@@ -73,6 +73,11 @@
   .seg{display:flex; gap:6px; flex-wrap:wrap;}
   .seg button{flex:1; min-width:40px; padding:10px 0; border-radius:9px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-size:15px; font-weight:800; cursor:pointer;}
   .seg button.on{background:#2b7be0; border-color:#2b7be0;}
+  .tokgrid{display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin:6px 0;}
+  .tokbtn{display:flex; flex-direction:column; align-items:center; gap:1px; width:64px; padding:7px 3px; border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); cursor:pointer; font-size:9.5px; text-align:center;}
+  .tokbtn .e{font-size:23px; line-height:1;}
+  .tokbtn.sel{background:#2b7be0; border-color:#2b7be0;}
+  .tokbtn .pb{font-size:9px; font-weight:800; color:#bfe3ff;}
   .sw{position:relative; width:42px; height:24px; border-radius:12px; background:#33406b; cursor:pointer; flex:0 0 auto;}
   .sw.on{background:#27a758;}
   .sw::after{content:""; position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%; background:#fff; transition:left .15s;}
@@ -533,18 +538,18 @@ function handleJailRoll(dbl,total){
   log(`${p.name} stays in Jail.`);
   G.phase="action"; endOrContinue(false);
 }
-function moveBy(p,steps,wasDouble){
-  let np=p.pos+steps;
-  if(np>=40){ np-=40; passGo(p); }
-  p.pos=np;
-  animateLand(p,wasDouble);
+const STEP_MS=165;   // per-space hop speed
+function moveBy(p,steps,wasDouble){ stepMove(p,steps,1,()=>resolveLanding(p,wasDouble)); }
+// hop the token one space at a time (dir +1 forward, -1 back); collect $200 when crossing GO forward
+function stepMove(p,steps,dir,done){
+  if(G) G.phaseSince=Date.now();   // keep the stuck-turn watchdog from firing mid-animation
+  if(steps<=0){ setTimeout(done,240); return; }
+  p.pos=(p.pos+dir+40)%40;
+  if(dir>0 && p.pos===0) passGo(p);
+  renderBoard(); renderStatus();
+  setTimeout(()=>stepMove(p,steps-1,dir,done), STEP_MS);
 }
 function passGo(p){ gain(p,200); p.lapDone=true; log(`${p.name} passes GO (+$200).`); }
-function moveTo(p,idx,collectIfPass){
-  if(collectIfPass && idx<=p.pos && !(p.pos===idx)) { passGo(p); }
-  else if(collectIfPass && idx<p.pos){ passGo(p); }
-  p.pos=idx;
-}
 function animateLand(p,wasDouble){
   refresh();
   setTimeout(()=>resolveLanding(p,wasDouble),350);
@@ -643,9 +648,13 @@ function offerBuy(p,i,wasDouble){
     window.__buy=()=>{ closeModal(); buyProp(p,i); endOrContinue(); };
     window.__decline=()=>{ closeModal(); if(RULES.noAuction){ log(`${p.name} declines ${s.n}.`); endOrContinue();} else startAuction(i,endOrContinue); };
   } else {
-    // AI decide
-    if(aiWantsToBuy(p,i)){ buyProp(p,i); endOrContinue(); }
-    else { if(RULES.noAuction){ log(`${p.name} declines ${s.n}.`); endOrContinue();} else startAuction(i,endOrContinue); }
+    // AI decides — show the decision so the human can follow along
+    const wants=aiWantsToBuy(p,i);
+    const title = wants ? `${p.name} buys ${s.n}` : `${p.name} ${RULES.noAuction?"passes on":"declines"} ${s.n}`;
+    cpuShow(`<div style="text-align:center;font-weight:800;font-size:15px">${title}</div><div style="text-align:center;color:var(--muted);font-size:12px;margin-top:2px">Price ${money(s.price)} · ${p.name} has ${money(p.cash)}</div>${deedCardHTML(i)}`, ()=>{
+      if(wants){ buyProp(p,i); endOrContinue(); }
+      else { if(RULES.noAuction){ log(`${p.name} declines ${s.n}.`); endOrContinue();} else startAuction(i,endOrContinue); }
+    }, 1700);
   }
 }
 function buyProp(p,i){ const s=BOARD[i]; p.cash-=s.price; G.owner[i]=p.id; log(`${p.name} buys ${s.n} for ${money(s.price)}.`); }
@@ -726,7 +735,7 @@ function drawCard(p,deck){
   const col=isCh?"#f08d1c":"#2b7be0";
   const show=cb=>{
     if(p.human){ openModal(`<h2>${isCh?"Chance":"Community Chest"}</h2><div class="cardbig" style="border-color:${col}">${card.text}</div><button class="btn primary" style="width:100%" onclick="window.__ok()">OK</button>`); window.__ok=()=>{ closeModal(); cb(); }; }
-    else { log(`${p.name} — ${isCh?"Chance":"Chest"}: ${card.text}`); setTimeout(cb,700); }
+    else { log(`${p.name} — ${isCh?"Chance":"Chest"}: ${card.text}`); cpuShow(`<h2>${isCh?"Chance":"Community Chest"} — ${p.name}</h2><div class="cardbig" style="border-color:${col}">${card.text}</div>`, cb, 1900); }
   };
   show(()=>{
     if(card.fx==="joker"){ G.jokersHeld[deck]++; }   // held by player, stays out of the pile
@@ -740,12 +749,12 @@ function applyCard(p,card,deck){
     case "pay": payBank(p,card.a,true); endOrContinue(false); break;
     case "move": {
       const target=card.a;
-      if(target<=p.pos) passGo(p); // passes GO (target 0 or behind)
-      p.pos=target; refresh(); setTimeout(()=>{ if(target===0){endOrContinue(false);} else resolveLanding(p,false); },300); break;
+      const steps=(target-p.pos+40)%40;   // move forward around the board (collects GO if it crosses it)
+      stepMove(p,steps,1,()=>{ if(target===0) endOrContinue(); else resolveLanding(p,false); }); break;
     }
     case "jail": goToJail(p); refresh(); endOrContinue(false); break;
     case "joker": p.jokers++; endOrContinue(false); break;
-    case "back3": { p.pos=(p.pos-3+40)%40; refresh(); setTimeout(()=>resolveLanding(p,false),300); break; }
+    case "back3": { stepMove(p,3,-1,()=>resolveLanding(p,false)); break; }
     case "payeach": { alive().forEach(q=>{ if(q!==p && !p.bankrupt){ forcePayTo(p,q,card.a);} }); endOrContinue(false); break; }
     case "collecteach": { alive().forEach(q=>{ if(q!==p){ forcePayTo(q,p,card.a);} }); endOrContinue(false); break; }
     case "repairs": { let h=0,ht=0; for(let i=0;i<40;i++) if(G.owner[i]===p.id && BOARD[i].t==="prop"){ if(G.houses[i]===5) ht++; else h+=G.houses[i]; } const amt=h*card.a[0]+ht*card.a[1]; payBank(p,amt,true); log(`${p.name} pays repairs ${money(amt)}.`); endOrContinue(false); break; }
@@ -759,9 +768,8 @@ function returnJoker(){ // a held Get-Out-of-Jail card goes back to the bottom o
 }
 function nearest(pos,list){ for(let step=1;step<=40;step++){ const q=(pos+step)%40; if(list.includes(q)) return q; } return list[0]; }
 function goToAndPay(p,idx,mult){
-  if(idx<=p.pos) passGo(p);
-  p.pos=idx; refresh();
-  setTimeout(()=>{
+  const steps=(idx-p.pos+40)%40;
+  stepMove(p,steps,1,()=>{
     const own=G.owner[idx];
     if(own===-1){ if(!(RULES.buyAfterLap&&!p.lapDone)) offerBuy(p,idx,false); else endOrContinue(false); }
     else if(own===p.id){ endOrContinue(false); }
@@ -1092,6 +1100,14 @@ function execTrade(){
 
 /* ========================= MODAL / RULES / SETUP ========================= */
 function openModal(html){ $("modal").innerHTML=html; $("overlay").classList.add("on"); }
+// show a CPU's card / decision so the human can follow along; auto-continues, or tap to skip
+function cpuShow(html,cb,ms){
+  openModal(html+`<button class="btn primary" style="width:100%;margin-top:8px" onclick="window.__cpuGo()">Continue ▸</button>`);
+  let done=false;
+  const go=()=>{ if(done) return; done=true; closeModal(); cb(); };
+  window.__cpuGo=go;
+  setTimeout(go, ms||1700);
+}
 function closeModal(){ $("overlay").classList.remove("on"); }
 window.__close=closeModal;
 
@@ -1105,22 +1121,45 @@ function openRules(){
   document.querySelectorAll(".sw[data-k]").forEach(el=>{ el.onclick=()=>{ const k=el.dataset.k; RULES[k]=!RULES[k]; el.classList.toggle("on"); }; });
 }
 
-let SETUP={players:4,humans:1};
+let SETUP={players:4,humans:1,humanTokens:[0]};
 function openSetup(){
   let h=`<h2>New Game</h2>`;
   h+=`<h3>Players</h3><div class="seg" id="segP">${[2,3,4,5,6].map(n=>`<button data-n="${n}" class="${SETUP.players===n?"on":""}">${n}</button>`).join("")}</div>`;
   h+=`<h3>How many are human?</h3><div class="seg" id="segH"></div>`;
+  h+=`<h3 id="tokHdr">Pick your token</h3><div class="tokgrid" id="tokGrid"></div><div id="tokMsg" style="text-align:center;color:var(--muted);font-size:11px"></div>`;
   h+=`<button class="btn" style="width:100%;margin:10px 0 6px" onclick="window.__rules()">⚙️ House Rules</button>`;
   h+=`<button class="btn primary" style="width:100%" onclick="window.__start()">Start Game</button>`;
   openModal(h);
-  const drawH=()=>{ const seg=$("segH"); seg.innerHTML=Array.from({length:SETUP.players},(_,k)=>k+1).map(n=>`<button data-n="${n}" class="${SETUP.humans===n?"on":""}">${n}</button>`).join(""); seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{ SETUP.humans=+b.dataset.n; drawH(); }); };
-  $("segP").querySelectorAll("button").forEach(b=>b.onclick=()=>{ SETUP.players=+b.dataset.n; if(SETUP.humans>SETUP.players)SETUP.humans=SETUP.players; $("segP").querySelectorAll("button").forEach(x=>x.classList.toggle("on",+x.dataset.n===SETUP.players)); drawH(); });
-  drawH();
+  const drawTok=()=>{
+    const hdr=$("tokHdr"), grid=$("tokGrid"), msg=$("tokMsg");
+    hdr.textContent = SETUP.humans>1 ? "Pick tokens (Player 1 = You)" : "Pick your token";
+    grid.innerHTML = TOKENS.map((t,i)=>{
+      const slot=SETUP.humanTokens.indexOf(i);
+      return `<button class="tokbtn ${slot>=0?"sel":""}" data-t="${i}"><span class="e">${t.e}</span><span>${t.n}</span>${slot>=0?`<span class="pb">P${slot+1}</span>`:""}</button>`;
+    }).join("");
+    const need=SETUP.humans-SETUP.humanTokens.length;
+    msg.textContent = need>0 ? `Tap ${need} more (unchosen will be random).` : (SETUP.humans>1?"All human tokens chosen. Tap to change.":"");
+    grid.querySelectorAll(".tokbtn").forEach(b=>b.onclick=()=>{
+      const t=+b.dataset.t, at=SETUP.humanTokens.indexOf(t);
+      if(at>=0) SETUP.humanTokens.splice(at,1);                       // unpick
+      else if(SETUP.humanTokens.length<SETUP.humans) SETUP.humanTokens.push(t); // pick into next slot
+      else if(SETUP.humans===1) SETUP.humanTokens=[t];               // single-human: just switch
+      drawTok();
+    });
+  };
+  const clampTokens=()=>{ if(SETUP.humanTokens.length>SETUP.humans) SETUP.humanTokens=SETUP.humanTokens.slice(0,SETUP.humans); };
+  const drawH=()=>{ const seg=$("segH"); seg.innerHTML=Array.from({length:SETUP.players},(_,k)=>k+1).map(n=>`<button data-n="${n}" class="${SETUP.humans===n?"on":""}">${n}</button>`).join(""); seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{ SETUP.humans=+b.dataset.n; clampTokens(); drawH(); drawTok(); }); };
+  $("segP").querySelectorAll("button").forEach(b=>b.onclick=()=>{ SETUP.players=+b.dataset.n; if(SETUP.humans>SETUP.players){SETUP.humans=SETUP.players; clampTokens();} $("segP").querySelectorAll("button").forEach(x=>x.classList.toggle("on",+x.dataset.n===SETUP.players)); drawH(); drawTok(); });
+  drawH(); drawTok();
   window.__rules=openRules;
   window.__start=()=>{ startGame(SETUP.players,SETUP.humans); };
 }
 function startGame(nP,nH){
-  const toks=shuffle(TOKENS.map((_,i)=>i)).slice(0,nP);
+  const chosen=(SETUP.humanTokens||[]).slice(0,nH);
+  const used=new Set(chosen);
+  const remaining=shuffle(TOKENS.map((_,i)=>i).filter(i=>!used.has(i)));
+  const toks=[];
+  for(let i=0;i<nP;i++){ toks.push( (i<nH && chosen[i]!==undefined) ? chosen[i] : remaining.shift() ); }
   G=freshState(nP,nH,toks);
   G.started=true;
   $("log").innerHTML="";
