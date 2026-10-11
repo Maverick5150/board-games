@@ -242,7 +242,8 @@ function freshState(nPlayers,nHumans,tokenIdx){
     players, cur:0, dice:[0,0], doublesCount:0, phase:"preroll",
     owner:Array(40).fill(-1), houses:Array(40).fill(0), mort:Array(40).fill(false),
     chance:shuffle(CHANCE.map((_,i)=>i)), chest:shuffle(CHEST.map((_,i)=>i)), ci:0, ki:0,
-    housesLeft:32, hotelsLeft:12, fpPool:0, over:false, started:false
+    housesLeft:32, hotelsLeft:12, fpPool:0, over:false, started:false,
+    turnDouble:false, phaseSince:0
   };
 }
 function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=rnd(i+1); [a[i],a[j]]=[a[j],a[i]]; } return a; }
@@ -341,32 +342,44 @@ function renderStatus(){
   h+=`<span class="pill">🏠${G.housesLeft} 🏨${G.hotelsLeft}</span>`;
   $("status").innerHTML=h;
 }
+function addBtn(c,label,cls,fn,dis){ const b=document.createElement("button"); b.className="btn "+(cls||""); b.textContent=label; if(dis)b.disabled=true; else b.onclick=fn; c.appendChild(b); return b; }
 function renderControls(){
   const c=$("controls"); c.innerHTML="";
+  const add=(label,cls,fn,dis)=>addBtn(c,label,cls,fn,dis);
+  if(!G || !G.started){ add("🎲 New Game","primary",openSetup); return; }
   const p=cur();
-  const add=(label,cls,fn,dis)=>{ const b=document.createElement("button"); b.className="btn "+(cls||""); b.textContent=label; if(dis)b.disabled=true; else b.onclick=fn; c.appendChild(b); };
-  if(G.over){ add("New Game","primary",openSetup); return; }
-  if(!p.human){ add("CPU thinking…","",()=>{},true); return; }
+  if(G.over){ add("🎲 New Game","primary",openSetup); add("☰ Menu","",openMenu); return; }
+  if(!p.human){ add("CPU thinking…","",()=>{},true); add("☰","",openMenu); return; }
   if(G.phase==="preroll"){
     if(p.jail){
-      add("🎲 Roll for doubles","go",()=>humanRoll());
-      if(p.cash>=50) add("Pay $50","",()=>{ payBank(p,50,true); p.jail=false; p.jailTurns=0; log(`${p.name} pays $50 to leave Jail.`); G.phase="preroll"; refresh(); });
+      add("🎲 Roll for doubles","go",humanRoll);
+      if(p.cash>=50) add("Pay $50","",()=>{ payBank(p,50,true); p.jail=false; p.jailTurns=0; log(`${p.name} pays $50 to leave Jail.`); refresh(); });
       if(p.jokers>0) add("Use Jail card","",()=>{ p.jokers--; p.jail=false; p.jailTurns=0; returnJoker(); log(`${p.name} uses Get Out of Jail Free.`); refresh(); });
     } else {
-      add("🎲 Roll Dice","go",()=>humanRoll());
+      add("🎲 Roll Dice","go",humanRoll);
     }
     add("Manage","",openManage);
     add("Trade","",openTradeSetup);
-    add("Rules",""," ".trim()&&openRules); c.lastChild.onclick=openRules;
   } else if(G.phase==="action"){
-    // landed; show context (buy handled via modal). Offer end / manage / trade
     add("End Turn","primary",endTurn);
     add("Manage","",openManage);
     add("Trade","",openTradeSetup);
   } else if(G.phase==="rolledAgain"){
-    add("🎲 Roll Again (doubles)","go",()=>humanRoll());
+    add("🎲 Roll Again (doubles)","go",humanRoll);
     add("Manage","",openManage);
+  } else {
+    // "moving"/processing — show a working indicator so the human is never left with a blank screen
+    add("…working…","",()=>{},true);
   }
+  add("☰","",openMenu);
+}
+function openMenu(){
+  openModal(`<h2>Menu</h2>
+    <button class="btn" style="width:100%;margin:4px 0" onclick="window.__close()">Resume Game</button>
+    <button class="btn" style="width:100%;margin:4px 0" onclick="window.__mrules()">⚙️ House Rules</button>
+    <button class="btn warn" style="width:100%;margin:4px 0" onclick="window.__mnew()">🎲 New Game</button>`);
+  window.__mrules=openRules;
+  window.__mnew=openSetup;
 }
 function refresh(){ renderBoard(); renderStatus(); renderControls(); }
 
@@ -406,15 +419,17 @@ function endGame(){
 }
 
 function humanRoll(){ if(G.phase!=="preroll"&&G.phase!=="rolledAgain")return; doRoll(); }
+function setMoving(){ G.phase="moving"; G.phaseSince=Date.now(); renderControls(); renderStatus(); }
 function doRoll(){
   const p=cur();
-  G.phase="moving"; renderControls();   // lock out double-rolls during movement
+  setMoving();   // lock out double-rolls during movement
   const d1=1+rnd(6), d2=1+rnd(6);
   G.dice=[d1,d2];
   const dbl=d1===d2;
+  G.turnDouble=false;
   log(`${p.name} rolls ${d1}+${d2}${dbl?" (doubles)":""}.`);
   if(p.jail){ handleJailRoll(dbl,d1+d2); return; }
-  if(dbl){ G.doublesCount++; if(RULES.threeDoublesJail && G.doublesCount===3){ log(`${p.name} rolled 3 doubles — Go to Jail!`); goToJail(p); G.phase="action"; endOrContinue(false); return; } }
+  if(dbl){ G.doublesCount++; if(RULES.threeDoublesJail && G.doublesCount===3){ log(`${p.name} rolled 3 doubles — Go to Jail!`); goToJail(p); endOrContinue(); return; } G.turnDouble=true; }
   else G.doublesCount=0;
   if(RULES.snakeEyesBonus && d1===1 && d2===1){ gain(p,500); log(`${p.name} rolled snake-eyes — +$500!`); }
   moveBy(p,d1+d2,dbl);
@@ -517,10 +532,10 @@ function computeRent(i,own,mult){
   return 0;
 }
 
-function endOrContinue(wasDouble){
+function endOrContinue(){   // doubles tracked on G.turnDouble (ignores any arg passed by callers)
   const p=cur();
-  if(p.bankrupt){ G.phase="action"; if(p.human){refresh();} advancePlayer(); return; }
-  if(wasDouble && !p.jail){ G.phase="rolledAgain"; refresh(); if(!p.human) setTimeout(aiTurn,600); return; }
+  if(p.bankrupt){ G.phase="action"; advancePlayer(); return; }
+  if(G.turnDouble && !p.jail){ G.turnDouble=false; G.phase="rolledAgain"; refresh(); if(!p.human) setTimeout(aiTurn,600); return; }
   G.phase="action"; refresh();
   if(!p.human) setTimeout(()=>endTurn(),600);
 }
@@ -953,8 +968,19 @@ function startGame(nP,nH){
 /* ========================= BOOT ========================= */
 // placeholder empty board before start
 G=freshState(4,1,[0,1,2,3]);
-renderBoard();
+renderBoard(); renderStatus(); renderControls();   // never leave the UI blank
 openSetup();
+
+// Watchdog: if a turn ever gets stuck "moving" with no dialog/auction open, auto-recover
+setInterval(()=>{
+  try{
+    if(!G || !G.started || G.over) return;
+    const modalOpen=$("overlay").classList.contains("on");
+    if(G.phase==="moving" && !modalOpen && !AUC && G.phaseSince && (Date.now()-G.phaseSince)>4000){
+      log("<i>(recovering stuck turn…)</i>"); G.turnDouble=false; endOrContinue();
+    }
+  }catch(e){}
+},1500);
 
 if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
 

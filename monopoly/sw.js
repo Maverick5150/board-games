@@ -1,5 +1,5 @@
 // Offline cache for Monopoly (bump VERSION to force update)
-const VERSION = "monopoly-v1";
+const VERSION = "monopoly-v2";
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.png"];
 
 self.addEventListener("install", e => {
@@ -11,13 +11,26 @@ self.addEventListener("activate", e => {
       .then(() => self.clients.claim())
   );
 });
+// Network-first for the page/HTML so updates always load fresh; cache-first for other assets.
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
-  e.respondWith(
-    caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
-      const copy = res.clone();
-      caches.open(VERSION).then(c => c.put(e.request, copy)).catch(() => {});
-      return res;
-    }).catch(() => caches.match("./index.html")))
-  );
+  const url = new URL(e.request.url);
+  const isDoc = e.request.mode === "navigate" || url.pathname.endsWith("/") || url.pathname.endsWith(".html");
+  if (isDoc) {
+    e.respondWith(
+      fetch(e.request).then(res => {
+        const copy = res.clone();
+        caches.open(VERSION).then(c => c.put(e.request, copy)).catch(() => {});
+        return res;
+      }).catch(() => caches.match(e.request).then(h => h || caches.match("./index.html")))
+    );
+  } else {
+    e.respondWith(
+      caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
+        const copy = res.clone();
+        caches.open(VERSION).then(c => c.put(e.request, copy)).catch(() => {});
+        return res;
+      }))
+    );
+  }
 });
