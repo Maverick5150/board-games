@@ -449,13 +449,16 @@ function renderControls(){
     // "moving"/processing — show a working indicator so the human is never left with a blank screen
     add("…working…","",()=>{},true);
   }
+  add("👥 Players","",openPlayers);
   add("☰","",openMenu);
 }
 function openMenu(){
   openModal(`<h2>Menu</h2>
     <button class="btn" style="width:100%;margin:4px 0" onclick="window.__close()">Resume Game</button>
+    <button class="btn" style="width:100%;margin:4px 0" onclick="window.__mplayers()">👥 Players &amp; holdings</button>
     <button class="btn" style="width:100%;margin:4px 0" onclick="window.__mrules()">⚙️ House Rules</button>
     <button class="btn warn" style="width:100%;margin:4px 0" onclick="window.__mnew()">🎲 New Game</button>`);
+  window.__mplayers=openPlayers;
   window.__mrules=openRules;
   window.__mnew=openSetup;
 }
@@ -910,6 +913,35 @@ function openManage(){
   document.querySelectorAll(".deedrow").forEach(el=>{ el.onclick=()=>openDeed(+el.dataset.i,true); });
 }
 function colorChip(i){ const s=BOARD[i]; if(s.t==="prop") return `<span class="dot" style="border-radius:2px;background:${COLORVAR[s.g]}"></span>`; if(s.t==="rr")return "🚂"; if(s.t==="util")return i===12?"💡":"🚰"; return ""; }
+function openPlayers(){
+  let h=`<h2>Players</h2>`;
+  for(const p of G.players){
+    const props=[]; for(let i=0;i<40;i++) if(G.owner[i]===p.id) props.push(i);
+    h+=`<div style="border:1px solid var(--line);border-radius:12px;padding:9px 11px;margin:7px 0;${p.bankrupt?'opacity:.45':''}">`;
+    h+=`<div style="display:flex;justify-content:space-between;align-items:center">`;
+    h+=`<div style="font-weight:800">${p.token.e} ${dotc(p)} ${p.name}${p.human?'':' <small style="color:var(--muted)">CPU</small>'}${(p.id===G.cur&&!G.over&&!p.bankrupt)?' <small style="color:#7CFC9A">● turn</small>':''}${p.bankrupt?' <small class="neg">OUT</small>':''}</div>`;
+    h+=`<div class="cash" style="font-size:15px">${money(p.cash)}</div></div>`;
+    let tags=[]; if(p.jail) tags.push("🔒 In Jail"); if(p.jokers) tags.push(`🎫 ${p.jokers} jail card${p.jokers>1?'s':''}`);
+    tags.push(`Net worth ${money(netWorth(p))}`);
+    h+=`<div style="font-size:11.5px;color:var(--muted);margin:2px 0 4px">${tags.join(" · ")}</div>`;
+    if(props.length){
+      h+=`<div style="display:flex;flex-wrap:wrap;gap:4px">`;
+      for(const i of props){ const s=BOARD[i];
+        const hs=s.t==="prop"&&G.houses[i]?(G.houses[i]===5?' 🏨':' '+'🏠'.repeat(G.houses[i])):'';
+        h+=`<span class="pchip" data-i="${i}" style="font-size:11px;display:inline-flex;align-items:center;gap:3px;background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:2px 6px;cursor:pointer;${G.mort[i]?'opacity:.55':''}">${colorChip(i)} ${s.n}${hs}${G.mort[i]?' ✖':''}</span>`;
+      }
+      h+=`</div>`;
+      const sets=[]; for(const g in GROUPS) if(ownsFullGroup(p,g)) sets.push(g.replace('_',' '));
+      const rr=rrOwned(p.id), ut=utilOwned(p.id);
+      let extra=[]; if(sets.length) extra.push("Sets: "+sets.join(", ")); if(rr) extra.push(rr+" railroad"+(rr>1?'s':'')); if(ut) extra.push(ut+" utilit"+(ut>1?'ies':'y'));
+      if(extra.length) h+=`<div style="font-size:11px;color:#7CFC9A;margin-top:4px">${extra.join(" · ")}</div>`;
+    } else h+=`<div style="font-size:11.5px;color:var(--muted)">No properties yet.</div>`;
+    h+=`</div>`;
+  }
+  h+=`<button class="btn primary" style="width:100%;margin-top:6px" onclick="window.__close()">Close</button>`;
+  openModal(h);
+  document.querySelectorAll(".pchip").forEach(el=>{ el.onclick=()=>openDeed(+el.dataset.i); });
+}
 function deedCardHTML(i){
   const s=BOARD[i];
   const lightText=(s.g==="yellow"||s.g==="light_blue");
