@@ -80,6 +80,20 @@
   .badge.on{background:#27a75833; color:#b7f5cf;}
   .cardbig{background:#fff; color:#111; border-radius:12px; padding:18px; text-align:center; font-size:16px; font-weight:600; border:4px solid; margin:10px 0;}
   .deedline{display:flex; justify-content:space-between; font-size:12px; padding:2px 0;}
+  /* authentic title-deed card */
+  .deed{background:#f4f0e3; color:#15110a; border-radius:10px; overflow:hidden; border:2px solid #00000040; margin:10px 0; box-shadow:0 4px 14px #0007;}
+  .deed-band{padding:9px 10px; text-align:center; color:#fff; border-bottom:2px solid #0003;}
+  .deed-band.light{color:#1a1203;}
+  .deed-title{font-size:10px; letter-spacing:2.5px; font-weight:800; opacity:.92;}
+  .deed-name{font-size:18px; font-weight:900; letter-spacing:.3px; line-height:1.12; margin-top:1px; text-transform:uppercase;}
+  .deed-body{padding:9px 13px;}
+  .dl{display:flex; justify-content:space-between; padding:2.5px 0; font-size:13.5px;}
+  .dl b{font-weight:800;}
+  .dl.rule{border-top:1px solid #00000022; margin-top:5px; padding-top:5px;}
+  .dl.sub{color:#5a5240; font-size:12px;}
+  .deed-note{font-size:11px; color:#5a5240; margin-top:7px; text-align:center; font-style:italic; line-height:1.3;}
+  .icon-band{font-size:38px; text-align:center; padding:4px 0 8px;}
+  .stickyact{position:sticky; bottom:0; background:var(--panel); padding:9px 0 2px; margin-top:2px; border-top:1px solid #ffffff14;}
   .cash{color:#7CFC9A; font-weight:800;}
   .neg{color:#ff8a8a;}
   .toast{position:fixed; bottom:14px; left:50%; transform:translateX(-50%); background:#000c; padding:9px 15px; border-radius:16px; font-size:13px; opacity:0; transition:opacity .2s; pointer-events:none; z-index:40; max-width:92vw; text-align:center;}
@@ -341,9 +355,10 @@ function spaceDesc(s){
 }
 function showInfo(i){
   const s=BOARD[i];
-  let h=`<h2 style="text-align:center;margin-bottom:4px">${s.n}</h2>`;
+  let h=`<h2 style="text-align:center;margin-bottom:0">${s.n}</h2>`;
   if(s.price){
     const own=G.owner[i];
+    h+=`<div style="text-align:center;color:var(--muted);font-size:12.5px;margin:2px 0 6px">Price <b style="color:var(--ink)">${money(s.price)}</b></div>`;
     h+=`<p style="text-align:center;margin:2px 0 8px">`;
     if(own<0) h+=`<b>Unowned</b>`;
     else { h+=`Owned by ${dotc(G.players[own])} <b>${G.players[own].name}</b>`; if(G.mort[i]) h+=` · <span class="neg">mortgaged</span>`; if(s.t==="prop"&&G.houses[i]>0) h+= G.houses[i]===5?' · 🏨 Hotel':' · '+'🏠'.repeat(G.houses[i]); }
@@ -577,11 +592,13 @@ function endTurn(){ advancePlayer(); }
 function offerBuy(p,i,wasDouble){
   const s=BOARD[i];
   if(p.human){
-    openModal(`<h2 style="text-align:center;margin-bottom:2px">${s.n}</h2>
-      <p style="text-align:center;margin:2px 0 10px">Unowned · Price <b>${money(s.price)}</b> · Your cash <b class="cash">${money(p.cash)}</b></p>
-      <button class="btn go" style="width:100%;padding:17px;font-size:17px;margin:4px 0" ${p.cash<s.price?"disabled":""} onclick="window.__buy()">✅ Buy for ${money(s.price)}</button>
-      <button class="btn warn" style="width:100%;padding:13px" onclick="window.__decline()">${RULES.noAuction?"Don't buy":"Decline → Auction"}</button>
-      <details style="margin-top:10px"><summary style="color:var(--muted);font-size:12px;cursor:pointer">View full title deed (rents, houses…)</summary>${deedCardHTML(i)}</details>`);
+    openModal(`<div style="text-align:center;font-weight:800;font-size:15px">Buy this property?</div>
+      <div style="text-align:center;color:var(--muted);font-size:12.5px;margin:3px 0 0">Price <b style="color:var(--ink)">${money(s.price)}</b> · Your cash <b class="cash">${money(p.cash)}</b></div>
+      ${deedCardHTML(i)}
+      <div class="stickyact">
+        <button class="btn go" style="width:100%;padding:16px;font-size:16px;margin:0 0 6px" ${p.cash<s.price?"disabled":""} onclick="window.__buy()">✅ Buy for ${money(s.price)}</button>
+        <button class="btn warn" style="width:100%;padding:12px" onclick="window.__decline()">${RULES.noAuction?"❌ Don't buy":"❌ Decline → Auction"}</button>
+      </div>`);
     window.__buy=()=>{ closeModal(); buyProp(p,i); endOrContinue(wasDouble); };
     window.__decline=()=>{ closeModal(); if(RULES.noAuction){ log(`${p.name} declines ${s.n}.`); endOrContinue(wasDouble);} else startAuction(i,wasDouble); };
   } else {
@@ -869,23 +886,33 @@ function openManage(){
   window.__unm=i=>{ unmortgage(p,i); openManage(); refresh(); };
 }
 function colorChip(i){ const s=BOARD[i]; if(s.t==="prop") return `<span class="dot" style="border-radius:2px;background:${COLORVAR[s.g]}"></span>`; if(s.t==="rr")return "🚂"; if(s.t==="util")return i===12?"💡":"🚰"; return ""; }
-function deedCardHTML(i,compact){
+function deedCardHTML(i){
   const s=BOARD[i];
-  let h=`<div class="cardbig" style="border-color:${s.t==="prop"?COLORVAR[s.g]:"#333"};padding:12px;text-align:left;font-size:13px;font-weight:600">`;
-  h+=`<div style="text-align:center;font-weight:900;font-size:15px;margin-bottom:6px">${s.n}</div>`;
+  const lightText=(s.g==="yellow"||s.g==="light_blue");
+  let band="", body="";
   if(s.t==="prop"){
-    const L=["Rent","With 1 House","With 2 Houses","With 3 Houses","With 4 Houses","With HOTEL"];
-    for(let k=0;k<6;k++) h+=`<div class="deedline"><span>${L[k]}</span><span>${money(s.rent[k])}</span></div>`;
-    h+=`<div class="deedline"><span>Mortgage</span><span>${money(s.mort)}</span></div>`;
-    h+=`<div class="deedline"><span>Houses cost (each)</span><span>${money(s.house)}</span></div>`;
-    h+=`<div class="deedline"><small>Rent doubles on full color group if unimproved.</small></div>`;
+    band=`<div class="deed-band${lightText?" light":""}" style="background:${COLORVAR[s.g]}"><div class="deed-title">TITLE DEED</div><div class="deed-name">${s.n}</div></div>`;
+    const L=["Rent","Rent with 1 House","Rent with 2 Houses","Rent with 3 Houses","Rent with 4 Houses","Rent with HOTEL"];
+    for(let k=0;k<6;k++) body+=`<div class="dl"><span>${L[k]}</span><b>${money(s.rent[k])}</b></div>`;
+    body+=`<div class="dl rule"><span>Mortgage Value</span><b>${money(s.mort)}</b></div>`;
+    body+=`<div class="dl sub"><span>Houses cost</span><b>${money(s.house)} each</b></div>`;
+    body+=`<div class="dl sub"><span>Hotels</span><b>${money(s.house)} + 4 houses</b></div>`;
+    body+=`<div class="deed-note">If a player owns ALL the lots of this color group, the rent is doubled on unimproved lots.</div>`;
   } else if(s.t==="rr"){
-    h+=`<div class="deedline"><span>1 Railroad</span><span>$25</span></div><div class="deedline"><span>2 Railroads</span><span>$50</span></div><div class="deedline"><span>3 Railroads</span><span>$100</span></div><div class="deedline"><span>4 Railroads</span><span>$200</span></div><div class="deedline"><span>Mortgage</span><span>$100</span></div>`;
+    band=`<div class="deed-band" style="background:#1e1e1e"><div class="deed-title">TITLE DEED</div><div class="deed-name">${s.n}</div></div>`;
+    body+=`<div class="icon-band">🚂</div>`;
+    body+=`<div class="dl"><span>Rent</span><b>$25</b></div>`;
+    body+=`<div class="dl"><span>If 2 Railroads are owned</span><b>$50</b></div>`;
+    body+=`<div class="dl"><span>If 3 Railroads are owned</span><b>$100</b></div>`;
+    body+=`<div class="dl"><span>If 4 Railroads are owned</span><b>$200</b></div>`;
+    body+=`<div class="dl rule"><span>Mortgage Value</span><b>$100</b></div>`;
   } else if(s.t==="util"){
-    h+=`<div class="deedline"><small>If one Utility owned, rent = 4× dice. If both, 10× dice.</small></div><div class="deedline"><span>Mortgage</span><span>$75</span></div>`;
+    band=`<div class="deed-band" style="background:#1e1e1e"><div class="deed-title">TITLE DEED</div><div class="deed-name">${s.n}</div></div>`;
+    body+=`<div class="icon-band">${i===12?"💡":"🚰"}</div>`;
+    body+=`<div class="deed-note" style="font-style:normal;font-size:12.5px;color:#15110a">If <b>one</b> Utility is owned, rent is <b>4×</b> the amount shown on the dice.<br>If <b>both</b> Utilities are owned, rent is <b>10×</b> the amount shown on the dice.</div>`;
+    body+=`<div class="dl rule"><span>Mortgage Value</span><b>$75</b></div>`;
   }
-  h+=`<div class="deedline" style="border-top:1px solid #0002;margin-top:4px"><span>Price</span><span>${money(s.price)}</span></div></div>`;
-  return h;
+  return `<div class="deed">${band}<div class="deed-body">${body}</div></div>`;
 }
 
 /* ========================= TRADE ========================= */
