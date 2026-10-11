@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0e1630">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Sorry!</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.png">
+<style>
+  :root{
+    --red:#e23b3b; --blue:#2b7be0; --green:#27a758; --yellow:#eec21b;
+    --bg:#0e1630; --panel:#16203f; --ink:#eef2ff; --muted:#9fb0d8;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; height:100%;}
+  body{
+    background:radial-gradient(120% 120% at 50% 0%, #1b2a55 0%, var(--bg) 60%);
+    color:var(--ink); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    display:flex; flex-direction:column; align-items:center;
+    min-height:100%; padding:max(8px,env(safe-area-inset-top)) 8px max(10px,env(safe-area-inset-bottom));
+    overflow-x:hidden; touch-action:manipulation;
+  }
+  h1{font-size:19px; margin:4px 0 2px; letter-spacing:2px; font-weight:900;}
+  .sub{color:var(--muted); font-size:11px; margin-bottom:6px; text-align:center;}
+  #boardWrap{width:min(96vw,560px); aspect-ratio:1/1; position:relative;}
+  svg{width:100%; height:100%; display:block;}
+  .status{
+    width:min(96vw,560px); min-height:36px; display:flex; align-items:center; justify-content:center;
+    gap:10px; background:var(--panel); border-radius:12px; padding:7px 12px; margin:6px 0;
+    font-size:14px; font-weight:600; text-align:center;
+  }
+  .dot{width:13px; height:13px; border-radius:50%; display:inline-block; box-shadow:0 0 0 2px #0003 inset;}
+  .controls{display:flex; gap:10px; align-items:center; justify-content:center; flex-wrap:wrap;}
+  .deck{
+    width:70px; height:94px; border-radius:12px; border:none; cursor:pointer;
+    background:linear-gradient(145deg,#ff5d5d,#c62222); color:#fff; font-weight:900; font-size:14px;
+    box-shadow:0 6px 0 #7e1414, 0 10px 16px #0007; display:flex; align-items:center; justify-content:center;
+    letter-spacing:1px; transition:transform .05s, box-shadow .05s;
+  }
+  .deck:active{transform:translateY(4px); box-shadow:0 2px 0 #7e1414;}
+  .deck[disabled]{filter:grayscale(.5) brightness(.8); cursor:default;}
+  .cardFace{
+    width:70px; height:94px; border-radius:12px; background:#fff; color:#c62222; font-weight:900;
+    font-size:40px; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 14px #0008;
+    border:3px solid #c62222;
+  }
+  .cardFace.small{font-size:20px;}
+  .actions{display:flex; flex-wrap:wrap; gap:8px; justify-content:center; width:min(96vw,560px); margin-top:4px;}
+  .abtn{background:#101938; color:var(--ink); border:1px solid #39498a; border-radius:10px; padding:10px 12px; font-size:14px; font-weight:700; cursor:pointer;}
+  .abtn:active{background:#2b7be0;}
+  .btn{background:var(--panel); color:var(--ink); border:1px solid #2e3b66; border-radius:12px; padding:11px 15px; font-size:14px; font-weight:600; cursor:pointer;}
+  .btn.primary{background:#2b7be0; border-color:#2b7be0;}
+  .peg.movable .ring{opacity:1;}
+  .ring{opacity:0;}
+  .overlay{position:fixed; inset:0; background:#0b1228ee; display:flex; align-items:center; justify-content:center; padding:20px; z-index:10;}
+  .card{background:var(--panel); border-radius:18px; padding:22px; width:min(92vw,420px); text-align:center;}
+  .card h2{margin:0 0 6px;}
+  .card p{color:var(--muted); font-size:13px; margin:6px 0 16px;}
+  .seg{display:flex; gap:8px; justify-content:center; margin:14px 0;}
+  .seg button{flex:1; padding:14px 0; border-radius:12px; border:1px solid #2e3b66; background:#101938; color:var(--ink); font-size:18px; font-weight:800; cursor:pointer;}
+  .seg button.on{background:#2b7be0; border-color:#2b7be0;}
+  .legend{display:flex; gap:10px; justify-content:center; flex-wrap:wrap; font-size:11px; color:var(--muted); margin-top:6px;}
+  .legend span{display:flex; align-items:center; gap:5px;}
+  .toast{position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#000b; padding:9px 15px; border-radius:18px; font-size:13px; opacity:0; transition:opacity .2s; pointer-events:none; z-index:20; max-width:90vw; text-align:center;}
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+  <h1>S O R R Y !</h1>
+  <div class="sub">Draw a card &middot; 1 or 2 leaves Start &middot; bump, slide &amp; get all 4 pawns Home</div>
+  <div class="status" id="status">&nbsp;</div>
+  <div id="boardWrap"><svg id="board" viewBox="0 0 600 600"></svg></div>
+  <div class="controls">
+    <button class="btn" id="menuBtn">Menu</button>
+    <div id="deckSlot"><button class="deck" id="deck">SORRY!<br>DRAW</button></div>
+    <button class="btn" id="skipBtn" style="visibility:hidden">Skip</button>
+  </div>
+  <div class="actions" id="actions"></div>
+  <div class="legend" id="legend"></div>
+
+  <div class="overlay" id="setup">
+    <div class="card">
+      <h2>New Game</h2>
+      <p>How many players are human? The rest are computer. You are <b>Red</b>.</p>
+      <div class="seg" id="humanSeg">
+        <button data-n="1" class="on">1</button>
+        <button data-n="2">2</button>
+        <button data-n="3">3</button>
+        <button data-n="4">4</button>
+      </div>
+      <button class="btn primary" id="startBtn" style="width:100%;padding:14px;">Start Game</button>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+<script>
+(function(){
+"use strict";
+
+const COLORS=["red","blue","yellow","green"];
+const CSS={red:"#e23b3b",blue:"#2b7be0",yellow:"#eec21b",green:"#27a758"};
+const INK={red:"#ffdede",blue:"#dbe9ff",yellow:"#4a3c00",green:"#dcffe9"};
+const NAME={red:"Red",blue:"Blue",yellow:"Yellow",green:"Green"};
+
+// ---- board geometry: 16x16 grid, outer ring = 60-cell track ----
+const CELL=36, OFF=12, HALF=18, R=14;
+function px(col,row){ return [OFF+col*CELL+HALF, OFF+row*CELL+HALF]; }
+function ringColRow(i){
+  if(i<=15) return [i,0];
+  if(i<=30) return [15,i-15];
+  if(i<=45) return [45-i,15];
+  return [0,60-i];
+}
+function ringPx(i){ const [c,r]=ringColRow(i); return px(c,r); }
+
+// per-color track entry (startExit) and safety turn-in (safeEntry)
+const START_EXIT={red:4,blue:19,yellow:34,green:49};
+const SAFE_ENTRY={red:2,blue:17,yellow:32,green:47};
+// safety lane cells (5) in grid coords + home box, pointing inward
+const SAFE_CELLS={
+  red:   [[2,1],[2,2],[2,3],[2,4],[2,5]],
+  blue:  [[14,2],[13,2],[12,2],[11,2],[10,2]],
+  yellow:[[13,14],[13,13],[13,12],[13,11],[13,10]],
+  green: [[1,13],[2,13],[3,13],[4,13],[5,13]]
+};
+const HOME_CELL={red:[2,6.4],blue:[8.6,2],yellow:[13,8.6],green:[6.4,13]};
+const START_CELL={red:[5,2],blue:[13,5],yellow:[11,13],green:[2,11]};
+
+// slides: triangle at cells[0]; color matches side
+const SLIDES=[
+  {color:"red",   cells:[6,7,8,9]},        {color:"red",   cells:[11,12,13,14,15]},
+  {color:"blue",  cells:[21,22,23,24]},    {color:"blue",  cells:[26,27,28,29,30]},
+  {color:"yellow",cells:[36,37,38,39]},    {color:"yellow",cells:[41,42,43,44,45]},
+  {color:"green", cells:[51,52,53,54]},    {color:"green", cells:[56,57,58,59,0]}
+];
+function slideTriAt(i){ return SLIDES.find(s=>s.cells[0]===i) || null; }
+
+// ---- deck ----
+function buildDeck(){
+  const d=[];
+  const add=(v,n)=>{for(let i=0;i<n;i++)d.push(v);};
+  add(1,5); add(2,4); add(3,4); add(4,4); add(5,4);
+  add(7,4); add(8,4); add(10,4); add(11,4); add(12,4); add("sorry",4);
+  return d;
+}
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+// ---- state ----
+let players=[], isHuman={}, pawns={}, turn=0, deck=[], card=null, gameOver=false, busy=false;
+
+// pawn = {color,id,loc}; loc = {t:'start'} | {t:'ring',i} | {t:'safe',j} | {t:'home'}
+function newPawns(){
+  pawns={};
+  for(const c of COLORS) pawns[c]=[0,1,2,3].map(id=>({color:c,id,loc:{t:'start'}}));
+}
+function allPawns(){ let a=[]; for(const c of players) a=a.concat(pawns[c]); return a; }
+function curColor(){ return players[turn]; }
+
+// ---- movement primitives ----
+function stepFwd(color,loc){
+  if(loc.t==='start'||loc.t==='home') return null;
+  if(loc.t==='ring'){ if(loc.i===SAFE_ENTRY[color]) return {t:'safe',j:0}; return {t:'ring',i:(loc.i+1)%60}; }
+  if(loc.t==='safe'){ return loc.j<4 ? {t:'safe',j:loc.j+1} : {t:'home'}; }
+  return null;
+}
+function stepBack(color,loc){
+  if(loc.t==='start'||loc.t==='home') return null;
+  if(loc.t==='ring') return {t:'ring',i:(loc.i+59)%60};
+  if(loc.t==='safe') return loc.j>0 ? {t:'safe',j:loc.j-1} : {t:'ring',i:SAFE_ENTRY[color]};
+  return null;
+}
+function travel(color,loc,n,dir){
+  let cur=loc;
+  for(let s=0;s<n;s++){ cur = dir>0?stepFwd(color,cur):stepBack(color,cur); if(!cur) return null; }
+  return cur;
+}
+function sameCell(a,b){
+  if(a.t!==b.t) return false;
+  if(a.t==='ring') return a.i===b.i;
+  if(a.t==='safe') return a.j===b.j;
+  return true; // home/start
+}
+function ownPawnAt(color,loc,except){
+  if(loc.t==='home') return false; // home can stack
+  return pawns[color].some(p=>p!==except && sameCell(p.loc,loc));
+}
+function occupantsAtRing(i,except){
+  return allPawns().filter(p=>p!==except && p.loc.t==='ring' && p.loc.i===i);
+}
+
+// ---- landing resolution (mutates) ----
+function sendToStart(p){ p.loc={t:'start'}; }
+function resolveLanding(mover,dest,allowSlide){
+  if(!dest) return; // guard: destination became invalid (e.g. pawn bumped mid-move)
+  if(dest.t!=='ring'){ mover.loc=dest; return; }
+  if(allowSlide){
+    const sl=slideTriAt(dest.i);
+    if(sl && sl.color!==mover.color){
+      // bump everyone on the slide path (except mover), then land at end
+      const set=new Set(sl.cells);
+      for(const p of allPawns()){ if(p!==mover && p.loc.t==='ring' && set.has(p.loc.i)) sendToStart(p); }
+      mover.loc={t:'ring',i:sl.cells[sl.cells.length-1]};
+      toast(NAME[mover.color]+" slid!");
+      return;
+    }
+  }
+  const occ=occupantsAtRing(dest.i,mover);
+  for(const p of occ){ sendToStart(p); toast(NAME[p.color]+" bumped home!"); }
+  mover.loc=dest;
+}
+
+// ---- legal actions ----
+function legalActions(color,c){
+  const list=[], ps=pawns[color];
+  const onBoard=ps.filter(p=>p.loc.t!=='start' && p.loc.t!=='home');
+  const canLand=(p,loc)=> !ownPawnAt(color,loc,p);
+  const pushFwd=(n)=>{ for(const p of onBoard){ const d=travel(color,p.loc,n,1); if(d&&canLand(p,d)) list.push({k:'fwd',p,n}); } };
+  const pushBack=(n)=>{ for(const p of onBoard){ const d=travel(color,p.loc,n,-1); if(d&&canLand(p,d)) list.push({k:'back',p,n}); } };
+  const pushOut=()=>{ const ex={t:'ring',i:START_EXIT[color]}; for(const p of ps){ if(p.loc.t==='start' && canLand(p,ex)) list.push({k:'out',p}); } };
+
+  if(c===1){ pushOut(); pushFwd(1); }
+  else if(c===2){ pushOut(); pushFwd(2); }
+  else if(c===3){ pushFwd(3); }
+  else if(c===4){ pushBack(4); }
+  else if(c===5){ pushFwd(5); }
+  else if(c===8){ pushFwd(8); }
+  else if(c===12){ pushFwd(12); }
+  else if(c===10){ pushFwd(10); pushBack(1); }
+  else if(c===11){
+    pushFwd(11);
+    const mine=onBoard.filter(p=>p.loc.t==='ring');
+    for(const p of mine){ for(const op of allPawns()){ if(op.color!==color && op.loc.t==='ring') list.push({k:'swap',p,target:op}); } }
+  }
+  else if(c===7){
+    pushFwd(7);
+    // splits: two distinct pawns, a+b=7
+    for(let ai=0;ai<onBoard.length;ai++){
+      for(let bi=0;bi<onBoard.length;bi++){
+        if(ai===bi) continue;
+        const A=onBoard[ai], B=onBoard[bi];
+        for(let a=1;a<=6;a++){
+          const b=7-a; if(b<1) continue;
+          const dA=travel(color,A.loc,a,1); if(!dA||!canLand(A,dA)) continue;
+          const dB=travel(color,B.loc,b,1); if(!dB||!canLand(B,dB)) continue;
+          if(sameCell(dA,dB) && dA.t!=='home') continue; // can't both land same non-home cell
+          if(a<=b) list.push({k:'split',A,a,B,b}); // dedupe by a<=b ordering
+        }
+      }
+    }
+  }
+  else if(c==='sorry'){
+    const inStart=ps.filter(p=>p.loc.t==='start');
+    for(const p of inStart){ for(const op of allPawns()){ if(op.color!==color && op.loc.t==='ring') list.push({k:'sorry',p,target:op}); } }
+  }
+  return list;
+}
+
+// ---- apply an action ----
+function applyAction(a){
+  const color=a.p?a.p.color:a.A.color;
+  if(a.k==='out'){ resolveLanding(a.p,{t:'ring',i:START_EXIT[color]},true); }
+  else if(a.k==='fwd'){ resolveLanding(a.p, travel(color,a.p.loc,a.n,1), true); }
+  else if(a.k==='back'){ resolveLanding(a.p, travel(color,a.p.loc,a.n,-1), false); }
+  else if(a.k==='swap'){ const mi=a.p.loc.i, ti=a.target.loc.i; a.p.loc={t:'ring',i:ti}; a.target.loc={t:'ring',i:mi}; }
+  else if(a.k==='sorry'){ const ti=a.target.loc.i; sendToStart(a.target); a.p.loc={t:'ring',i:ti}; toast(NAME[a.target.color]+" — SORRY!"); }
+  else if(a.k==='split'){
+    resolveLanding(a.A, travel(color,a.A.loc,a.a,1), true);
+    // recompute B from its CURRENT loc: A's slide/bump may have moved B
+    if(a.B.loc.t!=='start' && a.B.loc.t!=='home'){ resolveLanding(a.B, travel(color,a.B.loc,a.b,1), true); }
+  }
+}
+
+function hasWon(color){ return pawns[color].every(p=>p.loc.t==='home'); }
+
+// ---- rendering ----
+const svg=document.getElementById("board");
+function roundRect(x,y,w,h,r,fill,stroke,sw){ return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="${fill}"${stroke?` stroke="${stroke}" stroke-width="${sw||2}"`:''}/>`; }
+function cellRect(col,row,fill,stroke,sw){ const [x,y]=px(col,row); return roundRect(x-HALF+2,y-HALF+2,CELL-4,CELL-4,6,fill,stroke,sw); }
+
+function buildBoard(){
+  let s=roundRect(4,4,592,592,22,"#f3efe2","#c9c2ad",4);
+  // all ring cells (big even squares)
+  for(let i=0;i<60;i++){ const [c,r]=ringColRow(i); s+=cellRect(c,r,"#ffffff","#c9c2ad",2); }
+  // slides
+  for(const sl of SLIDES){
+    const pts=sl.cells.map(ringPx);
+    const [x0,y0]=pts[0], [x1,y1]=pts[pts.length-1];
+    s+=`<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="${CSS[sl.color]}" stroke-width="12" stroke-linecap="round" opacity="0.55"/>`;
+    // triangle at start
+    s+=`<circle cx="${x0}" cy="${y0}" r="12" fill="${CSS[sl.color]}"/>`;
+    s+=`<path d="M ${x0-6} ${y0-7} L ${x0+7} ${y0} L ${x0-6} ${y0+7} Z" fill="#fff"/>`;
+    // end dot
+    s+=`<circle cx="${x1}" cy="${y1}" r="7" fill="${CSS[sl.color]}"/>`;
+  }
+  // per color: start-exit marker, safety lane, home, start circle
+  for(const c of COLORS){
+    const [ec,er]=ringColRow(START_EXIT[c]);
+    s+=cellRect(ec,er,CSS[c],"#0004",2);
+    for(const [cc,rr] of SAFE_CELLS[c]) s+=cellRect(cc,rr,CSS[c]+"cc","#0004",2);
+    // home
+    const [hc,hr]=HOME_CELL[c], [hx,hy]=px(hc,hr);
+    s+=roundRect(hx-26,hy-26,52,52,12,CSS[c],"#0006",3);
+    s+=`<text x="${hx}" y="${hy+5}" text-anchor="middle" font-size="12" font-weight="800" fill="${INK[c]}">HOME</text>`;
+    // start circle
+    const [sc,sr]=START_CELL[c], [sx,sy]=px(sc,sr);
+    s+=`<circle cx="${sx}" cy="${sy}" r="30" fill="${CSS[c]}33" stroke="${CSS[c]}" stroke-width="3"/>`;
+    s+=`<text x="${sx}" y="${sy-34}" text-anchor="middle" font-size="11" font-weight="800" fill="${CSS[c]}">START</text>`;
+  }
+  svg.innerHTML=s;
+  renderPawns();
+}
+
+function pawnXY(p){
+  const l=p.loc;
+  if(l.t==='ring') return ringPx(l.i);
+  if(l.t==='safe'){ const [c,r]=SAFE_CELLS[p.color][l.j]; return px(c,r); }
+  if(l.t==='home'){ const [hc,hr]=HOME_CELL[p.color]; const [bx,by]=px(hc,hr); return [bx-12+(p.id%2)*24, by-12+(p.id<2?0:24)]; }
+  // start cluster
+  const [sc,sr]=START_CELL[p.color]; const [bx,by]=px(sc,sr);
+  return [bx-11+(p.id%2)*22, by-11+(p.id<2?0:22)];
+}
+let highlightPawns=new Set();
+function renderPawns(){
+  svg.querySelectorAll(".peg").forEach(e=>e.remove());
+  for(const c of players){
+    for(const p of pawns[c]){
+      const [x,y]=pawnXY(p);
+      const g=document.createElementNS("http://www.w3.org/2000/svg","g");
+      const hot=highlightPawns.has(p);
+      g.setAttribute("class","peg"+(hot?" movable":""));
+      g.setAttribute("transform",`translate(${x.toFixed(1)},${y.toFixed(1)})`);
+      g.innerHTML=`<circle class="ring" r="15" fill="none" stroke="#111" stroke-width="3"/>`+
+        `<circle r="10.5" fill="${CSS[c]}" stroke="#0008" stroke-width="2"/>`+
+        `<circle r="3.4" cx="-3" cy="-3" fill="#ffffff99"/>`+
+        `<text y="3.5" text-anchor="middle" font-size="10" font-weight="800" fill="${INK[c]}">${p.id+1}</text>`;
+      if(hot) g.addEventListener("click",()=>tapPawn(p));
+      svg.appendChild(g);
+    }
+  }
+}
+
+// ---- UI flow ----
+const statusEl=document.getElementById("status");
+const deckSlot=document.getElementById("deckSlot");
+const actionsEl=document.getElementById("actions");
+const toastEl=document.getElementById("toast");
+let currentActions=[];
+
+function toast(m){ toastEl.textContent=m; toastEl.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>toastEl.classList.remove("show"),1500); }
+function setStatus(h){ statusEl.innerHTML=h; }
+function dot(c){ return `<span class="dot" style="background:${CSS[c]}"></span>`; }
+
+function showDeck(){
+  deckSlot.innerHTML=`<button class="deck" id="deck">SORRY!<br>DRAW</button>`;
+  document.getElementById("deck").addEventListener("click",humanDraw);
+}
+function showCard(v,anim){
+  const txt=(v==='sorry')?'SORRY!':v;
+  deckSlot.innerHTML=`<div class="cardFace ${v==='sorry'?'small':''}">${txt}</div>`;
+}
+
+function drawCard(){
+  if(deck.length===0) deck=shuffle(buildDeck());
+  card=deck.pop();
+  return card;
+}
+
+function beginTurn(){
+  if(gameOver) return;
+  card=null; currentActions=[]; actionsEl.innerHTML=""; highlightPawns=new Set();
+  renderPawns();
+  const c=curColor();
+  setStatus(`${dot(c)} ${isHuman[c]?"<b>Your turn</b> — draw a card":NAME[c]+" (CPU)…"}`);
+  if(isHuman[c]){ showDeck(); }
+  else { deckSlot.innerHTML=`<div class="cardFace small">…</div>`; busy=true; setTimeout(aiTurn,650); }
+}
+function nextTurn(){ turn=(turn+1)%players.length; beginTurn(); }
+
+function humanDraw(){
+  if(busy||gameOver) return;
+  const c=curColor(); if(!isHuman[c]) return;
+  busy=true;
+  animateDraw(()=>{
+    const v=drawCard(); showCard(v);
+    const acts=legalActions(c,v);
+    if(acts.length===0){
+      setStatus(`${dot(c)} Drew <b>${v==='sorry'?'SORRY!':v}</b> — no legal move`);
+      setTimeout(()=>{ busy=false; endTurnOrAgain(c,v,false); },1000);
+      return;
+    }
+    currentActions=acts;
+    showActionButtons(c,v,acts);
+    busy=false;
+  });
+}
+
+function showActionButtons(c,v,acts){
+  setStatus(`${dot(c)} Drew <b>${v==='sorry'?'SORRY!':v}</b> — choose a move`);
+  highlightPawns=new Set();
+  acts.forEach(a=>{ if(a.p) highlightPawns.add(a.p); if(a.A){highlightPawns.add(a.A);highlightPawns.add(a.B);} if(a.target) highlightPawns.add(a.target); });
+  renderPawns();
+  actionsEl.innerHTML="";
+  acts.forEach((a,idx)=>{
+    const b=document.createElement("button");
+    b.className="abtn"; b.textContent=actionLabel(a);
+    b.addEventListener("click",()=>chooseAction(idx));
+    actionsEl.appendChild(b);
+  });
+}
+function actionLabel(a){
+  if(a.k==='out') return `#${a.p.id+1} ▸ leave Start`;
+  if(a.k==='fwd') return `#${a.p.id+1} ▸ fwd ${a.n}`;
+  if(a.k==='back') return `#${a.p.id+1} ▸ back ${a.n}`;
+  if(a.k==='swap') return `#${a.p.id+1} ⇄ ${NAME[a.target.color]} #${a.target.id+1}`;
+  if(a.k==='sorry') return `SORRY! #${a.p.id+1} ▸ bump ${NAME[a.target.color]} #${a.target.id+1}`;
+  if(a.k==='split') return `#${a.A.id+1}+${a.a} & #${a.B.id+1}+${a.b}`;
+  return "?";
+}
+function tapPawn(p){
+  // execute if this pawn has exactly one simple action
+  const mine=currentActions.filter(a=>a.p===p && (a.k==='out'||a.k==='fwd'||a.k==='back'));
+  if(mine.length===1){ chooseAction(currentActions.indexOf(mine[0])); }
+}
+function chooseAction(idx){
+  if(busy||gameOver) return;
+  const a=currentActions[idx];
+  busy=true; actionsEl.innerHTML=""; highlightPawns=new Set();
+  const c=curColor(), v=card;
+  applyAction(a);
+  renderPawns();
+  setTimeout(()=>{
+    if(hasWon(c)){ gameOver=true; setStatus(`${dot(c)} <b>${isHuman[c]?"You win! 🎉":NAME[c]+" wins!"}</b>`); deckSlot.innerHTML=""; return; }
+    busy=false; endTurnOrAgain(c,v,true);
+  },400);
+}
+function endTurnOrAgain(c,v,moved){
+  if(v===2 && moved){
+    card=null; currentActions=[]; actionsEl.innerHTML="";
+    setStatus(`${dot(c)} Drew a 2 — ${isHuman[c]?"<b>draw again!</b>":"draws again…"}`);
+    if(isHuman[c]){ showDeck(); } else { setTimeout(aiTurn,600); }
+  } else {
+    nextTurn();
+  }
+}
+
+// ---- AI ----
+function progress(color,loc){
+  if(loc.t==='start') return -1;
+  if(loc.t==='home') return 100;
+  if(loc.t==='safe') return 60+loc.j;
+  return (loc.i-START_EXIT[color]+60)%60; // 0..59
+}
+function scoreAction(a){
+  const color=a.p?a.p.color:a.A.color;
+  const evalFwd=(p,dest)=>{
+    let sc=0;
+    if(dest.t==='home') sc+=200;
+    else if(dest.t==='safe') sc+=60+dest.j*4;
+    else if(dest.t==='ring'){
+      const sl=slideTriAt(dest.i);
+      if(sl&&sl.color!==color){ sc+=70+sl.cells.length*4; sc+=occupantsAtRing(dest.i,p).length*20; }
+      else sc+=occupantsAtRing(dest.i,p).filter(o=>o.color!==color).length*55;
+      sc+=progress(color,dest)*0.6;
+    }
+    return sc;
+  };
+  if(a.k==='out') return 55 + (occupantsAtRing(START_EXIT[color]).filter(o=>o.color!==color).length*55);
+  if(a.k==='fwd') return evalFwd(a.p, travel(color,a.p.loc,a.n,1)) + 2;
+  if(a.k==='back'){ const d=travel(color,a.p.loc,a.n,-1); const bump=d.t==='ring'?occupantsAtRing(d.i,a.p).filter(o=>o.color!==color).length:0; return bump*55 - 8; }
+  if(a.k==='swap'){ return (progress(color,a.target.loc)-progress(color,a.p.loc)) + 20; }
+  if(a.k==='sorry') return 150 + progress(a.target.color,a.target.loc);
+  if(a.k==='split') return evalFwd(a.A,travel(color,a.A.loc,a.a,1)) + evalFwd(a.B,travel(color,a.B.loc,a.b,1));
+  return 0;
+}
+function aiTurn(){
+  const c=curColor();
+  animateDraw(()=>{
+    const v=drawCard(); showCard(v);
+    const acts=legalActions(c,v);
+    if(acts.length===0){
+      setStatus(`${dot(c)} ${NAME[c]} drew ${v==='sorry'?'SORRY!':v} — no move`);
+      setTimeout(()=>{ busy=false; endTurnOrAgain(c,v,false); },900);
+      return;
+    }
+    let best=acts[0], bs=-1e9;
+    for(const a of acts){ const s=scoreAction(a); if(s>bs){bs=s;best=a;} }
+    setStatus(`${dot(c)} ${NAME[c]} drew <b>${v==='sorry'?'SORRY!':v}</b>`);
+    setTimeout(()=>{
+      applyAction(best); renderPawns();
+      setTimeout(()=>{
+        if(hasWon(c)){ gameOver=true; setStatus(`${dot(c)} <b>${NAME[c]} wins!</b>`); deckSlot.innerHTML=""; return; }
+        busy=false; endTurnOrAgain(c,v,true);
+      },420);
+    },650);
+  });
+}
+
+// ---- animations ----
+function animateDraw(cb){
+  let n=0; deckSlot.innerHTML=`<div class="cardFace">?</div>`;
+  const face=deckSlot.firstChild;
+  const iv=setInterval(()=>{ face.textContent=String(1+Math.floor(Math.random()*9)); if(++n>=5){ clearInterval(iv); cb(); } },65);
+}
+
+// ---- setup ----
+let humanCount=1;
+document.querySelectorAll("#humanSeg button").forEach(b=>b.addEventListener("click",()=>{
+  document.querySelectorAll("#humanSeg button").forEach(x=>x.classList.remove("on")); b.classList.add("on"); humanCount=+b.dataset.n;
+}));
+document.getElementById("startBtn").addEventListener("click",()=>{ startGame(humanCount); document.getElementById("setup").style.display="none"; });
+document.getElementById("menuBtn").addEventListener("click",()=>{ document.getElementById("setup").style.display="flex"; });
+
+function startGame(humans){
+  players=["red","blue","yellow","green"];
+  isHuman={}; players.forEach((c,i)=>isHuman[c]=i<humans);
+  newPawns(); turn=0; deck=shuffle(buildDeck()); card=null; gameOver=false; busy=false;
+  document.getElementById("legend").innerHTML=players.map(c=>`<span>${dot(c)}${NAME[c]}${isHuman[c]?" (you)":" CPU"}</span>`).join("");
+  buildBoard(); beginTurn();
+}
+
+buildBoard();
+startGame(1);
+document.getElementById("setup").style.display="flex";
+
+if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
+})();
+</script>
+</body>
+</html>

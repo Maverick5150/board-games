@@ -1,0 +1,14 @@
+{
+  "name": "Sorry!",
+  "short_name": "Sorry!",
+  "description": "Classic Sorry! board game — draw cards, slide, bump and race your pawns home.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0e1630",
+  "theme_color": "#0e1630",
+  "icons": [
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
