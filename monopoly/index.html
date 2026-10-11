@@ -261,14 +261,19 @@ function freshState(nPlayers,nHumans,tokenIdx){
   return {
     players, cur:0, dice:[0,0], doublesCount:0, phase:"preroll",
     owner:Array(40).fill(-1), houses:Array(40).fill(0), mort:Array(40).fill(false),
-    chance:shuffle(CHANCE.map((_,i)=>i)), chest:shuffle(CHEST.map((_,i)=>i)), ci:0, ki:0,
+    chanceDraw:shuffle(CHANCE.map((_,i)=>i)), chanceDisc:[],
+    chestDraw:shuffle(CHEST.map((_,i)=>i)), chestDisc:[],
+    jokersHeld:{chance:0,chest:0},
     housesLeft:32, hotelsLeft:12, fpPool:0, over:false, started:false,
-    turnDouble:false, phaseSince:0
+    turnDouble:false, phaseSince:0, bankAuctionActive:false
   };
 }
 function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=rnd(i+1); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 function cur(){ return G.players[G.cur]; }
 function alive(){ return G.players.filter(p=>!p.bankrupt); }
+// who is managing right now: the current human, or (during a CPU turn) the human player, so you can
+// build & mortgage any time like the official rules allow
+function viewer(){ return cur().human ? cur() : (G.players.find(p=>p.human && !p.bankrupt) || cur()); }
 
 /* ========================= HELPERS ========================= */
 function groupOf(i){ return BOARD[i].g; }
@@ -375,7 +380,8 @@ function openDeed(i,fromManage){
     openModal(h); return;
   }
   const own=G.owner[i];
-  const mine = own===G.cur && cur().human;
+  const v=viewer();
+  const mine = own===v.id && v.human && !v.bankrupt;
   h+=`<div style="text-align:center;color:var(--muted);font-size:12.5px;margin:2px 0 4px">Price <b style="color:var(--ink)">${money(s.price)}</b>`;
   if(own<0) h+=` · <b>Unowned</b>`;
   else { h+=` · Owner ${dotc(G.players[own])} <b style="color:var(--ink)">${G.players[own].name}</b>`; if(G.mort[i]) h+=` · <span class="neg">mortgaged</span>`; }
@@ -386,20 +392,20 @@ function openDeed(i,fromManage){
   if(mine){
     const grpMort = s.t==="prop" && GROUPS[s.g].some(x=>G.mort[x]);
     if(s.t==="prop"){
-      if(canBuildOn(cur(),i)) h+=`<button class="btn go" style="width:100%;margin:0 0 6px" onclick="window.__dBuild(${i})">${G.houses[i]===4?"🏨 Build Hotel":"🏠 Build House"} — ${money(s.house)}</button>`;
-      else if(!grpMort && ownsFullGroup(cur(),s.g) && G.houses[i]<5 && cur().cash<s.house) h+=`<button class="btn" style="width:100%;margin:0 0 6px" disabled>Need ${money(s.house)} to build</button>`;
-      if(G.houses[i]>0 && canSellHouse(cur(),i)) h+=`<button class="btn" style="width:100%;margin:0 0 6px" onclick="window.__dSell(${i})">Sell building — +${money(Math.floor(s.house/2))}</button>`;
+      if(canBuildOn(v,i)) h+=`<button class="btn go" style="width:100%;margin:0 0 6px" onclick="window.__dBuild(${i})">${G.houses[i]===4?"🏨 Build Hotel":"🏠 Build House"} — ${money(s.house)}</button>`;
+      else if(!grpMort && ownsFullGroup(v,s.g) && G.houses[i]<5 && v.cash<s.house) h+=`<button class="btn" style="width:100%;margin:0 0 6px" disabled>Need ${money(s.house)} to build</button>`;
+      if(G.houses[i]>0 && canSellHouse(v,i)) h+=`<button class="btn" style="width:100%;margin:0 0 6px" onclick="window.__dSell(${i})">Sell building — +${money(Math.floor(s.house/2))}</button>`;
     }
     if(!G.mort[i] && (s.t!=="prop"||G.houses[i]===0)) h+=`<button class="btn warn" style="width:100%;margin:0 0 6px" onclick="window.__dMort(${i})">Mortgage — +${money(s.mort)}</button>`;
-    if(G.mort[i]) h+=`<button class="btn go" style="width:100%;margin:0 0 6px" onclick="window.__dUnmort(${i})" ${cur().cash<Math.ceil(s.mort*1.1)?"disabled":""}>Lift mortgage — ${money(Math.ceil(s.mort*1.1))}</button>`;
+    if(G.mort[i]) h+=`<button class="btn go" style="width:100%;margin:0 0 6px" onclick="window.__dUnmort(${i})" ${v.cash<Math.ceil(s.mort*1.1)?"disabled":""}>Lift mortgage — ${money(Math.ceil(s.mort*1.1))}</button>`;
   }
   h+=`<button class="btn primary" style="width:100%" onclick="${fromManage?"window.__backManage()":"window.__close()"}">${fromManage?"‹ Back":"Close"}</button></div>`;
   openModal(h);
   const reopen=()=>{ refresh(); openDeed(i,fromManage); };
-  window.__dBuild=()=>{ buildHouse(cur(),i); reopen(); };
-  window.__dSell=()=>{ sellHouse(cur(),i); reopen(); };
-  window.__dMort=()=>{ mortgage(cur(),i); reopen(); };
-  window.__dUnmort=()=>{ unmortgage(cur(),i); reopen(); };
+  window.__dBuild=()=>{ buildHouse(v,i); reopen(); };
+  window.__dSell=()=>{ sellHouse(v,i); reopen(); };
+  window.__dMort=()=>{ mortgage(v,i); reopen(); };
+  window.__dUnmort=()=>{ unmortgage(v,i); reopen(); };
   window.__backManage=openManage;
 }
 
@@ -427,7 +433,7 @@ function renderControls(){
   if(!G || !G.started){ add("🎲 New Game","primary",openSetup); return; }
   const p=cur();
   if(G.over){ add("🎲 New Game","primary",openSetup); add("☰ Menu","",openMenu); return; }
-  if(!p.human){ add("CPU thinking…","",()=>{},true); add("☰","",openMenu); return; }
+  if(!p.human){ add("CPU thinking…","",()=>{},true); if(G.players.some(x=>x.human&&!x.bankrupt)){ add("Manage","",openManage); } add("👥","",openPlayers); add("☰","",openMenu); return; }
   if(G.phase==="preroll"){
     if(p.jail){
       add("🎲 Roll for doubles","go",humanRoll);
@@ -468,12 +474,12 @@ function refresh(){ renderBoard(); renderStatus(); renderControls(); }
 function payBank(p,amt,toPool){
   p.cash-=amt;
   if(toPool && RULES.freeParkingJackpot) G.fpPool+=amt;
-  checkDebt(p,amt,null);
+  if(p.cash<0) resolveDebt(p,null,!!toPool);
 }
 function gain(p,amt){ p.cash+=amt; }
 function payTo(p,creditor,amt){
-  const pay=Math.min(amt,Math.max(p.cash,0)); // actual transfer limited handled in debt
-  p.cash-=amt; creditor.cash+=amt; checkDebt(p,amt,creditor);
+  p.cash-=amt; creditor.cash+=amt;           // creditor is tentatively credited in full
+  if(p.cash<0) resolveDebt(p,creditor,false); // if payer can't cover it, bankruptcy claws the shortfall back
 }
 
 /* ========================= TURN FLOW ========================= */
@@ -614,6 +620,7 @@ function computeRent(i,own,mult){
 }
 
 function endOrContinue(){   // doubles tracked on G.turnDouble (ignores any arg passed by callers)
+  if(G.bankAuctionActive) return;   // a bankruptcy auction is running; it will advance the turn when done
   const p=cur();
   if(p.bankrupt){ G.phase="action"; advancePlayer(); return; }
   if(G.turnDouble && !p.jail){ G.turnDouble=false; G.phase="rolledAgain"; refresh(); if(!p.human) setTimeout(aiTurn,600); return; }
@@ -633,12 +640,12 @@ function offerBuy(p,i,wasDouble){
         <button class="btn go" style="width:100%;padding:16px;font-size:16px;margin:0 0 6px" ${p.cash<s.price?"disabled":""} onclick="window.__buy()">✅ Buy for ${money(s.price)}</button>
         <button class="btn warn" style="width:100%;padding:12px" onclick="window.__decline()">${RULES.noAuction?"❌ Don't buy":"❌ Decline → Auction"}</button>
       </div>`);
-    window.__buy=()=>{ closeModal(); buyProp(p,i); endOrContinue(wasDouble); };
-    window.__decline=()=>{ closeModal(); if(RULES.noAuction){ log(`${p.name} declines ${s.n}.`); endOrContinue(wasDouble);} else startAuction(i,wasDouble); };
+    window.__buy=()=>{ closeModal(); buyProp(p,i); endOrContinue(); };
+    window.__decline=()=>{ closeModal(); if(RULES.noAuction){ log(`${p.name} declines ${s.n}.`); endOrContinue();} else startAuction(i,endOrContinue); };
   } else {
     // AI decide
-    if(aiWantsToBuy(p,i)){ buyProp(p,i); endOrContinue(wasDouble); }
-    else { if(RULES.noAuction){ log(`${p.name} declines ${s.n}.`); endOrContinue(wasDouble);} else startAuction(i,wasDouble); }
+    if(aiWantsToBuy(p,i)){ buyProp(p,i); endOrContinue(); }
+    else { if(RULES.noAuction){ log(`${p.name} declines ${s.n}.`); endOrContinue();} else startAuction(i,endOrContinue); }
   }
 }
 function buyProp(p,i){ const s=BOARD[i]; p.cash-=s.price; G.owner[i]=p.id; log(`${p.name} buys ${s.n} for ${money(s.price)}.`); }
@@ -654,20 +661,25 @@ function aiWantsToBuy(p,i){
 }
 
 let AUC=null;
-function startAuction(i,wasDouble){
+function auctionQueue(list,onAllDone){   // auction each property in turn, then call onAllDone
+  if(!list.length){ onAllDone(); return; }
+  const i=list.shift();
+  startAuction(i, ()=>auctionQueue(list,onAllDone));
+}
+function startAuction(i,onDone){
   const bidders=alive();
-  AUC={i,wasDouble,price:0,high:null,active:bidders.map(b=>b.id),idx:0};
+  if(bidders.length===0){ if(onDone) onDone(); return; }
+  AUC={i,onDone,price:0,high:null,active:bidders.map(b=>b.id),idx:0};
   log(`Auction: ${BOARD[i].n} — bidding starts at $1.`);
   auctionStep();
 }
 function auctionStep(){
   if(!AUC) return;
   if(AUC.active.length<=1){
-    const winnerId = AUC.high!=null?AUC.high:(AUC.active.length===1?AUC.active[0]:null);
     closeModal();
     if(AUC.high!=null){ const w=G.players[AUC.high]; w.cash-=AUC.price; G.owner[AUC.i]=w.id; log(`${w.name} wins ${BOARD[AUC.i].n} at auction for ${money(AUC.price)}.`); }
     else log(`No bids — ${BOARD[AUC.i].n} stays unowned.`);
-    const wd=AUC.wasDouble; AUC=null; endOrContinue(wd); return;
+    const done=AUC.onDone; AUC=null; if(done) done(); return;
   }
   const bidderId=AUC.active[AUC.idx%AUC.active.length];
   const b=G.players[bidderId];
@@ -699,19 +711,28 @@ function aiAuctionValue(p,i){
 }
 
 /* ========================= CARDS ========================= */
-let JOKER_SRC=[]; // track for returning
+const JOKER_IDX={chance:CHANCE.findIndex(c=>c.fx==="joker"), chest:CHEST.findIndex(c=>c.fx==="joker")};
+// true draw pile + discard pile per deck; a "Get Out of Jail Free" that's drawn & kept
+// leaves circulation (not discarded) until used/returned. Pile reshuffles when exhausted.
 function drawCard(p,deck){
   const isCh=deck==="chance";
-  const arr=isCh?G.chance:G.chest, src=isCh?CHANCE:CHEST;
-  let ptr=isCh?G.ci:G.ki;
-  const cardIdx=arr[ptr]; ptr=(ptr+1)%arr.length; if(isCh)G.ci=ptr; else G.ki=ptr;
+  const draw=isCh?G.chanceDraw:G.chestDraw;
+  const disc=isCh?G.chanceDisc:G.chestDisc;
+  const src=isCh?CHANCE:CHEST;
+  if(draw.length===0){ while(disc.length) draw.push(disc.pop()); shuffle(draw); }
+  if(draw.length===0){ endOrContinue(); return; } // only possible if every card is held (impossible here)
+  const cardIdx=draw.shift();
   const card=src[cardIdx];
   const col=isCh?"#f08d1c":"#2b7be0";
   const show=cb=>{
     if(p.human){ openModal(`<h2>${isCh?"Chance":"Community Chest"}</h2><div class="cardbig" style="border-color:${col}">${card.text}</div><button class="btn primary" style="width:100%" onclick="window.__ok()">OK</button>`); window.__ok=()=>{ closeModal(); cb(); }; }
     else { log(`${p.name} — ${isCh?"Chance":"Chest"}: ${card.text}`); setTimeout(cb,700); }
   };
-  show(()=>applyCard(p,card,deck));
+  show(()=>{
+    if(card.fx==="joker"){ G.jokersHeld[deck]++; }   // held by player, stays out of the pile
+    else disc.push(cardIdx);                           // returned to the bottom of the deck
+    applyCard(p,card,deck);
+  });
 }
 function applyCard(p,card,deck){
   switch(card.fx){
@@ -725,14 +746,17 @@ function applyCard(p,card,deck){
     case "jail": goToJail(p); refresh(); endOrContinue(false); break;
     case "joker": p.jokers++; endOrContinue(false); break;
     case "back3": { p.pos=(p.pos-3+40)%40; refresh(); setTimeout(()=>resolveLanding(p,false),300); break; }
-    case "payeach": { alive().forEach(q=>{ if(q!==p){ payTo(p,q,card.a);} }); endOrContinue(false); break; }
-    case "collecteach": { alive().forEach(q=>{ if(q!==p){ payTo(q,p,card.a);} }); endOrContinue(false); break; }
+    case "payeach": { alive().forEach(q=>{ if(q!==p && !p.bankrupt){ forcePayTo(p,q,card.a);} }); endOrContinue(false); break; }
+    case "collecteach": { alive().forEach(q=>{ if(q!==p){ forcePayTo(q,p,card.a);} }); endOrContinue(false); break; }
     case "repairs": { let h=0,ht=0; for(let i=0;i<40;i++) if(G.owner[i]===p.id && BOARD[i].t==="prop"){ if(G.houses[i]===5) ht++; else h+=G.houses[i]; } const amt=h*card.a[0]+ht*card.a[1]; payBank(p,amt,true); log(`${p.name} pays repairs ${money(amt)}.`); endOrContinue(false); break; }
     case "nearRR": { const idx=nearest(p.pos,RR_IDX); goToAndPay(p,idx,2); break; }
     case "nearUtil": { const idx=nearest(p.pos,UTIL_IDX); goToAndPay(p,idx,10); break; }
   }
 }
-function returnJoker(){ /* joker returns to bottom of a deck implicitly; no-op for supply */ }
+function returnJoker(){ // a held Get-Out-of-Jail card goes back to the bottom of its deck
+  if(G.jokersHeld.chance>0){ G.jokersHeld.chance--; G.chanceDisc.push(JOKER_IDX.chance); }
+  else if(G.jokersHeld.chest>0){ G.jokersHeld.chest--; G.chestDisc.push(JOKER_IDX.chest); }
+}
 function nearest(pos,list){ for(let step=1;step<=40;step++){ const q=(pos+step)%40; if(list.includes(q)) return q; } return list[0]; }
 function goToAndPay(p,idx,mult){
   if(idx<=p.pos) passGo(p);
@@ -747,15 +771,15 @@ function goToAndPay(p,idx,mult){
 }
 
 /* ========================= DEBT / BANKRUPTCY ========================= */
-function checkDebt(p,amt,creditor){
+function resolveDebt(p,creditor,toPool){
   if(p.cash>=0) return;
-  if(p.human){
-    // prompt to raise funds
-    setTimeout(()=>openDebtModal(p,creditor),50);
-  } else {
-    aiRaiseFunds(p);
-    if(p.cash<0) declareBankrupt(p,creditor);
-  }
+  if(p.human){ openDebtModal(p,creditor,toPool); }          // interactive; opened synchronously
+  else { aiRaiseFunds(p); if(p.cash<0) declareBankrupt(p,creditor,toPool); }
+}
+// non-interactive payment used by "pay/collect from each player" cards (may auto-bankrupt a non-current player)
+function forcePayTo(p,creditor,amt){
+  p.cash-=amt; creditor.cash+=amt;
+  if(p.cash<0){ aiRaiseFunds(p); if(p.cash<0) declareBankrupt(p,creditor,false); }
 }
 function liquidatableValue(p){
   let v=p.cash;
@@ -779,25 +803,41 @@ function aiRaiseFunds(p){
     if(!sold) break;
   }
 }
-function declareBankrupt(p,creditor){
+function declareBankrupt(p,creditor,toPool){
   log(`<b>${p.name} is bankrupt!</b>`);
-  // return houses
-  for(let i=0;i<40;i++) if(G.owner[i]===p.id){
-    if(BOARD[i].t==="prop" && G.houses[i]>0){ if(G.houses[i]===5){G.hotelsLeft++;} else {G.housesLeft+=G.houses[i];} G.houses[i]=0; }
-    if(creditor){ G.owner[i]=creditor.id; } else { G.owner[i]=-1; G.mort[i]=false; }
+  // sell all buildings back to the bank; proceeds (half price) go to the creditor, if any
+  let refund=0;
+  for(let i=0;i<40;i++) if(G.owner[i]===p.id && BOARD[i].t==="prop" && G.houses[i]>0){
+    const s=BOARD[i]; refund+=Math.floor(G.houses[i]*s.house/2);
+    if(G.houses[i]===5) G.hotelsLeft++; else G.housesLeft+=G.houses[i];
+    G.houses[i]=0;
   }
-  if(creditor){ creditor.cash+=Math.max(p.cash,0); if(p.jokers){creditor.jokers+=p.jokers;} }
+  if(creditor){
+    creditor.cash += p.cash + refund;   // p.cash is the negative shortfall → claws back any over-credit
+    creditor.jokers += p.jokers;
+    const taken=[]; for(let i=0;i<40;i++) if(G.owner[i]===p.id){ G.owner[i]=creditor.id; taken.push(i); }
+    for(const i of taken) if(G.mort[i]){ const fee=Math.ceil(BOARD[i].mort*0.1); if(creditor.cash>=fee) creditor.cash-=fee; } // 10% interest to keep mortgaged
+    p.cash=0; p.jokers=0; p.bankrupt=true;
+    if(alive().length<=1){ endGame(); return; }
+    closeModal(); return;
+  }
+  // bankrupt to the BANK: cash lost (to FP pool under that rule), jail cards returned, properties auctioned
+  if(toPool && RULES.freeParkingJackpot && p.cash<0) G.fpPool+=p.cash; // claw back over-credit from the pool
+  for(let k=0;k<p.jokers;k++) returnJoker();
+  const list=[]; for(let i=0;i<40;i++) if(G.owner[i]===p.id){ G.owner[i]=-1; list.push(i); } // mortgage state kept for auction
   p.cash=0; p.jokers=0; p.bankrupt=true;
   if(alive().length<=1){ endGame(); return; }
   closeModal();
+  if(list.length){ G.bankAuctionActive=true; log(`The bank auctions ${p.name}'s ${list.length} propert${list.length>1?'ies':'y'}.`); auctionQueue(list, ()=>{ G.bankAuctionActive=false; advancePlayer(); }); }
 }
-function openDebtModal(p,creditor){
+function finishBankrupt(p,creditor,toPool){ declareBankrupt(p,creditor,toPool); if(!G.bankAuctionActive && !G.over) endOrContinue(); }
+function openDebtModal(p,creditor,toPool){
   const need=-p.cash;
-  if(liquidatableValue(p)<0){ declareBankrupt(p,creditor); return; }
-  openModal(`<h2 class="neg">You owe ${money(need)}</h2><p>Raise cash by selling houses or mortgaging, or declare bankruptcy.</p>
+  if(liquidatableValue(p)<0){ finishBankrupt(p,creditor,toPool); return; }
+  openModal(`<h2 class="neg">You owe ${money(need)} more</h2><p>Sell buildings or mortgage properties to raise the cash, or declare bankruptcy.</p>
     <div id="debtList"></div>
     <button class="btn warn" style="width:100%;margin-top:8px" onclick="window.__bankrupt()">Declare Bankruptcy</button>`);
-  window.__bankrupt=()=>declareBankrupt(p,creditor);
+  window.__bankrupt=()=>finishBankrupt(p,creditor,toPool);
   renderDebtList(p,creditor);
 }
 function renderDebtList(p,creditor){
@@ -897,7 +937,7 @@ function aiBuildPhase(p){
 
 /* ========================= MANAGE MODAL ========================= */
 function openManage(){
-  const p=cur();
+  const p=viewer();
   let h=`<h2>Manage — ${p.name}</h2><p class="cash">Cash ${money(p.cash)} · Net worth ${money(netWorth(p))}${p.jokers?` · 🎫 ${p.jokers} Jail card(s)`:""}</p>`;
   h+=`<p style="color:var(--muted);font-size:12px;margin:2px 0 8px">Tap a property to see its title deed and build / mortgage it.</p>`;
   // group owned properties by color group for a tidy list
@@ -1034,12 +1074,19 @@ function proposeTrade(){
 }
 function execTrade(){
   const me=G.players[TRADE.me], them=G.players[TRADE.them];
+  const giveMort=[...TRADE.give].filter(i=>G.mort[i]);
+  const getMort=[...TRADE.get].filter(i=>G.mort[i]);
   [...TRADE.give].forEach(i=>G.owner[i]=them.id);
   [...TRADE.get].forEach(i=>G.owner[i]=me.id);
   me.cash-=TRADE.cashGive; them.cash+=TRADE.cashGive;
   them.cash-=TRADE.cashGet; me.cash+=TRADE.cashGet;
   if(TRADE.giveJoker){ me.jokers--; them.jokers++; }
   if(TRADE.getJoker){ them.jokers--; me.jokers++; }
+  // 10% bank interest on each mortgaged property that changes hands (new owner keeps it mortgaged)
+  let fee=0;
+  giveMort.forEach(i=>{ const f=Math.ceil(BOARD[i].mort*0.1); them.cash-=f; fee+=f; });
+  getMort.forEach(i=>{ const f=Math.ceil(BOARD[i].mort*0.1); me.cash-=f; fee+=f; });
+  if(fee>0) log(`Mortgage interest paid to the bank on traded deeds.`);
   TRADE=null; closeModal(); refresh();
 }
 
