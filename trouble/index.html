@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0e1630">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Trouble</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.png">
+<style>
+  :root{
+    --red:#e23b3b; --blue:#2b7be0; --green:#27a758; --yellow:#eec21b;
+    --bg:#0e1630; --panel:#16203f; --ink:#eef2ff; --muted:#9fb0d8;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; height:100%;}
+  body{
+    background:radial-gradient(120% 120% at 50% 0%, #1b2a55 0%, var(--bg) 60%);
+    color:var(--ink); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    display:flex; flex-direction:column; align-items:center;
+    min-height:100%; padding:max(10px,env(safe-area-inset-top)) 10px max(10px,env(safe-area-inset-bottom));
+    overflow-x:hidden; touch-action:manipulation;
+  }
+  h1{font-size:20px; margin:4px 0 2px; letter-spacing:.5px;}
+  .sub{color:var(--muted); font-size:12px; margin-bottom:8px;}
+  #boardWrap{width:min(94vw,520px); aspect-ratio:1/1; position:relative;}
+  svg{width:100%; height:100%; display:block;}
+  .status{
+    width:min(94vw,520px); min-height:40px; display:flex; align-items:center; justify-content:center;
+    gap:10px; background:var(--panel); border-radius:14px; padding:8px 12px; margin:8px 0;
+    font-size:15px; font-weight:600; text-align:center;
+  }
+  .dot{width:14px; height:14px; border-radius:50%; display:inline-block; box-shadow:0 0 0 2px #0003 inset;}
+  .controls{display:flex; gap:10px; align-items:center; justify-content:center; flex-wrap:wrap;}
+  .pop{
+    width:92px; height:92px; border-radius:50%; border:none; cursor:pointer;
+    background:radial-gradient(circle at 35% 30%, #ffffff, #cdd6f0 55%, #8da0cf 100%);
+    box-shadow:0 8px 0 #5a6aa0, 0 12px 18px #0007; color:#1b2340; font-weight:800;
+    font-size:34px; position:relative; transition:transform .05s, box-shadow .05s;
+  }
+  .pop:active{transform:translateY(5px); box-shadow:0 3px 0 #5a6aa0, 0 6px 10px #0007;}
+  .pop[disabled]{filter:grayscale(.6) brightness(.85); cursor:default;}
+  .pop .lbl{position:absolute; bottom:-20px; left:0; right:0; font-size:11px; font-weight:700; color:var(--muted);}
+  .btn{
+    background:var(--panel); color:var(--ink); border:1px solid #2e3b66; border-radius:12px;
+    padding:12px 16px; font-size:15px; font-weight:600; cursor:pointer;
+  }
+  .btn.primary{background:#2b7be0; border-color:#2b7be0;}
+  .peg{cursor:default; transition:transform .18s ease;}
+  .peg.movable{cursor:pointer;}
+  .peg.movable .ring{opacity:1;}
+  .ring{opacity:0;}
+  .overlay{
+    position:fixed; inset:0; background:#0b1228ee; display:flex; align-items:center; justify-content:center;
+    padding:20px; z-index:10;
+  }
+  .card{background:var(--panel); border-radius:18px; padding:22px; width:min(92vw,420px); text-align:center;}
+  .card h2{margin:0 0 6px;}
+  .card p{color:var(--muted); font-size:14px; margin:6px 0 16px;}
+  .seg{display:flex; gap:8px; justify-content:center; margin:14px 0;}
+  .seg button{flex:1; padding:14px 0; border-radius:12px; border:1px solid #2e3b66; background:#101938; color:var(--ink); font-size:18px; font-weight:800; cursor:pointer;}
+  .seg button.on{background:#2b7be0; border-color:#2b7be0;}
+  .legend{display:flex; gap:12px; justify-content:center; flex-wrap:wrap; font-size:12px; color:var(--muted); margin-top:4px;}
+  .legend span{display:flex; align-items:center; gap:5px;}
+  .toast{position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#000a; padding:10px 16px; border-radius:20px; font-size:14px; opacity:0; transition:opacity .2s; pointer-events:none; z-index:20;}
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+  <h1>TROUBLE</h1>
+  <div class="sub">Pop the die &middot; roll a 6 to leave home &middot; get all 4 pegs home to win</div>
+  <div class="status" id="status">&nbsp;</div>
+  <div id="boardWrap"><svg id="board" viewBox="0 0 600 600"></svg></div>
+  <div class="controls">
+    <button class="btn" id="menuBtn">Menu</button>
+    <button class="pop" id="pop">POP<span class="lbl">tap to roll</span></button>
+    <button class="btn" id="passBtn" style="visibility:hidden">Pass</button>
+  </div>
+  <div class="legend" id="legend"></div>
+
+  <div class="overlay" id="setup">
+    <div class="card">
+      <h2>New Game</h2>
+      <p>How many of the 4 players are human? The rest are computer. You are <b>Red</b>.</p>
+      <div class="seg" id="humanSeg">
+        <button data-n="1" class="on">1</button>
+        <button data-n="2">2</button>
+        <button data-n="3">3</button>
+        <button data-n="4">4</button>
+      </div>
+      <button class="btn primary" id="startBtn" style="width:100%;padding:14px;">Start Game</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+(function(){
+"use strict";
+
+const COLORS = ["red","blue","green","yellow"];
+const CSSCOL = {red:"#e23b3b", blue:"#2b7be0", green:"#27a758", yellow:"#eec21b"};
+const NAME   = {red:"Red", blue:"Blue", green:"Green", yellow:"Yellow"};
+const TRACK = 28;                     // spaces around the loop
+const START = {red:0, green:7, yellow:14, blue:21};  // entry space per color
+const MAXD = 31;                      // 0..27 track, 28..31 finish slots
+const cx=300, cy=300;
+const trackR=228, homeR=272;
+
+// ---- geometry ----
+function ang(i){ return (-90 + 360*i/TRACK) * Math.PI/180; }
+function trackXY(i){ const a=ang(i); return [cx+trackR*Math.cos(a), cy+trackR*Math.sin(a)]; }
+// absolute track space for a peg of color c at distance d (0..27)
+function absSpace(c,d){ return (START[c]+d)%TRACK; }
+// pixel position for a peg state
+function pegXY(c,d){
+  if(d===null) return null;              // handled separately (home nest)
+  if(d<=27) return trackXY(absSpace(c,d));
+  const j=d-28;                          // finish slot 0..3
+  const a=ang(START[c]);
+  const r=trackR-42*(j+1);
+  return [cx+r*Math.cos(a), cy+r*Math.sin(a)];
+}
+function homeSlotXY(c,k){
+  const a=ang(START[c]);
+  const bx=cx+homeR*Math.cos(a), by=cy+homeR*Math.sin(a);
+  const ox=(k%2?1:-1)*16, oy=(k<2?-1:1)*16;
+  return [bx+ox, by+oy];
+}
+
+// ---- state ----
+let players=[];        // active colors in play
+let isHuman={};        // color -> bool
+let pegs={};           // color -> [d,d,d,d]  (null=home)
+let turn=0;            // index into players
+let die=0;
+let awaitingMove=false;
+let extraRoll=false;
+let sixStreak=0;
+let gameOver=false;
+let busy=false;
+
+const svg=document.getElementById("board");
+const statusEl=document.getElementById("status");
+const popBtn=document.getElementById("pop");
+const passBtn=document.getElementById("passBtn");
+const toastEl=document.getElementById("toast");
+
+function toast(msg){ toastEl.textContent=msg; toastEl.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>toastEl.classList.remove("show"),1400); }
+
+// ---- board rendering ----
+function buildBoard(){
+  let s="";
+  // outer plate
+  s+=`<circle cx="${cx}" cy="${cy}" r="292" fill="#101a3c" stroke="#1a254a" stroke-width="3"/>`;
+  // track spaces
+  for(let i=0;i<TRACK;i++){
+    const [x,y]=trackXY(i);
+    s+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="15" fill="#26325f" stroke="#39498a" stroke-width="2"/>`;
+  }
+  // per color: finish slots + home nest + colored start ring
+  for(const c of COLORS){
+    // start space highlight
+    const [sx,sy]=trackXY(START[c]);
+    s+=`<circle cx="${sx.toFixed(1)}" cy="${sy.toFixed(1)}" r="15" fill="none" stroke="${CSSCOL[c]}" stroke-width="4"/>`;
+    // finish slots
+    for(let j=0;j<4;j++){
+      const [fx,fy]=pegXY(c,28+j);
+      s+=`<circle cx="${fx.toFixed(1)}" cy="${fy.toFixed(1)}" r="13" fill="${CSSCOL[c]}22" stroke="${CSSCOL[c]}" stroke-width="2"/>`;
+    }
+    // home nest plate
+    const a=ang(START[c]);
+    const hx=cx+homeR*Math.cos(a), hy=cy+homeR*Math.sin(a);
+    s+=`<circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="30" fill="${CSSCOL[c]}26" stroke="${CSSCOL[c]}" stroke-width="2"/>`;
+  }
+  svg.innerHTML=s;
+  renderPegs();
+}
+
+function renderPegs(){
+  // remove old pegs
+  svg.querySelectorAll(".peg").forEach(e=>e.remove());
+  const movable = (awaitingMove && !busy) ? legalMovesFor(players[turn], die) : [];
+  const movSet = new Set(movable.map(m=>m.peg));
+  const cur = players[turn];
+  for(const c of players){
+    for(let k=0;k<4;k++){
+      const d=pegs[c][k];
+      let xy;
+      if(d===null) xy=homeSlotXY(c,k); else xy=pegXY(c,d);
+      const [x,y]=xy;
+      const g=document.createElementNS("http://www.w3.org/2000/svg","g");
+      g.setAttribute("class","peg"+((c===cur && movSet.has(k))?" movable":""));
+      g.setAttribute("transform",`translate(${x.toFixed(1)},${y.toFixed(1)})`);
+      g.innerHTML=
+        `<circle class="ring" r="20" fill="none" stroke="#fff" stroke-width="3"/>`+
+        `<circle r="12" fill="${CSSCOL[c]}" stroke="#00000055" stroke-width="2"/>`+
+        `<circle r="4" cx="-3" cy="-3" fill="#ffffff88"/>`;
+      if(c===cur && movSet.has(k)){
+        g.addEventListener("click",()=>humanMove(k));
+      }
+      svg.appendChild(g);
+    }
+  }
+}
+
+// ---- rules ----
+function occupantAt(color,targetD){
+  // returns {color,peg} occupying the same absolute space as `color` would at targetD, else null
+  if(targetD>27){ // finish slot: only own color can be there
+    for(let k=0;k<4;k++) if(pegs[color][k]===targetD) return {color,peg:k};
+    return null;
+  }
+  const absTarget=absSpace(color,targetD);
+  for(const c of players){
+    for(let k=0;k<4;k++){
+      const d=pegs[c][k];
+      if(d===null||d>27) continue;
+      if(absSpace(c,d)===absTarget) return {color:c,peg:k};
+    }
+  }
+  return null;
+}
+
+function legalMovesFor(color,roll){
+  const moves=[];
+  for(let k=0;k<4;k++){
+    const d=pegs[color][k];
+    if(d===null){
+      if(roll===6){
+        const occ=occupantAt(color,0);
+        if(!(occ && occ.color===color)) moves.push({peg:k,from:null,to:0});
+      }
+      continue;
+    }
+    const nd=d+roll;
+    if(nd>MAXD) continue;                     // need exact into finish
+    const occ=occupantAt(color,nd);
+    if(occ && occ.color===color) continue;    // can't land on own peg
+    moves.push({peg:k,from:d,to:nd});
+  }
+  return moves;
+}
+
+function applyMove(color,mv){
+  // capture?
+  if(mv.to<=27){
+    const occ=occupantAt(color,mv.to);
+    if(occ && occ.color!==color){
+      pegs[occ.color][occ.peg]=null;
+      toast(NAME[occ.color]+" sent home!");
+    }
+  }
+  pegs[color][mv.peg]=mv.to;
+}
+
+function hasWon(color){ return pegs[color].every(d=>d!==null && d>=28); }
+
+// ---- flow ----
+function setStatus(html){ statusEl.innerHTML=html; }
+function curColor(){ return players[turn]; }
+
+function showTurn(){
+  const c=curColor();
+  const who=isHuman[c]?"Your turn":NAME[c]+" (CPU)";
+  setStatus(`<span class="dot" style="background:${CSSCOL[c]}"></span> ${isHuman[c]?"<b>Your turn</b> — pop the die":who+"…"}`);
+}
+
+function beginTurn(){
+  if(gameOver) return;
+  die=0; awaitingMove=false;
+  renderPegs();
+  showTurn();
+  const c=curColor();
+  passBtn.style.visibility="hidden";
+  if(isHuman[c]){
+    popBtn.disabled=false;
+  }else{
+    popBtn.disabled=true;
+    busy=true;
+    setTimeout(aiRoll, 650);
+  }
+}
+
+function nextTurn(){
+  sixStreak=0;
+  turn=(turn+1)%players.length;
+  beginTurn();
+}
+
+function doRoll(){
+  die=1+Math.floor(Math.random()*6);
+  return die;
+}
+
+function afterRollResolve(color){
+  const moves=legalMovesFor(color,die);
+  if(moves.length===0){
+    setStatus(`<span class="dot" style="background:${CSSCOL[color]}"></span> Rolled <b>${die}</b> — no moves`);
+    awaitingMove=false;
+    renderPegs();
+    if(die===6 && sixStreak<3){
+      // rolled 6 but nothing to do -> still lose turn per no-move
+    }
+    setTimeout(()=>{ busy=false; nextTurn(); }, 900);
+    return;
+  }
+  awaitingMove=true;
+  if(isHuman[color]){
+    busy=false;
+    setStatus(`<span class="dot" style="background:${CSSCOL[color]}"></span> Rolled <b>${die}</b> — tap a highlighted peg`);
+    renderPegs();
+  }else{
+    renderPegs();
+    setTimeout(()=>aiPickMove(color,moves), 600);
+  }
+}
+
+// human roll
+popBtn.addEventListener("click",()=>{
+  if(gameOver||busy||awaitingMove) return;
+  const c=curColor();
+  if(!isHuman[c]) return;
+  popBtn.disabled=true;
+  busy=true;
+  animatePop(()=>{
+    doRoll();
+    if(die===6) sixStreak++; else sixStreak=0;
+    afterRollResolve(c);
+  });
+});
+
+function humanMove(k){
+  if(!awaitingMove||busy) return;
+  const c=curColor();
+  const moves=legalMovesFor(c,die);
+  const mv=moves.find(m=>m.peg===k);
+  if(!mv) return;
+  busy=true;
+  awaitingMove=false;
+  applyMove(c,mv);
+  renderPegs();
+  finishMove(c);
+}
+
+function finishMove(color){
+  if(hasWon(color)){
+    gameOver=true;
+    renderPegs();
+    setStatus(`<span class="dot" style="background:${CSSCOL[color]}"></span> <b>${isHuman[color]?"You win! 🎉":NAME[color]+" wins"}</b>`);
+    popBtn.disabled=true;
+    return;
+  }
+  const rolledSix = (die===6 && sixStreak<3);
+  setTimeout(()=>{
+    if(rolledSix){
+      // same player rolls again
+      die=0; awaitingMove=false;
+      showTurnRollAgain(color);
+      if(isHuman[color]){ busy=false; popBtn.disabled=false; }
+      else { setTimeout(aiRoll, 600); }
+    }else{
+      busy=false;
+      nextTurn();
+    }
+  }, 350);
+}
+
+function showTurnRollAgain(c){
+  setStatus(`<span class="dot" style="background:${CSSCOL[c]}"></span> Rolled a 6 — ${isHuman[c]?"<b>roll again!</b>":NAME[c]+" rolls again…"}`);
+}
+
+// ---- AI ----
+function aiRoll(){
+  const c=curColor();
+  animatePop(()=>{
+    doRoll();
+    if(die===6) sixStreak++; else sixStreak=0;
+    afterRollResolve(c);
+  });
+}
+function aiPickMove(color,moves){
+  // score each move
+  let best=null, bestScore=-1e9;
+  for(const mv of moves){
+    let sc=0;
+    // capture value
+    if(mv.to<=27){
+      const occ=occupantAt(color,mv.to);
+      if(occ && occ.color!==color) sc+=100+occ.peg*0+ (pegs[occ.color][occ.peg]);
+    }
+    // entering/advancing in finish
+    if(mv.to>=28) sc+=40+mv.to;
+    // get a peg out of home
+    if(mv.from===null) sc+=30;
+    // general progress
+    sc+=mv.to*0.5;
+    if(sc>bestScore){bestScore=sc; best=mv;}
+  }
+  applyMove(color,best);
+  renderPegs();
+  finishMove(color);
+}
+
+// ---- pop animation ----
+function animatePop(cb){
+  popBtn.textContent="…";
+  let n=0;
+  const iv=setInterval(()=>{
+    popBtn.textContent=String(1+Math.floor(Math.random()*6));
+    if(++n>=6){ clearInterval(iv); setTimeout(()=>{ cb(); popBtn.innerHTML = die? String(die)+'<span class="lbl">'+(busy?'':'tap to roll')+'</span>' : 'POP<span class="lbl">tap to roll</span>'; },120); }
+  },70);
+}
+
+// ---- setup ----
+let humanCount=1;
+document.querySelectorAll("#humanSeg button").forEach(b=>{
+  b.addEventListener("click",()=>{
+    document.querySelectorAll("#humanSeg button").forEach(x=>x.classList.remove("on"));
+    b.classList.add("on"); humanCount=+b.dataset.n;
+  });
+});
+document.getElementById("startBtn").addEventListener("click",()=>{
+  startGame(humanCount);
+  document.getElementById("setup").style.display="none";
+});
+document.getElementById("menuBtn").addEventListener("click",()=>{
+  document.getElementById("setup").style.display="flex";
+});
+
+function startGame(humans){
+  // play order around the board
+  players=["red","green","yellow","blue"];
+  isHuman={}; pegs={};
+  players.forEach((c,i)=>{ isHuman[c]= i<humans; pegs[c]=[null,null,null,null]; });
+  turn=0; die=0; gameOver=false; busy=false; awaitingMove=false; sixStreak=0;
+  // legend
+  const leg=document.getElementById("legend");
+  leg.innerHTML=players.map(c=>`<span><span class="dot" style="background:${CSSCOL[c]}"></span>${NAME[c]}${isHuman[c]?" (you)":" CPU"}</span>`).join("");
+  buildBoard();
+  beginTurn();
+}
+
+// init board visuals even before start
+buildBoard();
+startGame(1);
+document.getElementById("setup").style.display="flex";
+
+// register service worker for offline / installable
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.register("sw.js").catch(()=>{});
+}
+})();
+</script>
+</body>
+</html>
