@@ -40,7 +40,7 @@
   .corner .big{font-size:13px;}
   .center{grid-column:2/11; grid-row:2/11; display:flex; align-items:center; justify-content:center; background:var(--board); position:relative;}
   .logo{font-size:min(7vw,42px); font-weight:900; color:#d7263d; letter-spacing:2px; transform:rotate(-18deg); text-shadow:1px 1px 0 #0003; text-align:center;}
-  .owner{position:absolute; width:7px; height:7px; border-radius:2px; top:1px; right:1px; border:1px solid #0006;}
+  .owner{position:absolute; width:8px; height:8px; border-radius:50%; bottom:1px; right:1px; border:1px solid #0008; box-shadow:0 0 0 1px #fff8;}
   .hs{position:absolute; top:1px; left:1px; display:flex; gap:1px;}
   .hs i{width:3px; height:3px; background:#1f9d54; border:.5px solid #0a3; display:block;}
   .hs i.hotel{width:5px; height:4px; background:#d7263d;}
@@ -337,10 +337,11 @@ function spaceInner(i){
   const ic=spaceIcon(i);
   if(ic) inner+=`<div class="ic2${s.t==="chance"?" q":""}">${ic}</div>`;
   if(s.price) inner+=`<div class="pr2">$${s.price}</div>`;
+  // owner marker lives INSIDE the rotated layer so it always sits on the board's outer edge
+  if(G.owner[i]>=0) inner+=`<div class="owner" style="background:${G.players[G.owner[i]].color}"></div>`;
   let h=`<div class="spin" style="transform:rotate(${sideAngle(i)}deg)">${inner}</div>`;
-  // overlay (never rotated): owner marker, houses, mortgage, tokens
+  // overlay (never rotated): houses, mortgage, tokens
   h+=`<div class="ovl">`;
-  if(G.owner[i]>=0) h+=`<div class="owner" style="background:${G.players[G.owner[i]].color}"></div>`;
   if(s.t==="prop" && G.houses[i]>0) h+= G.houses[i]===5?`<div class="hs"><i class="hotel"></i></div>`:`<div class="hs">`+"<i></i>".repeat(G.houses[i])+`</div>`;
   if(G.mort[i]) h+=`<div class="mort"></div>`;
   h+=`</div>`;
@@ -381,6 +382,9 @@ function openDeed(i,fromManage){
   let h=`<h2 style="text-align:center;margin-bottom:0">${s.n}</h2>`;
   if(!s.price){
     h+=`<p style="text-align:center;margin:8px 0">${spaceDesc(s)}</p>`;
+    if(s.t==="fp" && RULES.freeParkingJackpot){
+      h+=`<div style="text-align:center;margin:6px 0 2px;font-size:13px;color:var(--muted)">Current pot</div><div class="cash" style="text-align:center;font-size:26px;font-weight:900">${money(G.fpPool)}</div>`;
+    }
     h+=`<button class="btn primary" style="width:100%;margin-top:8px" onclick="window.__close()">Close</button>`;
     openModal(h); return;
   }
