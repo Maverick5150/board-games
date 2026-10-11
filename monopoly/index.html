@@ -23,18 +23,19 @@
     font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; display:flex; flex-direction:column;
     align-items:center; min-height:100%; padding:max(6px,env(safe-area-inset-top)) 6px max(8px,env(safe-area-inset-bottom)); overflow-x:hidden; touch-action:manipulation;}
   h1{font-size:17px; margin:3px 0; letter-spacing:1px; font-weight:900;}
-  #boardWrap{width:min(98vw,600px); aspect-ratio:1/1; position:relative;}
+  #boardWrap{width:min(100vw,640px); aspect-ratio:1/1; position:relative;}
   #board{width:100%; height:100%; display:grid; grid-template-columns:repeat(11,1fr); grid-template-rows:repeat(11,1fr);
     background:var(--board); border:3px solid #0a0f22; border-radius:8px; overflow:hidden;}
-  .sp{position:relative; border:1px solid #2b6b42; background:#e9f7ec; font-size:5.5px; line-height:1.03; overflow:hidden; color:#09250f;}
-  .sp .nm{padding:1px 1px 0; font-weight:700; text-align:center; display:block; letter-spacing:-.2px;}
-  .sp .pr{position:absolute; bottom:0; left:0; right:0; text-align:center; font-size:5px; opacity:.8;}
+  .sp{position:relative; border:1px solid #2b6b42; background:#e9f7ec; font-size:6.4px; line-height:1.02; overflow:hidden; color:#09250f; cursor:pointer;}
+  .sp:active{filter:brightness(1.08);}
+  .sp .nm{padding:1px 1px 0; font-weight:800; text-align:center; display:block; letter-spacing:-.2px;}
+  .sp .pr{position:absolute; bottom:0; left:0; right:0; text-align:center; font-size:6px; font-weight:700; opacity:.85;}
   .bar{position:absolute; background:#777;}
-  .bar.top{top:0;left:0;right:0;height:20%;}
-  .bar.bottom{bottom:0;left:0;right:0;height:20%;}
-  .bar.left{left:0;top:0;bottom:0;width:20%;}
-  .bar.right{right:0;top:0;bottom:0;width:20%;}
-  .corner{background:#dff0e3; font-size:6px; font-weight:800; display:flex; align-items:center; justify-content:center; text-align:center;}
+  .bar.top{top:0;left:0;right:0;height:26%;}
+  .bar.bottom{bottom:0;left:0;right:0;height:26%;}
+  .bar.left{left:0;top:0;bottom:0;width:26%;}
+  .bar.right{right:0;top:0;bottom:0;width:26%;}
+  .corner{background:#dff0e3; font-size:7px; font-weight:800; display:flex; align-items:center; justify-content:center; text-align:center;}
   .center{grid-column:2/11; grid-row:2/11; display:flex; align-items:center; justify-content:center; background:var(--board); position:relative;}
   .logo{font-size:min(7vw,42px); font-weight:900; color:#d7263d; letter-spacing:2px; transform:rotate(-18deg); text-shadow:1px 1px 0 #0003; text-align:center;}
   .owner{position:absolute; width:7px; height:7px; border-radius:2px; top:1px; right:1px; border:1px solid #0006;}
@@ -42,7 +43,10 @@
   .hs i{width:3px; height:3px; background:#1f9d54; border:.5px solid #0a3; display:block;}
   .hs i.hotel{width:5px; height:4px; background:#d7263d;}
   .mort{position:absolute; inset:0; background:repeating-linear-gradient(45deg,#0000,#0000 3px,#0006 3px,#0006 5px);}
-  .toks{position:absolute; bottom:1px; left:0; right:0; display:flex; flex-wrap:wrap; justify-content:center; gap:0; font-size:8px; line-height:1;}
+  .toks{position:absolute; bottom:0; left:0; right:0; display:flex; flex-wrap:wrap; justify-content:center; gap:1px; line-height:1; z-index:3;}
+  .tk{display:inline-flex; align-items:center; justify-content:center; width:17px; height:17px; font-size:11px; background:#fff; border-radius:50%; box-shadow:0 0 0 2px var(--pc,#333), 0 1px 2px #0007;}
+  .tk.cur{animation:pulse 1s infinite; box-shadow:0 0 0 2px var(--pc,#333), 0 0 7px 2px #fff;}
+  @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.18)}}
   .status{width:min(98vw,600px); display:flex; align-items:center; gap:8px; background:var(--panel); border-radius:10px; padding:6px 10px; margin:6px 0 4px; font-size:13px; font-weight:600; min-height:34px; flex-wrap:wrap; justify-content:center;}
   .pill{display:flex; align-items:center; gap:4px; background:var(--panel2); border-radius:8px; padding:3px 7px; font-size:12px;}
   .dot{width:11px;height:11px;border-radius:50%;display:inline-block;border:1px solid #fff6;}
@@ -284,7 +288,7 @@ function barSide(i){
 function tokenHTML(i){
   const here=G.players.filter(p=>!p.bankrupt && p.pos===i);
   if(!here.length) return "";
-  return `<div class="toks">`+here.map(p=>`<span title="${p.name}">${p.token.e}</span>`).join("")+`</div>`;
+  return `<div class="toks">`+here.map(p=>`<span class="tk${(G.started&&p.id===G.cur)?' cur':''}" style="--pc:${p.color}" title="${p.name}">${p.token.e}</span>`).join("")+`</div>`;
 }
 function spaceInner(i){
   const s=BOARD[i];
@@ -319,10 +323,38 @@ function renderBoard(){
   const b=$("board"); let html="";
   for(let i=0;i<40;i++){
     const [r,c]=spGridPos(i);
-    html+=`<div class="sp" style="grid-row:${r+1};grid-column:${c+1}">${spaceInner(i)}</div>`;
+    html+=`<div class="sp" data-i="${i}" style="grid-row:${r+1};grid-column:${c+1}">${spaceInner(i)}</div>`;
   }
   html+=`<div class="center"><div class="logo">MONOPOLY</div></div>`;
   b.innerHTML=html;
+}
+function spaceDesc(s){
+  if(s.t==="go") return "Collect $200 salary as you pass.";
+  if(s.t==="jail") return "Just visiting (or in jail). No penalty for visiting.";
+  if(s.t==="fp") return RULES.freeParkingJackpot?"Land here to win the pool of collected fees.":"Free resting space — nothing happens (officially).";
+  if(s.t==="gotojail") return "Go directly to Jail. Do not pass GO, do not collect $200.";
+  if(s.tax==="income") return RULES.incomeTaxChoice?"Pay $200 or 10% of your total worth.":"Pay $200.";
+  if(s.tax==="luxury") return "Pay "+(RULES.luxury75?"$75":"$100")+".";
+  if(s.t==="chance") return "Draw a Chance card.";
+  if(s.t==="cc") return "Draw a Community Chest card.";
+  return "";
+}
+function showInfo(i){
+  const s=BOARD[i];
+  let h=`<h2 style="text-align:center;margin-bottom:4px">${s.n}</h2>`;
+  if(s.price){
+    const own=G.owner[i];
+    h+=`<p style="text-align:center;margin:2px 0 8px">`;
+    if(own<0) h+=`<b>Unowned</b>`;
+    else { h+=`Owned by ${dotc(G.players[own])} <b>${G.players[own].name}</b>`; if(G.mort[i]) h+=` · <span class="neg">mortgaged</span>`; if(s.t==="prop"&&G.houses[i]>0) h+= G.houses[i]===5?' · 🏨 Hotel':' · '+'🏠'.repeat(G.houses[i]); }
+    h+=`</p>`;
+    if(own>=0 && !G.mort[i]){ h+=`<p style="text-align:center;margin:0 0 8px">Current rent to pay if you land here: <b class="cash">${money(computeRent(i,own,1))}</b></p>`; }
+    h+=deedCardHTML(i);
+  } else {
+    h+=`<p style="text-align:center;margin:8px 0">${spaceDesc(s)}</p>`;
+  }
+  h+=`<button class="btn primary" style="width:100%;margin-top:8px" onclick="window.__close()">Close</button>`;
+  openModal(h);
 }
 
 /* ========================= UI BITS ========================= */
@@ -545,9 +577,11 @@ function endTurn(){ advancePlayer(); }
 function offerBuy(p,i,wasDouble){
   const s=BOARD[i];
   if(p.human){
-    openModal(`${deedCardHTML(i)}
-      <button class="btn go" style="width:100%;margin:6px 0" ${p.cash<s.price?"disabled":""} onclick="window.__buy()">Buy for ${money(s.price)}</button>
-      <button class="btn" style="width:100%" onclick="window.__decline()">${RULES.noAuction?"Decline":"Decline → Auction"}</button>`);
+    openModal(`<h2 style="text-align:center;margin-bottom:2px">${s.n}</h2>
+      <p style="text-align:center;margin:2px 0 10px">Unowned · Price <b>${money(s.price)}</b> · Your cash <b class="cash">${money(p.cash)}</b></p>
+      <button class="btn go" style="width:100%;padding:17px;font-size:17px;margin:4px 0" ${p.cash<s.price?"disabled":""} onclick="window.__buy()">✅ Buy for ${money(s.price)}</button>
+      <button class="btn warn" style="width:100%;padding:13px" onclick="window.__decline()">${RULES.noAuction?"Don't buy":"Decline → Auction"}</button>
+      <details style="margin-top:10px"><summary style="color:var(--muted);font-size:12px;cursor:pointer">View full title deed (rents, houses…)</summary>${deedCardHTML(i)}</details>`);
     window.__buy=()=>{ closeModal(); buyProp(p,i); endOrContinue(wasDouble); };
     window.__decline=()=>{ closeModal(); if(RULES.noAuction){ log(`${p.name} declines ${s.n}.`); endOrContinue(wasDouble);} else startAuction(i,wasDouble); };
   } else {
@@ -969,6 +1003,12 @@ function startGame(nP,nH){
 // placeholder empty board before start
 G=freshState(4,1,[0,1,2,3]);
 renderBoard(); renderStatus(); renderControls();   // never leave the UI blank
+// Tap any space to see a big, readable deed / info card (magnifier for the small board)
+$("board").addEventListener("click",e=>{
+  const sp=e.target.closest(".sp"); if(!sp||sp.dataset.i===undefined) return;
+  if($("overlay").classList.contains("on")) return;   // don't interrupt an open dialog
+  showInfo(+sp.dataset.i);
+});
 openSetup();
 
 // Watchdog: if a turn ever gets stuck "moving" with no dialog/auction open, auto-recover
