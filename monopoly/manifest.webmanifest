@@ -1,0 +1,14 @@
+{
+  "name": "Monopoly",
+  "short_name": "Monopoly",
+  "description": "Classic Monopoly — full board, Chance & Community Chest, trading, auctions, and house-rule options.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0e1630",
+  "theme_color": "#0e1630",
+  "icons": [
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
