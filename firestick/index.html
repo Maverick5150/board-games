@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0e1630">
+<title>Board Games — TV / Party Mode</title>
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{background:radial-gradient(130% 100% at 50% -10%,#24346b,#0e1630 60%);color:#eef2ff;
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100%;overflow:hidden;}
+  .wrap{height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2vh;}
+  h1{font-size:4.2vh;margin:0 0 1vh;letter-spacing:1px;}
+  .muted{color:#9fb0d8;}
+  button.big{font-size:3vh;font-weight:800;color:#fff;background:#2b7be0;border:3px solid #2b7be0;border-radius:14px;
+    padding:1.6vh 3vh;cursor:pointer;margin:1vh;}
+  button.big:focus{outline:4px solid #fff;outline-offset:2px;}
+  button.big.ghost{background:transparent;border-color:#3a4a7e;}
+  button.big[disabled]{opacity:.4;}
+  /* game select */
+  .cards{display:flex;gap:3vh;flex-wrap:wrap;justify-content:center;}
+  .gc{width:30vh;height:34vh;border-radius:3vh;overflow:hidden;position:relative;cursor:pointer;border:4px solid transparent;}
+  .gc:focus{border-color:#fff;outline:none;}
+  .gc .lab{position:absolute;left:2vh;bottom:2vh;font-size:3.4vh;font-weight:900;text-shadow:0 2px 6px #000;}
+  /* lobby */
+  .lobby{display:flex;gap:6vh;align-items:center;justify-content:center;flex-wrap:wrap;}
+  .qrbox{background:#fff;padding:2.4vh;border-radius:2.4vh;}
+  #qr canvas{display:block;width:34vh !important;height:34vh !important;}
+  .join-url{font-size:2.4vh;color:#cfe0ff;margin-top:1.4vh;text-align:center;word-break:break-all;}
+  .code{font-size:9vh;font-weight:900;letter-spacing:1.2vh;color:#ffd86b;line-height:1;}
+  .players{display:flex;flex-direction:column;gap:1.4vh;min-width:30vh;}
+  .prow{display:flex;align-items:center;gap:1.4vh;font-size:3vh;font-weight:700;background:#16203f;border-radius:1.6vh;padding:1.2vh 2vh;}
+  .pdot{width:2.6vh;height:2.6vh;border-radius:50%;}
+  .empty{opacity:.4;font-style:italic;font-weight:500;}
+  /* game */
+  #boardWrap{width:min(92vh,96vw);aspect-ratio:1/1;position:relative;}
+  svg{width:100%;height:100%;display:block;}
+  .status{font-size:3vh;font-weight:800;margin:1.4vh 0;min-height:4vh;display:flex;align-items:center;gap:1.2vh;}
+  .dot{width:2.2vh;height:2.2vh;border-radius:50%;display:inline-block;}
+  .conn{position:fixed;top:1.4vh;right:1.8vh;font-size:1.8vh;color:#7CFC9A;}
+  .hintbar{font-size:2.2vh;color:#9fb0d8;margin-top:.6vh;}
+  .toast{position:fixed;bottom:3vh;left:50%;transform:translateX(-50%);background:#000c;padding:1.4vh 2.6vh;border-radius:2vh;font-size:2.6vh;font-weight:700;opacity:0;transition:opacity .2s;}
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+  <div class="conn" id="conn">connecting…</div>
+  <div class="wrap" id="wrap"></div>
+  <div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="net.js"></script>
+<script>
+(function(){
+"use strict";
+var $=function(id){return document.getElementById(id);};
+var wrap=$("wrap"), connEl=$("conn"), toastEl=$("toast");
+var COL={red:"#e23b3b",blue:"#2b7be0",green:"#27a758",yellow:"#eec21b"};
+var CNAME={red:"Red",blue:"Blue",green:"Green",yellow:"Yellow"};
+var sleep=function(ms){return new Promise(function(r){setTimeout(r,ms);});};
+
+/* ---------- networking ---------- */
+var room=BGNet.roomCode();
+var net=null;
+var players={};         // pid -> {pid,name,color}
+var seat={};            // color -> pid
+var pending={};         // reqId -> {pid, resolve}
+var reqSeq=1;
+var inLobby=true;
+
+net=BGNet.connect(room,"host",{
+  status:function(s){ connEl.textContent = s==="online"?"● relay connected":(s==="connecting"?"connecting…":"reconnecting…"); connEl.style.color=s==="online"?"#7CFC9A":"#ffcf7a"; },
+  ready:function(){},
+  msg:onMsg
+});
+function send(o,retain){ net.send(o,retain); }
+function broadcastLobby(){ send({t:"lobby", players:Object.keys(players).map(function(p){return players[p];})}, true); }
+
+function onMsg(o){
+  if(o.t==="join"){
+    if(players[o.pid]){ players[o.pid].name=o.name||players[o.pid].name; }
+    else if(inLobby && Object.keys(players).length<4){
+      var color=firstFreeColor();
+      players[o.pid]={pid:o.pid,name:(o.name||"Player"),color:color};
+      seat[color]=o.pid;
+      toast((o.name||"Player")+" joined");
+    } else if(!inLobby && !players[o.pid]){
+      // late joiner during game: ignore seating
+      return;
+    }
+    if(players[o.pid]) send({t:"you", pid:o.pid, color:players[o.pid].color, name:players[o.pid].name});
+    broadcastLobby();
+    if(inLobby) renderLobby();
+  } else if(o.t==="pick"){
+    var pr=pending[o.reqId];
+    if(pr && pr.pid===o.pid){ delete pending[o.reqId]; pr.resolve({id:o.id, i:o.i}); }
+  }
+}
+function firstFreeColor(){ var order=["red","blue","green","yellow"]; for(var i=0;i<order.length;i++){ if(!seat[order[i]]) return order[i]; } return "red"; }
+
+/* ask a player's phone; resolves with their choice */
+function ask(color, title, sub, options){
+  var pid=seat[color];
+  if(!pid) return Promise.resolve(options&&options[0]?{id:options[0].id,i:0}:{id:null,i:0}); // no controller -> auto first
+  var reqId=reqSeq++;
+  return new Promise(function(resolve){
+    pending[reqId]={pid:pid, resolve:resolve};
+    send({t:"ask", pid:pid, reqId:reqId, title:title, sub:sub, options:options});
+  });
+}
+function waitPhone(color, msg, turnColor){ var pid=seat[color]; if(pid) send({t:"wait", pid:pid, msg:msg, turn:turnColor}); }
+function waitAllExcept(activeColor, turnColor){
+  Object.keys(seat).forEach(function(c){ if(c!==activeColor) waitPhone(c, CNAME[turnColor]+"’s turn…", turnColor); });
+}
+function announceStart(){ send({t:"started"}); }
+function announceOver(name){ send({t:"over", winner:name}, true); }
+
+/* ---------- toast ---------- */
+var toastT;
+function toast(m){ toastEl.textContent=m; toastEl.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(function(){toastEl.classList.remove("show");},1800); }
+
+/* ---------- screens ---------- */
+var JOIN_URL=location.href.replace(/index\.html.*$/,"").replace(/\/$/,"")+"/play.html?room="+room;
+function screenSelect(){
+  inLobby=true;
+  wrap.innerHTML='<h1>🎲 Board Games — Party Mode</h1><p class="muted" style="font-size:2.6vh">Pick a game, then players scan to join from their phones</p>'+
+    '<div class="cards" id="cards"></div>';
+  var games=[
+    {id:"trouble", title:"Trouble", grad:"linear-gradient(145deg,#3a2b86,#1c3f9e)", on:true},
+    {id:"sorry", title:"Sorry!", grad:"linear-gradient(145deg,#0f7a43,#b21f2b)", on:false},
+    {id:"monopoly", title:"Monopoly", grad:"linear-gradient(145deg,#15663a,#0c3b22)", on:false}
+  ];
+  var c=$("cards");
+  games.forEach(function(g){
+    var d=document.createElement("div"); d.className="gc"; d.tabIndex=0;
+    d.style.background=g.grad;
+    d.innerHTML='<div class="lab">'+g.title+(g.on?'':'<div style="font-size:1.8vh;font-weight:600;opacity:.8">coming soon</div>')+'</div>';
+    if(g.on){ d.onclick=function(){ chosenGame=g.id; screenLobby(); }; d.onkeydown=function(e){ if(e.key==="Enter"){ chosenGame=g.id; screenLobby(); } }; }
+    else { d.style.opacity=".5"; }
+    c.appendChild(d);
+  });
+  var first=c.querySelector(".gc"); if(first) first.focus();
+}
+var chosenGame="trouble";
+
+function screenLobby(){
+  inLobby=true;
+  wrap.innerHTML='<h1>'+gameTitle(chosenGame)+' — scan to join</h1>'+
+    '<div class="lobby">'+
+      '<div style="text-align:center"><div class="qrbox"><div id="qr"></div></div><div class="join-url">or go to <b>maverick5150.github.io/board-games/firestick/play.html</b></div></div>'+
+      '<div style="text-align:center"><div class="muted" style="font-size:2.6vh">Room code</div><div class="code">'+room+'</div>'+
+        '<div class="players" id="players" style="margin-top:3vh"></div>'+
+        '<button class="big" id="startBtn" style="margin-top:3vh">Start Game</button>'+
+        '<div class="hintbar">Need at least 1 player. Empty seats become computer players.</div>'+
+      '</div>'+
+    '</div>';
+  try{ QRCode.toCanvas($("qr"), JOIN_URL, {width:Math.round(window.innerHeight*0.34), margin:1}, function(){}); }catch(e){ $("qr").innerHTML='<div style="color:#111;padding:2vh">'+JOIN_URL+'</div>'; }
+  renderLobby();
+  broadcastLobby();
+  $("startBtn").onclick=startGame;
+  $("startBtn").focus();
+}
+function renderLobby(){
+  var el=$("players"); if(!el) return;
+  var order=["red","blue","green","yellow"];
+  el.innerHTML=order.map(function(c){
+    var pid=seat[c];
+    if(pid) return '<div class="prow"><span class="pdot" style="background:'+COL[c]+'"></span>'+esc(players[pid].name)+'</div>';
+    return '<div class="prow empty"><span class="pdot" style="background:'+COL[c]+';opacity:.3"></span>open — will be CPU</div>';
+  }).join("");
+  var sb=$("startBtn"); if(sb) sb.disabled = Object.keys(seat).length<1;
+}
+function gameTitle(id){ return id==="trouble"?"Trouble":id==="sorry"?"Sorry!":"Monopoly"; }
+
+function startGame(){
+  inLobby=false;
+  announceStart();
+  if(chosenGame==="trouble") playTrouble();
+}
+
+/* status helper */
+function setStatus(html){ var s=$("status"); if(s) s.innerHTML=html; }
+function gameFrame(boardId){
+  wrap.innerHTML='<div class="status" id="status"></div><div id="boardWrap"><svg id="'+boardId+'" viewBox="0 0 600 600"></svg></div><div class="hintbar" id="hint"></div>';
+}
+
+/* ============================================================
+   TROUBLE  (TV host)
+   ============================================================ */
+function playTrouble(){
+  var TRACK=28, MAXD=31, cx=300, cy=300, trackR=228, homeR=272;
+  var order=["red","green","yellow","blue"];               // play order
+  var START={red:0, green:7, yellow:14, blue:21};
+  var active=order.filter(function(c){return true;});       // all 4 colors play
+  var human={}; order.forEach(function(c){ human[c]=!!seat[c]; });
+  var pegs={}; order.forEach(function(c){ pegs[c]=[null,null,null,null]; });
+  var die=0, turn=0, sixStreak=0, over=false;
+
+  function ang(i){ return (-90 + 360*i/TRACK)*Math.PI/180; }
+  function trackXY(i){ var a=ang(i); return [cx+trackR*Math.cos(a), cy+trackR*Math.sin(a)]; }
+  function absSpace(c,d){ return (START[c]+d)%TRACK; }
+  function pegXY(c,d){ if(d===null) return null; if(d<=27) return trackXY(absSpace(c,d)); var j=d-28,a=ang(START[c]),r=198-30*j; return [cx+r*Math.cos(a), cy+r*Math.sin(a)]; }
+  function homeSlotXY(c,k){ var a=ang(START[c]),bx=cx+homeR*Math.cos(a),by=cy+homeR*Math.sin(a),ox=(k%2?1:-1)*16,oy=(k<2?-1:1)*16; return [bx+ox,by+oy]; }
+  function occupantAt(color,targetD){
+    if(targetD>27){ for(var k=0;k<4;k++) if(pegs[color][k]===targetD) return {color:color,peg:k}; return null; }
+    var abs=absSpace(color,targetD);
+    for(var ci=0;ci<active.length;ci++){ var c=active[ci]; for(var p=0;p<4;p++){ var d=pegs[c][p]; if(d===null||d>27) continue; if(absSpace(c,d)===abs) return {color:c,peg:p}; } }
+    return null;
+  }
+  function legalMoves(color,roll){
+    var mv=[];
+    for(var k=0;k<4;k++){ var d=pegs[color][k];
+      if(d===null){ if(roll===6){ var occ=occupantAt(color,0); if(!(occ&&occ.color===color)) mv.push({peg:k,from:null,to:0}); } continue; }
+      var nd=d+roll; if(nd>MAXD) continue; var o2=occupantAt(color,nd); if(o2&&o2.color===color) continue; mv.push({peg:k,from:d,to:nd});
+    }
+    return mv;
+  }
+  function applyMove(color,mv){ if(mv.to<=27){ var occ=occupantAt(color,mv.to); if(occ&&occ.color!==color){ pegs[occ.color][occ.peg]=null; toast(CNAME[occ.color]+" sent home!"); waitPhone(occ.color, CNAME[occ.color]+" — bumped home!", color); } } pegs[color][mv.peg]=mv.to; }
+  function hasWon(color){ return pegs[color].every(function(d){return d!==null&&d>=28;}); }
+  function moveLabel(c,mv){
+    var n=mv.peg+1, bump="";
+    if(mv.to<=27){ var occ=occupantAt(c,mv.to); if(occ&&occ.color!==c) bump=" — bump "+CNAME[occ.color]+"!"; }
+    if(mv.from===null) return "Peg "+n+": leave HOME"+bump;
+    if(mv.to>=28) return "Peg "+n+": into FINISH"+bump;
+    return "Peg "+n+": move "+die+bump;
+  }
+
+  // ---- rendering ----
+  var svg;
+  function dieFace(v,ox,oy,size){ if(!v) return ""; var h=size/2,o=size*0.26,pr=size*0.08; var s='<rect x="'+(ox-h)+'" y="'+(oy-h)+'" width="'+size+'" height="'+size+'" rx="11" fill="#fdfdfd" stroke="#0005" stroke-width="2"/>'; var P={TL:[-o,-o],TR:[o,-o],ML:[-o,0],MC:[0,0],MR:[o,0],BL:[-o,o],BR:[o,o]}; var M={1:['MC'],2:['TL','BR'],3:['TL','MC','BR'],4:['TL','TR','BL','BR'],5:['TL','TR','MC','BL','BR'],6:['TL','TR','ML','MR','BL','BR']}; M[v].forEach(function(k){ var d=P[k]; s+='<circle cx="'+(ox+d[0])+'" cy="'+(oy+d[1])+'" r="'+pr+'" fill="#1b2340"/>'; }); return s; }
+  function build(){
+    var s='<defs><radialGradient id="dg" cx="40%" cy="35%" r="75%"><stop offset="0" stop-color="#fff"/><stop offset=".55" stop-color="#d6def4"/><stop offset="1" stop-color="#9aa8cf"/></radialGradient><radialGradient id="pl" cx="50%" cy="42%" r="70%"><stop offset="0" stop-color="#1b2a55"/><stop offset="1" stop-color="#0c1329"/></radialGradient></defs>';
+    s+='<circle cx="300" cy="300" r="294" fill="url(#pl)" stroke="#2a3663" stroke-width="4"/>';
+    active.forEach(function(c){ var a=ang(START[c]); var p0=trackXY(START[c]); var x1=cx+100*Math.cos(a),y1=cy+100*Math.sin(a); s+='<line x1="'+p0[0].toFixed(1)+'" y1="'+p0[1].toFixed(1)+'" x2="'+x1.toFixed(1)+'" y2="'+y1.toFixed(1)+'" stroke="'+COL[c]+'" stroke-width="30" stroke-linecap="round" opacity="0.18"/>'; });
+    for(var i=0;i<TRACK;i++){ var xy=trackXY(i); s+='<circle cx="'+xy[0].toFixed(1)+'" cy="'+xy[1].toFixed(1)+'" r="15.5" fill="#f2f5ff" stroke="#9fb0d8" stroke-width="2"/>'; }
+    active.forEach(function(c){ var sp=trackXY(START[c]); s+='<circle cx="'+sp[0].toFixed(1)+'" cy="'+sp[1].toFixed(1)+'" r="15.5" fill="'+COL[c]+'" stroke="#0005" stroke-width="2"/>';
+      for(var j=0;j<4;j++){ var f=pegXY(c,28+j); s+='<circle cx="'+f[0].toFixed(1)+'" cy="'+f[1].toFixed(1)+'" r="14" fill="'+COL[c]+'" stroke="#0006" stroke-width="2" opacity="0.9"/><circle cx="'+f[0].toFixed(1)+'" cy="'+f[1].toFixed(1)+'" r="8" fill="#0003"/>'; }
+      var a=ang(START[c]); var hx=cx+homeR*Math.cos(a),hy=cy+homeR*Math.sin(a); s+='<circle cx="'+hx.toFixed(1)+'" cy="'+hy.toFixed(1)+'" r="36" fill="'+COL[c]+'" stroke="#0006" stroke-width="2" opacity="0.92"/>';
+      for(var k=0;k<4;k++){ var ph=homeSlotXY(c,k); s+='<circle cx="'+ph[0].toFixed(1)+'" cy="'+ph[1].toFixed(1)+'" r="9" fill="#0004"/>'; }
+    });
+    svg.innerHTML=s; renderPegs();
+  }
+  function renderPegs(){
+    Array.prototype.slice.call(svg.querySelectorAll(".peg")).forEach(function(e){e.remove();});
+    active.forEach(function(c){ for(var k=0;k<4;k++){ var d=pegs[c][k]; var xy=d===null?homeSlotXY(c,k):pegXY(c,d); var g=document.createElementNS("http://www.w3.org/2000/svg","g"); g.setAttribute("class","peg"); g.setAttribute("transform","translate("+xy[0].toFixed(1)+","+xy[1].toFixed(1)+")"); g.innerHTML='<circle r="12" fill="'+COL[c]+'" stroke="#00000055" stroke-width="2"/><circle r="4" cx="-3" cy="-3" fill="#ffffff88"/>'; svg.appendChild(g); } });
+    // name labels on nests
+    active.forEach(function(c){ var a=ang(START[c]); var hx=cx+homeR*Math.cos(a),hy=cy+homeR*Math.sin(a); var t=document.createElementNS("http://www.w3.org/2000/svg","text"); t.setAttribute("x",hx.toFixed(1)); t.setAttribute("y",(hy+4).toFixed(1)); t.setAttribute("text-anchor","middle"); t.setAttribute("font-size","12"); t.setAttribute("font-weight","800"); t.setAttribute("fill","#fff"); t.setAttribute("stroke","#000a"); t.setAttribute("stroke-width","2.8"); t.setAttribute("paint-order","stroke"); t.setAttribute("class","peg"); t.textContent=(seat[c]?players[seat[c]].name:CNAME[c]).toUpperCase().slice(0,8); svg.appendChild(t); });
+    renderDome();
+  }
+  function renderDome(){
+    Array.prototype.slice.call(svg.querySelectorAll(".dome")).forEach(function(e){e.remove();});
+    var c=active[turn];
+    var g=document.createElementNS("http://www.w3.org/2000/svg","g"); g.setAttribute("class","dome");
+    var inner='<circle cx="300" cy="300" r="94" fill="#0b1228" stroke="#2a3663" stroke-width="4"/><circle cx="300" cy="300" r="86" fill="url(#dg)"/><ellipse cx="278" cy="270" rx="26" ry="16" fill="#ffffff55"/>';
+    if(die>0) inner+=dieFace(die,300,300,64); else inner+='<text x="300" y="307" text-anchor="middle" font-size="26" font-weight="900" fill="#20305f">POP</text>';
+    if(!over) inner+='<circle cx="300" cy="300" r="94" fill="none" stroke="'+COL[c]+'" stroke-width="5"><animate attributeName="opacity" values="0.35;1;0.35" dur="1.1s" repeatCount="indefinite"/></circle>';
+    g.innerHTML=inner; svg.appendChild(g);
+  }
+  function tvTurn(){ var c=active[turn]; setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+(seat[c]?players[seat[c]].name:CNAME[c]+" (CPU)")+(human[c]?" — check your phone":"")); $("hint").textContent = human[c]? "Controller: pop the die on your phone" : ""; }
+
+  async function rollAnim(){ for(var i=0;i<8;i++){ die=1+Math.floor(Math.random()*6); renderDome(); await sleep(70); } }
+  function aiPick(moves){ var best=moves[0],bs=-1e9; moves.forEach(function(m){ var sc=0; if(m.to<=27){ var occ=occupantAt(active[turn],m.to); if(occ&&occ.color!==active[turn]) sc+=100+(pegs[occ.color][occ.peg]||0);} if(m.to>=28) sc+=40+m.to; if(m.from===null) sc+=30; sc+=m.to*0.5; if(sc>bs){bs=sc;best=m;} }); return best; }
+
+  async function run(){
+    gameFrame("tboard"); svg=$("tboard"); build();
+    while(!over){
+      var c=active[turn]; die=0; renderPegs(); tvTurn();
+      waitAllExcept(c, c);
+      if(human[c]){ await ask(c, "Your turn", "Pop the die!", [{id:"pop",label:"🎲 POP THE DIE"}]); }
+      else { await sleep(900); }
+      await rollAnim();
+      die=1+Math.floor(Math.random()*6);
+      if(die===6) sixStreak++; else sixStreak=0;
+      renderDome();
+      var moves=legalMoves(c,die);
+      if(moves.length){
+        var mv;
+        if(human[c]){
+          var opts=moves.map(function(m,i){ return {id:String(i), label:moveLabel(c,m), color:c}; });
+          var pick=await ask(c, "Rolled a "+die, "Choose your move", opts);
+          mv=moves[parseInt(pick.id,10)]||moves[0];
+        } else { setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+CNAME[c]+" rolled "+die+"…"); await sleep(1100); mv=aiPick(moves); }
+        applyMove(c,mv); renderPegs();
+        if(hasWon(c)){ over=true; var wn=seat[c]?players[seat[c]].name:CNAME[c]; setStatus('<span class="dot" style="background:'+COL[c]+'"></span> 🏆 '+wn+" wins!"); announceOver(wn); showPlayAgain(); return; }
+      } else {
+        setStatus('<span class="dot" style="background:'+COL[c]+'"></span> Rolled '+die+" — no moves"); await sleep(1100);
+      }
+      if(die===6 && sixStreak<3){ /* same player rolls again */ }
+      else { sixStreak=0; turn=(turn+1)%active.length; }
+      await sleep(300);
+    }
+  }
+  run();
+}
+
+function showPlayAgain(){
+  var b=document.createElement("button"); b.className="big"; b.textContent="New Game"; b.style.marginTop="2vh";
+  b.onclick=function(){ seat={}; players={}; pending={}; screenSelect(); };
+  wrap.appendChild(b); b.focus();
+}
+
+function esc(s){ return String(s==null?"":s).replace(/[&<>]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;"}[c];}); }
+
+/* boot */
+screenSelect();
+})();
+</script>
+</body>
+</html>

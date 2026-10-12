@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0e1630">
+<title>Board Games — Controller</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;}
+  body{background:radial-gradient(130% 100% at 50% -10%,#24346b,#0e1630 60%);color:#eef2ff;
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;
+    min-height:100%;padding:max(14px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom));touch-action:manipulation;}
+  .top{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#9fb0d8;}
+  .dotc{width:12px;height:12px;border-radius:50%;display:inline-block;margin-right:5px;vertical-align:-1px;}
+  h1{font-size:20px;margin:14px 0 4px;}
+  .big{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px;}
+  .title{font-size:26px;font-weight:900;}
+  .sub{color:#9fb0d8;font-size:15px;}
+  .opts{display:flex;flex-direction:column;gap:12px;width:100%;max-width:440px;margin-top:6px;}
+  button.opt{width:100%;padding:20px;border-radius:16px;border:none;font-size:20px;font-weight:800;color:#fff;
+    background:#2b7be0;box-shadow:0 8px 0 #1c5bb0,0 12px 20px #0007;cursor:pointer;}
+  button.opt:active{transform:translateY(5px);box-shadow:0 3px 0 #1c5bb0;}
+  input{width:100%;max-width:360px;padding:16px;border-radius:14px;border:1px solid #39498a;background:#101938;color:#fff;font-size:18px;text-align:center;}
+  .pill{background:#16203f;border-radius:20px;padding:6px 12px;font-weight:700;}
+  .spin{width:40px;height:40px;border-radius:50%;border:4px solid #2b7be033;border-top-color:#2b7be0;animation:spin 1s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .waitdot{font-size:40px;animation:pulse 1.2s infinite;}
+  @keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+</style>
+</head>
+<body>
+  <div class="top">
+    <span id="room">Room —</span>
+    <span id="conn" class="pill">connecting…</span>
+  </div>
+  <div class="big" id="main"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script src="net.js"></script>
+<script>
+(function(){
+"use strict";
+var $=function(id){return document.getElementById(id);};
+var main=$("main"), connEl=$("conn"), roomEl=$("room");
+var COL={red:"#e23b3b",blue:"#2b7be0",green:"#27a758",yellow:"#eec21b"};
+
+var params=new URLSearchParams(location.search);
+var room=(params.get("room")||"").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,4);
+var myPid=BGNet.pid();
+var myName=null, myColor=null, net=null, curReq=null;
+
+try{ myName=localStorage.getItem("bgfs_name")||null; }catch(e){}
+
+function setConn(s){ connEl.textContent = s==="online"?"● connected":(s==="connecting"?"connecting…":"reconnecting…"); connEl.style.color = s==="online"?"#7CFC9A":"#ffcf7a"; }
+
+if(!room){ askRoom(); } else { roomEl.textContent="Room "+room; startJoin(); }
+
+function askRoom(){
+  main.innerHTML='<div class="title">Enter Room Code</div><input id="rc" maxlength="4" autocapitalize="characters" placeholder="ABCD"><button class="opt" id="go" style="max-width:360px">Join</button>';
+  $("go").onclick=function(){ var v=($("rc").value||"").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,4); if(v.length===4){ room=v; roomEl.textContent="Room "+room; startJoin(); } };
+}
+function startJoin(){
+  if(!myName){ askName(); return; }
+  connect();
+}
+function askName(){
+  main.innerHTML='<div class="title">Your Name</div><input id="nm" maxlength="12" placeholder="e.g. Alex" value="'+(myName||"")+'"><button class="opt" id="go" style="max-width:360px">Join Game</button>';
+  $("nm").focus();
+  $("go").onclick=function(){ var v=($("nm").value||"").trim().slice(0,12)||"Player"; myName=v; try{localStorage.setItem("bgfs_name",v);}catch(e){} connect(); };
+}
+function connect(){
+  showWaiting("Joining room "+room+"…", true);
+  net=BGNet.connect(room,"ctrl",{
+    status:setConn,
+    ready:function(){ sendJoin(); setInterval(sendJoin, 8000); },  // re-announce so host keeps us
+    msg:onMsg
+  });
+}
+function sendJoin(){ net && net.send({t:"join", pid:myPid, name:myName}); }
+
+function onMsg(o){
+  if(o.t==="you" && o.pid===myPid){ myColor=o.color; if(o.name) myName=o.name; }
+  else if(o.t==="lobby"){ if(!isAsking()) showLobby(o); }
+  else if(o.t==="ask" && o.pid===myPid){ showAsk(o); }
+  else if(o.t==="wait" && o.pid===myPid){ curReq=null; showWaiting(o.msg||"Waiting…", false, o.turn); }
+  else if(o.t==="started"){ if(!isAsking()) showWaiting("Game starting…", false); }
+  else if(o.t==="over"){ curReq=null; showOver(o); }
+  else if(o.t==="info" && (o.pid===myPid||!o.pid)){ toast(o.msg); }
+}
+function isAsking(){ return !!curReq; }
+
+function showLobby(o){
+  var me=(o.players||[]).filter(function(p){return p.pid===myPid;})[0];
+  var c = me&&me.color ? COL[me.color] : "#9fb0d8";
+  var list=(o.players||[]).map(function(p){ return '<div class="pill" style="margin:4px"><span class="dotc" style="background:'+(COL[p.color]||"#889")+'"></span>'+esc(p.name)+(p.pid===myPid?" (you)":"")+'</div>'; }).join("");
+  main.innerHTML='<div class="title" style="color:'+c+'">You’re in!</div><div class="sub">'+esc(myName)+(me&&me.color?(" — "+me.color.toUpperCase()):"")+'</div>'+
+    '<div style="display:flex;flex-wrap:wrap;justify-content:center;max-width:440px">'+list+'</div>'+
+    '<div class="sub" style="margin-top:10px">Waiting for the host to start on the TV…</div>';
+}
+function showWaiting(msg, spin, turn){
+  var tcol = turn&&COL[turn] ? COL[turn] : null;
+  main.innerHTML=(spin?'<div class="spin"></div>':'<div class="waitdot">⏳</div>')+
+    '<div class="sub" style="max-width:440px'+(tcol?';color:'+tcol:'')+'">'+esc(msg)+'</div>';
+}
+function showAsk(o){
+  curReq=o.reqId;
+  var c = myColor?COL[myColor]:"#2b7be0";
+  var opts=(o.options||[]).map(function(op,i){
+    var bg=op.color?COL[op.color]||op.color:c;
+    return '<button class="opt" data-i="'+i+'" style="background:'+bg+';box-shadow:0 8px 0 #0007,0 12px 20px #0007">'+esc(op.label)+'</button>';
+  }).join("");
+  main.innerHTML='<div class="title" style="color:'+c+'">'+esc(o.title||"Your turn")+'</div>'+
+    (o.sub?'<div class="sub">'+esc(o.sub)+'</div>':'')+
+    '<div class="opts">'+opts+'</div>';
+  Array.prototype.forEach.call(main.querySelectorAll("button.opt"), function(b){
+    b.onclick=function(){ var i=+b.dataset.i; var op=o.options[i]; curReq=null;
+      net.send({t:"pick", pid:myPid, reqId:o.reqId, id:op.id, i:i});
+      showWaiting("Sent ✔  waiting…", true);
+    };
+  });
+}
+function showOver(o){
+  var win = o.winner||"";
+  main.innerHTML='<div class="title">🏆 '+esc(win)+' wins!</div><div class="sub">Thanks for playing. The host can start a new game.</div>';
+}
+var toastT;
+function toast(m){ var d=document.createElement("div"); d.textContent=m; d.style.cssText="position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#000b;padding:10px 16px;border-radius:18px;font-size:14px;z-index:9"; document.body.appendChild(d); setTimeout(function(){d.remove();},1800); }
+function esc(s){ return String(s==null?"":s).replace(/[&<>]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;"}[c];}); }
+})();
+</script>
+</body>
+</html>
