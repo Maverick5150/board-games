@@ -74,6 +74,9 @@
   @keyframes domepulse{0%,100%{opacity:.35}50%{opacity:1}}
   .dome{cursor:default;}
 </style>
+<script src="../sound.js"></script>
+<script src="../skins.js"></script>
+<script>window.Sound=window.Sound||{music:function(){},stop:function(){},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
 </head>
 <body>
   <a href="../index.html" class="homebtn">🏠 Menu</a>
@@ -162,7 +165,7 @@ const popBtn=document.getElementById("pop");
 const passBtn=document.getElementById("passBtn");
 const toastEl=document.getElementById("toast");
 
-function toast(msg){ toastEl.textContent=msg; toastEl.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>toastEl.classList.remove("show"),1400); }
+function toast(msg){ Sound.fromText(msg); toastEl.textContent=msg; toastEl.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>toastEl.classList.remove("show"),1400); }
 
 // ---- center pop-o-matic dome ----
 const svgns="http://www.w3.org/2000/svg";
@@ -322,7 +325,7 @@ function legalMovesFor(color,roll){
   return moves;
 }
 
-function applyMove(color,mv){
+function applyMove(color,mv){ Sound.sfx("tick");
   // capture?
   if(mv.to<=27){
     const occ=occupantAt(color,mv.to);
@@ -416,7 +419,7 @@ function humanMove(k){
 
 function finishMove(color){
   if(hasWon(color)){
-    gameOver=true;
+    gameOver=true; Sound.sfx("win");
     renderPegs();
     setStatus(`<span class="dot" style="background:${CSSCOL[color]}"></span> <b>${isHuman[color]?"You win! 🎉":NAME[color]+" wins"}</b>`);
     popBtn.disabled=true;
@@ -474,7 +477,7 @@ function aiPickMove(color,moves){
 }
 
 // ---- pop animation ----
-function animatePop(cb){
+function animatePop(cb){ Sound.sfx("dice");
   let n=0;
   const iv=setInterval(()=>{
     die=1+Math.floor(Math.random()*6); renderDome();   // tumble the die in the dome
@@ -527,6 +530,7 @@ function startGame(humans, cpus){
 }
 
 // init board visuals even before start
+Skins.apply("trouble"); Sound.mountButton(); Sound.music("trouble");
 buildBoard();
 startGame(1,1);
 document.getElementById("setup").style.display="flex";

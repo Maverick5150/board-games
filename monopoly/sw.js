@@ -1,6 +1,6 @@
 // Offline cache for Monopoly (bump VERSION to force update)
-const VERSION = "monopoly-v15";
-const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.png"];
+const VERSION = "monopoly-v16";
+const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.png", "../sound.js", "../skins.js"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
@@ -15,7 +15,7 @@ self.addEventListener("activate", e => {
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
   const url = new URL(e.request.url);
-  const isDoc = e.request.mode === "navigate" || url.pathname.endsWith("/") || url.pathname.endsWith(".html");
+  const isDoc = e.request.mode === "navigate" || url.pathname.endsWith("/") || url.pathname.endsWith(".html") || url.pathname.endsWith(".js");
   if (isDoc) {
     e.respondWith(
       fetch(e.request).then(res => {

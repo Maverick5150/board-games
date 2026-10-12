@@ -41,6 +41,8 @@
 <script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
 <script src="net.js"></script>
 <script src="monodata.js"></script>
+<script src="../skins.js"></script>
+<script>window.Skins=window.Skins||{apply:function(){}};</script>
 <script>
 (function(){
 var _st=document.createElement("style");
@@ -58,6 +60,7 @@ _st.textContent=window.MONO_DEED_CSS+
 document.head.appendChild(_st);
 "use strict";
 var $=function(id){return document.getElementById(id);};
+Skins.apply("party");
 var main=$("main"), connEl=$("conn"), roomEl=$("room");
 var COL={red:"#e23b3b",blue:"#2b7be0",green:"#27a758",yellow:"#eec21b"};
 
