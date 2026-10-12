@@ -51,15 +51,18 @@
   .hintbar{font-size:2.2vh;color:#9fb0d8;margin-top:.6vh;}
   /* monopoly board */
   .mboard{width:min(90vh,96vw);aspect-ratio:1/1;display:grid;grid-template-columns:repeat(11,1fr);grid-template-rows:repeat(11,1fr);background:#cfe8d4;border:3px solid #0a0f22;border-radius:6px;overflow:hidden;}
-  .msp{position:relative;border:1px solid #2b6b42;background:#eef9f0;font-size:1.05vh;line-height:1.04;overflow:hidden;color:#09250f;}
-  .msp .nm{position:absolute;top:24%;left:0;right:0;text-align:center;font-weight:800;padding:0 1px;letter-spacing:-.2px;}
-  .msp .pr{position:absolute;bottom:0;left:0;right:0;text-align:center;font-size:.95vh;opacity:.85;font-weight:700;}
-  .mbar{position:absolute;}.mbar.top{top:0;left:0;right:0;height:24%;}.mbar.bottom{bottom:0;left:0;right:0;height:24%;}.mbar.left{left:0;top:0;bottom:0;width:24%;}.mbar.right{right:0;top:0;bottom:0;width:24%;}
+  .msp{position:relative;border:1px solid #2b6b42;background:#eef9f0;overflow:hidden;color:#09250f;}
+  .mspin{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;text-align:center;}
+  .mcbar{width:100%;height:24%;flex:0 0 auto;border-bottom:1px solid #00000040;}
+  .mnm{flex:0 1 auto;min-height:0;overflow:hidden;font-size:1.05vh;font-weight:800;line-height:1.02;padding:1px 1px 0;width:100%;word-break:break-word;letter-spacing:-.2px;}
+  .mic{flex:0 0 auto;font-size:1.9vh;line-height:1;margin-top:.3vh;}
+  .mpr{flex:0 0 auto;margin-top:auto;font-size:1vh;font-weight:700;opacity:.9;padding-bottom:.4vh;}
+  .movl{position:absolute;inset:0;pointer-events:none;}
   .mcorner{display:flex;align-items:center;justify-content:center;text-align:center;font-weight:800;font-size:1.3vh;background:#dff0e3;color:#09250f;padding:2px;}
   .mcenter{grid-column:2/11;grid-row:2/11;display:flex;align-items:center;justify-content:center;background:#cfe8d4;}
   .mlogo{font-size:6vh;font-weight:900;color:#d7263d;transform:rotate(-14deg);letter-spacing:3px;text-shadow:1px 1px 0 #0002;}
-  .mtok{position:absolute;bottom:0;left:0;right:0;display:flex;flex-wrap:wrap;justify-content:center;font-size:1.7vh;line-height:1;}
-  .mown{position:absolute;top:1px;right:1px;width:1.3vh;height:1.3vh;border-radius:50%;border:1px solid #0006;}
+  .mtok{position:absolute;top:50%;left:0;right:0;transform:translateY(-50%);display:flex;flex-wrap:wrap;justify-content:center;gap:0;font-size:1.7vh;line-height:1;z-index:3;}
+  .mown{position:absolute;bottom:1px;right:1px;width:1.4vh;height:1.4vh;border-radius:50%;border:1px solid #0008;box-shadow:0 0 0 1px #fff8;}
   .mhs{position:absolute;top:1px;left:1px;display:flex;gap:1px;}.mhs i{width:.9vh;height:.9vh;background:#1f9d54;border:.5px solid #0a3;display:block;}.mhs i.hotel{background:#d7263d;width:1.5vh;}
   .mmort{position:absolute;inset:0;background:repeating-linear-gradient(45deg,#0000,#0000 4px,#0005 4px,#0005 7px);}
   .toast{position:fixed;bottom:3vh;left:50%;transform:translateX(-50%);background:#000c;padding:1.4vh 2.6vh;border-radius:2vh;font-size:2.6vh;font-weight:700;opacity:0;transition:opacity .2s;}
@@ -191,15 +194,21 @@ function onMsg(o){
 }
 function firstFreeColor(){ var order=["red","blue","green","yellow"]; for(var i=0;i<order.length;i++){ if(!seat[order[i]]) return order[i]; } return "red"; }
 
-/* ask a player's phone; resolves with their choice */
+/* ask a player's phone; resolves with their choice. Shows a TV hint while waiting,
+   and auto-advances after a long timeout so a non-responding phone can't hang the game. */
 function ask(color, title, sub, options){
   var pid=seat[color];
   if(!pid) return Promise.resolve(options&&options[0]?{id:options[0].id,i:0}:{id:null,i:0}); // no controller -> auto first
   var reqId=reqSeq++;
   var msg={t:"ask", pid:pid, reqId:reqId, title:title, sub:sub, options:options};
   lastAsk[pid]=msg;
+  var who = players[pid] ? players[pid].name : "player";
+  var hint=$("hint"); if(hint) hint.textContent = "⏳ Waiting for "+who+" — check your phone ("+title+")";
   return new Promise(function(resolve){
-    pending[reqId]={pid:pid, resolve:function(v){ if(lastAsk[pid]===msg) delete lastAsk[pid]; resolve(v); }};
+    var done=false;
+    var fin=function(v){ if(done) return; done=true; clearTimeout(to); if(lastAsk[pid]===msg) delete lastAsk[pid]; var h=$("hint"); if(h) h.textContent="Players: use your phones"; resolve(v); };
+    var to=setTimeout(function(){ delete pending[reqId]; fin(options&&options[0]?{id:options[0].id,i:0}:{id:null,i:0}); }, 120000); // 2 min safety
+    pending[reqId]={pid:pid, resolve:fin};
     send(msg);
   });
 }
@@ -240,8 +249,16 @@ function screenSelect(){
   var first=c.querySelector(".gc"); if(first) first.focus();
 }
 var chosenGame="trouble";
-var fillAI=true;          // lobby choice: fill empty seats with computer players?
+var cpuCount=3;           // how many computer players to add (capped by free seats)
 var screenState="select";
+function computeActive(order){
+  var seated=order.filter(function(c){return seat[c];});
+  var free=order.filter(function(c){return !seat[c];});
+  var nCpu=Math.min(cpuCount, 4-seated.length);
+  if(seated.length+nCpu<2) nCpu=Math.min(free.length, 2-seated.length);  // need 2+ players
+  var cpu=free.slice(0,nCpu);
+  return order.filter(function(c){ return seat[c] || cpu.indexOf(c)>=0; });
+}
 var backbtn=$("backbtn");
 function setBack(label, show){ backbtn.textContent=label; backbtn.style.display= show?"block":"none"; }
 backbtn.onclick=function(){
@@ -280,13 +297,11 @@ function screenLobby(){
     '<div class="join-url">or on your phone open:<br><b>'+SHORT_URL+'</b></div>'+
     '<div class="codewrap"><div class="muted" style="font-size:2.4vh">Room code</div><div class="code">'+room+'</div></div>'+
     '<div class="players" id="players"></div>'+
-    '<div class="aitoggle">Empty seats: <button class="aibtn'+(fillAI?" on":"")+'" id="aiYes">🤖 Computers</button> <button class="aibtn'+(fillAI?"":" on")+'" id="aiNo">👤 Humans only</button></div>'+
+    '<div class="aitoggle">🤖 Computer players: <span id="cpuBtns"></span></div>'+
     '<button class="big" id="startBtn">▶ Start Game</button>'+
     '<div class="hintbar" id="lobhint"></div>';
   var img=$("qrimg");
   img.onerror=function(){ img.replaceWith(Object.assign(document.createElement("div"),{className:"qrfallback",textContent:"(QR unavailable — type the room code on phones)"})); };
-  $("aiYes").onclick=function(){ fillAI=true; $("aiYes").classList.add("on"); $("aiNo").classList.remove("on"); renderLobby(); };
-  $("aiNo").onclick=function(){ fillAI=false; $("aiNo").classList.add("on"); $("aiYes").classList.remove("on"); renderLobby(); };
   renderLobby();
   broadcastLobby();
   $("startBtn").onclick=startGame;
@@ -296,13 +311,22 @@ function renderLobby(){
   var el=$("players"); if(!el) return;
   var order=["red","blue","green","yellow"];
   var seated=Object.keys(seat).length;
+  var activeNow=computeActive(order);
   el.innerHTML=order.map(function(c){
     var pid=seat[c];
     if(pid) return '<div class="prow"><span class="pdot" style="background:'+COL[c]+'"></span>'+esc(players[pid].name)+'</div>';
-    return '<div class="prow empty"><span class="pdot" style="background:'+COL[c]+';opacity:.3"></span>open — '+(fillAI?"will be CPU":"sits out")+'</div>';
+    var isCpu=activeNow.indexOf(c)>=0;
+    return '<div class="prow empty"><span class="pdot" style="background:'+COL[c]+';opacity:.3"></span>'+(isCpu?"🤖 computer":"open — sits out")+'</div>';
   }).join("");
   var sb=$("startBtn"); if(sb) sb.disabled = seated<1;
-  var h=$("lobhint"); if(h) h.textContent = fillAI ? "Empty seats become computer players." : (seated<2 ? "Humans-only needs 2+ players (or switch to Computers)." : "Only the "+seated+" joined players will play.");
+  var maxC=4-seated; if(cpuCount>maxC) cpuCount=maxC; if(cpuCount<0) cpuCount=0;
+  var cb=$("cpuBtns");
+  if(cb){
+    cb.innerHTML=[0,1,2,3].map(function(n){ return '<button class="aibtn'+(n===cpuCount?" on":"")+'"'+(n>maxC?' disabled style="opacity:.35"':'')+' data-n="'+n+'" style="padding:.7vh 1.9vh">'+n+'</button>'; }).join("");
+    cb.querySelectorAll("button:not([disabled])").forEach(function(b){ b.onclick=function(){ cpuCount=+b.dataset.n; renderLobby(); }; });
+  }
+  var total=Math.min(4, seated+cpuCount);
+  var h=$("lobhint"); if(h) h.textContent = (total<2? "Add a computer player or another human (need 2+)." : total+" players: "+seated+" human + "+Math.min(cpuCount,maxC)+" computer.");
 }
 function gameTitle(id){ return id==="trouble"?"Trouble":id==="sorry"?"Sorry!":"Monopoly"; }
 
@@ -328,8 +352,7 @@ function playTrouble(){
   var TRACK=28, MAXD=31, cx=300, cy=300, trackR=228, homeR=272;
   var order=["red","green","yellow","blue"];               // play order
   var START={red:0, green:7, yellow:14, blue:21};
-  var useAI = fillAI || order.filter(function(c){return seat[c];}).length<2;   // fall back to CPU if <2 humans
-  var active=order.filter(function(c){ return useAI || seat[c]; });
+  var active=computeActive(order);
   var human={}; active.forEach(function(c){ human[c]=!!seat[c]; });
   var pegs={}; active.forEach(function(c){ pegs[c]=[null,null,null,null]; });
   var die=0, turn=0, sixStreak=0, over=false;
@@ -453,8 +476,7 @@ function playSorry(){
   function buildDeck(){ var d=[],add=function(v,n){for(var i=0;i<n;i++)d.push(v);}; add(1,5);add(2,4);add(3,4);add(4,4);add(5,4);add(7,4);add(8,4);add(10,4);add(11,4);add(12,4);add("sorry",4); return d; }
   function shuffle(a){ for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i];a[i]=a[j];a[j]=t; } return a; }
 
-  var useAI = fillAI || order.filter(function(c){return seat[c];}).length<2;
-  var active=order.filter(function(c){ return useAI || seat[c]; });
+  var active=computeActive(order);
   var pawns={}; active.forEach(function(c){ pawns[c]=[0,1,2,3].map(function(id){return {color:c,id:id,loc:{t:"start"}};}); });
   var human={}; active.forEach(function(c){ human[c]=!!seat[c]; });
   var deck=shuffle(buildDeck()), over=false;
@@ -565,8 +587,7 @@ function playSorry(){
    ============================================================ */
 function playMonopoly(){
   var order=["red","blue","green","yellow"];
-  var useAI = fillAI || order.filter(function(c){return seat[c];}).length<2;
-  var active=order.filter(function(c){ return useAI || seat[c]; });
+  var active=computeActive(order);
   var COLORVAR={brown:"#8b5a2b",light_blue:"#9fd0ef",pink:"#d93a96",orange:"#f08d1c",red:"#e23b3b",yellow:"#f3d41b",green:"#1f9d54",dark_blue:"#2b4fe0"};
   var TOKS=["🎩","🏎️","🐕","🚢"];
   var BOARD=MONO_BOARD, CHANCE=MONO_CHANCE, CHEST=MONO_CHEST, RR_IDX=[5,15,25,35], UTIL_IDX=[12,28];
@@ -602,16 +623,21 @@ function playMonopoly(){
   function barSide(i){ if(i<=10)return"top"; if(i<=20)return"right"; if(i<=30)return"bottom"; return"left"; }
   function toksAt(i){ var here=active.filter(function(c){return !bankrupt[c]&&pos[c]===i;}); if(!here.length)return""; return '<div class="mtok">'+here.map(function(c){return '<span style="filter:drop-shadow(0 0 1px '+PC(c)+')">'+tokE[c]+'</span>';}).join("")+'</div>'; }
   function PC(c){ return COL[c]; }
-  function spInner(i){ var s=BOARD[i]; var corner=(i===0||i===10||i===20||i===30); var h="";
-    if(corner){ var lab={0:"GO →",10:"JAIL",20:"FREE PARKING",30:"GO TO JAIL"}[i]; return '<div class="mcorner" style="position:absolute;inset:0">'+lab+'</div>'+toksAt(i); }
-    if(s.t==="prop") h+='<div class="mbar '+barSide(i)+'" style="background:'+COLORVAR[s.g]+'"></div>';
+  function spInner(i){ var s=BOARD[i];
+    if(i===0||i===10||i===20||i===30){ var lab={0:"GO →",10:"JAIL",20:"FREE PARKING",30:"GO TO JAIL"}[i]; return '<div class="mcorner" style="position:absolute;inset:0">'+lab+'</div>'+toksAt(i); }
+    var angle = i<=10?0 : i<=20?90 : i<=30?180 : 270;   // rotate names/price to face each side
+    var inner="";
+    if(s.t==="prop") inner+='<div class="mcbar" style="background:'+COLORVAR[s.g]+'"></div>';
+    inner+='<div class="mnm">'+s.n+'</div>';
     var icon = s.t==="rr"?"🚂":s.t==="util"?(i===12?"💡":"🚰"):s.t==="chance"?"?":s.t==="cc"?"📦":s.tax==="income"?"💵":s.tax==="luxury"?"💎":"";
-    h+='<div class="nm">'+s.n+(icon?'<br>'+icon:'')+'</div>';
-    if(s.price) h+='<div class="pr">$'+s.price+'</div>';
-    if(owner[i]!=null) h+='<div class="mown" style="background:'+PC(owner[i])+'"></div>';
+    if(icon) inner+='<div class="mic">'+icon+'</div>';
+    if(s.price) inner+='<div class="mpr">$'+s.price+'</div>';
+    if(owner[i]!=null) inner+='<div class="mown" style="background:'+PC(owner[i])+'"></div>';
+    var h='<div class="mspin" style="transform:rotate('+angle+'deg)">'+inner+'</div><div class="movl">';
     if(s.t==="prop"&&houses[i]>0) h+= houses[i]===5?'<div class="mhs"><i class="hotel"></i></div>':'<div class="mhs">'+Array(houses[i]+1).join("<i></i>")+'</div>';
     if(mort[i]) h+='<div class="mmort"></div>';
-    h+=toksAt(i); return h;
+    h+='</div>'+toksAt(i);
+    return h;
   }
   function renderBoard(){ var html=""; for(var i=0;i<40;i++){ var rc=spGrid(i); html+='<div class="msp" style="grid-row:'+(rc[0]+1)+';grid-column:'+(rc[1]+1)+'">'+spInner(i)+'</div>'; } html+='<div class="mcenter"><div class="mlogo">MONOPOLY</div></div>'; boardEl.innerHTML=html; }
   function tv(html){ setStatus(html); }

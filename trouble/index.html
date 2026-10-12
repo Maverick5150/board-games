@@ -101,11 +101,8 @@
         <button data-n="3">3</button>
         <button data-n="4">4</button>
       </div>
-      <p style="margin-top:14px">Add computer players?</p>
-      <div class="seg" id="aiSeg">
-        <button data-ai="1" class="on">Yes — fill seats</button>
-        <button data-ai="0">No — humans only</button>
-      </div>
+      <p style="margin-top:14px">Computer players?</p>
+      <div class="seg" id="cpuSeg"></div>
       <button class="btn primary" id="startBtn" style="width:100%;padding:14px;margin-top:14px">Start Game</button>
       <a href="../index.html" class="btn" style="display:block;width:100%;padding:12px;margin-top:10px;text-align:center;text-decoration:none">🏠 Back to All Games</a>
     </div>
@@ -485,21 +482,23 @@ function animatePop(cb){
 }
 
 // ---- setup ----
-let humanCount=1, withAI=1;
+let humanCount=1, cpuCount=1;   // 2-4 total players
+function drawCpuSeg(){
+  const seg=document.getElementById("cpuSeg");
+  const maxCpu=4-humanCount, minCpu=humanCount>=2?0:1;   // need at least 2 total
+  if(cpuCount>maxCpu) cpuCount=maxCpu; if(cpuCount<minCpu) cpuCount=minCpu;
+  seg.innerHTML=[0,1,2,3].map(n=>`<button data-n="${n}" class="${cpuCount===n?'on':''}"${(n>maxCpu||n<minCpu)?' disabled style="opacity:.3"':''}>${n}</button>`).join("");
+  seg.querySelectorAll("button:not([disabled])").forEach(b=>b.addEventListener("click",()=>{ cpuCount=+b.dataset.n; drawCpuSeg(); }));
+}
 document.querySelectorAll("#humanSeg button").forEach(b=>{
   b.addEventListener("click",()=>{
     document.querySelectorAll("#humanSeg button").forEach(x=>x.classList.remove("on"));
-    b.classList.add("on"); humanCount=+b.dataset.n;
+    b.classList.add("on"); humanCount=+b.dataset.n; drawCpuSeg();
   });
 });
-document.querySelectorAll("#aiSeg button").forEach(b=>{
-  b.addEventListener("click",()=>{
-    document.querySelectorAll("#aiSeg button").forEach(x=>x.classList.remove("on"));
-    b.classList.add("on"); withAI=+b.dataset.ai;
-  });
-});
+drawCpuSeg();
 document.getElementById("startBtn").addEventListener("click",()=>{
-  startGame(humanCount, withAI);
+  startGame(humanCount, cpuCount);
   document.getElementById("setup").style.display="none";
 });
 document.getElementById("resumeBtn").addEventListener("click",()=>{
@@ -511,10 +510,11 @@ document.getElementById("menuBtn").addEventListener("click",()=>{
   document.getElementById("setup").style.display="flex";
 });
 
-function startGame(humans, ai){
-  // play order around the board. With CPU off, only the human seats play.
+function startGame(humans, cpus){
+  // total seats = humans + cpus (2..4). First `humans` are human, rest are CPU.
   const all=["red","green","yellow","blue"];
-  players = ai ? all.slice() : all.slice(0, Math.max(1,humans));
+  let total=Math.min(4, Math.max(2, humans+(cpus||0)));
+  players = all.slice(0, total);
   isHuman={}; pegs={};
   players.forEach((c,i)=>{ isHuman[c]= i<humans; pegs[c]=[null,null,null,null]; });
   turn=0; die=0; gameOver=false; busy=false; awaitingMove=false; sixStreak=0;

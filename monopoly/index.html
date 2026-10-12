@@ -1131,11 +1131,11 @@ function openRules(){
   document.querySelectorAll(".sw[data-k]").forEach(el=>{ el.onclick=()=>{ const k=el.dataset.k; RULES[k]=!RULES[k]; el.classList.toggle("on"); }; });
 }
 
-let SETUP={players:4,humans:1,humanTokens:[0]};
+let SETUP={humans:1,cpus:3,humanTokens:[0]};
 function openSetup(){
   let h=`<h2>New Game</h2>`;
-  h+=`<h3>Players</h3><div class="seg" id="segP">${[2,3,4,5,6].map(n=>`<button data-n="${n}" class="${SETUP.players===n?"on":""}">${n}</button>`).join("")}</div>`;
-  h+=`<h3>How many are human?</h3><div class="seg" id="segH"></div>`;
+  h+=`<h3>Human players</h3><div class="seg" id="segH"></div>`;
+  h+=`<h3>Computer players</h3><div class="seg" id="segC"></div>`;
   h+=`<h3 id="tokHdr">Pick your token</h3><div class="tokgrid" id="tokGrid"></div><div id="tokMsg" style="text-align:center;color:var(--muted);font-size:11px"></div>`;
   h+=`<button class="btn" style="width:100%;margin:10px 0 6px" onclick="window.__rules()">⚙️ House Rules</button>`;
   h+=`<button class="btn primary" style="width:100%" onclick="window.__start()">Start Game</button>`;
@@ -1159,11 +1159,11 @@ function openSetup(){
     });
   };
   const clampTokens=()=>{ if(SETUP.humanTokens.length>SETUP.humans) SETUP.humanTokens=SETUP.humanTokens.slice(0,SETUP.humans); };
-  const drawH=()=>{ const seg=$("segH"); seg.innerHTML=Array.from({length:SETUP.players},(_,k)=>k+1).map(n=>`<button data-n="${n}" class="${SETUP.humans===n?"on":""}">${n}</button>`).join(""); seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{ SETUP.humans=+b.dataset.n; clampTokens(); drawH(); drawTok(); }); };
-  $("segP").querySelectorAll("button").forEach(b=>b.onclick=()=>{ SETUP.players=+b.dataset.n; if(SETUP.humans>SETUP.players){SETUP.humans=SETUP.players; clampTokens();} $("segP").querySelectorAll("button").forEach(x=>x.classList.toggle("on",+x.dataset.n===SETUP.players)); drawH(); drawTok(); });
-  drawH(); drawTok();
+  const drawH=()=>{ const seg=$("segH"); seg.innerHTML=[1,2,3,4,5,6].map(n=>`<button data-n="${n}" class="${SETUP.humans===n?"on":""}">${n}</button>`).join(""); seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{ SETUP.humans=+b.dataset.n; clampTokens(); drawH(); drawC(); drawTok(); }); };
+  const drawC=()=>{ const seg=$("segC"); const maxC=6-SETUP.humans, minC=SETUP.humans>=2?0:(2-SETUP.humans); if(SETUP.cpus>maxC)SETUP.cpus=maxC; if(SETUP.cpus<minC)SETUP.cpus=minC; seg.innerHTML=[0,1,2,3,4,5].map(n=>`<button data-n="${n}" class="${SETUP.cpus===n?"on":""}"${(n>maxC||n<minC)?' disabled style="opacity:.3"':''}>${n}</button>`).join(""); seg.querySelectorAll("button:not([disabled])").forEach(b=>b.onclick=()=>{ SETUP.cpus=+b.dataset.n; drawC(); }); };
+  drawH(); drawC(); drawTok();
   window.__rules=openRules;
-  window.__start=()=>{ startGame(SETUP.players,SETUP.humans); };
+  window.__start=()=>{ const nH=SETUP.humans, nP=Math.min(6,Math.max(2,nH+SETUP.cpus)); startGame(nP,nH); };
 }
 function startGame(nP,nH){
   const chosen=(SETUP.humanTokens||[]).slice(0,nH);
