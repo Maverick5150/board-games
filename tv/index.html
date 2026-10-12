@@ -23,6 +23,13 @@
   <p class="sub">Trouble · Sorry! · Monopoly — TV is the board, phones are the controllers</p>
 
   <div class="card">
+    <b>Get a short Downloader code (about 10 seconds)</b>
+    <div class="step"><div class="n">1</div><div>Tap <b>Copy APK link</b>:<br><button id="cp" style="margin-top:8px;font-size:17px;font-weight:800;color:#fff;background:#27a758;border:none;border-radius:12px;padding:12px 18px">📋 Copy APK link</button> <small id="cpok"></small></div></div>
+    <div class="step"><div class="n">2</div><div>Open the <a href="https://go.aftvnews.com" style="color:#ffd86b;font-weight:800">AFTVnews code maker</a>, paste the link, tick the “I’m not a robot” box, tap <b>Shorten</b>.</div></div>
+    <div class="step"><div class="n">3</div><div>You get a number like <code>12345</code>. In <b>Downloader</b>, type that number and press Go.</div></div>
+  </div>
+
+  <div class="card">
     <b>Install with the Downloader app</b>
     <div class="step"><div class="n">1</div><div>On the Fire TV: Settings → My Fire TV → Developer Options → <b>Install unknown apps</b> → turn on for <b>Downloader</b>.</div></div>
     <div class="step"><div class="n">2</div><div>Open <b>Downloader</b> and enter this link:<br><code>maverick5150.github.io/board-games/tv/BoardGamesTV.apk</code></div></div>
@@ -39,5 +46,13 @@
 
   <a class="btn" href="BoardGamesTV.apk">⬇ Download the APK directly</a>
   <p><small>Updating the app later? Uninstall the old one first, then install the new APK.</small></p>
+<script>
+document.getElementById("cp").onclick=function(){
+  var u="https://maverick5150.github.io/board-games/tv/BoardGamesTV.apk", ok=document.getElementById("cpok");
+  function done(){ ok.textContent="Copied ✔"; }
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(u).then(done,function(){ fallback(); }); } else fallback();
+  function fallback(){ var t=document.createElement("textarea"); t.value=u; document.body.appendChild(t); t.select(); try{document.execCommand("copy");done();}catch(e){ok.textContent=u;} t.remove(); }
+};
+</script>
 </body>
 </html>
