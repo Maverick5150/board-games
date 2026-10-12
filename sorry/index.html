@@ -353,10 +353,10 @@ function buildBoard(){
     // start circle
     const [sc,sr]=START_CELL[c], [sx,sy]=px(sc,sr);
     s+=`<circle cx="${sx}" cy="${sy}" r="30" fill="${CSS[c]}33" stroke="${CSS[c]}" stroke-width="3"/>`;
-    // place START on the OUTER side of the circle (away from board center) and face it like HOME
+    // place START clearly on the OUTER side of the circle (clear of it) and face it like HOME — uniform for all
     const sa=Math.atan2(sy-300, sx-300);
-    const lx=(sx+42*Math.cos(sa)).toFixed(1), ly=(sy+42*Math.sin(sa)+4).toFixed(1);
-    s+=`<text x="${lx}" y="${ly}" transform="rotate(${rot},${lx},${ly})" text-anchor="middle" font-size="11" font-weight="800" fill="${CSS[c]}">START</text>`;
+    const lx=(sx+52*Math.cos(sa)).toFixed(1), ly=(sy+52*Math.sin(sa)).toFixed(1);
+    s+=`<text x="${lx}" y="${ly}" transform="rotate(${rot},${lx},${ly})" dominant-baseline="middle" text-anchor="middle" font-size="11" font-weight="800" fill="${CSS[c]}" stroke="#f3efe2" stroke-width="2.2" paint-order="stroke" stroke-linejoin="round">START</text>`;
   }
   svg.innerHTML=s;
   renderPawns();

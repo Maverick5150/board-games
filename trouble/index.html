@@ -80,7 +80,7 @@
   <div class="controls">
     <button class="btn" id="menuBtn">Menu</button>
     <button class="pop" id="pop" style="display:none">POP</button>
-    <button class="btn" id="passBtn" style="visibility:hidden">Pass</button>
+    <button class="btn" id="passBtn" style="display:none">Pass</button>
   </div>
   <div class="legend" id="legend"></div>
 
@@ -225,9 +225,9 @@ function buildBoard(){
     // home nest with 4 peg holes
     const a=ang(START[c]);
     const hx=cx+homeR*Math.cos(a), hy=cy+homeR*Math.sin(a);
-    s+=`<circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="33" fill="${CSSCOL[c]}" stroke="#0006" stroke-width="2" opacity="0.92"/>`;
+    s+=`<circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="36" fill="${CSSCOL[c]}" stroke="#0006" stroke-width="2" opacity="0.92"/>`;
     for(let k=0;k<4;k++){ const [px,py]=homeSlotXY(c,k); s+=`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="9" fill="#0004"/>`; }
-    s+=`<text x="${hx.toFixed(1)}" y="${(hy-41).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="800" fill="#ffffff" stroke="#0009" stroke-width="2.5" paint-order="stroke" stroke-linejoin="round">${NAME[c].toUpperCase()}</text>`;
+    // (color name is drawn in renderPegs, on TOP of the pegs, so it's always visible)
   }
   svg.innerHTML=s;
   renderPegs();
@@ -257,6 +257,18 @@ function renderPegs(){
       }
       svg.appendChild(g);
     }
+  }
+  // color names on TOP of pegs so every color (incl. RED) is always readable, uniform on each nest
+  for(const c of players){
+    const a=ang(START[c]); const hx=cx+homeR*Math.cos(a), hy=cy+homeR*Math.sin(a);
+    const t=document.createElementNS(svgns,"text");
+    t.setAttribute("x",hx.toFixed(1)); t.setAttribute("y",(hy+4).toFixed(1));
+    t.setAttribute("text-anchor","middle"); t.setAttribute("font-size","12"); t.setAttribute("font-weight","800");
+    t.setAttribute("fill","#ffffff"); t.setAttribute("stroke","#000a"); t.setAttribute("stroke-width","2.8");
+    t.setAttribute("paint-order","stroke"); t.setAttribute("stroke-linejoin","round"); t.setAttribute("pointer-events","none");
+    t.setAttribute("class","peg");
+    t.textContent=NAME[c].toUpperCase();
+    svg.appendChild(t);
   }
   renderDome();
 }
