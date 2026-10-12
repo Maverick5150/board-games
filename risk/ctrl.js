@@ -146,7 +146,7 @@ function create(cfg){
   function btn(txt,a,cls,dis){ return '<button data-a="'+a+'" class="'+(cls||"")+'"'+(dis?" disabled":"")+'>'+txt+'</button>'; }
   function render(){
     if(!V) return;
-    var key=V.turn+"/"+V.phase; if(key!==S.key){ S.key=key; S.src=null; S.tgt=null; S.fSrc=null; S.fTgt=null; S.s2=[]; S.s2n=null; S.occN=null; stopBlitz(); }
+    var key=V.turn+"/"+V.phase; if(key!==S.key){ if(V.phase==="reinforce") S.amt=1; S.key=key; S.shiftOpen=false; S.src=null; S.tgt=null; S.fSrc=null; S.fTgt=null; S.s2=[]; S.s2n=null; S.occN=null; stopBlitz(); }
     if(S.src!=null&&(V.terr[S.src].o!==V.me||V.terr[S.src].a<2||V.phase!=="attack")){ S.src=null; S.tgt=null; }
     if(S.tgt!=null&&(V.terr[S.tgt].o===V.me||V.phase!=="attack")) S.tgt=null;
     if(S.fSrc!=null&&(V.terr[S.fSrc].o!==V.me||V.terr[S.fSrc].a<2||V.phase!=="fortify")){ S.fSrc=null; S.fTgt=null; }
@@ -170,14 +170,26 @@ function create(cfg){
         case "choose": stat="<b>Your turn</b> — old rules: reinforce OR attack this turn."; acts+=btn("Reinforce (+"+E.terrArmies(V,V.me)+" armies)","mode:reinforce","pri")+btn("Attack","mode:attack",""); break;
         case "reinforce": {
           var forced=V.myCards.length>=V.o.forcedTrade&&E.findSets(V.myCards).length||(V.mustDown&&V.myCards.length>4);
-          stat="<b>Reinforce</b> — "+V.reserve+" "+(V.reserve===1?"army":"armies")+" to place. Tap your territories."+(forced?" You must trade in cards first!":"");
+          stat="<b>Reinforce</b> — "+V.reserve+" "+(V.reserve===1?"army":"armies")+" left. Tap any of your territories to place "+(S.amt==="all"?"all remaining":Math.min(V.reserve,S.amt|0||1))+" there."+(forced?" You must trade in cards first!":"");
           owned(V.me).forEach(function(i){ marks.mine[i]=1; });
-          if(V.reserve>0) acts+='<div class="rkseg"><span>Place:</span>'+[1,5,10,"all"].map(function(a){ return '<button data-a="amt:'+a+'" class="'+(String(S.amt)===String(a)?"on":"")+'">'+(a==="all"?"All":a)+'</button>'; }).join("")+'</div>';
+          if(V.reserve>0) acts+='<div class="rkseg"><span>Armies per tap:</span>'+[1,5,10,"all"].map(function(a){ return '<button data-a="amt:'+a+'" class="'+(String(S.amt)===String(a)?"on":"")+'">'+(a==="all"?"All":a)+'</button>'; }).join("")+'</div>';
           if(E.findSets(V.myCards).length) acts+=btn("🃏 Trade cards","cards",forced?"pri":"");
           if(V.reserve===0) acts+=btn("Done — start attacking ▶","endReinforce","pri",forced);
           if(forced&&modalClosed()) setTimeout(function(){ openCards(); },50);
           break; }
         case "attack": {
+          var sp=V.shiftPair;
+          if(sp&&V.terr[sp.a].o===V.me&&V.terr[sp.b].o===V.me&&S.src==null){
+            if(S.shiftOpen){
+              var ta=V.terr[sp.a].a, tb=V.terr[sp.b].a, mxA=ta-1, mxB=tb-1; if(S.shiftN==null||S.shiftN<1) S.shiftN=1; S.shiftN=Math.max(1,Math.min(S.shiftN,Math.max(mxA,mxB,1)));
+              stat="<b>Shift armies</b> between <b>"+esc(MP.names[sp.a])+"</b> ("+ta+") and <b>"+esc(MP.names[sp.b])+"</b> ("+tb+") — at least 1 stays in each.";
+              marks.src[sp.a]=1; marks.src[sp.b]=1;
+              acts+='<div class="rkstep"><button data-a="sh:-1">−</button><b>'+S.shiftN+'</b><button data-a="sh:1">+</button></div>'+
+                btn("◀ Move "+S.shiftN+" to "+esc(MP.names[sp.a]),"shmove:"+sp.b+":"+sp.a,"pri",S.shiftN>mxB)+btn("Move "+S.shiftN+" to "+esc(MP.names[sp.b])+" ▶","shmove:"+sp.a+":"+sp.b,"pri",S.shiftN>mxA)+btn("Done","shdone","");
+              acts+=btn("End attacks ▶","endAttack",""); break;
+            }
+            acts+=btn("↔ Shift armies ("+esc(MP.names[sp.a])+" / "+esc(MP.names[sp.b])+")","shopen","");
+          }
           if(V.noAttack){ stat="You reinforced this turn, so no attacking."; acts+=btn("Continue ▶","endAttack","pri"); break; }
           if(S.src==null){ stat="<b>Attack</b> — tap one of your territories (2+ armies) to attack from, or end your attacks."; V.terr.forEach(function(t,i){ if(t.o===V.me&&t.a>=2&&E.targetsFrom(V,i).length) marks.mine[i]=1; }); }
           else if(S.tgt==null){ stat="<b>Attack from "+esc(MP.names[S.src])+"</b> ("+V.terr[S.src].a+") — tap a highlighted enemy territory."; marks.sel=S.src; E.targetsFrom(V,S.src).forEach(function(i){ marks.tgt[i]=1; }); }
@@ -188,8 +200,8 @@ function create(cfg){
             else { for(var dd=md;dd>=1;dd--) acts+=btn("🎲 Roll "+dd+(dd===1?" die":" dice"),"atk:"+dd,dd===md?"pri":""); acts+=btn("⚔ Blitz (until won)","blitz",""); }
           }
           acts+=btn("End attacks ▶","endAttack","",S.blitz); break; }
-        case "occupy": { var oc=V.occ; if(S.occN==null||S.occN<oc.min||S.occN>oc.max) S.occN=oc.max;
-          stat="<b>Conquered "+esc(MP.names[oc.to])+"!</b> Move armies in from "+esc(MP.names[oc.from])+" ("+oc.min+"–"+oc.max+").";
+        case "occupy": { var oc=V.occ; if(S.occN==null||S.occN<oc.min||S.occN>oc.max) S.occN=oc.min;
+          stat="<b>Conquered "+esc(MP.names[oc.to])+"!</b> How many armies move in from "+esc(MP.names[oc.from])+"? ("+oc.min+"–"+oc.max+")"+(V.o.occupyFree?" You can shift armies back and forth afterwards.":"");
           marks.sel=oc.to; marks.src[oc.from]=1;
           acts+='<div class="rkstep"><button data-a="occ:-1">−</button><b>'+S.occN+'</b><button data-a="occ:1">+</button></div>'+btn("Min ("+oc.min+")","occset:"+oc.min,"")+btn("All ("+oc.max+")","occset:"+oc.max,"")+btn("Move in ▶","occupy","pri");
           break; }
@@ -281,13 +293,17 @@ function create(cfg){
       case "zoomout": board.zoomAt(1/1.4); break;
       case "fit": board.fit(); break;
       case "endReinforce": act({t:"endReinforce"}); break;
-      case "atk": act({t:"attack",from:S.src,to:S.tgt,dice:+p[1]}); break;
+      case "atk": S.shiftOpen=false; act({t:"attack",from:S.src,to:S.tgt,dice:+p[1]}); break;
       case "blitz": S.blitz=true; render(); blitzStep(); break;
       case "stopblitz": stopBlitz(); render(); break;
-      case "endAttack": stopBlitz(); act({t:"endAttack"}); break;
+      case "endAttack": stopBlitz(); S.shiftOpen=false; act({t:"endAttack"}); break;
+      case "shopen": S.shiftOpen=true; S.shiftN=1; render(); break;
+      case "shdone": S.shiftOpen=false; render(); break;
+      case "sh": S.shiftN=Math.max(1,(S.shiftN||1)+(+p[1])); render(); break;
+      case "shmove": act({t:"shift",from:+p[1],to:+p[2],n:S.shiftN||1}); break;
       case "occ": S.occN=Math.max(V.occ.min,Math.min(V.occ.max,S.occN+(+p[1]))); render(); break;
       case "occset": S.occN=+p[1]; render(); break;
-      case "occupy": act({t:"occupy",n:S.occN}); break;
+      case "occupy": S.shiftOpen=false; act({t:"occupy",n:S.occN}); break;
       case "f": S.fN=Math.max(1,Math.min(maxFort(),S.fN+(+p[1]))); render(); break;
       case "fset": S.fN=+p[1]; render(); break;
       case "fcancel": S.fSrc=null; S.fTgt=null; render(); break;

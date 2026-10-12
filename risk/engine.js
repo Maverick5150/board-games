@@ -21,6 +21,7 @@ function defaultOpts(){
     cardOnElim:true,         // take an eliminated player's cards (old UK: no)
     capArmies:0,             // 12 = "experts" cap on armies per territory (0 = none)
     randomSetup:false,       // convenience: finish the starting placement automatically
+    occupyFree:true,         // after a conquest you choose how many armies move in (from 1) and can shift armies back and forth between the two territories
     maxPlayers:6
   };
 }
@@ -44,9 +45,10 @@ var HOUSE=[
   ["reinforceOrAttack","Reinforce OR attack (old UK)","bool"],
   ["cardOnElim","Take cards of an eliminated player","bool"],
   ["capArmies","Army cap per territory","choice",[[0,"None"],[12,"12 (experts)"]]],
-  ["randomSetup","Place starting armies automatically","bool"]
+  ["randomSetup","Place starting armies automatically","bool"],
+  ["occupyFree","Choose how many move in after a conquest, and shift armies back and forth","bool"]
 ];
-var HOUSE_OFFICIAL={mode:1,setup:1,terrBonus:1,cardValues:1,wilds:0,fortify:1,reinforceOrAttack:1,cardOnElim:1,capArmies:1,randomSetup:0};
+var HOUSE_OFFICIAL={mode:1,setup:1,terrBonus:1,cardValues:1,wilds:0,fortify:1,reinforceOrAttack:1,cardOnElim:1,capArmies:1,randomSetup:0,occupyFree:0};
 function versionOpts(id,extra){ var v=VERSIONS.filter(function(x){ return x.id===id; })[0]||VERSIONS[0]; var o={}; for(var k in v.opts) o[k]=v.opts[k]; for(var k2 in (extra||{})) o[k2]=extra[k2]; return mergeOpts(o); }
 
 /* ---------------- helpers ---------------- */
@@ -322,14 +324,14 @@ function attack(G,from,to,dice){
   for(i=0;i<dice;i++) ar.push(rollDie(G)); for(i=0;i<dd;i++) dr.push(rollDie(G));
   var as=ar.slice().sort(function(a,b){ return b-a; }), ds=dr.slice().sort(function(a,b){ return b-a; });
   var al=0,dl=0; for(i=0;i<Math.min(as.length,ds.length);i++){ if(as[i]>ds[i]) dl++; else al++; }
-  A.a-=al; D.a-=dl;
+  A.a-=al; D.a-=dl; G.shiftPair=null;
   var defOwner=D.o, events=[];
   events.push(ev(G,"attack",{p:p,from:from,to:to,ar:as,dr:ds,al:al,dl:dl,def:defOwner,text:pn(G,p)+" attacks "+tname(to)+" from "+tname(from)+" — "+pn(G,p)+" rolls "+as.join(",")+" vs "+ds.join(",")+": attacker loses "+al+", defender loses "+dl}));
   var res={ok:true,events:events,ar:as,dr:ds,al:al,dl:dl,conquered:false,eliminated:false};
   G.lastAttack={seq:++G.seq,p:p,from:from,to:to,def:defOwner,ar:as,dr:ds,al:al,dl:dl,conquered:false,fromA:A.a,toA:D.a};
   if(D.a<=0){
     D.o=p; D.a=0; res.conquered=true; G.conquered=true; G.lastAttack.conquered=true;
-    var min=dice; if(min>A.a-1) min=A.a-1; if(min<1) min=1;
+    var min=G.o.occupyFree?1:dice; if(min>A.a-1) min=A.a-1; if(min<1) min=1;
     G.occ={from:from,to:to,min:min,max:A.a-1}; G.phase="occupy";
     events.push(ev(G,"conquer",{p:p,t:to,from:defOwner,text:pn(G,p)+" conquers "+tname(to)}));
     if(G.players[defOwner]&&owned(G,defOwner).length===0){
@@ -356,6 +358,7 @@ function occupy(G,n,auto){
   n=Math.max(oc.min,Math.min(n==null?oc.min:n,A.a-1));
   if(G.o.capArmies&&n>G.o.capArmies) n=G.o.capArmies;
   A.a-=n; D.a+=n; G.occ=null; G.phase="attack";
+  G.shiftPair=G.o.occupyFree?{a:oc.from,b:oc.to}:null;
   var events=[ev(G,"occupy",{p:G.turn,from:oc.from,to:oc.to,n:n,text:pn(G,G.turn)+" moves "+n+" "+(n===1?"army":"armies")+" into "+tname(oc.to)})];
   if(G.pendingTradeDown){
     G.pendingTradeDown=false;
@@ -364,12 +367,21 @@ function occupy(G,n,auto){
   if(G.phase==="attack"&&!anyAttack(G,G.turn)) events=events.concat(endAttack(G).events||[]);
   return {ok:true,events:events};
 }
+function shift(G,from,to,n){
+  if(G.phase!=="attack"||!G.shiftPair) return {ok:false,msg:"You can only shift armies between the two territories right after a conquest."};
+  var sp=G.shiftPair; if(!((from===sp.a&&to===sp.b)||(from===sp.b&&to===sp.a))) return {ok:false,msg:"Shift armies between the two territories you just fought over."};
+  var A=G.terr[from], B=G.terr[to]; if(A.o!==G.turn||B.o!==G.turn) return {ok:false,msg:"Both territories must be yours."};
+  n=Math.max(1,Math.min(n||1,A.a-1)); if(A.a<2) return {ok:false,msg:"Leave at least one army behind."};
+  if(G.o.capArmies&&B.a+n>G.o.capArmies) n=Math.max(0,G.o.capArmies-B.a); if(n<1) return {ok:false,msg:"That territory is full."};
+  A.a-=n; B.a+=n;
+  return {ok:true,events:[ev(G,"shift",{p:G.turn,from:from,to:to,n:n,text:pn(G,G.turn)+" shifts "+n+" "+(n===1?"army":"armies")+" from "+tname(from)+" to "+tname(to)})]};
+}
 function endAttack(G){
   if(G.phase!=="attack") return {ok:false,msg:"You aren't attacking."};
   return {ok:true,events:enterFortify(G)};
 }
 function enterFortify(G){
-  G.phase="fortify"; G.fortLeft=G.o.fortify==="steps7"?7:1;
+  G.phase="fortify"; G.shiftPair=null; G.fortLeft=G.o.fortify==="steps7"?7:1;
   if(!canFortifyAny(G)){ return finishTurnEvents(G); }
   return [];
 }
@@ -605,6 +617,7 @@ function applyAction(G,a){
     case "endAttack": return endAttack(G);
     case "fortify": return fortify(G,a.from,a.to,a.n);
     case "endTurn": return endTurn(G);
+    case "shift": return shift(G,a.from,a.to,a.n);
     case "endReinforce": return endReinforce(G);
     case "autoSetup": autoFinishSetup(G); return {ok:true,events:[]};
     case "noop": return {ok:true,events:[]};
@@ -626,7 +639,7 @@ function snapshot(G,me){
   var mp=me>=0&&G.players[me]?G.players[me]:null;
   var cur0=G.players[G.turn];
   return {o:G.o,n:G.n,two:G.two,phase:G.phase,turn:G.turn,me:me,players:pl,terr:G.terr.map(function(t){ return {o:t.o,a:t.a}; }),
-    reserve:G.reserve,occ:G.occ,fortLeft:G.fortLeft,setsTraded:G.setsTraded,nextSet:nextSetValue(G),conquered:G.conquered,noAttack:G.noAttack,mustDown:!!G.mustDown,
+    reserve:G.reserve,occ:G.occ,shiftPair:G.shiftPair||null,fortLeft:G.fortLeft,setsTraded:G.setsTraded,nextSet:nextSetValue(G),conquered:G.conquered,noAttack:G.noAttack,mustDown:!!G.mustDown,
     initLeft:G.initLeft,returnTo:G.returnTo,deck:G.deck.length,
     myCards:mp?mp.cards.map(function(c){ return {id:c.id,t:c.t,sym:c.sym}; }):[],mission:(mp&&mp.mission)?G.o.mode==="mission"&&missionText(G,mp.mission):null,myHq:mp?mp.hq:null,
     cards:me===G.turn?null:undefined,lastAttack:G.lastAttack||null,over:G.over,winner:G.winner,round:G.round||0,
