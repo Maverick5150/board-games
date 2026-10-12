@@ -88,6 +88,7 @@
 
   <div class="overlay" id="setup">
     <div class="card">
+      <button class="btn" id="resumeBtn" style="display:none;width:100%;padding:13px;margin-bottom:12px">▸ Resume Game</button>
       <h2>New Game</h2>
       <p>How many of the 4 players are human? The rest are computer. You are <b>Red</b>.</p>
       <div class="seg" id="humanSeg">
@@ -485,7 +486,12 @@ document.getElementById("startBtn").addEventListener("click",()=>{
   startGame(humanCount);
   document.getElementById("setup").style.display="none";
 });
+document.getElementById("resumeBtn").addEventListener("click",()=>{
+  document.getElementById("setup").style.display="none";
+});
 document.getElementById("menuBtn").addEventListener("click",()=>{
+  // offer Resume only when a game is actually in progress
+  document.getElementById("resumeBtn").style.display = (players.length>0 && !gameOver) ? "block" : "none";
   document.getElementById("setup").style.display="flex";
 });
 
