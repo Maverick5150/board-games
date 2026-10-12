@@ -1,5 +1,5 @@
 // Offline cache for Sorry! (bump VERSION to force update)
-const VERSION = "sorry-v9";
+const VERSION = "sorry-v10";
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.png", "../sound.js", "../skins.js"];
 
 self.addEventListener("install", e => {

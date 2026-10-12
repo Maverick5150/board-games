@@ -114,7 +114,7 @@
 </style>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
-<script>window.Sound=window.Sound||{music:function(){},stop:function(){},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
+<script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
 </head>
 <body>
   <a href="../index.html" class="homebtn">🏠 Menu</a>
@@ -1166,7 +1166,7 @@ function openSetup(){
   const drawC=()=>{ const seg=$("segC"); const maxC=6-SETUP.humans, minC=SETUP.humans>=2?0:(2-SETUP.humans); if(SETUP.cpus>maxC)SETUP.cpus=maxC; if(SETUP.cpus<minC)SETUP.cpus=minC; seg.innerHTML=[0,1,2,3,4,5].map(n=>`<button data-n="${n}" class="${SETUP.cpus===n?"on":""}"${(n>maxC||n<minC)?' disabled style="opacity:.3"':''}>${n}</button>`).join(""); seg.querySelectorAll("button:not([disabled])").forEach(b=>b.onclick=()=>{ SETUP.cpus=+b.dataset.n; drawC(); }); };
   drawH(); drawC(); drawTok();
   window.__rules=openRules;
-  window.__start=()=>{ const nH=SETUP.humans, nP=Math.min(6,Math.max(2,nH+SETUP.cpus)); startGame(nP,nH); };
+  window.__start=()=>{ Sound.skip(); const nH=SETUP.humans, nP=Math.min(6,Math.max(2,nH+SETUP.cpus)); startGame(nP,nH); };
 }
 function startGame(nP,nH){
   const chosen=(SETUP.humanTokens||[]).slice(0,nH);

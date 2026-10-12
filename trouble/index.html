@@ -76,7 +76,7 @@
 </style>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
-<script>window.Sound=window.Sound||{music:function(){},stop:function(){},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
+<script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
 </head>
 <body>
   <a href="../index.html" class="homebtn">🏠 Menu</a>
@@ -502,6 +502,7 @@ document.querySelectorAll("#humanSeg button").forEach(b=>{
 });
 drawCpuSeg();
 document.getElementById("startBtn").addEventListener("click",()=>{
+  Sound.skip();
   startGame(humanCount, cpuCount);
   document.getElementById("setup").style.display="none";
 });

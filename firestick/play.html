@@ -65,41 +65,52 @@ var main=$("main"), connEl=$("conn"), roomEl=$("room");
 var COL={red:"#e23b3b",blue:"#2b7be0",green:"#27a758",yellow:"#eec21b"};
 
 var params=new URLSearchParams(location.search);
-var room=(params.get("room")||"").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,4);
+var room=(params.get("room")||"").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,5);
 var myPid=BGNet.pid();
 var myName=null, myColor=null, net=null, curReq=null, started=false;
+var joined=false, joinTick=0, joinTimer=null;
 
-try{ myName=localStorage.getItem("bgfs_name")||null; }catch(e){}
+/* the player types their name fresh every time — it is never saved or pre-filled */
 
 function setConn(s){ connEl.textContent = s==="online"?"● connected":(s==="connecting"?"connecting…":"reconnecting…"); connEl.style.color = s==="online"?"#7CFC9A":"#ffcf7a"; }
 
 if(!room){ askRoom(); } else { roomEl.textContent="Room "+room; startJoin(); }
 
 function askRoom(){
-  main.innerHTML='<div class="title">Enter Room Code</div><input id="rc" maxlength="4" autocapitalize="characters" placeholder="ABCD"><button class="opt" id="go" style="max-width:360px">Join</button>';
-  $("go").onclick=function(){ var v=($("rc").value||"").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,4); if(v.length===4){ room=v; roomEl.textContent="Room "+room; startJoin(); } };
+  main.innerHTML='<div class="title">Enter Room Code</div><input id="rc" maxlength="5" autocapitalize="characters" placeholder="ABCDE"><button class="opt" id="go" style="max-width:360px">Join</button>';
+  $("go").onclick=function(){ var v=($("rc").value||"").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,5); if(v.length===5){ room=v; roomEl.textContent="Room "+room; startJoin(); } };
 }
-function startJoin(){
-  if(!myName){ askName(); return; }
-  connect();
-}
+function startJoin(){ askName(); }
 function askName(){
-  main.innerHTML='<div class="title">Your Name</div><input id="nm" maxlength="12" placeholder="e.g. Alex" value="'+(myName||"")+'"><button class="opt" id="go" style="max-width:360px">Join Game</button>';
+  main.className="big";
+  main.innerHTML='<div class="title">Type your name</div><div class="sub">Room '+esc(room)+'</div><input id="nm" maxlength="12" placeholder="Your name" autocomplete="off" autocapitalize="words" value=""><button class="opt" id="go" style="max-width:360px">Sit down ▸</button>';
+  var go=function(){ var v=($("nm").value||"").trim().slice(0,12); if(!v){ toast("Type your name first"); $("nm").focus(); return; } myName=v; connect(); };
+  $("go").onclick=go; $("nm").onkeydown=function(e){ if(e.key==="Enter") go(); };
   $("nm").focus();
-  $("go").onclick=function(){ var v=($("nm").value||"").trim().slice(0,12)||"Player"; myName=v; try{localStorage.setItem("bgfs_name",v);}catch(e){} connect(); };
 }
 function connect(){
-  showWaiting("Joining room "+room+"…", true);
+  joined=false; joinTick=0; if(joinTimer){ clearInterval(joinTimer); joinTimer=null; }
+  showWaiting("Connecting to the TV…", true);
+  if(net){ try{ net.close(); }catch(e){} }
   net=BGNet.connect(room,"ctrl",{
     status:setConn,
-    ready:function(){ sendJoin(); setInterval(sendJoin, 8000); },  // re-announce so host keeps us
+    ready:function(){
+      sendJoin();
+      // keep knocking every 2s until the TV confirms we are seated, then just a keep-alive every 8s
+      joinTimer=setInterval(function(){
+        joinTick++;
+        if(!joined || joinTick%4===0) sendJoin();
+        if(!joined && joinTick===5) showWaiting("Still connecting… make sure the TV is on the lobby screen for room "+room+".", true);
+      },2000);
+    },
+    up:function(){ if(!joined && joinTimer) sendJoin(); },   // a relay just came up: knock on it right away
     msg:onMsg
   });
 }
 function sendJoin(){ net && net.send({t:"join", pid:myPid, name:myName}); }
 
 function onMsg(o){
-  if(o.t==="you" && o.pid===myPid){ myColor=o.color; if(o.name) myName=o.name; }
+  if(o.t==="you" && o.pid===myPid){ myColor=o.color; if(o.name) myName=o.name; joined=true; if(!started && !isAsking()) showLobby({players:[{pid:myPid,name:myName,color:myColor}]}); }
   else if(o.t==="lobby"){ if(!started && !isAsking()) showLobby(o); }   // never fall back to lobby once the game is on
   else if(o.t==="ask" && o.pid===myPid){ started=true; showAsk(o); }
   else if(o.t==="snap"){ lastSnap=o; $("plbtn").style.display="inline-block"; if($("ov").classList.contains("on") && ovMode==="players") showPlayers(); }
@@ -112,6 +123,8 @@ function isAsking(){ return !!curReq; }
 
 function showLobby(o){
   var me=(o.players||[]).filter(function(p){return p.pid===myPid;})[0];
+  if(!me) return;            // only confirm once the TV has actually seated us
+  joined=true; main.className="big";
   var c = me&&me.color ? COL[me.color] : "#9fb0d8";
   var list=(o.players||[]).map(function(p){ return '<div class="pill" style="margin:4px"><span class="dotc" style="background:'+(COL[p.color]||"#889")+'"></span>'+esc(p.name)+(p.pid===myPid?" (you)":"")+'</div>'; }).join("");
   main.innerHTML='<div class="title" style="color:'+c+'">You’re in!</div><div class="sub">'+esc(myName)+(me&&me.color?(" — "+me.color.toUpperCase()):"")+'</div>'+

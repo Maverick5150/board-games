@@ -75,7 +75,7 @@
 </style>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
-<script>window.Sound=window.Sound||{music:function(){},stop:function(){},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
+<script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
 </head>
 <body>
   <a href="../index.html" class="homebtn">🏠 Menu</a>
@@ -577,7 +577,7 @@ document.querySelectorAll("#humanSeg button").forEach(b=>b.addEventListener("cli
   document.querySelectorAll("#humanSeg button").forEach(x=>x.classList.remove("on")); b.classList.add("on"); humanCount=+b.dataset.n; drawCpuSeg();
 }));
 drawCpuSeg();
-document.getElementById("startBtn").addEventListener("click",()=>{ startGame(humanCount, cpuCount); document.getElementById("setup").style.display="none"; });
+document.getElementById("startBtn").addEventListener("click",()=>{ Sound.skip(); startGame(humanCount, cpuCount); document.getElementById("setup").style.display="none"; });
 document.getElementById("resumeBtn").addEventListener("click",()=>{ document.getElementById("setup").style.display="none"; });
 document.getElementById("menuBtn").addEventListener("click",()=>{
   // offer Resume only when a game is actually in progress

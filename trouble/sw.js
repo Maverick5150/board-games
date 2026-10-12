@@ -1,5 +1,5 @@
 // Offline cache for Trouble (bump VERSION to force update)
-const VERSION = "trouble-v12";
+const VERSION = "trouble-v13";
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.png", "../sound.js", "../skins.js"];
 
 self.addEventListener("install", e => {

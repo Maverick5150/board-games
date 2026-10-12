@@ -1,5 +1,5 @@
 // Offline cache for Monopoly (bump VERSION to force update)
-const VERSION = "monopoly-v16";
+const VERSION = "monopoly-v17";
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.png", "../sound.js", "../skins.js"];
 
 self.addEventListener("install", e => {

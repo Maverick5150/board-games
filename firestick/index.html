@@ -100,7 +100,7 @@
 <script src="monodata.js"></script>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
-<script>window.Sound=window.Sound||{music:function(){},stop:function(){},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
+<script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
 <script>
 (function(){
 "use strict";
@@ -178,7 +178,7 @@ var MONO_CHEST=[
 ];
 
 /* ---------- networking ---------- */
-var room=BGNet.roomCode();
+var room=null;           // a fresh random room is created every time a game is picked
 var net=null;
 var players={};         // pid -> {pid,name,color}
 var seat={};            // color -> pid
@@ -189,12 +189,25 @@ var lastAsk={};         // pid -> last ask message (for reconnect re-send)
 var reqSeq=1;
 var inLobby=true;
 
-net=BGNet.connect(room,"host",{
-  status:function(s){ connEl.textContent = s==="online"?"● relay connected":(s==="connecting"?"connecting…":"reconnecting…"); connEl.style.color=s==="online"?"#7CFC9A":"#ffcf7a"; },
-  ready:function(){},
-  msg:onMsg
-});
-function send(o,retain){ net.send(o,retain); }
+function send(o,retain){ if(net) net.send(o,retain); }
+function startRoom(){
+  closeRoom("The host opened a new game room. Scan the new QR code to join.");
+  room=BGNet.roomCode();
+  players={}; seat={}; pending={}; lastAsk={};
+  JOIN_URL=BASE+"play.html?room="+room; SHORT_URL=JOIN_URL.replace(/^https?:\/\//,"");
+  net=BGNet.connect(room,"host",{
+    status:function(s){ connEl.textContent = s==="online"?"● relay connected":(s==="connecting"?"connecting…":"reconnecting…"); connEl.style.color=s==="online"?"#7CFC9A":"#ffcf7a"; },
+    ready:function(){},
+    msg:onMsg
+  });
+}
+function closeRoom(msg){
+  if(!net) return;
+  try{ net.send({t:"wait", pid:"*", msg:msg||"The host closed this room."}); }catch(e){}
+  var old=net; net=null;
+  setTimeout(function(){ try{ old.close(true); }catch(e){} }, 400);   // let the goodbye go out first
+  connEl.textContent="";
+}
 function broadcastLobby(){ send({t:"lobby", players:Object.keys(players).map(function(p){return players[p];})}, true); }
 
 function onMsg(o){
@@ -259,7 +272,7 @@ var JOIN_URL=BASE+"play.html?room="+room;
 var SHORT_URL=JOIN_URL.replace(/^https?:\/\//,"");
 function screenSelect(){
   inLobby=true; screenState="select"; gameSnap=null; viewHandler=null; Skins.apply("party"); Sound.music("menu"); setBack((window.AndroidTV?"✕ Exit":"🏠 Hub"), true);
-  send({t:"wait", pid:"*", msg:"Host is choosing a game…"}, true);   // clear any retained game state for late joiners
+  closeRoom("The host went back to the game menu.");                  // each game gets its own brand-new room
   wrap.innerHTML='<h1>🎲 Board Games — Party Mode</h1><p class="muted" style="font-size:2.6vh">Pick a game, then players scan to join from their phones</p>'+
     '<div class="cards" id="cards"></div>';
   var games=[
@@ -328,6 +341,7 @@ function cardArt(id){
 
 function screenLobby(){
   inLobby=true; screenState="lobby"; setBack("‹ Back", true); Skins.apply(chosenGame); Sound.music(chosenGame);
+  startRoom();                                                          // new random code + new QR for this game
   var qrSrc="https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=12&data="+encodeURIComponent(JOIN_URL);
   wrap.innerHTML='<h1 style="margin-top:1vh">'+gameTitle(chosenGame)+' — Scan to join</h1>'+
     '<div class="qrbox"><img class="qrimg" id="qrimg" src="'+qrSrc+'" alt="QR"></div>'+
@@ -375,7 +389,7 @@ function renderLobby(){
 function gameTitle(id){ return id==="trouble"?"Trouble":id==="sorry"?"Sorry!":"Monopoly"; }
 
 function startGame(){
-  inLobby=false;
+  inLobby=false; Sound.skip();
   send({t:"started"}, true);   // retained so a reconnecting phone knows the game is on (not the lobby)
   if(chosenGame==="trouble") playTrouble();
   else if(chosenGame==="sorry") playSorry();

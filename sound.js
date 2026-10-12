@@ -33,8 +33,15 @@ function applyVol(){
 function hz(m){ return 440*Math.pow(2,(m-69)/12); }
 
 /* ---------- voices ---------- */
+var inSfx=false, sty=null;
+var STY={trouble:{wave:"square",pitch:1},sorry:{wave:"sawtooth",pitch:1.14},monopoly:{wave:"triangle",pitch:0.92}};
 function tone(f,t,dur,type,vol,dest,o){
-  o=o||{}; var osc=ctx.createOscillator(), gn=ctx.createGain();
+  o=o||{};
+  if(inSfx&&sty){
+    if(sty.wave&&(type==="square"||type==="triangle")) type=sty.wave;
+    if(sty.pitch){ f=f*sty.pitch; if(o.to){ var o2={}; for(var kk in o) o2[kk]=o[kk]; o2.to=o.to*sty.pitch; o=o2; } }
+  }
+  var osc=ctx.createOscillator(), gn=ctx.createGain();
   osc.type=type||"sine"; osc.frequency.setValueAtTime(f,t);
   if(o.to) osc.frequency.exponentialRampToValueAtTime(o.to,t+dur);
   gn.gain.setValueAtTime(0.0001,t);
@@ -69,7 +76,7 @@ var SFX={
 function sfx(name){
   if(!AC||st.sm||!SFX[name]) return;
   if(!ensure()) return;
-  try{ SFX[name](ctx.currentTime+0.01,sfxGain); }catch(e){}
+  try{ inSfx=true; sty=STY[styleName]||null; SFX[name](ctx.currentTime+0.01,sfxGain); }catch(e){} inSfx=false;
 }
 function fromText(m){
   m=String(m||"");
@@ -84,30 +91,98 @@ function fromText(m){
   if(/pays|Tax|rent|fine/i.test(m)) return sfx("pay");
 }
 
-/* ---------- music (tiny step sequencer; 32 eighth-note steps = 4 bars) ---------- */
+/* ---------- music: a small composer makes 10 different songs per game; a shuffled playlist plays them ---------- */
+var styleName="menu";
+function mulberry(seed){ var a=seed>>>0; return function(){ a=(a+0x6D2B79F5)>>>0; var t=a; t=Math.imul(t^(t>>>15),t|1); t^=t+Math.imul(t^(t>>>7),t|61); return ((t^(t>>>14))>>>0)/4294967296; }; }
+function hashStr(x){ var h=2166136261; for(var i=0;i<x.length;i++){ h^=x.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; }
+function pickOf(r,a){ return a[Math.floor(r()*a.length)]; }
+var SCALES={major:[0,2,4,5,7,9,11],minor:[0,2,3,5,7,8,10],mixo:[0,2,4,5,7,9,10],dorian:[0,2,3,5,7,9,10]};
+function d2s(sc,d){ var n=sc.length; return sc[((d%n)+n)%n]+12*Math.floor(d/n); }
+var KEYS=[48,50,52,53,55,57,58];
 function P(s){ return s.trim().split(/\s+/).map(function(x){ return x==="."?null:parseInt(x,10); }); }
 function R8(p){ var a=[]; for(var b=0;b<4;b++) for(var j=0;j<8;j++) a.push(!!p[j]); return a; }
 function barsB(roots,pat){ var a=[]; for(var b=0;b<4;b++) for(var j=0;j<8;j++) a.push(pat[j]===null?null:roots[b]+pat[j]); return a; }
-function barsC(ch,steps){ var a=[]; for(var b=0;b<4;b++) for(var j=0;j<8;j++) a.push(steps.indexOf(j)>=0?ch[b]:null); return a; }
-function walk(w){ var a=[]; for(var b=0;b<4;b++) for(var j=0;j<8;j++) a.push(j%2===0?w[b][j/2]:null); return a; }
-var THEMES={
-  trouble:{ bpm:124,len:32,swing:0, leadRoot:72,leadWave:"square",leadVol:0.075,leadLen:0.9,
-    lead:P("0 4 7 4 12 7 4 7  5 9 12 9 14 12 9 12  7 11 14 11 16 14 11 14  12 7 9 5 7 4 2 0"),
-    bassRoot:48,bass:barsB([0,5,7,0],[0,null,7,null,0,null,7,null]),bassVol:0.2,
-    kick:R8([1,0,0,0,1,0,0,0]),hat:R8([0,0,1,0,0,0,1,0]),hatVol:0.1 },
-  sorry:{ bpm:132,len:32,swing:0, leadRoot:74,leadWave:"sawtooth",leadVol:0.05,leadLen:0.7,
-    lead:P("0 . 3 . 7 . 3 .  5 . 8 . 12 . 8 .  7 . 10 . 14 . 10 .  12 10 8 7 5 3 2 0"),
-    bassRoot:38,bass:barsB([0,-4,-2,0],[0,null,0,null,7,null,0,null]),bassVol:0.22,
-    kick:R8([1,0,0,0,1,0,0,1]),snare:R8([0,0,1,0,0,0,1,0]),hat:R8([1,1,1,1,1,1,1,1]),hatVol:0.05 },
-  monopoly:{ bpm:108,len:32,swing:0.3, leadRoot:72,leadWave:"triangle",leadVol:0.13,leadLen:1.1,
-    lead:P("12 . 11 . 7 . 4 7  9 . 7 . 4 . 0 4  5 . 9 . 12 . 9 5  7 . 11 . 14 . 11 7"),
-    bassRoot:36,bass:walk([[0,4,7,4],[-3,0,4,0],[2,5,9,5],[-5,-1,2,-1]]),bassVol:0.24,
-    chordRoot:60,chord:barsC([[0,4,7,11],[-3,0,4,7],[2,5,9,12],[-1,2,5,7]],[0,5]),chordVol:0.06,
-    kick:R8([1,0,0,0,0,0,0,0]),kickVol:0.25,snare:R8([0,0,0,1,0,0,0,1]),snareVol:0.1,hat:R8([1,0,1,0,1,0,1,0]),hatVol:0.06 },
-  menu:{ bpm:84,len:32,swing:0, leadRoot:72,leadWave:"sine",leadVol:0.11,leadLen:2,
-    lead:P("0 4 7 12 7 4 0 4  5 9 12 17 12 9 5 9  7 11 14 19 14 11 7 11  4 7 12 16 12 7 4 7"),
-    bassRoot:48,bass:barsB([0,5,7,4],[0,null,null,null,7,null,null,null]),bassVol:0.16 }
+/* the calm menu loop (hand-written) */
+var THEMES={ menu:{ bpm:84,len:32,swing:0,leadRoot:72,leadWave:"sine",leadVol:0.11,leadLen:2,
+  lead:P("0 4 7 12 7 4 0 4  5 9 12 17 12 9 5 9  7 11 14 19 14 11 7 11  4 7 12 16 12 7 4 7"),
+  bassRoot:48,bass:barsB([0,5,7,4],[0,null,null,null,7,null,null,null]),bassVol:0.16 } };
+
+var STYLES={
+  trouble:{ scales:["major","major","mixo"], bpm:[112,140], swing:0, sev:false, leadVol:0.075, waves:["square","triangle","square"], bassKind:"bounce",
+    progs:[[0,4,5,3],[0,5,3,4],[0,3,4,3],[5,3,0,4],[0,2,3,4],[0,3,0,4],[3,4,0,0],[0,4,3,4]],
+    bridge:[[3,4,0,5],[5,4,3,4],[1,4,0,0],[3,0,4,0]],
+    rhythms:[[1,0,1,1,1,0,1,1],[1,1,1,0,1,1,1,0],[1,0,1,0,1,1,1,0],[1,1,0,1,1,0,1,1]],
+    chordSteps:[0,4],
+    drums:[{kick:[1,0,0,0,1,0,0,0],hat:[0,0,1,0,0,0,1,0],hv:0.1},{kick:[1,0,0,1,1,0,0,0],hat:[1,0,1,0,1,0,1,0],hv:0.07},{kick:[1,0,0,0,1,0,0,1],snare:[0,0,1,0,0,0,1,0],hat:[0,1,0,1,0,1,0,1],hv:0.06}],
+    titles:["Pop Goes the Die","Six to Start","Peg Parade","Home Stretch","Bump and Run","Lucky Six Shuffle","Dome Sweet Dome","Race to Home","Pop-o-matic Polka","Peg Party"] },
+  sorry:{ scales:["minor","minor","dorian"], bpm:[120,150], swing:0, sev:false, leadVol:0.055, waves:["sawtooth","square","sawtooth"], bassKind:"pulse",
+    progs:[[0,5,2,6],[0,3,4,0],[0,6,5,4],[0,5,3,4],[0,2,6,5],[0,4,5,3],[0,3,6,2],[0,6,3,4]],
+    bridge:[[3,4,0,0],[5,6,0,0],[2,3,4,4],[3,6,2,4]],
+    rhythms:[[1,0,1,0,1,0,1,1],[1,1,0,1,1,0,1,0],[1,0,1,1,0,1,1,0],[1,0,0,1,1,0,1,0]],
+    chordSteps:[0,3,6],
+    drums:[{kick:[1,0,0,0,1,0,0,1],snare:[0,0,1,0,0,0,1,0],hat:[1,1,1,1,1,1,1,1],hv:0.05},{kick:[1,0,0,1,0,0,1,0],snare:[0,0,0,0,1,0,0,0],hat:[0,1,0,1,0,1,0,1],hv:0.06},{kick:[1,0,1,0,1,0,1,0],snare:[0,1,0,1,0,1,0,1],hat:[1,0,1,0,1,0,1,0],hv:0.05}],
+    titles:["Sorry Not Sorry","Slide Into Home","Wait For It","Bumped Again","The Long Slide","Card Shark Shuffle","Back to Start","Safety Zone Stomp","Eleven Swap","Pawn Takes Revenge"] },
+  monopoly:{ scales:["major","mixo","major"], bpm:[96,120], swing:0.3, sev:true, leadVol:0.13, waves:["triangle","sine","triangle"], bassKind:"walk",
+    progs:[[0,5,1,4],[1,4,0,5],[0,3,1,4],[0,5,3,4],[2,5,1,4],[0,2,3,4],[3,4,2,5],[0,1,4,0]],
+    bridge:[[3,2,1,4],[5,1,4,0],[1,4,3,0],[3,4,0,5]],
+    rhythms:[[1,0,1,0,1,1,0,1],[1,0,0,1,1,0,1,0],[1,0,1,1,0,1,0,1],[1,1,0,1,0,1,1,0]],
+    chordSteps:[0,5],
+    drums:[{kick:[1,0,0,0,0,0,0,0],kv:0.25,snare:[0,0,0,1,0,0,0,1],sv:0.1,hat:[1,0,1,0,1,0,1,0],hv:0.06},{kick:[1,0,0,0,1,0,0,0],kv:0.22,hat:[1,1,1,1,1,1,1,1],hv:0.04},{snare:[0,0,0,0,1,0,0,0],sv:0.09,hat:[1,0,1,0,1,0,1,0],hv:0.07}],
+    titles:["Boardwalk Blues","Go Collect Two Hundred","Park Place Swing","Rent Is Due","Free Parking Jazz","Railroad Rag","Hotel Lobby","Chance Encounter","Community Chest Cha-Cha","Pass Go Boogie"] }
 };
+function melody(r,sc,prog,rh,resolve){
+  var out=[], prev=2+Math.floor(r()*5), LO=-2, HI=9;
+  for(var b=0;b<4;b++){
+    var ch=prog[b];
+    for(var st2=0;st2<8;st2++){
+      if(!rh[st2]){ out.push(null); continue; }
+      var d;
+      if(st2===0||st2===4){
+        var c=[]; [0,2,4].forEach(function(k){ for(var o=-1;o<=1;o++) c.push(ch+k+7*o); });
+        c=c.filter(function(x){ return x>=LO&&x<=HI; });
+        c.sort(function(a,z){ return Math.abs(a-prev)-Math.abs(z-prev); });
+        d=c[Math.min(c.length-1,Math.floor(r()*2))];
+      } else {
+        var stp=[-2,-1,-1,0,1,1,2][Math.floor(r()*7)]; d=Math.max(LO,Math.min(HI,prev+stp));
+      }
+      out.push(d); prev=d;
+    }
+  }
+  if(resolve){ for(var i=out.length-1;i>=out.length-8;i--){ if(out[i]!=null){ var tg=[0,2,4,7]; tg.sort(function(a,z){ return Math.abs(a-prev)-Math.abs(z-prev); }); out[i]=tg[0]; break; } } }
+  return out;
+}
+function compose(game,idx){
+  var S=STYLES[game], r=mulberry(hashStr(game)*131+idx*977+7);
+  var sc=SCALES[pickOf(r,S.scales)], key=pickOf(r,KEYS), bpm=Math.round(S.bpm[0]+r()*(S.bpm[1]-S.bpm[0]));
+  var progA=pickOf(r,S.progs), progB=pickOf(r,S.bridge), rhA=pickOf(r,S.rhythms), rhB=pickOf(r,S.rhythms), wave=pickOf(r,S.waves), dr=pickOf(r,S.drums);
+  var mA=melody(r,sc,progA,rhA,true), mB=melody(r,sc,progB,rhB,false), mA2=mA.slice(0,24).concat(melody(r,sc,progA,rhA,true).slice(24));
+  var secs=[[progA,mA],[progA,mA],[progB,mB],[progA,mA2]];
+  var lead=[],bass=[],chord=[],kick=[],snare=[],hat=[];
+  secs.forEach(function(sec,si){
+    var prog=sec[0], mel=sec[1];
+    for(var b=0;b<4;b++){
+      var ch=prog[b], nextCh=(b<3?prog[b+1]:(si<3?secs[si+1][0][0]:progA[0]));
+      var root=key-12+d2s(sc,ch), third=key-12+d2s(sc,ch+2), fifth=key-12+d2s(sc,ch+4), nroot=key-12+d2s(sc,nextCh);
+      var cn=[0,2,4].concat(S.sev?[6]:[]).map(function(k){ return key+12+d2s(sc,ch+k); });
+      for(var j=0;j<8;j++){
+        var m=mel[b*8+j]; lead.push(m==null?null:key+24+d2s(sc,m));
+        var bv=null;
+        if(S.bassKind==="bounce") bv=[root,null,root+7,null,root,null,root+7,null][j];
+        else if(S.bassKind==="pulse") bv=[root,root,null,root+12,root,null,root+7,null][j];
+        else bv=[root,null,third,null,fifth,null,(nroot-1),null][j];
+        bass.push(bv===undefined?null:bv);
+        chord.push(S.chordSteps.indexOf(j)>=0?cn:null);
+        kick.push(!!(dr.kick&&dr.kick[j])); snare.push(!!(dr.snare&&dr.snare[j])); hat.push(!!(dr.hat&&dr.hat[j]));
+      }
+    }
+  });
+  return { title:S.titles[idx], bpm:bpm, len:128, swing:S.swing, leadRoot:0, leadWave:wave, leadVol:S.leadVol*(0.9+r()*0.25), leadLen:(game==="sorry"?0.6:game==="monopoly"?1.1:0.9),
+    lead:lead, bassRoot:0, bass:bass, bassVol:game==="monopoly"?0.24:0.2, chordRoot:0, chord:chord, chordVol:game==="monopoly"?0.06:0.045,
+    kick:kick, snare:snare, hat:hat, hatVol:dr.hv||0.07, kickVol:dr.kv||0.5, snareVol:dr.sv||0.26 };
+}
+var songCache={};
+function getSongs(game){ if(!songCache[game]){ var a=[]; for(var i=0;i<10;i++) a.push(compose(game,i)); songCache[game]=a; } return songCache[game]; }
+
 function playStep(th,i,t,dur){
   var d=musicGain, v;
   v=th.lead[i]; if(v!=null) tone(hz(th.leadRoot+v),t,dur*th.leadLen,th.leadWave,th.leadVol,d);
@@ -117,22 +192,42 @@ function playStep(th,i,t,dur){
   if(th.snare&&th.snare[i]) noise(t,0.1,th.snareVol||0.28,1800,"bandpass",d);
   if(th.hat&&th.hat[i]) noise(t,0.04,th.hatVol||0.1,7000,"highpass",d);
 }
+var game=null, plist=[], pidx=0, curTheme=null, playlistMode=false;
+function lastKey(gm){ return "bg_last_"+gm; }
+function shuffled(n,avoid){ var a=[],i; for(i=0;i<n;i++) a.push(i); for(i=n-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i]; a[i]=a[j]; a[j]=t; } if(n>1&&a[0]===avoid){ var t2=a[0]; a[0]=a[1]; a[1]=t2; } return a; }
+function nextSong(){
+  if(!playlistMode) return;
+  pidx++; if(pidx>=plist.length){ plist=shuffled(10,plist[plist.length-1]); pidx=0; }
+  curTheme=getSongs(game)[plist[pidx]]; step=0; try{ g.localStorage.setItem(lastKey(game),String(plist[pidx])); }catch(e){}
+  refreshPanel();
+}
 function pump(){
-  var th=THEMES[cur]; if(!th||!ctx) return;
-  var dur=60/th.bpm/2;
+  if(!curTheme||!ctx) return;
   while(nextT<ctx.currentTime+0.4){
+    var th=curTheme, dur=60/th.bpm/2;
     var i=step%th.len, t=nextT+((i%2)?th.swing*dur:0);
     playStep(th,i,t,dur); nextT+=dur; step++;
+    if(playlistMode&&step>=th.len*2) nextSong();      // each song plays twice, then the next one starts
   }
 }
 function stopMusic(){ if(timer){ clearInterval(timer); timer=null; } cur=null; }
+function setupTheme(name){
+  if(STYLES[name]){
+    playlistMode=true; game=name;
+    var last=parseInt(ld(lastKey(name),-1),10); if(isNaN(last)) last=-1;
+    plist=shuffled(10,last); pidx=0; curTheme=getSongs(name)[plist[0]];
+    try{ g.localStorage.setItem(lastKey(name),String(plist[0])); }catch(e){}
+  } else { playlistMode=false; game=null; curTheme=THEMES.menu; }
+}
 function begin(){
   if(!want){ stopMusic(); return; }
   if(cur===want&&timer) return;
-  stopMusic(); if(!THEMES[want]) return;
-  cur=want; step=0; nextT=ctx.currentTime+0.15; timer=setInterval(pump,80); pump();
+  stopMusic(); setupTheme(want);
+  cur=want; step=0; nextT=ctx.currentTime+0.15; timer=setInterval(pump,80); pump(); refreshPanel();
 }
-function music(name){ want=name||null; if(!AC) return; if(unlocked&&ensure()) begin(); }
+function music(name){ want=name||null; styleName=(name&&(STYLES[name]||name==="menu"))?name:"menu"; if(!AC) return; if(unlocked&&ensure()) begin(); }
+function skip(){ if(playlistMode&&timer) nextSong(); }          // start a different song (used at the start of every game)
+function nowPlaying(){ return (playlistMode&&curTheme)?curTheme.title:""; }
 
 function unlock(){
   if(unlocked) return; unlocked=true;
@@ -152,6 +247,7 @@ function refreshPanel(){
   rm.value=Math.round(st.music*100); rs.value=Math.round(st.sfx*100);
   d.getElementById("bgVm").textContent=Math.round(st.music*100)+"%"; d.getElementById("bgVs").textContent=Math.round(st.sfx*100)+"%";
   d.getElementById("bgMm").textContent=st.mm?"🔇 Music off":"🎵 Music on"; d.getElementById("bgMs").textContent=st.sm?"🔇 Effects off":"🔊 Effects on";
+  var np=d.getElementById("bgNow"); if(np) np.textContent=nowPlaying()?("♪ Now playing: "+nowPlaying()):"♪ Menu music";
 }
 function openPanel(){
   var d=g.document; closePanel();
@@ -163,8 +259,9 @@ function openPanel(){
       '<div style="display:flex;align-items:center;gap:.6em"><button data-a="'+idr+'-" style="'+btn+'">−</button><input id="'+idr+'" type="range" min="0" max="100" step="5" style="flex:1;height:2.4em"><button data-a="'+idr+'+" style="'+btn+'">+</button></div></div>'; }
   ov.innerHTML='<div style="background:#16203f;border:2px solid #39498a;border-radius:22px;padding:1.4em 1.6em;width:min(92vw,720px);max-height:92vh;overflow:auto">'+
     '<div style="font-size:calc('+fs+' * 1.3);font-weight:900">🔊 Sound settings</div>'+
+    '<div id="bgNow" style="margin-top:.5em;color:#ffd86b;font-size:'+fs+';font-weight:700"></div>'+
     row("🎵 Music volume","bgRm","bgVm")+row("🔊 Sound-effects volume","bgRs","bgVs")+
-    '<div style="display:flex;flex-wrap:wrap;gap:.6em;margin-top:.4em"><button id="bgMm" style="'+btn+';background:#2a3663;border-color:#3a4a7e"></button><button id="bgMs" style="'+btn+';background:#2a3663;border-color:#3a4a7e"></button><button id="bgTest" style="'+btn+';background:#27a758;border-color:#27a758">▶ Test</button></div>'+
+    '<div style="display:flex;flex-wrap:wrap;gap:.6em;margin-top:.4em"><button id="bgMm" style="'+btn+';background:#2a3663;border-color:#3a4a7e"></button><button id="bgMs" style="'+btn+';background:#2a3663;border-color:#3a4a7e"></button><button id="bgNext" style="'+btn+';background:#6a2bd0;border-color:#6a2bd0">⏭ Next song</button><button id="bgTest" style="'+btn+';background:#27a758;border-color:#27a758">▶ Test</button></div>'+
     '<button id="bgDone" style="'+btn+';width:100%;margin-top:1.2em">Done</button></div>';
   d.body.appendChild(ov);
   function on(id,fn){ var e=d.getElementById(id); if(e) e.onclick=fn; }
@@ -174,6 +271,7 @@ function openPanel(){
   on("bgMm",function(){ st.mm=!st.mm; save(); applyVol(); refreshPanel(); });
   on("bgMs",function(){ st.sm=!st.sm; save(); applyVol(); refreshPanel(); });
   on("bgTest",function(){ unlock(); ensure(); sfx("dice"); setTimeout(function(){ sfx("coin"); },600); });
+  on("bgNext",function(){ unlock(); skip(); refreshPanel(); });
   on("bgDone",closePanel);
   refreshPanel(); try{ d.getElementById("bgDone").focus(); }catch(e){}
 }
@@ -186,5 +284,5 @@ function mountButton(o){
   d.body.appendChild(b);
 }
 
-g.Sound={music:music,stop:function(){ want=null; stopMusic(); },sfx:sfx,fromText:fromText,openPanel:openPanel,mountButton:mountButton,state:st,_themes:THEMES};
+g.Sound={music:music,skip:skip,nowPlaying:nowPlaying,stop:function(){ want=null; stopMusic(); },sfx:sfx,fromText:fromText,openPanel:openPanel,mountButton:mountButton,state:st,_songs:getSongs,_themes:THEMES};
 })(window);
