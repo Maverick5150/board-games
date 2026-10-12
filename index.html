@@ -6,26 +6,102 @@
 <meta name="theme-color" content="#0e1630">
 <title>Board Games</title>
 <style>
-  *{box-sizing:border-box;}
-  body{margin:0;min-height:100vh;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-    background:radial-gradient(120% 120% at 50% 0%,#1b2a55,#0e1630 60%);color:#eef2ff;
-    display:flex;flex-direction:column;align-items:center;padding:40px 16px;}
-  h1{letter-spacing:1px;margin:0 0 4px;}
-  p{color:#9fb0d8;margin:0 0 28px;font-size:14px;}
-  .grid{display:flex;flex-wrap:wrap;gap:16px;justify-content:center;width:100%;max-width:560px;}
-  a.tile{display:flex;flex-direction:column;justify-content:flex-end;width:160px;height:160px;
-    border-radius:18px;text-decoration:none;color:#fff;padding:16px;font-weight:800;font-size:20px;
-    background:linear-gradient(145deg,#e23b3b,#2b7be0);box-shadow:0 10px 20px #0006;}
-  a.tile small{display:block;font-weight:500;font-size:12px;opacity:.85;}
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{margin:0; min-height:100vh; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:#eef2ff;
+    background:radial-gradient(130% 100% at 50% -10%,#24346b 0%,#0e1630 55%,#080d1f 100%);
+    display:flex; flex-direction:column; align-items:center; padding:34px 16px 48px;}
+  h1{letter-spacing:.5px; margin:0 0 2px; font-size:30px; display:flex; align-items:center; gap:10px;}
+  .sub{color:#9fb0d8; margin:0 0 26px; font-size:14px;}
+  .grid{display:flex; flex-direction:column; gap:20px; width:100%; max-width:440px;}
+  a.tile{position:relative; display:block; height:190px; border-radius:22px; overflow:hidden; text-decoration:none;
+    box-shadow:0 14px 34px #0008, inset 0 1px 0 #ffffff22; transition:transform .12s;}
+  a.tile:active{transform:scale(.98);}
+  .tile .art{position:absolute; inset:0; width:100%; height:100%;}
+  .tile .scrim{position:absolute; inset:0; background:linear-gradient(90deg,#000000aa 0%,#0000006b 42%,transparent 70%);}
+  .tile .label{position:absolute; left:20px; bottom:16px; right:16px;}
+  .tile .label h2{margin:0; font-size:30px; font-weight:900; color:#fff; letter-spacing:.5px; text-shadow:0 2px 6px #0009;}
+  .tile .label p{margin:2px 0 0; font-size:13px; font-weight:600; color:#ffffffdd; text-shadow:0 1px 4px #0009;}
+  footer{color:#64749f; font-size:11px; margin-top:28px;}
 </style>
 </head>
 <body>
   <h1>🎲 Board Games</h1>
-  <p>Tap a game to play</p>
+  <p class="sub">Tap a game to play</p>
   <div class="grid">
-    <a class="tile" href="trouble/index.html">Trouble<small>pop &amp; race home</small></a>
-    <a class="tile" href="sorry/index.html" style="background:linear-gradient(145deg,#e23b3b,#27a758)">Sorry!<small>draw, slide &amp; bump</small></a>
-    <a class="tile" href="monopoly/index.html" style="background:linear-gradient(145deg,#1f9d54,#d7263d)">Monopoly<small>buy, build &amp; bankrupt</small></a>
+
+    <a class="tile" href="trouble/index.html">
+      <svg class="art" viewBox="0 0 440 190" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="tbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3a2b86"/><stop offset="1" stop-color="#1c3f9e"/></linearGradient>
+          <radialGradient id="dome" cx="38%" cy="32%" r="70%"><stop offset="0" stop-color="#ffffff"/><stop offset="60%" stop-color="#dbe3f6"/><stop offset="100%" stop-color="#9fb0d8"/></radialGradient>
+        </defs>
+        <rect width="440" height="190" fill="url(#tbg)"/>
+        <g opacity=".25" fill="#fff">
+          <circle cx="60" cy="40" r="6"/><circle cx="110" cy="26" r="6"/><circle cx="380" cy="150" r="6"/><circle cx="420" cy="100" r="6"/><circle cx="30" cy="150" r="6"/>
+        </g>
+        <!-- pegs around the dome -->
+        <g stroke="#0004" stroke-width="2">
+          <g transform="translate(300,52)"><ellipse cx="0" cy="10" rx="13" ry="7" fill="#e23b3b"/><circle cx="0" cy="-4" r="11" fill="#e23b3b"/></g>
+          <g transform="translate(392,70)"><ellipse cx="0" cy="10" rx="13" ry="7" fill="#27a758"/><circle cx="0" cy="-4" r="11" fill="#27a758"/></g>
+          <g transform="translate(300,140)"><ellipse cx="0" cy="10" rx="13" ry="7" fill="#2b7be0"/><circle cx="0" cy="-4" r="11" fill="#2b7be0"/></g>
+          <g transform="translate(392,158)"><ellipse cx="0" cy="10" rx="13" ry="7" fill="#eec21b"/><circle cx="0" cy="-4" r="11" fill="#eec21b"/></g>
+        </g>
+        <!-- pop-o-matic dome with die -->
+        <circle cx="346" cy="100" r="54" fill="#0b1228" stroke="#2a3663" stroke-width="3"/>
+        <circle cx="346" cy="100" r="47" fill="url(#dome)"/>
+        <ellipse cx="330" cy="82" rx="16" ry="9" fill="#ffffff66"/>
+        <rect x="326" y="80" width="40" height="40" rx="8" fill="#fff" stroke="#0004" stroke-width="2"/>
+        <g fill="#1b2340"><circle cx="336" cy="90" r="3.6"/><circle cx="356" cy="90" r="3.6"/><circle cx="346" cy="100" r="3.6"/><circle cx="336" cy="110" r="3.6"/><circle cx="356" cy="110" r="3.6"/></g>
+      </svg>
+      <div class="scrim"></div>
+      <div class="label"><h2>Trouble</h2><p>Pop the die &amp; race your pegs home</p></div>
+    </a>
+
+    <a class="tile" href="sorry/index.html">
+      <svg class="art" viewBox="0 0 440 190" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+        <defs><linearGradient id="sbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0f7a43"/><stop offset="1" stop-color="#b21f2b"/></linearGradient></defs>
+        <rect width="440" height="190" fill="url(#sbg)"/>
+        <!-- slide -->
+        <g opacity=".5"><line x1="40" y1="150" x2="150" y2="40" stroke="#fff" stroke-width="14" stroke-linecap="round"/>
+          <polygon points="150,40 140,58 160,54" fill="#fff"/><path d="M80,116 l16,-16 M98,126 l16,-16" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/></g>
+        <!-- pawns -->
+        <g stroke="#0004" stroke-width="2"><g transform="translate(60,150)"><ellipse cy="8" rx="11" ry="6" fill="#eec21b"/><circle cy="-4" r="9" fill="#eec21b"/></g>
+        <g transform="translate(150,44)"><ellipse cy="8" rx="11" ry="6" fill="#2b7be0"/><circle cy="-4" r="9" fill="#2b7be0"/></g></g>
+        <!-- fanned cards -->
+        <g stroke="#c62222" stroke-width="3">
+          <g transform="translate(300,104) rotate(-16)"><rect x="-42" y="-58" width="84" height="116" rx="12" fill="#fff"/><text x="0" y="12" text-anchor="middle" font-family="Arial Black,Arial" font-size="42" font-weight="900" fill="#c62222">12</text></g>
+          <g transform="translate(336,98) rotate(-2)"><rect x="-42" y="-58" width="84" height="116" rx="12" fill="#fff"/><text x="0" y="10" text-anchor="middle" font-family="Arial Black,Arial" font-size="22" font-weight="900" fill="#c62222">SORRY!</text></g>
+          <g transform="translate(378,104) rotate(14)"><rect x="-42" y="-58" width="84" height="116" rx="12" fill="#fff"/><text x="0" y="14" text-anchor="middle" font-family="Arial Black,Arial" font-size="42" font-weight="900" fill="#c62222">7</text></g>
+        </g>
+      </svg>
+      <div class="scrim"></div>
+      <div class="label"><h2>Sorry!</h2><p>Draw cards, slide &amp; bump home</p></div>
+    </a>
+
+    <a class="tile" href="monopoly/index.html">
+      <svg class="art" viewBox="0 0 440 190" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+        <defs><linearGradient id="mbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#15663a"/><stop offset="1" stop-color="#0c3b22"/></linearGradient></defs>
+        <rect width="440" height="190" fill="url(#mbg)"/>
+        <g opacity=".12" fill="#fff"><text x="38" y="52" font-family="Georgia,serif" font-size="40" font-weight="900">$</text><text x="392" y="168" font-family="Georgia,serif" font-size="40" font-weight="900">$</text></g>
+        <!-- houses + hotel -->
+        <g transform="translate(252,120)" stroke="#0005" stroke-width="2">
+          <g transform="translate(0,0)"><rect x="-16" y="0" width="32" height="24" fill="#2ecc71"/><polygon points="-20,0 0,-16 20,0" fill="#27a758"/></g>
+          <g transform="translate(40,0)"><rect x="-16" y="0" width="32" height="24" fill="#2ecc71"/><polygon points="-20,0 0,-16 20,0" fill="#27a758"/></g>
+          <g transform="translate(92,-4)"><rect x="-26" y="0" width="52" height="30" fill="#e23b3b"/><polygon points="-30,0 0,-18 30,0" fill="#c0272d"/></g>
+        </g>
+        <!-- dice -->
+        <g transform="translate(96,96)">
+          <g transform="rotate(-12)"><rect x="-34" y="-34" width="56" height="56" rx="12" fill="#fff" stroke="#0004" stroke-width="2"/><g fill="#1b2340"><circle cx="-14" cy="-14" r="5"/><circle cx="6" cy="6" r="5"/></g></g>
+          <g transform="translate(34,30) rotate(10)"><rect x="-28" y="-28" width="48" height="48" rx="10" fill="#fff" stroke="#0004" stroke-width="2"/><g fill="#1b2340"><circle cx="-12" cy="-12" r="4.4"/><circle cx="0" cy="0" r="4.4"/><circle cx="12" cy="12" r="4.4"/></g></g>
+        </g>
+        <!-- gold coin -->
+        <g transform="translate(360,58)"><circle r="26" fill="#f4c542" stroke="#b8860b" stroke-width="3"/><circle r="20" fill="none" stroke="#d6a81e" stroke-width="2"/><text y="10" text-anchor="middle" font-family="Georgia,serif" font-size="28" font-weight="900" fill="#8a5a00">$</text></g>
+      </svg>
+      <div class="scrim"></div>
+      <div class="label"><h2>Monopoly</h2><p>Buy, build, bankrupt your rivals</p></div>
+    </a>
+
   </div>
+  <footer>Add to Home Screen to play like an app · works offline</footer>
 </body>
 </html>

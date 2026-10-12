@@ -19,7 +19,10 @@
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{margin:0; height:100%;}
-  body{background:radial-gradient(120% 120% at 50% 0%,#1b2a55,var(--bg) 60%); color:var(--ink);
+  body{background:
+      linear-gradient(#ffffff07 1px,transparent 1px) 0 0/44px 44px,
+      linear-gradient(90deg,#ffffff07 1px,transparent 1px) 0 0/44px 44px,
+      radial-gradient(120% 120% at 50% 0%,#1b2a55,var(--bg) 60%); color:var(--ink);
     font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; display:flex; flex-direction:column;
     align-items:center; min-height:100%; padding:max(6px,env(safe-area-inset-top)) 6px max(8px,env(safe-area-inset-bottom)); overflow-x:hidden; touch-action:manipulation;}
   h1{font-size:17px; margin:3px 0; letter-spacing:1px; font-weight:900;}
