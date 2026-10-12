@@ -86,6 +86,7 @@
 
   <div class="overlay" id="setup">
     <div class="card">
+      <button class="btn" id="resumeBtn" style="display:none;width:100%;padding:13px;margin-bottom:12px">▸ Resume Game</button>
       <h2>New Game</h2>
       <p>How many players are human? The rest are computer. You are <b>Red</b>.</p>
       <div class="seg" id="humanSeg">
@@ -326,9 +327,16 @@ function buildBoard(){
     const pts=sl.cells.map(ringPx);
     const [x0,y0]=pts[0], [x1,y1]=pts[pts.length-1];
     s+=`<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="${CSS[sl.color]}" stroke-width="12" stroke-linecap="round" opacity="0.55"/>`;
-    // triangle at start
+    // triangle at start, pointing in the slide's travel direction
+    const ang=Math.atan2(y1-y0, x1-x0), dx=Math.cos(ang), dy=Math.sin(ang), nx=-dy, ny=dx;
     s+=`<circle cx="${x0}" cy="${y0}" r="12" fill="${CSS[sl.color]}"/>`;
-    s+=`<path d="M ${x0-6} ${y0-7} L ${x0+7} ${y0} L ${x0-6} ${y0+7} Z" fill="#fff"/>`;
+    const tipX=(x0+8*dx).toFixed(1), tipY=(y0+8*dy).toFixed(1);
+    const b1X=(x0-5*dx+6*nx).toFixed(1), b1Y=(y0-5*dy+6*ny).toFixed(1);
+    const b2X=(x0-5*dx-6*nx).toFixed(1), b2Y=(y0-5*dy-6*ny).toFixed(1);
+    s+=`<path d="M ${tipX} ${tipY} L ${b1X} ${b1Y} L ${b2X} ${b2Y} Z" fill="#fff"/>`;
+    // small chevrons along the slide pointing the same way
+    for(let t=1;t<sl.cells.length;t++){ const [mx,my]=pts[t]; const cxp=(mx-3*dx).toFixed(1), cyp=(my-3*dy).toFixed(1);
+      s+=`<path d="M ${(mx+5*dx).toFixed(1)} ${(my+5*dy).toFixed(1)} L ${(mx-3*dx+5*nx).toFixed(1)} ${(my-3*dy+5*ny).toFixed(1)} M ${(mx+5*dx).toFixed(1)} ${(my+5*dy).toFixed(1)} L ${(mx-3*dx-5*nx).toFixed(1)} ${(my-3*dy-5*ny).toFixed(1)}" stroke="#ffffffcc" stroke-width="2" fill="none" stroke-linecap="round"/>`; }
     // end dot
     s+=`<circle cx="${x1}" cy="${y1}" r="7" fill="${CSS[sl.color]}"/>`;
   }
@@ -345,7 +353,10 @@ function buildBoard(){
     // start circle
     const [sc,sr]=START_CELL[c], [sx,sy]=px(sc,sr);
     s+=`<circle cx="${sx}" cy="${sy}" r="30" fill="${CSS[c]}33" stroke="${CSS[c]}" stroke-width="3"/>`;
-    s+=`<text x="${sx}" y="${sy-34}" transform="rotate(${rot},${sx},${sy-34})" text-anchor="middle" font-size="11" font-weight="800" fill="${CSS[c]}">START</text>`;
+    // place START on the OUTER side of the circle (away from board center) and face it like HOME
+    const sa=Math.atan2(sy-300, sx-300);
+    const lx=(sx+42*Math.cos(sa)).toFixed(1), ly=(sy+42*Math.sin(sa)+4).toFixed(1);
+    s+=`<text x="${lx}" y="${ly}" transform="rotate(${rot},${lx},${ly})" text-anchor="middle" font-size="11" font-weight="800" fill="${CSS[c]}">START</text>`;
   }
   svg.innerHTML=s;
   renderPawns();
@@ -415,7 +426,7 @@ function beginTurn(){
   const c=curColor();
   setStatus(`${dot(c)} ${isHuman[c]?"<b>Your turn</b> — draw a card":NAME[c]+" (CPU)…"}`);
   if(isHuman[c]){ showDeck(); }
-  else { deckSlot.innerHTML=`<div class="cardFace small">…</div>`; busy=true; setTimeout(aiTurn,650); }
+  else { deckSlot.innerHTML=`<div class="cardFace small" style="border-color:${CSS[c]}"><div class="cv" style="color:${CSS[c]}">…</div></div>`; busy=true; setTimeout(aiTurn,1050); }
 }
 function nextTurn(){ turn=(turn+1)%players.length; beginTurn(); }
 
@@ -478,7 +489,7 @@ function endTurnOrAgain(c,v,moved){
   if(v===2 && moved){
     card=null; currentActions=[]; actionsEl.innerHTML="";
     setStatus(`${dot(c)} Drew a 2 — ${isHuman[c]?"<b>draw again!</b>":"draws again…"}`);
-    if(isHuman[c]){ showDeck(); } else { setTimeout(aiTurn,600); }
+    if(isHuman[c]){ showDeck(); } else { setTimeout(aiTurn,1050); }
   } else {
     nextTurn();
   }
@@ -520,18 +531,18 @@ function aiTurn(){
     const acts=legalActions(c,v);
     if(acts.length===0){
       setStatus(`${dot(c)} ${NAME[c]} drew ${v==='sorry'?'SORRY!':v} — no move`);
-      setTimeout(()=>{ busy=false; endTurnOrAgain(c,v,false); },900);
+      setTimeout(()=>{ busy=false; endTurnOrAgain(c,v,false); },1600);
       return;
     }
     let best=acts[0], bs=-1e9;
     for(const a of acts){ const s=scoreAction(a); if(s>bs){bs=s;best=a;} }
     setStatus(`${dot(c)} ${NAME[c]} drew <b>${v==='sorry'?'SORRY!':v}</b>`);
-    setTimeout(()=>{
+    setTimeout(()=>{                // hold on the drawn card so you can read it before the CPU moves
       applyActionAnimated(best, ()=>{
         if(hasWon(c)){ gameOver=true; setStatus(`${dot(c)} <b>${NAME[c]} wins!</b>`); deckSlot.innerHTML=""; return; }
         busy=false; endTurnOrAgain(c,v,true);
       });
-    },650);
+    },1500);
   });
 }
 
@@ -549,7 +560,12 @@ document.querySelectorAll("#humanSeg button").forEach(b=>b.addEventListener("cli
   document.querySelectorAll("#humanSeg button").forEach(x=>x.classList.remove("on")); b.classList.add("on"); humanCount=+b.dataset.n;
 }));
 document.getElementById("startBtn").addEventListener("click",()=>{ startGame(humanCount); document.getElementById("setup").style.display="none"; });
-document.getElementById("menuBtn").addEventListener("click",()=>{ document.getElementById("setup").style.display="flex"; });
+document.getElementById("resumeBtn").addEventListener("click",()=>{ document.getElementById("setup").style.display="none"; });
+document.getElementById("menuBtn").addEventListener("click",()=>{
+  // offer Resume only when a game is actually in progress
+  document.getElementById("resumeBtn").style.display = (players.length>0 && !gameOver) ? "block" : "none";
+  document.getElementById("setup").style.display="flex";
+});
 
 function startGame(humans){
   players=["red","blue","yellow","green"];
