@@ -114,6 +114,8 @@
 </style>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
+<script src="../saves.js"></script>
+<script>window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
 <script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
 </head>
 <body>
@@ -243,6 +245,7 @@ const RULES={
  snakeEyesBonus:false,           // +$500 double 1s
  threeDoublesJail:true
 };
+const DEFAULT_RULES=Object.assign({},RULES);
 const RULE_DEFS=[
  ["freeParkingJackpot","Free Parking jackpot","All taxes & fees collect in the middle; land on Free Parking to win the pool.","house"],
  ["fpSeed500","↳ Seed pool with $500","When claimed, the Free Parking pool resets to $500 instead of empty.","house"],
@@ -479,9 +482,11 @@ function openMenu(){
   openModal(`<h2>Menu</h2>
     <button class="btn" style="width:100%;margin:4px 0" onclick="window.__close()">Resume Game</button>
     <button class="btn" style="width:100%;margin:4px 0" onclick="window.__mplayers()">👥 Players &amp; holdings</button>
+    <div id="svbar2"></div>
     <button class="btn" style="width:100%;margin:4px 0" onclick="window.__mrules()">⚙️ House Rules</button>
     <button class="btn warn" style="width:100%;margin:4px 0" onclick="window.__mnew()">🎲 New Game</button>
     <button class="btn" style="width:100%;margin:4px 0" onclick="location.href='../index.html'">🏠 Back to All Games</button>`);
+  Saves.bar({game:"monopoly",el:$("svbar2"),noSettings:true,getSnapshot:()=>(G&&G.started&&!G.over)?lastSnap:null,loadSnapshot:loadSavedGame});
   window.__mplayers=openPlayers;
   window.__mrules=openRules;
   window.__mnew=openSetup;
@@ -501,10 +506,25 @@ function payTo(p,creditor,amt){
 }
 
 /* ========================= TURN FLOW ========================= */
+let lastSnap=null;
+function takeSnap(){
+  if(!G||!G.started||G.over) return;
+  const lg=$("log"); const kids=lg?Array.from(lg.children).slice(-60).map(x=>x.innerHTML):[];
+  lastSnap=JSON.parse(JSON.stringify({G:G,rules:RULES,setup:SETUP,log:kids}));
+  Saves.auto("monopoly",lastSnap);
+}
+function loadSavedGame(d){
+  G=JSON.parse(JSON.stringify(d.G)); Object.assign(RULES,DEFAULT_RULES,d.rules||{}); if(d.setup) SETUP=d.setup;
+  AUC=null; TRADE=null;
+  const lg=$("log"); lg.innerHTML=""; (d.log||[]).forEach(h=>{ const x=document.createElement("div"); x.innerHTML=h; lg.appendChild(x); });
+  lg.scrollTop=lg.scrollHeight; log("<i>Saved game loaded.</i>");
+  closeModal(); Sound.skip(); startTurn();
+}
 function startTurn(){
   if(G.over) return;
   const p=cur();
   if(p.bankrupt){ advancePlayer(); return; }
+  G.dice=[0,0]; G.phase="preroll"; G.turnDouble=false; takeSnap();
   G.dice=[0,0]; G.phase="preroll"; refresh();
   if(!p.human){ setTimeout(aiTurn,650); }
 }
@@ -1140,7 +1160,7 @@ function openSetup(){
   h+=`<h3>Human players</h3><div class="seg" id="segH"></div>`;
   h+=`<h3>Computer players</h3><div class="seg" id="segC"></div>`;
   h+=`<h3 id="tokHdr">Pick your token</h3><div class="tokgrid" id="tokGrid"></div><div id="tokMsg" style="text-align:center;color:var(--muted);font-size:11px"></div>`;
-  h+=`<button class="btn" style="width:100%;margin:10px 0 6px" onclick="window.__rules()">⚙️ House Rules</button>`;
+  h+=`<button class="btn" style="width:100%;margin:10px 0 6px" onclick="window.__rules()">⚙️ House Rules</button><div id="svbar"></div>`;
   h+=`<button class="btn primary" style="width:100%" onclick="window.__start()">Start Game</button>`;
   h+=`<button class="btn" style="width:100%;margin-top:8px" onclick="location.href='../index.html'">🏠 Back to All Games</button>`;
   openModal(h);
@@ -1165,6 +1185,12 @@ function openSetup(){
   const drawH=()=>{ const seg=$("segH"); seg.innerHTML=[1,2,3,4,5,6].map(n=>`<button data-n="${n}" class="${SETUP.humans===n?"on":""}">${n}</button>`).join(""); seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{ SETUP.humans=+b.dataset.n; clampTokens(); drawH(); drawC(); drawTok(); }); };
   const drawC=()=>{ const seg=$("segC"); const maxC=6-SETUP.humans, minC=SETUP.humans>=2?0:(2-SETUP.humans); if(SETUP.cpus>maxC)SETUP.cpus=maxC; if(SETUP.cpus<minC)SETUP.cpus=minC; seg.innerHTML=[0,1,2,3,4,5].map(n=>`<button data-n="${n}" class="${SETUP.cpus===n?"on":""}"${(n>maxC||n<minC)?' disabled style="opacity:.3"':''}>${n}</button>`).join(""); seg.querySelectorAll("button:not([disabled])").forEach(b=>b.onclick=()=>{ SETUP.cpus=+b.dataset.n; drawC(); }); };
   drawH(); drawC(); drawTok();
+  Saves.bar({game:"monopoly",el:$("svbar"),
+    getSettings:()=>({setup:SETUP,rules:RULES}),
+    applySettings:s=>{ Object.assign(RULES,DEFAULT_RULES,s.rules||{}); SETUP=Object.assign({humans:1,cpus:3,humanTokens:[0]},s.setup||{}); openSetup(); },
+    standard:()=>{ Object.assign(RULES,DEFAULT_RULES); SETUP={humans:1,cpus:3,humanTokens:[0]}; openSetup(); },
+    getSnapshot:()=>(G&&G.started&&!G.over)?lastSnap:null,
+    loadSnapshot:loadSavedGame});
   window.__rules=openRules;
   window.__start=()=>{ Sound.skip(); const nH=SETUP.humans, nP=Math.min(6,Math.max(2,nH+SETUP.cpus)); startGame(nP,nH); };
 }

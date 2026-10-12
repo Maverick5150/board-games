@@ -1,6 +1,6 @@
 // Offline cache for 500 Rummy (bump VERSION to force update)
-const VERSION = "rummy500-v1";
-const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.png", "../sound.js", "../skins.js", "./engine.js", "./game.js", "./cards.js"];
+const VERSION = "rummy500-v2";
+const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.png", "../sound.js", "../skins.js", "../saves.js", "./engine.js", "./game.js", "./cards.js"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));

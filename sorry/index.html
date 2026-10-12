@@ -75,6 +75,8 @@
 </style>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
+<script src="../saves.js"></script>
+<script>window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
 <script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
 </head>
 <body>
@@ -104,6 +106,7 @@
       </div>
       <p style="margin-top:14px">Computer players?</p>
       <div class="seg" id="cpuSeg"></div>
+      <div id="svbar"></div>
       <button class="btn primary" id="startBtn" style="width:100%;padding:14px;margin-top:14px">Start Game</button>
       <a href="../index.html" class="btn" style="display:block;width:100%;padding:12px;margin-top:10px;text-align:center;text-decoration:none">🏠 Back to All Games</a>
     </div>
@@ -429,8 +432,15 @@ function drawCard(){
   return card;
 }
 
+let armed=false, lastSnap=null;
+function takeSnap(){
+  if(!armed||gameOver) return;
+  lastSnap=JSON.parse(JSON.stringify({players:players,isHuman:isHuman,pawns:pawns,turn:turn,deck:deck,humanCount:humanCount,cpuCount:cpuCount}));
+  Saves.auto("sorry",lastSnap);
+}
 function beginTurn(){
   if(gameOver) return;
+  takeSnap();
   card=null; currentActions=[]; actionsEl.innerHTML=""; highlightPawns=new Set();
   renderPawns();
   const c=curColor();
@@ -573,15 +583,27 @@ function drawCpuSeg(){
   seg.innerHTML=[0,1,2,3].map(n=>`<button data-n="${n}" class="${cpuCount===n?'on':''}"${(n>maxCpu||n<minCpu)?' disabled style="opacity:.3"':''}>${n}</button>`).join("");
   seg.querySelectorAll("button:not([disabled])").forEach(b=>b.addEventListener("click",()=>{ cpuCount=+b.dataset.n; drawCpuSeg(); }));
 }
-document.querySelectorAll("#humanSeg button").forEach(b=>b.addEventListener("click",()=>{
-  document.querySelectorAll("#humanSeg button").forEach(x=>x.classList.remove("on")); b.classList.add("on"); humanCount=+b.dataset.n; drawCpuSeg();
-}));
+function setHumanSeg(){ document.querySelectorAll("#humanSeg button").forEach(x=>x.classList.toggle("on",+x.dataset.n===humanCount)); }
+document.querySelectorAll("#humanSeg button").forEach(b=>b.addEventListener("click",()=>{ humanCount=+b.dataset.n; setHumanSeg(); drawCpuSeg(); }));
 drawCpuSeg();
-document.getElementById("startBtn").addEventListener("click",()=>{ Sound.skip(); startGame(humanCount, cpuCount); document.getElementById("setup").style.display="none"; });
+const saveBar=Saves.bar({game:"sorry",el:document.getElementById("svbar"),
+  getSettings:()=>({humans:humanCount,cpus:cpuCount}),
+  applySettings:s=>{ humanCount=s.humans||1; cpuCount=s.cpus!=null?s.cpus:1; setHumanSeg(); drawCpuSeg(); },
+  standard:()=>{ humanCount=1; cpuCount=1; setHumanSeg(); drawCpuSeg(); },
+  getSnapshot:()=>(armed&&!gameOver)?lastSnap:null,
+  loadSnapshot:d=>{ Sound.skip(); loadGame(d); document.getElementById("setup").style.display="none"; }});
+function loadGame(d){
+  players=d.players; isHuman=d.isHuman; pawns=d.pawns; turn=d.turn; deck=d.deck; humanCount=d.humanCount||humanCount; cpuCount=d.cpuCount!=null?d.cpuCount:cpuCount;
+  card=null; gameOver=false; busy=false; armed=true;
+  document.getElementById("legend").innerHTML=players.map(c=>`<span>${dot(c)}${NAME[c]}${isHuman[c]?" (you)":" CPU"}</span>`).join("");
+  buildBoard(); beginTurn();
+}
+document.getElementById("startBtn").addEventListener("click",()=>{ Sound.skip(); armed=true; startGame(humanCount, cpuCount); document.getElementById("setup").style.display="none"; });
 document.getElementById("resumeBtn").addEventListener("click",()=>{ document.getElementById("setup").style.display="none"; });
 document.getElementById("menuBtn").addEventListener("click",()=>{
   // offer Resume only when a game is actually in progress
   document.getElementById("resumeBtn").style.display = (players.length>0 && !gameOver) ? "block" : "none";
+  saveBar.refresh();
   document.getElementById("setup").style.display="flex";
 });
 
@@ -598,6 +620,7 @@ function startGame(humans, cpus){
 Skins.apply("sorry"); Sound.mountButton(); Sound.music("sorry");
 buildBoard();
 startGame(1,1);
+saveBar.refresh();
 document.getElementById("setup").style.display="flex";
 
 if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }

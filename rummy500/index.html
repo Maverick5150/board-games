@@ -104,6 +104,7 @@
   <div class="seg" id="speedSeg"><button data-s="slow">Slow</button><button data-s="normal" class="on">Normal</button><button data-s="fast">Fast</button></div>
   <details style="margin-top:10px"><summary>Rules &amp; house rules (tap to customize)</summary><div id="houseRules"></div>
     <div style="font-size:11px;color:var(--muted);margin-top:6px"><span class="tag off">variant</span> appears in a published version of the game · <span class="tag house">house</span> a common home rule</div></details>
+  <div id="svbar"></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px">
     <button class="btn primary" id="startBtn" style="flex:1;font-size:16px">▶ Start new game</button>
     <button class="btn" id="resumeBtn" style="display:none;flex:1">Resume game</button>
@@ -116,6 +117,8 @@
 
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
+<script src="../saves.js"></script>
+<script>window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
 <script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
 <script src="engine.js"></script>
 <script src="game.js"></script>
@@ -169,8 +172,28 @@ function drawHouse(){
     box.appendChild(row);
   });
 }
-$("speedSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.speed=b.dataset.s; $("speedSeg").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b)); }));
-$("menuBtn").addEventListener("click",()=>{ $("resumeBtn").style.display=(G&&!G.over)?"block":"none"; $("setup").classList.add("show"); });
+function setSpeedSeg(){ $("speedSeg").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x.dataset.s===cfg.speed)); }
+$("speedSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.speed=b.dataset.s; setSpeedSeg(); }));
+let lastSnap=null;
+function takeSnap(){
+  if(!G||G.over||G.roundOver||G.phase!=="draw") return;
+  const c=JSON.parse(JSON.stringify(G,(k,v)=>(k==="log"||k==="snap")?undefined:v));
+  lastSnap={G:c,cfg:JSON.parse(JSON.stringify(cfg))};
+  Saves.auto("rummy500",lastSnap);
+}
+function loadSaved(d){
+  gen++; G=d.G; G.rnd=Math.random; G.log=[]; G.snap=null; G.roundOver=null;
+  Object.assign(cfg,d.cfg||{}); sel.clear(); pileFrom=null; flashCards={}; flashMeld=null; handoffOk=null; lastTurn=-1; newIds={}; busy=false;
+  logLines=[]; say("Saved game loaded — round "+G.round,true);
+  $("setup").classList.remove("show"); $("roundBox").classList.remove("show"); Sound.skip(); loop();
+}
+const saveBar=Saves.bar({game:"rummy500",el:$("svbar"),
+  getSettings:()=>({version:cfg.version,over:cfg.over,humans:cfg.humans,cpus:cfg.cpus,speed:cfg.speed}),
+  applySettings:s=>{ cfg.version=s.version||"standard"; cfg.over=s.over||{}; cfg.humans=s.humans||1; cfg.cpus=s.cpus!=null?s.cpus:1; cfg.speed=s.speed||"normal"; clampSeats(); setSpeedSeg(); drawSetup(); },
+  standard:()=>{ cfg.version="standard"; cfg.over={}; cfg.humans=1; cfg.cpus=1; cfg.speed="normal"; setSpeedSeg(); drawSetup(); },
+  getSnapshot:()=>(G&&!G.over&&!G.roundOver)?lastSnap:null,
+  loadSnapshot:loadSaved});
+$("menuBtn").addEventListener("click",()=>{ saveBar.refresh(); $("resumeBtn").style.display=(G&&!G.over)?"block":"none"; $("setup").classList.add("show"); });
 $("resumeBtn").addEventListener("click",()=>$("setup").classList.remove("show"));
 $("startBtn").addEventListener("click",()=>{ Sound.skip(); $("setup").classList.remove("show"); startGame(); });
 
@@ -224,6 +247,7 @@ function loop(){
   const p=cur();
   if(G.turn!==lastTurn){ lastTurn=G.turn; handoffOk=null; sel.clear(); pileFrom=null; if(!p.human) newIds={}; }
   busy=!p.human;
+  takeSnap();
   render();
   if(p.human){
     if(cfg.humans>1&&handoffOk!==G.turn) showHandoff(p);
@@ -370,7 +394,7 @@ function showRound(){
 }
 
 Skins.apply("rummy500"); Sound.mountButton(); Sound.music("rummy500");
-drawSetup();
+drawSetup(); saveBar.refresh();
 if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
 window.__rummy={get G(){ return G; },cfg:cfg,act:act,perform:perform,loop:loop,startGame:startGame,get sel(){ return sel; },render:render};
 })();

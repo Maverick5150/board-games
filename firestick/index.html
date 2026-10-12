@@ -100,6 +100,8 @@
 <script src="monodata.js"></script>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
+<script src="../saves.js"></script>
+<script>window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
 <script src="../rummy500/engine.js"></script>
 <script src="../rummy500/game.js"></script>
 <script src="../rummy500/cards.js"></script>
@@ -302,6 +304,7 @@ function screenSelect(){
 var chosenGame="trouble";
 var cpuCount=3;           // how many computer players to add (capped by free seats)
 var monoRules={fpJackpot:false,noAuction:false,doubleGo:false,snakeEyes:false,noRentJail:false,lux75:false,unlimited:false,evenBuild:true};
+var MONO_DEFAULT=JSON.stringify(monoRules);
 var MONO_RULE_DEFS=[["fpJackpot","🅿️ Free Parking jackpot"],["noAuction","No auctions"],["doubleGo","$400 for landing on GO"],["snakeEyes","Snake-eyes bonus $500"],["noRentJail","No rent while in Jail"],["lux75","Luxury tax $75"],["unlimited","Unlimited houses & hotels"],["evenBuild","Even building (official)"]];
 function renderRules(){ var el=$("ruleBtns"); if(!el) return;
   el.innerHTML=MONO_RULE_DEFS.map(function(r){ return '<button class="aibtn'+(monoRules[r[0]]?" on":"")+'" data-k="'+r[0]+'" style="margin:.5vh;padding:.9vh 1.6vh;font-size:2vh">'+r[1]+'</button>'; }).join("");
@@ -356,6 +359,7 @@ function cardArt(id){
 }
 
 function screenLobby(){
+  monoRules=JSON.parse(MONO_DEFAULT); rvCfg={version:"standard",over:{}};      // every game opens on the standard rules
   inLobby=true; screenState="lobby"; setBack("‹ Back", true); Skins.apply(chosenGame); Sound.music(chosenGame);
   startRoom();                                                          // new random code + new QR for this game
   var qrSrc="https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=12&data="+encodeURIComponent(JOIN_URL);
@@ -368,6 +372,7 @@ function screenLobby(){
     '<div class="aitoggle">🐢 Game speed: <span id="paceBtns"></span></div>'+
     (chosenGame==="monopoly"?'<div class="rulebox"><div class="muted" style="font-size:2.2vh">⚙️ House rules (tap to toggle)</div><div id="ruleBtns"></div></div>':'')+
     (chosenGame==="rummy500"?'<div class="rulebox" id="rvbox"></div>':'')+
+    '<div id="svbar" style="max-width:92vw;font-size:2vh;margin:1vh auto"></div>'+
     '<button class="big" id="startBtn">▶ Start Game</button>'+
     '<div class="hintbar" id="lobhint"></div>';
   var img=$("qrimg");
@@ -375,6 +380,11 @@ function screenLobby(){
   renderLobby();
   if(chosenGame==="monopoly") renderRules();
   if(chosenGame==="rummy500") renderRvRules();
+  var redrawRules=function(){ if(chosenGame==="monopoly") renderRules(); if(chosenGame==="rummy500") renderRvRules(); renderLobby(); };
+  Saves.bar({game:"party-"+chosenGame,el:$("svbar"),
+    getSettings:function(){ return {cpu:cpuCount,pace:PACE,mono:chosenGame==="monopoly"?monoRules:null,rv:chosenGame==="rummy500"?rvCfg:null}; },
+    applySettings:function(s){ if(s.cpu!=null) cpuCount=s.cpu; if(s.pace>0){ PACE=s.pace; try{localStorage.setItem("bgfs_pace",String(PACE));}catch(e){} } if(s.mono&&chosenGame==="monopoly") monoRules=s.mono; if(s.rv&&chosenGame==="rummy500") rvCfg={version:s.rv.version||"standard",over:s.rv.over||{}}; redrawRules(); },
+    standard:function(){ cpuCount=3; PACE=1.8; try{localStorage.setItem("bgfs_pace","1.8");}catch(e){} monoRules=JSON.parse(MONO_DEFAULT); rvCfg={version:"standard",over:{}}; redrawRules(); }});
   broadcastLobby();
   $("startBtn").onclick=startGame;
   $("startBtn").focus();

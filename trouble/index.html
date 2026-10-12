@@ -76,6 +76,8 @@
 </style>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
+<script src="../saves.js"></script>
+<script>window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
 <script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
 </head>
 <body>
@@ -106,6 +108,7 @@
       </div>
       <p style="margin-top:14px">Computer players?</p>
       <div class="seg" id="cpuSeg"></div>
+      <div id="svbar"></div>
       <button class="btn primary" id="startBtn" style="width:100%;padding:14px;margin-top:14px">Start Game</button>
       <a href="../index.html" class="btn" style="display:block;width:100%;padding:12px;margin-top:10px;text-align:center;text-decoration:none">🏠 Back to All Games</a>
     </div>
@@ -349,8 +352,15 @@ function showTurn(){
   setStatus(`<span class="dot" style="background:${CSSCOL[c]}"></span> ${isHuman[c]?"<b>Your turn</b> — pop the die":who+"…"}`);
 }
 
+let armed=false, lastSnap=null;
+function takeSnap(){
+  if(!armed||gameOver) return;
+  lastSnap=JSON.parse(JSON.stringify({players:players,isHuman:isHuman,pegs:pegs,turn:turn,sixStreak:sixStreak,humanCount:humanCount,cpuCount:cpuCount}));
+  Saves.auto("trouble",lastSnap);
+}
 function beginTurn(){
   if(gameOver) return;
+  takeSnap();
   die=0; awaitingMove=false;
   renderPegs();
   showTurn();
@@ -494,15 +504,25 @@ function drawCpuSeg(){
   seg.innerHTML=[0,1,2,3].map(n=>`<button data-n="${n}" class="${cpuCount===n?'on':''}"${(n>maxCpu||n<minCpu)?' disabled style="opacity:.3"':''}>${n}</button>`).join("");
   seg.querySelectorAll("button:not([disabled])").forEach(b=>b.addEventListener("click",()=>{ cpuCount=+b.dataset.n; drawCpuSeg(); }));
 }
+function setHumanSeg(){ document.querySelectorAll("#humanSeg button").forEach(x=>x.classList.toggle("on",+x.dataset.n===humanCount)); }
 document.querySelectorAll("#humanSeg button").forEach(b=>{
-  b.addEventListener("click",()=>{
-    document.querySelectorAll("#humanSeg button").forEach(x=>x.classList.remove("on"));
-    b.classList.add("on"); humanCount=+b.dataset.n; drawCpuSeg();
-  });
+  b.addEventListener("click",()=>{ humanCount=+b.dataset.n; setHumanSeg(); drawCpuSeg(); });
 });
 drawCpuSeg();
+const saveBar=Saves.bar({game:"trouble",el:document.getElementById("svbar"),
+  getSettings:()=>({humans:humanCount,cpus:cpuCount}),
+  applySettings:s=>{ humanCount=s.humans||1; cpuCount=s.cpus!=null?s.cpus:1; setHumanSeg(); drawCpuSeg(); },
+  standard:()=>{ humanCount=1; cpuCount=1; setHumanSeg(); drawCpuSeg(); },
+  getSnapshot:()=>(armed&&!gameOver)?lastSnap:null,
+  loadSnapshot:d=>{ Sound.skip(); loadGame(d); document.getElementById("setup").style.display="none"; }});
+function loadGame(d){
+  players=d.players; isHuman=d.isHuman; pegs=d.pegs; turn=d.turn; sixStreak=d.sixStreak||0; humanCount=d.humanCount||humanCount; cpuCount=d.cpuCount!=null?d.cpuCount:cpuCount;
+  die=0; gameOver=false; busy=false; awaitingMove=false; armed=true;
+  document.getElementById("legend").innerHTML=players.map(c=>`<span><span class="dot" style="background:${CSSCOL[c]}"></span>${NAME[c]}${isHuman[c]?" (you)":" CPU"}</span>`).join("");
+  buildBoard(); beginTurn();
+}
 document.getElementById("startBtn").addEventListener("click",()=>{
-  Sound.skip();
+  Sound.skip(); armed=true;
   startGame(humanCount, cpuCount);
   document.getElementById("setup").style.display="none";
 });
@@ -512,6 +532,7 @@ document.getElementById("resumeBtn").addEventListener("click",()=>{
 document.getElementById("menuBtn").addEventListener("click",()=>{
   // offer Resume only when a game is actually in progress
   document.getElementById("resumeBtn").style.display = (players.length>0 && !gameOver) ? "block" : "none";
+  saveBar.refresh();
   document.getElementById("setup").style.display="flex";
 });
 
@@ -534,6 +555,7 @@ function startGame(humans, cpus){
 Skins.apply("trouble"); Sound.mountButton(); Sound.music("trouble");
 buildBoard();
 startGame(1,1);
+saveBar.refresh();
 document.getElementById("setup").style.display="flex";
 
 // register service worker for offline / installable
