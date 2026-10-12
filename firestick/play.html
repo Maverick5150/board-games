@@ -83,7 +83,7 @@ function onMsg(o){
   if(o.t==="you" && o.pid===myPid){ myColor=o.color; if(o.name) myName=o.name; }
   else if(o.t==="lobby"){ if(!started && !isAsking()) showLobby(o); }   // never fall back to lobby once the game is on
   else if(o.t==="ask" && o.pid===myPid){ started=true; showAsk(o); }
-  else if(o.t==="wait" && o.pid===myPid){ started=true; curReq=null; showWaiting(o.msg||"Waiting…", false, o.turn); }
+  else if(o.t==="wait" && (o.pid===myPid || o.pid==="*")){ curReq=null; started=(o.pid!=="*"); showWaiting(o.msg||"Waiting…", false, o.turn); }
   else if(o.t==="started"){ started=true; if(!isAsking()) showWaiting("Game starting…", false); }
   else if(o.t==="over"){ started=false; curReq=null; showOver(o); }
   else if(o.t==="info" && (o.pid===myPid||!o.pid)){ toast(o.msg); }

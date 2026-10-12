@@ -42,6 +42,12 @@
   .status{font-size:3vh;font-weight:800;margin:1.4vh 0;min-height:4vh;display:flex;align-items:center;gap:1.2vh;}
   .dot{width:2.2vh;height:2.2vh;border-radius:50%;display:inline-block;}
   .conn{position:fixed;top:1.4vh;right:1.8vh;font-size:1.8vh;color:#7CFC9A;}
+  .backbtn{position:fixed;top:1.2vh;left:1.6vh;z-index:70;font-size:2.2vh;font-weight:800;color:#fff;background:#16203fdd;border:2px solid #3a4a7e;border-radius:1.2vh;padding:1vh 2vh;cursor:pointer;}
+  .backbtn:focus{outline:3px solid #fff;}
+  .aitoggle{display:flex;align-items:center;gap:1.2vh;justify-content:center;flex-wrap:wrap;margin:1vh 0;font-size:2.4vh;}
+  .aibtn{font-size:2.4vh;font-weight:800;color:#fff;background:#2a3663;border:2px solid #3a4a7e;border-radius:1.2vh;padding:1.1vh 2.4vh;cursor:pointer;}
+  .aibtn.on{background:#2b7be0;border-color:#2b7be0;}
+  .aibtn:focus{outline:3px solid #fff;}
   .hintbar{font-size:2.2vh;color:#9fb0d8;margin-top:.6vh;}
   .toast{position:fixed;bottom:3vh;left:50%;transform:translateX(-50%);background:#000c;padding:1.4vh 2.6vh;border-radius:2vh;font-size:2.6vh;font-weight:700;opacity:0;transition:opacity .2s;}
   .toast.show{opacity:1;}
@@ -49,6 +55,7 @@
 </head>
 <body>
   <div class="conn" id="conn">connecting…</div>
+  <button class="backbtn" id="backbtn" style="display:none">‹ Back</button>
   <div class="wrap" id="wrap"></div>
   <div class="toast" id="toast"></div>
 
@@ -135,7 +142,8 @@ var BASE=location.href.replace(/[?#].*$/,"").replace(/[^\/]*$/,"");   // directo
 var JOIN_URL=BASE+"play.html?room="+room;
 var SHORT_URL=JOIN_URL.replace(/^https?:\/\//,"");
 function screenSelect(){
-  inLobby=true;
+  inLobby=true; screenState="select"; setBack("🏠 Hub", true);
+  send({t:"wait", pid:"*", msg:"Host is choosing a game…"}, true);   // clear any retained game state for late joiners
   wrap.innerHTML='<h1>🎲 Board Games — Party Mode</h1><p class="muted" style="font-size:2.6vh">Pick a game, then players scan to join from their phones</p>'+
     '<div class="cards" id="cards"></div>';
   var games=[
@@ -155,6 +163,18 @@ function screenSelect(){
   var first=c.querySelector(".gc"); if(first) first.focus();
 }
 var chosenGame="trouble";
+var fillAI=true;          // lobby choice: fill empty seats with computer players?
+var screenState="select";
+var backbtn=$("backbtn");
+function setBack(label, show){ backbtn.textContent=label; backbtn.style.display= show?"block":"none"; }
+backbtn.onclick=function(){
+  if(screenState==="select"){ location.href="../index.html"; }
+  else if(screenState==="lobby"){ screenSelect(); }
+  else if(screenState==="game"){ // abandon current game -> back to game picker
+    try{ send({t:"wait", pid:"*", msg:"Host left the game"}); }catch(e){}
+    seat={}; players={}; pending={}; lastAsk={}; screenSelect();
+  }
+};
 function cardArt(id){
   var s='<svg class="art2" viewBox="0 0 100 114" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">';
   if(id==="trouble"){
@@ -176,17 +196,20 @@ function cardArt(id){
 }
 
 function screenLobby(){
-  inLobby=true;
+  inLobby=true; screenState="lobby"; setBack("‹ Back", true);
   var qrSrc="https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=12&data="+encodeURIComponent(JOIN_URL);
   wrap.innerHTML='<h1 style="margin-top:1vh">'+gameTitle(chosenGame)+' — Scan to join</h1>'+
     '<div class="qrbox"><img class="qrimg" id="qrimg" src="'+qrSrc+'" alt="QR"></div>'+
     '<div class="join-url">or on your phone open:<br><b>'+SHORT_URL+'</b></div>'+
     '<div class="codewrap"><div class="muted" style="font-size:2.4vh">Room code</div><div class="code">'+room+'</div></div>'+
     '<div class="players" id="players"></div>'+
+    '<div class="aitoggle">Empty seats: <button class="aibtn'+(fillAI?" on":"")+'" id="aiYes">🤖 Computers</button> <button class="aibtn'+(fillAI?"":" on")+'" id="aiNo">👤 Humans only</button></div>'+
     '<button class="big" id="startBtn">▶ Start Game</button>'+
-    '<div class="hintbar">At least 1 player. Empty seats become computer players.</div>';
+    '<div class="hintbar" id="lobhint"></div>';
   var img=$("qrimg");
   img.onerror=function(){ img.replaceWith(Object.assign(document.createElement("div"),{className:"qrfallback",textContent:"(QR unavailable — type the room code on phones)"})); };
+  $("aiYes").onclick=function(){ fillAI=true; $("aiYes").classList.add("on"); $("aiNo").classList.remove("on"); renderLobby(); };
+  $("aiNo").onclick=function(){ fillAI=false; $("aiNo").classList.add("on"); $("aiYes").classList.remove("on"); renderLobby(); };
   renderLobby();
   broadcastLobby();
   $("startBtn").onclick=startGame;
@@ -195,12 +218,14 @@ function screenLobby(){
 function renderLobby(){
   var el=$("players"); if(!el) return;
   var order=["red","blue","green","yellow"];
+  var seated=Object.keys(seat).length;
   el.innerHTML=order.map(function(c){
     var pid=seat[c];
     if(pid) return '<div class="prow"><span class="pdot" style="background:'+COL[c]+'"></span>'+esc(players[pid].name)+'</div>';
-    return '<div class="prow empty"><span class="pdot" style="background:'+COL[c]+';opacity:.3"></span>open — will be CPU</div>';
+    return '<div class="prow empty"><span class="pdot" style="background:'+COL[c]+';opacity:.3"></span>open — '+(fillAI?"will be CPU":"sits out")+'</div>';
   }).join("");
-  var sb=$("startBtn"); if(sb) sb.disabled = Object.keys(seat).length<1;
+  var sb=$("startBtn"); if(sb) sb.disabled = seated<1;
+  var h=$("lobhint"); if(h) h.textContent = fillAI ? "Empty seats become computer players." : (seated<2 ? "Humans-only needs 2+ players (or switch to Computers)." : "Only the "+seated+" joined players will play.");
 }
 function gameTitle(id){ return id==="trouble"?"Trouble":id==="sorry"?"Sorry!":"Monopoly"; }
 
@@ -214,6 +239,7 @@ function startGame(){
 /* status helper */
 function setStatus(html){ var s=$("status"); if(s) s.innerHTML=html; }
 function gameFrame(boardId){
+  screenState="game"; setBack("‹ Quit", true);
   wrap.innerHTML='<div class="status" id="status"></div><div id="boardWrap"><svg id="'+boardId+'" viewBox="0 0 600 600"></svg></div><div class="hintbar" id="hint"></div>';
 }
 
@@ -224,9 +250,10 @@ function playTrouble(){
   var TRACK=28, MAXD=31, cx=300, cy=300, trackR=228, homeR=272;
   var order=["red","green","yellow","blue"];               // play order
   var START={red:0, green:7, yellow:14, blue:21};
-  var active=order.filter(function(c){return true;});       // all 4 colors play
-  var human={}; order.forEach(function(c){ human[c]=!!seat[c]; });
-  var pegs={}; order.forEach(function(c){ pegs[c]=[null,null,null,null]; });
+  var useAI = fillAI || order.filter(function(c){return seat[c];}).length<2;   // fall back to CPU if <2 humans
+  var active=order.filter(function(c){ return useAI || seat[c]; });
+  var human={}; active.forEach(function(c){ human[c]=!!seat[c]; });
+  var pegs={}; active.forEach(function(c){ pegs[c]=[null,null,null,null]; });
   var die=0, turn=0, sixStreak=0, over=false;
 
   function ang(i){ return (-90 + 360*i/TRACK)*Math.PI/180; }
@@ -348,11 +375,13 @@ function playSorry(){
   function buildDeck(){ var d=[],add=function(v,n){for(var i=0;i<n;i++)d.push(v);}; add(1,5);add(2,4);add(3,4);add(4,4);add(5,4);add(7,4);add(8,4);add(10,4);add(11,4);add(12,4);add("sorry",4); return d; }
   function shuffle(a){ for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i];a[i]=a[j];a[j]=t; } return a; }
 
-  var pawns={}; order.forEach(function(c){ pawns[c]=[0,1,2,3].map(function(id){return {color:c,id:id,loc:{t:"start"}};}); });
-  var human={}; order.forEach(function(c){ human[c]=!!seat[c]; });
+  var useAI = fillAI || order.filter(function(c){return seat[c];}).length<2;
+  var active=order.filter(function(c){ return useAI || seat[c]; });
+  var pawns={}; active.forEach(function(c){ pawns[c]=[0,1,2,3].map(function(id){return {color:c,id:id,loc:{t:"start"}};}); });
+  var human={}; active.forEach(function(c){ human[c]=!!seat[c]; });
   var deck=shuffle(buildDeck()), over=false;
 
-  function allP(){ var a=[]; order.forEach(function(c){ a=a.concat(pawns[c]); }); return a; }
+  function allP(){ var a=[]; active.forEach(function(c){ a=a.concat(pawns[c]); }); return a; }
   function stepFwd(color,loc){ if(loc.t==="start"||loc.t==="home")return null; if(loc.t==="ring"){ if(loc.i===SAFE_ENTRY[color])return{t:"safe",j:0}; return{t:"ring",i:(loc.i+1)%60}; } if(loc.t==="safe")return loc.j<4?{t:"safe",j:loc.j+1}:{t:"home"}; return null; }
   function stepBack(color,loc){ if(loc.t==="start"||loc.t==="home")return null; if(loc.t==="ring")return{t:"ring",i:(loc.i+59)%60}; if(loc.t==="safe")return loc.j>0?{t:"safe",j:loc.j-1}:{t:"ring",i:SAFE_ENTRY[color]}; return null; }
   function travel(color,loc,n,dir){ var cur=loc; for(var s=0;s<n;s++){ cur=dir>0?stepFwd(color,cur):stepBack(color,cur); if(!cur)return null; } return cur; }
@@ -402,7 +431,7 @@ function playSorry(){
   }
   function pawnXY(p){ var l=p.loc; if(l.t==="ring")return ringPx(l.i); if(l.t==="safe"){ var sc=SAFE_CELLS[p.color][l.j]; return px(sc[0],sc[1]); } if(l.t==="home"){ var hc=HOME_CELL[p.color],b=px(hc[0],hc[1]); return [b[0]-12+(p.id%2)*24,b[1]-12+(p.id<2?0:24)]; } var sc2=START_CELL[p.color],b2=px(sc2[0],sc2[1]); return [b2[0]-11+(p.id%2)*22,b2[1]-11+(p.id<2?0:22)]; }
   function renderPawns(){ Array.prototype.slice.call(svg.querySelectorAll(".pawn")).forEach(function(e){e.remove();});
-    order.forEach(function(c){ pawns[c].forEach(function(p){ var xy=pawnXY(p); var g=document.createElementNS("http://www.w3.org/2000/svg","g"); g.setAttribute("class","pawn"); g.setAttribute("transform","translate("+xy[0].toFixed(1)+","+xy[1].toFixed(1)+")"); g.innerHTML='<circle r="10.5" fill="'+COL[c]+'" stroke="#0008" stroke-width="2"/><circle r="3.4" cx="-3" cy="-3" fill="#ffffff99"/><text y="3.5" text-anchor="middle" font-size="10" font-weight="800" fill="'+INK[c]+'">'+(p.id+1)+'</text>'; svg.appendChild(g); }); });
+    active.forEach(function(c){ pawns[c].forEach(function(p){ var xy=pawnXY(p); var g=document.createElementNS("http://www.w3.org/2000/svg","g"); g.setAttribute("class","pawn"); g.setAttribute("transform","translate("+xy[0].toFixed(1)+","+xy[1].toFixed(1)+")"); g.innerHTML='<circle r="10.5" fill="'+COL[c]+'" stroke="#0008" stroke-width="2"/><circle r="3.4" cx="-3" cy="-3" fill="#ffffff99"/><text y="3.5" text-anchor="middle" font-size="10" font-weight="800" fill="'+INK[c]+'">'+(p.id+1)+'</text>'; svg.appendChild(g); }); });
   }
   function buildPath(color,loc,n,dir){ var path=[],cur=loc; for(var s=0;s<n;s++){ cur=dir>0?stepFwd(color,cur):stepBack(color,cur); if(!cur)break; path.push(cur); } return path; }
   async function animMove(pawn,path){ for(var k=0;k<path.length;k++){ pawn.loc=path[k]; renderPawns(); await sleep(150); } }
@@ -428,7 +457,7 @@ function playSorry(){
     gameFrame("sboard"); svg=$("sboard"); build();
     var turn=0;
     while(!over){
-      var c=order[turn]; waitAllExcept(c,c);
+      var c=active[turn]; waitAllExcept(c,c);
       setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+(seat[c]?players[seat[c]].name:CNAME[c]+" (CPU)")+" — "+(human[c]?"draw on your phone":"drawing…"));
       if(human[c]){ await ask(c,"Your turn","Draw a card",[{id:"draw",label:"🂠 DRAW A CARD"}]); }
       else { await sleep(1000); }
@@ -445,7 +474,7 @@ function playSorry(){
         if(hasWon(c)){ over=true; var wn=seat[c]?players[seat[c]].name:CNAME[c]; setStatus('<span class="dot" style="background:'+COL[c]+'"></span> 🏆 '+wn+" wins!"); announceOver(wn); showPlayAgain(); return; }
       } else { setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+(seat[c]?players[seat[c]].name:CNAME[c])+" — no move"); await sleep(1100); }
       if(v===2 && moved){ /* draw again, same player */ }
-      else turn=(turn+1)%order.length;
+      else turn=(turn+1)%active.length;
       await sleep(300);
     }
   }
