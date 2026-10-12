@@ -77,12 +77,14 @@
   <div class="sub">Pop the die &middot; roll a 6 to leave home &middot; get all 4 pegs home to win</div>
   <div class="status" id="status">&nbsp;</div>
   <div id="boardWrap"><svg id="board" viewBox="0 0 600 600"></svg></div>
-  <div class="controls">
-    <button class="btn" id="menuBtn">Menu</button>
-    <button class="pop" id="pop" style="display:none">POP</button>
-    <button class="btn" id="passBtn" style="display:none">Pass</button>
+  <div class="controls" style="display:none">
+    <button class="pop" id="pop">POP</button>
+    <button class="btn" id="passBtn">Pass</button>
   </div>
   <div class="legend" id="legend"></div>
+  <div style="display:flex; justify-content:center; margin-top:12px;">
+    <button class="btn" id="menuBtn">Menu</button>
+  </div>
 
   <div class="overlay" id="setup">
     <div class="card">
