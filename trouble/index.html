@@ -168,7 +168,7 @@ function dieFaceSVG(v,ox,oy,size){
 function renderDome(){
   svg.querySelectorAll(".dome").forEach(e=>e.remove());
   const c=curColor();
-  const canPop = !gameOver && !busy && !awaitingMove && die===0 && isHuman[c];
+  const canPop = !gameOver && !busy && !awaitingMove && die===0 && c && isHuman[c];
   const g=document.createElementNS(svgns,"g");
   g.setAttribute("class","dome");
   let inner=`<circle cx="${cx}" cy="${cy}" r="94" fill="#0b1228" stroke="#2a3663" stroke-width="4"/>`;
@@ -176,7 +176,8 @@ function renderDome(){
   inner+=`<ellipse cx="${cx-22}" cy="${cy-30}" rx="26" ry="16" fill="#ffffff55"/>`;  // glossy highlight
   if(die>0) inner+=dieFaceSVG(die,cx,cy,64);
   else inner+=`<text x="${cx}" y="${cy+7}" text-anchor="middle" font-size="26" font-weight="900" fill="#20305f" letter-spacing="1">POP</text>`;
-  if(canPop) inner+=`<circle class="domeRing" cx="${cx}" cy="${cy}" r="94" fill="none" stroke="${CSSCOL[c]}" stroke-width="5"/>`;
+  // pulsing ring in the CURRENT player's color — shows whose turn it is (human or CPU)
+  if(!gameOver && c) inner+=`<circle class="domeRing" cx="${cx}" cy="${cy}" r="94" fill="none" stroke="${CSSCOL[c]}" stroke-width="5"/>`;
   g.innerHTML=inner;
   if(canPop){ g.style.cursor="pointer"; g.addEventListener("click",doPop); }
   svg.appendChild(g);
@@ -226,7 +227,7 @@ function buildBoard(){
     const hx=cx+homeR*Math.cos(a), hy=cy+homeR*Math.sin(a);
     s+=`<circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="33" fill="${CSSCOL[c]}" stroke="#0006" stroke-width="2" opacity="0.92"/>`;
     for(let k=0;k<4;k++){ const [px,py]=homeSlotXY(c,k); s+=`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="9" fill="#0004"/>`; }
-    s+=`<text x="${hx.toFixed(1)}" y="${(hy-40).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="800" fill="${CSSCOL[c]}">${NAME[c].toUpperCase()}</text>`;
+    s+=`<text x="${hx.toFixed(1)}" y="${(hy-41).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="800" fill="#ffffff" stroke="#0009" stroke-width="2.5" paint-order="stroke" stroke-linejoin="round">${NAME[c].toUpperCase()}</text>`;
   }
   svg.innerHTML=s;
   renderPegs();
@@ -334,7 +335,7 @@ function beginTurn(){
   }else{
     popBtn.disabled=true;
     busy=true;
-    setTimeout(aiRoll, 650);
+    setTimeout(aiRoll, 1000);   // pause so you see whose turn it is before the CPU pops
   }
 }
 
@@ -358,7 +359,7 @@ function afterRollResolve(color){
     if(die===6 && sixStreak<3){
       // rolled 6 but nothing to do -> still lose turn per no-move
     }
-    setTimeout(()=>{ busy=false; nextTurn(); }, 900);
+    setTimeout(()=>{ busy=false; nextTurn(); }, isHuman[color]?900:1500);
     return;
   }
   awaitingMove=true;
@@ -367,8 +368,9 @@ function afterRollResolve(color){
     setStatus(`<span class="dot" style="background:${CSSCOL[color]}"></span> Rolled <b>${die}</b> — tap a highlighted peg`);
     renderPegs();
   }else{
+    setStatus(`<span class="dot" style="background:${CSSCOL[color]}"></span> ${NAME[color]} rolled <b>${die}</b>…`);
     renderPegs();
-    setTimeout(()=>aiPickMove(color,moves), 600);
+    setTimeout(()=>aiPickMove(color,moves), 1300);   // hold on the rolled die so you can read it
   }
 }
 
@@ -404,12 +406,12 @@ function finishMove(color){
       die=0; awaitingMove=false;
       showTurnRollAgain(color);
       if(isHuman[color]){ busy=false; popBtn.disabled=false; }
-      else { setTimeout(aiRoll, 600); }
+      else { setTimeout(aiRoll, 950); }
     }else{
       busy=false;
       nextTurn();
     }
-  }, 350);
+  }, isHuman[color]?350:800);
 }
 
 function showTurnRollAgain(c){
@@ -453,8 +455,8 @@ function animatePop(cb){
   let n=0;
   const iv=setInterval(()=>{
     die=1+Math.floor(Math.random()*6); renderDome();   // tumble the die in the dome
-    if(++n>=7){ clearInterval(iv); die=0; setTimeout(cb,110); }
-  },65);
+    if(++n>=8){ clearInterval(iv); die=0; setTimeout(cb,150); }
+  },95);
 }
 
 // ---- setup ----
