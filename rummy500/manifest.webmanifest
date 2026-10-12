@@ -1,0 +1,14 @@
+{
+  "name": "500 Rummy",
+  "short_name": "500 Rummy",
+  "description": "500 Rummy (Pinochle Rummy) — meld sets and runs, lay off, and race to 500. Every version, vs computers or friends.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b4129",
+  "theme_color": "#0b4129",
+  "icons": [
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

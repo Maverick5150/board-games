@@ -42,6 +42,10 @@
 <script src="net.js"></script>
 <script src="monodata.js"></script>
 <script src="../skins.js"></script>
+<script src="../rummy500/engine.js"></script>
+<script src="../rummy500/game.js"></script>
+<script src="../rummy500/cards.js"></script>
+<script src="../rummy500/party.js"></script>
 <script>window.Skins=window.Skins||{apply:function(){}};</script>
 <script>
 (function(){
@@ -62,7 +66,7 @@ document.head.appendChild(_st);
 var $=function(id){return document.getElementById(id);};
 Skins.apply("party");
 var main=$("main"), connEl=$("conn"), roomEl=$("room");
-var COL={red:"#e23b3b",blue:"#2b7be0",green:"#27a758",yellow:"#eec21b"};
+var COL={red:"#e23b3b",blue:"#2b7be0",green:"#27a758",yellow:"#eec21b",orange:"#f08a24",purple:"#a65bd6",teal:"#19b5b0",pink:"#ec6aa8"};
 
 var params=new URLSearchParams(location.search);
 var room=(params.get("room")||"").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,5);
@@ -113,10 +117,11 @@ function onMsg(o){
   if(o.t==="you" && o.pid===myPid){ myColor=o.color; if(o.name) myName=o.name; joined=true; if(!started && !isAsking()) showLobby({players:[{pid:myPid,name:myName,color:myColor}]}); }
   else if(o.t==="lobby"){ if(!started && !isAsking()) showLobby(o); }   // never fall back to lobby once the game is on
   else if(o.t==="ask" && o.pid===myPid){ started=true; showAsk(o); }
+  else if(o.t==="rvs" && o.pid===myPid){ started=true; curReq=null; rvShow(o.st,false,null); }
   else if(o.t==="snap"){ lastSnap=o; $("plbtn").style.display="inline-block"; if($("ov").classList.contains("on") && ovMode==="players") showPlayers(); }
-  else if(o.t==="wait" && (o.pid===myPid || o.pid==="*")){ curReq=null; started=(o.pid!=="*"); if(o.pid==="*"){ lastSnap=null; $("plbtn").style.display="none"; closeOv(); } showWaiting(o.msg||"Waiting…", false, o.turn, o.card); }
+  else if(o.t==="wait" && (o.pid===myPid || o.pid==="*")){ if(o.pid==="*") Rummy.Party.resetUI(); curReq=null; started=(o.pid!=="*"); if(o.pid==="*"){ lastSnap=null; $("plbtn").style.display="none"; closeOv(); } showWaiting(o.msg||"Waiting…", false, o.turn, o.card); }
   else if(o.t==="started"){ started=true; if(!isAsking()) showWaiting("Game starting…", false); }
-  else if(o.t==="over"){ started=false; curReq=null; showOver(o); }
+  else if(o.t==="over"){ started=false; curReq=null; Rummy.Party.resetUI(); showOver(o); }
   else if(o.t==="info" && (o.pid===myPid||!o.pid)){ toast(o.msg); }
 }
 function isAsking(){ return !!curReq; }
@@ -222,6 +227,7 @@ $("plbtn").onclick=showPlayers;
 
 function showAsk(o){
   curReq=o.reqId; main.className="big";
+  if(o.kind==="rummy"){ curReq=null; rvShow(o.st,true,o); return; }
   if(o.kind==="manage"){ showManage(o); return; }
   if(o.kind==="trade"){ showTrade(o); return; }
   var c = myColor?COL[myColor]:"#2b7be0";
@@ -238,6 +244,18 @@ function showAsk(o){
       showWaiting("Sent ✔  waiting…", true);
     };
   });
+}
+var rvLastKey="", rvAsk=null;
+function rvShow(st,active,ask){
+  rvAsk=ask;
+  var key=JSON.stringify(st)+(active?"A":"-");
+  if(key===rvLastKey){ Rummy.Party.unbusy(); return; }
+  rvLastKey=key;
+  main.className="big scroll"; document.body.style.background="radial-gradient(120% 90% at 50% 20%,#177048,#0b4129 60%,#04180f)";
+  Rummy.Party.phoneRender(main,st,{active:active,
+    act:function(id,data){ if(rvAsk&&net) net.send({t:"pick",pid:myPid,reqId:rvAsk.reqId,id:id,i:0,data:data}); },
+    view:function(i){ if(net) net.send({t:"view",pid:myPid,rv:1,i:i}); },
+    toast:toast});
 }
 function showOver(o){
   var win = o.winner||"";

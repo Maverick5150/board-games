@@ -34,7 +34,7 @@ function hz(m){ return 440*Math.pow(2,(m-69)/12); }
 
 /* ---------- voices ---------- */
 var inSfx=false, sty=null;
-var STY={trouble:{wave:"square",pitch:1},sorry:{wave:"sawtooth",pitch:1.14},monopoly:{wave:"triangle",pitch:0.92}};
+var STY={trouble:{wave:"square",pitch:1},sorry:{wave:"sawtooth",pitch:1.14},monopoly:{wave:"triangle",pitch:0.92},rummy500:{wave:"triangle",pitch:1.06}};
 function tone(f,t,dur,type,vol,dest,o){
   o=o||{};
   if(inSfx&&sty){
@@ -71,6 +71,10 @@ var SFX={
   win:function(t,d){ [523,659,784,1047,784,1047,1319].forEach(function(f,i){ tone(f,t+i*0.11,i>5?0.6:0.16,"square",0.15,d); }); },
   lose:function(t,d){ [392,330,262,196].forEach(function(f,i){ tone(f,t+i*0.16,0.3,"triangle",0.2,d); }); },
   turn:function(t,d){ tone(660,t,0.08,"sine",0.13,d); tone(880,t+0.07,0.12,"sine",0.13,d); },
+  deal:function(t,d){ for(var i=0;i<6;i++){ noise(t+i*0.08,0.05,0.45,4500,"highpass",d); } tone(520,t+0.5,0.06,"triangle",0.1,d); },
+  draw:function(t,d){ noise(t,0.07,0.45,5200,"highpass",d); tone(600,t+0.05,0.05,"triangle",0.1,d); },
+  discard:function(t,d){ noise(t,0.05,0.5,3000,"bandpass",d); tone(220,t+0.02,0.09,"sine",0.25,d,{to:150}); },
+  meld:function(t,d){ tone(523,t,0.12,"triangle",0.18,d); tone(659,t+0.09,0.12,"triangle",0.18,d); tone(784,t+0.18,0.3,"triangle",0.18,d); },
   build:function(t,d){ tone(300,t,0.07,"square",0.14,d); tone(450,t+0.08,0.1,"square",0.14,d); noise(t,0.05,0.3,900,"bandpass",d); }
 };
 function sfx(name){
@@ -86,6 +90,11 @@ function fromText(m){
   if(/sent home|bumped|SORRY|swap/i.test(m)) return sfx("bump");
   if(/to Jail|goes to Jail|3 doubles/i.test(m)) return sfx("jail");
   if(/passes GO|landed on GO|collects/i.test(m)) return sfx("bell");
+  if(/goes out|wins the round/i.test(m)) return sfx("win");
+  if(/melds|lays off|laid off/i.test(m)) return sfx("meld");
+  if(/discards/i.test(m)) return sfx("discard");
+  if(/takes .* from the discard|draws from the (stock|pile)/i.test(m)) return sfx("draw");
+  if(/deals|shuffl/i.test(m)) return sfx("deal");
   if(/builds/i.test(m)) return sfx("build");
   if(/buys|Trade done| for \$/i.test(m)) return sfx("coin");
   if(/pays|Tax|rent|fine/i.test(m)) return sfx("pay");
@@ -122,6 +131,13 @@ var STYLES={
     chordSteps:[0,3,6],
     drums:[{kick:[1,0,0,0,1,0,0,1],snare:[0,0,1,0,0,0,1,0],hat:[1,1,1,1,1,1,1,1],hv:0.05},{kick:[1,0,0,1,0,0,1,0],snare:[0,0,0,0,1,0,0,0],hat:[0,1,0,1,0,1,0,1],hv:0.06},{kick:[1,0,1,0,1,0,1,0],snare:[0,1,0,1,0,1,0,1],hat:[1,0,1,0,1,0,1,0],hv:0.05}],
     titles:["Sorry Not Sorry","Slide Into Home","Wait For It","Bumped Again","The Long Slide","Card Shark Shuffle","Back to Start","Safety Zone Stomp","Eleven Swap","Pawn Takes Revenge"] },
+  rummy500:{ scales:["major","dorian","mixo","major"], bpm:[88,112], swing:0.22, sev:true, leadVol:0.12, waves:["triangle","sine","triangle"], bassKind:"walk",
+    progs:[[0,5,1,4],[1,4,0,5],[0,2,3,4],[5,1,4,0],[0,3,1,4],[2,5,1,4],[0,5,3,4],[3,4,2,5]],
+    bridge:[[3,2,1,4],[1,4,3,0],[5,2,1,4],[3,4,0,5]],
+    rhythms:[[1,0,1,0,1,0,1,1],[1,0,0,1,1,0,1,0],[1,1,0,1,0,1,0,1],[1,0,1,1,0,0,1,0]],
+    chordSteps:[0,3,6],
+    drums:[{snare:[0,0,0,0,1,0,0,0],sv:0.07,hat:[1,0,1,1,1,0,1,1],hv:0.045},{kick:[1,0,0,0,0,0,0,0],kv:0.18,hat:[1,0,1,0,1,0,1,0],hv:0.05},{snare:[0,0,0,1,0,0,0,1],sv:0.06,hat:[1,1,1,1,1,1,1,1],hv:0.03}],
+    titles:["Ace High Lounge","Shuffle and Deal","Full House Slow Dance","Run of Luck","Discard Blues","Going Out Swing","Wild Card Waltz","Joker's Lullaby","Five Hundred Nights","Meld Into Morning"] },
   monopoly:{ scales:["major","mixo","major"], bpm:[96,120], swing:0.3, sev:true, leadVol:0.13, waves:["triangle","sine","triangle"], bassKind:"walk",
     progs:[[0,5,1,4],[1,4,0,5],[0,3,1,4],[0,5,3,4],[2,5,1,4],[0,2,3,4],[3,4,2,5],[0,1,4,0]],
     bridge:[[3,2,1,4],[5,1,4,0],[1,4,3,0],[3,4,0,5]],

@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0b4129">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<title>500 Rummy</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.png">
+<style>
+  :root{--bg:#0b4129;--panel:#0f3a28;--ink:#f3f7ee;--muted:#a8c9b4;--gold:#ffd84a}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;min-height:100%}
+  body{background:#0b4129;color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;
+    padding:max(8px,env(safe-area-inset-top)) 8px max(12px,env(safe-area-inset-bottom));overflow-x:hidden;touch-action:manipulation}
+  h1{font-size:19px;margin:2px 0 4px;letter-spacing:2px;font-weight:900}
+  .wrap{width:min(98vw,600px)}
+  #legend{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:2px 0}
+  .chip{display:flex;align-items:center;gap:6px;background:#00000050;border:2px solid #ffffff22;border-radius:999px;padding:4px 10px;font-size:12.5px;font-weight:700}
+  .chip .dot{width:13px;height:13px;border-radius:50%}
+  .chip b{color:var(--gold)}
+  .chip.act{border-color:var(--c);box-shadow:0 0 0 2px var(--c),0 0 16px 2px var(--c);background:#00000070}
+  .menuRow{display:flex;justify-content:center;gap:8px;margin:6px 0}
+  .btn{background:#0b2d1e;color:var(--ink);border:1px solid #3d7a58;border-radius:12px;padding:10px 14px;font-size:14px;font-weight:700;cursor:pointer}
+  .btn:active{background:#1d6a44}
+  .btn.primary{background:#d9a21b;border-color:#d9a21b;color:#2a1c00}
+  .btn[disabled]{opacity:.38;cursor:default}
+  #rtable{border:3px solid #ffffff18;background:radial-gradient(120% 100% at 50% 20%,#1b7a4f,#0c4a2f);padding:6px;margin:4px 0;position:relative}
+  #meldsArea{min-height:84px;max-height:36vh;overflow-y:auto;display:flex;flex-wrap:wrap;align-content:flex-start;justify-content:center;padding:2px}
+  #meldsArea .empty{color:#bfe3cc;font-size:12.5px;text-align:center;padding:22px 10px;opacity:.85}
+  #pilesRow{display:flex;gap:10px;align-items:center;margin-top:6px;padding:8px 6px 10px;border-top:1px dashed #ffffff30}
+  #stock{--cw:58px;text-align:center;font-size:11px;font-weight:700;color:#d6efdf;flex:none}
+  #stock .pc{display:block;margin:0 auto 3px}
+  #stock .pc.dead{opacity:.35}
+  #discard{--cw:50px;display:flex;align-items:flex-end;overflow-x:auto;padding:16px 8px 6px 4px;flex:1;min-height:100px}
+  #discard .pc{margin-left:-27px}#discard .pc:first-child{margin-left:0}
+  #discard .none{color:#bfe3cc;font-size:12px;opacity:.8}
+  #status{min-height:40px;background:#00000055;border-radius:12px;padding:8px 12px;margin:6px 0;font-size:14px;font-weight:600;text-align:center;display:flex;align-items:center;justify-content:center;gap:8px;border:2px solid transparent}
+  #status .dot{width:13px;height:13px;border-radius:50%;flex:none}
+  #log{font-size:11.5px;color:#b5d8c3;min-height:48px;text-align:center;line-height:1.35;margin-bottom:4px}
+  #actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:4px 0 6px;min-height:42px}
+  #hand{--cw:58px;display:flex;flex-wrap:wrap;justify-content:center;padding:20px 22px 8px 4px;min-height:96px;gap:8px 0}
+  #hand .pc{margin-right:-16px}
+  .hint{color:#bfe3cc;font-size:12px;text-align:center}
+  .overlay{position:fixed;inset:0;z-index:50;background:#04180fee;display:none;align-items:flex-start;justify-content:center;overflow-y:auto;padding:max(14px,env(safe-area-inset-top)) 12px 28px}
+  .overlay.show{display:flex}
+  .sheet{width:min(100%,560px);background:#0c3322;border:1px solid #3d7a58;border-radius:20px;padding:16px;box-shadow:0 20px 50px #000a}
+  .sheet h2{margin:0 0 4px;font-size:22px;letter-spacing:1px}
+  .sheet h3{margin:16px 0 6px;font-size:13px;color:var(--gold);letter-spacing:1px;text-transform:uppercase}
+  .vers{display:flex;flex-direction:column;gap:7px}
+  .ver{border:2px solid #2d6a49;border-radius:14px;padding:9px 12px;cursor:pointer;background:#0a2a1b}
+  .ver.on{border-color:var(--gold);background:#16452d}
+  .ver b{font-size:15px}.ver i{font-style:normal;font-size:11px;color:var(--gold);margin-left:8px}
+  .ver p{margin:3px 0 0;font-size:12px;color:var(--muted);line-height:1.35}
+  .seg{display:flex;gap:6px;flex-wrap:wrap}
+  .seg button{background:#0a2a1b;color:var(--ink);border:2px solid #2d6a49;border-radius:10px;min-width:42px;padding:9px 12px;font-size:15px;font-weight:800;cursor:pointer}
+  .seg button.on{background:#d9a21b;border-color:#d9a21b;color:#2a1c00}
+  .seg button[disabled]{opacity:.3}
+  .row{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:7px 0;border-bottom:1px solid #ffffff14;font-size:13.5px}
+  .row select{background:#0a2a1b;color:var(--ink);border:1px solid #3d7a58;border-radius:8px;padding:6px;font-size:13px;max-width:55%}
+  .row input[type=checkbox]{width:22px;height:22px}
+  .tag{font-size:10px;border-radius:6px;padding:1px 5px;margin-left:6px;font-weight:800}
+  .tag.off{background:#2b7be0}.tag.house{background:#a65bd6}
+  details summary{cursor:pointer;font-weight:800;padding:8px 0;color:var(--gold)}
+  table.sc{width:100%;border-collapse:collapse;font-size:13px;margin:8px 0}
+  table.sc th,table.sc td{padding:6px 4px;text-align:right;border-bottom:1px solid #ffffff18}
+  table.sc th:first-child,table.sc td:first-child{text-align:left}
+  table.sc td.pos{color:#8ff0b0}table.sc td.neg{color:#ff9a9a}
+  #handoff{background:#04180f;z-index:80;align-items:center}
+  #toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 90px);transform:translateX(-50%);background:#000c;color:#fff;border-radius:12px;padding:10px 16px;font-size:14px;font-weight:700;z-index:90;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;text-align:center}
+  #toast.show{opacity:1}
+  @media(min-width:520px){#hand{--cw:62px}#stock{--cw:66px}#discard{--cw:52px}#discard .pc{margin-left:-28px}}
+</style>
+</head>
+<body>
+<h1>♠ 500 RUMMY ♥</h1>
+<div class="wrap">
+  <div id="legend"></div>
+  <div class="menuRow"><button class="btn" id="menuBtn">☰ Menu</button></div>
+  <div id="rtable">
+    <div id="meldsArea"></div>
+    <div id="pilesRow"><div id="stock"></div><div id="discard"></div></div>
+  </div>
+  <div id="status"></div>
+  <div id="log"></div>
+  <div id="actions"></div>
+  <div id="hand"></div>
+  <div class="hint">Tap cards to select · tap a table meld to lay a card off · press &amp; hold any card to enlarge</div>
+</div>
+<div id="toast"></div>
+
+<div class="overlay show" id="setup"><div class="sheet">
+  <h2>♠ 500 Rummy ♥</h2>
+  <div style="color:var(--muted);font-size:13px">Meld sets and runs, lay off, and race to the target score.</div>
+  <h3>Version</h3><div class="vers" id="versions"></div>
+  <h3>Players</h3>
+  <div class="row"><span>Humans (share this phone)</span><div class="seg" id="humanSeg"></div></div>
+  <div class="row"><span>Computer players</span><div class="seg" id="cpuSeg"></div></div>
+  <div id="seatNote" style="font-size:12px;color:var(--muted);padding-top:6px"></div>
+  <h3>Game speed</h3>
+  <div class="seg" id="speedSeg"><button data-s="slow">Slow</button><button data-s="normal" class="on">Normal</button><button data-s="fast">Fast</button></div>
+  <details style="margin-top:10px"><summary>Rules &amp; house rules (tap to customize)</summary><div id="houseRules"></div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px"><span class="tag off">variant</span> appears in a published version of the game · <span class="tag house">house</span> a common home rule</div></details>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px">
+    <button class="btn primary" id="startBtn" style="flex:1;font-size:16px">▶ Start new game</button>
+    <button class="btn" id="resumeBtn" style="display:none;flex:1">Resume game</button>
+  </div>
+  <div style="margin-top:10px;display:flex;gap:8px"><a class="btn" href="../index.html" style="text-decoration:none;flex:1;text-align:center">🏠 Back to all games</a></div>
+</div></div>
+
+<div class="overlay" id="roundBox"><div class="sheet" id="roundSheet"></div></div>
+<div class="overlay" id="handoff"><div class="sheet" style="text-align:center" id="handoffSheet"></div></div>
+
+<script src="../sound.js"></script>
+<script src="../skins.js"></script>
+<script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
+<script src="engine.js"></script>
+<script src="game.js"></script>
+<script src="cards.js"></script>
+<script>
+(function(){
+"use strict";
+const R=Rummy, GM=Rummy.Game, UI=Rummy.UI;
+UI.injectCSS();
+const $=id=>document.getElementById(id);
+const SPEED={slow:1600,normal:1000,fast:450};
+const OFFICIAL_NOT={minNat:1,addOppHands:1,mustGoOut:1};
+let cfg={version:"standard",over:{},humans:1,cpus:1,speed:"normal"};
+let G=null,sel=new Set(),pileFrom=null,sortMode="suit",flashCards={},flashMeld=null,logLines=[],gen=0,handoffOk=null,lastTurn=-1,busy=false,newIds={};
+
+function curOpts(){ return R.versionOpts(cfg.version,cfg.over); }
+function esc(s){ return String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+function toast(m){ const t=$("toast"); t.textContent=m; t.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove("show"),2200); }
+
+/* ---------------- setup screen ---------------- */
+function maxSeats(){ return curOpts().teams?4:8; }
+function drawSetup(){
+  const vs=$("versions");
+  vs.innerHTML=R.VERSIONS.map(v=>`<div class="ver${cfg.version===v.id?" on":""}" data-v="${v.id}"><b>${esc(v.name)}</b><i>${esc(v.tag)}</i><p>${esc(v.desc)}</p></div>`).join("");
+  vs.querySelectorAll(".ver").forEach(d=>d.addEventListener("click",()=>{ cfg.version=d.dataset.v; cfg.over={}; clampSeats(); drawSetup(); }));
+  drawSeats(); drawHouse();
+}
+function clampSeats(){
+  const o=curOpts();
+  if(o.teams){ cfg.humans=Math.min(cfg.humans,4); cfg.cpus=4-cfg.humans; }
+  else { if(cfg.humans+cfg.cpus<2) cfg.cpus=2-cfg.humans; if(cfg.humans+cfg.cpus>8) cfg.cpus=8-cfg.humans; }
+}
+function drawSeats(){
+  const o=curOpts(), teams=o.teams;
+  $("humanSeg").innerHTML=[1,2,3,4].map(n=>`<button data-n="${n}" class="${cfg.humans===n?"on":""}">${n}</button>`).join("");
+  $("humanSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.humans=+b.dataset.n; clampSeats(); drawSeats(); }));
+  const opts=[]; for(let n=0;n<=7;n++){ const tot=cfg.humans+n; const ok=teams?tot===4:(tot>=2&&tot<=8); opts.push(`<button data-n="${n}" class="${cfg.cpus===n?"on":""}"${ok?"":" disabled"}>${n}</button>`); }
+  $("cpuSeg").innerHTML=opts.join("");
+  $("cpuSeg").querySelectorAll("button:not([disabled])").forEach(b=>b.addEventListener("click",()=>{ cfg.cpus=+b.dataset.n; drawSeats(); }));
+  const tot=cfg.humans+cfg.cpus, decks=o.decksAuto?(tot>=5?2:1):o.decks;
+  $("seatNote").textContent=`${tot} players · ${decks} deck${decks>1?"s":""}${o.jokers?` + ${o.jokers*decks} jokers`:""}${teams?" · partners sit opposite (1&3 vs 2&4)":""}`;
+}
+function drawHouse(){
+  const o=curOpts(), box=$("houseRules"); box.innerHTML="";
+  R.HOUSE.forEach(h=>{
+    const key=h[0], label=h[1], kind=h[2], tag=OFFICIAL_NOT[key]?'<span class="tag house">house</span>':'<span class="tag off">variant</span>';
+    const row=document.createElement("div"); row.className="row";
+    if(kind==="bool"){ row.innerHTML=`<span>${esc(label)}${tag}</span><input type="checkbox"${o[key]?" checked":""}>`; row.querySelector("input").addEventListener("change",e=>{ cfg.over[key]=e.target.checked; drawSeats(); }); }
+    else { row.innerHTML=`<span>${esc(label)}${tag}</span><select>${h[3].map(c=>`<option value="${esc(c[0])}"${String(o[key])===String(c[0])?" selected":""}>${esc(c[1])}</option>`).join("")}</select>`;
+      row.querySelector("select").addEventListener("change",e=>{ const raw=e.target.value; const m=h[3].filter(c=>String(c[0])===raw)[0]; cfg.over[key]=m?m[0]:raw; drawSeats(); }); }
+    box.appendChild(row);
+  });
+}
+$("speedSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.speed=b.dataset.s; $("speedSeg").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b)); }));
+$("menuBtn").addEventListener("click",()=>{ $("resumeBtn").style.display=(G&&!G.over)?"block":"none"; $("setup").classList.add("show"); });
+$("resumeBtn").addEventListener("click",()=>$("setup").classList.remove("show"));
+$("startBtn").addEventListener("click",()=>{ Sound.skip(); $("setup").classList.remove("show"); startGame(); });
+
+/* ---------------- game ---------------- */
+function startGame(){
+  gen++; clampSeats();
+  const total=cfg.humans+cfg.cpus, names=[], humans=[];
+  for(let i=0;i<total;i++){ const h=i<cfg.humans; humans.push(h); names.push(h?(cfg.humans===1?"You":"Player "+(i+1)):"CPU "+(i+1-cfg.humans)); }
+  if(curOpts().teams){ /* seat humans so teammates alternate: seats 0..3 */ }
+  G=GM.newGame({names,humans,opts:curOpts()});
+  logLines=[]; startRound(true);
+}
+function startRound(first){
+  GM.startRound(G); sel.clear(); pileFrom=null; flashCards={}; flashMeld=null; handoffOk=null; lastTurn=-1; newIds={};
+  Sound.sfx("deal");
+  logLines=[]; say(`${G.players[G.dealer].name} ${G.players[G.dealer].human&&G.n>0&&cfg.humans===1?"deal":"deals"} — round ${G.round}`,true);
+  loop();
+}
+const cur=()=>GM.cur(G);
+function dotHTML(i){ return `<span class="dot" style="background:${UI.colorOf(G,i)}"></span>`; }
+function say(msg,quiet){ logLines.push(msg); if(logLines.length>4) logLines.shift(); if(!quiet) Sound.fromText(msg); }
+
+function lab(cards){ return cards.map(R.cardLabel).join(" "); }
+function describe(a){
+  const p=cur(), nm=p.name, verb=(p.human&&cfg.humans===1);
+  const hand=id=>p.hand.filter(c=>c.id===id)[0];
+  if(a.t==="stock") return `${nm} ${verb?"draw":"draws"} from the stock`;
+  if(a.t==="take"){ const cs=G.discard.slice(a.idx); return `${nm} ${verb?"take":"takes"} ${lab(cs)} from the discard pile`; }
+  if(a.t==="meld"){ const cs=a.ids.map(hand).filter(Boolean); const m=R.buildMeld(cs,G.o); return `${nm} ${verb?"meld":"melds"} ${lab(m?m.cards.map(e=>e.c):cs)}`; }
+  if(a.t==="layoff"){ const m=G.melds.filter(x=>x.id===a.meld)[0]; const c=hand(a.card); const own=m&&GM.unitOf(G,m.owner)===GM.unitOf(G,p.id); return `${nm} ${verb?"lay":"lays"} off ${c?R.cardLabel(c):"a card"} on ${own?"a":G.players[m.owner].name+"'s"} ${m&&m.kind==="set"?"set":"run"}`; }
+  if(a.t==="discard"){ const c=hand(a.card); return `${nm} ${verb?"discard":"discards"} ${c?R.cardLabel(c):"a card"}`; }
+  return "";
+}
+function perform(a){
+  const p=cur(), msg=describe(a), before=G.discard.length;
+  const res=GM.applyAction(G,a);
+  if(!res.ok){ toast(res.msg); return res; }
+  say(msg);
+  if(a.t==="meld"){ flashMeld=res.meld&&res.meld.id; }
+  if(a.t==="layoff"){ flashMeld=a.meld; }
+  if(a.t==="discard"){ flashCards={[a.card]:1}; }
+  if(a.t==="stock"&&p.human){ newIds={}; const c=res.card; if(c) newIds[c.id]=1; }
+  if(a.t==="take"&&p.human){ newIds={}; (res.cards||[]).forEach(c=>newIds[c.id]=1); }
+  if(a.t==="take") flashCards={};
+  if(res.roundOver&&res.roundOver.reason==="out"){ say(`${G.players[res.roundOver.out].name} ${G.players[res.roundOver.out].human&&cfg.humans===1?"go":"goes"} out!`); }
+  return res;
+}
+
+function loop(){
+  if(G.roundOver){ busy=true; render(); setTimeout(showRound,cur().human?500:900); return; }
+  const p=cur();
+  if(G.turn!==lastTurn){ lastTurn=G.turn; handoffOk=null; sel.clear(); pileFrom=null; if(!p.human) newIds={}; }
+  busy=!p.human;
+  render();
+  if(p.human){
+    if(cfg.humans>1&&handoffOk!==G.turn) showHandoff(p);
+    return;
+  }
+  const my=gen;
+  setTimeout(()=>{
+    if(my!==gen||!G||G.roundOver) return;
+    const a=GM.aiAction(G); if(!a){ return; }
+    const res=perform(a);
+    if(!res.ok){ /* should not happen */ G.phase==="draw"?perform({t:"stock"}):perform({t:"discard",card:cur().hand[0].id}); }
+    loop();
+  },SPEED[cfg.speed]);
+}
+function showHandoff(p){
+  const sh=$("handoffSheet");
+  sh.innerHTML=`<h2 style="font-size:26px">Pass the phone</h2><p style="font-size:18px;margin:14px 0">to <b style="color:${UI.colorOf(G,p.id)}">${esc(p.name)}</b></p><button class="btn primary" id="hoBtn" style="font-size:17px;padding:14px 22px">I'm ${esc(p.name)} — show my hand</button>`;
+  $("handoff").classList.add("show");
+  $("hoBtn").addEventListener("click",()=>{ handoffOk=G.turn; $("handoff").classList.remove("show"); render(); });
+}
+
+/* ---------------- rendering ---------------- */
+function viewerHand(){
+  const p=cur();
+  if(p.human&&(cfg.humans===1||handoffOk===G.turn)) return p;
+  if(cfg.humans===1) return G.players[0];
+  return null;
+}
+function render(){
+  if(!G) return;
+  const p=cur(), human=p.human&&!G.roundOver&&!busy;
+  // legend
+  $("legend").innerHTML=G.units.map((u,ui)=>{
+    const active=!G.roundOver&&GM.unitOf(G,G.turn)===ui;
+    const col=UI.colorOf(G,u[0]);
+    const label=u.map(i=>{ const q=G.players[i]; return esc(q.name)+(q.human?"":" 🤖")+`<small style="opacity:.75"> ✋${q.hand.length}</small>`; }).join(" &amp; ");
+    return `<div class="chip${active?" act":""}" style="--c:${col}"><span class="dot" style="background:${col}"></span>${label} · <b>${G.scores[ui]}</b></div>`;
+  }).join("");
+  // melds
+  const ma=$("meldsArea");
+  const vh0=viewerHand();
+  const one=(sel.size===1&&vh0)?vh0.hand.filter(c=>sel.has(c.id))[0]:null;
+  ma.innerHTML=G.melds.length?G.melds.map(m=>{
+    const fit=human&&G.phase==="play"&&one&&GM.mayLayOn(G,m,G.turn)&&R.layOff(m,one,G.o)&&!(G.mustNew&&G.mustUse===one.id);
+    return UI.meldHTML(m,G,{cls:(fit?"fit":"")+(flashMeld===m.id?" flash":"")});
+  }).join(""):`<div class="empty">No melds yet.<br>A set is 3–4 of a kind · a run is 3+ in a row of one suit.</div>`;
+  // stock + discard
+  const canDraw=human&&G.phase==="draw";
+  $("stock").innerHTML=UI.backHTML({label:G.stock.length?"":"EMPTY",cls:G.stock.length?"":"dead",attrs:'id="stockCard"'})+`${G.stock.length} left`;
+  $("discard").innerHTML=G.discard.length?G.discard.map((c,i)=>UI.cardHTML(c,{cls:(pileFrom!=null&&i>=pileFrom?"pf ":"")+(flashCards[c.id]?"flash":""),attrs:`data-i="${i}"`})).join(""):`<span class="none">Discard pile is empty</span>`;
+  $("discard").scrollLeft=1e5;
+  // hand
+  const vh=viewerHand(), hd=$("hand");
+  if(vh){ hd.innerHTML=UI.sortHand(vh.hand,sortMode).map(c=>UI.cardHTML(c,{cls:(sel.has(c.id)?"sel ":"")+(newIds[c.id]?"flash":"")})).join(""); }
+  else hd.innerHTML=`<div class="hint" style="padding:30px 0">${G.roundOver?"":esc(p.name)+" is playing…"}</div>`;
+  // status
+  const st=$("status");
+  if(G.roundOver) st.innerHTML="Round over";
+  else {
+    const col=UI.colorOf(G,p.id);
+    st.style.borderColor=col; st.style.boxShadow=`0 0 14px ${col}`;
+    let t;
+    if(!human) t=`${esc(p.name)} ${G.phase==="draw"?"is choosing a card…":"is playing…"}`;
+    else if(G.phase==="draw"){
+      t=(G.stock.length?"Your turn — draw from the stock or take from the discard pile":"The stock is empty — take from the pile, or tap the stock to end the round");
+      if(pileFrom!=null){ t=GM.takeFeasible(G,pileFrom)?`Take ${G.discard.length-pileFrom} card${G.discard.length-pileFrom>1?"s":""} from the pile?`:"You can't use that card right away — pick another"; }
+    } else t=G.mustUse!=null?"Use the card you took from the pile (meld it"+(G.mustNew?"":" or lay it off")+"), then discard":"Meld, lay off, then discard one card";
+    st.innerHTML=`${dotHTML(p.id)}<span>${t}</span>`;
+  }
+  $("log").innerHTML=logLines.map(esc).join("<br>");
+  renderActions(human);
+}
+function renderActions(human){
+  const a=$("actions"); a.innerHTML="";
+  if(!human||G.roundOver) return;
+  const add=(txt,fn,opt)=>{ const b=document.createElement("button"); b.className="btn"+(opt&&opt.primary?" primary":""); b.textContent=txt; if(opt&&opt.dis) b.disabled=true; b.addEventListener("click",fn); a.appendChild(b); return b; };
+  if(G.phase==="draw"){
+    if(pileFrom!=null){
+      add(`Take ${G.discard.length-pileFrom} from pile`,()=>act({t:"take",idx:pileFrom}),{primary:true,dis:!GM.takeFeasible(G,pileFrom)});
+      add("Cancel",()=>{ pileFrom=null; render(); });
+    } else { add("Draw from stock",()=>act({t:"stock"}),{primary:true}); }
+    add("Sort: "+(sortMode==="suit"?"suit":"rank"),()=>{ sortMode=sortMode==="suit"?"rank":"suit"; render(); });
+    return;
+  }
+  const vh=viewerHand(), cs=vh.hand.filter(c=>sel.has(c.id));
+  const m=cs.length>=3?R.buildMeld(cs,G.o):null;
+  add(m?`Meld (+${R.meldPoints(m,G.o)})`:"Meld",()=>act({t:"meld",ids:cs.map(c=>c.id)}),{primary:!!m,dis:!m});
+  let tgt=null; if(cs.length===1){ const ts=G.melds.filter(x=>GM.mayLayOn(G,x,G.turn)&&R.layOff(x,cs[0],G.o)&&!(G.mustNew&&G.mustUse===cs[0].id)); tgt=ts.length===1?ts[0]:(ts.length>1?"many":null); }
+  add("Lay off",()=>{ if(tgt==="many") toast("Tap the glowing meld you want"); else act({t:"layoff",meld:tgt.id,card:cs[0].id}); },{dis:!tgt});
+  add("Discard",()=>act({t:"discard",card:cs[0].id}),{dis:cs.length!==1});
+  add("↶ Undo",()=>{ const r=GM.undo(G); if(!r.ok) toast(r.msg); else { sel.clear(); newIds={}; say(`${cur().name} undo`,true); render(); } },{dis:!G.snap});
+  add("💡 Hint",()=>{
+    const plan=R.bestMelds(vh.hand,G.o);
+    if(plan.list.length){ sel=new Set(plan.list[0].ids); toast("Best meld selected: "+lab(plan.list[0].cards.map(e=>e.c))); }
+    else toast(G.mustUse!=null?"Look for a lay-off for the card you took":"No melds yet — discard your least useful card");
+    render();
+  });
+  add("Sort: "+(sortMode==="suit"?"suit":"rank"),()=>{ sortMode=sortMode==="suit"?"rank":"suit"; render(); });
+}
+function act(a){
+  if(!G||busy||G.roundOver) return;
+  const res=perform(a);
+  if(!res.ok) return;
+  sel.clear(); if(a.t!=="take") pileFrom=null; else pileFrom=null;
+  loop();
+}
+
+/* ---------------- input ---------------- */
+function humanTurn(){ return G&&!G.roundOver&&!busy&&cur().human&&(cfg.humans===1||handoffOk===G.turn); }
+$("hand").addEventListener("click",e=>{
+  const n=e.target.closest(".pc"); if(!n||!humanTurn()) return;
+  const id=+n.dataset.id; if(sel.has(id)) sel.delete(id); else sel.add(id);
+  Sound.sfx("tick"); render();
+});
+$("stock").addEventListener("click",()=>{ if(humanTurn()&&G.phase==="draw") act({t:"stock"}); });
+$("discard").addEventListener("click",e=>{
+  const n=e.target.closest(".pc"); if(!n||!humanTurn()||G.phase!=="draw") return;
+  const i=+n.dataset.i; pileFrom=(pileFrom===i)?null:i; render();
+});
+$("meldsArea").addEventListener("click",e=>{
+  const n=e.target.closest(".meld"); if(!n||!humanTurn()||G.phase!=="play"||sel.size!==1) return;
+  const mid=+n.dataset.m, cid=[...sel][0];
+  act({t:"layoff",meld:mid,card:cid});
+});
+UI.enablePeek(document.body);
+
+/* ---------------- round summary ---------------- */
+function showRound(){
+  if(!G||!G.roundOver) return;
+  const ro=G.roundOver, sh=$("roundSheet");
+  const why=ro.reason==="out"?`${esc(G.players[ro.out].name)} went out`:"The stock ran out";
+  const f=n=>(n>0?"+":"")+n;
+  const rows=ro.rows.map(r=>`<tr><td>${dotHTML(r.players[0])} ${esc(r.name)}</td><td>${r.melded}</td><td>${r.dead?-r.dead:0}</td><td>${(r.bonus+r.oppHands)||0}</td><td class="${r.total>=0?"pos":"neg"}">${f(r.total)}</td><td><b>${r.score}</b></td></tr>`).join("");
+  let h=`<h2>${ro.over?"🏆 Game over":"Round "+G.round+" complete"}</h2><div style="color:var(--muted);font-size:13px">${why}</div>
+   <table class="sc"><tr><th>Player</th><th>Melds</th><th>Hand</th><th>Bonus</th><th>Round</th><th>Total</th></tr>${rows}</table>`;
+  if(ro.over) h+=`<p style="font-size:18px;text-align:center"><b style="color:var(--gold)">${esc(ro.winnerName)}</b> ${ro.winnerName.indexOf(" & ")>0||/^You$/.test(ro.winnerName)?"win":"wins"} with ${G.scores[ro.winner]} points!</p>`;
+  else h+=`<p style="font-size:12px;color:var(--muted)">First to ${G.o.target} wins.</p>`;
+  h+=`<div style="display:flex;gap:8px;margin-top:8px">${ro.over?`<button class="btn primary" id="rbNew" style="flex:1">New game</button>`:`<button class="btn primary" id="rbNext" style="flex:1">Next round ▶</button>`}<button class="btn" id="rbMenu" style="flex:1">☰ Menu</button></div>`;
+  sh.innerHTML=h; $("roundBox").classList.add("show");
+  if(ro.over) Sound.sfx("win");
+  const nx=$("rbNext"); if(nx) nx.addEventListener("click",()=>{ $("roundBox").classList.remove("show"); startRound(); });
+  const nw=$("rbNew"); if(nw) nw.addEventListener("click",()=>{ $("roundBox").classList.remove("show"); startGame(); });
+  $("rbMenu").addEventListener("click",()=>{ $("roundBox").classList.remove("show"); $("resumeBtn").style.display="none"; $("setup").classList.add("show"); });
+}
+
+Skins.apply("rummy500"); Sound.mountButton(); Sound.music("rummy500");
+drawSetup();
+if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
+window.__rummy={get G(){ return G; },cfg:cfg,act:act,perform:perform,loop:loop,startGame:startGame,get sel(){ return sel; },render:render};
+})();
+</script>
+</body>
+</html>

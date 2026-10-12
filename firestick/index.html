@@ -100,14 +100,21 @@
 <script src="monodata.js"></script>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
+<script src="../rummy500/engine.js"></script>
+<script src="../rummy500/game.js"></script>
+<script src="../rummy500/cards.js"></script>
+<script src="../rummy500/party.js"></script>
 <script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
 <script>
 (function(){
 "use strict";
 var $=function(id){return document.getElementById(id);};
 var wrap=$("wrap"), connEl=$("conn"), toastEl=$("toast");
-var COL={red:"#e23b3b",blue:"#2b7be0",green:"#27a758",yellow:"#eec21b"};
-var CNAME={red:"Red",blue:"Blue",green:"Green",yellow:"Yellow"};
+var COL={red:"#e23b3b",blue:"#2b7be0",green:"#27a758",yellow:"#eec21b",orange:"#f08a24",purple:"#a65bd6",teal:"#19b5b0",pink:"#ec6aa8"};
+var CNAME={red:"Red",blue:"Blue",green:"Green",yellow:"Yellow",orange:"Orange",purple:"Purple",teal:"Teal",pink:"Pink"};
+var ORDER4=["red","blue","green","yellow"], ORDER8=["red","blue","green","yellow","orange","purple","teal","pink"];
+var runId=0, noWait=false;
+function maxPlayers(){ return chosenGame==="rummy500"?8:4; }
 var PACE=1.8;   // game-speed multiplier (every pause in every game is scaled by this)
 try{ var _pp=parseFloat(localStorage.getItem("bgfs_pace")); if(_pp>0) PACE=_pp; }catch(e){}
 var sleep=function(ms){return new Promise(function(r){setTimeout(r,Math.round(ms*PACE));});};
@@ -213,7 +220,7 @@ function broadcastLobby(){ send({t:"lobby", players:Object.keys(players).map(fun
 function onMsg(o){
   if(o.t==="join"){
     if(players[o.pid]){ players[o.pid].name=o.name||players[o.pid].name; }
-    else if(inLobby && Object.keys(players).length<4){
+    else if(inLobby && Object.keys(players).length<maxPlayers()){
       var color=firstFreeColor();
       players[o.pid]={pid:o.pid,name:(o.name||"Player"),color:color};
       seat[color]=o.pid;
@@ -226,7 +233,7 @@ function onMsg(o){
     else {
       // reconnect during the game: re-send their pending prompt so they don't get stuck on the lobby
       var la=lastAsk[o.pid];
-      send(la ? la : {t:"wait", pid:o.pid, msg:"Waiting for your turn…"});
+      if(la||!noWait) send(la ? la : {t:"wait", pid:o.pid, msg:"Waiting for your turn…"});
       if(gameSnap) gameSnap();
     }
   } else if(o.t==="view"){ if(viewHandler) viewHandler(o);
@@ -235,7 +242,7 @@ function onMsg(o){
     if(pr && pr.pid===o.pid){ delete pending[o.reqId]; pr.resolve({id:o.id, i:o.i, data:o.data}); }
   }
 }
-function firstFreeColor(){ var order=["red","blue","green","yellow"]; for(var i=0;i<order.length;i++){ if(!seat[order[i]]) return order[i]; } return "red"; }
+function firstFreeColor(){ var order=ORDER8; for(var i=0;i<order.length;i++){ if(!seat[order[i]]) return order[i]; } return "red"; }
 
 /* ask a player's phone; resolves with their choice. Shows a TV hint while waiting,
    and auto-advances after a long timeout so a non-responding phone can't hang the game. */
@@ -271,14 +278,15 @@ var BASE=location.href.replace(/[?#].*$/,"").replace(/[^\/]*$/,"");   // directo
 var JOIN_URL=BASE+"play.html?room="+room;
 var SHORT_URL=JOIN_URL.replace(/^https?:\/\//,"");
 function screenSelect(){
-  inLobby=true; screenState="select"; gameSnap=null; viewHandler=null; Skins.apply("party"); Sound.music("menu"); setBack((window.AndroidTV?"✕ Exit":"🏠 Hub"), true);
+  runId++; noWait=false; inLobby=true; screenState="select"; gameSnap=null; viewHandler=null; Skins.apply("party"); Sound.music("menu"); setBack((window.AndroidTV?"✕ Exit":"🏠 Hub"), true);
   closeRoom("The host went back to the game menu.");                  // each game gets its own brand-new room
   wrap.innerHTML='<h1>🎲 Board Games — Party Mode</h1><p class="muted" style="font-size:2.6vh">Pick a game, then players scan to join from their phones</p>'+
     '<div class="cards" id="cards"></div>';
   var games=[
     {id:"trouble", title:"Trouble", grad:"linear-gradient(145deg,#3a2b86,#1c3f9e)", on:true},
     {id:"sorry", title:"Sorry!", grad:"linear-gradient(145deg,#0f7a43,#b21f2b)", on:true},
-    {id:"monopoly", title:"Monopoly", grad:"linear-gradient(145deg,#15663a,#0c3b22)", on:true}
+    {id:"monopoly", title:"Monopoly", grad:"linear-gradient(145deg,#15663a,#0c3b22)", on:true},
+    {id:"rummy500", title:"500 Rummy", grad:"linear-gradient(145deg,#1e8a58,#0a3d26)", on:true}
   ];
   var c=$("cards");
   games.forEach(function(g){
@@ -302,7 +310,8 @@ var screenState="select";
 function computeActive(order){
   var seated=order.filter(function(c){return seat[c];});
   var free=order.filter(function(c){return !seat[c];});
-  var nCpu=Math.min(cpuCount, 4-seated.length);
+  var nCpu=Math.min(cpuCount, order.length-seated.length);
+  if(chosenGame==="rummy500"&&Rummy.versionOpts(rvCfg.version,rvCfg.over).teams) nCpu=Math.max(0,Math.min(free.length,4-seated.length));
   if(seated.length+nCpu<2) nCpu=Math.min(free.length, 2-seated.length);  // need 2+ players
   var cpu=free.slice(0,nCpu);
   return order.filter(function(c){ return seat[c] || cpu.indexOf(c)>=0; });
@@ -314,7 +323,7 @@ backbtn.onclick=function(){
   else if(screenState==="lobby"){ screenSelect(); }
   else if(screenState==="game"){ // abandon current game -> back to game picker
     try{ send({t:"wait", pid:"*", msg:"Host left the game"}); }catch(e){}
-    seat={}; players={}; pending={}; lastAsk={}; screenSelect();
+    runId++; seat={}; players={}; pending={}; lastAsk={}; screenSelect();
   }
 };
 /* Fire TV app: the remote Back button calls this */
@@ -331,6 +340,13 @@ function cardArt(id){
     s+='<g transform="translate(50,52) rotate(-2)"><rect x="-20" y="-28" width="40" height="56" rx="6" fill="#fff"/><text x="0" y="6" text-anchor="middle" font-family="Arial" font-size="11" font-weight="900" fill="#c62222">SORRY!</text></g>';
     s+='<g transform="translate(66,56) rotate(14)"><rect x="-20" y="-28" width="40" height="56" rx="6" fill="#fff"/><text x="0" y="9" text-anchor="middle" font-family="Arial" font-size="24" font-weight="900" fill="#c62222">7</text></g>';
     s+='</g>';
+  } else if(id==="rummy500"){
+    s+='<defs><radialGradient id="rg" cx="50%" cy="40%" r="80%"><stop offset="0" stop-color="#1e8a58"/><stop offset="1" stop-color="#0a3d26"/></radialGradient></defs><rect width="100" height="114" fill="url(#rg)"/>';
+    s+='<g font-family="Georgia,serif" font-weight="900" stroke="#8d97ae" stroke-width="1">';
+    s+='<g transform="translate(32,62) rotate(-20)"><rect x="-19" y="-27" width="38" height="54" rx="5" fill="#fff"/><text x="-15" y="-14" font-size="14" fill="#d02323" stroke="none">7</text><text x="-1" y="20" font-size="20" fill="#d02323" stroke="none">♥</text></g>';
+    s+='<g transform="translate(50,58) rotate(-4)"><rect x="-19" y="-27" width="38" height="54" rx="5" fill="#fff"/><text x="-15" y="-14" font-size="14" fill="#d02323" stroke="none">8</text><text x="-1" y="20" font-size="20" fill="#d02323" stroke="none">♥</text></g>';
+    s+='<g transform="translate(70,62) rotate(13)"><rect x="-19" y="-27" width="38" height="54" rx="5" fill="#fff"/><text x="-15" y="-14" font-size="14" fill="#d02323" stroke="none">9</text><text x="-1" y="20" font-size="20" fill="#d02323" stroke="none">♥</text></g></g>';
+    s+='<g transform="translate(50,22)"><circle r="14" fill="#ffd84a" stroke="#a87b00" stroke-width="1.5"/><text y="5" text-anchor="middle" font-family="Georgia,serif" font-size="13" font-weight="900" fill="#5a3a00">500</text></g>';
   } else {
     s+='<g transform="translate(50,40)" stroke="#0005" stroke-width="1"><g transform="translate(-20,0)"><rect x="-9" y="0" width="18" height="14" fill="#2ecc71"/><polygon points="-11,0 0,-9 11,0" fill="#27a758"/></g><g transform="translate(6,0)"><rect x="-9" y="0" width="18" height="14" fill="#2ecc71"/><polygon points="-11,0 0,-9 11,0" fill="#27a758"/></g><g transform="translate(34,-2)"><rect x="-13" y="0" width="26" height="16" fill="#e23b3b"/><polygon points="-15,0 0,-10 15,0" fill="#c0272d"/></g></g>';
     s+='<g transform="translate(34,74) rotate(-10)"><rect x="-15" y="-15" width="30" height="30" rx="5" fill="#fff" stroke="#0004"/><g fill="#1b2340"><circle cx="-6" cy="-6" r="2.4"/><circle cx="6" cy="6" r="2.4"/></g></g>';
@@ -351,42 +367,66 @@ function screenLobby(){
     '<div class="aitoggle">🤖 Computer players: <span id="cpuBtns"></span></div>'+
     '<div class="aitoggle">🐢 Game speed: <span id="paceBtns"></span></div>'+
     (chosenGame==="monopoly"?'<div class="rulebox"><div class="muted" style="font-size:2.2vh">⚙️ House rules (tap to toggle)</div><div id="ruleBtns"></div></div>':'')+
+    (chosenGame==="rummy500"?'<div class="rulebox" id="rvbox"></div>':'')+
     '<button class="big" id="startBtn">▶ Start Game</button>'+
     '<div class="hintbar" id="lobhint"></div>';
   var img=$("qrimg");
   img.onerror=function(){ img.replaceWith(Object.assign(document.createElement("div"),{className:"qrfallback",textContent:"(QR unavailable — type the room code on phones)"})); };
   renderLobby();
   if(chosenGame==="monopoly") renderRules();
+  if(chosenGame==="rummy500") renderRvRules();
   broadcastLobby();
   $("startBtn").onclick=startGame;
   $("startBtn").focus();
 }
 function renderLobby(){
   var el=$("players"); if(!el) return;
-  var order=["red","blue","green","yellow"];
+  var isRv=chosenGame==="rummy500", order=isRv?ORDER8:ORDER4, teams=isRv&&Rummy.versionOpts(rvCfg.version,rvCfg.over).teams;
   var seated=Object.keys(seat).length;
+  if(teams) cpuCount=Math.max(0,4-seated);
+  if(isRv) el.style.cssText="display:flex;flex-direction:row;flex-wrap:wrap;gap:1vh;justify-content:center;max-width:92vw;width:auto";
   var activeNow=computeActive(order);
   el.innerHTML=order.map(function(c){
     var pid=seat[c];
-    if(pid) return '<div class="prow"><span class="pdot" style="background:'+COL[c]+'"></span>'+esc(players[pid].name)+'</div>';
+    if(pid) return '<div class="prow" style="'+(isRv?"width:auto;max-width:none":"")+'"><span class="pdot" style="background:'+COL[c]+'"></span>'+esc(players[pid].name)+'</div>';
     var isCpu=activeNow.indexOf(c)>=0;
-    return '<div class="prow empty"><span class="pdot" style="background:'+COL[c]+';opacity:.3"></span>'+(isCpu?"🤖 computer":"open — sits out")+'</div>';
+    return '<div class="prow empty" style="'+(isRv?"width:auto;max-width:none":"")+'"><span class="pdot" style="background:'+COL[c]+';opacity:.3"></span>'+(isCpu?"🤖 computer":"open — sits out")+'</div>';
   }).join("");
-  var sb=$("startBtn"); if(sb) sb.disabled = seated<1;
-  var maxC=4-seated; if(cpuCount>maxC) cpuCount=maxC; if(cpuCount<0) cpuCount=0;
+  var sb=$("startBtn"); if(sb) sb.disabled = seated<1||(teams&&seated>4);
+  var maxC=order.length-seated; if(cpuCount>maxC) cpuCount=maxC; if(cpuCount<0) cpuCount=0;
   var cb=$("cpuBtns");
   if(cb){
-    cb.innerHTML=[0,1,2,3].map(function(n){ return '<button class="aibtn'+(n===cpuCount?" on":"")+'"'+(n>maxC?' disabled style="opacity:.35"':'')+' data-n="'+n+'" style="padding:.7vh 1.9vh">'+n+'</button>'; }).join("");
+    cb.innerHTML=(isRv?[0,1,2,3,4,5,6,7]:[0,1,2,3]).map(function(n){ return '<button class="aibtn'+(n===cpuCount?" on":"")+'"'+((n>maxC||teams)?' disabled style="opacity:.35"':'')+' data-n="'+n+'" style="padding:.7vh 1.9vh">'+n+'</button>'; }).join("");
     cb.querySelectorAll("button:not([disabled])").forEach(function(b){ b.onclick=function(){ cpuCount=+b.dataset.n; renderLobby(); }; });
   }
-  var total=Math.min(4, seated+cpuCount);
+  var total=Math.min(order.length, seated+cpuCount);
   var pbx=$("paceBtns");
   if(pbx){ var PO=[["Normal",1],["Slow",1.8],["Very slow",2.6]];
     pbx.innerHTML=PO.map(function(p){ return '<button class="aibtn'+(Math.abs(PACE-p[1])<0.05?" on":"")+'" data-p="'+p[1]+'" style="padding:.7vh 1.9vh">'+p[0]+'</button>'; }).join("");
     Array.prototype.forEach.call(pbx.querySelectorAll("button"),function(b){ b.onclick=function(){ PACE=parseFloat(b.dataset.p); try{localStorage.setItem("bgfs_pace",String(PACE));}catch(e){} renderLobby(); }; }); }
-  var h=$("lobhint"); if(h) h.textContent = (total<2? "Add a computer player or another human (need 2+)." : total+" players: "+seated+" human + "+Math.min(cpuCount,maxC)+" computer.");
+  var h=$("lobhint"); if(h) h.textContent = (teams&&seated>4? "Partnership games need exactly 4 players — pick another version for "+seated+" people." : total<2? "Add a computer player or another human (need 2+)." : total+" players: "+seated+" human + "+Math.min(cpuCount,maxC)+" computer"+(teams?" (partners sit opposite)":"")+".");
 }
-function gameTitle(id){ return id==="trouble"?"Trouble":id==="sorry"?"Sorry!":"Monopoly"; }
+function gameTitle(id){ return id==="trouble"?"Trouble":id==="sorry"?"Sorry!":id==="rummy500"?"500 Rummy":"Monopoly"; }
+var rvCfg={version:"standard",over:{}};
+function rvOpts(){ return Rummy.versionOpts(rvCfg.version,rvCfg.over); }
+function renderRvRules(){
+  var el=$("rvbox"); if(!el) return;
+  var R=Rummy, o=rvOpts(), cur=R.VERSIONS.filter(function(v){return v.id===rvCfg.version;})[0];
+  var h='<div class="muted" style="font-size:2.2vh">🃏 Version</div><div>'+R.VERSIONS.map(function(v){ return '<button class="aibtn'+(v.id===rvCfg.version?" on":"")+'" data-v="'+v.id+'" style="margin:.5vh;padding:.9vh 1.6vh;font-size:2vh">'+esc(v.name)+'</button>'; }).join("")+'</div>'+
+    '<div class="muted" style="font-size:2vh;max-width:80vw;margin:.6vh auto">'+esc(cur.tag)+' — '+esc(cur.desc)+'</div>'+
+    '<div class="muted" style="font-size:2.2vh;margin-top:.6vh">⚙️ Rules (tap to change)</div><div>'+R.HOUSE.map(function(hr,k){
+      var v=o[hr[0]], txt;
+      if(hr[2]==="bool") txt=hr[1]+": "+(v?"ON":"off");
+      else { var m=hr[3].filter(function(c){return String(c[0])===String(v);})[0]; txt=hr[1]+": "+(m?m[1]:v); }
+      return '<button class="aibtn" data-k="'+k+'" style="margin:.4vh;padding:.7vh 1.3vh;font-size:1.8vh">'+esc(txt)+'</button>'; }).join("")+'</div>';
+  el.innerHTML=h;
+  Array.prototype.forEach.call(el.querySelectorAll("button[data-v]"),function(b){ b.onclick=function(){ rvCfg.version=b.dataset.v; rvCfg.over={}; renderRvRules(); renderLobby(); }; });
+  Array.prototype.forEach.call(el.querySelectorAll("button[data-k]"),function(b){ b.onclick=function(){
+    var hr=R.HOUSE[+b.dataset.k], cv=rvOpts()[hr[0]];
+    if(hr[2]==="bool") rvCfg.over[hr[0]]=!cv;
+    else { var ch=hr[3], ix=0; ch.forEach(function(c,j){ if(String(c[0])===String(cv)) ix=j; }); rvCfg.over[hr[0]]=ch[(ix+1)%ch.length][0]; }
+    renderRvRules(); renderLobby(); }; });
+}
 
 function startGame(){
   inLobby=false; Sound.skip();
@@ -394,6 +434,7 @@ function startGame(){
   if(chosenGame==="trouble") playTrouble();
   else if(chosenGame==="sorry") playSorry();
   else if(chosenGame==="monopoly") playMonopoly();
+  else if(chosenGame==="rummy500") playRummy();
 }
 
 /* status helper */
@@ -1004,6 +1045,88 @@ function playMonopoly(){
     turnBanner(c,"🎲 "+dice[0]+" + "+dice[1]+" = "+(dice[0]+dice[1]));
     setGameCenter(face()+'<div class="mwho" style="font-size:3.4vh">= '+(dice[0]+dice[1])+(dice[0]===dice[1]?" — doubles!":"")+'</div>');
     await sleep(1000); setGameCenter("");
+  }
+  run();
+}
+/* ============================================================
+   500 RUMMY  (TV host) — the TV is the table (public cards only); each phone is a private hand
+   ============================================================ */
+function playRummy(){
+  var myRun=++runId, R=window.Rummy, GM=R.Game, P=R.Party, UI=R.UI; noWait=true;
+  var active=computeActive(ORDER8), opts=rvOpts();
+  var names=active.map(function(c){ return seat[c]?players[seat[c]].name:CNAME[c]+" CPU"; });
+  var humans=active.map(function(c){ return !!seat[c]; });
+  var G=GM.newGame({names:names,humans:humans,opts:opts});
+  if(G.o.teams){ var c0=COL[active[0]], c1=COL[active[1]]; G.colors=[c0,c1,c0,c1]; } else G.colors=active.map(function(c){ return COL[c]; });
+  G.logText=[];
+  var flashMeld=null, flashCard=null, mirrorPf=null, askingIdx=-1;
+  screenState="game"; setBack("‹ Quit", true); Skins.apply("rummy500");
+  var st0=document.createElement("style"); st0.textContent=P.tvCSS; document.head.appendChild(st0);
+  UI.injectCSS();
+  wrap.innerHTML='<div class="rvtv" id="rvtv"></div><div class="status" id="status" style="margin:.6vh 0"></div><div class="rvlog" id="rvlog"></div><div class="hintbar" id="hint">Players: use your phones</div>';
+  function alive(){ return myRun===runId; }
+  function dotOf(i){ return '<span class="dot" style="background:'+UI.colorOf(G,i)+'"></span>'; }
+  function log(m){ G.logText.push(m); if(G.logText.length>6) G.logText.shift(); Sound.fromText(m); var l=$("rvlog"); if(l) l.innerHTML=G.logText.slice(-3).map(esc).join("<br>"); }
+  function draw(){ var el=$("rvtv"); if(el) el.innerHTML=P.tvHTML(G,{flashMeld:flashMeld,flashCard:flashCard,pf:mirrorPf}); }
+  function pushAll(skip){ G.players.forEach(function(p,i){ if(p.human&&i!==skip&&seat[active[i]]) send({t:"rvs",pid:seat[active[i]],st:P.snap(G,i,{})}); }); }
+  gameSnap=function(){ pushAll(askingIdx); };
+  viewHandler=function(o){ if(o.rv&&!G.roundOver&&G.players[G.turn].human&&seat[active[G.turn]]===o.pid){ mirrorPf=(o.i==null?null:o.i); draw(); } };
+  function doAction(a){
+    var msg=P.describe(G,a), res=GM.applyAction(G,a);
+    if(!res.ok) return res;
+    log(msg);
+    flashMeld=(a.t==="meld"&&res.meld)?res.meld.id:(a.t==="layoff"?a.meld:null);
+    flashCard=a.t==="discard"?a.card:null;
+    if(res.roundOver&&res.roundOver.reason==="out") log(G.players[res.roundOver.out].name+" goes out!");
+    draw(); pushAll(G.roundOver?-1:G.turn);
+    return res;
+  }
+  function stat(i,txt){ setStatus(dotOf(i)+" "+esc(names[i])+" — "+txt); }
+  async function humanStep(i){
+    var color=active[i], pid=seat[color];
+    askingIdx=i; stat(i,G.phase==="draw"?"drawing (use your phone)":"melding / discarding");
+    var r=await ask(color,"Your turn","",[{id:"auto",label:"Auto-play"}],{kind:"rummy",st:P.snap(G,i,{active:true})});
+    askingIdx=-1; if(mirrorPf!=null){ mirrorPf=null; draw(); }
+    if(!alive()||G.roundOver||G.turn!==i) return;
+    var d=r.data||{}, a;
+    if(r.id==="undo"){ var u=GM.undo(G); if(!u.ok) send({t:"info",pid:pid,msg:u.msg}); else { log(names[i]+" takes back the last move"); draw(); } return; }
+    if(r.id==="stock") a={t:"stock"};
+    else if(r.id==="take") a={t:"take",idx:d.idx};
+    else if(r.id==="meld") a={t:"meld",ids:d.ids||[]};
+    else if(r.id==="layoff") a={t:"layoff",meld:d.meld,card:d.card};
+    else if(r.id==="discard") a={t:"discard",card:d.card};
+    else a=GM.aiAction(G);
+    if(!a) return;
+    var res=doAction(a);
+    if(!res.ok) send({t:"info",pid:pid,msg:res.msg||"That didn't work"});
+  }
+  async function cpuStep(i){
+    askingIdx=-1; stat(i,G.phase==="draw"?"choosing a card…":"playing…");
+    await sleep(G.phase==="draw"?1500:1300);
+    if(!alive()||G.roundOver||G.turn!==i) return;
+    var a=GM.aiAction(G); if(!a) return;
+    var res=doAction(a);
+    if(!res.ok){ if(G.phase==="draw") doAction({t:"stock"}); else doAction({t:"discard",card:G.players[i].hand[0].id}); }
+  }
+  async function roundEnd(){
+    pushAll(-1); askingIdx=-1;
+    var el=$("rvtv"); if(!el) return;
+    el.innerHTML=P.roundSheetHTML(G);
+    setStatus(G.over?"🏆 "+esc(G.roundOver.winnerName)+(/ & /.test(G.roundOver.winnerName)?" win!":" wins!"):"Round "+G.round+" complete");
+    if(G.over) return;
+    var b=document.createElement("button"); b.className="big"; b.textContent="Next round ▶"; b.style.marginTop="1vh"; el.appendChild(b); b.focus();
+    await new Promise(function(res){ var done=false,fin=function(){ if(!done){ done=true; res(); } }; b.onclick=fin; setTimeout(fin,25000); });
+  }
+  async function run(){
+    while(alive()){
+      GM.startRound(G); G.logText=[]; flashMeld=null; flashCard=null; Sound.sfx("deal");
+      log(G.players[G.dealer].name+" deals — round "+G.round);
+      draw(); pushAll(-1); await sleep(1800);
+      while(alive()&&!G.roundOver){ var i=G.turn; if(G.players[i].human) await humanStep(i); else await cpuStep(i); }
+      if(!alive()) return;
+      await roundEnd();
+      if(G.over){ var wn=G.roundOver.winnerName; if(alive()){ announceOver(wn); showPlayAgain(); } return; }
+    }
   }
   run();
 }
