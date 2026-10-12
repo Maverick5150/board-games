@@ -48,7 +48,7 @@ var COL={red:"#e23b3b",blue:"#2b7be0",green:"#27a758",yellow:"#eec21b"};
 var params=new URLSearchParams(location.search);
 var room=(params.get("room")||"").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,4);
 var myPid=BGNet.pid();
-var myName=null, myColor=null, net=null, curReq=null;
+var myName=null, myColor=null, net=null, curReq=null, started=false;
 
 try{ myName=localStorage.getItem("bgfs_name")||null; }catch(e){}
 
@@ -81,11 +81,11 @@ function sendJoin(){ net && net.send({t:"join", pid:myPid, name:myName}); }
 
 function onMsg(o){
   if(o.t==="you" && o.pid===myPid){ myColor=o.color; if(o.name) myName=o.name; }
-  else if(o.t==="lobby"){ if(!isAsking()) showLobby(o); }
-  else if(o.t==="ask" && o.pid===myPid){ showAsk(o); }
-  else if(o.t==="wait" && o.pid===myPid){ curReq=null; showWaiting(o.msg||"Waiting…", false, o.turn); }
-  else if(o.t==="started"){ if(!isAsking()) showWaiting("Game starting…", false); }
-  else if(o.t==="over"){ curReq=null; showOver(o); }
+  else if(o.t==="lobby"){ if(!started && !isAsking()) showLobby(o); }   // never fall back to lobby once the game is on
+  else if(o.t==="ask" && o.pid===myPid){ started=true; showAsk(o); }
+  else if(o.t==="wait" && o.pid===myPid){ started=true; curReq=null; showWaiting(o.msg||"Waiting…", false, o.turn); }
+  else if(o.t==="started"){ started=true; if(!isAsking()) showWaiting("Game starting…", false); }
+  else if(o.t==="over"){ started=false; curReq=null; showOver(o); }
   else if(o.t==="info" && (o.pid===myPid||!o.pid)){ toast(o.msg); }
 }
 function isAsking(){ return !!curReq; }
