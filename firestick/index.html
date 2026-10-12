@@ -49,6 +49,19 @@
   .aibtn.on{background:#2b7be0;border-color:#2b7be0;}
   .aibtn:focus{outline:3px solid #fff;}
   .hintbar{font-size:2.2vh;color:#9fb0d8;margin-top:.6vh;}
+  /* monopoly board */
+  .mboard{width:min(90vh,96vw);aspect-ratio:1/1;display:grid;grid-template-columns:repeat(11,1fr);grid-template-rows:repeat(11,1fr);background:#cfe8d4;border:3px solid #0a0f22;border-radius:6px;overflow:hidden;}
+  .msp{position:relative;border:1px solid #2b6b42;background:#eef9f0;font-size:1.05vh;line-height:1.04;overflow:hidden;color:#09250f;}
+  .msp .nm{position:absolute;top:24%;left:0;right:0;text-align:center;font-weight:800;padding:0 1px;letter-spacing:-.2px;}
+  .msp .pr{position:absolute;bottom:0;left:0;right:0;text-align:center;font-size:.95vh;opacity:.85;font-weight:700;}
+  .mbar{position:absolute;}.mbar.top{top:0;left:0;right:0;height:24%;}.mbar.bottom{bottom:0;left:0;right:0;height:24%;}.mbar.left{left:0;top:0;bottom:0;width:24%;}.mbar.right{right:0;top:0;bottom:0;width:24%;}
+  .mcorner{display:flex;align-items:center;justify-content:center;text-align:center;font-weight:800;font-size:1.3vh;background:#dff0e3;color:#09250f;padding:2px;}
+  .mcenter{grid-column:2/11;grid-row:2/11;display:flex;align-items:center;justify-content:center;background:#cfe8d4;}
+  .mlogo{font-size:6vh;font-weight:900;color:#d7263d;transform:rotate(-14deg);letter-spacing:3px;text-shadow:1px 1px 0 #0002;}
+  .mtok{position:absolute;bottom:0;left:0;right:0;display:flex;flex-wrap:wrap;justify-content:center;font-size:1.7vh;line-height:1;}
+  .mown{position:absolute;top:1px;right:1px;width:1.3vh;height:1.3vh;border-radius:50%;border:1px solid #0006;}
+  .mhs{position:absolute;top:1px;left:1px;display:flex;gap:1px;}.mhs i{width:.9vh;height:.9vh;background:#1f9d54;border:.5px solid #0a3;display:block;}.mhs i.hotel{background:#d7263d;width:1.5vh;}
+  .mmort{position:absolute;inset:0;background:repeating-linear-gradient(45deg,#0000,#0000 4px,#0005 4px,#0005 7px);}
   .toast{position:fixed;bottom:3vh;left:50%;transform:translateX(-50%);background:#000c;padding:1.4vh 2.6vh;border-radius:2vh;font-size:2.6vh;font-weight:700;opacity:0;transition:opacity .2s;}
   .toast.show{opacity:1;}
 </style>
@@ -70,6 +83,70 @@ var wrap=$("wrap"), connEl=$("conn"), toastEl=$("toast");
 var COL={red:"#e23b3b",blue:"#2b7be0",green:"#27a758",yellow:"#eec21b"};
 var CNAME={red:"Red",blue:"Blue",green:"Green",yellow:"Yellow"};
 var sleep=function(ms){return new Promise(function(r){setTimeout(r,ms);});};
+
+/* Monopoly board data (factual game data) */
+var MONO_BOARD=[
+ {n:"GO",t:"go"},
+ {n:"Mediterranean Ave",t:"prop",g:"brown",price:60,rent:[2,10,30,90,160,250],house:50,mort:30},
+ {n:"Comm. Chest",t:"cc"},
+ {n:"Baltic Ave",t:"prop",g:"brown",price:60,rent:[4,20,60,180,320,450],house:50,mort:30},
+ {n:"Income Tax",t:"tax",tax:"income"},
+ {n:"Reading RR",t:"rr",price:200,mort:100},
+ {n:"Oriental Ave",t:"prop",g:"light_blue",price:100,rent:[6,30,90,270,400,550],house:50,mort:50},
+ {n:"Chance",t:"chance"},
+ {n:"Vermont Ave",t:"prop",g:"light_blue",price:100,rent:[6,30,90,270,400,550],house:50,mort:50},
+ {n:"Connecticut Ave",t:"prop",g:"light_blue",price:120,rent:[8,40,100,300,450,600],house:50,mort:60},
+ {n:"JAIL",t:"jail"},
+ {n:"St. Charles Pl",t:"prop",g:"pink",price:140,rent:[10,50,150,450,625,750],house:100,mort:70},
+ {n:"Electric Co",t:"util",price:150,mort:75},
+ {n:"States Ave",t:"prop",g:"pink",price:140,rent:[10,50,150,450,625,750],house:100,mort:70},
+ {n:"Virginia Ave",t:"prop",g:"pink",price:160,rent:[12,60,180,500,700,900],house:100,mort:80},
+ {n:"Pennsylvania RR",t:"rr",price:200,mort:100},
+ {n:"St. James Pl",t:"prop",g:"orange",price:180,rent:[14,70,200,550,750,950],house:100,mort:90},
+ {n:"Comm. Chest",t:"cc"},
+ {n:"Tennessee Ave",t:"prop",g:"orange",price:180,rent:[14,70,200,550,750,950],house:100,mort:90},
+ {n:"New York Ave",t:"prop",g:"orange",price:200,rent:[16,80,220,600,800,1000],house:100,mort:100},
+ {n:"FREE PARKING",t:"fp"},
+ {n:"Kentucky Ave",t:"prop",g:"red",price:220,rent:[18,90,250,700,875,1050],house:150,mort:110},
+ {n:"Chance",t:"chance"},
+ {n:"Indiana Ave",t:"prop",g:"red",price:220,rent:[18,90,250,700,875,1050],house:150,mort:110},
+ {n:"Illinois Ave",t:"prop",g:"red",price:240,rent:[20,100,300,750,925,1100],house:150,mort:120},
+ {n:"B&O RR",t:"rr",price:200,mort:100},
+ {n:"Atlantic Ave",t:"prop",g:"yellow",price:260,rent:[22,110,330,800,975,1150],house:150,mort:130},
+ {n:"Ventnor Ave",t:"prop",g:"yellow",price:260,rent:[22,110,330,800,975,1150],house:150,mort:130},
+ {n:"Water Works",t:"util",price:150,mort:75},
+ {n:"Marvin Gardens",t:"prop",g:"yellow",price:280,rent:[24,120,360,850,1025,1200],house:150,mort:140},
+ {n:"GO TO JAIL",t:"gotojail"},
+ {n:"Pacific Ave",t:"prop",g:"green",price:300,rent:[26,130,390,900,1100,1275],house:200,mort:150},
+ {n:"N. Carolina Ave",t:"prop",g:"green",price:300,rent:[26,130,390,900,1100,1275],house:200,mort:150},
+ {n:"Comm. Chest",t:"cc"},
+ {n:"Pennsylvania Ave",t:"prop",g:"green",price:320,rent:[28,150,450,1000,1200,1400],house:200,mort:160},
+ {n:"Short Line",t:"rr",price:200,mort:100},
+ {n:"Chance",t:"chance"},
+ {n:"Park Place",t:"prop",g:"dark_blue",price:350,rent:[35,175,500,1100,1300,1500],house:200,mort:175},
+ {n:"Luxury Tax",t:"tax",tax:"luxury"},
+ {n:"Boardwalk",t:"prop",g:"dark_blue",price:400,rent:[50,200,600,1400,1700,2000],house:200,mort:200}
+];
+var MONO_CHANCE=[
+ {text:"Advance to Boardwalk.",fx:"move",a:39},{text:"Advance to GO (collect $200).",fx:"move",a:0},
+ {text:"Advance to Illinois Ave.",fx:"move",a:24},{text:"Advance to St. Charles Place.",fx:"move",a:11},
+ {text:"Advance to the nearest Railroad; pay owner twice rent.",fx:"nearRR"},{text:"Advance to the nearest Railroad; pay owner twice rent.",fx:"nearRR"},
+ {text:"Advance to nearest Utility; pay 10x dice.",fx:"nearUtil"},{text:"Bank pays you dividend of $50.",fx:"gain",a:50},
+ {text:"Get Out of Jail Free.",fx:"joker"},{text:"Go Back 3 Spaces.",fx:"back3"},
+ {text:"Go to Jail. Do not pass GO.",fx:"jail"},{text:"Make general repairs: $25/house, $100/hotel.",fx:"repairs",a:[25,100]},
+ {text:"Speeding fine $15.",fx:"pay",a:15},{text:"Take a trip to Reading Railroad.",fx:"move",a:5},
+ {text:"Chairman of the Board — pay each player $50.",fx:"payeach",a:50},{text:"Building loan matures. Collect $150.",fx:"gain",a:150}
+];
+var MONO_CHEST=[
+ {text:"Advance to GO (collect $200).",fx:"move",a:0},{text:"Bank error in your favor. Collect $200.",fx:"gain",a:200},
+ {text:"Doctor's fee. Pay $50.",fx:"pay",a:50},{text:"From sale of stock you get $50.",fx:"gain",a:50},
+ {text:"Get Out of Jail Free.",fx:"joker"},{text:"Go to Jail. Do not pass GO.",fx:"jail"},
+ {text:"Holiday fund matures. Receive $100.",fx:"gain",a:100},{text:"Income tax refund. Collect $20.",fx:"gain",a:20},
+ {text:"It is your birthday. Collect $10 from every player.",fx:"collecteach",a:10},{text:"Life insurance matures. Collect $100.",fx:"gain",a:100},
+ {text:"Pay hospital fees of $100.",fx:"pay",a:100},{text:"Pay school fees of $50.",fx:"pay",a:50},
+ {text:"Receive $25 consultancy fee.",fx:"gain",a:25},{text:"Street repairs: $40/house, $115/hotel.",fx:"repairs",a:[40,115]},
+ {text:"Second prize in a beauty contest. Collect $10.",fx:"gain",a:10},{text:"You inherit $100.",fx:"gain",a:100}
+];
 
 /* ---------- networking ---------- */
 var room=BGNet.roomCode();
@@ -149,7 +226,7 @@ function screenSelect(){
   var games=[
     {id:"trouble", title:"Trouble", grad:"linear-gradient(145deg,#3a2b86,#1c3f9e)", on:true},
     {id:"sorry", title:"Sorry!", grad:"linear-gradient(145deg,#0f7a43,#b21f2b)", on:true},
-    {id:"monopoly", title:"Monopoly", grad:"linear-gradient(145deg,#15663a,#0c3b22)", on:false}
+    {id:"monopoly", title:"Monopoly", grad:"linear-gradient(145deg,#15663a,#0c3b22)", on:true}
   ];
   var c=$("cards");
   games.forEach(function(g){
@@ -234,6 +311,7 @@ function startGame(){
   send({t:"started"}, true);   // retained so a reconnecting phone knows the game is on (not the lobby)
   if(chosenGame==="trouble") playTrouble();
   else if(chosenGame==="sorry") playSorry();
+  else if(chosenGame==="monopoly") playMonopoly();
 }
 
 /* status helper */
@@ -480,6 +558,268 @@ function playSorry(){
   }
   run();
 }
+
+/* ============================================================
+   MONOPOLY  (TV host) — playable core: roll, buy, rent, cards,
+   tax, jail, build, mortgage, auctions, bankruptcy. (Trading next.)
+   ============================================================ */
+function playMonopoly(){
+  var order=["red","blue","green","yellow"];
+  var useAI = fillAI || order.filter(function(c){return seat[c];}).length<2;
+  var active=order.filter(function(c){ return useAI || seat[c]; });
+  var COLORVAR={brown:"#8b5a2b",light_blue:"#9fd0ef",pink:"#d93a96",orange:"#f08d1c",red:"#e23b3b",yellow:"#f3d41b",green:"#1f9d54",dark_blue:"#2b4fe0"};
+  var TOKS=["🎩","🏎️","🐕","🚢"];
+  var BOARD=MONO_BOARD, CHANCE=MONO_CHANCE, CHEST=MONO_CHEST, RR_IDX=[5,15,25,35], UTIL_IDX=[12,28];
+  var GROUPS={}; BOARD.forEach(function(s,i){ if(s.t==="prop"){ (GROUPS[s.g]=GROUPS[s.g]||[]).push(i); } });
+
+  // per-player state keyed by color
+  var cash={}, pos={}, injail={}, jailT={}, jokers={}, bankrupt={}, tokE={};
+  active.forEach(function(c,i){ cash[c]=1500; pos[c]=0; injail[c]=false; jailT[c]=0; jokers[c]=0; bankrupt[c]=false; tokE[c]=TOKS[i%4]; });
+  var owner=[], houses=[], mort=[]; for(var i=0;i<40;i++){ owner[i]=null; houses[i]=0; mort[i]=false; }
+  var housesLeft=32, hotelsLeft=12;
+  var chanceDeck=shuf(rangeArr(16)), chanceDisc=[], chestDeck=shuf(rangeArr(16)), chestDisc=[];
+  var dice=[0,0], doublesCount=0, turn=0, over=false;
+  function rangeArr(n){ var a=[]; for(var i=0;i<n;i++)a.push(i); return a; }
+  function shuf(a){ for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i];a[i]=a[j];a[j]=t; } return a; }
+  function nm(c){ return seat[c]?players[seat[c]].name:(CNAME[c]+" (CPU)"); }
+  function human(c){ return !!seat[c]; }
+  function alive(){ return active.filter(function(c){return !bankrupt[c];}); }
+  function money(n){ return (n<0?"-$":"$")+Math.abs(n); }
+
+  function rrOwned(c){ return RR_IDX.filter(function(i){return owner[i]===c;}).length; }
+  function utilOwned(c){ return UTIL_IDX.filter(function(i){return owner[i]===c;}).length; }
+  function ownsGroup(c,g){ return GROUPS[g].every(function(i){return owner[i]===c;}); }
+  function netWorth(c){ var w=cash[c]; for(var i=0;i<40;i++) if(owner[i]===c){ var s=BOARD[i]; w+= mort[i]?Math.floor((s.price||0)/2):(s.price||0); if(s.t==="prop") w+=houses[i]*s.house; } return w; }
+  function computeRent(i,o,mult,ds){ var s=BOARD[i]; mult=mult||1;
+    if(s.t==="prop"){ if(houses[i]>0) return s.rent[houses[i]]; return ownsGroup(o,s.g)?s.rent[0]*2:s.rent[0]; }
+    if(s.t==="rr"){ var n=rrOwned(o); return 25*Math.pow(2,n-1)*mult; }
+    if(s.t==="util"){ var n2=utilOwned(o); if(mult>1) return 10*ds; return (n2===2?10:4)*ds; }
+    return 0; }
+
+  // ---------- rendering (HTML grid) ----------
+  var boardEl;
+  function spGrid(i){ var r,c; if(i<=10){r=10;c=10-i;} else if(i<=20){c=0;r=20-i;} else if(i<=30){r=0;c=i-20;} else {c=10;r=i-30;} return [r,c]; }
+  function barSide(i){ if(i<=10)return"top"; if(i<=20)return"right"; if(i<=30)return"bottom"; return"left"; }
+  function toksAt(i){ var here=active.filter(function(c){return !bankrupt[c]&&pos[c]===i;}); if(!here.length)return""; return '<div class="mtok">'+here.map(function(c){return '<span style="filter:drop-shadow(0 0 1px '+PC(c)+')">'+tokE[c]+'</span>';}).join("")+'</div>'; }
+  function PC(c){ return COL[c]; }
+  function spInner(i){ var s=BOARD[i]; var corner=(i===0||i===10||i===20||i===30); var h="";
+    if(corner){ var lab={0:"GO →",10:"JAIL",20:"FREE PARKING",30:"GO TO JAIL"}[i]; return '<div class="mcorner" style="position:absolute;inset:0">'+lab+'</div>'+toksAt(i); }
+    if(s.t==="prop") h+='<div class="mbar '+barSide(i)+'" style="background:'+COLORVAR[s.g]+'"></div>';
+    var icon = s.t==="rr"?"🚂":s.t==="util"?(i===12?"💡":"🚰"):s.t==="chance"?"?":s.t==="cc"?"📦":s.tax==="income"?"💵":s.tax==="luxury"?"💎":"";
+    h+='<div class="nm">'+s.n+(icon?'<br>'+icon:'')+'</div>';
+    if(s.price) h+='<div class="pr">$'+s.price+'</div>';
+    if(owner[i]!=null) h+='<div class="mown" style="background:'+PC(owner[i])+'"></div>';
+    if(s.t==="prop"&&houses[i]>0) h+= houses[i]===5?'<div class="mhs"><i class="hotel"></i></div>':'<div class="mhs">'+Array(houses[i]+1).join("<i></i>")+'</div>';
+    if(mort[i]) h+='<div class="mmort"></div>';
+    h+=toksAt(i); return h;
+  }
+  function renderBoard(){ var html=""; for(var i=0;i<40;i++){ var rc=spGrid(i); html+='<div class="msp" style="grid-row:'+(rc[0]+1)+';grid-column:'+(rc[1]+1)+'">'+spInner(i)+'</div>'; } html+='<div class="mcenter"><div class="mlogo">MONOPOLY</div></div>'; boardEl.innerHTML=html; }
+  function tv(html){ setStatus(html); }
+  function turnBanner(c,extra){ tv('<span class="dot" style="background:'+PC(c)+'"></span> '+tokE[c]+' <b>'+nm(c)+'</b> · '+money(cash[c])+(extra?' · '+extra:'')); }
+
+  // ---------- money / debt ----------
+  async function payBank(c,amt){ cash[c]-=amt; if(cash[c]<0) await resolveDebt(c,null); }
+  async function payTo(c,to,amt){ cash[c]-=amt; cash[to]+=amt; if(cash[c]<0) await resolveDebt(c,to); }
+  function liquidatable(c){ var v=cash[c]; for(var i=0;i<40;i++) if(owner[i]===c){ var s=BOARD[i]; if(s.t==="prop"&&houses[i]>0) v+=Math.floor(houses[i]*s.house/2); if(!mort[i]) v+=Math.floor((s.price||0)/2); } return v; }
+  function aiRaise(c){ var guard=200; while(cash[c]<0 && guard-->0){ var best=-1,bh=0; for(var i=0;i<40;i++) if(owner[i]===c&&BOARD[i].t==="prop"&&houses[i]>bh){bh=houses[i];best=i;} if(best>=0){ sellHouse(c,best); continue; } var did=false; for(var j=0;j<40;j++) if(owner[j]===c&&!mort[j]&&(BOARD[j].t!=="prop"||houses[j]===0)){ doMort(c,j); did=true; break; } if(!did) break; } }
+  async function resolveDebt(c,creditor){
+    if(human(c)){
+      while(cash[c]<0){
+        if(liquidatable(c)<0){ declareBankrupt(c,creditor); return; }
+        var opts=[];
+        for(var i=0;i<40;i++) if(owner[i]===c){ var s=BOARD[i];
+          if(s.t==="prop"&&houses[i]>0) opts.push({id:"sell"+i,label:"Sell building on "+s.n+" (+"+money(Math.floor(s.house/2))+")"});
+          else if(!mort[i]) opts.push({id:"mort"+i,label:"Mortgage "+s.n+" (+"+money(s.mort)+")"});
+        }
+        opts.push({id:"bankrupt",label:"❌ Declare Bankruptcy",color:"red"});
+        var pick=await ask(c,"You owe "+money(-cash[c])+" more","Raise cash or go bankrupt",opts);
+        if(pick.id==="bankrupt"){ declareBankrupt(c,creditor); return; }
+        if(pick.id.indexOf("sell")===0) sellHouse(c,parseInt(pick.id.slice(4),10));
+        else if(pick.id.indexOf("mort")===0) doMort(c,parseInt(pick.id.slice(4),10));
+        renderBoard(); turnBanner(c);
+      }
+    } else { aiRaise(c); if(cash[c]<0) declareBankrupt(c,creditor); }
+  }
+  function declareBankrupt(c,creditor){
+    toast(nm(c)+" is bankrupt!");
+    var refund=0;
+    for(var i=0;i<40;i++) if(owner[i]===c && BOARD[i].t==="prop" && houses[i]>0){ refund+=Math.floor(houses[i]*BOARD[i].house/2); if(houses[i]===5)hotelsLeft++; else housesLeft+=houses[i]; houses[i]=0; }
+    if(creditor){ cash[creditor]+=cash[c]+refund; jokers[creditor]+=jokers[c]; for(var j=0;j<40;j++) if(owner[j]===c) owner[j]=creditor; }
+    else { for(var k=0;k<40;k++) if(owner[k]===c){ owner[k]=null; mort[k]=false; } }
+    cash[c]=0; jokers[c]=0; bankrupt[c]=true;
+    if(seat[c]) send({t:"wait", pid:seat[c], msg:"You went bankrupt — game over for you."});
+    renderBoard();
+  }
+
+  // ---------- build / mortgage ----------
+  function canBuild(c,i){ var s=BOARD[i]; if(s.t!=="prop"||owner[i]!==c) return false; if(!ownsGroup(c,s.g)) return false; if(GROUPS[s.g].some(function(x){return mort[x];})) return false; if(houses[i]>=5) return false; if(houses[i]===4){ return hotelsLeft>0; } if(housesLeft<=0) return false; var min=Math.min.apply(null,GROUPS[s.g].map(function(x){return houses[x];})); return houses[i]===min; }
+  function buildHouse(c,i){ var s=BOARD[i]; if(!canBuild(c,i)||cash[c]<s.house) return; cash[c]-=s.house; if(houses[i]===4){ houses[i]=5; hotelsLeft--; housesLeft+=4; } else { houses[i]++; housesLeft--; } }
+  function canSell(c,i){ var s=BOARD[i]; if(s.t!=="prop"||owner[i]!==c||houses[i]<=0) return false; var max=Math.max.apply(null,GROUPS[s.g].map(function(x){return houses[x];})); return houses[i]===max; }
+  function sellHouse(c,i){ if(houses[i]<=0) return; cash[c]+=Math.floor(BOARD[i].house/2); if(houses[i]===5){ houses[i]=4; hotelsLeft++; housesLeft-=4; } else { houses[i]--; housesLeft++; } }
+  function doMort(c,i){ var s=BOARD[i]; if(owner[i]!==c||mort[i]) return; if(s.t==="prop"&&houses[i]>0){ while(houses[i]>0) sellHouse(c,i); } mort[i]=true; cash[c]+=s.mort; }
+  function unMort(c,i){ var s=BOARD[i]; if(owner[i]!==c||!mort[i]) return; var cost=Math.ceil(s.mort*1.1); if(cash[c]<cost) return; cash[c]-=cost; mort[i]=false; }
+  async function manage(c){
+    while(true){
+      var opts=[];
+      for(var i=0;i<40;i++) if(owner[i]===c){ var s=BOARD[i];
+        if(canBuild(c,i)&&cash[c]>=s.house) opts.push({id:"b"+i,label:(houses[i]===4?"🏨 Hotel on ":"🏠 House on ")+s.n+" ("+money(s.house)+")",color:"green"});
+        if(s.t==="prop"&&houses[i]>0&&canSell(c,i)) opts.push({id:"s"+i,label:"Sell building on "+s.n+" (+"+money(Math.floor(s.house/2))+")"});
+        if(!mort[i]&&(s.t!=="prop"||houses[i]===0)) opts.push({id:"m"+i,label:"Mortgage "+s.n+" (+"+money(s.mort)+")"});
+        if(mort[i]&&cash[c]>=Math.ceil(s.mort*1.1)) opts.push({id:"u"+i,label:"Unmortgage "+s.n+" ("+money(Math.ceil(s.mort*1.1))+")"});
+      }
+      opts.push({id:"done",label:"◀ Done",color:"blue"});
+      var pick=await ask(c,"Manage — "+money(cash[c]),"Build / mortgage, then Done",opts);
+      if(pick.id==="done") return;
+      var idx=parseInt(pick.id.slice(1),10), op=pick.id[0];
+      if(op==="b") buildHouse(c,idx); else if(op==="s") sellHouse(c,idx); else if(op==="m") doMort(c,idx); else if(op==="u") unMort(c,idx);
+      renderBoard(); turnBanner(c);
+    }
+  }
+  function aiBuild(c){ var guard=40,imp=true; while(imp&&guard-->0){ imp=false; for(var g in GROUPS){ if(!ownsGroup(c,g))continue; var lots=GROUPS[g].slice().sort(function(a,b){return houses[a]-houses[b];}); for(var k=0;k<lots.length;k++){ var i=lots[k]; if(cash[c]>BOARD[i].house+250 && canBuild(c,i)){ buildHouse(c,i); imp=true; break; } } } } }
+
+  // ---------- movement ----------
+  function passGo(c){ cash[c]+=200; toast(nm(c)+" passes GO +$200"); }
+  async function stepTo(c,steps){ for(var s=0;s<steps;s++){ pos[c]=(pos[c]+1)%40; if(pos[c]===0) passGo(c); renderBoard(); await sleep(150); } }
+  async function moveToIdx(c,idx,collect){ var steps=(idx-pos[c]+40)%40; await stepTo(c,steps); }
+  function goJail(c){ pos[c]=10; injail[c]=true; jailT[c]=0; doublesCount=0; renderBoard(); }
+
+  // ---------- auction ----------
+  async function auction(i){
+    toast("Auction: "+BOARD[i].n);
+    var bidders=alive().slice(); var price=0, high=null, idx=0;
+    while(bidders.length>1){
+      var c=bidders[idx%bidders.length];
+      var need=price+(price<20?5:10);
+      var bid;
+      if(human(c)){
+        var opts=[{id:"bid",label:"Bid "+money(need),color:"green"},{id:"pass",label:"Pass",color:"red"}];
+        if(cash[c]<need) opts=[{id:"pass",label:"Pass (can’t afford "+money(need)+")",color:"red"}];
+        turnBanner(c,"Auction "+BOARD[i].n+" — high "+(price?money(price):"none"));
+        var pk=await ask(c,"Auction: "+BOARD[i].n,"High bid "+(price?money(price)+" by "+nm(high):"none"),opts);
+        bid = pk.id==="bid";
+      } else { await sleep(500); var val=aiAuctionVal(c,i); bid = (need<=val && cash[c]>=need); }
+      if(bid){ price=need; high=c; idx++; } else { bidders=bidders.filter(function(x){return x!==c;}); }
+    }
+    if(high!=null){ cash[high]-=price; owner[i]=high; toast(nm(high)+" wins "+BOARD[i].n+" for "+money(price)); }
+    renderBoard();
+  }
+  function aiAuctionVal(c,i){ var s=BOARD[i]; var v=s.price; if(s.t==="prop"){ var owned=GROUPS[s.g].filter(function(x){return owner[x]===c;}).length; if(owned>0) v=Math.floor(s.price*(1+0.4*owned)); } if(s.t==="rr") v=Math.floor(s.price*1.2); return Math.min(v,Math.max(0,cash[c]-50)); }
+
+  // ---------- cards ----------
+  function nearest(p,list){ for(var s=1;s<=40;s++){ var q=(p+s)%40; if(list.indexOf(q)>=0) return q; } return list[0]; }
+  async function drawCard(c,deckName){
+    var isCh=deckName==="chance"; var dk=isCh?chanceDeck:chestDeck; var dc=isCh?chanceDisc:chestDisc; var src=isCh?CHANCE:CHEST;
+    if(dk.length===0){ while(dc.length) dk.push(dc.pop()); shuf(dk); }
+    var ci=dk.shift(); var card=src[ci];
+    tv('<span class="dot" style="background:'+PC(c)+'"></span> '+(isCh?"Chance":"Community Chest")+': <b>'+card.text+'</b>');
+    await sleep(2200);
+    if(card.fx==="joker"){ jokers[c]++; } else { dc.push(ci); }
+    await applyCard(c,card);
+  }
+  async function applyCard(c,card){
+    var a=card.a;
+    if(card.fx==="gain"){ cash[c]+=a; }
+    else if(card.fx==="pay"){ await payBank(c,a); }
+    else if(card.fx==="move"){ var tgt=a; if(tgt<=pos[c]&&tgt!==pos[c]) {} var steps=(tgt-pos[c]+40)%40; await stepTo(c,steps); if(tgt!==0) await resolveLanding(c,false); }
+    else if(card.fx==="jail"){ goJail(c); }
+    else if(card.fx==="back3"){ for(var k=0;k<3;k++){ pos[c]=(pos[c]+39)%40; renderBoard(); await sleep(150); } await resolveLanding(c,false); }
+    else if(card.fx==="payeach"){ for(var qi=0;qi<active.length;qi++){ var q=active[qi]; if(q!==c&&!bankrupt[q]){ cash[c]-=a; cash[q]+=a; } } if(cash[c]<0) await resolveDebt(c,null); }
+    else if(card.fx==="collecteach"){ for(var ri=0;ri<active.length;ri++){ var r=active[ri]; if(r!==c&&!bankrupt[r]){ cash[r]-=a; cash[c]+=a; if(cash[r]<0) await resolveDebt(r,c); } } }
+    else if(card.fx==="repairs"){ var hh=0,ht=0; for(var i=0;i<40;i++) if(owner[i]===c&&BOARD[i].t==="prop"){ if(houses[i]===5)ht++; else hh+=houses[i]; } await payBank(c,hh*a[0]+ht*a[1]); }
+    else if(card.fx==="nearRR"){ var idx=nearest(pos[c],RR_IDX); await stepTo(c,(idx-pos[c]+40)%40); await landRailUtil(c,idx,2); }
+    else if(card.fx==="nearUtil"){ var idu=nearest(pos[c],UTIL_IDX); await stepTo(c,(idu-pos[c]+40)%40); await landRailUtil(c,idu,10); }
+    renderBoard();
+  }
+  async function landRailUtil(c,idx,mult){ var o=owner[idx];
+    if(o==null){ await offerBuy(c,idx); }
+    else if(o===c){} else if(mort[idx]){}
+    else { var rent = BOARD[idx].t==="rr" ? computeRent(idx,o,1)*2 : 10*(1+Math.floor(Math.random()*6)+1+Math.floor(Math.random()*6)); toast(nm(c)+" pays "+nm(o)+" "+money(rent)); await payTo(c,o,rent); }
+  }
+
+  // ---------- landing ----------
+  async function offerBuy(c,i){ var s=BOARD[i];
+    if(human(c)){
+      var opts=[{id:"buy",label:"✅ Buy "+s.n+" for "+money(s.price),color:"green"},{id:"no",label:"❌ Decline → Auction",color:"red"}];
+      if(cash[c]<s.price) opts=[{id:"no",label:"Can’t afford — to Auction",color:"red"}];
+      var pk=await ask(c,"Buy property?",s.n+" — "+money(s.price)+" · you have "+money(cash[c]),opts);
+      if(pk.id==="buy"){ cash[c]-=s.price; owner[i]=c; toast(nm(c)+" buys "+s.n); renderBoard(); } else { await auction(i); }
+    } else {
+      if(aiWantsBuy(c,i)){ cash[c]-=s.price; owner[i]=c; toast(nm(c)+" buys "+s.n); renderBoard(); } else { await auction(i); }
+    }
+  }
+  function aiWantsBuy(c,i){ var s=BOARD[i]; if(cash[c]<s.price+50) return false; var score=0.5; if(s.t==="prop"){ var owned=GROUPS[s.g].filter(function(x){return owner[x]===c;}).length; score+=owned*0.25; } if(s.t==="rr")score+=0.3; if(cash[c]>s.price*2.5)score+=0.3; return Math.random()<score; }
+  async function resolveLanding(c,wasDouble){ var i=pos[c], s=BOARD[i];
+    if(s.t==="go"||s.t==="fp"||s.t==="jail"){ }
+    else if(s.t==="gotojail"){ toast(nm(c)+" goes to Jail"); goJail(c); }
+    else if(s.t==="tax"){ var amt = s.tax==="income"?200:100; toast(nm(c)+" pays "+(s.tax==="income"?"Income":"Luxury")+" Tax "+money(amt)); await payBank(c,amt); }
+    else if(s.t==="chance"){ await drawCard(c,"chance"); }
+    else if(s.t==="cc"){ await drawCard(c,"chest"); }
+    else if(s.t==="prop"||s.t==="rr"||s.t==="util"){
+      var o=owner[i];
+      if(o==null){ await offerBuy(c,i); }
+      else if(o===c){ }
+      else if(mort[i]){ toast(s.n+" is mortgaged — no rent"); }
+      else { var rent=computeRent(i,o,1,dice[0]+dice[1]); toast(nm(c)+" pays "+nm(o)+" "+money(rent)+" rent"); await payTo(c,o,rent); }
+    }
+  }
+
+  // ---------- turn loop ----------
+  function aiPreRoll(c){ aiBuild(c); }
+  async function run(){
+    monoFrame(); boardEl=$("mboard"); renderBoard();
+    while(alive().length>1){
+      var c=active[turn]; if(bankrupt[c]){ turn=(turn+1)%active.length; continue; }
+      doublesCount=0;
+      // play this player's turn (may repeat on doubles)
+      var endTurn=false;
+      while(!endTurn && !over){
+        renderBoard(); turnBanner(c, injail[c]?"in Jail":"");
+        active.forEach(function(x){ if(x!==c && seat[x]) waitPhone(x, nm(c)+" is playing…", c); });
+        // jail handling
+        if(injail[c]){
+          var jopts=[{id:"roll",label:"🎲 Roll for doubles",color:"blue"}];
+          if(cash[c]>=50) jopts.push({id:"pay",label:"Pay $50 to get out",color:"green"});
+          if(jokers[c]>0) jopts.push({id:"card",label:"Use Get Out of Jail Free"});
+          var jp = human(c)? await ask(c,"You’re in Jail","Turn "+(jailT[c]+1)+" of 3",jopts) : {id: (jokers[c]>0?"card": (cash[c]>300&&jailT[c]>=1?"pay":"roll"))};
+          if(jp.id==="card"){ jokers[c]--; injail[c]=false; jailT[c]=0; toast(nm(c)+" uses Jail card"); }
+          else if(jp.id==="pay"){ await payBank(c,50); injail[c]=false; jailT[c]=0; }
+          else { // roll for doubles
+            await rollDice(c); if(dice[0]===dice[1]){ injail[c]=false; jailT[c]=0; toast(nm(c)+" rolled doubles — out!"); await stepTo(c,dice[0]+dice[1]); await resolveLanding(c,false); endTurn=true; break; }
+            else { jailT[c]++; if(jailT[c]>=3){ await payBank(c,50); injail[c]=false; toast(nm(c)+" pays $50, leaves Jail"); await stepTo(c,dice[0]+dice[1]); await resolveLanding(c,false); } else { toast(nm(c)+" stays in Jail"); } endTurn=true; break; }
+          }
+        }
+        // pre-roll menu
+        if(human(c)){
+          var pre=[{id:"roll",label:"🎲 Roll Dice",color:"blue"},{id:"manage",label:"🏠 Manage properties"}];
+          var pk=await ask(c,"Your turn — "+money(cash[c]),"Roll, or build / mortgage",pre);
+          if(pk.id==="manage"){ await manage(c); continue; }
+        } else { aiPreRoll(c); }
+        // roll + move
+        await rollDice(c);
+        if(dice[0]===dice[1]){ doublesCount++; if(doublesCount===3){ toast(nm(c)+" rolled 3 doubles — Jail!"); goJail(c); endTurn=true; break; } }
+        await stepTo(c, dice[0]+dice[1]);
+        await resolveLanding(c,false);
+        if(over) return;
+        if(bankrupt[c]){ endTurn=true; break; }
+        if(dice[0]===dice[1]){ toast(nm(c)+" rolled doubles — go again"); continue; }
+        // end-of-turn menu
+        if(human(c)){
+          var post=[{id:"end",label:"✔ End Turn",color:"green"},{id:"manage",label:"🏠 Manage properties"}];
+          var pe=await ask(c,"Turn done — "+money(cash[c]),"Build / mortgage, or End Turn",post);
+          if(pe.id==="manage"){ await manage(c); }
+        }
+        endTurn=true;
+      }
+      if(alive().length<=1){ break; }
+      turn=(turn+1)%active.length;
+      await sleep(250);
+    }
+    var w=alive()[0]; over=true; tv('<span class="dot" style="background:'+(w?PC(w):"#fff")+'"></span> 🏆 '+(w?nm(w):"?")+" wins!"); announceOver(w?nm(w):"?"); showPlayAgain();
+  }
+  async function rollDice(c){ for(var k=0;k<6;k++){ dice=[1+Math.floor(Math.random()*6),1+Math.floor(Math.random()*6)]; turnBanner(c,"🎲 "+dice[0]+" + "+dice[1]); await sleep(80); } dice=[1+Math.floor(Math.random()*6),1+Math.floor(Math.random()*6)]; turnBanner(c,"🎲 "+dice[0]+" + "+dice[1]+" = "+(dice[0]+dice[1])); await sleep(600); }
+  run();
+}
+function monoFrame(){ screenState="game"; setBack("‹ Quit", true); wrap.innerHTML='<div class="status" id="status"></div><div id="mboard" class="mboard"></div><div class="hintbar" id="hint">Players: use your phones</div>'; }
 
 function showPlayAgain(){
   var b=document.createElement("button"); b.className="big"; b.textContent="New Game"; b.style.marginTop="2vh";
