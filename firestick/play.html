@@ -48,6 +48,7 @@ _st.textContent=window.MONO_DEED_CSS+
  '.big.scroll{justify-content:flex-start;padding-top:10px;overflow-y:auto;}'+
  '.prow2{display:flex;align-items:center;gap:10px;width:100%;max-width:420px;padding:14px 14px;border-radius:14px;background:#16203f;border:1px solid #2e3b66;color:#eef2ff;font-size:16px;font-weight:700;text-align:left;cursor:pointer;margin:0}'+
  '.prow2 .chip{width:16px;height:16px;border-radius:4px;flex:0 0 auto;border:1px solid #fff5}.prow2 small{color:#9fb0d8;font-weight:600;margin-left:auto;font-size:12px}'+
+ '.scard{width:210px;height:290px;background:#fff;border:12px solid #c62222;border-radius:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:10px;color:#222;text-align:center}.scard.sback{border-color:#fff;color:#fff}.sbigb{font-size:38px;font-weight:900;text-shadow:0 2px 6px #0006}.swho,.swho2{font-size:15px;font-weight:800;opacity:.85}.sbig{font-weight:900;line-height:1}.stxt{font-size:15px;font-weight:700;line-height:1.25}'+
  'button.opt.sm{padding:15px;font-size:17px}button.opt.ghost{background:#2a3663;box-shadow:0 6px 0 #1a2347}'+
  '.sec{width:100%;max-width:420px;text-align:left;margin-top:8px}.sec h3{margin:6px 0 4px;font-size:13px;color:#9fb0d8;text-transform:uppercase;letter-spacing:.5px}'+
  '.trow{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;background:#101938;margin:4px 0;font-size:15px}.trow input[type=checkbox]{width:20px;height:20px}'+
@@ -99,7 +100,7 @@ function onMsg(o){
   else if(o.t==="lobby"){ if(!started && !isAsking()) showLobby(o); }   // never fall back to lobby once the game is on
   else if(o.t==="ask" && o.pid===myPid){ started=true; showAsk(o); }
   else if(o.t==="snap"){ lastSnap=o; $("plbtn").style.display="inline-block"; if($("ov").classList.contains("on") && ovMode==="players") showPlayers(); }
-  else if(o.t==="wait" && (o.pid===myPid || o.pid==="*")){ curReq=null; started=(o.pid!=="*"); if(o.pid==="*"){ lastSnap=null; $("plbtn").style.display="none"; closeOv(); } showWaiting(o.msg||"Waiting…", false, o.turn); }
+  else if(o.t==="wait" && (o.pid===myPid || o.pid==="*")){ curReq=null; started=(o.pid!=="*"); if(o.pid==="*"){ lastSnap=null; $("plbtn").style.display="none"; closeOv(); } showWaiting(o.msg||"Waiting…", false, o.turn, o.card); }
   else if(o.t==="started"){ started=true; if(!isAsking()) showWaiting("Game starting…", false); }
   else if(o.t==="over"){ started=false; curReq=null; showOver(o); }
   else if(o.t==="info" && (o.pid===myPid||!o.pid)){ toast(o.msg); }
@@ -114,16 +115,23 @@ function showLobby(o){
     '<div style="display:flex;flex-wrap:wrap;justify-content:center;max-width:440px">'+list+'</div>'+
     '<div class="sub" style="margin-top:10px">Waiting for the host to start on the TV…</div>';
 }
-function showWaiting(msg, spin, turn){
+function cardHTML(cd){
+  var col=COL[cd.color]||"#c62222";
+  if(cd.back) return '<div class="scard sback" style="background:'+col+';box-shadow:0 0 34px '+col+'99"><div class="sbigb">SORRY!</div><div class="swho2">'+esc(cd.who||"")+' draws…</div></div>';
+  var big=(cd.v==="sorry")?"SORRY!":String(cd.v);
+  return '<div class="scard" style="border-color:'+col+';box-shadow:0 0 34px '+col+'99"><div class="swho">'+esc(cd.who||"")+' drew</div><div class="sbig" style="color:'+col+';font-size:'+(cd.v==="sorry"?"46px":"96px")+'">'+big+'</div><div class="stxt">'+esc(cd.text||"")+'</div></div>';
+}
+function showWaiting(msg, spin, turn, card){
   main.className="big";
   var tcol = turn&&COL[turn] ? COL[turn] : null;
-  main.innerHTML=(spin?'<div class="spin"></div>':'<div class="waitdot">⏳</div>')+
+  main.innerHTML=(card?cardHTML(card):(spin?'<div class="spin"></div>':'<div class="waitdot">⏳</div>'))+
     '<div class="sub" style="max-width:440px'+(tcol?';color:'+tcol:'')+'">'+esc(msg)+'</div>';
 }
 /* ---------- Monopoly extras: deed cards, manage list, trade builder, players ---------- */
 var lastSnap=null, ovMode=null, reopenIdx=null, tradeSel=null;
 var MC=window.MONO_COLORS, MD=window.MONO_DEEDS;
-function sendPick(o,id,data){ curReq=null; net.send({t:"pick", pid:myPid, reqId:o.reqId, id:id, i:0, data:data}); showWaiting("Sent ✔  waiting…", true); }
+function mirror(i){ try{ net&&net.send({t:"view",pid:myPid,i:i}); }catch(e){} }
+function sendPick(o,id,data){ curReq=null; mirror(null); net.send({t:"pick", pid:myPid, reqId:o.reqId, id:id, i:0, data:data}); showWaiting("Sent ✔  waiting…", true); }
 function chipColor(i){ var d=MD[i]; if(!d) return "#777"; return d.t==="prop"?MC[d.g]:"#333"; }
 function propTag(p){ var t=""; if(p.m) t+=" (mortgaged)"; else if(p.h===5) t+=" 🏨"; else if(p.h>0) t+=" "+Array(p.h+1).join("🏠"); return t; }
 
@@ -131,6 +139,7 @@ function showManage(o){
   if(reopenIdx!=null){ var r=reopenIdx; reopenIdx=null; if((o.props||[]).some(function(p){return p.i===r;})){ showDeed(o,r); return; } }
   main.className="big scroll";
   var c = myColor?COL[myColor]:"#2b7be0";
+  mirror(null);
   var rows=(o.props||[]).map(function(p){ var d=MD[p.i];
     return '<button class="prow2" data-i="'+p.i+'"><span class="chip" style="background:'+chipColor(p.i)+'"></span>'+esc(d.n)+'<small>'+esc(propTag(p).trim())+' ›</small></button>'; }).join("");
   var extra=(o.extra||[]).map(function(op,k){ return '<button class="opt sm" data-x="'+k+'" style="background:'+(op.color?(COL[op.color]||op.color):c)+'">'+esc(op.label)+'</button>'; }).join("");
@@ -141,6 +150,7 @@ function showManage(o){
   Array.prototype.forEach.call(main.querySelectorAll("button[data-x]"), function(b){ b.onclick=function(){ reopenIdx=null; sendPick(o,o.extra[+b.dataset.x].id); }; });
 }
 function showDeed(o,i){
+  mirror(i);
   main.className="big scroll";
   var p=(o.props||[]).filter(function(x){return x.i===i;})[0]||{i:i,h:0,m:false,actions:[]};
   var c = myColor?COL[myColor]:"#2b7be0";
@@ -165,7 +175,7 @@ function showTrade(o){
       (o.theirJokers>0?'<label class="trow"><input type="checkbox" id="jr" '+(T.jr?"checked":"")+'> Receive a Get Out of Jail Free card</label>':'')+'</div>'+
     '<div class="opts"><button class="opt sm" id="tgo" style="background:#27a758">Propose Trade</button><button class="opt sm ghost" id="tno">Cancel</button></div>';
   Array.prototype.forEach.call(main.querySelectorAll('input[type=checkbox][data-s]'), function(cb){ cb.onchange=function(){ var m=cb.dataset.s==="give"?T.give:T.get; if(cb.checked) m[cb.dataset.i]=1; else delete m[cb.dataset.i]; }; });
-  Array.prototype.forEach.call(main.querySelectorAll("button[data-v]"), function(b){ b.onclick=function(e){ e.preventDefault(); e.stopPropagation(); ovShow('<div id="deedv"></div>'); $("deedv").innerHTML=window.monoDeedHTML(+b.dataset.v)+'<button class="opt sm ghost" id="ovx" style="margin-top:6px">Close</button>'; $("ovx").onclick=closeOv; }; });
+  Array.prototype.forEach.call(main.querySelectorAll("button[data-v]"), function(b){ b.onclick=function(e){ e.preventDefault(); e.stopPropagation(); mirror(+b.dataset.v); ovShow('<div id="deedv"></div>'); $("deedv").innerHTML=window.monoDeedHTML(+b.dataset.v)+'<button class="opt sm ghost" id="ovx" style="margin-top:6px">Close</button>'; $("ovx").onclick=closeOv; }; });
   var cgI=$("cg"), crI=$("cr"); cgI.oninput=function(){ T.cg=Math.max(0,parseInt(cgI.value||"0",10)||0); }; crI.oninput=function(){ T.cr=Math.max(0,parseInt(crI.value||"0",10)||0); };
   if($("jg")) $("jg").onchange=function(){ T.jg=$("jg").checked?1:0; }; if($("jr")) $("jr").onchange=function(){ T.jr=$("jr").checked?1:0; };
   $("tno").onclick=function(){ tradeSel=null; sendPick(o,"cancel"); };
@@ -178,9 +188,9 @@ function showTrade(o){
   };
 }
 function ovShow(html){ $("ovin").innerHTML=html; $("ov").classList.add("on"); }
-function closeOv(){ $("ov").classList.remove("on"); ovMode=null; }
+function closeOv(){ $("ov").classList.remove("on"); ovMode=null; mirror(null); }
 function showPlayers(){
-  if(!lastSnap) return; ovMode="players";
+  if(!lastSnap) return; ovMode="players"; mirror(null);
   var h='<div class="title" style="font-size:22px">Players &amp; holdings</div>'+(lastSnap.fp?'<div class="sub">🅿️ Free Parking pot: $'+lastSnap.fp+'</div>':'');
   (lastSnap.players||[]).forEach(function(p){
     h+='<div class="pcard" style="'+(p.bankrupt?"opacity:.45":"")+'"><div style="display:flex;justify-content:space-between;align-items:center"><b><span class="dotc" style="background:'+COL[p.color]+'"></span>'+esc(p.name)+(p.pid===myPid?" (you)":"")+(p.bankrupt?" — OUT":"")+'</b><span style="color:#7CFC9A;font-weight:800">$'+p.cash+'</span></div>'+
@@ -189,7 +199,7 @@ function showPlayers(){
   });
   h+='<button class="opt sm ghost" id="ovc" style="margin-top:6px">Close</button>';
   ovShow(h);
-  Array.prototype.forEach.call($("ovin").querySelectorAll(".pchip"), function(ch){ ch.onclick=function(){ var i=+ch.dataset.i; ovMode="deed"; ovShow(window.monoDeedHTML(i)+'<button class="opt sm ghost" id="ovb" style="margin-top:6px">‹ Back</button>'); $("ovb").onclick=showPlayers; }; });
+  Array.prototype.forEach.call($("ovin").querySelectorAll(".pchip"), function(ch){ ch.onclick=function(){ var i=+ch.dataset.i; ovMode="deed"; mirror(i); ovShow(window.monoDeedHTML(i)+'<button class="opt sm ghost" id="ovb" style="margin-top:6px">‹ Back</button>'); $("ovb").onclick=showPlayers; }; });
   $("ovc").onclick=closeOv;
 }
 $("plbtn").onclick=showPlayers;
@@ -203,7 +213,7 @@ function showAsk(o){
     var bg=op.color?COL[op.color]||op.color:c;
     return '<button class="opt" data-i="'+i+'" style="background:'+bg+';box-shadow:0 8px 0 #0007,0 12px 20px #0007">'+esc(op.label)+'</button>';
   }).join("");
-  main.innerHTML='<div class="title" style="color:'+c+'">'+esc(o.title||"Your turn")+'</div>'+
+  main.innerHTML=(o.card?cardHTML(o.card):"")+'<div class="title" style="color:'+c+'">'+esc(o.title||"Your turn")+'</div>'+
     (o.sub?'<div class="sub">'+esc(o.sub)+'</div>':'')+
     '<div class="opts">'+opts+'</div>';
   Array.prototype.forEach.call(main.querySelectorAll("button.opt"), function(b){

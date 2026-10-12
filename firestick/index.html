@@ -60,6 +60,14 @@
   .mschips i{min-width:2.2vh;height:2.2vh;border-radius:.5vh;border:1px solid #fff5;font-style:normal;font-size:1.4vh;font-weight:900;color:#fff;display:inline-flex;align-items:center;justify-content:center;text-shadow:0 0 2px #000;}
   .msfp{font-size:2.4vh;font-weight:800;color:#ffd86b;}
   .rulebox{text-align:center;max-width:92vw;margin:1vh 0;}
+  .mcw{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.2vh;width:100%;height:100%;padding:1vh;}
+  .mwho{font-size:2.6vh;font-weight:800;color:#09250f;text-align:center;background:#ffffffd9;border-radius:1.4vh;padding:.6vh 1.6vh;max-width:100%;}
+  .mdeed .deed{width:34vh;max-width:none;margin:0;box-shadow:0 .6vh 2vh #0007;}
+  .mdeed .deed-title{font-size:1.2vh;}.mdeed .deed-name{font-size:2.5vh;}.mdeed .dl{font-size:1.9vh;}.mdeed .dl.sub{font-size:1.65vh;}.mdeed .deed-note{font-size:1.35vh;}.mdeed .icon-band{font-size:5vh;}.mdeed .deed-body{padding:1vh 1.6vh;}.mdeed .deed-band{padding:1.1vh 1vh;}
+  .mcard{width:38vh;background:#fff;border:.8vh solid #f08d1c;border-radius:2vh;padding:3vh 2.6vh;text-align:center;box-shadow:0 .8vh 2.4vh #0007;color:#111;}
+  .mcard h2{margin:0 0 1.4vh;font-size:3vh;letter-spacing:.2vh;}.mcard p{margin:0;font-size:2.7vh;font-weight:700;line-height:1.25;}
+  .mdice{display:flex;gap:2vh;align-items:center;}.mdie{width:11vh;height:11vh;border-radius:2vh;background:#fff;color:#111;font-size:8vh;font-weight:900;display:flex;align-items:center;justify-content:center;box-shadow:0 .6vh 1.6vh #0007;}
+  .mtradebox{background:#fff;border-radius:2vh;padding:2vh 2.4vh;width:46vh;max-width:90%;color:#111;box-shadow:0 .8vh 2.4vh #0007;text-align:left;font-size:2.3vh;line-height:1.3;}
   /* monopoly board */
   .mboard{width:min(90vh,96vw);aspect-ratio:1/1;display:grid;grid-template-columns:repeat(11,1fr);grid-template-rows:repeat(11,1fr);background:#cfe8d4;border:3px solid #0a0f22;border-radius:6px;overflow:hidden;}
   .msp{position:relative;border:1px solid #2b6b42;background:#eef9f0;overflow:hidden;color:#09250f;}
@@ -97,7 +105,10 @@ var $=function(id){return document.getElementById(id);};
 var wrap=$("wrap"), connEl=$("conn"), toastEl=$("toast");
 var COL={red:"#e23b3b",blue:"#2b7be0",green:"#27a758",yellow:"#eec21b"};
 var CNAME={red:"Red",blue:"Blue",green:"Green",yellow:"Yellow"};
-var sleep=function(ms){return new Promise(function(r){setTimeout(r,ms);});};
+var PACE=1.8;   // game-speed multiplier (every pause in every game is scaled by this)
+try{ var _pp=parseFloat(localStorage.getItem("bgfs_pace")); if(_pp>0) PACE=_pp; }catch(e){}
+var sleep=function(ms){return new Promise(function(r){setTimeout(r,Math.round(ms*PACE));});};
+(function(){ var st=document.createElement("style"); st.textContent=window.MONO_DEED_CSS||""; document.head.appendChild(st); })();
 
 /* Monopoly board data (factual game data) */
 var MONO_BOARD=[
@@ -170,6 +181,7 @@ var players={};         // pid -> {pid,name,color}
 var seat={};            // color -> pid
 var pending={};         // reqId -> {pid, resolve}
 var gameSnap=null;      // set by Monopoly: re-sends the holdings snapshot to phones
+var viewHandler=null;   // set by Monopoly: shows the deed a phone is looking at
 var lastAsk={};         // pid -> last ask message (for reconnect re-send)
 var reqSeq=1;
 var inLobby=true;
@@ -201,6 +213,7 @@ function onMsg(o){
       send(la ? la : {t:"wait", pid:o.pid, msg:"Waiting for your turn…"});
       if(gameSnap) gameSnap();
     }
+  } else if(o.t==="view"){ if(viewHandler) viewHandler(o);
   } else if(o.t==="pick"){
     var pr=pending[o.reqId];
     if(pr && pr.pid===o.pid){ delete pending[o.reqId]; pr.resolve({id:o.id, i:o.i, data:o.data}); }
@@ -242,7 +255,7 @@ var BASE=location.href.replace(/[?#].*$/,"").replace(/[^\/]*$/,"");   // directo
 var JOIN_URL=BASE+"play.html?room="+room;
 var SHORT_URL=JOIN_URL.replace(/^https?:\/\//,"");
 function screenSelect(){
-  inLobby=true; screenState="select"; gameSnap=null; setBack((window.AndroidTV?"✕ Exit":"🏠 Hub"), true);
+  inLobby=true; screenState="select"; gameSnap=null; viewHandler=null; setBack((window.AndroidTV?"✕ Exit":"🏠 Hub"), true);
   send({t:"wait", pid:"*", msg:"Host is choosing a game…"}, true);   // clear any retained game state for late joiners
   wrap.innerHTML='<h1>🎲 Board Games — Party Mode</h1><p class="muted" style="font-size:2.6vh">Pick a game, then players scan to join from their phones</p>'+
     '<div class="cards" id="cards"></div>';
@@ -319,6 +332,7 @@ function screenLobby(){
     '<div class="codewrap"><div class="muted" style="font-size:2.4vh">Room code</div><div class="code">'+room+'</div></div>'+
     '<div class="players" id="players"></div>'+
     '<div class="aitoggle">🤖 Computer players: <span id="cpuBtns"></span></div>'+
+    '<div class="aitoggle">🐢 Game speed: <span id="paceBtns"></span></div>'+
     (chosenGame==="monopoly"?'<div class="rulebox"><div class="muted" style="font-size:2.2vh">⚙️ House rules (tap to toggle)</div><div id="ruleBtns"></div></div>':'')+
     '<button class="big" id="startBtn">▶ Start Game</button>'+
     '<div class="hintbar" id="lobhint"></div>';
@@ -349,6 +363,10 @@ function renderLobby(){
     cb.querySelectorAll("button:not([disabled])").forEach(function(b){ b.onclick=function(){ cpuCount=+b.dataset.n; renderLobby(); }; });
   }
   var total=Math.min(4, seated+cpuCount);
+  var pbx=$("paceBtns");
+  if(pbx){ var PO=[["Normal",1],["Slow",1.8],["Very slow",2.6]];
+    pbx.innerHTML=PO.map(function(p){ return '<button class="aibtn'+(Math.abs(PACE-p[1])<0.05?" on":"")+'" data-p="'+p[1]+'" style="padding:.7vh 1.9vh">'+p[0]+'</button>'; }).join("");
+    Array.prototype.forEach.call(pbx.querySelectorAll("button"),function(b){ b.onclick=function(){ PACE=parseFloat(b.dataset.p); try{localStorage.setItem("bgfs_pace",String(PACE));}catch(e){} renderLobby(); }; }); }
   var h=$("lobhint"); if(h) h.textContent = (total<2? "Add a computer player or another human (need 2+)." : total+" players: "+seated+" human + "+Math.min(cpuCount,maxC)+" computer.");
 }
 function gameTitle(id){ return id==="trouble"?"Trouble":id==="sorry"?"Sorry!":"Monopoly"; }
@@ -426,7 +444,7 @@ function playTrouble(){
   }
   function renderPegs(){
     Array.prototype.slice.call(svg.querySelectorAll(".peg")).forEach(function(e){e.remove();});
-    active.forEach(function(c){ for(var k=0;k<4;k++){ var d=pegs[c][k]; var xy=d===null?homeSlotXY(c,k):pegXY(c,d); var g=document.createElementNS("http://www.w3.org/2000/svg","g"); g.setAttribute("class","peg"); g.setAttribute("transform","translate("+xy[0].toFixed(1)+","+xy[1].toFixed(1)+")"); g.innerHTML='<circle r="12" fill="'+COL[c]+'" stroke="#00000055" stroke-width="2"/><circle r="4" cx="-3" cy="-3" fill="#ffffff88"/>'; svg.appendChild(g); } });
+    active.forEach(function(c){ for(var k=0;k<4;k++){ var d=pegs[c][k]; var xy=d===null?homeSlotXY(c,k):pegXY(c,d); var g=document.createElementNS("http://www.w3.org/2000/svg","g"); g.setAttribute("class","peg"); g.setAttribute("transform","translate("+xy[0].toFixed(1)+","+xy[1].toFixed(1)+")"); g.innerHTML='<circle r="12" fill="'+COL[c]+'" stroke="#00000055" stroke-width="2"/><circle r="4" cx="-4" cy="-5" fill="#ffffff55"/><text y="4.5" text-anchor="middle" font-size="13" font-weight="900" fill="#fff" stroke="#000b" stroke-width="2.6" paint-order="stroke" stroke-linejoin="round">'+(k+1)+'</text>'; svg.appendChild(g); } });
     // name labels on nests
     active.forEach(function(c){ var a=ang(START[c]); var hx=cx+homeR*Math.cos(a),hy=cy+homeR*Math.sin(a); var t=document.createElementNS("http://www.w3.org/2000/svg","text"); t.setAttribute("x",hx.toFixed(1)); t.setAttribute("y",(hy+4).toFixed(1)); t.setAttribute("text-anchor","middle"); t.setAttribute("font-size","12"); t.setAttribute("font-weight","800"); t.setAttribute("fill","#fff"); t.setAttribute("stroke","#000a"); t.setAttribute("stroke-width","2.8"); t.setAttribute("paint-order","stroke"); t.setAttribute("class","peg"); t.textContent=(seat[c]?players[seat[c]].name:CNAME[c]).toUpperCase().slice(0,8); svg.appendChild(t); });
     renderDome();
@@ -445,6 +463,10 @@ function playTrouble(){
   async function rollAnim(){ for(var i=0;i<8;i++){ die=1+Math.floor(Math.random()*6); renderDome(); await sleep(70); } }
   function aiPick(moves){ var best=moves[0],bs=-1e9; moves.forEach(function(m){ var sc=0; if(m.to<=27){ var occ=occupantAt(active[turn],m.to); if(occ&&occ.color!==active[turn]) sc+=100+(pegs[occ.color][occ.peg]||0);} if(m.to>=28) sc+=40+m.to; if(m.from===null) sc+=30; sc+=m.to*0.5; if(sc>bs){bs=sc;best=m;} }); return best; }
 
+  async function animateMove(c,mv){
+    if(mv.from!==null && mv.to-mv.from>1){ for(var d=mv.from+1; d<mv.to; d++){ pegs[c][mv.peg]=d; renderPegs(); await sleep(170); } }
+    applyMove(c,mv); renderPegs(); await sleep(250);
+  }
   async function run(){
     gameFrame("tboard"); svg=$("tboard"); build();
     while(!over){
@@ -464,7 +486,7 @@ function playTrouble(){
           var pick=await ask(c, "Rolled a "+die, "Choose your move", opts);
           mv=moves[parseInt(pick.id,10)]||moves[0];
         } else { setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+CNAME[c]+" rolled "+die+"…"); await sleep(1100); mv=aiPick(moves); }
-        applyMove(c,mv); renderPegs();
+        await animateMove(c,mv);
         if(hasWon(c)){ over=true; var wn=seat[c]?players[seat[c]].name:CNAME[c]; setStatus('<span class="dot" style="background:'+COL[c]+'"></span> 🏆 '+wn+" wins!"); announceOver(wn); showPlayAgain(); return; }
       } else {
         setStatus('<span class="dot" style="background:'+COL[c]+'"></span> Rolled '+die+" — no moves"); await sleep(1100);
@@ -576,22 +598,44 @@ function playSorry(){
     if(a.k==="split")return ev(a.A,travel(color,a.A.loc,a.a,1))+ev(a.B,travel(color,a.B.loc,a.b,1));
     return 0; }
 
+  function wrapTxt(t,n){ var w=String(t).split(" "),lines=[],cur=""; w.forEach(function(x){ if((cur+" "+x).trim().length>n){ lines.push(cur.trim()); cur=x; } else cur=cur+" "+x; }); if(cur.trim()) lines.push(cur.trim()); return lines; }
+  function centerCard(v,c,who,back){
+    var old=svg.querySelector("#cardc"); if(old) old.remove();
+    var g=document.createElementNS("http://www.w3.org/2000/svg","g"); g.setAttribute("id","cardc");
+    var col=COL[c], cx0=300, cy0=300, w=160, h=222, x0=cx0-w/2, y0=cy0-h/2;
+    var t='<rect x="'+(x0+6)+'" y="'+(y0+8)+'" width="'+w+'" height="'+h+'" rx="14" fill="#0005"/>';
+    if(back){
+      t+='<rect x="'+x0+'" y="'+y0+'" width="'+w+'" height="'+h+'" rx="14" fill="'+col+'" stroke="#fff" stroke-width="5"/>';
+      t+='<text x="300" y="'+(cy0-4)+'" text-anchor="middle" font-size="26" font-weight="900" fill="#fff" stroke="#0006" stroke-width="2" paint-order="stroke">SORRY!</text>';
+      t+='<text x="300" y="'+(cy0+26)+'" text-anchor="middle" font-size="14" font-weight="800" fill="#fff">'+esc(who)+' draws…</text>';
+    } else {
+      t+='<rect x="'+x0+'" y="'+y0+'" width="'+w+'" height="'+h+'" rx="14" fill="#fff" stroke="'+col+'" stroke-width="8"/>';
+      t+='<text x="300" y="'+(y0+26)+'" text-anchor="middle" font-size="14" font-weight="800" fill="#555">'+esc(who)+' drew</text>';
+      var big=(v==="sorry")?"SORRY!":String(v);
+      t+='<text x="300" y="'+(v==="sorry"?cy0+6:cy0+20)+'" text-anchor="middle" font-size="'+(v==="sorry"?36:84)+'" font-weight="900" fill="'+col+'">'+big+'</text>';
+      wrapTxt(CARD_TEXT[v],21).forEach(function(L,i){ t+='<text x="300" y="'+(cy0+52+i*16)+'" text-anchor="middle" font-size="13" font-weight="700" fill="#222">'+esc(L)+'</text>'; });
+    }
+    g.innerHTML=t; svg.appendChild(g);
+  }
   async function run(){
     gameFrame("sboard"); svg=$("sboard"); build();
     var turn=0;
     while(!over){
       var c=active[turn]; waitAllExcept(c,c);
       setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+(seat[c]?players[seat[c]].name:CNAME[c]+" (CPU)")+" — "+(human[c]?"draw on your phone":"drawing…"));
-      if(human[c]){ await ask(c,"Your turn","Draw a card",[{id:"draw",label:"🂠 DRAW A CARD"}]); }
+      centerCard(null,c,(seat[c]?players[seat[c]].name:CNAME[c]),true);
+      if(human[c]){ await ask(c,"Your turn","Draw a card",[{id:"draw",label:"🂠 DRAW A CARD"}],{card:{back:true,color:c,who:(seat[c]?players[seat[c]].name:CNAME[c])}}); }
       else { await sleep(1000); }
       if(deck.length===0) deck=shuffle(buildDeck());
       var v=deck.pop();
+      centerCard(v,c,(seat[c]?players[seat[c]].name:CNAME[c]),false);
+      active.forEach(function(x){ if(seat[x]) send({t:"wait",pid:seat[x],msg:(seat[c]?players[seat[c]].name:CNAME[c])+" drew a card",turn:c,card:{v:v,text:CARD_TEXT[v],color:c,who:(seat[c]?players[seat[c]].name:CNAME[c])}}); });
       setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+(seat[c]?players[seat[c]].name:CNAME[c])+' drew <b style="font-size:4vh;color:#ffd86b">'+(v==="sorry"?"SORRY!":v)+'</b> — '+CARD_TEXT[v]);
       await sleep(1200);
       var acts=legal(c,v), moved=false;
       if(acts.length){
         var act;
-        if(human[c]){ var opts=acts.map(function(a,i){ return {id:String(i),label:actLabel(a),color:c}; }); var pick=await ask(c,"You drew "+(v==="sorry"?"SORRY!":v),CARD_TEXT[v],opts); act=acts[parseInt(pick.id,10)]||acts[0]; }
+        if(human[c]){ var opts=acts.map(function(a,i){ return {id:String(i),label:actLabel(a),color:c}; }); var pick=await ask(c,"You drew "+(v==="sorry"?"SORRY!":v),CARD_TEXT[v],opts,{card:{v:v,text:CARD_TEXT[v],color:c,who:(seat[c]?players[seat[c]].name:CNAME[c])}}); act=acts[parseInt(pick.id,10)]||acts[0]; }
         else { var best=acts[0],bs=-1e9; acts.forEach(function(a){ var s=scoreA(a); if(s>bs){bs=s;best=a;} }); act=best; }
         await applyAnim(act); moved=true;
         if(hasWon(c)){ over=true; var wn=seat[c]?players[seat[c]].name:CNAME[c]; setStatus('<span class="dot" style="background:'+COL[c]+'"></span> 🏆 '+wn+" wins!"); announceOver(wn); showPlayAgain(); return; }
@@ -625,6 +669,15 @@ function playMonopoly(){
   var dice=[0,0], doublesCount=0, turn=0, over=false;
   var R={}; for(var rk in monoRules) R[rk]=monoRules[rk];
   var fpPool=0, heldCh=0, heldCs=0, snapT=null;
+  var centerGame="", centerView="";
+  function centerRender(){ var el=boardEl&&boardEl.querySelector(".mcenter"); if(!el) return; var h=centerView||centerGame; el.innerHTML = h?('<div class="mcw">'+h+'</div>'):'<div class="mlogo">MONOPOLY</div>'; }
+  function setGameCenter(h){ centerGame=h||""; centerRender(); }
+  function deedBox(i,who){ return '<div class="mwho">'+who+'</div><div class="mdeed">'+window.monoDeedHTML(i)+'</div>'; }
+  function cardBox(deckName,c,text){ var isCh=deckName==="chance", col=isCh?"#f08d1c":"#2b7be0"; return '<div class="mwho">'+esc(nm(c))+' draws…</div><div class="mcard" style="border-color:'+col+'"><h2 style="color:'+col+'">'+(isCh?"CHANCE":"COMMUNITY CHEST")+'</h2><p>'+esc(text)+'</p></div>'; }
+  function colorOfPid(pid){ for(var k in seat) if(seat[k]===pid) return k; return null; }
+  viewHandler=function(o){ var c=colorOfPid(o.pid); var sp=(o.i!=null)?BOARD[o.i]:null;
+    if(!c||!sp||!sp.price){ centerView=""; } else { centerView=deedBox(o.i,"👀 "+esc(nm(c))+" is looking at "+esc(sp.n)); }
+    centerRender(); };
   function rangeArr(n){ var a=[]; for(var i=0;i<n;i++)a.push(i); return a; }
   function shuf(a){ for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i];a[i]=a[j];a[j]=t; } return a; }
   function nm(c){ return seat[c]?players[seat[c]].name:(CNAME[c]+" (CPU)"); }
@@ -664,7 +717,7 @@ function playMonopoly(){
     h+='</div>'+toksAt(i);
     return h;
   }
-  function renderBoard(){ var html=""; for(var i=0;i<40;i++){ var rc=spGrid(i); html+='<div class="msp" style="grid-row:'+(rc[0]+1)+';grid-column:'+(rc[1]+1)+'">'+spInner(i)+'</div>'; } html+='<div class="mcenter"><div class="mlogo">MONOPOLY</div></div>'; boardEl.innerHTML=html; renderScore(); snapSoon(); }
+  function renderBoard(){ var html=""; for(var i=0;i<40;i++){ var rc=spGrid(i); html+='<div class="msp" style="grid-row:'+(rc[0]+1)+';grid-column:'+(rc[1]+1)+'">'+spInner(i)+'</div>'; } html+='<div class="mcenter"><div class="mlogo">MONOPOLY</div></div>'; boardEl.innerHTML=html; centerRender(); renderScore(); snapSoon(); }
   function renderScore(){ var el=$("mscore"); if(!el) return; var h='<div class="mshead">Players</div>';
     active.forEach(function(c){ var props=[]; for(var i=0;i<40;i++) if(owner[i]===c) props.push(i);
       h+='<div class="msrow'+(bankrupt[c]?' out':'')+(active[turn]===c&&!bankrupt[c]?' cur':'')+'"><div class="msname"><span class="dot" style="background:'+PC(c)+'"></span>'+tokE[c]+' '+esc(nm(c))+'</div><div class="mscash">'+money(cash[c])+(injail[c]?' 🔒':'')+(jokers[c]?' 🎫'+jokers[c]:'')+(bankrupt[c]?' OUT':'')+'</div><div class="mschips">'+props.map(function(i){ var sp=BOARD[i]; var col=sp.t==="prop"?COLORVAR[sp.g]:"#555"; return '<i style="background:'+col+(mort[i]?';opacity:.35':'')+'" title="'+sp.n+'">'+(houses[i]>0?(houses[i]===5?'H':houses[i]):(sp.t==="rr"?'R':sp.t==="util"?'U':''))+'</i>'; }).join("")+'</div></div>'; });
@@ -742,6 +795,7 @@ function playMonopoly(){
     while(bidders.length>1){
       var c=bidders[idx%bidders.length];
       var need=price+(price<20?5:10);
+      setGameCenter(deedBox(i,"🔨 Auction — "+(price?"high bid "+money(price)+" by "+esc(nm(high)):"no bids yet")+" · "+esc(nm(c))+" to bid"));
       var bid;
       if(human(c)){
         var opts=[{id:"bid",label:"Bid "+money(need),color:"green"},{id:"pass",label:"Pass",color:"red"}];
@@ -764,7 +818,7 @@ function playMonopoly(){
     if(dk.length===0){ while(dc.length) dk.push(dc.pop()); shuf(dk); }
     var ci=dk.shift(); var card=src[ci];
     tv('<span class="dot" style="background:'+PC(c)+'"></span> '+(isCh?"Chance":"Community Chest")+': <b>'+card.text+'</b>');
-    await sleep(2200);
+    setGameCenter(cardBox(deckName,c,card.text)); await sleep(3200); setGameCenter("");
     if(card.fx==="joker"){ jokers[c]++; if(isCh)heldCh++; else heldCs++; } else { dc.push(ci); }
     await applyCard(c,card);
   }
@@ -791,6 +845,10 @@ function playMonopoly(){
   // ---------- landing ----------
   async function declineBuy(i){ if(R.noAuction) toast("Left unsold"); else await auction(i); }
   async function offerBuy(c,i){ var s=BOARD[i];
+    setGameCenter(deedBox(i,esc(nm(c))+" can buy this for "+money(s.price)));
+    try{ await offerBuyInner(c,i); } finally { setGameCenter(""); }
+  }
+  async function offerBuyInner(c,i){ var s=BOARD[i];
     if(human(c)){
       var opts=[{id:"buy",label:"✅ Buy "+s.n+" for "+money(s.price),color:"green"},{id:"no",label:R.noAuction?"❌ Don’t buy":"❌ Decline → Auction",color:"red"}];
       if(cash[c]<s.price) opts=[{id:"no",label:R.noAuction?"Can’t afford":"Can’t afford — to Auction",color:"red"}];
@@ -815,7 +873,7 @@ function playMonopoly(){
       else if(o===c){ }
       else if(mort[i]){ toast(s.n+" is mortgaged — no rent"); }
       else if(R.noRentJail&&injail[o]){ toast(nm(o)+" is in Jail — no rent"); }
-      else { var rent=computeRent(i,o,1,dice[0]+dice[1]); toast(nm(c)+" pays "+nm(o)+" "+money(rent)+" rent"); await payTo(c,o,rent); }
+      else { var rent=computeRent(i,o,1,dice[0]+dice[1]); toast(nm(c)+" pays "+nm(o)+" "+money(rent)+" rent"); setGameCenter(deedBox(i,esc(nm(c))+" pays "+esc(nm(o))+" "+money(rent)+" rent")); await sleep(2200); setGameCenter(""); await payTo(c,o,rent); }
     }
   }
   function returnJoker(){ if(heldCh>0){ heldCh--; chanceDisc.push(8); } else if(heldCs>0){ heldCs--; chestDisc.push(4); } }
@@ -844,10 +902,11 @@ function playMonopoly(){
     var jg=(d.jg&&jokers[c]>0)?1:0, jr=(d.jr&&jokers[p]>0)?1:0;
     if(!give.length&&!get.length&&!cg&&!cr&&!jg&&!jr) return;
     toast(nm(c)+" offers a trade to "+nm(p));
+    setGameCenter('<div class="mtradebox"><b>🤝 Trade offer</b><div style="margin-top:1vh"><b>'+esc(nm(c))+' gives:</b> '+esc(sumTxt(give,cg,jg))+'</div><div style="margin-top:.8vh"><b>'+esc(nm(p))+' gives:</b> '+esc(sumTxt(get,cr,jr))+'</div><div style="margin-top:1vh;color:#555">'+esc(nm(p))+' is deciding…</div></div>');
     var accept;
     if(human(p)){ var ans=await ask(p,"Trade offer from "+nm(c),"You GET: "+sumTxt(give,cg,jg)+"   ·   You GIVE: "+sumTxt(get,cr,jr),[{id:"yes",label:"✅ Accept",color:"green"},{id:"no",label:"❌ Decline",color:"red"}]); accept=(ans.id==="yes"); }
     else { await sleep(1200); accept=aiTradeOK(p,give,cg,jg,get,cr,jr); }
-    if(!accept){ toast(nm(p)+" declined the trade"); return; }
+    setGameCenter(""); if(!accept){ toast(nm(p)+" declined the trade"); return; }
     give.forEach(function(i){ owner[i]=p; if(mort[i]) cash[p]-=Math.ceil(BOARD[i].mort*0.1); });
     get.forEach(function(i){ owner[i]=c; if(mort[i]) cash[c]-=Math.ceil(BOARD[i].mort*0.1); });
     cash[c]-=cg; cash[p]+=cg; cash[p]-=cr; cash[c]+=cr;
@@ -867,7 +926,7 @@ function playMonopoly(){
       // play this player's turn (may repeat on doubles)
       var endTurn=false;
       while(!endTurn && !over){
-        renderBoard(); turnBanner(c, injail[c]?"in Jail":"");
+        centerView=""; renderBoard(); turnBanner(c, injail[c]?"in Jail":"");
         active.forEach(function(x){ if(x!==c && seat[x]) waitPhone(x, nm(c)+" is playing…", c); });
         // jail handling
         if(injail[c]){
@@ -919,7 +978,14 @@ function playMonopoly(){
     }
     var w=alive()[0]; over=true; tv('<span class="dot" style="background:'+(w?PC(w):"#fff")+'"></span> 🏆 '+(w?nm(w):"?")+" wins!"); announceOver(w?nm(w):"?"); showPlayAgain();
   }
-  async function rollDice(c){ for(var k=0;k<6;k++){ dice=[1+Math.floor(Math.random()*6),1+Math.floor(Math.random()*6)]; turnBanner(c,"🎲 "+dice[0]+" + "+dice[1]); await sleep(80); } dice=[1+Math.floor(Math.random()*6),1+Math.floor(Math.random()*6)]; turnBanner(c,"🎲 "+dice[0]+" + "+dice[1]+" = "+(dice[0]+dice[1])); await sleep(600); }
+  async function rollDice(c){
+    var face=function(){ return '<div class="mwho">'+esc(nm(c))+' rolls…</div><div class="mdice"><div class="mdie">'+dice[0]+'</div><div class="mdie">'+dice[1]+'</div></div>'; };
+    for(var k=0;k<6;k++){ dice=[1+Math.floor(Math.random()*6),1+Math.floor(Math.random()*6)]; turnBanner(c,"🎲 "+dice[0]+" + "+dice[1]); setGameCenter(face()); await sleep(90); }
+    dice=[1+Math.floor(Math.random()*6),1+Math.floor(Math.random()*6)];
+    turnBanner(c,"🎲 "+dice[0]+" + "+dice[1]+" = "+(dice[0]+dice[1]));
+    setGameCenter(face()+'<div class="mwho" style="font-size:3.4vh">= '+(dice[0]+dice[1])+(dice[0]===dice[1]?" — doubles!":"")+'</div>');
+    await sleep(1000); setGameCenter("");
+  }
   run();
 }
 function monoFrame(){ screenState="game"; setBack("‹ Quit", true); wrap.innerHTML='<div class="status" id="status"></div><div class="mwrap"><div id="mboard" class="mboard"></div><div id="mscore" class="mscore"></div></div><div class="hintbar" id="hint">Players: use your phones</div>'; }
