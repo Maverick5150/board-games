@@ -1,0 +1,48 @@
+name: Build Fire TV APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "android-tv/**"
+      - ".github/workflows/build-tv-apk.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Build debug APK
+        working-directory: android-tv
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BoardGamesTV
+          path: android-tv/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Publish APK to the website (short Downloader link)
+        run: |
+          mkdir -p tv
+          cp android-tv/app/build/outputs/apk/debug/app-debug.apk tv/BoardGamesTV.apk
+          ls -l tv/BoardGamesTV.apk
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add tv/BoardGamesTV.apk
+          git commit -m "Build Fire TV APK" || echo "nothing to commit"
+          git pull --rebase origin main
+          git push origin HEAD:main

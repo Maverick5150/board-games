@@ -242,7 +242,7 @@ var BASE=location.href.replace(/[?#].*$/,"").replace(/[^\/]*$/,"");   // directo
 var JOIN_URL=BASE+"play.html?room="+room;
 var SHORT_URL=JOIN_URL.replace(/^https?:\/\//,"");
 function screenSelect(){
-  inLobby=true; screenState="select"; gameSnap=null; setBack("🏠 Hub", true);
+  inLobby=true; screenState="select"; gameSnap=null; setBack((window.AndroidTV?"✕ Exit":"🏠 Hub"), true);
   send({t:"wait", pid:"*", msg:"Host is choosing a game…"}, true);   // clear any retained game state for late joiners
   wrap.innerHTML='<h1>🎲 Board Games — Party Mode</h1><p class="muted" style="font-size:2.6vh">Pick a game, then players scan to join from their phones</p>'+
     '<div class="cards" id="cards"></div>';
@@ -281,13 +281,15 @@ function computeActive(order){
 var backbtn=$("backbtn");
 function setBack(label, show){ backbtn.textContent=label; backbtn.style.display= show?"block":"none"; }
 backbtn.onclick=function(){
-  if(screenState==="select"){ location.href="../index.html"; }
+  if(screenState==="select"){ if(window.AndroidTV&&AndroidTV.exit){ AndroidTV.exit(); } else { location.href="../index.html"; } }
   else if(screenState==="lobby"){ screenSelect(); }
   else if(screenState==="game"){ // abandon current game -> back to game picker
     try{ send({t:"wait", pid:"*", msg:"Host left the game"}); }catch(e){}
     seat={}; players={}; pending={}; lastAsk={}; screenSelect();
   }
 };
+/* Fire TV app: the remote Back button calls this */
+window.__tvBack=function(){ backbtn.click(); };
 function cardArt(id){
   var s='<svg class="art2" viewBox="0 0 100 114" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">';
   if(id==="trouble"){

@@ -1,3 +1,6 @@
 node_modules/
 .DS_Store
 Thumbs.db
+android-tv/.gradle/
+android-tv/**/build/
+android-tv/local.properties

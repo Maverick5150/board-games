@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0e1630">
+<title>Board Games — Fire TV app</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#eef2ff;
+    background:radial-gradient(130% 100% at 50% -10%,#24346b,#0e1630 60%);display:flex;flex-direction:column;align-items:center;padding:28px 16px 48px}
+  h1{margin:0 0 4px;font-size:30px} .sub{color:#9fb0d8;margin:0 0 22px}
+  .card{background:#16203f;border:1px solid #2e3b66;border-radius:18px;padding:18px 20px;width:100%;max-width:560px;margin:8px 0}
+  .step{display:flex;gap:12px;margin:12px 0;font-size:17px;line-height:1.35}
+  .n{flex:0 0 32px;height:32px;border-radius:50%;background:#2b7be0;font-weight:800;display:flex;align-items:center;justify-content:center}
+  code{background:#0b1430;border:1px solid #39498a;border-radius:8px;padding:3px 8px;color:#ffd86b;font-size:16px;word-break:break-all}
+  a.btn{display:block;text-align:center;text-decoration:none;color:#fff;background:#2b7be0;border-radius:14px;padding:16px;font-weight:800;font-size:18px;margin-top:10px}
+  small{color:#9fb0d8}
+</style>
+</head>
+<body>
+  <h1>📺 Board Games for Fire TV</h1>
+  <p class="sub">Trouble · Sorry! · Monopoly — TV is the board, phones are the controllers</p>
+
+  <div class="card">
+    <b>Install with the Downloader app</b>
+    <div class="step"><div class="n">1</div><div>On the Fire TV: Settings → My Fire TV → Developer Options → <b>Install unknown apps</b> → turn on for <b>Downloader</b>.</div></div>
+    <div class="step"><div class="n">2</div><div>Open <b>Downloader</b> and enter this link:<br><code>maverick5150.github.io/board-games/tv/BoardGamesTV.apk</code></div></div>
+    <div class="step"><div class="n">3</div><div>Choose <b>Install</b>, then <b>Open</b>. It’s also in your apps list as <b>Board Games</b>.</div></div>
+  </div>
+
+  <div class="card">
+    <b>Playing</b>
+    <div class="step"><div class="n">1</div><div>Pick a game on the TV — a QR code and 4-letter room code appear.</div></div>
+    <div class="step"><div class="n">2</div><div>Everyone scans the QR with their phone and joins.</div></div>
+    <div class="step"><div class="n">3</div><div>Press Start on the TV. Your phone becomes your controller.</div></div>
+    <small>Needs Wi-Fi/internet. The remote’s Back button steps back through the menus.</small>
+  </div>
+
+  <a class="btn" href="BoardGamesTV.apk">⬇ Download the APK directly</a>
+  <p><small>Updating the app later? Uninstall the old one first, then install the new APK.</small></p>
+</body>
+</html>
