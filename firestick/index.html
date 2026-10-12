@@ -49,6 +49,17 @@
   .aibtn.on{background:#2b7be0;border-color:#2b7be0;}
   .aibtn:focus{outline:3px solid #fff;}
   .hintbar{font-size:2.2vh;color:#9fb0d8;margin-top:.6vh;}
+  .mwrap{display:flex;gap:2vh;align-items:flex-start;justify-content:center;flex-wrap:wrap;width:100%;}
+  .mscore{width:min(40vh,94vw);display:flex;flex-direction:column;gap:1vh;}
+  .mshead{font-size:2.4vh;font-weight:900;color:#9fb0d8;letter-spacing:1px;text-transform:uppercase;}
+  .msrow{background:#16203f;border-radius:1.4vh;padding:1vh 1.4vh;border:2px solid transparent;}
+  .msrow.cur{border-color:#ffd86b;}.msrow.out{opacity:.4;}
+  .msname{font-size:2.4vh;font-weight:800;display:flex;align-items:center;gap:1vh;}
+  .mscash{font-size:2.6vh;font-weight:900;color:#7CFC9A;}
+  .mschips{display:flex;flex-wrap:wrap;gap:.4vh;margin-top:.6vh;}
+  .mschips i{min-width:2.2vh;height:2.2vh;border-radius:.5vh;border:1px solid #fff5;font-style:normal;font-size:1.4vh;font-weight:900;color:#fff;display:inline-flex;align-items:center;justify-content:center;text-shadow:0 0 2px #000;}
+  .msfp{font-size:2.4vh;font-weight:800;color:#ffd86b;}
+  .rulebox{text-align:center;max-width:92vw;margin:1vh 0;}
   /* monopoly board */
   .mboard{width:min(90vh,96vw);aspect-ratio:1/1;display:grid;grid-template-columns:repeat(11,1fr);grid-template-rows:repeat(11,1fr);background:#cfe8d4;border:3px solid #0a0f22;border-radius:6px;overflow:hidden;}
   .msp{position:relative;border:1px solid #2b6b42;background:#eef9f0;overflow:hidden;color:#09250f;}
@@ -78,6 +89,7 @@
 <script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <script src="net.js"></script>
+<script src="monodata.js"></script>
 <script>
 (function(){
 "use strict";
@@ -157,6 +169,7 @@ var net=null;
 var players={};         // pid -> {pid,name,color}
 var seat={};            // color -> pid
 var pending={};         // reqId -> {pid, resolve}
+var gameSnap=null;      // set by Monopoly: re-sends the holdings snapshot to phones
 var lastAsk={};         // pid -> last ask message (for reconnect re-send)
 var reqSeq=1;
 var inLobby=true;
@@ -186,21 +199,22 @@ function onMsg(o){
       // reconnect during the game: re-send their pending prompt so they don't get stuck on the lobby
       var la=lastAsk[o.pid];
       send(la ? la : {t:"wait", pid:o.pid, msg:"Waiting for your turn…"});
+      if(gameSnap) gameSnap();
     }
   } else if(o.t==="pick"){
     var pr=pending[o.reqId];
-    if(pr && pr.pid===o.pid){ delete pending[o.reqId]; pr.resolve({id:o.id, i:o.i}); }
+    if(pr && pr.pid===o.pid){ delete pending[o.reqId]; pr.resolve({id:o.id, i:o.i, data:o.data}); }
   }
 }
 function firstFreeColor(){ var order=["red","blue","green","yellow"]; for(var i=0;i<order.length;i++){ if(!seat[order[i]]) return order[i]; } return "red"; }
 
 /* ask a player's phone; resolves with their choice. Shows a TV hint while waiting,
    and auto-advances after a long timeout so a non-responding phone can't hang the game. */
-function ask(color, title, sub, options){
+function ask(color, title, sub, options, extraFields){
   var pid=seat[color];
   if(!pid) return Promise.resolve(options&&options[0]?{id:options[0].id,i:0}:{id:null,i:0}); // no controller -> auto first
   var reqId=reqSeq++;
-  var msg={t:"ask", pid:pid, reqId:reqId, title:title, sub:sub, options:options};
+  var msg={t:"ask", pid:pid, reqId:reqId, title:title, sub:sub, options:options}; if(extraFields){ for(var k in extraFields) msg[k]=extraFields[k]; }
   lastAsk[pid]=msg;
   var who = players[pid] ? players[pid].name : "player";
   var hint=$("hint"); if(hint) hint.textContent = "⏳ Waiting for "+who+" — check your phone ("+title+")";
@@ -228,7 +242,7 @@ var BASE=location.href.replace(/[?#].*$/,"").replace(/[^\/]*$/,"");   // directo
 var JOIN_URL=BASE+"play.html?room="+room;
 var SHORT_URL=JOIN_URL.replace(/^https?:\/\//,"");
 function screenSelect(){
-  inLobby=true; screenState="select"; setBack("🏠 Hub", true);
+  inLobby=true; screenState="select"; gameSnap=null; setBack("🏠 Hub", true);
   send({t:"wait", pid:"*", msg:"Host is choosing a game…"}, true);   // clear any retained game state for late joiners
   wrap.innerHTML='<h1>🎲 Board Games — Party Mode</h1><p class="muted" style="font-size:2.6vh">Pick a game, then players scan to join from their phones</p>'+
     '<div class="cards" id="cards"></div>';
@@ -250,6 +264,11 @@ function screenSelect(){
 }
 var chosenGame="trouble";
 var cpuCount=3;           // how many computer players to add (capped by free seats)
+var monoRules={fpJackpot:false,noAuction:false,doubleGo:false,snakeEyes:false,noRentJail:false,lux75:false,unlimited:false,evenBuild:true};
+var MONO_RULE_DEFS=[["fpJackpot","🅿️ Free Parking jackpot"],["noAuction","No auctions"],["doubleGo","$400 for landing on GO"],["snakeEyes","Snake-eyes bonus $500"],["noRentJail","No rent while in Jail"],["lux75","Luxury tax $75"],["unlimited","Unlimited houses & hotels"],["evenBuild","Even building (official)"]];
+function renderRules(){ var el=$("ruleBtns"); if(!el) return;
+  el.innerHTML=MONO_RULE_DEFS.map(function(r){ return '<button class="aibtn'+(monoRules[r[0]]?" on":"")+'" data-k="'+r[0]+'" style="margin:.5vh;padding:.9vh 1.6vh;font-size:2vh">'+r[1]+'</button>'; }).join("");
+  Array.prototype.forEach.call(el.querySelectorAll("button"),function(b){ b.onclick=function(){ monoRules[b.dataset.k]=!monoRules[b.dataset.k]; renderRules(); }; }); }
 var screenState="select";
 function computeActive(order){
   var seated=order.filter(function(c){return seat[c];});
@@ -298,11 +317,13 @@ function screenLobby(){
     '<div class="codewrap"><div class="muted" style="font-size:2.4vh">Room code</div><div class="code">'+room+'</div></div>'+
     '<div class="players" id="players"></div>'+
     '<div class="aitoggle">🤖 Computer players: <span id="cpuBtns"></span></div>'+
+    (chosenGame==="monopoly"?'<div class="rulebox"><div class="muted" style="font-size:2.2vh">⚙️ House rules (tap to toggle)</div><div id="ruleBtns"></div></div>':'')+
     '<button class="big" id="startBtn">▶ Start Game</button>'+
     '<div class="hintbar" id="lobhint"></div>';
   var img=$("qrimg");
   img.onerror=function(){ img.replaceWith(Object.assign(document.createElement("div"),{className:"qrfallback",textContent:"(QR unavailable — type the room code on phones)"})); };
   renderLobby();
+  if(chosenGame==="monopoly") renderRules();
   broadcastLobby();
   $("startBtn").onclick=startGame;
   $("startBtn").focus();
@@ -600,6 +621,8 @@ function playMonopoly(){
   var housesLeft=32, hotelsLeft=12;
   var chanceDeck=shuf(rangeArr(16)), chanceDisc=[], chestDeck=shuf(rangeArr(16)), chestDisc=[];
   var dice=[0,0], doublesCount=0, turn=0, over=false;
+  var R={}; for(var rk in monoRules) R[rk]=monoRules[rk];
+  var fpPool=0, heldCh=0, heldCs=0, snapT=null;
   function rangeArr(n){ var a=[]; for(var i=0;i<n;i++)a.push(i); return a; }
   function shuf(a){ for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i];a[i]=a[j];a[j]=t; } return a; }
   function nm(c){ return seat[c]?players[seat[c]].name:(CNAME[c]+" (CPU)"); }
@@ -639,29 +662,38 @@ function playMonopoly(){
     h+='</div>'+toksAt(i);
     return h;
   }
-  function renderBoard(){ var html=""; for(var i=0;i<40;i++){ var rc=spGrid(i); html+='<div class="msp" style="grid-row:'+(rc[0]+1)+';grid-column:'+(rc[1]+1)+'">'+spInner(i)+'</div>'; } html+='<div class="mcenter"><div class="mlogo">MONOPOLY</div></div>'; boardEl.innerHTML=html; }
+  function renderBoard(){ var html=""; for(var i=0;i<40;i++){ var rc=spGrid(i); html+='<div class="msp" style="grid-row:'+(rc[0]+1)+';grid-column:'+(rc[1]+1)+'">'+spInner(i)+'</div>'; } html+='<div class="mcenter"><div class="mlogo">MONOPOLY</div></div>'; boardEl.innerHTML=html; renderScore(); snapSoon(); }
+  function renderScore(){ var el=$("mscore"); if(!el) return; var h='<div class="mshead">Players</div>';
+    active.forEach(function(c){ var props=[]; for(var i=0;i<40;i++) if(owner[i]===c) props.push(i);
+      h+='<div class="msrow'+(bankrupt[c]?' out':'')+(active[turn]===c&&!bankrupt[c]?' cur':'')+'"><div class="msname"><span class="dot" style="background:'+PC(c)+'"></span>'+tokE[c]+' '+esc(nm(c))+'</div><div class="mscash">'+money(cash[c])+(injail[c]?' 🔒':'')+(jokers[c]?' 🎫'+jokers[c]:'')+(bankrupt[c]?' OUT':'')+'</div><div class="mschips">'+props.map(function(i){ var sp=BOARD[i]; var col=sp.t==="prop"?COLORVAR[sp.g]:"#555"; return '<i style="background:'+col+(mort[i]?';opacity:.35':'')+'" title="'+sp.n+'">'+(houses[i]>0?(houses[i]===5?'H':houses[i]):(sp.t==="rr"?'R':sp.t==="util"?'U':''))+'</i>'; }).join("")+'</div></div>'; });
+    if(R.fpJackpot) h+='<div class="msfp">🅿️ Free Parking: '+money(fpPool)+'</div>';
+    el.innerHTML=h; }
+  function snapNow(){ var pl=active.map(function(c){ var props=[]; for(var i=0;i<40;i++) if(owner[i]===c) props.push({i:i,h:houses[i],m:mort[i]}); return {color:c,pid:seat[c]||null,name:nm(c),cash:cash[c],net:netWorth(c),jail:injail[c],jokers:jokers[c],bankrupt:bankrupt[c],props:props}; }); send({t:"snap",players:pl,fp:R.fpJackpot?fpPool:0}); }
+  function snapSoon(){ clearTimeout(snapT); snapT=setTimeout(snapNow,400); }
   function tv(html){ setStatus(html); }
-  function turnBanner(c,extra){ tv('<span class="dot" style="background:'+PC(c)+'"></span> '+tokE[c]+' <b>'+nm(c)+'</b> · '+money(cash[c])+(extra?' · '+extra:'')); }
+  function turnBanner(c,extra){ tv('<span class="dot" style="background:'+PC(c)+'"></span> '+tokE[c]+' <b>'+nm(c)+'</b> · '+money(cash[c])+(R.fpJackpot&&fpPool>0?' · 🅿️ '+money(fpPool):'')+(extra?' · '+extra:'')); }
 
   // ---------- money / debt ----------
-  async function payBank(c,amt){ cash[c]-=amt; if(cash[c]<0) await resolveDebt(c,null); }
+  async function payBank(c,amt){ cash[c]-=amt; if(R.fpJackpot) fpPool+=amt; if(cash[c]<0) await resolveDebt(c,null); }
   async function payTo(c,to,amt){ cash[c]-=amt; cash[to]+=amt; if(cash[c]<0) await resolveDebt(c,to); }
   function liquidatable(c){ var v=cash[c]; for(var i=0;i<40;i++) if(owner[i]===c){ var s=BOARD[i]; if(s.t==="prop"&&houses[i]>0) v+=Math.floor(houses[i]*s.house/2); if(!mort[i]) v+=Math.floor((s.price||0)/2); } return v; }
   function aiRaise(c){ var guard=200; while(cash[c]<0 && guard-->0){ var best=-1,bh=0; for(var i=0;i<40;i++) if(owner[i]===c&&BOARD[i].t==="prop"&&houses[i]>bh){bh=houses[i];best=i;} if(best>=0){ sellHouse(c,best); continue; } var did=false; for(var j=0;j<40;j++) if(owner[j]===c&&!mort[j]&&(BOARD[j].t!=="prop"||houses[j]===0)){ doMort(c,j); did=true; break; } if(!did) break; } }
+  function propActions(c,i,debt){ var s=BOARD[i], a=[];
+    if(debt){ if(s.t==="prop"&&houses[i]>0) a.push({id:"s"+i,label:"Sell a building (+"+money(Math.floor(s.house/2))+")"}); else if(!mort[i]) a.push({id:"m"+i,label:"Mortgage (+"+money(s.mort)+")",color:"red"}); return a; }
+    if(canBuild(c,i)&&cash[c]>=s.house) a.push({id:"b"+i,label:(houses[i]===4?"🏨 Build Hotel":"🏠 Build House")+" — "+money(s.house),color:"green"});
+    if(s.t==="prop"&&houses[i]>0&&canSell(c,i)) a.push({id:"s"+i,label:"Sell a building (+"+money(Math.floor(s.house/2))+")"});
+    if(!mort[i]&&(s.t!=="prop"||houses[i]===0)) a.push({id:"m"+i,label:"Mortgage (+"+money(s.mort)+")",color:"red"});
+    if(mort[i]&&cash[c]>=Math.ceil(s.mort*1.1)) a.push({id:"u"+i,label:"Lift mortgage — "+money(Math.ceil(s.mort*1.1)),color:"green"});
+    return a; }
+  function propList(c,debt){ var arr=[]; for(var i=0;i<40;i++) if(owner[i]===c) arr.push({i:i,h:houses[i],m:mort[i],actions:propActions(c,i,debt)}); return arr; }
   async function resolveDebt(c,creditor){
     if(human(c)){
       while(cash[c]<0){
         if(liquidatable(c)<0){ declareBankrupt(c,creditor); return; }
-        var opts=[];
-        for(var i=0;i<40;i++) if(owner[i]===c){ var s=BOARD[i];
-          if(s.t==="prop"&&houses[i]>0) opts.push({id:"sell"+i,label:"Sell building on "+s.n+" (+"+money(Math.floor(s.house/2))+")"});
-          else if(!mort[i]) opts.push({id:"mort"+i,label:"Mortgage "+s.n+" (+"+money(s.mort)+")"});
-        }
-        opts.push({id:"bankrupt",label:"❌ Declare Bankruptcy",color:"red"});
-        var pick=await ask(c,"You owe "+money(-cash[c])+" more","Raise cash or go bankrupt",opts);
-        if(pick.id==="bankrupt"){ declareBankrupt(c,creditor); return; }
-        if(pick.id.indexOf("sell")===0) sellHouse(c,parseInt(pick.id.slice(4),10));
-        else if(pick.id.indexOf("mort")===0) doMort(c,parseInt(pick.id.slice(4),10));
+        var pick=await ask(c,"You owe "+money(-cash[c])+" more","Tap a property to sell buildings / mortgage, or declare bankruptcy",[{id:"bankrupt",label:"❌ Declare Bankruptcy"}],{kind:"manage",props:propList(c,true),extra:[{id:"bankrupt",label:"❌ Declare Bankruptcy",color:"red"}]});
+        if(!pick.id||pick.id==="bankrupt"){ declareBankrupt(c,creditor); return; }
+        var op=pick.id[0], idx=parseInt(pick.id.slice(1),10);
+        if(owner[idx]===c){ if(op==="s") sellHouse(c,idx); else if(op==="m") doMort(c,idx); }
         renderBoard(); turnBanner(c);
       }
     } else { aiRaise(c); if(cash[c]<0) declareBankrupt(c,creditor); }
@@ -671,33 +703,25 @@ function playMonopoly(){
     var refund=0;
     for(var i=0;i<40;i++) if(owner[i]===c && BOARD[i].t==="prop" && houses[i]>0){ refund+=Math.floor(houses[i]*BOARD[i].house/2); if(houses[i]===5)hotelsLeft++; else housesLeft+=houses[i]; houses[i]=0; }
     if(creditor){ cash[creditor]+=cash[c]+refund; jokers[creditor]+=jokers[c]; for(var j=0;j<40;j++) if(owner[j]===c) owner[j]=creditor; }
-    else { for(var k=0;k<40;k++) if(owner[k]===c){ owner[k]=null; mort[k]=false; } }
+    else { for(var k=0;k<40;k++) if(owner[k]===c){ owner[k]=null; mort[k]=false; } for(var jk=0;jk<jokers[c];jk++) returnJoker(); }
     cash[c]=0; jokers[c]=0; bankrupt[c]=true;
     if(seat[c]) send({t:"wait", pid:seat[c], msg:"You went bankrupt — game over for you."});
     renderBoard();
   }
 
   // ---------- build / mortgage ----------
-  function canBuild(c,i){ var s=BOARD[i]; if(s.t!=="prop"||owner[i]!==c) return false; if(!ownsGroup(c,s.g)) return false; if(GROUPS[s.g].some(function(x){return mort[x];})) return false; if(houses[i]>=5) return false; if(houses[i]===4){ return hotelsLeft>0; } if(housesLeft<=0) return false; var min=Math.min.apply(null,GROUPS[s.g].map(function(x){return houses[x];})); return houses[i]===min; }
+  function canBuild(c,i){ var s=BOARD[i]; if(s.t!=="prop"||owner[i]!==c) return false; if(!ownsGroup(c,s.g)) return false; if(GROUPS[s.g].some(function(x){return mort[x];})) return false; if(houses[i]>=5) return false; if(houses[i]===4){ return R.unlimited||hotelsLeft>0; } if(!R.unlimited&&housesLeft<=0) return false; if(!R.evenBuild) return true; var min=Math.min.apply(null,GROUPS[s.g].map(function(x){return houses[x];})); return houses[i]===min; }
   function buildHouse(c,i){ var s=BOARD[i]; if(!canBuild(c,i)||cash[c]<s.house) return; cash[c]-=s.house; if(houses[i]===4){ houses[i]=5; hotelsLeft--; housesLeft+=4; } else { houses[i]++; housesLeft--; } }
-  function canSell(c,i){ var s=BOARD[i]; if(s.t!=="prop"||owner[i]!==c||houses[i]<=0) return false; var max=Math.max.apply(null,GROUPS[s.g].map(function(x){return houses[x];})); return houses[i]===max; }
+  function canSell(c,i){ var s=BOARD[i]; if(s.t!=="prop"||owner[i]!==c||houses[i]<=0) return false; if(!R.evenBuild) return true; var max=Math.max.apply(null,GROUPS[s.g].map(function(x){return houses[x];})); return houses[i]===max; }
   function sellHouse(c,i){ if(houses[i]<=0) return; cash[c]+=Math.floor(BOARD[i].house/2); if(houses[i]===5){ houses[i]=4; hotelsLeft++; housesLeft-=4; } else { houses[i]--; housesLeft++; } }
   function doMort(c,i){ var s=BOARD[i]; if(owner[i]!==c||mort[i]) return; if(s.t==="prop"&&houses[i]>0){ while(houses[i]>0) sellHouse(c,i); } mort[i]=true; cash[c]+=s.mort; }
   function unMort(c,i){ var s=BOARD[i]; if(owner[i]!==c||!mort[i]) return; var cost=Math.ceil(s.mort*1.1); if(cash[c]<cost) return; cash[c]-=cost; mort[i]=false; }
   async function manage(c){
     while(true){
-      var opts=[];
-      for(var i=0;i<40;i++) if(owner[i]===c){ var s=BOARD[i];
-        if(canBuild(c,i)&&cash[c]>=s.house) opts.push({id:"b"+i,label:(houses[i]===4?"🏨 Hotel on ":"🏠 House on ")+s.n+" ("+money(s.house)+")",color:"green"});
-        if(s.t==="prop"&&houses[i]>0&&canSell(c,i)) opts.push({id:"s"+i,label:"Sell building on "+s.n+" (+"+money(Math.floor(s.house/2))+")"});
-        if(!mort[i]&&(s.t!=="prop"||houses[i]===0)) opts.push({id:"m"+i,label:"Mortgage "+s.n+" (+"+money(s.mort)+")"});
-        if(mort[i]&&cash[c]>=Math.ceil(s.mort*1.1)) opts.push({id:"u"+i,label:"Unmortgage "+s.n+" ("+money(Math.ceil(s.mort*1.1))+")"});
-      }
-      opts.push({id:"done",label:"◀ Done",color:"blue"});
-      var pick=await ask(c,"Manage — "+money(cash[c]),"Build / mortgage, then Done",opts);
-      if(pick.id==="done") return;
-      var idx=parseInt(pick.id.slice(1),10), op=pick.id[0];
-      if(op==="b") buildHouse(c,idx); else if(op==="s") sellHouse(c,idx); else if(op==="m") doMort(c,idx); else if(op==="u") unMort(c,idx);
+      var pick=await ask(c,"Your properties — "+money(cash[c]),"Tap a property to see its title deed",[{id:"done",label:"◀ Done"}],{kind:"manage",props:propList(c,false),extra:[{id:"done",label:"◀ Done",color:"blue"}]});
+      if(!pick.id||pick.id==="done") return;
+      var op=pick.id[0], idx=parseInt(pick.id.slice(1),10);
+      if(owner[idx]===c){ if(op==="b") buildHouse(c,idx); else if(op==="s") sellHouse(c,idx); else if(op==="m") doMort(c,idx); else if(op==="u") unMort(c,idx); }
       renderBoard(); turnBanner(c);
     }
   }
@@ -739,7 +763,7 @@ function playMonopoly(){
     var ci=dk.shift(); var card=src[ci];
     tv('<span class="dot" style="background:'+PC(c)+'"></span> '+(isCh?"Chance":"Community Chest")+': <b>'+card.text+'</b>');
     await sleep(2200);
-    if(card.fx==="joker"){ jokers[c]++; } else { dc.push(ci); }
+    if(card.fx==="joker"){ jokers[c]++; if(isCh)heldCh++; else heldCs++; } else { dc.push(ci); }
     await applyCard(c,card);
   }
   async function applyCard(c,card){
@@ -763,21 +787,24 @@ function playMonopoly(){
   }
 
   // ---------- landing ----------
+  async function declineBuy(i){ if(R.noAuction) toast("Left unsold"); else await auction(i); }
   async function offerBuy(c,i){ var s=BOARD[i];
     if(human(c)){
-      var opts=[{id:"buy",label:"✅ Buy "+s.n+" for "+money(s.price),color:"green"},{id:"no",label:"❌ Decline → Auction",color:"red"}];
-      if(cash[c]<s.price) opts=[{id:"no",label:"Can’t afford — to Auction",color:"red"}];
+      var opts=[{id:"buy",label:"✅ Buy "+s.n+" for "+money(s.price),color:"green"},{id:"no",label:R.noAuction?"❌ Don’t buy":"❌ Decline → Auction",color:"red"}];
+      if(cash[c]<s.price) opts=[{id:"no",label:R.noAuction?"Can’t afford":"Can’t afford — to Auction",color:"red"}];
       var pk=await ask(c,"Buy property?",s.n+" — "+money(s.price)+" · you have "+money(cash[c]),opts);
-      if(pk.id==="buy"){ cash[c]-=s.price; owner[i]=c; toast(nm(c)+" buys "+s.n); renderBoard(); } else { await auction(i); }
+      if(pk.id==="buy"&&cash[c]>=s.price){ cash[c]-=s.price; owner[i]=c; toast(nm(c)+" buys "+s.n); renderBoard(); } else { await declineBuy(i); }
     } else {
-      if(aiWantsBuy(c,i)){ cash[c]-=s.price; owner[i]=c; toast(nm(c)+" buys "+s.n); renderBoard(); } else { await auction(i); }
+      if(aiWantsBuy(c,i)){ cash[c]-=s.price; owner[i]=c; toast(nm(c)+" buys "+s.n); renderBoard(); } else { await declineBuy(i); }
     }
   }
   function aiWantsBuy(c,i){ var s=BOARD[i]; if(cash[c]<s.price+50) return false; var score=0.5; if(s.t==="prop"){ var owned=GROUPS[s.g].filter(function(x){return owner[x]===c;}).length; score+=owned*0.25; } if(s.t==="rr")score+=0.3; if(cash[c]>s.price*2.5)score+=0.3; return Math.random()<score; }
   async function resolveLanding(c,wasDouble){ var i=pos[c], s=BOARD[i];
-    if(s.t==="go"||s.t==="fp"||s.t==="jail"){ }
+    if(s.t==="go"){ if(R.doubleGo){ cash[c]+=200; toast(nm(c)+" landed on GO — extra $200!"); } }
+    else if(s.t==="fp"){ if(R.fpJackpot&&fpPool>0){ toast(nm(c)+" collects the Free Parking pot "+money(fpPool)+"!"); cash[c]+=fpPool; fpPool=0; } }
+    else if(s.t==="jail"){ }
     else if(s.t==="gotojail"){ toast(nm(c)+" goes to Jail"); goJail(c); }
-    else if(s.t==="tax"){ var amt = s.tax==="income"?200:100; toast(nm(c)+" pays "+(s.tax==="income"?"Income":"Luxury")+" Tax "+money(amt)); await payBank(c,amt); }
+    else if(s.t==="tax"){ var amt = s.tax==="income"?200:(R.lux75?75:100); toast(nm(c)+" pays "+(s.tax==="income"?"Income":"Luxury")+" Tax "+money(amt)); await payBank(c,amt); }
     else if(s.t==="chance"){ await drawCard(c,"chance"); }
     else if(s.t==="cc"){ await drawCard(c,"chest"); }
     else if(s.t==="prop"||s.t==="rr"||s.t==="util"){
@@ -785,14 +812,53 @@ function playMonopoly(){
       if(o==null){ await offerBuy(c,i); }
       else if(o===c){ }
       else if(mort[i]){ toast(s.n+" is mortgaged — no rent"); }
+      else if(R.noRentJail&&injail[o]){ toast(nm(o)+" is in Jail — no rent"); }
       else { var rent=computeRent(i,o,1,dice[0]+dice[1]); toast(nm(c)+" pays "+nm(o)+" "+money(rent)+" rent"); await payTo(c,o,rent); }
     }
+  }
+  function returnJoker(){ if(heldCh>0){ heldCh--; chanceDisc.push(8); } else if(heldCs>0){ heldCs--; chestDisc.push(4); } }
+
+  // ---------- trading ----------
+  function assetVal(i){ var sp=BOARD[i]; var v=mort[i]?Math.floor(sp.price/2):sp.price; if(sp.t==="prop") v+=houses[i]*sp.house; return v; }
+  function tradeableOf(c){ var a=[]; for(var i=0;i<40;i++) if(owner[i]===c && !(BOARD[i].t==="prop"&&GROUPS[BOARD[i].g].some(function(x){return houses[x]>0;}))) a.push({i:i,m:mort[i]}); return a; }
+  function aiTradeOK(p,inc,inCash,inJ,out,outCash,outJ){ var v=0; inc.forEach(function(i){v+=assetVal(i);}); v+=inCash+inJ*50; out.forEach(function(i){v-=assetVal(i);}); v-=outCash+outJ*50;
+    inc.forEach(function(i){ var sp=BOARD[i]; if(sp.t==="prop"){ var after=GROUPS[sp.g].filter(function(x){return owner[x]===p||inc.indexOf(x)>=0;}).length; if(after===GROUPS[sp.g].length) v+=sp.price; } });
+    out.forEach(function(i){ var sp=BOARD[i]; if(sp.t==="prop"&&ownsGroup(p,sp.g)) v-=Math.floor(sp.price*1.5); });
+    return v>=-10; }
+  function sumTxt(items,amt,j){ var a=items.map(function(i){return BOARD[i].n+(mort[i]?" (mortgaged)":"");}); if(amt) a.push(money(amt)); if(j) a.push("a Get Out of Jail Free card"); return a.length?a.join(", "):"nothing"; }
+  async function tradeFlow(c){
+    var others=alive().filter(function(x){return x!==c;}); if(!others.length) return;
+    var popts=others.map(function(x){ return {id:x,label:tokE[x]+" "+nm(x)+" — "+money(cash[x]),color:x}; }); popts.push({id:"cancel",label:"Cancel",color:"blue"});
+    var pk=await ask(c,"Trade with who?","Pick a player",popts);
+    if(!pk.id||pk.id==="cancel"||others.indexOf(pk.id)<0) return; var p=pk.id;
+    var tr=await ask(c,"Trade","",[{id:"cancel",label:"Cancel"}],{kind:"trade",partner:{name:nm(p),color:p},mine:tradeableOf(c),theirs:tradeableOf(p),myCash:cash[c],theirCash:cash[p],myJokers:jokers[c],theirJokers:jokers[p]});
+    if(tr.id!=="offer"||!tr.data) return;
+    var d=tr.data;
+    var okT=function(who,i){ return i>=0&&i<40&&owner[i]===who && !(BOARD[i].t==="prop"&&GROUPS[BOARD[i].g].some(function(x){return houses[x]>0;})); };
+    var uniq=function(v,k,a){ return a.indexOf(v)===k; };
+    var give=(d.give||[]).map(Number).filter(function(i){return okT(c,i);}).filter(uniq);
+    var get=(d.get||[]).map(Number).filter(function(i){return okT(p,i);}).filter(uniq);
+    var cg=Math.max(0,Math.min(cash[c],parseInt(d.cg,10)||0)), cr=Math.max(0,Math.min(cash[p],parseInt(d.cr,10)||0));
+    var jg=(d.jg&&jokers[c]>0)?1:0, jr=(d.jr&&jokers[p]>0)?1:0;
+    if(!give.length&&!get.length&&!cg&&!cr&&!jg&&!jr) return;
+    toast(nm(c)+" offers a trade to "+nm(p));
+    var accept;
+    if(human(p)){ var ans=await ask(p,"Trade offer from "+nm(c),"You GET: "+sumTxt(give,cg,jg)+"   ·   You GIVE: "+sumTxt(get,cr,jr),[{id:"yes",label:"✅ Accept",color:"green"},{id:"no",label:"❌ Decline",color:"red"}]); accept=(ans.id==="yes"); }
+    else { await sleep(1200); accept=aiTradeOK(p,give,cg,jg,get,cr,jr); }
+    if(!accept){ toast(nm(p)+" declined the trade"); return; }
+    give.forEach(function(i){ owner[i]=p; if(mort[i]) cash[p]-=Math.ceil(BOARD[i].mort*0.1); });
+    get.forEach(function(i){ owner[i]=c; if(mort[i]) cash[c]-=Math.ceil(BOARD[i].mort*0.1); });
+    cash[c]-=cg; cash[p]+=cg; cash[p]-=cr; cash[c]+=cr;
+    if(jg){ jokers[c]--; jokers[p]++; } if(jr){ jokers[p]--; jokers[c]++; }
+    toast("🤝 Trade done: "+nm(c)+" ⇄ "+nm(p));
+    renderBoard(); turnBanner(c);
+    if(cash[c]<0) await resolveDebt(c,null); if(cash[p]<0) await resolveDebt(p,null);
   }
 
   // ---------- turn loop ----------
   function aiPreRoll(c){ aiBuild(c); }
   async function run(){
-    monoFrame(); boardEl=$("mboard"); renderBoard();
+    monoFrame(); boardEl=$("mboard"); gameSnap=snapNow; renderBoard(); snapNow();
     while(alive().length>1){
       var c=active[turn]; if(bankrupt[c]){ turn=(turn+1)%active.length; continue; }
       doublesCount=0;
@@ -807,7 +873,7 @@ function playMonopoly(){
           if(cash[c]>=50) jopts.push({id:"pay",label:"Pay $50 to get out",color:"green"});
           if(jokers[c]>0) jopts.push({id:"card",label:"Use Get Out of Jail Free"});
           var jp = human(c)? await ask(c,"You’re in Jail","Turn "+(jailT[c]+1)+" of 3",jopts) : {id: (jokers[c]>0?"card": (cash[c]>300&&jailT[c]>=1?"pay":"roll"))};
-          if(jp.id==="card"){ jokers[c]--; injail[c]=false; jailT[c]=0; toast(nm(c)+" uses Jail card"); }
+          if(jp.id==="card"){ jokers[c]--; returnJoker(); injail[c]=false; jailT[c]=0; toast(nm(c)+" uses Jail card"); }
           else if(jp.id==="pay"){ await payBank(c,50); injail[c]=false; jailT[c]=0; }
           else { // roll for doubles
             await rollDice(c); if(dice[0]===dice[1]){ injail[c]=false; jailT[c]=0; toast(nm(c)+" rolled doubles — out!"); await stepTo(c,dice[0]+dice[1]); await resolveLanding(c,false); endTurn=true; break; }
@@ -817,11 +883,14 @@ function playMonopoly(){
         // pre-roll menu
         if(human(c)){
           var pre=[{id:"roll",label:"🎲 Roll Dice",color:"blue"},{id:"manage",label:"🏠 Manage properties"}];
-          var pk=await ask(c,"Your turn — "+money(cash[c]),"Roll, or build / mortgage",pre);
+          if(alive().length>1) pre.push({id:"trade",label:"🤝 Trade"});
+          var pk=await ask(c,"Your turn — "+money(cash[c]),"Roll, manage, or trade first",pre);
           if(pk.id==="manage"){ await manage(c); continue; }
+          if(pk.id==="trade"){ await tradeFlow(c); continue; }
         } else { aiPreRoll(c); }
         // roll + move
         await rollDice(c);
+        if(R.snakeEyes&&dice[0]===1&&dice[1]===1){ cash[c]+=500; toast(nm(c)+" rolled snake-eyes — +$500!"); }
         if(dice[0]===dice[1]){ doublesCount++; if(doublesCount===3){ toast(nm(c)+" rolled 3 doubles — Jail!"); goJail(c); endTurn=true; break; } }
         await stepTo(c, dice[0]+dice[1]);
         await resolveLanding(c,false);
@@ -830,9 +899,15 @@ function playMonopoly(){
         if(dice[0]===dice[1]){ toast(nm(c)+" rolled doubles — go again"); continue; }
         // end-of-turn menu
         if(human(c)){
-          var post=[{id:"end",label:"✔ End Turn",color:"green"},{id:"manage",label:"🏠 Manage properties"}];
-          var pe=await ask(c,"Turn done — "+money(cash[c]),"Build / mortgage, or End Turn",post);
-          if(pe.id==="manage"){ await manage(c); }
+          while(true){
+            var post=[{id:"end",label:"✔ End Turn",color:"green"},{id:"manage",label:"🏠 Manage properties"}];
+            if(alive().length>1) post.push({id:"trade",label:"🤝 Trade"});
+            var pe=await ask(c,"Turn done — "+money(cash[c]),"Manage, trade, or End Turn",post);
+            if(pe.id==="manage"){ await manage(c); }
+            else if(pe.id==="trade"){ await tradeFlow(c); }
+            else break;
+            if(bankrupt[c]) break;
+          }
         }
         endTurn=true;
       }
@@ -845,7 +920,7 @@ function playMonopoly(){
   async function rollDice(c){ for(var k=0;k<6;k++){ dice=[1+Math.floor(Math.random()*6),1+Math.floor(Math.random()*6)]; turnBanner(c,"🎲 "+dice[0]+" + "+dice[1]); await sleep(80); } dice=[1+Math.floor(Math.random()*6),1+Math.floor(Math.random()*6)]; turnBanner(c,"🎲 "+dice[0]+" + "+dice[1]+" = "+(dice[0]+dice[1])); await sleep(600); }
   run();
 }
-function monoFrame(){ screenState="game"; setBack("‹ Quit", true); wrap.innerHTML='<div class="status" id="status"></div><div id="mboard" class="mboard"></div><div class="hintbar" id="hint">Players: use your phones</div>'; }
+function monoFrame(){ screenState="game"; setBack("‹ Quit", true); wrap.innerHTML='<div class="status" id="status"></div><div class="mwrap"><div id="mboard" class="mboard"></div><div id="mscore" class="mscore"></div></div><div class="hintbar" id="hint">Players: use your phones</div>'; }
 
 function showPlayAgain(){
   var b=document.createElement("button"); b.className="big"; b.textContent="New Game"; b.style.marginTop="2vh";

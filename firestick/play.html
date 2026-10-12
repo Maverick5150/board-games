@@ -32,14 +32,29 @@
 <body>
   <div class="top">
     <span id="room">Room —</span>
+    <button id="plbtn" class="pill" style="display:none;border:none;color:#eef2ff;cursor:pointer;font-size:13px">👥 Players</button>
     <span id="conn" class="pill">connecting…</span>
   </div>
   <div class="big" id="main"></div>
+  <div id="ov"><div id="ovin"></div></div>
 
 <script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
 <script src="net.js"></script>
+<script src="monodata.js"></script>
 <script>
 (function(){
+var _st=document.createElement("style");
+_st.textContent=window.MONO_DEED_CSS+
+ '.big.scroll{justify-content:flex-start;padding-top:10px;overflow-y:auto;}'+
+ '.prow2{display:flex;align-items:center;gap:10px;width:100%;max-width:420px;padding:14px 14px;border-radius:14px;background:#16203f;border:1px solid #2e3b66;color:#eef2ff;font-size:16px;font-weight:700;text-align:left;cursor:pointer;margin:0}'+
+ '.prow2 .chip{width:16px;height:16px;border-radius:4px;flex:0 0 auto;border:1px solid #fff5}.prow2 small{color:#9fb0d8;font-weight:600;margin-left:auto;font-size:12px}'+
+ 'button.opt.sm{padding:15px;font-size:17px}button.opt.ghost{background:#2a3663;box-shadow:0 6px 0 #1a2347}'+
+ '.sec{width:100%;max-width:420px;text-align:left;margin-top:8px}.sec h3{margin:6px 0 4px;font-size:13px;color:#9fb0d8;text-transform:uppercase;letter-spacing:.5px}'+
+ '.trow{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;background:#101938;margin:4px 0;font-size:15px}.trow input[type=checkbox]{width:20px;height:20px}'+
+ '.numin{width:110px;padding:10px;border-radius:10px;border:1px solid #39498a;background:#101938;color:#fff;font-size:17px;text-align:center}'+
+ '#ov{position:fixed;inset:0;background:#0b1228f2;z-index:50;display:none;overflow-y:auto;padding:16px}#ov.on{display:block}#ovin{max-width:440px;margin:0 auto;display:flex;flex-direction:column;align-items:center;gap:8px}'+
+ '.pcard{width:100%;max-width:420px;background:#16203f;border-radius:14px;padding:10px 12px;border:1px solid #2e3b66}.pchips{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}.pchip{display:inline-flex;align-items:center;gap:4px;font-size:12px;background:#101938;border:1px solid #2e3b66;border-radius:8px;padding:3px 7px;cursor:pointer}.pchip .chip{width:11px;height:11px;border-radius:3px}';
+document.head.appendChild(_st);
 "use strict";
 var $=function(id){return document.getElementById(id);};
 var main=$("main"), connEl=$("conn"), roomEl=$("room");
@@ -83,7 +98,8 @@ function onMsg(o){
   if(o.t==="you" && o.pid===myPid){ myColor=o.color; if(o.name) myName=o.name; }
   else if(o.t==="lobby"){ if(!started && !isAsking()) showLobby(o); }   // never fall back to lobby once the game is on
   else if(o.t==="ask" && o.pid===myPid){ started=true; showAsk(o); }
-  else if(o.t==="wait" && (o.pid===myPid || o.pid==="*")){ curReq=null; started=(o.pid!=="*"); showWaiting(o.msg||"Waiting…", false, o.turn); }
+  else if(o.t==="snap"){ lastSnap=o; $("plbtn").style.display="inline-block"; if($("ov").classList.contains("on") && ovMode==="players") showPlayers(); }
+  else if(o.t==="wait" && (o.pid===myPid || o.pid==="*")){ curReq=null; started=(o.pid!=="*"); if(o.pid==="*"){ lastSnap=null; $("plbtn").style.display="none"; closeOv(); } showWaiting(o.msg||"Waiting…", false, o.turn); }
   else if(o.t==="started"){ started=true; if(!isAsking()) showWaiting("Game starting…", false); }
   else if(o.t==="over"){ started=false; curReq=null; showOver(o); }
   else if(o.t==="info" && (o.pid===myPid||!o.pid)){ toast(o.msg); }
@@ -99,12 +115,89 @@ function showLobby(o){
     '<div class="sub" style="margin-top:10px">Waiting for the host to start on the TV…</div>';
 }
 function showWaiting(msg, spin, turn){
+  main.className="big";
   var tcol = turn&&COL[turn] ? COL[turn] : null;
   main.innerHTML=(spin?'<div class="spin"></div>':'<div class="waitdot">⏳</div>')+
     '<div class="sub" style="max-width:440px'+(tcol?';color:'+tcol:'')+'">'+esc(msg)+'</div>';
 }
+/* ---------- Monopoly extras: deed cards, manage list, trade builder, players ---------- */
+var lastSnap=null, ovMode=null, reopenIdx=null, tradeSel=null;
+var MC=window.MONO_COLORS, MD=window.MONO_DEEDS;
+function sendPick(o,id,data){ curReq=null; net.send({t:"pick", pid:myPid, reqId:o.reqId, id:id, i:0, data:data}); showWaiting("Sent ✔  waiting…", true); }
+function chipColor(i){ var d=MD[i]; if(!d) return "#777"; return d.t==="prop"?MC[d.g]:"#333"; }
+function propTag(p){ var t=""; if(p.m) t+=" (mortgaged)"; else if(p.h===5) t+=" 🏨"; else if(p.h>0) t+=" "+Array(p.h+1).join("🏠"); return t; }
+
+function showManage(o){
+  if(reopenIdx!=null){ var r=reopenIdx; reopenIdx=null; if((o.props||[]).some(function(p){return p.i===r;})){ showDeed(o,r); return; } }
+  main.className="big scroll";
+  var c = myColor?COL[myColor]:"#2b7be0";
+  var rows=(o.props||[]).map(function(p){ var d=MD[p.i];
+    return '<button class="prow2" data-i="'+p.i+'"><span class="chip" style="background:'+chipColor(p.i)+'"></span>'+esc(d.n)+'<small>'+esc(propTag(p).trim())+' ›</small></button>'; }).join("");
+  var extra=(o.extra||[]).map(function(op,k){ return '<button class="opt sm" data-x="'+k+'" style="background:'+(op.color?(COL[op.color]||op.color):c)+'">'+esc(op.label)+'</button>'; }).join("");
+  main.innerHTML='<div class="title" style="color:'+c+'">'+esc(o.title||"Properties")+'</div>'+(o.sub?'<div class="sub">'+esc(o.sub)+'</div>':'')+
+    (rows||'<div class="sub">You don’t own any properties yet.</div>')+'<div class="sub" style="font-size:12px">Tap a property to see its title deed</div>'+
+    '<div class="opts">'+extra+'</div>';
+  Array.prototype.forEach.call(main.querySelectorAll(".prow2"), function(b){ b.onclick=function(){ showDeed(o,+b.dataset.i); }; });
+  Array.prototype.forEach.call(main.querySelectorAll("button[data-x]"), function(b){ b.onclick=function(){ reopenIdx=null; sendPick(o,o.extra[+b.dataset.x].id); }; });
+}
+function showDeed(o,i){
+  main.className="big scroll";
+  var p=(o.props||[]).filter(function(x){return x.i===i;})[0]||{i:i,h:0,m:false,actions:[]};
+  var c = myColor?COL[myColor]:"#2b7be0";
+  var acts=(p.actions||[]).map(function(a,k){ return '<button class="opt sm" data-a="'+k+'" style="background:'+(a.color?(COL[a.color]||a.color):c)+'">'+esc(a.label)+'</button>'; }).join("");
+  main.innerHTML='<div class="sub">'+esc(propTag(p).trim()||"Unimproved")+'</div>'+window.monoDeedHTML(i)+
+    '<div class="opts">'+acts+'<button class="opt sm ghost" id="bk">‹ Back to list</button></div>';
+  Array.prototype.forEach.call(main.querySelectorAll("button[data-a]"), function(b){ b.onclick=function(){ reopenIdx=i; sendPick(o,p.actions[+b.dataset.a].id); }; });
+  $("bk").onclick=function(){ reopenIdx=null; showManage(o); };
+}
+function showTrade(o){
+  main.className="big scroll";
+  var c = myColor?COL[myColor]:"#2b7be0";
+  if(!tradeSel||tradeSel.req!==o.reqId) tradeSel={req:o.reqId,give:{},get:{},cg:0,cr:0,jg:0,jr:0};
+  var T=tradeSel;
+  function list(arr,side){ return (arr||[]).map(function(p){ var d=MD[p.i]; return '<label class="trow"><input type="checkbox" data-s="'+side+'" data-i="'+p.i+'" '+((side==="give"?T.give:T.get)[p.i]?"checked":"")+'><span class="chip" style="width:14px;height:14px;border-radius:4px;background:'+chipColor(p.i)+'"></span><span style="flex:1">'+esc(d.n)+'</span><small style="color:#9fb0d8">'+(p.m?"mortgaged":"")+'</small><button data-v="'+p.i+'" style="background:none;border:1px solid #39498a;color:#9fb0d8;border-radius:8px;padding:2px 8px">deed</button></label>'; }).join("")||'<div class="sub" style="font-size:13px">nothing tradeable (buildings must be sold first)</div>'; }
+  main.innerHTML='<div class="title" style="color:'+c+'">Trade with '+esc(o.partner&&o.partner.name||"player")+'</div>'+
+    '<div class="sec"><h3>You give</h3>'+list(o.mine,"give")+
+      '<div class="trow">Cash: $<input class="numin" type="number" inputmode="numeric" min="0" max="'+o.myCash+'" id="cg" value="'+(T.cg||"")+'" placeholder="0"> <small style="color:#9fb0d8">you have $'+o.myCash+'</small></div>'+
+      (o.myJokers>0?'<label class="trow"><input type="checkbox" id="jg" '+(T.jg?"checked":"")+'> Give a Get Out of Jail Free card</label>':'')+'</div>'+
+    '<div class="sec"><h3>You receive</h3>'+list(o.theirs,"get")+
+      '<div class="trow">Cash: $<input class="numin" type="number" inputmode="numeric" min="0" max="'+o.theirCash+'" id="cr" value="'+(T.cr||"")+'" placeholder="0"> <small style="color:#9fb0d8">they have $'+o.theirCash+'</small></div>'+
+      (o.theirJokers>0?'<label class="trow"><input type="checkbox" id="jr" '+(T.jr?"checked":"")+'> Receive a Get Out of Jail Free card</label>':'')+'</div>'+
+    '<div class="opts"><button class="opt sm" id="tgo" style="background:#27a758">Propose Trade</button><button class="opt sm ghost" id="tno">Cancel</button></div>';
+  Array.prototype.forEach.call(main.querySelectorAll('input[type=checkbox][data-s]'), function(cb){ cb.onchange=function(){ var m=cb.dataset.s==="give"?T.give:T.get; if(cb.checked) m[cb.dataset.i]=1; else delete m[cb.dataset.i]; }; });
+  Array.prototype.forEach.call(main.querySelectorAll("button[data-v]"), function(b){ b.onclick=function(e){ e.preventDefault(); e.stopPropagation(); ovShow('<div id="deedv"></div>'); $("deedv").innerHTML=window.monoDeedHTML(+b.dataset.v)+'<button class="opt sm ghost" id="ovx" style="margin-top:6px">Close</button>'; $("ovx").onclick=closeOv; }; });
+  var cgI=$("cg"), crI=$("cr"); cgI.oninput=function(){ T.cg=Math.max(0,parseInt(cgI.value||"0",10)||0); }; crI.oninput=function(){ T.cr=Math.max(0,parseInt(crI.value||"0",10)||0); };
+  if($("jg")) $("jg").onchange=function(){ T.jg=$("jg").checked?1:0; }; if($("jr")) $("jr").onchange=function(){ T.jr=$("jr").checked?1:0; };
+  $("tno").onclick=function(){ tradeSel=null; sendPick(o,"cancel"); };
+  $("tgo").onclick=function(){
+    var give=Object.keys(T.give).map(Number), get=Object.keys(T.get).map(Number);
+    if(T.cg>o.myCash){ toast("You only have $"+o.myCash); return; }
+    if(T.cr>o.theirCash){ toast("They only have $"+o.theirCash); return; }
+    if(!give.length&&!get.length&&!T.cg&&!T.cr&&!T.jg&&!T.jr){ toast("Pick something to trade"); return; }
+    var data={give:give,get:get,cg:T.cg|0,cr:T.cr|0,jg:T.jg?1:0,jr:T.jr?1:0}; tradeSel=null; sendPick(o,"offer",data);
+  };
+}
+function ovShow(html){ $("ovin").innerHTML=html; $("ov").classList.add("on"); }
+function closeOv(){ $("ov").classList.remove("on"); ovMode=null; }
+function showPlayers(){
+  if(!lastSnap) return; ovMode="players";
+  var h='<div class="title" style="font-size:22px">Players &amp; holdings</div>'+(lastSnap.fp?'<div class="sub">🅿️ Free Parking pot: $'+lastSnap.fp+'</div>':'');
+  (lastSnap.players||[]).forEach(function(p){
+    h+='<div class="pcard" style="'+(p.bankrupt?"opacity:.45":"")+'"><div style="display:flex;justify-content:space-between;align-items:center"><b><span class="dotc" style="background:'+COL[p.color]+'"></span>'+esc(p.name)+(p.pid===myPid?" (you)":"")+(p.bankrupt?" — OUT":"")+'</b><span style="color:#7CFC9A;font-weight:800">$'+p.cash+'</span></div>'+
+      '<div style="font-size:12px;color:#9fb0d8;margin-top:2px">Net worth $'+p.net+(p.jail?" · 🔒 In Jail":"")+(p.jokers?" · 🎫 "+p.jokers+" jail card"+(p.jokers>1?"s":""):"")+'</div>'+
+      '<div class="pchips">'+((p.props||[]).map(function(q){ return '<span class="pchip" data-i="'+q.i+'" style="'+(q.m?"opacity:.55":"")+'"><span class="chip" style="background:'+chipColor(q.i)+'"></span>'+esc(MD[q.i].n)+esc(propTag(q).trim()?" "+propTag(q).trim():"")+'</span>'; }).join("")||'<span style="font-size:12px;color:#9fb0d8">no properties</span>')+'</div></div>';
+  });
+  h+='<button class="opt sm ghost" id="ovc" style="margin-top:6px">Close</button>';
+  ovShow(h);
+  Array.prototype.forEach.call($("ovin").querySelectorAll(".pchip"), function(ch){ ch.onclick=function(){ var i=+ch.dataset.i; ovMode="deed"; ovShow(window.monoDeedHTML(i)+'<button class="opt sm ghost" id="ovb" style="margin-top:6px">‹ Back</button>'); $("ovb").onclick=showPlayers; }; });
+  $("ovc").onclick=closeOv;
+}
+$("plbtn").onclick=showPlayers;
+
 function showAsk(o){
-  curReq=o.reqId;
+  curReq=o.reqId; main.className="big";
+  if(o.kind==="manage"){ showManage(o); return; }
+  if(o.kind==="trade"){ showTrade(o); return; }
   var c = myColor?COL[myColor]:"#2b7be0";
   var opts=(o.options||[]).map(function(op,i){
     var bg=op.color?COL[op.color]||op.color:c;
