@@ -90,14 +90,20 @@
     <div class="card">
       <button class="btn" id="resumeBtn" style="display:none;width:100%;padding:13px;margin-bottom:12px">▸ Resume Game</button>
       <h2>New Game</h2>
-      <p>How many players are human? The rest are computer. You are <b>Red</b>.</p>
+      <p>How many human players? You are <b>Red</b>.</p>
       <div class="seg" id="humanSeg">
         <button data-n="1" class="on">1</button>
         <button data-n="2">2</button>
         <button data-n="3">3</button>
         <button data-n="4">4</button>
       </div>
-      <button class="btn primary" id="startBtn" style="width:100%;padding:14px;">Start Game</button>
+      <p style="margin-top:14px">Add computer players?</p>
+      <div class="seg" id="aiSeg">
+        <button data-ai="1" class="on">Yes — fill seats</button>
+        <button data-ai="0">No — humans only</button>
+      </div>
+      <button class="btn primary" id="startBtn" style="width:100%;padding:14px;margin-top:14px">Start Game</button>
+      <a href="../index.html" class="btn" style="display:block;width:100%;padding:12px;margin-top:10px;text-align:center;text-decoration:none">🏠 Back to All Games</a>
     </div>
   </div>
   <div class="toast" id="toast"></div>
@@ -557,11 +563,14 @@ function animateDraw(cb){
 }
 
 // ---- setup ----
-let humanCount=1;
+let humanCount=1, withAI=1;
 document.querySelectorAll("#humanSeg button").forEach(b=>b.addEventListener("click",()=>{
   document.querySelectorAll("#humanSeg button").forEach(x=>x.classList.remove("on")); b.classList.add("on"); humanCount=+b.dataset.n;
 }));
-document.getElementById("startBtn").addEventListener("click",()=>{ startGame(humanCount); document.getElementById("setup").style.display="none"; });
+document.querySelectorAll("#aiSeg button").forEach(b=>b.addEventListener("click",()=>{
+  document.querySelectorAll("#aiSeg button").forEach(x=>x.classList.remove("on")); b.classList.add("on"); withAI=+b.dataset.ai;
+}));
+document.getElementById("startBtn").addEventListener("click",()=>{ startGame(humanCount, withAI); document.getElementById("setup").style.display="none"; });
 document.getElementById("resumeBtn").addEventListener("click",()=>{ document.getElementById("setup").style.display="none"; });
 document.getElementById("menuBtn").addEventListener("click",()=>{
   // offer Resume only when a game is actually in progress
@@ -569,8 +578,9 @@ document.getElementById("menuBtn").addEventListener("click",()=>{
   document.getElementById("setup").style.display="flex";
 });
 
-function startGame(humans){
-  players=["red","blue","yellow","green"];
+function startGame(humans, ai){
+  const all=["red","blue","yellow","green"];
+  players = ai ? all.slice() : all.slice(0, Math.max(1,humans));   // CPU off -> only human seats play
   isHuman={}; players.forEach((c,i)=>isHuman[c]=i<humans);
   newPawns(); turn=0; deck=shuffle(buildDeck()); card=null; gameOver=false; busy=false;
   document.getElementById("legend").innerHTML=players.map(c=>`<span>${dot(c)}${NAME[c]}${isHuman[c]?" (you)":" CPU"}</span>`).join("");
@@ -578,7 +588,7 @@ function startGame(humans){
 }
 
 buildBoard();
-startGame(1);
+startGame(1,1);
 document.getElementById("setup").style.display="flex";
 
 if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }

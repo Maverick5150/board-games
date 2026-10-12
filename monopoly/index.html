@@ -475,7 +475,8 @@ function openMenu(){
     <button class="btn" style="width:100%;margin:4px 0" onclick="window.__close()">Resume Game</button>
     <button class="btn" style="width:100%;margin:4px 0" onclick="window.__mplayers()">👥 Players &amp; holdings</button>
     <button class="btn" style="width:100%;margin:4px 0" onclick="window.__mrules()">⚙️ House Rules</button>
-    <button class="btn warn" style="width:100%;margin:4px 0" onclick="window.__mnew()">🎲 New Game</button>`);
+    <button class="btn warn" style="width:100%;margin:4px 0" onclick="window.__mnew()">🎲 New Game</button>
+    <button class="btn" style="width:100%;margin:4px 0" onclick="location.href='../index.html'">🏠 Back to All Games</button>`);
   window.__mplayers=openPlayers;
   window.__mrules=openRules;
   window.__mnew=openSetup;
@@ -1136,6 +1137,7 @@ function openSetup(){
   h+=`<h3 id="tokHdr">Pick your token</h3><div class="tokgrid" id="tokGrid"></div><div id="tokMsg" style="text-align:center;color:var(--muted);font-size:11px"></div>`;
   h+=`<button class="btn" style="width:100%;margin:10px 0 6px" onclick="window.__rules()">⚙️ House Rules</button>`;
   h+=`<button class="btn primary" style="width:100%" onclick="window.__start()">Start Game</button>`;
+  h+=`<button class="btn" style="width:100%;margin-top:8px" onclick="location.href='../index.html'">🏠 Back to All Games</button>`;
   openModal(h);
   const drawTok=()=>{
     const hdr=$("tokHdr"), grid=$("tokGrid"), msg=$("tokMsg");
