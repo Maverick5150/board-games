@@ -12,6 +12,7 @@ var CSS=
 /* board frames */
 'body.skin-trouble #board,body.skin-trouble #tboard{filter:drop-shadow(0 0 22px rgba(91,140,255,.45)) drop-shadow(0 12px 20px rgba(0,0,0,.7))}'+
 'body.skin-sorry #boardWrap{border-radius:26px;box-shadow:0 0 0 6px #c62222,0 0 0 11px #eec21b,0 0 0 16px #27a758,0 0 0 21px #2b7be0,0 24px 54px rgba(0,0,0,.75)}'+
+'body.skin-risk #rkframe{border-radius:16px;box-shadow:0 0 0 6px #5a3a1c,0 0 0 10px #c79a4a,0 0 0 13px #3a230f,0 24px 56px rgba(0,0,0,.8)}'+
 'body.skin-rummy500 #rtable,body.skin-rummy500 #boardWrap{border-radius:34px;box-shadow:0 0 0 7px #5b3a1e,0 0 0 11px #8a5a2b,0 0 0 14px #3a230f,0 26px 60px rgba(0,0,0,.8)}'+
 'body.skin-monopoly #board,body.skin-monopoly .mboard{box-shadow:0 0 0 5px #d4a017,0 0 0 9px #0a0f22,0 24px 60px rgba(0,0,0,.8);border-radius:8px}';
 var COLS=["#e23b3b","#2b7be0","#27a758","#eec21b"];
@@ -52,6 +53,13 @@ var THEMES={
         "background-image:radial-gradient(circle,rgba(255,213,90,.75) 1.2px,transparent 1.6px),linear-gradient(#0b1c2b,#061019);background-size:11px 13px,100% 100%;opacity:.95"); }
     for(var s=0;s<26;s++){ el(root,"","left:"+rand(0,99)+"vw;top:"+rand(0,60)+"vh;width:3px;height:3px;border-radius:50%;background:#ffe9a8;animation:bgtwinkle "+rand(2.5,6).toFixed(1)+"s ease-in-out "+(-rand(0,6)).toFixed(1)+"s infinite"); }
     for(var d=0;d<9;d++){ floater(root,"left:"+rand(0,96)+"vw;font:900 "+rand(36,86)+"px Georgia,serif;color:#f4c542;opacity:"+rand(.1,.2).toFixed(2),rand(26,50),rand(-60,60),rand(-30,30)).textContent=pick(["$","$","💵","🪙"]); }
+  },
+  risk:function(root){
+    root.style.background="radial-gradient(120% 90% at 50% 30%,#2a4c66 0%,#16293b 55%,#0a141e 100%)";
+    el(root,"","inset:0;opacity:.18;background:repeating-linear-gradient(8deg,rgba(255,255,255,.12) 0 1px,transparent 1px 22px)");
+    el(root,"","left:50%;top:44%;width:140vmin;height:140vmin;margin:-70vmin 0 0 -70vmin;border-radius:50%;background:radial-gradient(circle,rgba(255,226,160,.18),transparent 62%);animation:bgbreathe 8s ease-in-out infinite");
+    for(var i=0;i<14;i++){ floater(root,"left:"+rand(0,96)+"vw;font:900 "+rand(40,100)+"px Georgia,serif;color:#e8c987;opacity:"+rand(.05,.12).toFixed(2),rand(30,58),rand(-60,60),rand(-120,120)).textContent=pick(["✦","⚓","✜","♜","☆"]); }
+    el(root,"","inset:0;background:radial-gradient(ellipse at center,transparent 50%,rgba(0,0,0,.55) 100%)");
   },
   rummy500:function(root){
     root.style.background="radial-gradient(120% 90% at 50% 35%,#177048 0%,#0b4129 55%,#04180f 100%)";

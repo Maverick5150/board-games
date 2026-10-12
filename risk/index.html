@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#16293b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Risk</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.png">
+<style>
+  :root{--ink:#f4ecd8;--muted:#cdbf9b;--gold:#e8b94c;--panel:#2b2013}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;min-height:100%}
+  body{background:#16293b;color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;padding:max(8px,env(safe-area-inset-top)) 8px max(14px,env(safe-area-inset-bottom));overflow-x:hidden;touch-action:manipulation}
+  h1{font:900 24px Georgia,'Times New Roman',serif;letter-spacing:5px;margin:2px 0 0;text-shadow:0 2px 0 #0007}
+  .sub{font:italic 12px Georgia,serif;color:var(--muted);margin-bottom:4px}
+  .wrap{width:min(100%,900px)}
+  #legend{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:4px 0}
+  .chip{display:flex;align-items:center;gap:6px;background:#00000055;border:2px solid #ffffff22;border-radius:999px;padding:4px 10px;font-size:12.5px;font-weight:700}
+  .chip .sw{width:14px;height:14px;border-radius:3px;border:1px solid #0008}
+  .chip small{opacity:.8;font-weight:600}
+  .chip.act{border-color:var(--c);box-shadow:0 0 0 2px var(--c),0 0 16px 2px var(--c);background:#000000a0}
+  .chip.out{opacity:.4;text-decoration:line-through}
+  .menuRow{display:flex;justify-content:center;gap:8px;margin:5px 0}
+  .btn{background:#2a2118;color:var(--ink);border:1px solid #8a6d3b;border-radius:12px;padding:10px 14px;font-size:14px;font-weight:800;cursor:pointer}
+  .btn.primary{background:#c98b1a;border-color:#e6b04a;color:#2a1700}
+  .btn[disabled]{opacity:.38}
+  #rkframe{position:relative;padding:0;margin:4px 0;border-radius:16px}
+  #rkboard{border-radius:12px;overflow:hidden}
+  .overlay{position:fixed;inset:0;z-index:60;background:#0a141eee;display:none;align-items:flex-start;justify-content:center;overflow-y:auto;padding:max(14px,env(safe-area-inset-top)) 12px 28px}
+  .overlay.show{display:flex}
+  .sheet{width:min(100%,600px);background:var(--panel);border:2px solid #8a6d3b;border-radius:20px;padding:16px;box-shadow:0 20px 50px #000b}
+  .sheet h2{margin:0 0 2px;font:900 24px Georgia,serif;letter-spacing:3px}
+  .sheet h3{margin:16px 0 6px;font-size:12.5px;color:var(--gold);letter-spacing:1px;text-transform:uppercase}
+  .vers{display:flex;flex-direction:column;gap:7px}
+  .ver{border:2px solid #5a4528;border-radius:14px;padding:9px 12px;cursor:pointer;background:#20180e}
+  .ver.on{border-color:var(--gold);background:#3a2b14}
+  .ver b{font-size:15px}.ver i{font-style:normal;font-size:11px;color:var(--gold);margin-left:8px}
+  .ver p{margin:3px 0 0;font-size:12px;color:var(--muted);line-height:1.35}
+  .seg{display:flex;gap:6px;flex-wrap:wrap}
+  .seg button{background:#20180e;color:var(--ink);border:2px solid #5a4528;border-radius:10px;min-width:42px;padding:9px 12px;font-size:15px;font-weight:800;cursor:pointer}
+  .seg button.on{background:#c98b1a;border-color:#e6b04a;color:#2a1700}.seg button[disabled]{opacity:.3}
+  .row{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:7px 0;border-bottom:1px solid #ffffff14;font-size:13.5px}
+  .row select{background:#20180e;color:var(--ink);border:1px solid #8a6d3b;border-radius:8px;padding:6px;font-size:13px;max-width:55%}
+  .row input[type=checkbox]{width:22px;height:22px}
+  .tag{font-size:10px;border-radius:6px;padding:1px 5px;margin-left:6px;font-weight:800}.tag.off{background:#2b7be0}.tag.house{background:#a65bd6}
+  details summary{cursor:pointer;font-weight:800;padding:8px 0;color:var(--gold)}
+  .cchips{display:flex;gap:8px;flex-wrap:wrap}
+  .cchip{width:46px;height:46px;border-radius:12px;border:3px solid #5a4528;cursor:pointer;display:flex;align-items:center;justify-content:center;position:relative}
+  .cchip.on{border-color:#fff;box-shadow:0 0 0 3px var(--gold)}.cchip b{font:900 12px system-ui;color:#fff;text-shadow:0 1px 2px #000}
+  #toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 90px);transform:translateX(-50%);background:#000c;color:#fff;border-radius:12px;padding:10px 16px;font-size:14px;font-weight:700;z-index:90;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;text-align:center}
+  #toast.show{opacity:1}
+  #handoff{background:#0a141e;z-index:80;align-items:center}
+</style>
+</head>
+<body>
+<h1>RISK</h1>
+<div class="sub">The Continental Game</div>
+<div class="wrap">
+  <div id="legend"></div>
+  <div class="menuRow"><button class="btn" id="menuBtn">☰ Menu</button></div>
+  <div id="rkframe"><div id="rkboard"></div></div>
+  <div id="rkpanel"></div>
+</div>
+<div id="toast"></div>
+
+<div class="overlay show" id="setup"><div class="sheet">
+  <h2>RISK</h2>
+  <div style="color:var(--muted);font-size:13px">Conquer the world. Wooden-cube armies, the classic 42-territory map.</div>
+  <h3>Version</h3><div class="vers" id="versions"></div>
+  <h3>Game type</h3><div class="seg" id="modeSeg"></div>
+  <h3>Players</h3>
+  <div class="row"><span>Humans (share this phone)</span><div class="seg" id="humanSeg"></div></div>
+  <div class="row"><span>Computer players</span><div class="seg" id="cpuSeg"></div></div>
+  <div id="seatNote" style="font-size:12px;color:var(--muted);padding-top:6px"></div>
+  <h3 id="colorHdr">Your colour</h3><div class="cchips" id="colorChips"></div>
+  <h3>Game speed</h3><div class="seg" id="speedSeg"><button data-s="slow">Slow</button><button data-s="normal" class="on">Normal</button><button data-s="fast">Fast</button></div>
+  <div class="row" style="margin-top:8px"><span>Tint territories by owner (easier to read)</span><input type="checkbox" id="tintCb"></div>
+  <details style="margin-top:10px"><summary>Rules &amp; house rules (tap to customize)</summary><div id="houseRules"></div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px"><span class="tag off">published</span> appears in a published Risk rulebook · <span class="tag house">house</span> a common home rule / convenience</div></details>
+  <div id="svbar"></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">
+    <button class="btn primary" id="startBtn" style="flex:1;font-size:16px">▶ Start new game</button>
+    <button class="btn" id="resumeBtn" style="display:none;flex:1">Resume game</button>
+  </div>
+  <div style="margin-top:10px"><a class="btn" href="../index.html" style="display:block;text-decoration:none;text-align:center">🏠 Back to all games</a></div>
+</div></div>
+<div class="overlay" id="handoff"><div class="sheet" style="text-align:center" id="handoffSheet"></div></div>
+<div class="overlay" id="winBox"><div class="sheet" style="text-align:center" id="winSheet"></div></div>
+
+<script src="../sound.js"></script>
+<script src="../skins.js"></script>
+<script src="../saves.js"></script>
+<script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
+<script src="map.js"></script>
+<script src="engine.js"></script>
+<script src="board.js"></script>
+<script src="ctrl.js"></script>
+<script>
+(function(){
+"use strict";
+const R=Risk, E=R.Engine, MP=R.MAP, PCOLS=MP.PCOLORS;
+const $=id=>document.getElementById(id);
+const SPEED={slow:1100,normal:650,fast:260};
+let cfg={version:"1959",over:{},mode:"classic",humans:1,cpus:2,speed:"normal",tint:false,hcolors:[0]};
+let G=null,V=null,gen=0,handoffOk=null,board=null,ctrl=null,lastEv=0,aiTimer=null;
+const esc=R.Ctrl.esc;
+function curOpts(){ const o=E.versionOpts(cfg.version,cfg.over); if(cfg.over.mode===undefined) o.mode=cfg.mode||"classic"; return o; }
+function toast(m){ const t=$("toast"); t.textContent=m; t.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove("show"),2400); }
+
+/* ---------------- setup screen ---------------- */
+function totalOk(h,c){ const t=h+c; return t>=2&&t<=6; }
+function clampSeats(){ if(cfg.humans+cfg.cpus<2) cfg.cpus=2-cfg.humans; if(cfg.humans+cfg.cpus>6) cfg.cpus=6-cfg.humans; if(cfg.cpus<0) cfg.cpus=0; if(cfg.hcolors.length>cfg.humans) cfg.hcolors=cfg.hcolors.slice(0,cfg.humans); }
+function drawSetup(){
+  const o=curOpts();
+  $("versions").innerHTML=E.VERSIONS.map(v=>`<div class="ver${cfg.version===v.id?" on":""}" data-v="${v.id}"><b>${esc(v.name)}</b><i>${esc(v.tag)}</i><p>${esc(v.desc)}</p></div>`).join("");
+  $("versions").querySelectorAll(".ver").forEach(d=>d.addEventListener("click",()=>{ cfg.version=d.dataset.v; cfg.over={}; cfg.mode="classic"; drawSetup(); }));
+  $("modeSeg").innerHTML=E.GAMEMODES.map(m=>`<button data-m="${m[0]}" class="${o.mode===m[0]?"on":""}">${esc(m[1])}</button>`).join("");
+  $("modeSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.mode=b.dataset.m; cfg.over.mode=b.dataset.m; drawSetup(); }));
+  clampSeats();
+  $("humanSeg").innerHTML=[1,2,3,4,5,6].map(n=>`<button data-n="${n}" class="${cfg.humans===n?"on":""}">${n}</button>`).join("");
+  $("humanSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.humans=+b.dataset.n; clampSeats(); drawSetup(); }));
+  $("cpuSeg").innerHTML=[0,1,2,3,4,5].map(n=>`<button data-n="${n}" class="${cfg.cpus===n?"on":""}"${totalOk(cfg.humans,n)?"":" disabled"}>${n}</button>`).join("");
+  $("cpuSeg").querySelectorAll("button:not([disabled])").forEach(b=>b.addEventListener("click",()=>{ cfg.cpus=+b.dataset.n; drawSetup(); }));
+  const tot=cfg.humans+cfg.cpus;
+  $("seatNote").textContent=tot+" players"+(tot===2?" · two-player rules: a third, neutral army defends its own territories":"")+(tot>=3&&o.setup!=="deal1"?" · "+E.startArmiesFor(tot)+" armies each":"");
+  $("colorHdr").textContent=cfg.humans>1?"Player colours (tap to pick in order)":"Your colour";
+  $("colorChips").innerHTML=PCOLS.map((c,i)=>{ const at=cfg.hcolors.indexOf(i); return `<div class="cchip${at>=0?" on":""}" data-c="${i}" style="background:${c.c}">${at>=0&&cfg.humans>1?`<b>P${at+1}</b>`:""}</div>`; }).join("");
+  $("colorChips").querySelectorAll(".cchip").forEach(d=>d.addEventListener("click",()=>{ const c=+d.dataset.c, at=cfg.hcolors.indexOf(c); if(at>=0) cfg.hcolors.splice(at,1); else if(cfg.hcolors.length<cfg.humans) cfg.hcolors.push(c); else if(cfg.humans===1) cfg.hcolors=[c]; else toast("Tap a picked colour to change it."); drawSetup(); }));
+  $("tintCb").checked=cfg.tint;
+  drawHouse();
+}
+function drawHouse(){
+  const o=curOpts(), box=$("houseRules"); box.innerHTML="";
+  E.HOUSE.forEach(h=>{
+    const key=h[0], tag=E.HOUSE_OFFICIAL[key]?'<span class="tag off">published</span>':'<span class="tag house">house</span>';
+    const row=document.createElement("div"); row.className="row";
+    if(h[2]==="bool"){ row.innerHTML=`<span>${esc(h[1])}${tag}</span><input type="checkbox"${o[key]?" checked":""}>`; row.querySelector("input").addEventListener("change",e=>{ cfg.over[key]=e.target.checked; drawSetup(); }); }
+    else { row.innerHTML=`<span>${esc(h[1])}${tag}</span><select>${h[3].map(c=>`<option value="${esc(c[0])}"${String(o[key])===String(c[0])?" selected":""}>${esc(c[1])}</option>`).join("")}</select>`;
+      row.querySelector("select").addEventListener("change",e=>{ const m=h[3].filter(c=>String(c[0])===e.target.value)[0]; cfg.over[key]=m?m[0]:e.target.value; if(key==="mode") cfg.mode=cfg.over.mode; drawSetup(); }); }
+    box.appendChild(row);
+  });
+}
+function setSpeedSeg(){ $("speedSeg").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x.dataset.s===cfg.speed)); }
+$("speedSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.speed=b.dataset.s; setSpeedSeg(); }));
+$("tintCb").addEventListener("change",e=>{ cfg.tint=e.target.checked; if(board) board.setTint(cfg.tint); });
+
+/* ---------------- saving ---------------- */
+function packG(){ if(!G) return null; const c=JSON.parse(JSON.stringify(G,(k,v)=>k==="log"?undefined:v)); c.log=G.log.slice(-40); return {G:c,cfg:JSON.parse(JSON.stringify(cfg))}; }
+function loadSaved(d){
+  gen++; clearTimeout(aiTimer);
+  G=d.G; G.rnd=Math.random; Object.assign(cfg,d.cfg||{}); handoffOk=null; setSpeedSeg();
+  $("setup").classList.remove("show"); $("winBox").classList.remove("show"); Sound.skip(); startUI(); drive();
+}
+const saveBar=Saves.bar({game:"risk",el:$("svbar"),snapNote:"exactly as it is now",saveToast:"Game saved",
+  getSettings:()=>({version:cfg.version,over:cfg.over,mode:cfg.mode,humans:cfg.humans,cpus:cfg.cpus,speed:cfg.speed,tint:cfg.tint,hcolors:cfg.hcolors}),
+  applySettings:s=>{ cfg.version=s.version||"1959"; cfg.over=s.over||{}; cfg.mode=s.mode||"classic"; cfg.humans=s.humans||1; cfg.cpus=s.cpus!=null?s.cpus:2; cfg.speed=s.speed||"normal"; cfg.tint=!!s.tint; cfg.hcolors=s.hcolors||[0]; setSpeedSeg(); drawSetup(); },
+  standard:()=>{ cfg={version:"1959",over:{},mode:"classic",humans:1,cpus:2,speed:"normal",tint:false,hcolors:[0]}; setSpeedSeg(); drawSetup(); },
+  getSnapshot:()=>(G&&!G.over)?packG():null,
+  loadSnapshot:loadSaved});
+$("menuBtn").addEventListener("click",()=>{ $("resumeBtn").style.display=(G&&!G.over)?"block":"none"; saveBar.refresh(); drawSetup(); $("setup").classList.add("show"); });
+$("resumeBtn").addEventListener("click",()=>$("setup").classList.remove("show"));
+$("startBtn").addEventListener("click",()=>{ Sound.skip(); $("setup").classList.remove("show"); $("winBox").classList.remove("show"); startGame(); });
+
+/* ---------------- game ---------------- */
+function startGame(){
+  gen++; clearTimeout(aiTimer); clampSeats();
+  const total=cfg.humans+cfg.cpus, used=cfg.hcolors.slice();
+  while(used.length<cfg.humans){ for(let i=0;i<PCOLS.length;i++) if(used.indexOf(i)<0){ used.push(i); break; } }
+  const colors=used.slice(); for(let i=0;i<PCOLS.length&&colors.length<total;i++) if(colors.indexOf(i)<0) colors.push(i);
+  const humans=[], names=[];
+  for(let i=0;i<total;i++){ humans.push(i<cfg.humans); names.push(PCOLS[colors[i]].name); }
+  G=E.newGame({names:names,humans:humans,colors:colors,opts:curOpts()});
+  handoffOk=null; startUI(); drive();
+}
+function startUI(){
+  Skins.apply("risk"); Sound.music("risk");
+  if(!board){
+    board=R.Board.create($("rkboard"),{labels:"auto",tint:cfg.tint});
+    ctrl=R.Ctrl.create({root:$("rkpanel"),board:board,toast:toast,send:send,blitzDelay:cfg.speed==="slow"?700:420});
+  }
+  board.setTint(cfg.tint); board.fit();
+  lastEv=G.log.length; refresh();
+}
+function meIndex(){
+  const humans=G.players.map((p,i)=>p.human?i:-1).filter(i=>i>=0);
+  if(humans.length===1) return humans[0];
+  const p=G.players[G.turn]; return (p.human&&handoffOk===G.turn)?G.turn:-1;
+}
+function boardView(v){
+  return {terr:v.terr,colors:v.players.map(p=>p.neutral?"#9a9a9a":PCOLS[p.ci%PCOLS.length].c),pcol:v.players.map(p=>p.neutral?{c:"#9a9a9a",d:"#555",l:"#cfcfcf"}:PCOLS[p.ci%PCOLS.length])};
+}
+function refresh(){
+  V=E.snapshot(G,meIndex());
+  board.setView(boardView(V)); ctrl.update(V); legend();
+  const pk=packG(); if(pk) Saves.auto("risk",pk);
+}
+function legend(){
+  $("legend").innerHTML=V.players.map((p,i)=>{
+    const c=p.neutral?"#9a9a9a":PCOLS[p.ci%PCOLS.length].c, act=!V.over&&i===V.turn;
+    return `<div class="chip${act?" act":""}${p.alive?"":" out"}" style="--c:${c}"><span class="sw" style="background:${c}"></span>${esc(p.name)}${p.neutral?"":(p.human?(cfg.humans>1?" 🧑":" (you)"):" 🤖")} <small>🗺${p.terrs} ⚔${p.armies}</small></div>`;
+  }).join("");
+}
+function send(a){
+  if(!G||G.over) return {ok:false,msg:"The game is over."};
+  const humanActing=G.players[G.turn].human;
+  const r=E.applyAction(G,a);
+  if(!r.ok) return r;
+  (r.events||[]).forEach(e=>{ if(e.text) Sound.fromText(e.text); });
+  if(G.log.length>lastEv){ lastEv=G.log.length; }
+  refresh(); drive();
+  return r;
+}
+function drive(){
+  clearTimeout(aiTimer);
+  if(!G) return;
+  if(G.over){ showWin(); return; }
+  const p=G.players[G.turn], my=gen;
+  if(p.human){
+    const nh=G.players.filter(x=>x.human).length;
+    if(nh>1&&handoffOk!==G.turn&&(G.phase==="hq"||G.phase==="reinforce"||G.phase==="choose")){ showHandoff(p); return; }
+    if(nh>1&&handoffOk!==G.turn){ handoffOk=G.turn; refresh(); }
+    return;
+  }
+  const base=SPEED[cfg.speed], ph=G.phase;
+  const d=(ph==="claim"||ph==="deploy"||ph==="setup2p"||ph==="hq"||ph==="choose")?base*0.3:(ph==="reinforce"?base*0.55:(ph==="attack"?base:(ph==="occupy"?base*0.5:base*0.6)));
+  aiTimer=setTimeout(()=>{
+    if(my!==gen||!G||G.over) return;
+    const a=E.aiAction(G); if(!a){ return; }
+    const r=send(a);
+    if(!r.ok){ /* safety: never hang */ send({t:"endTurn"}); }
+  },Math.max(120,d));
+}
+function showHandoff(p){
+  const sh=$("handoffSheet"), c=PCOLS[p.ci%PCOLS.length];
+  sh.innerHTML=`<h2 style="font-size:26px">Pass the phone</h2><p style="font-size:18px;margin:14px 0">to <b style="color:${c.l}">${esc(p.name)}</b></p><button class="btn primary" id="hoBtn" style="font-size:17px;padding:14px 22px">I'm ${esc(p.name)} — show my cards</button>`;
+  $("handoff").classList.add("show");
+  $("hoBtn").addEventListener("click",()=>{ handoffOk=G.turn; $("handoff").classList.remove("show"); refresh(); drive(); });
+}
+function showWin(){
+  const w=G.players[G.winner], c=PCOLS[(w.ci||0)%PCOLS.length];
+  $("winSheet").innerHTML=`<h2 style="font-size:30px">🏆 ${esc(w.name)} wins!</h2><p style="font-size:15px;color:var(--muted)">${G.o.mode==="mission"&&w.mission?"Mission complete: "+esc(E.missionText(G,w.mission)):G.o.mode==="capital"?"All required headquarters captured.":"The whole world is conquered."}</p>
+    <div style="display:flex;gap:8px;margin-top:12px"><button class="btn primary" id="wnNew" style="flex:1">New game</button><button class="btn" id="wnMenu" style="flex:1">☰ Menu</button></div>`;
+  $("winBox").classList.add("show"); Sound.sfx("win");
+  $("wnNew").addEventListener("click",()=>{ $("winBox").classList.remove("show"); $("resumeBtn").style.display="none"; drawSetup(); $("setup").classList.add("show"); });
+  $("wnMenu").addEventListener("click",()=>{ $("winBox").classList.remove("show"); $("resumeBtn").style.display="none"; drawSetup(); $("setup").classList.add("show"); });
+}
+
+Skins.apply("risk"); Sound.mountButton(); Sound.music("risk");
+drawSetup(); saveBar.refresh();
+if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
+window.__risk={get G(){ return G; },get V(){ return V; },cfg:cfg,send:send,get ctrl(){ return ctrl; },get board(){ return board; },startGame:startGame};
+})();
+</script>
+</body>
+</html>

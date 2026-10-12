@@ -1,0 +1,14 @@
+{
+  "name": "Risk",
+  "short_name": "Risk",
+  "description": "Risk — conquer the world with wooden-cube armies. Every classic version, vs computers or friends.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#16293b",
+  "theme_color": "#16293b",
+  "icons": [
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

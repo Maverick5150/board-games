@@ -27,7 +27,7 @@ function bar(o){
     el.className="svbar";
     el.innerHTML='<h4>Save &amp; load</h4>'+
       (o.noSettings?'':'<div class="r"><button data-a="ss">💾 Save settings</button><button data-a="ls"'+(st?"":" disabled")+'>📂 Load settings'+(st?'<small>'+when(st.ts)+'</small>':'')+'</button>'+(o.standard?'<button data-a="std">↺ Standard rules</button>':'')+'</div>')+
-      (o.getSnapshot?'<div class="r"><button data-a="sg"'+(snap?"":" disabled")+'>💾 Save game'+(snap?'<small>start of this turn</small>':'')+'</button><button data-a="lg"'+(sv?"":" disabled")+'>📂 Load saved game'+(sv?'<small>'+when(sv.ts)+'</small>':'')+'</button><button data-a="au"'+(au?"":" disabled")+'>↻ Continue last game'+(au?'<small>'+when(au.ts)+'</small>':'')+'</button></div>':'');
+      (o.getSnapshot?'<div class="r"><button data-a="sg"'+(snap?"":" disabled")+'>💾 Save game'+(snap?'<small>'+(o.snapNote||'start of this turn')+'</small>':'')+'</button><button data-a="lg"'+(sv?"":" disabled")+'>📂 Load saved game'+(sv?'<small>'+when(sv.ts)+'</small>':'')+'</button><button data-a="au"'+(au?"":" disabled")+'>↻ Continue last game'+(au?'<small>'+when(au.ts)+'</small>':'')+'</button></div>':'');
   }
   el.onclick=function(e){
     var b=e.target.closest&&e.target.closest("button[data-a]"); if(!b||b.disabled) return;
@@ -35,7 +35,7 @@ function bar(o){
     if(a==="ss"){ ok=put(o.game,"settings",o.getSettings()); toast(ok?"Settings saved on this device":"Couldn't save (storage blocked?)"); }
     else if(a==="ls"){ var s=get(o.game,"settings"); if(s){ o.applySettings(s.data); toast("Saved settings loaded"); } }
     else if(a==="std"){ o.standard(); toast("Standard rules restored"); }
-    else if(a==="sg"){ var sn=o.getSnapshot(); if(sn){ ok=put(o.game,"save",sn); toast(ok?"Game saved (restores to the start of the current turn)":"Couldn't save (storage blocked?)"); } }
+    else if(a==="sg"){ var sn=o.getSnapshot(); if(sn){ ok=put(o.game,"save",sn); toast(ok?(o.saveToast||"Game saved (restores to the start of the current turn)"):"Couldn't save (storage blocked?)"); } }
     else if(a==="lg"){ var sv=get(o.game,"save"); if(sv){ o.loadSnapshot(sv.data); toast("Saved game loaded"); } }
     else if(a==="au"){ var au=get(o.game,"auto"); if(au){ o.loadSnapshot(au.data); toast("Last game continued"); } }
     draw();

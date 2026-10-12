@@ -34,7 +34,7 @@ function hz(m){ return 440*Math.pow(2,(m-69)/12); }
 
 /* ---------- voices ---------- */
 var inSfx=false, sty=null;
-var STY={trouble:{wave:"square",pitch:1},sorry:{wave:"sawtooth",pitch:1.14},monopoly:{wave:"triangle",pitch:0.92},rummy500:{wave:"triangle",pitch:1.06}};
+var STY={trouble:{wave:"square",pitch:1},sorry:{wave:"sawtooth",pitch:1.14},monopoly:{wave:"triangle",pitch:0.92},rummy500:{wave:"triangle",pitch:1.06},risk:{wave:"square",pitch:0.9}};
 function tone(f,t,dur,type,vol,dest,o){
   o=o||{};
   if(inSfx&&sty){
@@ -75,6 +75,9 @@ var SFX={
   draw:function(t,d){ noise(t,0.07,0.45,5200,"highpass",d); tone(600,t+0.05,0.05,"triangle",0.1,d); },
   discard:function(t,d){ noise(t,0.05,0.5,3000,"bandpass",d); tone(220,t+0.02,0.09,"sine",0.25,d,{to:150}); },
   meld:function(t,d){ tone(523,t,0.12,"triangle",0.18,d); tone(659,t+0.09,0.12,"triangle",0.18,d); tone(784,t+0.18,0.3,"triangle",0.18,d); },
+  cannon:function(t,d){ noise(t,0.2,0.9,260,"lowpass",d); tone(95,t,0.32,"sine",0.42,d,{to:38}); noise(t+0.02,0.1,0.5,1600,"bandpass",d); },
+  conquer:function(t,d){ [392,523,659,784].forEach(function(f,i){ tone(f,t+i*0.09,0.22,"sawtooth",0.1,d); }); tone(1047,t+0.4,0.5,"square",0.12,d); noise(t+0.4,0.2,0.3,3000,"highpass",d); },
+  place:function(t,d){ tone(260,t,0.06,"square",0.12,d,{to:170}); noise(t,0.04,0.35,2000,"bandpass",d); },
   build:function(t,d){ tone(300,t,0.07,"square",0.14,d); tone(450,t+0.08,0.1,"square",0.14,d); noise(t,0.05,0.3,900,"bandpass",d); }
 };
 function sfx(name){
@@ -90,6 +93,12 @@ function fromText(m){
   if(/sent home|bumped|SORRY|swap/i.test(m)) return sfx("bump");
   if(/to Jail|goes to Jail|3 doubles/i.test(m)) return sfx("jail");
   if(/passes GO|landed on GO|collects/i.test(m)) return sfx("bell");
+  if(/conquers|captures .* headquarters/i.test(m)) return sfx("conquer");
+  if(/eliminates/i.test(m)) return sfx("lose");
+  if(/ attacks .* rolls /i.test(m)) return sfx("cannon");
+  if(/trades in a set/i.test(m)) return sfx("meld");
+  if(/draws a territory card/i.test(m)) return sfx("card");
+  if(/ places \d+ (armies|army)| places an army| claims | moves \d+ armies? (into|from)| moves 1 army (into|from)/i.test(m)) return sfx("place");
   if(/goes out|wins the round/i.test(m)) return sfx("win");
   if(/melds|lays off|laid off/i.test(m)) return sfx("meld");
   if(/discards/i.test(m)) return sfx("discard");
@@ -131,6 +140,13 @@ var STYLES={
     chordSteps:[0,3,6],
     drums:[{kick:[1,0,0,0,1,0,0,1],snare:[0,0,1,0,0,0,1,0],hat:[1,1,1,1,1,1,1,1],hv:0.05},{kick:[1,0,0,1,0,0,1,0],snare:[0,0,0,0,1,0,0,0],hat:[0,1,0,1,0,1,0,1],hv:0.06},{kick:[1,0,1,0,1,0,1,0],snare:[0,1,0,1,0,1,0,1],hat:[1,0,1,0,1,0,1,0],hv:0.05}],
     titles:["Sorry Not Sorry","Slide Into Home","Wait For It","Bumped Again","The Long Slide","Card Shark Shuffle","Back to Start","Safety Zone Stomp","Eleven Swap","Pawn Takes Revenge"] },
+  risk:{ scales:["minor","dorian","minor"], bpm:[96,126], swing:0, sev:false, leadVol:0.075, waves:["square","sawtooth","square"], bassKind:"pulse",
+    progs:[[0,5,3,4],[0,6,5,4],[0,3,4,0],[0,2,6,5],[0,5,6,4],[0,4,3,6],[0,3,6,4],[0,6,2,4]],
+    bridge:[[3,4,0,0],[5,6,0,4],[2,3,4,4],[6,5,4,4]],
+    rhythms:[[1,0,1,1,1,0,1,1],[1,0,0,1,1,0,1,0],[1,1,0,1,0,1,1,0],[1,0,1,0,1,1,0,1]],
+    chordSteps:[0,3,6],
+    drums:[{kick:[1,0,0,0,1,0,0,0],snare:[0,0,1,0,0,0,1,1],sv:0.09,hat:[1,0,1,0,1,0,1,0],hv:0.04},{kick:[1,0,0,1,0,0,1,0],snare:[0,0,1,0,0,1,1,1],sv:0.1,hat:[0,0,0,0,0,0,0,0],hv:0},{kick:[1,0,1,0,1,0,1,0],snare:[0,1,0,1,0,1,0,1],sv:0.07,hat:[1,1,1,1,1,1,1,1],hv:0.03}],
+    titles:["Continental Drift","Border Dispute","March on Kamchatka","The Siam Gambit","Long Campaign","Cavalry at Dawn","Artillery Waltz","Sea Lanes","Hold the Chokepoint","Total Conquest"] },
   rummy500:{ scales:["major","dorian","mixo","major"], bpm:[88,112], swing:0.22, sev:true, leadVol:0.12, waves:["triangle","sine","triangle"], bassKind:"walk",
     progs:[[0,5,1,4],[1,4,0,5],[0,2,3,4],[5,1,4,0],[0,3,1,4],[2,5,1,4],[0,5,3,4],[3,4,2,5]],
     bridge:[[3,2,1,4],[1,4,3,0],[5,2,1,4],[3,4,0,5]],
