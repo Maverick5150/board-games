@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#1b1230">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Uno</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.png">
+<style>
+  :root{--ink:#fff;--muted:#cbbfe0;--gold:#f2bf24;--panel:#23183a}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;min-height:100%}
+  body{background:#1b1230;color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;padding:max(8px,env(safe-area-inset-top)) 8px max(14px,env(safe-area-inset-bottom));overflow-x:hidden;touch-action:manipulation}
+  h1{font:900 30px 'Arial Black',Arial,sans-serif;letter-spacing:3px;margin:2px 0 2px;color:#f2bf24;text-shadow:2px 2px 0 #d6322b,4px 4px 0 #0007;font-style:italic}
+  .wrap{width:min(100%,640px)}
+  .menuRow{display:flex;justify-content:center;gap:8px;margin:4px 0}
+  .btn{background:#2a1f45;color:var(--ink);border:1px solid #ffffff55;border-radius:12px;padding:10px 14px;font-size:14px;font-weight:800;cursor:pointer}
+  .btn.primary{background:#e53b2c;border-color:#ff8a7a}
+  .btn[disabled]{opacity:.38}
+  #uframe{border-radius:18px;padding:4px 6px 2px;background:radial-gradient(120% 100% at 50% 0,#2e4d9c,#1d2f68 60%,#14204a);box-shadow:0 0 0 5px #f2bf24,0 0 0 9px #d6322b,0 20px 44px #000a}
+  .overlay{position:fixed;inset:0;z-index:60;background:#0d0818ee;display:none;align-items:flex-start;justify-content:center;overflow-y:auto;padding:max(14px,env(safe-area-inset-top)) 12px 28px}
+  .overlay.show{display:flex}
+  .sheet{width:min(100%,600px);background:var(--panel);border:2px solid #ffffff44;border-radius:20px;padding:16px;box-shadow:0 20px 50px #000b}
+  .sheet h2{margin:0 0 2px;font:900 26px 'Arial Black',Arial;letter-spacing:2px;color:var(--gold);font-style:italic}
+  .sheet h3{margin:16px 0 6px;font-size:12.5px;color:var(--gold);letter-spacing:1px;text-transform:uppercase}
+  .vers{display:flex;flex-direction:column;gap:7px}
+  .ver{border:2px solid #4a3a75;border-radius:14px;padding:9px 12px;cursor:pointer;background:#1a1230}
+  .ver.on{border-color:var(--gold);background:#3a2a66}
+  .ver b{font-size:15px}.ver i{font-style:normal;font-size:11px;color:var(--gold);margin-left:8px}
+  .ver p{margin:3px 0 0;font-size:12px;color:var(--muted);line-height:1.35}
+  .seg{display:flex;gap:6px;flex-wrap:wrap}
+  .seg button{background:#1a1230;color:var(--ink);border:2px solid #4a3a75;border-radius:10px;min-width:40px;padding:9px 11px;font-size:15px;font-weight:800;cursor:pointer}
+  .seg button.on{background:#e53b2c;border-color:#ff8a7a}.seg button[disabled]{opacity:.3}
+  .row{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:7px 0;border-bottom:1px solid #ffffff14;font-size:13.5px}
+  .row select{background:#1a1230;color:var(--ink);border:1px solid #ffffff66;border-radius:8px;padding:6px;font-size:13px;max-width:55%}
+  .row input[type=checkbox]{width:22px;height:22px}
+  .tag{font-size:10px;border-radius:6px;padding:1px 5px;margin-left:6px;font-weight:800}.tag.off{background:#2b7be0}.tag.house{background:#a65bd6}
+  details summary{cursor:pointer;font-weight:800;padding:8px 0;color:var(--gold)}
+  table.sc{width:100%;border-collapse:collapse;font-size:13.5px;margin:8px 0}table.sc th,table.sc td{padding:6px 4px;text-align:right;border-bottom:1px solid #ffffff22}table.sc th:first-child,table.sc td:first-child{text-align:left}
+  #toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 90px);transform:translateX(-50%);background:#000c;color:#fff;border-radius:12px;padding:10px 16px;font-size:14px;font-weight:700;z-index:90;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;text-align:center}
+  #toast.show{opacity:1}
+  #handoff{background:#0d0818;z-index:80;align-items:center}
+</style>
+</head>
+<body>
+<h1>UNO</h1>
+<div class="wrap">
+  <div class="menuRow"><button class="btn" id="menuBtn">☰ Menu</button></div>
+  <div id="uframe"><div id="uctrl"></div></div>
+</div>
+<div id="toast"></div>
+
+<div class="overlay show" id="setup"><div class="sheet">
+  <h2>UNO</h2>
+  <div style="color:var(--muted);font-size:13px">Match the colour, number or symbol — and shout UNO!</div>
+  <h3>Version</h3><div class="vers" id="versions"></div>
+  <h3>Players</h3>
+  <div class="row"><span>Humans (share this phone)</span><div class="seg" id="humanSeg"></div></div>
+  <div class="row"><span>Computer players</span><div class="seg" id="cpuSeg"></div></div>
+  <div id="seatNote" style="font-size:12px;color:var(--muted);padding-top:6px"></div>
+  <h3>Game speed</h3><div class="seg" id="speedSeg"><button data-s="slow">Slow</button><button data-s="normal" class="on">Normal</button><button data-s="fast">Fast</button></div>
+  <details style="margin-top:10px"><summary>Rules &amp; house rules (tap to customize)</summary><div id="houseRules"></div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px"><span class="tag off">published</span> appears in a Mattel rulebook · <span class="tag house">house</span> a popular home rule</div></details>
+  <div id="svbar"></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">
+    <button class="btn primary" id="startBtn" style="flex:1;font-size:16px">▶ Start new game</button>
+    <button class="btn" id="resumeBtn" style="display:none;flex:1">Resume game</button>
+  </div>
+  <div style="margin-top:10px"><a class="btn" href="../index.html" style="display:block;text-decoration:none;text-align:center">🏠 Back to all games</a></div>
+</div></div>
+<div class="overlay" id="handoff"><div class="sheet" style="text-align:center" id="handoffSheet"></div></div>
+<div class="overlay" id="roundBox"><div class="sheet" id="roundSheet"></div></div>
+
+<script src="../sound.js"></script>
+<script src="../skins.js"></script>
+<script src="../saves.js"></script>
+<script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
+<script src="engine.js"></script>
+<script src="cards.js"></script>
+<script>
+(function(){
+"use strict";
+const U=Uno, E=U.Engine;
+const $=id=>document.getElementById(id);
+const SEATC=["#e23b3b","#2b7be0","#27a758","#eec21b","#a65bd6","#19b5b0","#f08a24","#ec6aa8","#8a8f99","#9a6a3a"];
+const SPEED={slow:1500,normal:950,fast:420};
+let cfg={version:"classic",over:{},humans:1,cpus:3,speed:"normal"};
+let G=null,V=null,gen=0,handoffOk=null,ctrl=null,timer=null,lastActor=-1;
+const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+function curOpts(){ return E.versionOpts(cfg.version,cfg.over); }
+function toast(m){ const t=$("toast"); t.textContent=m; t.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove("show"),2200); }
+
+/* ---------------- setup ---------------- */
+function clampSeats(){ const o=curOpts(); if(cfg.humans+cfg.cpus<2) cfg.cpus=2-cfg.humans; if(cfg.humans+cfg.cpus>10) cfg.cpus=10-cfg.humans; if(cfg.cpus<0) cfg.cpus=0; if(o.teams&&cfg.humans+cfg.cpus!==4){ cfg.cpus=Math.max(0,4-cfg.humans); } if(o.edition==="nomercy"&&cfg.humans+cfg.cpus>6&&false) cfg.cpus=6-cfg.humans; }
+function drawSetup(){
+  const o=curOpts();
+  $("versions").innerHTML=E.VERSIONS.map(v=>`<div class="ver${cfg.version===v.id?" on":""}" data-v="${v.id}"><b>${esc(v.name)}</b><i>${esc(v.tag)}</i><p>${esc(v.desc)}</p></div>`).join("");
+  $("versions").querySelectorAll(".ver").forEach(d=>d.addEventListener("click",()=>{ cfg.version=d.dataset.v; cfg.over={}; drawSetup(); }));
+  clampSeats();
+  $("humanSeg").innerHTML=[1,2,3,4].map(n=>`<button data-n="${n}" class="${cfg.humans===n?"on":""}">${n}</button>`).join("");
+  $("humanSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.humans=+b.dataset.n; clampSeats(); drawSetup(); }));
+  $("cpuSeg").innerHTML=[0,1,2,3,4,5,6,7,8,9].map(n=>{ const t=cfg.humans+n, okk=t>=2&&t<=10&&(!o.teams||t===4); return `<button data-n="${n}" class="${cfg.cpus===n?"on":""}"${okk?"":" disabled"}>${n}</button>`; }).join("");
+  $("cpuSeg").querySelectorAll("button:not([disabled])").forEach(b=>b.addEventListener("click",()=>{ cfg.cpus=+b.dataset.n; drawSetup(); }));
+  const tot=cfg.humans+cfg.cpus;
+  $("seatNote").textContent=tot+" players"+(o.teams?" · partners sit opposite (1 & 3 vs 2 & 4)":"")+(o.edition==="nomercy"&&tot>6?" · the box says 2–6 players, but more works":"");
+  drawHouse();
+}
+function drawHouse(){
+  const o=curOpts(), box=$("houseRules"); box.innerHTML="";
+  E.HOUSE.forEach(h=>{
+    const key=h[0], tag=h[4]?'<span class="tag off">published</span>':'<span class="tag house">house</span>';
+    const row=document.createElement("div"); row.className="row";
+    if(h[2]==="bool"){ row.innerHTML=`<span>${esc(h[1])}${tag}</span><input type="checkbox"${o[key]?" checked":""}>`; row.querySelector("input").addEventListener("change",e=>{ cfg.over[key]=e.target.checked; drawSetup(); }); }
+    else { row.innerHTML=`<span>${esc(h[1])}${tag}</span><select>${h[3].map(c=>`<option value="${esc(c[0])}"${String(o[key])===String(c[0])?" selected":""}>${esc(c[1])}</option>`).join("")}</select>`;
+      row.querySelector("select").addEventListener("change",e=>{ const m=h[3].filter(c=>String(c[0])===e.target.value)[0]; cfg.over[key]=m?m[0]:e.target.value; drawSetup(); }); }
+    box.appendChild(row);
+  });
+}
+function setSpeedSeg(){ $("speedSeg").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x.dataset.s===cfg.speed)); }
+$("speedSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.speed=b.dataset.s; setSpeedSeg(); }));
+
+/* ---------------- saving ---------------- */
+function packG(){ if(!G) return null; const c=JSON.parse(JSON.stringify(G,(k,v)=>(k==="log"||k==="evq")?undefined:v)); c.log=G.log.slice(-30); c.evq=[]; return {G:c,cfg:JSON.parse(JSON.stringify(cfg))}; }
+function loadSaved(d){
+  gen++; clearTimeout(timer); G=d.G; G.rnd=Math.random; Object.assign(cfg,d.cfg||{}); handoffOk=null; setSpeedSeg();
+  $("setup").classList.remove("show"); $("roundBox").classList.remove("show"); Sound.skip(); startUI(); drive();
+}
+const saveBar=Saves.bar({game:"uno",el:$("svbar"),snapNote:"exactly as it is now",saveToast:"Game saved",
+  getSettings:()=>({version:cfg.version,over:cfg.over,humans:cfg.humans,cpus:cfg.cpus,speed:cfg.speed}),
+  applySettings:s=>{ cfg.version=s.version||"classic"; cfg.over=s.over||{}; cfg.humans=s.humans||1; cfg.cpus=s.cpus!=null?s.cpus:3; cfg.speed=s.speed||"normal"; setSpeedSeg(); drawSetup(); },
+  standard:()=>{ cfg={version:"classic",over:{},humans:1,cpus:3,speed:"normal"}; setSpeedSeg(); drawSetup(); },
+  getSnapshot:()=>(G&&!G.over)?packG():null,loadSnapshot:loadSaved});
+$("menuBtn").addEventListener("click",()=>{ $("resumeBtn").style.display=(G&&!G.over)?"block":"none"; saveBar.refresh(); drawSetup(); $("setup").classList.add("show"); });
+$("resumeBtn").addEventListener("click",()=>$("setup").classList.remove("show"));
+$("startBtn").addEventListener("click",()=>{ Sound.skip(); $("setup").classList.remove("show"); $("roundBox").classList.remove("show"); startGame(); });
+
+/* ---------------- game ---------------- */
+function startGame(){
+  gen++; clearTimeout(timer); clampSeats();
+  const total=cfg.humans+cfg.cpus, names=[], humans=[];
+  for(let i=0;i<total;i++){ const h=i<cfg.humans; humans.push(h); names.push(h?(cfg.humans===1?"You":"Player "+(i+1)):"CPU "+(i+1-cfg.humans)); }
+  G=E.newGame({names,humans,opts:curOpts()}); E.startRound(G); handoffOk=null; startUI(); drive();
+}
+function startUI(){
+  Skins.apply("uno"); Sound.music("uno");
+  if(!ctrl) ctrl=U.Ctrl.create({root:$("uctrl"),toast,send,seatColor:i=>SEATC[i%SEATC.length]});
+  refresh();
+}
+function meIndex(){
+  const humans=G.players.map((p,i)=>p.human?i:-1).filter(i=>i>=0);
+  if(humans.length===1) return humans[0];
+  const a=E.actor(G); return (G.players[a]&&G.players[a].human&&handoffOk===a)?a:-1;
+}
+function refresh(){ V=E.snapshot(G,meIndex()); ctrl.update(V); const pk=packG(); if(pk) Saves.auto("uno",pk); }
+function send(a){
+  if(!G) return {ok:false};
+  const hum=G.players.filter(p=>p.human); let who;
+  if(a.t==="catch"||a.t==="uno"||a.t==="jump") who=(hum.length===1)?G.players.indexOf(hum[0]):E.actor(G); else who=E.actor(G);
+  if(a.t==="uno"&&G.players[who]) { /* ok */ }
+  const r=E.applyAction(G,who,a);
+  if(!r.ok) return r;
+  (r.events||[]).forEach(e=>{ if(e.text) Sound.fromText(e.text); });
+  refresh();
+  if(G.roundOver) showRound(); else drive();
+  return r;
+}
+function drive(){
+  clearTimeout(timer);
+  if(!G||G.roundOver||G.over) return;
+  const a=E.actor(G), p=G.players[a], my=gen, nh=G.players.filter(x=>x.human).length;
+  if(p.human){
+    if(nh>1&&handoffOk!==a){ showHandoff(p); return; }
+    // computers may catch a human who forgot UNO
+    scheduleCatch(); return;
+  }
+  let delay=SPEED[cfg.speed]; if(G.phase==="challenge") delay*=0.9;
+  const human=G.players.findIndex(x=>x.human);
+  // give a human a fair moment to catch a forgetful computer or to jump in
+  if(nh===1){ if(G.unoVuln!=null&&!G.players[G.unoVuln].human) delay=Math.max(delay,1700); if(G.o.jumpIn&&E.jumpIds(G,human).length) delay=Math.max(delay,1900); }
+  timer=setTimeout(()=>{
+    if(my!==gen||!G||G.roundOver||G.over) return;
+    // other computers may jump in or catch first
+    if(G.unoVuln!=null){ const t=G.unoVuln; if(G.players[t].human&&G.rnd()<0.7){ const by=pickOther(t); if(by>=0){ send2(by,{t:"catch",target:t}); return; } } else if(!G.players[t].human&&nh>1){ /* hot-seat: no catching AIs */ } }
+    if(G.o.jumpIn&&G.phase==="play"&&!G.pen&&G.rnd()<0.18){ for(let q=0;q<G.players.length;q++){ if(!G.players[q].human&&q!==G.turn&&G.players[q].alive){ const ids=E.jumpIds(G,q); if(ids.length){ const c=G.players[q].hand.filter(x=>x.id===ids[0])[0]; const aa={t:"jump",card:ids[0]}; if(c.f[G.side].c==="W") aa.color=E.bestColor(G,q,ids[0]); send2(q,aa); return; } } } }
+    const act=E.actor(G), aa=E.aiAction(G,act); if(!aa) return;
+    const r=send2(act,aa); if(!r.ok) send2(act,{t:"draw"});
+  },Math.max(250,delay));
+}
+function pickOther(t){ const c=G.players.map((p,i)=>(!p.human&&p.alive&&i!==t)?i:-1).filter(i=>i>=0); return c.length?c[Math.floor(G.rnd()*c.length)]:-1; }
+function scheduleCatch(){
+  const t=G.unoVuln; if(t==null||!G.players[t].human) return; const my=gen;
+  timer=setTimeout(()=>{ if(my!==gen||!G||G.roundOver||G.unoVuln!==t) return; const by=pickOther(t); if(by>=0&&G.rnd()<0.75){ send2(by,{t:"catch",target:t}); } },1300);
+}
+function send2(who,a){
+  const r=E.applyAction(G,who,a); if(!r.ok) return r;
+  (r.events||[]).forEach(e=>{ if(e.text) Sound.fromText(e.text); });
+  refresh(); if(G.roundOver) showRound(); else drive(); return r;
+}
+function showHandoff(p){
+  const sh=$("handoffSheet"), c=SEATC[p.id%SEATC.length];
+  sh.innerHTML=`<h2 style="font-size:26px">Pass the phone</h2><p style="font-size:18px;margin:14px 0">to <b style="color:${c}">${esc(p.name)}</b></p><button class="btn primary" id="hoBtn" style="font-size:17px;padding:14px 22px">I'm ${esc(p.name)} — show my cards</button>`;
+  $("handoff").classList.add("show");
+  $("hoBtn").addEventListener("click",()=>{ handoffOk=E.actor(G); $("handoff").classList.remove("show"); refresh(); drive(); });
+}
+function showRound(){
+  const ro=G.roundOver; if(!ro) return; Sound.sfx("win");
+  const f=n=>(n>0?"+":"")+n;
+  const rows=ro.rows.map(r=>`<tr><td>${esc(r.name)}${r.id===ro.winUnit?" 🏆":""}</td><td>${r.left}</td><td>${r.points?f(r.points):"—"}</td><td><b>${G.uscore[r.id]}</b></td></tr>`).join("");
+  let h=`<h2>${ro.over?"🏆 Game over":"Round "+G.round+" complete"}</h2><div style="color:var(--muted);font-size:13px">${esc(G.players[ro.winner].name)} went out first.</div>
+    <table class="sc"><tr><th>Player</th><th>Cards left</th><th>Round</th><th>Total</th></tr>${rows}</table>`;
+  if(ro.over) h+=`<p style="font-size:18px;text-align:center"><b style="color:var(--gold)">${esc(ro.gameWinnerName)}</b> wins the game!</p>`;
+  else if(G.o.target) h+=`<p style="font-size:12px;color:var(--muted)">${G.o.scoring==="tally"?"Cards left count against you — lowest total wins once someone reaches "+G.o.target+".":"First to "+G.o.target+" wins."}</p>`;
+  h+=`<div style="display:flex;gap:8px;margin-top:8px">${ro.over?`<button class="btn primary" id="rbNew" style="flex:1">New game</button>`:`<button class="btn primary" id="rbNext" style="flex:1">Next round ▶</button>`}<button class="btn" id="rbMenu" style="flex:1">☰ Menu</button></div>`;
+  $("roundSheet").innerHTML=h; $("roundBox").classList.add("show");
+  const nx=$("rbNext"); if(nx) nx.addEventListener("click",()=>{ $("roundBox").classList.remove("show"); E.startRound(G); handoffOk=null; startUI(); drive(); });
+  const nw=$("rbNew"); if(nw) nw.addEventListener("click",()=>{ $("roundBox").classList.remove("show"); startGame(); });
+  $("rbMenu").addEventListener("click",()=>{ $("roundBox").classList.remove("show"); $("resumeBtn").style.display="none"; drawSetup(); $("setup").classList.add("show"); });
+}
+
+Skins.apply("uno"); Sound.mountButton(); Sound.music("uno");
+drawSetup(); saveBar.refresh();
+if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
+window.__uno={get G(){ return G; },get V(){ return V; },cfg:cfg,send:send,startGame:startGame,get ctrl(){ return ctrl; }};
+})();
+</script>
+</body>
+</html>

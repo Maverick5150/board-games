@@ -34,7 +34,7 @@ function hz(m){ return 440*Math.pow(2,(m-69)/12); }
 
 /* ---------- voices ---------- */
 var inSfx=false, sty=null;
-var STY={trouble:{wave:"square",pitch:1},sorry:{wave:"sawtooth",pitch:1.14},monopoly:{wave:"triangle",pitch:0.92},rummy500:{wave:"triangle",pitch:1.06},risk:{wave:"square",pitch:0.9}};
+var STY={trouble:{wave:"square",pitch:1},sorry:{wave:"sawtooth",pitch:1.14},monopoly:{wave:"triangle",pitch:0.92},rummy500:{wave:"triangle",pitch:1.06},risk:{wave:"square",pitch:0.9},uno:{wave:"square",pitch:1.12}};
 function tone(f,t,dur,type,vol,dest,o){
   o=o||{};
   if(inSfx&&sty){
@@ -93,6 +93,14 @@ function fromText(m){
   if(/sent home|bumped|SORRY|swap/i.test(m)) return sfx("bump");
   if(/to Jail|goes to Jail|3 doubles/i.test(m)) return sfx("jail");
   if(/passes GO|landed on GO|collects/i.test(m)) return sfx("bell");
+  if(/ says UNO!/i.test(m)) return sfx("bell");
+  if(/ catches .* didn't say UNO/i.test(m)) return sfx("bump");
+  if(/ challenges .*'s /i.test(m)) return sfx("bump");
+  if(/FLIP!|knocked out by the Mercy/i.test(m)) return sfx(/FLIP/.test(m)?"dice":"lose");
+  if(/Direction reversed| is skipped|are skipped|Everyone else is skipped/i.test(m)) return sfx("slide");
+  if(/ plays [A-Z][a-z]+ |^[A-Za-z0-9 ]+ plays /.test(m)&&!/armies/.test(m)) return sfx("card");
+  if(/ draws d+ cards?| draws a card| keeps the card/i.test(m)) return sfx("draw");
+  if(/ picks .* for Color Roulette| passes their hand| swaps hands/i.test(m)) return sfx("deal");
   if(/conquers|captures .* headquarters/i.test(m)) return sfx("conquer");
   if(/eliminates/i.test(m)) return sfx("lose");
   if(/ attacks .* rolls /i.test(m)) return sfx("cannon");
@@ -140,6 +148,13 @@ var STYLES={
     chordSteps:[0,3,6],
     drums:[{kick:[1,0,0,0,1,0,0,1],snare:[0,0,1,0,0,0,1,0],hat:[1,1,1,1,1,1,1,1],hv:0.05},{kick:[1,0,0,1,0,0,1,0],snare:[0,0,0,0,1,0,0,0],hat:[0,1,0,1,0,1,0,1],hv:0.06},{kick:[1,0,1,0,1,0,1,0],snare:[0,1,0,1,0,1,0,1],hat:[1,0,1,0,1,0,1,0],hv:0.05}],
     titles:["Sorry Not Sorry","Slide Into Home","Wait For It","Bumped Again","The Long Slide","Card Shark Shuffle","Back to Start","Safety Zone Stomp","Eleven Swap","Pawn Takes Revenge"] },
+  uno:{ scales:["major","mixo","major","dorian"], bpm:[118,138], swing:0.1, sev:false, leadVol:0.09, waves:["square","triangle","square"], bassKind:"walk",
+    progs:[[0,3,4,0],[0,4,5,3],[0,5,3,4],[0,3,0,4],[0,2,3,4],[0,6,3,4],[0,4,3,5],[0,3,5,4]],
+    bridge:[[3,4,0,0],[5,4,3,0],[2,3,4,4],[3,5,4,0]],
+    rhythms:[[1,0,1,1,1,0,1,1],[1,1,0,1,1,0,1,0],[1,0,1,0,1,1,0,1],[1,1,1,0,1,0,1,1]],
+    chordSteps:[0,3,6],
+    drums:[{kick:[1,0,0,0,1,0,0,0],snare:[0,0,1,0,0,0,1,0],sv:0.08,hat:[1,1,1,1,1,1,1,1],hv:0.04},{kick:[1,0,0,1,0,0,1,0],snare:[0,0,1,0,0,1,0,1],sv:0.08,hat:[1,0,1,0,1,0,1,0],hv:0.05},{kick:[1,0,1,0,1,0,1,0],snare:[0,1,0,1,0,1,0,1],sv:0.06,hat:[0,1,0,1,0,1,0,1],hv:0.045}],
+    titles:["Wild Card Boogie","Draw Four Shuffle","Skip a Beat","Reverse Psychology","Last Card Standing","Color Me Lucky","Two to Draw","Say It First","Match Point Stomp","Flip the Table"] },
   risk:{ scales:["minor","dorian","minor"], bpm:[96,126], swing:0, sev:false, leadVol:0.075, waves:["square","sawtooth","square"], bassKind:"pulse",
     progs:[[0,5,3,4],[0,6,5,4],[0,3,4,0],[0,2,6,5],[0,5,6,4],[0,4,3,6],[0,3,6,4],[0,6,2,4]],
     bridge:[[3,4,0,0],[5,6,0,4],[2,3,4,4],[6,5,4,4]],
@@ -305,8 +320,22 @@ function openPanel(){
   on("bgTest",function(){ unlock(); ensure(); sfx("dice"); setTimeout(function(){ sfx("coin"); },600); });
   on("bgNext",function(){ unlock(); skip(); refreshPanel(); });
   on("bgDone",closePanel);
+  /* remote / keyboard: Up/Down move between the controls (they must NOT change a slider), Left/Right adjust a slider, Back closes the window */
+  ov.addEventListener("keydown",function(e){
+    var k=e.key, list=Array.prototype.slice.call(ov.querySelectorAll("button,input")), i=list.indexOf(d.activeElement);
+    if(k==="Escape"||k==="Backspace"||k==="GoBack"||k==="BrowserBack"||e.keyCode===4){ e.preventDefault(); e.stopPropagation(); closePanel(); return; }
+    if(k==="ArrowDown"||k==="ArrowUp"){
+      e.preventDefault(); e.stopPropagation();
+      var j=k==="ArrowDown"?Math.min(list.length-1,i+1):Math.max(0,i-1); if(i<0) j=0;
+      // skip the − / + buttons beside a slider when moving vertically
+      while(list[j]&&list[j].hasAttribute("data-a")&&j>0&&j<list.length-1) j+=(k==="ArrowDown"?1:-1);
+      if(list[j]) list[j].focus(); return;
+    }
+    if((k==="ArrowLeft"||k==="ArrowRight")&&d.activeElement&&d.activeElement.type!=="range"){ e.preventDefault(); e.stopPropagation(); var jj=k==="ArrowRight"?Math.min(list.length-1,i+1):Math.max(0,i-1); if(list[jj]) list[jj].focus(); }
+  },true);
   refreshPanel(); try{ d.getElementById("bgDone").focus(); }catch(e){}
 }
+function panelOpen(){ return !!g.document.getElementById("bgSoundPanel"); }
 function mountButton(o){
   var d=g.document; if(!d||d.getElementById("bgSndBtn")) return; o=o||{};
   var b=d.createElement("button"); b.id="bgSndBtn"; b.type="button"; b.textContent="🔊";
@@ -316,5 +345,5 @@ function mountButton(o){
   d.body.appendChild(b);
 }
 
-g.Sound={music:music,skip:skip,nowPlaying:nowPlaying,stop:function(){ want=null; stopMusic(); },sfx:sfx,fromText:fromText,openPanel:openPanel,mountButton:mountButton,state:st,_songs:getSongs,_themes:THEMES};
+g.Sound={music:music,skip:skip,nowPlaying:nowPlaying,stop:function(){ want=null; stopMusic(); },sfx:sfx,fromText:fromText,openPanel:openPanel,closePanel:closePanel,panelOpen:panelOpen,mountButton:mountButton,state:st,_songs:getSongs,_themes:THEMES};
 })(window);

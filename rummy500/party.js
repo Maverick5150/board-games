@@ -14,6 +14,7 @@ function snap(G,me,ex){
     hand:me>=0?G.players[me].hand.map(enc):[],discard:G.discard.map(enc),stock:G.stock.length,round:G.round,dealer:G.dealer,
     melds:G.melds.map(function(m){ return {id:m.id,owner:m.owner,kind:m.kind,rank:m.rank,suit:m.suit,lo:m.lo,hi:m.hi,
       cards:m.cards.map(function(e){ return [e.c.id,e.c.r,e.c.s,e.r,e.s,e.by,e.dbl?1:0]; })}; }),
+    hist:(G.history||[]).map(function(h){ return h.rows.map(function(r){ return [r.t,r.s]; }); }),target:G.o.target,
     log:(G.logText||[]).slice(-3),ro:G.roundOver?{reason:G.roundOver.reason,out:G.roundOver.out,rows:G.roundOver.rows,over:G.roundOver.over,winner:G.roundOver.winner,winnerName:G.roundOver.winnerName}:null };
   if(ex) for(var k in ex) st[k]=ex[k];
   return st;
@@ -74,7 +75,7 @@ function tvHTML(G,ctx){
   var melds=nm?G.melds.map(function(m){ return UI.meldHTML(m,G,{cls:(ctx.flashMeld===m.id?"flash":"")}); }).join(""):'<div class="empty">No melds yet — sets of 3–4 of a kind, runs of 3+ in one suit</div>';
   var nd=G.discard.length, dcw=8, step=Math.min(4.6,100/Math.max(nd,1)), ml=-(dcw-step);
   var disc=nd?G.discard.map(function(c,i){ return UI.cardHTML(c,{cls:(ctx.pf!=null&&i>=ctx.pf?"pf ":"")+(ctx.flashCard===c.id?"flash":""),style:"margin-left:"+(i?ml:0)+"vh"}); }).join(""):'<span class="none">Discard pile is empty</span>';
-  return '<div class="rvscore">'+chips+'</div>'+
+  return '<div class="rvscore">'+chips+'<div class="rvchip" style="background:#00000040">Round '+G.round+' · first to <b>'+G.o.target+'</b></div></div>'+
     '<div id="rtable"><div class="rvmelds" style="--mcw:'+cw+'vh">'+melds+'</div>'+
     '<div class="rvpiles"><div class="rvstock" style="--cw:7vh">'+UI.backHTML({label:G.stock.length?"":"EMPTY"})+G.stock.length+' in stock</div><div class="rvdisc" style="--cw:'+dcw+'vh">'+disc+'</div></div></div>';
 }
@@ -106,13 +107,15 @@ var PCSS=[
 ".rvp .sc{display:flex;flex-wrap:wrap;gap:5px;justify-content:center;font-size:12px}.rvp .sc span{background:#00000055;border-radius:99px;padding:3px 9px;border:2px solid transparent}.rvp .sc span.me{border-color:#ffd84a}",
 ".rvp .sheet table{width:100%;border-collapse:collapse;font-size:13px}.rvp .sheet th,.rvp .sheet td{padding:5px 3px;text-align:right;border-bottom:1px solid #ffffff22}.rvp .sheet th:first-child,.rvp .sheet td:first-child{text-align:left}"
 ].join("\n");
-var ui={sel:{},pf:null,sort:"suit",busy:false,peek:false};
+var ui={sel:{},pf:null,sort:"suit",busy:false,peek:false,order:[],drawn:{},prev:null,round:-1};
 function esc(s){ return String(s==null?"":s).replace(/[&<>]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;"}[c];}); }
 function selIds(){ return Object.keys(ui.sel).map(Number); }
 function phoneRender(root,st,ctx){
   UI.injectCSS(); if(!document.getElementById("rvPCss")){ var s=document.createElement("style"); s.id="rvPCss"; s.textContent=PCSS; document.head.appendChild(s); }
   ui.busy=false; g.Rummy.Party.last=st;
   var G=unpack(st), me=st.me, mine=G.players[me], hand=mine.hand;
+  if(st.round!==ui.round){ ui.round=st.round; ui.prev=null; ui.drawn={}; }
+  if(ui.prev){ var nowIds={}; hand.forEach(function(c){ nowIds[c.id]=1; if(!ui.prev[c.id]) ui.drawn[c.id]=Date.now(); }); ui.prev=nowIds; } else { ui.prev={}; hand.forEach(function(c){ ui.prev[c.id]=1; }); }
   var ids={}; hand.forEach(function(c){ ids[c.id]=1; }); Object.keys(ui.sel).forEach(function(k){ if(!ids[k]) delete ui.sel[k]; });
   var act=!!ctx.active&&!st.ro, draw=act&&st.phase==="draw", play=act&&st.phase==="play";
   if(!draw) ui.pf=null; if(ui.pf!=null&&ui.pf>=G.discard.length) ui.pf=null;
@@ -127,7 +130,8 @@ function phoneRender(root,st,ctx){
     if(ui.pf!=null){ var f=GM.takeFeasible(G,ui.pf); sub=f?("Take "+(G.discard.length-ui.pf)+" card"+((G.discard.length-ui.pf)>1?"s":"")+" from the pile?"):"You can't use that card right away — pick another"; } }
   else { headTxt="Your turn"; sub=st.mustUse!=null?("Use the card you took from the pile ("+(st.mustNew?"in a new meld":"meld or lay off")+") then discard"):"Meld, lay off, then discard one card"; }
   var h='<div class="rvp"><div class="head" style="--c:'+tcol+'">'+headTxt+'<small>'+sub+'</small></div>';
-  h+='<div class="sc">'+G.units.map(function(u,ui2){ var isMe=u.indexOf(me)>=0; return '<span class="'+(isMe?"me":"")+'" style="border-color:'+(isMe?"#ffd84a":UI.colorOf(G,u[0]))+'">'+u.map(function(i){ return esc(st.names[i]); }).join(" &amp; ")+' · <b>'+st.scores[ui2]+'</b></span>'; }).join("")+'</div>';
+  h+='<div class="sc"><span id="rvScoreBtn" style="background:#d9a21b;color:#2a1c00;font-weight:900;cursor:pointer">📊 Scores</span></div>'+
+    '<div class="sc">'+G.units.map(function(u,ui2){ var isMe=u.indexOf(me)>=0; return '<span class="'+(isMe?"me":"")+'" style="border-color:'+(isMe?"#ffd84a":UI.colorOf(G,u[0]))+'">'+u.map(function(i){ return esc(st.names[i]); }).join(" &amp; ")+' · <b>'+st.scores[ui2]+'</b></span>'; }).join("")+'</div>';
   // table
   h+='<div class="tbl"><div class="rm" id="rvm">'+(G.melds.length?G.melds.map(function(m){
       var fit=play&&one&&GM.mayLayOn(G,m,me)&&R.layOff(m,one,G.o)&&!(st.mustNew&&st.mustUse===one.id);
@@ -150,7 +154,7 @@ function phoneRender(root,st,ctx){
       '<button data-a="undo"'+(st.canUndo?"":" disabled")+'>↶ Undo</button><button data-a="hint">💡 Hint</button><button data-a="sort">Sort: '+ui.sort+'</button>';
   } else btns='<button data-a="sort">Sort: '+ui.sort+'</button>';
   h+='<div class="acts" id="rva">'+btns+'</div>';
-  h+='<div class="hd" id="rvh">'+(st.ro?"":UI.sortHand(hand,ui.sort).map(function(c){ return UI.cardHTML(c,{cls:ui.sel[c.id]?"sel":""}); }).join(""))+'</div>';
+  h+='<div class="hd" id="rvh">'+(st.ro?"":UI.sortHand(hand,ui.sort,ui.order).map(function(c){ return UI.cardHTML(c,{cls:ui.sel[c.id]?"sel":"",style:UI.drawnStyle(ui.drawn,c.id)}); }).join(""))+'</div>';
   h+='<div class="lg">'+(st.log||[]).map(esc).join("<br>")+'</div>';
   if(st.ro){
     var rows=st.ro.rows.map(function(r){ return '<tr><td>'+esc(r.name)+'</td><td>'+r.melded+'</td><td>'+(r.dead?-r.dead:0)+'</td><td>'+((r.bonus+r.oppHands)||0)+'</td><td>'+(r.total>0?"+":"")+r.total+'</td><td><b>'+r.score+'</b></td></tr>'; }).join("");
@@ -158,6 +162,15 @@ function phoneRender(root,st,ctx){
   }
   h+='</div>';
   root.innerHTML=h;
+  var sb=root.querySelector("#rvScoreBtn");
+  if(sb) sb.onclick=function(){
+    var ov=document.createElement("div"); ov.style.cssText="position:fixed;inset:0;z-index:99;background:#04180fee;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:16px";
+    var th=G.units.map(function(u){ return "<th>"+u.map(function(i){ return esc(st.names[i]); }).join(" &amp; ")+"</th>"; }).join("");
+    var rowsH=(st.hist||[]).map(function(rw,ri){ return "<tr><td>"+(ri+1)+"</td>"+rw.map(function(r){ return "<td style=\"color:"+(r[0]>=0?"#8ff0b0":"#ff9a9a")+"\">"+(r[0]>0?"+":"")+r[0]+"</td>"; }).join("")+"</tr>"; }).join("")||"<tr><td colspan=\""+(G.units.length+1)+"\" style=\"text-align:center;opacity:.7\">No rounds finished yet</td></tr>";
+    var tot=st.scores.map(function(s){ return "<td><b>"+s+"</b></td>"; }).join("");
+    ov.innerHTML="<div style=\"width:min(100%,520px);background:#0c3322;border:1px solid #3d7a58;border-radius:18px;padding:16px;color:#f3f7ee\"><h2 style=\"margin:0 0 4px\">📊 Scoreboard</h2><div style=\"opacity:.8;font-size:13px\">Playing to <b style=\"color:#ffd84a\">"+st.target+"</b> · round "+st.round+"</div><table style=\"width:100%;border-collapse:collapse;margin:8px 0;font-size:14px;text-align:right\"><tr><th style=\"text-align:left\">Round</th>"+th+"</tr>"+rowsH+"<tr style=\"border-top:2px solid #ffffff55\"><td style=\"text-align:left\"><b>Total</b></td>"+tot+"</tr></table><button id=\"rvScX\" style=\"width:100%;padding:12px;border-radius:12px;border:0;background:#d9a21b;font-weight:900;font-size:16px\">Close</button></div>";
+    document.body.appendChild(ov); ov.querySelector("#rvScX").onclick=function(){ ov.remove(); };
+  };
   var send=function(id,data){ if(ui.busy) return; ui.busy=true; ctx.act(id,data); };
   root.onclick=function(e){
     var n=e.target.closest?e.target.closest(".pc,button,.meld,#rvs"):null; if(!n) return;
@@ -181,6 +194,8 @@ function phoneRender(root,st,ctx){
     if(n.parentNode&&n.parentNode.id==="rvh"){ var id=+n.getAttribute("data-id"); if(ui.sel[id]) delete ui.sel[id]; else ui.sel[id]=1; phoneRender(root,st,ctx); }
   };
   if(!root.__peek){ root.__peek=true; UI.enablePeek(root); }
+  if(!root.__drag){ root.__drag=true; UI.enableDragSort(root,"#rvh",function(ids){ if(root.__reorder) root.__reorder(ids); }); }
+  root.__reorder=function(ids){ ui.order=ids; ui.sort="custom"; phoneRender(root,st,ctx); };
 }
 function resetUI(){ ui.sel={}; ui.pf=null; ui.busy=false; }
 function unbusy(){ ui.busy=false; }

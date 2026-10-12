@@ -1,5 +1,5 @@
 // Offline cache for Risk (bump VERSION to force update)
-const VERSION = "risk-v1";
+const VERSION = "risk-v2";
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.png", "../sound.js", "../skins.js", "../saves.js", "./map.js", "./engine.js", "./board.js", "./ctrl.js"];
 
 self.addEventListener("install", e => {

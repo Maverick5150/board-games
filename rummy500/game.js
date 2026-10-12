@@ -14,6 +14,7 @@ function newGame(cfg){
     melds:[], stock:[], discard:[], turn:0, phase:"draw", mustUse:null, mustNew:false, noDiscard:null, nextMeldId:1, snap:null, roundOver:null };
   G.units=o.teams?[[0,2],[1,3]]:G.players.map(function(p){ return [p.id]; });
   G.scores=G.units.map(function(){ return 0; });
+  G.history=[];
   return G;
 }
 function unitOf(G,i){ return G.o.teams?i%2:i; }
@@ -160,6 +161,7 @@ function endRound(G,reason,outP){
   }
   rows.forEach(function(r,ui){ r.total=r.melded-r.dead+r.bonus+r.oppHands; G.scores[ui]+=r.total; r.score=G.scores[ui]; });
   G.players.forEach(function(p){ p.score=G.scores[unitOf(G,p.id)]; });
+  (G.history=G.history||[]).push({round:G.round,rows:rows.map(function(r){ return {t:r.total,s:r.score}; })});
   var outU=outP!=null?unitOf(G,outP):null;
   var cands=[]; G.scores.forEach(function(s,ui){ if(s>=o.target&&(!o.mustGoOut||ui===outU)) cands.push(ui); });
   var winU=null;

@@ -1,0 +1,14 @@
+{
+  "name": "Uno",
+  "short_name": "Uno",
+  "description": "Uno — Classic, Flip, No Mercy and All Wild, vs computers or friends.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1b1230",
+  "theme_color": "#1b1230",
+  "icons": [
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

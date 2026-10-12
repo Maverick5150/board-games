@@ -110,19 +110,22 @@
 <script src="../risk/engine.js"></script>
 <script src="../risk/board.js"></script>
 <script src="../risk/ctrl.js"></script>
+<script src="../uno/engine.js"></script>
+<script src="../uno/cards.js"></script>
 <script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
 <script>
 (function(){
 "use strict";
 var $=function(id){return document.getElementById(id);};
 var wrap=$("wrap"), connEl=$("conn"), toastEl=$("toast");
-var COL={red:"#e23b3b",blue:"#2b7be0",green:"#27a758",yellow:"#eec21b",orange:"#f08a24",purple:"#a65bd6",teal:"#19b5b0",pink:"#e46aa4",black:"#34363d"};
-var CNAME={black:"Black",red:"Red",blue:"Blue",green:"Green",yellow:"Yellow",orange:"Orange",purple:"Purple",teal:"Teal",pink:"Pink"};
+var COL={red:"#e23b3b",blue:"#2b7be0",green:"#27a758",yellow:"#eec21b",orange:"#f08a24",purple:"#a65bd6",teal:"#19b5b0",pink:"#e46aa4",black:"#34363d",brown:"#9a6a3a"};
+var CNAME={brown:"Brown",black:"Black",red:"Red",blue:"Blue",green:"Green",yellow:"Yellow",orange:"Orange",purple:"Purple",teal:"Teal",pink:"Pink"};
 var ORDER6=["red","blue","green","yellow","black","pink"];
-function ORDER(){ return chosenGame==="rummy500"?ORDER8:chosenGame==="risk"?ORDER6:ORDER4; }
+var ORDERU=["red","blue","green","yellow","orange","purple","teal","pink","black","brown"];
+function ORDER(){ return chosenGame==="rummy500"?ORDER8:chosenGame==="risk"?ORDER6:chosenGame==="uno"?ORDERU:ORDER4; }
 var ORDER4=["red","blue","green","yellow"], ORDER8=["red","blue","green","yellow","orange","purple","teal","pink"];
 var runId=0, noWait=false;
-function maxPlayers(){ return chosenGame==="rummy500"?8:chosenGame==="risk"?6:4; }
+function maxPlayers(){ return chosenGame==="rummy500"?8:chosenGame==="risk"?6:chosenGame==="uno"?10:4; }
 var PACE=1.8;   // game-speed multiplier (every pause in every game is scaled by this)
 try{ var _pp=parseFloat(localStorage.getItem("bgfs_pace")); if(_pp>0) PACE=_pp; }catch(e){}
 var sleep=function(ms){return new Promise(function(r){setTimeout(r,Math.round(ms*PACE));});};
@@ -295,7 +298,8 @@ function screenSelect(){
     {id:"sorry", title:"Sorry!", grad:"linear-gradient(145deg,#0f7a43,#b21f2b)", on:true},
     {id:"monopoly", title:"Monopoly", grad:"linear-gradient(145deg,#15663a,#0c3b22)", on:true},
     {id:"rummy500", title:"500 Rummy", grad:"linear-gradient(145deg,#1e8a58,#0a3d26)", on:true},
-    {id:"risk", title:"Risk", grad:"linear-gradient(145deg,#3a6b8f,#16293b)", on:true}
+    {id:"risk", title:"Risk", grad:"linear-gradient(145deg,#3a6b8f,#16293b)", on:true},
+    {id:"uno", title:"Uno", grad:"linear-gradient(145deg,#4a3a9a,#1b1230)", on:true}
   ];
   var c=$("cards");
   games.forEach(function(g){
@@ -331,13 +335,15 @@ function setBack(label, show){ backbtn.textContent=label; backbtn.style.display=
 backbtn.onclick=function(){
   if(screenState==="select"){ if(window.AndroidTV&&AndroidTV.exit){ AndroidTV.exit(); } else { location.href="../index.html"; } }
   else if(screenState==="lobby"){ screenSelect(); }
-  else if(screenState==="game"){ // abandon current game -> back to game picker
+  else if(screenState==="game"){ // abandon current game -> back to game picker (needs a second press so a stray Back can't end the game)
+    if(!backbtn._armed){ backbtn._armed=true; toast("Press Back again to quit the game"); clearTimeout(backbtn._t); backbtn._t=setTimeout(function(){ backbtn._armed=false; },3000); return; }
+    backbtn._armed=false; clearTimeout(backbtn._t);
     try{ send({t:"wait", pid:"*", msg:"Host left the game"}); }catch(e){}
     runId++; seat={}; players={}; pending={}; lastAsk={}; screenSelect();
   }
 };
 /* Fire TV app: the remote Back button calls this */
-window.__tvBack=function(){ backbtn.click(); };
+window.__tvBack=function(){ if(window.Sound&&Sound.panelOpen&&Sound.panelOpen()){ Sound.closePanel(); return; } backbtn.click(); };
 function cardArt(id){
   var s='<svg class="art2" viewBox="0 0 100 114" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">';
   if(id==="trouble"){
@@ -350,6 +356,11 @@ function cardArt(id){
     s+='<g transform="translate(50,52) rotate(-2)"><rect x="-20" y="-28" width="40" height="56" rx="6" fill="#fff"/><text x="0" y="6" text-anchor="middle" font-family="Arial" font-size="11" font-weight="900" fill="#c62222">SORRY!</text></g>';
     s+='<g transform="translate(66,56) rotate(14)"><rect x="-20" y="-28" width="40" height="56" rx="6" fill="#fff"/><text x="0" y="9" text-anchor="middle" font-family="Arial" font-size="24" font-weight="900" fill="#c62222">7</text></g>';
     s+='</g>';
+  } else if(id==="uno"){
+    s+='<defs><linearGradient id="ug" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4a3a9a"/><stop offset="1" stop-color="#1b1230"/></linearGradient></defs><rect width="100" height="114" fill="url(#ug)"/>';
+    var UC=[["#d6322b","7",24,66,-22],["#f2bf24","+2",44,60,-6],["#2f9e44","5",62,64,10],["#2d63c8","9",78,72,24]];
+    UC.forEach(function(c){ s+='<g transform="translate('+c[2]+','+c[3]+') rotate('+c[4]+')"><rect x="-14" y="-21" width="28" height="42" rx="4" fill="'+c[0]+'" stroke="#fff" stroke-width="1.8"/><ellipse cx="0" cy="1" rx="12" ry="8" transform="rotate(-24)" fill="#fff"/><text x="0" y="6" text-anchor="middle" font-family="Arial Black,Arial" font-size="'+(c[1].length>1?13:16)+'" font-weight="900" fill="'+c[0]+'">'+c[1]+'</text></g>'; });
+    s+='<text x="50" y="22" text-anchor="middle" font-family="Arial Black,Arial" font-size="18" font-weight="900" font-style="italic" fill="#f2bf24" stroke="#d6322b" stroke-width="2" paint-order="stroke">UNO</text>';
   } else if(id==="risk"){
     var RKM=window.Risk&&Risk.Board;
     s+='<defs><linearGradient id="rkg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a7cde3"/><stop offset="1" stop-color="#6fa3c4"/></linearGradient></defs><rect width="100" height="114" fill="url(#rkg)"/>';
@@ -372,7 +383,7 @@ function cardArt(id){
 }
 
 function screenLobby(){
-  monoRules=JSON.parse(MONO_DEFAULT); rvCfg={version:"standard",over:{}}; rkCfg={version:"1959",over:{}};      // every game opens on the standard rules
+  monoRules=JSON.parse(MONO_DEFAULT); rvCfg={version:"standard",over:{}}; rkCfg={version:"1959",over:{}}; unCfg={version:"classic",over:{}};      // every game opens on the standard rules
   inLobby=true; screenState="lobby"; setBack("‹ Back", true); Skins.apply(chosenGame); Sound.music(chosenGame);
   startRoom();                                                          // new random code + new QR for this game
   var qrSrc="https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=12&data="+encodeURIComponent(JOIN_URL);
@@ -386,6 +397,7 @@ function screenLobby(){
     (chosenGame==="monopoly"?'<div class="rulebox"><div class="muted" style="font-size:2.2vh">⚙️ House rules (tap to toggle)</div><div id="ruleBtns"></div></div>':'')+
     (chosenGame==="rummy500"?'<div class="rulebox" id="rvbox"></div>':'')+
     (chosenGame==="risk"?'<div class="rulebox" id="rkbox"></div>':'')+
+    (chosenGame==="uno"?'<div class="rulebox" id="unbox"></div>':'')+
     '<div id="svbar" style="max-width:92vw;font-size:2vh;margin:1vh auto"></div>'+
     '<button class="big" id="startBtn">▶ Start Game</button>'+
     '<div class="hintbar" id="lobhint"></div>';
@@ -395,18 +407,19 @@ function screenLobby(){
   if(chosenGame==="monopoly") renderRules();
   if(chosenGame==="rummy500") renderRvRules();
   if(chosenGame==="risk") renderRkRules();
-  var redrawRules=function(){ if(chosenGame==="monopoly") renderRules(); if(chosenGame==="rummy500") renderRvRules(); if(chosenGame==="risk") renderRkRules(); renderLobby(); };
+  if(chosenGame==="uno") renderUnRules();
+  var redrawRules=function(){ if(chosenGame==="monopoly") renderRules(); if(chosenGame==="rummy500") renderRvRules(); if(chosenGame==="risk") renderRkRules(); if(chosenGame==="uno") renderUnRules(); renderLobby(); };
   Saves.bar({game:"party-"+chosenGame,el:$("svbar"),
-    getSettings:function(){ return {cpu:cpuCount,pace:PACE,mono:chosenGame==="monopoly"?monoRules:null,rv:chosenGame==="rummy500"?rvCfg:null,rk:chosenGame==="risk"?rkCfg:null}; },
-    applySettings:function(s){ if(s.cpu!=null) cpuCount=s.cpu; if(s.pace>0){ PACE=s.pace; try{localStorage.setItem("bgfs_pace",String(PACE));}catch(e){} } if(s.mono&&chosenGame==="monopoly") monoRules=s.mono; if(s.rv&&chosenGame==="rummy500") rvCfg={version:s.rv.version||"standard",over:s.rv.over||{}}; if(s.rk&&chosenGame==="risk") rkCfg={version:s.rk.version||"1959",over:s.rk.over||{}}; redrawRules(); },
-    standard:function(){ cpuCount=3; PACE=1.8; try{localStorage.setItem("bgfs_pace","1.8");}catch(e){} monoRules=JSON.parse(MONO_DEFAULT); rvCfg={version:"standard",over:{}}; rkCfg={version:"1959",over:{}}; redrawRules(); }});
+    getSettings:function(){ return {cpu:cpuCount,pace:PACE,mono:chosenGame==="monopoly"?monoRules:null,rv:chosenGame==="rummy500"?rvCfg:null,rk:chosenGame==="risk"?rkCfg:null,un:chosenGame==="uno"?unCfg:null}; },
+    applySettings:function(s){ if(s.cpu!=null) cpuCount=s.cpu; if(s.pace>0){ PACE=s.pace; try{localStorage.setItem("bgfs_pace",String(PACE));}catch(e){} } if(s.mono&&chosenGame==="monopoly") monoRules=s.mono; if(s.rv&&chosenGame==="rummy500") rvCfg={version:s.rv.version||"standard",over:s.rv.over||{}}; if(s.rk&&chosenGame==="risk") rkCfg={version:s.rk.version||"1959",over:s.rk.over||{}}; if(s.un&&chosenGame==="uno") unCfg={version:s.un.version||"classic",over:s.un.over||{}}; redrawRules(); },
+    standard:function(){ cpuCount=3; PACE=1.8; try{localStorage.setItem("bgfs_pace","1.8");}catch(e){} monoRules=JSON.parse(MONO_DEFAULT); rvCfg={version:"standard",over:{}}; rkCfg={version:"1959",over:{}}; unCfg={version:"classic",over:{}}; redrawRules(); }});
   broadcastLobby();
   $("startBtn").onclick=startGame;
   $("startBtn").focus();
 }
 function renderLobby(){
   var el=$("players"); if(!el) return;
-  var isRv=chosenGame==="rummy500"||chosenGame==="risk", order=ORDER(), teams=chosenGame==="rummy500"&&isRv&&Rummy.versionOpts(rvCfg.version,rvCfg.over).teams;
+  var isRv=chosenGame==="rummy500"||chosenGame==="risk"||chosenGame==="uno", order=ORDER(), teams=chosenGame==="rummy500"&&isRv&&Rummy.versionOpts(rvCfg.version,rvCfg.over).teams;
   var seated=Object.keys(seat).length;
   if(teams) cpuCount=Math.max(0,4-seated);
   if(isRv) el.style.cssText="display:flex;flex-direction:row;flex-wrap:wrap;gap:1vh;justify-content:center;max-width:92vw;width:auto";
@@ -431,7 +444,27 @@ function renderLobby(){
     Array.prototype.forEach.call(pbx.querySelectorAll("button"),function(b){ b.onclick=function(){ PACE=parseFloat(b.dataset.p); try{localStorage.setItem("bgfs_pace",String(PACE));}catch(e){} renderLobby(); }; }); }
   var h=$("lobhint"); if(h) h.textContent = (teams&&seated>4? "Partnership games need exactly 4 players — pick another version for "+seated+" people." : total<2? "Add a computer player or another human (need 2+)." : total+" players: "+seated+" human + "+Math.min(cpuCount,maxC)+" computer"+(teams?" (partners sit opposite)":"")+".");
 }
-function gameTitle(id){ return id==="trouble"?"Trouble":id==="sorry"?"Sorry!":id==="rummy500"?"500 Rummy":id==="risk"?"Risk":"Monopoly"; }
+function gameTitle(id){ return id==="trouble"?"Trouble":id==="sorry"?"Sorry!":id==="rummy500"?"500 Rummy":id==="risk"?"Risk":id==="uno"?"Uno":"Monopoly"; }
+var unCfg={version:"classic",over:{}};
+function unOpts(){ return Uno.Engine.versionOpts(unCfg.version,unCfg.over); }
+function renderUnRules(){
+  var el=$("unbox"); if(!el) return;
+  var E=Uno.Engine, o=unOpts(), cur=E.VERSIONS.filter(function(v){return v.id===unCfg.version;})[0];
+  var h='<div class="muted" style="font-size:2.2vh">🃏 Version</div><div>'+E.VERSIONS.map(function(v){ return '<button class="aibtn'+(v.id===unCfg.version?" on":"")+'" data-v="'+v.id+'" style="margin:.5vh;padding:.9vh 1.6vh;font-size:2vh">'+esc(v.name)+'</button>'; }).join("")+'</div>'+
+    '<div class="muted" style="font-size:2vh;max-width:80vw;margin:.6vh auto">'+esc(cur.tag)+' — '+esc(cur.desc)+'</div>'+
+    '<div class="muted" style="font-size:2.2vh;margin-top:.6vh">⚙️ Rules (tap to change)</div><div>'+E.HOUSE.map(function(hr,k){
+      var v=o[hr[0]], txt;
+      if(hr[2]==="bool") txt=hr[1]+": "+(v?"ON":"off");
+      else { var m=hr[3].filter(function(c){return String(c[0])===String(v);})[0]; txt=hr[1]+": "+(m?m[1]:v); }
+      return '<button class="aibtn" data-k="'+k+'" style="margin:.4vh;padding:.7vh 1.3vh;font-size:1.8vh">'+esc(txt)+'</button>'; }).join("")+'</div>';
+  el.innerHTML=h;
+  Array.prototype.forEach.call(el.querySelectorAll("button[data-v]"),function(b){ b.onclick=function(){ unCfg.version=b.dataset.v; unCfg.over={}; renderUnRules(); renderLobby(); }; });
+  Array.prototype.forEach.call(el.querySelectorAll("button[data-k]"),function(b){ b.onclick=function(){
+    var hr=E.HOUSE[+b.dataset.k], cv=unOpts()[hr[0]];
+    if(hr[2]==="bool") unCfg.over[hr[0]]=!cv;
+    else { var ch=hr[3], ix=0; ch.forEach(function(c,j){ if(String(c[0])===String(cv)) ix=j; }); unCfg.over[hr[0]]=ch[(ix+1)%ch.length][0]; }
+    renderUnRules(); renderLobby(); }; });
+}
 var rkCfg={version:"1959",over:{}};
 function rkOpts(){ var o=Risk.Engine.versionOpts(rkCfg.version,rkCfg.over); return o; }
 function renderRkRules(){
@@ -481,6 +514,7 @@ function startGame(){
   else if(chosenGame==="monopoly") playMonopoly();
   else if(chosenGame==="rummy500") playRummy();
   else if(chosenGame==="risk") playRisk();
+  else if(chosenGame==="uno") playUno();
 }
 
 /* status helper */
@@ -1257,6 +1291,113 @@ function playRisk(){
     }
     if(!alive()) return;
     if(G.over){ var wn=nameOf(G.winner); announceOver(wn); showPlayAgain(); }
+  }
+  run();
+}
+/* ============================================================
+   UNO  (TV host) — the TV is the table (top card, piles, everyone's card counts); each phone is a private hand
+   ============================================================ */
+function playUno(){
+  var myRun=++runId; noWait=true;
+  var UE=Uno.Engine, UC=Uno.Cards;
+  var active=computeActive(ORDERU), opts=unOpts();
+  var names=active.map(function(c){ return seat[c]?players[seat[c]].name:CNAME[c]+" CPU"; });
+  var humans=active.map(function(c){ return !!seat[c]; });
+  var cols=active.map(function(c){ return COL[c]; });
+  var G=UE.newGame({names:names,humans:humans,opts:opts});
+  var afk={}, askingIdx=-1;
+  screenState="game"; setBack("‹ Quit", true); Skins.apply("uno");
+  var st0=document.createElement("style"); st0.textContent=UC.CSS+Uno.Ctrl.CSS+
+   ".untv{display:flex;gap:3vh;width:98vw;align-items:flex-start;justify-content:center}#unMain{flex:none;width:min(54vw,100vh)}#unSide{width:34vw;display:flex;flex-direction:column;gap:1vh}"+
+   "#unTable{display:flex;align-items:center;justify-content:center;gap:5vh;background:radial-gradient(120% 100% at 50% 0,#2e4d9c,#1d2f68 60%,#14204a);border-radius:2.6vh;box-shadow:0 0 0 .7vh #f2bf24,0 0 0 1.3vh #d6322b,0 2.4vh 5vh rgba(0,0,0,.8);padding:4vh 2vh;min-height:48vh}"+
+   "#unTable .pile{text-align:center;font-size:2.4vh;font-weight:800;color:#ffe}#unTable .pile .uc{display:block;margin:0 auto 1vh}"+
+   ".unp{display:flex;align-items:center;gap:1.4vh;background:#00000066;border:.5vh solid transparent;border-radius:1.8vh;padding:1vh 1.6vh;font-size:3vh;font-weight:800}.unp.cur{border-color:var(--c);box-shadow:0 0 0 .4vh var(--c),0 0 3vh .6vh var(--c)}.unp.out{opacity:.3}"+
+   ".unp .sw{width:2.8vh;height:2.8vh;border-radius:.7vh;flex:none}.unp .bd{margin-left:auto;background:#fff;color:#111;border-radius:1vh;min-width:5vh;height:5vh;display:flex;align-items:center;justify-content:center;font-size:3.2vh;font-weight:900}.unp small{display:block;font-size:2vh;font-weight:600;opacity:.8}"+
+   "#unLog{font-size:2.3vh;color:#e6d9f2;line-height:1.35;min-height:12vh}#unBanner{position:fixed;left:50%;top:10%;transform:translateX(-50%);font:900 8vh 'Arial Black',Arial;font-style:italic;color:#f2bf24;text-shadow:.5vh .5vh 0 #d6322b,1vh 1vh 0 #0008;opacity:0;pointer-events:none;transition:opacity .25s;z-index:80}#unBanner.show{opacity:1}";
+  document.head.appendChild(st0);
+  wrap.innerHTML='<div class="untv"><div id="unMain"><div id="unTable"></div><div class="status" id="status" style="margin:1.2vh 0"></div></div><div id="unSide"><div id="unPl"></div><div id="unLog"></div></div></div><div id="unBanner"></div><div class="hintbar" id="hint">Players: use your phones</div>';
+  UC.injectCSS();
+  function alive(){ return myRun===runId; }
+  function banner(t){ var b=$("unBanner"); if(!b) return; b.textContent=t; b.classList.add("show"); setTimeout(function(){ b.classList.remove("show"); },1400); }
+  function drawTv(){
+    var V=UE.snapshot(G,-1), dark=V.side===1;
+    $("unTable").innerHTML='<div class="pile" style="--cw:13vh">'+UC.backHTML({label:V.drawCount+" cards"})+'draw pile</div>'+
+      '<div class="pile" style="font-size:5vh;line-height:1">'+(V.dir>0?"↻":"↺")+'<div style="width:6vh;height:6vh;border-radius:50%;border:.6vh solid #fff;margin:1vh auto;background:'+(V.color?UC.COL[V.color]:"conic-gradient(#d6322b,#f2bf24,#2f9e44,#2d63c8,#d6322b)")+'"></div>'+(V.pen?'<div style="background:#e53b2c;border-radius:99vh;font-size:3.4vh;padding:.4vh 2vh;display:inline-block">+'+V.pen.n+'</div>':'')+'</div>'+
+      '<div class="pile" style="--cw:17vh">'+(V.top?UC.cardHTML(V.top,V.side,{cls:"pop"}):"")+(V.o.edition==="flip"?(dark?"Dark side":"Light side"):"discard")+'</div>';
+    $("unPl").innerHTML=V.players.map(function(p,i){ var cur=!V.over&&!V.roundOver&&i===V.actor; return '<div class="unp'+(cur?" cur":"")+(p.alive?"":" out")+'" style="--c:'+cols[i]+'"><span class="sw" style="background:'+cols[i]+'"></span><span>'+esc(p.name)+(p.human?"":" 🤖")+(p.team>=0?'<small>Team '+(p.team+1)+'</small>':'')+(V.o.target?'<small>'+p.score+' pts</small>':'')+'</span><span class="bd">'+p.cards+'</span></div>'; }).join("");
+    $("unLog").innerHTML=G.log.slice(-6).map(function(e){ return e.text; }).filter(Boolean).slice(-5).map(esc).join("<br>");
+    var tn=G.players[G.turn].name, act=UE.actor(G);
+    setStatus('<span class="dot" style="background:'+cols[act]+'"></span> '+esc(G.players[act].name)+(G.phase==="challenge"?" is deciding on a challenge":G.phase==="roulette"?" is spinning the roulette":" is playing")+(G.players[act].human&&seat[active[act]]?" (use your phone)":""));
+  }
+  function snapFor(i){ var st=UE.snapshot(G,i); st.cols=cols; if(afk[i]) st.afk=true; return st; }
+  function pushAll(skip){ G.players.forEach(function(p,i){ if(p.human&&seat[active[i]]&&i!==skip) send({t:"ups",pid:seat[active[i]],st:snapFor(i)}); }); }
+  gameSnap=function(){ pushAll(askingIdx); };
+  function interrupt(pid){ Object.keys(pending).forEach(function(k){ if(pending[k].pid===pid){ var pr=pending[k]; delete pending[k]; pr.resolve({id:"interrupt"}); } }); }
+  function afterApply(res){
+    (res.events||[]).forEach(function(ev){ if(ev.text){ Sound.fromText(ev.text); if(/says UNO/.test(ev.text)) banner("UNO!"); else if(/FLIP/.test(ev.text)) banner("FLIP!"); } });
+    drawTv();
+  }
+  viewHandler=function(o){
+    var idx=-1; G.players.forEach(function(p,i){ if(seat[active[i]]===o.pid) idx=i; });
+    if(idx<0) return;
+    if(o.take){ if(afk[idx]){ afk[idx]=false; pushAll(-1); } return; }
+    var a=o.uno; if(!a||typeof a!=="object") return;
+    if(a.t!=="uno"&&a.t!=="catch"&&a.t!=="jump") return;
+    var prevActor=UE.actor(G), res;
+    try{ res=UE.applyAction(G,idx,a); }catch(e){ res={ok:false}; }
+    if(!res.ok){ send({t:"info",pid:o.pid,msg:res.msg||"Too late"}); return; }
+    afterApply(res);
+    if(G.roundOver){ interrupt(seat[active[prevActor]]); pushAll(-1); return; }
+    if(UE.actor(G)!==prevActor||a.t==="jump"){ if(seat[active[prevActor]]) interrupt(seat[active[prevActor]]); }
+    pushAll(askingIdx>=0&&UE.actor(G)===askingIdx?askingIdx:-1);
+  };
+  function doAction(who,a){
+    var res; try{ res=UE.applyAction(G,who,a); }catch(e){ res={ok:false,msg:"Invalid move"}; }
+    if(!res.ok) return res;
+    afterApply(res);
+    var nxt=(!G.roundOver&&G.players[UE.actor(G)].human&&!afk[UE.actor(G)])?UE.actor(G):-1;
+    pushAll(nxt); return res;
+  }
+  async function cpuStep(who){
+    askingIdx=-1;
+    var anyHuman=G.players.some(function(p,i){ return p.human&&seat[active[i]]; });
+    var base=1400; if(anyHuman&&G.unoVuln!=null&&!G.players[G.unoVuln].human) base=2600; if(opts.jumpIn&&anyHuman) base=Math.max(base,2200);
+    await sleep(base);
+    if(!alive()||G.roundOver) return;
+    if(UE.actor(G)!==who) return;
+    if(G.unoVuln!=null&&G.players[G.unoVuln].human&&G.rnd()<0.7){ var by=-1; G.players.forEach(function(p,i){ if(by<0&&!p.human&&p.alive&&i!==G.unoVuln) by=i; }); if(by>=0){ doAction(by,{t:"catch",target:G.unoVuln}); return; } }
+    var a=UE.aiAction(G,who); if(!a) return;
+    var res=doAction(who,a); if(!res.ok){ doAction(who,{t:"draw"}); }
+  }
+  async function humanStep(i){
+    var color=active[i], pid=seat[color];
+    askingIdx=i;
+    var r=await ask(color,"Your turn","",[{id:"auto",label:"Auto-play"}],{kind:"uno",st:snapFor(i)});
+    askingIdx=-1;
+    if(!alive()||G.roundOver) return;
+    if(r.id==="interrupt") return;
+    if(UE.actor(G)!==i) return;
+    if(r.id==="act"&&r.data&&typeof r.data==="object"){ var res=doAction(i,r.data); if(!res.ok) send({t:"info",pid:pid,msg:res.msg||"That didn't work"}); }
+    else { afk[i]=true; send({t:"info",pid:pid,msg:"You were away — the computer is playing for you. Tap “Take over” to resume."}); pushAll(-1); }
+  }
+  async function roundEnd(){
+    pushAll(-1); askingIdx=-1;
+    var ro=G.roundOver, el=$("unTable"); if(!el) return;
+    var rows=ro.rows.map(function(r){ return '<tr><td>'+esc(r.name)+(r.id===ro.winUnit?" 🏆":"")+'</td><td>'+r.left+'</td><td>'+(r.points?"+"+r.points:"—")+'</td><td><b>'+G.uscore[r.id]+'</b></td></tr>'; }).join("");
+    el.innerHTML='<div style="font-size:3vh;max-width:50vw"><div style="font-size:4.4vh;font-weight:900">'+(ro.over?"🏆 Game over":"Round "+G.round+" complete")+'</div><div style="opacity:.8">'+esc(G.players[ro.winner].name)+' went out first</div><table style="width:100%;margin:1vh 0"><tr style="opacity:.7"><td>Player</td><td>Cards left</td><td>Round</td><td>Total</td></tr>'+rows+'</table>'+(ro.over?'<div style="font-size:4vh;text-align:center"><b style="color:#f2bf24">'+esc(ro.gameWinnerName)+'</b> wins the game!</div>':'')+'</div>';
+    setStatus(ro.over?"🏆 "+esc(ro.gameWinnerName)+" wins!":"Round "+G.round+" complete");
+    if(ro.over) return;
+    var b=document.createElement("button"); b.className="big"; b.textContent="Next round ▶"; b.style.marginTop="1vh"; el.appendChild(b); b.focus();
+    await new Promise(function(res){ var done=false,fin=function(){ if(!done){ done=true; res(); } }; b.onclick=fin; setTimeout(fin,25000); });
+  }
+  async function run(){
+    while(alive()){
+      UE.startRound(G); drawTv(); pushAll(-1); await sleep(1500);
+      while(alive()&&!G.roundOver){ var a=UE.actor(G), p=G.players[a]; if(p.human&&seat[active[a]]&&!afk[a]) await humanStep(a); else await cpuStep(a); }
+      if(!alive()) return;
+      drawTv(); await roundEnd();
+      if(G.over){ if(alive()){ announceOver(G.roundOver.gameWinnerName); showPlayAgain(); } return; }
+    }
   }
   run();
 }

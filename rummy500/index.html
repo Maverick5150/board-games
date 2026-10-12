@@ -79,7 +79,7 @@
 <h1>♠ 500 RUMMY ♥</h1>
 <div class="wrap">
   <div id="legend"></div>
-  <div class="menuRow"><button class="btn" id="menuBtn">☰ Menu</button></div>
+  <div class="menuRow"><button class="btn" id="menuBtn">☰ Menu</button><button class="btn" id="scoreBtn">📊 Scores</button></div>
   <div id="rtable">
     <div id="meldsArea"></div>
     <div id="pilesRow"><div id="stock"></div><div id="discard"></div></div>
@@ -88,7 +88,7 @@
   <div id="log"></div>
   <div id="actions"></div>
   <div id="hand"></div>
-  <div class="hint">Tap cards to select · tap a table meld to lay a card off · press &amp; hold any card to enlarge</div>
+  <div class="hint">Tap cards to select · drag a card to move it · tap a table meld to lay a card off · press &amp; hold to enlarge</div>
 </div>
 <div id="toast"></div>
 
@@ -132,7 +132,7 @@ const $=id=>document.getElementById(id);
 const SPEED={slow:1600,normal:1000,fast:450};
 const OFFICIAL_NOT={minNat:1,addOppHands:1,mustGoOut:1};
 let cfg={version:"standard",over:{},humans:1,cpus:1,speed:"normal"};
-let G=null,sel=new Set(),pileFrom=null,sortMode="suit",flashCards={},flashMeld=null,logLines=[],gen=0,handoffOk=null,lastTurn=-1,busy=false,newIds={};
+let G=null,sel=new Set(),pileFrom=null,sortMode="suit",flashCards={},flashMeld=null,logLines=[],gen=0,handoffOk=null,lastTurn=-1,busy=false,drawnAt={},customOrder=[];
 
 function curOpts(){ return R.versionOpts(cfg.version,cfg.over); }
 function esc(s){ return String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
@@ -183,7 +183,7 @@ function takeSnap(){
 }
 function loadSaved(d){
   gen++; G=d.G; G.rnd=Math.random; G.log=[]; G.snap=null; G.roundOver=null;
-  Object.assign(cfg,d.cfg||{}); sel.clear(); pileFrom=null; flashCards={}; flashMeld=null; handoffOk=null; lastTurn=-1; newIds={}; busy=false;
+  Object.assign(cfg,d.cfg||{}); sel.clear(); pileFrom=null; flashCards={}; flashMeld=null; handoffOk=null; lastTurn=-1; drawnAt={}; busy=false;
   logLines=[]; say("Saved game loaded — round "+G.round,true);
   $("setup").classList.remove("show"); $("roundBox").classList.remove("show"); Sound.skip(); loop();
 }
@@ -193,6 +193,19 @@ const saveBar=Saves.bar({game:"rummy500",el:$("svbar"),
   standard:()=>{ cfg.version="standard"; cfg.over={}; cfg.humans=1; cfg.cpus=1; cfg.speed="normal"; setSpeedSeg(); drawSetup(); },
   getSnapshot:()=>(G&&!G.over&&!G.roundOver)?lastSnap:null,
   loadSnapshot:loadSaved});
+$("scoreBtn").addEventListener("click",()=>{ if(!G){ toast("Start a game first."); return; } showScores(); });
+function showScores(){
+  const hist=G.history||[], units=G.units;
+  const head=units.map((u,ui)=>`<th>${esc(u.map(i=>G.players[i].name).join(" & "))}</th>`).join("");
+  const rows=hist.map(hr=>`<tr><td>${hr.round}</td>${hr.rows.map(r=>`<td class="${r.t>=0?"pos":"neg"}">${r.t>0?"+":""}${r.t}</td>`).join("")}</tr>`).join("");
+  const tot=units.map((u,ui)=>`<td><b>${G.scores[ui]}</b></td>`).join("");
+  const lead=Math.max(...G.scores);
+  $("roundSheet").innerHTML=`<h2>📊 Scoreboard</h2><div style="color:var(--muted);font-size:13px">Playing to <b style="color:var(--gold)">${G.o.target}</b> · round ${G.round}</div>
+    <table class="sc"><tr><th>Round</th>${head}</tr>${rows||`<tr><td colspan="${units.length+1}" style="text-align:center;color:var(--muted)">No rounds finished yet</td></tr>`}<tr style="border-top:2px solid #ffffff55"><td><b>Total</b></td>${tot}</tr></table>
+    <div style="font-size:12.5px;color:var(--muted)">${units.map((u,ui)=>`${esc(u.map(i=>G.players[i].name).join(" & "))}: ${Math.max(0,G.o.target-G.scores[ui])} to go`).join(" · ")}</div>
+    <div style="display:flex;gap:8px;margin-top:10px"><button class="btn primary" id="scClose" style="flex:1">Close</button></div>`;
+  $("roundBox").classList.add("show"); $("scClose").addEventListener("click",()=>{ $("roundBox").classList.remove("show"); if(G&&G.roundOver) showRound(); });
+}
 $("menuBtn").addEventListener("click",()=>{ saveBar.refresh(); $("resumeBtn").style.display=(G&&!G.over)?"block":"none"; $("setup").classList.add("show"); });
 $("resumeBtn").addEventListener("click",()=>$("setup").classList.remove("show"));
 $("startBtn").addEventListener("click",()=>{ Sound.skip(); $("setup").classList.remove("show"); startGame(); });
@@ -207,7 +220,7 @@ function startGame(){
   logLines=[]; startRound(true);
 }
 function startRound(first){
-  GM.startRound(G); sel.clear(); pileFrom=null; flashCards={}; flashMeld=null; handoffOk=null; lastTurn=-1; newIds={};
+  GM.startRound(G); sel.clear(); pileFrom=null; flashCards={}; flashMeld=null; handoffOk=null; lastTurn=-1; drawnAt={};
   Sound.sfx("deal");
   logLines=[]; say(`${G.players[G.dealer].name} ${G.players[G.dealer].human&&G.n>0&&cfg.humans===1?"deal":"deals"} — round ${G.round}`,true);
   loop();
@@ -235,8 +248,8 @@ function perform(a){
   if(a.t==="meld"){ flashMeld=res.meld&&res.meld.id; }
   if(a.t==="layoff"){ flashMeld=a.meld; }
   if(a.t==="discard"){ flashCards={[a.card]:1}; }
-  if(a.t==="stock"&&p.human){ newIds={}; const c=res.card; if(c) newIds[c.id]=1; }
-  if(a.t==="take"&&p.human){ newIds={}; (res.cards||[]).forEach(c=>newIds[c.id]=1); }
+  if(a.t==="stock"&&p.human){ drawnAt={}; const c=res.card; if(c) drawnAt[c.id]=Date.now(); }
+  if(a.t==="take"&&p.human){ drawnAt={}; (res.cards||[]).forEach(c=>drawnAt[c.id]=Date.now()); }
   if(a.t==="take") flashCards={};
   if(res.roundOver&&res.roundOver.reason==="out"){ say(`${G.players[res.roundOver.out].name} ${G.players[res.roundOver.out].human&&cfg.humans===1?"go":"goes"} out!`); }
   return res;
@@ -245,7 +258,7 @@ function perform(a){
 function loop(){
   if(G.roundOver){ busy=true; render(); setTimeout(showRound,cur().human?500:900); return; }
   const p=cur();
-  if(G.turn!==lastTurn){ lastTurn=G.turn; handoffOk=null; sel.clear(); pileFrom=null; if(!p.human) newIds={}; }
+  if(G.turn!==lastTurn){ lastTurn=G.turn; handoffOk=null; sel.clear(); pileFrom=null; if(!p.human) drawnAt={}; }
   busy=!p.human;
   takeSnap();
   render();
@@ -301,7 +314,7 @@ function render(){
   $("discard").scrollLeft=1e5;
   // hand
   const vh=viewerHand(), hd=$("hand");
-  if(vh){ hd.innerHTML=UI.sortHand(vh.hand,sortMode).map(c=>UI.cardHTML(c,{cls:(sel.has(c.id)?"sel ":"")+(newIds[c.id]?"flash":"")})).join(""); }
+  if(vh){ hd.innerHTML=UI.sortHand(vh.hand,sortMode,customOrder).map(c=>UI.cardHTML(c,{cls:(sel.has(c.id)?"sel ":""),style:UI.drawnStyle(drawnAt,c.id)})).join(""); }
   else hd.innerHTML=`<div class="hint" style="padding:30px 0">${G.roundOver?"":esc(p.name)+" is playing…"}</div>`;
   // status
   const st=$("status");
@@ -329,7 +342,7 @@ function renderActions(human){
       add(`Take ${G.discard.length-pileFrom} from pile`,()=>act({t:"take",idx:pileFrom}),{primary:true,dis:!GM.takeFeasible(G,pileFrom)});
       add("Cancel",()=>{ pileFrom=null; render(); });
     } else { add("Draw from stock",()=>act({t:"stock"}),{primary:true}); }
-    add("Sort: "+(sortMode==="suit"?"suit":"rank"),()=>{ sortMode=sortMode==="suit"?"rank":"suit"; render(); });
+    add("Sort: "+sortMode,()=>{ sortMode=sortMode==="suit"?"rank":"suit"; render(); });
     return;
   }
   const vh=viewerHand(), cs=vh.hand.filter(c=>sel.has(c.id));
@@ -338,14 +351,14 @@ function renderActions(human){
   let tgt=null; if(cs.length===1){ const ts=G.melds.filter(x=>GM.mayLayOn(G,x,G.turn)&&R.layOff(x,cs[0],G.o)&&!(G.mustNew&&G.mustUse===cs[0].id)); tgt=ts.length===1?ts[0]:(ts.length>1?"many":null); }
   add("Lay off",()=>{ if(tgt==="many") toast("Tap the glowing meld you want"); else act({t:"layoff",meld:tgt.id,card:cs[0].id}); },{dis:!tgt});
   add("Discard",()=>act({t:"discard",card:cs[0].id}),{dis:cs.length!==1});
-  add("↶ Undo",()=>{ const r=GM.undo(G); if(!r.ok) toast(r.msg); else { sel.clear(); newIds={}; say(`${cur().name} undo`,true); render(); } },{dis:!G.snap});
+  add("↶ Undo",()=>{ const r=GM.undo(G); if(!r.ok) toast(r.msg); else { sel.clear(); drawnAt={}; say(`${cur().name} undo`,true); render(); } },{dis:!G.snap});
   add("💡 Hint",()=>{
     const plan=R.bestMelds(vh.hand,G.o);
     if(plan.list.length){ sel=new Set(plan.list[0].ids); toast("Best meld selected: "+lab(plan.list[0].cards.map(e=>e.c))); }
     else toast(G.mustUse!=null?"Look for a lay-off for the card you took":"No melds yet — discard your least useful card");
     render();
   });
-  add("Sort: "+(sortMode==="suit"?"suit":"rank"),()=>{ sortMode=sortMode==="suit"?"rank":"suit"; render(); });
+  add("Sort: "+sortMode,()=>{ sortMode=sortMode==="suit"?"rank":"suit"; render(); });
 }
 function act(a){
   if(!G||busy||G.roundOver) return;
@@ -373,6 +386,7 @@ $("meldsArea").addEventListener("click",e=>{
   act({t:"layoff",meld:mid,card:cid});
 });
 UI.enablePeek(document.body);
+UI.enableDragSort(document.body,"#hand",ids=>{ customOrder=ids; sortMode="custom"; render(); });
 
 /* ---------------- round summary ---------------- */
 function showRound(){

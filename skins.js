@@ -54,6 +54,13 @@ var THEMES={
     for(var s=0;s<26;s++){ el(root,"","left:"+rand(0,99)+"vw;top:"+rand(0,60)+"vh;width:3px;height:3px;border-radius:50%;background:#ffe9a8;animation:bgtwinkle "+rand(2.5,6).toFixed(1)+"s ease-in-out "+(-rand(0,6)).toFixed(1)+"s infinite"); }
     for(var d=0;d<9;d++){ floater(root,"left:"+rand(0,96)+"vw;font:900 "+rand(36,86)+"px Georgia,serif;color:#f4c542;opacity:"+rand(.1,.2).toFixed(2),rand(26,50),rand(-60,60),rand(-30,30)).textContent=pick(["$","$","💵","🪙"]); }
   },
+  uno:function(root){
+    root.style.background="radial-gradient(120% 90% at 50% 30%,#3a2a78 0%,#241a52 55%,#120c2a 100%)";
+    el(root,"","inset:0;opacity:.12;background:repeating-linear-gradient(135deg,rgba(255,255,255,.18) 0 2px,transparent 2px 26px)");
+    var cols=["#d6322b","#f2bf24","#2f9e44","#2d63c8"];
+    for(var i=0;i<16;i++){ var w=rand(46,86); floater(root,"left:"+rand(0,96)+"vw;width:"+w+"px;height:"+(w*1.5)+"px;background:"+pick(cols)+";border:4px solid #fff;border-radius:10px;opacity:"+rand(.10,.2).toFixed(2),rand(26,52),rand(-80,80),rand(-160,160)); }
+    el(root,"","inset:0;background:radial-gradient(ellipse at center,transparent 50%,rgba(0,0,0,.5) 100%)");
+  },
   risk:function(root){
     root.style.background="radial-gradient(120% 90% at 50% 30%,#2a4c66 0%,#16293b 55%,#0a141e 100%)";
     el(root,"","inset:0;opacity:.18;background:repeating-linear-gradient(8deg,rgba(255,255,255,.12) 0 1px,transparent 1px 22px)");
