@@ -1,0 +1,14 @@
+{
+  "name": "Scattergories",
+  "short_name": "Scattergories",
+  "description": "Roll a letter, fill in the categories, score for answers nobody else wrote. Every version, vs computers or friends.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f3b4a",
+  "theme_color": "#0f3b4a",
+  "icons": [
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

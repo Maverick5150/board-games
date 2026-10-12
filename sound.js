@@ -34,7 +34,7 @@ function hz(m){ return 440*Math.pow(2,(m-69)/12); }
 
 /* ---------- voices ---------- */
 var inSfx=false, sty=null;
-var STY={trouble:{wave:"square",pitch:1},sorry:{wave:"sawtooth",pitch:1.14},monopoly:{wave:"triangle",pitch:0.92},rummy500:{wave:"triangle",pitch:1.06},risk:{wave:"square",pitch:0.9},uno:{wave:"square",pitch:1.12}};
+var STY={trouble:{wave:"square",pitch:1},sorry:{wave:"sawtooth",pitch:1.14},monopoly:{wave:"triangle",pitch:0.92},rummy500:{wave:"triangle",pitch:1.06},risk:{wave:"square",pitch:0.9},uno:{wave:"square",pitch:1.12},scatter:{wave:"triangle",pitch:1.08}};
 function tone(f,t,dur,type,vol,dest,o){
   o=o||{};
   if(inSfx&&sty){
@@ -148,6 +148,13 @@ var STYLES={
     chordSteps:[0,3,6],
     drums:[{kick:[1,0,0,0,1,0,0,1],snare:[0,0,1,0,0,0,1,0],hat:[1,1,1,1,1,1,1,1],hv:0.05},{kick:[1,0,0,1,0,0,1,0],snare:[0,0,0,0,1,0,0,0],hat:[0,1,0,1,0,1,0,1],hv:0.06},{kick:[1,0,1,0,1,0,1,0],snare:[0,1,0,1,0,1,0,1],hat:[1,0,1,0,1,0,1,0],hv:0.05}],
     titles:["Sorry Not Sorry","Slide Into Home","Wait For It","Bumped Again","The Long Slide","Card Shark Shuffle","Back to Start","Safety Zone Stomp","Eleven Swap","Pawn Takes Revenge"] },
+  scatter:{ scales:["major","mixo","major","dorian"], bpm:[104,130], swing:0.2, sev:true, leadVol:0.1, waves:["triangle","square","triangle"], bassKind:"walk",
+    progs:[[0,5,3,4],[0,3,1,4],[0,4,5,3],[1,4,0,5],[0,2,3,4],[0,6,3,4],[0,3,4,0],[5,1,4,0]],
+    bridge:[[3,4,0,0],[1,4,3,0],[5,2,1,4],[3,5,4,0]],
+    rhythms:[[1,0,1,1,0,1,1,0],[1,1,0,1,0,1,0,1],[1,0,0,1,1,0,1,1],[1,0,1,0,1,1,0,1]],
+    chordSteps:[0,3,6],
+    drums:[{kick:[1,0,0,0,1,0,0,0],snare:[0,0,1,0,0,0,1,0],sv:0.06,hat:[1,0,1,1,1,0,1,1],hv:0.04},{kick:[1,0,0,1,0,0,1,0],snare:[0,0,0,0,1,0,0,0],sv:0.07,hat:[1,1,1,1,1,1,1,1],hv:0.03},{kick:[1,0,1,0,1,0,1,0],snare:[0,1,0,1,0,1,0,1],sv:0.05,hat:[0,1,0,1,0,1,0,1],hv:0.045}],
+    titles:["Starts With S","Brain Storm Boogie","Nobody Else Wrote That","Beat the Clock","Duplicate Blues","Category Is…","Thinking Out Loud","Scatter Shuffle","Letter Roll Jazz","Unique Answer Swing"] },
   uno:{ scales:["major","mixo","major","dorian"], bpm:[118,138], swing:0.1, sev:false, leadVol:0.09, waves:["square","triangle","square"], bassKind:"walk",
     progs:[[0,3,4,0],[0,4,5,3],[0,5,3,4],[0,3,0,4],[0,2,3,4],[0,6,3,4],[0,4,3,5],[0,3,5,4]],
     bridge:[[3,4,0,0],[5,4,3,0],[2,3,4,4],[3,5,4,0]],

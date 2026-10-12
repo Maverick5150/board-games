@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0f3b4a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Scattergories</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.png">
+<style>
+  :root{--ink:#fff;--muted:#c9dde4;--gold:#ffd23f;--panel:#12303c}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;min-height:100%}
+  body{background:#0f3b4a;color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;padding:max(8px,env(safe-area-inset-top)) 8px max(14px,env(safe-area-inset-bottom));overflow-x:hidden;touch-action:manipulation}
+  h1{font:900 26px Georgia,'Times New Roman',serif;letter-spacing:2px;margin:2px 0;color:#ffd23f;text-shadow:2px 2px 0 #e8590c,4px 4px 0 #0007}
+  .wrap{width:min(100%,640px)}
+  #legend{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:4px 0}
+  .chip{display:flex;align-items:center;gap:6px;background:#00000055;border:2px solid #ffffff22;border-radius:999px;padding:4px 10px;font-size:12.5px;font-weight:700}
+  .chip .sw{width:13px;height:13px;border-radius:3px}.chip b{color:var(--gold)}
+  .menuRow{display:flex;justify-content:center;gap:8px;margin:4px 0}
+  .btn{background:#12303c;color:var(--ink);border:1px solid #ffffff55;border-radius:12px;padding:10px 14px;font-size:14px;font-weight:800;cursor:pointer}
+  .btn.primary{background:#e8590c;border-color:#ffa56a}.btn[disabled]{opacity:.38}
+  #sframe{border-radius:18px;padding:8px 10px 6px;background:radial-gradient(120% 100% at 50% 0,#1e6a82,#134a5e 60%,#0e3645);box-shadow:0 0 0 5px #ffd23f,0 0 0 9px #e8590c,0 20px 44px #000a;min-height:260px}
+  .overlay{position:fixed;inset:0;z-index:60;background:#07202aee;display:none;align-items:flex-start;justify-content:center;overflow-y:auto;padding:max(14px,env(safe-area-inset-top)) 12px 28px}
+  .overlay.show{display:flex}
+  .sheet{width:min(100%,600px);background:var(--panel);border:2px solid #ffffff44;border-radius:20px;padding:16px;box-shadow:0 20px 50px #000b}
+  .sheet h2{margin:0 0 2px;font:900 26px Georgia,serif;letter-spacing:2px;color:var(--gold)}
+  .sheet h3{margin:16px 0 6px;font-size:12.5px;color:var(--gold);letter-spacing:1px;text-transform:uppercase}
+  .vers{display:flex;flex-direction:column;gap:7px}
+  .ver{border:2px solid #2d6a80;border-radius:14px;padding:9px 12px;cursor:pointer;background:#0d2630}
+  .ver.on{border-color:var(--gold);background:#1b4a5c}
+  .ver b{font-size:15px}.ver i{font-style:normal;font-size:11px;color:var(--gold);margin-left:8px}
+  .ver p{margin:3px 0 0;font-size:12px;color:var(--muted);line-height:1.35}
+  .seg{display:flex;gap:6px;flex-wrap:wrap}
+  .seg button{background:#0d2630;color:var(--ink);border:2px solid #2d6a80;border-radius:10px;min-width:40px;padding:9px 11px;font-size:15px;font-weight:800;cursor:pointer}
+  .seg button.on{background:#e8590c;border-color:#ffa56a}.seg button[disabled]{opacity:.3}
+  .row{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:7px 0;border-bottom:1px solid #ffffff14;font-size:13.5px}
+  .row select{background:#0d2630;color:var(--ink);border:1px solid #ffffff66;border-radius:8px;padding:6px;font-size:13px;max-width:55%}
+  .row input[type=checkbox]{width:22px;height:22px}
+  .tag{font-size:10px;border-radius:6px;padding:1px 5px;margin-left:6px;font-weight:800}.tag.off{background:#2b7be0}.tag.house{background:#a65bd6}
+  details summary{cursor:pointer;font-weight:800;padding:8px 0;color:var(--gold)}
+  #toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 90px);transform:translateX(-50%);background:#000c;color:#fff;border-radius:12px;padding:10px 16px;font-size:14px;font-weight:700;z-index:90;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;text-align:center}
+  #toast.show{opacity:1}
+  #handoff,#rollBox{background:#07202a;z-index:80;align-items:center}
+  #rollBox .big{font:900 150px Georgia,serif;color:var(--gold);text-shadow:6px 6px 0 #e8590c,0 12px 30px #000}
+  #banner{position:fixed;left:50%;top:14%;transform:translateX(-50%);background:#b32b1f;color:#fff;border-radius:14px;padding:12px 20px;font:900 20px system-ui;z-index:95;opacity:0;pointer-events:none;transition:opacity .2s}#banner.show{opacity:1}
+</style>
+</head>
+<body>
+<h1>SCATTERGORIES</h1>
+<div class="wrap">
+  <div id="legend"></div>
+  <div class="menuRow"><button class="btn" id="menuBtn">☰ Menu</button></div>
+  <div id="sframe"><div id="sctrl"></div></div>
+</div>
+<div id="toast"></div><div id="banner"></div>
+
+<div class="overlay show" id="setup"><div class="sheet">
+  <h2>SCATTERGORIES</h2>
+  <div style="color:var(--muted);font-size:13px">Roll a letter, fill in the categories, and score for answers nobody else wrote. All categories are original.</div>
+  <h3>Version</h3><div class="vers" id="versions"></div>
+  <h3>Players</h3>
+  <div class="row"><span>Humans (take turns on this phone)</span><div class="seg" id="humanSeg"></div></div>
+  <div class="row"><span>Computer players</span><div class="seg" id="cpuSeg"></div></div>
+  <div id="seatNote" style="font-size:12px;color:var(--muted);padding-top:6px"></div>
+  <details style="margin-top:10px"><summary>Rules &amp; house rules (tap to customize)</summary><div id="houseRules"></div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px"><span class="tag off">published</span> in a Hasbro rulebook · <span class="tag house">house</span> a popular home rule / convenience</div></details>
+  <div id="svbar"></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">
+    <button class="btn primary" id="startBtn" style="flex:1;font-size:16px">▶ Start new game</button>
+    <button class="btn" id="resumeBtn" style="display:none;flex:1">Resume game</button>
+  </div>
+  <div style="margin-top:10px"><a class="btn" href="../index.html" style="display:block;text-decoration:none;text-align:center">🏠 Back to all games</a></div>
+</div></div>
+<div class="overlay" id="handoff"><div class="sheet" style="text-align:center" id="handoffSheet"></div></div>
+<div class="overlay" id="rollBox"><div style="text-align:center"><div style="font-size:18px;color:var(--muted)" id="rollNote"></div><div class="big" id="rollLetter">?</div></div></div>
+
+<script src="../sound.js"></script>
+<script src="../skins.js"></script>
+<script src="../saves.js"></script>
+<script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
+<script src="bank.js"></script>
+<script src="engine.js"></script>
+<script src="ui.js"></script>
+<script>
+(function(){
+"use strict";
+const Sc=Scatter, E=Sc.Engine;
+const $=id=>document.getElementById(id);
+const PCOL=Sc.UI.PCOL;
+let cfg={version:"classic",over:{},humans:1,cpus:3};
+let G=null,ctrl=null,gen=0,writeQueue=[],curWriter=-1,reviewMe=0,voteMe=-1,roundStart=0,stopTimer=null,stopped=false,voteBusy=false;
+const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+function curOpts(){ return E.versionOpts(cfg.version,cfg.over); }
+function toast(m){ const t=$("toast"); t.textContent=m; t.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove("show"),2200); }
+function banner(m){ const b=$("banner"); b.textContent=m; b.classList.add("show"); clearTimeout(banner._t); banner._t=setTimeout(()=>b.classList.remove("show"),2600); }
+
+/* ---------------- setup ---------------- */
+function clampSeats(){ if(cfg.humans+cfg.cpus<2) cfg.cpus=2-cfg.humans; if(cfg.humans+cfg.cpus>8) cfg.cpus=8-cfg.humans; if(cfg.cpus<0) cfg.cpus=0; }
+function drawSetup(){
+  const o=curOpts();
+  $("versions").innerHTML=E.VERSIONS.map(v=>`<div class="ver${cfg.version===v.id?" on":""}" data-v="${v.id}"><b>${esc(v.name)}</b><i>${esc(v.tag)}</i><p>${esc(v.desc)}</p></div>`).join("");
+  $("versions").querySelectorAll(".ver").forEach(d=>d.addEventListener("click",()=>{ cfg.version=d.dataset.v; cfg.over={}; drawSetup(); }));
+  clampSeats();
+  $("humanSeg").innerHTML=[1,2,3,4].map(n=>`<button data-n="${n}" class="${cfg.humans===n?"on":""}">${n}</button>`).join("");
+  $("humanSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.humans=+b.dataset.n; clampSeats(); drawSetup(); }));
+  $("cpuSeg").innerHTML=[0,1,2,3,4,5,6,7].map(n=>{ const t=cfg.humans+n; return `<button data-n="${n}" class="${cfg.cpus===n?"on":""}"${(t>=2&&t<=8)?"":" disabled"}>${n}</button>`; }).join("");
+  $("cpuSeg").querySelectorAll("button:not([disabled])").forEach(b=>b.addEventListener("click",()=>{ cfg.cpus=+b.dataset.n; drawSetup(); }));
+  $("seatNote").textContent=(cfg.humans+cfg.cpus)+" players"+(cfg.humans>1?" · humans write one after another — pass the phone when asked":"")+(o.judge==="vote"&&cfg.humans<2?" · with one human, you can still challenge a computer's answer":"");
+  drawHouse();
+}
+function drawHouse(){
+  const o=curOpts(), box=$("houseRules"); box.innerHTML="";
+  E.HOUSE.forEach(h=>{
+    const key=h[0], tag=h[4]?'<span class="tag off">published</span>':'<span class="tag house">house</span>';
+    const row=document.createElement("div"); row.className="row";
+    if(h[2]==="bool"){ row.innerHTML=`<span>${esc(h[1])}${tag}</span><input type="checkbox"${o[key]?" checked":""}>`; row.querySelector("input").addEventListener("change",e=>{ cfg.over[key]=e.target.checked; drawSetup(); }); }
+    else { row.innerHTML=`<span>${esc(h[1])}${tag}</span><select>${h[3].map(c=>`<option value="${esc(c[0])}"${String(o[key])===String(c[0])?" selected":""}>${esc(c[1])}</option>`).join("")}</select>`;
+      row.querySelector("select").addEventListener("change",e=>{ const m=h[3].filter(c=>String(c[0])===e.target.value)[0]; cfg.over[key]=m?m[0]:e.target.value; drawSetup(); }); }
+    box.appendChild(row);
+  });
+}
+
+/* ---------------- saving ---------------- */
+function packG(){ if(!G) return null; return {G:E.serialize(G),cfg:JSON.parse(JSON.stringify(cfg))}; }
+function loadSaved(d){
+  gen++; clearTimeout(stopTimer); G=E.restore(JSON.parse(JSON.stringify(d.G))); Object.assign(cfg,d.cfg||{});
+  $("setup").classList.remove("show"); Sound.skip(); startUI(); resumePhase();
+}
+const saveBar=Saves.bar({game:"scatter",el:$("svbar"),snapNote:"this round (writing restarts)",saveToast:"Game saved",
+  getSettings:()=>({version:cfg.version,over:cfg.over,humans:cfg.humans,cpus:cfg.cpus}),
+  applySettings:s=>{ cfg.version=s.version||"classic"; cfg.over=s.over||{}; cfg.humans=s.humans||1; cfg.cpus=s.cpus!=null?s.cpus:3; drawSetup(); },
+  standard:()=>{ cfg={version:"classic",over:{},humans:1,cpus:3}; drawSetup(); },
+  getSnapshot:()=>(G&&!G.over)?packG():null,loadSnapshot:loadSaved});
+$("menuBtn").addEventListener("click",()=>{ $("resumeBtn").style.display=(G&&!G.over)?"block":"none"; saveBar.refresh(); drawSetup(); $("setup").classList.add("show"); });
+$("resumeBtn").addEventListener("click",()=>$("setup").classList.remove("show"));
+$("startBtn").addEventListener("click",()=>{ Sound.skip(); $("setup").classList.remove("show"); startGame(); });
+
+/* ---------------- game flow ---------------- */
+function startGame(){
+  gen++; clearTimeout(stopTimer); clampSeats();
+  const total=cfg.humans+cfg.cpus, names=[], humans=[];
+  for(let i=0;i<total;i++){ const h=i<cfg.humans; humans.push(h); names.push(h?(cfg.humans===1?"You":"Player "+(i+1)):"CPU "+(i+1-cfg.humans)); }
+  G=E.newGame({names,humans,opts:curOpts()}); startUI(); newRound();
+}
+function startUI(){
+  Skins.apply("scatter"); Sound.music("scatter");
+  if(!ctrl) ctrl=Sc.UI.create({root:$("sctrl"),toast,send:onIntent,readyLabel:"Done scoring ▶"});
+  legend();
+}
+function legend(){ $("legend").innerHTML=G.players.map((p,i)=>`<div class="chip"><span class="sw" style="background:${PCOL[i%PCOL.length]}"></span>${esc(p.name)}${p.human?"":" 🤖"} <b>${p.score}</b></div>`).join(""); }
+function newRound(){
+  E.startRound(G); stopped=false; clearTimeout(stopTimer);
+  const my=gen;
+  const showRoll=()=>{
+    const hasLetter=G.o.mode==="letter";
+    $("rollNote").textContent=hasLetter?"Round "+G.round+" — the letter is…":"Round "+G.round+" — the key word is…";
+    $("rollBox").classList.add("show"); Sound.sfx("dice");
+    const L=hasLetter?G.letter:G.keyword, el=$("rollLetter"); let n=0;
+    el.style.fontSize=hasLetter?"150px":"64px";
+    const iv=setInterval(()=>{ el.textContent=hasLetter?E.LETTERS[Math.floor(Math.random()*20)]:E.KEYWORDS[Math.floor(Math.random()*20)].toUpperCase(); if(++n>=9){ clearInterval(iv); el.textContent=L; setTimeout(()=>{ if(my!==gen) return; $("rollBox").classList.remove("show"); beginWriting(); },900); } },90);
+  };
+  showRoll();
+}
+function beginWriting(){
+  // star on the junior die: the roller picks the letter (computers just keep it)
+  writeQueue=G.players.filter(p=>p.human).map(p=>p.id); stopped=false;
+  // computers decide their answers now so a stop call can be timed
+  E.cpuFillAll(G); G._cpuStops=G.players.filter(p=>!p.human&&E.allFilled(G,p.id)).map(()=>G.o.timer*(0.55+Math.random()*0.3));
+  nextWriter();
+}
+function nextWriter(){
+  if(!writeQueue.length){ toReview(); return; }
+  curWriter=writeQueue.shift(); const nh=G.players.filter(p=>p.human).length;
+  if(nh>1) showHandoff(G.players[curWriter],"write",()=>openWrite()); else openWrite();
+}
+function snap(me,extra){ return E.snapshot(G,me,extra); }
+function openWrite(){
+  ctrl.update(snap(curWriter,{secLeft:G.o.timer})); legend(); roundStart=Date.now();
+  autosave();
+  // a computer may shout STOP
+  if(G.o.stopRule&&G._cpuStops.length){ const t=Math.min.apply(null,G._cpuStops)*1000, my=gen; stopTimer=setTimeout(()=>{ if(my!==gen||G.phase!=="write") return; banner("🛑 STOP! A computer finished — 8 seconds left!"); Sound.sfx("bell"); ctrl.setDeadlineIn(8); },t); }
+}
+function onIntent(a){
+  if(!G) return {ok:false};
+  if(a.t==="submit"){
+    clearTimeout(stopTimer);
+    E.setAnswers(G,curWriter,a.answers);
+    if(G.o.stopRule&&E.allFilled(G,curWriter)&&!stopped&&writeQueue.length===0){ stopped=true; }
+    nextWriter(); return {ok:true};
+  }
+  if(a.t==="star"){ const r=E.chooseStarLetter(G,a.letter); if(r.ok){ E.cpuFillAll(G); ctrl.update(snap(curWriter,{secLeft:G.o.timer})); } return r; }
+  if(a.t==="challenge"){ return doChallenge(a); }
+  if(a.t==="vote"){ return doVote(a); }
+  if(a.t==="ready"){ finishRound(); return {ok:true}; }
+  if(a.t==="next"){ newRound(); return {ok:true}; }
+  if(a.t==="again"){ $("resumeBtn").style.display="none"; drawSetup(); $("setup").classList.add("show"); return {ok:true}; }
+  return {ok:false};
+}
+function toReview(){
+  E.beginReview(G); Sound.sfx("bell"); reviewMe=G.players.findIndex(p=>p.human); showReview(); autosave();
+}
+function showReview(){ ctrl.update(snap(voteMe>=0?voteMe:reviewMe)); legend(); }
+function doChallenge(a){
+  const by=reviewMe, r=E.openChallenge(G,by,a.slot,a.p,a.k); if(!r.ok) return r;
+  const ch=r.ch; // the challenger counts as voting "reject"; other humans vote next
+  if(G.players[by].human) ch.votes[by]=false;
+  const res=E.resolveChallenge(G,ch,false);
+  if(!res.done) driveVotes(); else showReview();
+  autosave(); return {ok:true};
+}
+function driveVotes(){
+  const open=Object.keys(G.challenges).map(s=>Object.keys(G.challenges[s]).map(k=>G.challenges[s][k])).flat().filter(c=>c.state==="open")[0];
+  if(!open){ voteMe=-1; showReview(); return; }
+  const pend=E.pendingVoters(G,open).filter(i=>G.players[i].human);
+  if(!pend.length){ E.resolveChallenge(G,open,true); driveVotes(); return; }
+  const who=pend[0], nh=G.players.filter(p=>p.human).length;
+  voteMe=who;
+  if(nh>1) showHandoff(G.players[who],"vote",()=>{ showReview(); }); else showReview();
+}
+function doVote(a){
+  const r=E.castVote(G,voteMe>=0?voteMe:reviewMe,a.slot,a.p,a.k,a.accept); if(!r.ok) return r;
+  if(r.done){ Sound.sfx(r.state==="accepted"?"coin":"lose"); toast(r.state==="accepted"?"Answer kept ✔":"Answer voted out ✖"); }
+  setTimeout(driveVotes,50); return {ok:true};
+}
+function finishRound(){
+  // settle any challenge still open (a human walked away) in favour of the answer
+  Object.keys(G.challenges).forEach(s=>Object.keys(G.challenges[s]).forEach(k=>{ const c=G.challenges[s][k]; if(c.state==="open") E.resolveChallenge(G,c,true); }));
+  E.finishRound(G); legend(); voteMe=-1;
+  Sound.sfx("win"); ctrl.update(snap(reviewMe)); autosave();
+}
+function resumePhase(){
+  // a loaded game: writing restarts for the humans; other phases continue
+  if(G.phase==="write"){ writeQueue=G.players.filter(p=>p.human).map(p=>p.id); G._cpuStops=[]; E.cpuFillAll(G); nextWriter(); }
+  else if(G.phase==="review"){ reviewMe=G.players.findIndex(p=>p.human); voteMe=-1; showReview(); }
+  else if(G.phase==="scored"||G.phase==="over"){ reviewMe=G.players.findIndex(p=>p.human); ctrl.update(snap(reviewMe)); legend(); }
+  else newRound();
+}
+function showHandoff(p,kind,go){
+  const sh=$("handoffSheet"), c=PCOL[p.id%PCOL.length];
+  sh.innerHTML=`<h2 style="font-size:24px">Pass the phone</h2><p style="font-size:18px;margin:14px 0">to <b style="color:${c}">${esc(p.name)}</b> ${kind==="vote"?"to vote on a challenge":"to write answers"}</p><button class="btn primary" id="hoBtn" style="font-size:17px;padding:14px 22px">I'm ${esc(p.name)} — go</button>`;
+  $("handoff").classList.add("show");
+  $("hoBtn").addEventListener("click",()=>{ $("handoff").classList.remove("show"); go(); });
+}
+function autosave(){ const pk=packG(); if(pk) Saves.auto("scatter",pk); }
+
+Skins.apply("scatter"); Sound.mountButton(); Sound.music("scatter");
+drawSetup(); saveBar.refresh();
+if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
+window.__sc={get G(){ return G; },cfg:cfg,get ctrl(){ return ctrl; },startGame:startGame};
+})();
+</script>
+</body>
+</html>
