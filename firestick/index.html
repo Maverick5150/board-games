@@ -483,6 +483,7 @@ function renderUnRules(){
   var h='<div class="muted" style="font-size:2.2vh">🃏 Version</div><div>'+E.VERSIONS.map(function(v){ return '<button class="aibtn'+(v.id===unCfg.version?" on":"")+'" data-v="'+v.id+'" style="margin:.5vh;padding:.9vh 1.6vh;font-size:2vh">'+esc(v.name)+'</button>'; }).join("")+'</div>'+
     '<div class="muted" style="font-size:2vh;max-width:80vw;margin:.6vh auto">'+esc(cur.tag)+' — '+esc(cur.desc)+'</div>'+
     '<div class="muted" style="font-size:2.2vh;margin-top:.6vh">⚙️ Rules (tap to change)</div><div>'+E.HOUSE.map(function(hr,k){
+      if(!E.houseFor(hr,o.edition)) return "";   // e.g. the starting-card rule only exists in the Classic and Flip sheets
       var v=o[hr[0]], txt;
       if(hr[2]==="bool") txt=hr[1]+": "+(v?"ON":"off");
       else { var m=hr[3].filter(function(c){return String(c[0])===String(v);})[0]; txt=hr[1]+": "+(m?m[1]:v); }
@@ -1454,7 +1455,7 @@ function playUno(){
     await sleep(base);
     if(!alive()||G.roundOver) return;
     if(UE.actor(G)!==who) return;
-    if(G.unoVuln!=null&&G.players[G.unoVuln].human&&G.rnd()<0.7){ var by=-1; G.players.forEach(function(p,i){ if(by<0&&!p.human&&p.alive&&i!==G.unoVuln) by=i; }); if(by>=0){ doAction(by,{t:"catch",target:G.unoVuln}); return; } }
+    if(G.unoVuln!=null&&G.players[G.unoVuln].human&&G.rnd()<0.7){ var by=-1; G.players.forEach(function(p,i){ if(by<0&&!p.human&&p.alive&&i!==G.unoVuln) by=i; }); if(by>=0&&doAction(by,{t:"catch",target:G.unoVuln}).ok) return; }
     var a=UE.aiAction(G,who); if(!a) return;
     var res=doAction(who,a); if(!res.ok){ doAction(who,{t:"draw"}); }
   }
@@ -1472,8 +1473,10 @@ function playUno(){
   async function roundEnd(){
     pushAll(-1); askingIdx=-1;
     var ro=G.roundOver, el=$("unTable"); if(!el) return;
-    var rows=ro.rows.map(function(r){ return '<tr><td>'+esc(r.name)+(r.id===ro.winUnit?" 🏆":"")+'</td><td>'+r.left+'</td><td>'+(r.points?"+"+r.points:"—")+'</td><td><b>'+G.uscore[r.id]+'</b></td></tr>'; }).join("");
-    el.innerHTML='<div style="font-size:3vh;max-width:50vw"><div style="font-size:4.4vh;font-weight:900">'+(ro.over?"🏆 Game over":"Round "+G.round+" complete")+'</div><div style="opacity:.8">'+esc(G.players[ro.winner].name)+' went out first</div><table style="width:100%;margin:1vh 0"><tr style="opacity:.7"><td>Player</td><td>Cards left</td><td>Round</td><td>Total</td></tr>'+rows+'</table>'+(ro.over?'<div style="font-size:4vh;text-align:center"><b style="color:#f2bf24">'+esc(ro.gameWinnerName)+'</b> wins the game!</div>':'')+'</div>';
+    // Cards left = how many cards, Hand pts = what they are worth, knocked-out players are labelled
+    var rows=ro.rows.map(function(r){ return '<tr><td>'+esc(r.name)+(r.id===ro.winUnit?" 🏆":"")+(r.out?' <small style="opacity:.7">knocked out</small>':'')+'</td><td>'+(r.out||r.cards==null?"—":r.cards)+'</td><td>'+(r.out?"—":r.left)+'</td><td>'+(r.points?"+"+r.points:"—")+'</td><td><b>'+G.uscore[r.id]+'</b></td></tr>'; }).join("");
+    var wr=ro.rows[ro.winUnit]||{};
+    el.innerHTML='<div style="font-size:3vh;max-width:50vw"><div style="font-size:4.4vh;font-weight:900">'+(ro.over?"🏆 Game over":"Round "+G.round+" complete")+'</div><div style="opacity:.8">'+esc(G.players[ro.winner].name)+' went out first</div><table style="width:100%;margin:1vh 0"><tr style="opacity:.7"><td>Player</td><td>Cards left</td><td>Hand pts</td><td>Round</td><td>Total</td></tr>'+rows+'</table>'+(wr.bonus?'<div style="opacity:.8;font-size:2.4vh">The winner\'s round score includes '+wr.bonus+' bonus points: 250 for each player knocked out.</div>':'')+(ro.over?'<div style="font-size:4vh;text-align:center"><b style="color:#f2bf24">'+esc(ro.gameWinnerName)+'</b> wins the game!</div>':'')+'</div>';
     setStatus(ro.over?"🏆 "+esc(ro.gameWinnerName)+" wins!":"Round "+G.round+" complete");
     if(ro.over) return;
     var b=document.createElement("button"); b.className="big"; b.textContent="Next round ▶"; b.style.marginTop="1vh"; el.appendChild(b); b.focus();

@@ -112,6 +112,7 @@ function drawSetup(){
 function drawHouse(){
   const o=curOpts(), box=$("houseRules"); box.innerHTML="";
   E.HOUSE.forEach(h=>{
+    if(!E.houseFor(h,o.edition)) return;   // e.g. the starting-card rule only exists in the Classic and Flip sheets
     const key=h[0], tag=h[4]?'<span class="tag off">published</span>':'<span class="tag house">house</span>';
     const row=document.createElement("div"); row.className="row";
     if(h[2]==="bool"){ row.innerHTML=`<span>${esc(h[1])}${tag}</span><input type="checkbox"${o[key]?" checked":""}>`; row.querySelector("input").addEventListener("change",e=>{ cfg.over[key]=e.target.checked; drawSetup(); }); }
@@ -128,6 +129,7 @@ function packG(){ if(!G) return null; const c=JSON.parse(JSON.stringify(G,(k,v)=
 function loadSaved(d){
   gen++; clearTimeout(timer); G=d.G; G.rnd=Math.random; Object.assign(cfg,d.cfg||{}); handoffOk=null; setSpeedSeg();
   $("setup").classList.remove("show"); $("roundBox").classList.remove("show"); Sound.skip(); startUI(); drive();
+  if(G.roundOver) showRound();   // saved at the end of a round (or by an older version at game over): show the table and its buttons
 }
 const saveBar=Saves.bar({game:"uno",el:$("svbar"),snapNote:"exactly as it is now",saveToast:"Game saved",
   getSettings:()=>({version:cfg.version,over:cfg.over,humans:cfg.humans,cpus:cfg.cpus,speed:cfg.speed}),
@@ -155,7 +157,7 @@ function meIndex(){
   if(humans.length===1) return humans[0];
   const a=E.actor(G); return (G.players[a]&&G.players[a].human&&handoffOk===a)?a:-1;
 }
-function refresh(){ V=E.snapshot(G,meIndex()); ctrl.update(V); const pk=packG(); if(pk) Saves.auto("uno",pk); }
+function refresh(){ V=E.snapshot(G,meIndex()); ctrl.update(V); if(G.over){ Saves.del("uno","auto"); return; } const pk=packG(); if(pk) Saves.auto("uno",pk); }   // a finished game is not offered as "Continue last game"
 function send(a){
   if(!G) return {ok:false};
   const hum=G.players.filter(p=>p.human); let who;
@@ -184,7 +186,7 @@ function drive(){
   timer=setTimeout(()=>{
     if(my!==gen||!G||G.roundOver||G.over) return;
     // other computers may jump in or catch first
-    if(G.unoVuln!=null){ const t=G.unoVuln; if(G.players[t].human&&G.rnd()<0.7){ const by=pickOther(t); if(by>=0){ send2(by,{t:"catch",target:t}); return; } } else if(!G.players[t].human&&nh>1){ /* hot-seat: no catching AIs */ } }
+    if(G.unoVuln!=null){ const t=G.unoVuln; if(G.players[t].human&&G.rnd()<0.7){ const by=pickOther(t); if(by>=0&&send2(by,{t:"catch",target:t}).ok) return; } else if(!G.players[t].human&&nh>1){ /* hot-seat: no catching AIs */ } }
     if(G.o.jumpIn&&G.phase==="play"&&!G.pen&&G.rnd()<0.18){ for(let q=0;q<G.players.length;q++){ if(!G.players[q].human&&q!==G.turn&&G.players[q].alive){ const ids=E.jumpIds(G,q); if(ids.length){ const c=G.players[q].hand.filter(x=>x.id===ids[0])[0]; const aa={t:"jump",card:ids[0]}; if(c.f[G.side].c==="W") aa.color=E.bestColor(G,q,ids[0]); send2(q,aa); return; } } } }
     const act=E.actor(G), aa=E.aiAction(G,act); if(!aa) return;
     const r=send2(act,aa); if(!r.ok) send2(act,{t:"draw"});
@@ -208,17 +210,19 @@ function showHandoff(p){
 }
 function showRound(){
   const ro=G.roundOver; if(!ro) return; Sound.sfx("win");
-  const f=n=>(n>0?"+":"")+n;
-  const rows=ro.rows.map(r=>`<tr><td>${esc(r.name)}${r.id===ro.winUnit?" 🏆":""}</td><td>${r.left}</td><td>${r.points?f(r.points):"—"}</td><td><b>${G.uscore[r.id]}</b></td></tr>`).join("");
+  const f=n=>(n>0?"+":"")+n, wr=ro.rows[ro.winUnit]||{};
+  // Cards left = how many cards (rows saved by older versions have no count: "—"); Hand pts = what those cards are worth
+  const rows=ro.rows.map(r=>`<tr><td>${esc(r.name)}${r.id===ro.winUnit?" 🏆":""}${r.out?' <small style="color:var(--muted)">knocked out</small>':""}</td><td>${r.out||r.cards==null?"—":r.cards}</td><td>${r.out?"—":r.left}</td><td>${r.points?f(r.points):"—"}</td><td><b>${G.uscore[r.id]}</b></td></tr>`).join("");
   let h=`<h2>${ro.over?"🏆 Game over":"Round "+G.round+" complete"}</h2><div style="color:var(--muted);font-size:13px">${esc(G.players[ro.winner].name)} went out first.</div>
-    <table class="sc"><tr><th>Player</th><th>Cards left</th><th>Round</th><th>Total</th></tr>${rows}</table>`;
+    <table class="sc"><tr><th>Player</th><th>Cards left</th><th>Hand pts</th><th>Round</th><th>Total</th></tr>${rows}</table>`;
+  if(wr.bonus) h+=`<p style="font-size:12px;color:var(--muted)">The winner's round score includes ${wr.bonus} bonus points: 250 for each player knocked out.</p>`;
   if(ro.over) h+=`<p style="font-size:18px;text-align:center"><b style="color:var(--gold)">${esc(ro.gameWinnerName)}</b> wins the game!</p>`;
   else if(G.o.target) h+=`<p style="font-size:12px;color:var(--muted)">${G.o.scoring==="tally"?"Cards left count against you — lowest total wins once someone reaches "+G.o.target+".":"First to "+G.o.target+" wins."}</p>`;
   h+=`<div style="display:flex;gap:8px;margin-top:8px">${ro.over?`<button class="btn primary" id="rbNew" style="flex:1">New game</button>`:`<button class="btn primary" id="rbNext" style="flex:1">Next round ▶</button>`}<button class="btn" id="rbMenu" style="flex:1">☰ Menu</button></div>`;
   $("roundSheet").innerHTML=h; $("roundBox").classList.add("show");
   const nx=$("rbNext"); if(nx) nx.addEventListener("click",()=>{ $("roundBox").classList.remove("show"); E.startRound(G); handoffOk=null; startUI(); drive(); });
   const nw=$("rbNew"); if(nw) nw.addEventListener("click",()=>{ $("roundBox").classList.remove("show"); startGame(); });
-  $("rbMenu").addEventListener("click",()=>{ $("roundBox").classList.remove("show"); $("resumeBtn").style.display="none"; drawSetup(); $("setup").classList.add("show"); });
+  $("rbMenu").addEventListener("click",()=>{ $("roundBox").classList.remove("show"); $("resumeBtn").style.display="none"; saveBar.refresh(); drawSetup(); $("setup").classList.add("show"); });
 }
 
 Skins.apply("uno"); Sound.mountButton(); Sound.music("uno");

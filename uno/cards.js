@@ -117,7 +117,7 @@ function create(cfg){
   function playCard(id,out){
     var c=cardById(id); if(!c) return; var f=c.f[V.side];
     var needT=E.needsTarget({o:V.o},f)&&!(V.hand.length===1&&f.v==="7");
-    var needC=f.c==="W"&&V.o.edition!=="allwild";
+    var needC=E.namesColor({o:V.o},f);   // Color Roulette: the next player names the colour
     function go(color,target){ var a={t:out?"jump":"play",card:id}; if(color) a.color=color; if(target!=null) a.target=target; act(a); }
     if(needC){ colorPicker("Choose a colour",function(col){ if(needT) targetPicker(f.v==="wtd2"?"Who draws 2?":"Swap hands with…",function(t){ go(col,t); }); else go(col,null); }); }
     else if(needT){ targetPicker(f.v==="wtd2"?"Who draws 2?":(f.v==="7"?"Swap hands with…":"Swap hands with…"),function(t){ go(null,t); }); }

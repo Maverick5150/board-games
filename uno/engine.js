@@ -37,8 +37,9 @@ var VERSIONS=[
   {id:"nomercy",name:"Uno Show 'Em No Mercy",tag:"168 cards, stacking",desc:"Draw until you can play, stack bigger draw cards, 0s pass hands, 7s swap hands, Draw 6 / Draw 10, and you're out at 25 cards. First to 1000.",opts:{edition:"nomercy",startRule:"2022",drawRule:"untilPlay",forcePlay:true,stack:"mercy",sevenZero:true,challenge:false,mercy:25,target:1000}},
   {id:"allwild",name:"Uno All Wild",tag:"112 cards, nothing has to match",desc:"Every card is a Wild: play anything any time. Skips, Reverses, Draw Two / Four, targeted draws and forced hand swaps.",opts:{edition:"allwild",startRule:"2022",challenge:false}}
 ];
+/* [key, label, type, choices, published(1)/house(0), editions it applies to (omitted = every edition)] */
 var HOUSE=[
-  ["startRule","Starting card","choice",[["2008","Apply its effect (classic)"],["2022","Ignore non-number starters (2022)"]],1],
+  ["startRule","Starting card","choice",[["2008","Apply its effect (classic)"],["2022","Ignore non-number starters (2022)"]],1,["classic","flip"]],
   ["drawRule","When you can't play","choice",[["one","Draw one card (official)"],["untilPlay","Draw until you can play"]],1],
   ["forcePlay","A drawn playable card must be played","bool",null,0],
   ["challenge","Challenge Wild Draw cards","bool",null,1],
@@ -53,6 +54,8 @@ var HOUSE=[
   ["scoring","Scoring","choice",[["winner","Winner scores all hands"],["tally","Cards left count against you (lowest wins)"]],1],
   ["teams","Partners (4 players, opposite seats)","bool",null,1]
 ];
+function houseFor(h,edition){ return !h[5]||h[5].indexOf(edition)>=0; }   // is this rule row offered for that edition?
+function startFx(o){ return o.edition==="classic"||o.edition==="flip"; }   // editions whose sheet gives a starting action card an effect
 function versionOpts(id,extra){ var v=VERSIONS.filter(function(x){ return x.id===id; })[0]||VERSIONS[0]; var o={}; for(var k in v.opts) o[k]=v.opts[k]; for(var k2 in (extra||{})) o[k2]=extra[k2]; return mergeOpts(o); }
 
 /* ---------------- decks ---------------- */
@@ -123,17 +126,17 @@ function startRound(G){
     top=G.draw.pop(); var f=top.f[0];
     if(o.edition==="allwild"){ if(f.v==="wild"||guard>50) break; G.draw.unshift(top); continue; }   // ignore wild actions
     if(isNum(f)) break;
-    if(o.startRule==="2022"||o.edition!=="classic"){ G.draw.unshift(top); continue; }
-    if(f.v==="wd4"){ G.draw.unshift(top); continue; }     // classic: return to the deck and pick another
+    if(o.startRule==="2022"||!startFx(o)){ G.draw.unshift(top); continue; }   // No Mercy sheet: "If this card is an Action Card, ignore it"
+    if(f.v==="wd4"||f.v==="wd2"){ G.draw.unshift(top); continue; }     // Classic / Flip sheets: a Wild Draw card goes back, pick another
     break;
   }
   G.discard.push(top); var tf=top.f[0];
   G.color=tf.c==="W"?null:tf.c;
   ev(G,"deal",{text:nm(G,G.dealer)+" deals — round "+G.round+". Starting card: "+cardName(G,top)});
-  if(o.edition==="classic"&&o.startRule==="2008"&&!isNum(tf)){
+  if(startFx(o)&&o.startRule==="2008"&&!isNum(tf)){   // a Flip card turned up has no starting effect in the Flip sheet
     if(tf.v==="skip"){ var sk=G.turn; G.turn=nextIdx(G,G.turn,1); ev(G,"start",{text:nm(G,sk)+" is skipped"}); }
     else if(tf.v==="rev"){ G.dir=-1; G.turn=G.dealer; ev(G,"start",{text:"Reverse — "+nm(G,G.dealer)+" plays first, then play goes the other way"}); }
-    else if(tf.v==="d2"){ drawCards(G,G.turn,2,"Draw Two as the starting card"); G.turn=nextIdx(G,G.turn,1); }
+    else if(tf.v==="d2"||tf.v==="d1"){ drawCards(G,G.turn,DRAWN[tf.v],VNAME[tf.v]+" as the starting card"); G.turn=nextIdx(G,G.turn,1); }
     else if(tf.v==="wild"){ G.color=null; G.needColor=true; ev(G,"start",{text:nm(G,G.turn)+" chooses the starting colour"}); }
   }
   return G;
@@ -141,15 +144,17 @@ function startRound(G){
 
 /* ---------------- drawing ---------------- */
 function reshuffle(G){
-  if(G.discard.length<=1) return false;
-  var top=G.discard.pop(); var rest=G.discard.splice(0);
+  // Mercy rule: knocked-out hands stay set aside "until the deck runs out and needs to be reshuffled" (No Mercy sheet), then rejoin it
+  var back=(G.setAside&&G.setAside.length)?G.setAside.splice(0):[];
+  if(G.discard.length<=1&&!back.length) return false;
+  var top=G.discard.pop(); var rest=G.discard.splice(0).concat(back);
   // a played Flip changes sides; cards go back face-down so nothing to reset
-  G.draw=shuffle(rest,G.rnd); G.discard=[top];
-  ev(G,"shuffle",{text:"The discard pile is reshuffled"});
+  G.draw=shuffle(rest,G.rnd); G.discard=top?[top]:[];
+  ev(G,"shuffle",{text:"The discard pile is reshuffled"+(back.length?" with the knocked-out hands":"")});
   return true;
 }
 function drawOne(G){
-  if(!G.draw.length&&!reshuffle(G)){ if(G.setAside&&G.setAside.length){ G.draw=shuffle(G.setAside.splice(0),G.rnd); } }
+  if(!G.draw.length) reshuffle(G);
   return G.draw.length?G.draw.pop():null;
 }
 function drawCards(G,p,n,why){
@@ -158,14 +163,17 @@ function drawCards(G,p,n,why){
   ev(G,"draw",{p:p,n:got.length,text:nm(G,p)+" draws "+got.length+" card"+(got.length===1?"":"s")+(why?" ("+why+")":"")});
   checkMercy(G,p);
   if(pl.hand.length>1) pl.called=false;
+  unoGone(G,p);
   return got;
 }
+/* a player who no longer holds exactly one card can't be caught for not saying UNO */
+function unoGone(G,p){ if(G.unoVuln===p&&G.players[p].hand.length!==1) G.unoVuln=null; }
 function drawUntilColor(G,p,color,extra){
   var pl=G.players[p], c, n=0, guard=0;
   while(guard++<400){ c=drawOne(G); if(!c) break; pl.hand.push(c); n++; if(c.f[G.side].c===color) break; }
   var x=0; while(extra&&x<extra){ c=drawOne(G); if(!c) break; pl.hand.push(c); n++; x++; }
   ev(G,"draw",{p:p,n:n,text:nm(G,p)+" draws "+n+" card"+(n===1?"":"s")+" (until "+CNAME[color]+(extra?" +"+extra:"")+")"});
-  checkMercy(G,p); if(pl.hand.length>1) pl.called=false;
+  checkMercy(G,p); if(pl.hand.length>1) pl.called=false; unoGone(G,p);
   return n;
 }
 function checkMercy(G,p){
@@ -225,7 +233,7 @@ function play(G,p,cardId,params,out){
   var card=pl.hand[idx], f=fc(G,card);
   if(!canPlay(G,p,card)) return {ok:false,msg:G.pen?"You must stack a draw card or take the penalty.":"That card doesn't match."};
   var color=null;
-  if(f.c==="W"&&G.o.edition!=="allwild"){ color=params.color; if(colorsNow(G).indexOf(color)<0) return {ok:false,msg:"Choose a colour for the Wild card."}; }
+  if(namesColor(G,f)){ color=params.color; if(colorsNow(G).indexOf(color)<0) return {ok:false,msg:"Choose a colour for the Wild card."}; }
   var target=params.target;
   if(needsTarget(G,f)){
     var last=pl.hand.length===1&&f.v==="7";
@@ -241,7 +249,7 @@ function play(G,p,cardId,params,out){
   G.color=f.c==="W"?(G.o.edition==="allwild"?null:color):f.c;
   ev(G,"play",{p:p,card:card.id,text:nm(G,p)+" plays "+cardName(G,card)+(f.c==="W"&&color?" — chooses "+CNAME[color]:"")});
   // UNO bookkeeping
-  if(pl.hand.length===1){ if(pl.called||pl.armed){ ev(G,"uno",{p:p,text:nm(G,p)+" says UNO!"}); pl.called=true; } else if(!pl.human&&G.rnd()>=G.o.aiForget){ ev(G,"uno",{p:p,text:nm(G,p)+" says UNO!"}); pl.called=true; } else G.unoVuln=p; }
+  unoCheck(G,p);
   pl.armed=false;
   var win=pl.hand.length===0;
   // effects
@@ -251,6 +259,13 @@ function play(G,p,cardId,params,out){
   if(G.o.mercy&&alive(G).length===1) return finish(G,alive(G)[0].id);
   return {ok:true,events:G.evq.slice(),res:res};
 }
+/* down to one card: say UNO (called / armed / a computer that remembers) or stay catchable until the next player begins a turn */
+function unoCheck(G,p){
+  var pl=G.players[p]; if(pl.hand.length!==1) return;
+  if(pl.called||pl.armed){ ev(G,"uno",{p:p,text:nm(G,p)+" says UNO!"}); pl.called=true; } else if(!pl.human&&G.rnd()>=G.o.aiForget){ ev(G,"uno",{p:p,text:nm(G,p)+" says UNO!"}); pl.called=true; } else G.unoVuln=p;
+}
+/* does playing this Wild face need a colour from the player? (All Wild: never; No Mercy Color Roulette: the NEXT player names it) */
+function namesColor(G,f){ return f.c==="W"&&G.o.edition!=="allwild"&&f.v!=="roul"; }
 function afterTurn(G,p,skip){
   // move to the next player (skipping `skip` extra players)
   G.turn=nextIdx(G,p,1+(skip||0));
@@ -260,13 +275,14 @@ function applyEffect(G,p,card,f,x){
   var victim=nextIdx(G,p,1);
   function pen(count,kind,viaVictim){
     // a draw card was played: either start a stack, ask for a challenge, or just make the victim draw
-    if(x.win){ drawCards(G,viaVictim,count,"last card"); afterTurn(G,p,0); return; }
+    // going out on a draw card: the next player still takes the whole stacked penalty (a winner never draws, e.g. 2p Wild Reverse Draw 4)
+    if(x.win){ var tot=(G.pen?G.pen.n:0)+count; G.pen=null; if(viaVictim!==p) drawCards(G,viaVictim,tot,"last card"); afterTurn(G,p,0); return; }
     if(o.stack!=="none"){ G.pen={n:(G.pen?G.pen.n:0)+count,v:v,last:count}; G.turn=viaVictim; return; }
     if(o.challenge&&(v==="wd4"||v==="wd2"||v==="wdc")&&o.edition!=="nomercy"){ G.phase="challenge"; G.chal={by:p,victim:viaVictim,n:count,illegal:x.illegal,v:v,color:x.color,colorBefore:x.colorBefore,card:card.id}; return; }
     drawCards(G,viaVictim,count,VNAME[v]); G.turn=nextIdx(G,viaVictim,1);
   }
   if(isNum(f)){
-    if(o.sevenZero&&v==="0"){ passHands(G); afterTurn(G,p,0); }
+    if(o.sevenZero&&v==="0"&&!x.win){ passHands(G); afterTurn(G,p,0); }   // a final 0 just wins: no hands are passed
     else if(o.sevenZero&&v==="7"&&!x.win){ swapHands(G,p,x.target); afterTurn(G,p,0); }
     else afterTurn(G,p,0);
     return;
@@ -289,6 +305,7 @@ function applyEffect(G,p,card,f,x){
     if(mine.length){ G.players[p].hand=G.players[p].hand.filter(function(c){ return fc(G,c).c!==col; }); // extra cards go UNDER the played card
       var top=G.discard.pop(); mine.forEach(function(c){ G.discard.push(c); }); G.discard.push(top); ev(G,"discardall",{p:p,text:nm(G,p)+" discards "+mine.length+" more "+CNAME[col]+" card"+(mine.length===1?"":"s")}); }
     if(G.players[p].hand.length===0) x.win=true;
+    else if(mine.length) unoCheck(G,p);   // discarded down to one card: say UNO or be catchable
     afterTurn(G,p,0); return;
   }
   if(v==="d2"||v==="d1"||v==="d5"||v==="d4"){ pen(DRAWN[v],v,victim); return; }
@@ -311,13 +328,13 @@ function passHands(G){
   var live=alive(G).map(function(p){ return p.id; }), hands=live.map(function(i){ return G.players[i].hand; });
   var k=G.dir>0?1:-1;
   live.forEach(function(pid,i){ G.players[live[(i+k+live.length)%live.length]].hand=hands[i]; });
-  live.forEach(function(pid){ G.players[pid].called=false; if(G.players[pid].hand.length>1) G.players[pid].called=false; });
+  live.forEach(function(pid){ G.players[pid].called=false; if(G.players[pid].hand.length>1) G.players[pid].called=false; unoGone(G,pid); });
   ev(G,"pass",{text:"Everyone passes their hand"+(k>0?" forward":" backward")});
 }
 function swapHands(G,a,b){
   if(b==null||a===b) return;
   var t=G.players[a].hand; G.players[a].hand=G.players[b].hand; G.players[b].hand=t;
-  G.players[a].called=false; G.players[b].called=false;
+  G.players[a].called=false; G.players[b].called=false; unoGone(G,a); unoGone(G,b);
   ev(G,"swap",{text:nm(G,a)+" swaps hands with "+nm(G,b)});
 }
 
@@ -325,6 +342,7 @@ function swapHands(G,a,b){
 function respondChallenge(G,p,challenge){
   if(G.phase!=="challenge"||p!==G.chal.victim) return {ok:false,msg:"Nothing to challenge."};
   G.evq=[]; var c=G.chal, by=c.by, vic=c.victim; G.chal=null; G.phase="play";
+  if(G.unoVuln!=null&&G.unoVuln!==vic) G.unoVuln=null;   // answering the Wild Draw begins the next player's turn: the UNO-catch window closes
   var cnt=c.n, vname=VNAME[c.v];
   if(!challenge){ if(c.v==="wdc") drawUntilColor(G,vic,c.color,0); else drawCards(G,vic,cnt,vname); G.turn=nextIdx(G,vic,1); return finishAction(G); }
   var guilty=c.illegal;
@@ -337,6 +355,7 @@ function respondRoulette(G,p,color){
   if(G.phase!=="roulette"||p!==G.roul.victim) return {ok:false,msg:"Nothing to choose."};
   if(colorsNow(G).indexOf(color)<0) return {ok:false,msg:"Pick a colour."};
   G.evq=[]; var vic=G.roul.victim; G.roul=null; G.phase="play"; G.color=color;
+  if(G.unoVuln!=null&&G.unoVuln!==vic) G.unoVuln=null;   // the next player's turn has begun: the UNO-catch window closes
   ev(G,"roulette",{p:vic,text:nm(G,vic)+" picks "+CNAME[color]+" for Color Roulette"});
   drawUntilColor(G,vic,color,0); G.turn=nextIdx(G,vic,1);
   return finishAction(G);
@@ -355,14 +374,14 @@ function drawAction(G,p){
     var got=0, last=null, guard=0;
     while(guard++<300){ var c=drawOne(G); if(!c) break; pl.hand.push(c); got++; last=c; if(canPlay(G,p,c)) break; }
     ev(G,"draw",{p:p,n:got,text:nm(G,p)+" draws "+got+" card"+(got===1?"":"s")+" until one can be played"});
-    checkMercy(G,p); if(!pl.alive){ G.turn=nextIdx(G,p,1); return finishAction(G); }
+    checkMercy(G,p); unoGone(G,p); if(!pl.alive){ G.turn=nextIdx(G,p,1); return finishAction(G); }
     if(pl.hand.length>1) pl.called=false;
     if(last&&canPlay(G,p,last)){ G.phase="drawn"; G.drawnId=last.id; return {ok:true,events:G.evq.slice(),drawn:last.id}; }
     G.turn=nextIdx(G,p,1); return finishAction(G);
   }
   var c1=drawOne(G);
   if(!c1){ ev(G,"draw",{p:p,n:0,text:"No cards left to draw"}); G.turn=nextIdx(G,p,1); return finishAction(G); }
-  pl.hand.push(c1); if(pl.hand.length>1) pl.called=false;
+  pl.hand.push(c1); if(pl.hand.length>1) pl.called=false; unoGone(G,p);
   ev(G,"draw",{p:p,n:1,text:nm(G,p)+" draws a card"});
   if(canPlay(G,p,c1)){ G.phase="drawn"; G.drawnId=c1.id; return {ok:true,events:G.evq.slice(),drawn:c1.id}; }
   G.turn=nextIdx(G,p,1); return finishAction(G);
@@ -386,7 +405,7 @@ function callUno(G,p){
   return {ok:false,msg:"You can only call UNO with two cards or fewer."};
 }
 function catchUno(G,by,target){
-  if(G.unoVuln==null||G.unoVuln!==target||by===target) return {ok:false,msg:"Too late — nobody to catch."};
+  if(G.unoVuln==null||G.unoVuln!==target||by===target||!G.players[target]||G.players[target].hand.length!==1) return {ok:false,msg:"Too late — nobody to catch."};
   G.evq=[]; var pen=G.o.unoPenalty; G.unoVuln=null; G.players[target].called=true;
   ev(G,"catch",{p:target,by:by,text:nm(G,by)+" catches "+nm(G,target)+" — didn't say UNO!"});
   drawCards(G,target,pen,"forgot UNO"); return {ok:true,events:G.evq.slice()};
@@ -412,9 +431,10 @@ function cardPoints(G,f){
 }
 function handPoints(G,p){ var s=0; G.players[p].hand.forEach(function(c){ s+=cardPoints(G,fc(G,c)); }); return s; }
 function finish(G,winner){
-  var o=G.o, rows=G.units.map(function(u,ui){ return {id:ui,players:u.slice(),name:u.map(function(i){ return nm(G,i); }).join(" & "),points:0,left:0}; });
+  // row.left = points of the cards still held, row.cards = how many cards, row.out = knocked out by the Mercy rule
+  var o=G.o, rows=G.units.map(function(u,ui){ return {id:ui,players:u.slice(),name:u.map(function(i){ return nm(G,i); }).join(" & "),points:0,left:0,cards:0,out:u.every(function(i){ return !!G.players[i].out; })}; });
   var wu=teamOf(G,winner), total=0;
-  G.players.forEach(function(p,i){ var pts=handPoints(G,i); rows[teamOf(G,i)].left+=pts; });
+  G.players.forEach(function(p,i){ var r=rows[teamOf(G,i)]; r.left+=handPoints(G,i); r.cards+=p.hand.length; });
   if(o.scoring==="tally"){
     rows.forEach(function(r){ r.points=r.left; G.uscore[r.id]+=r.points; });
   } else {
@@ -491,12 +511,12 @@ function aiAction(G,p){
 }
 function playParams(G,p,card){
   var f=fc(G,card), a={t:"play",card:card.id};
-  if(f.c==="W"&&G.o.edition!=="allwild") a.color=bestColor(G,p,card.id);
+  if(namesColor(G,f)) a.color=bestColor(G,p,card.id);
   if(needsTarget(G,f)){
     var best=null,bs=-1e9;
     G.players.forEach(function(q,i){ if(i===p||!q.alive) return; var s;
       if(f.v==="wtd2") s=-q.hand.length+(q.hand.length<=2?20:0)+(i===nextIdx(G,p,1)?3:0);
-      else s=-q.hand.length+ (G.players[p].hand.length-1>q.hand.length?-100:0);   // swap hands to get fewer cards
+      else s=-q.hand.length;   // 7 / Forced Swap: take the smallest hand
       s+=G.rnd(); if(s>bs){ bs=s; best=i; } });
     a.target=best;
   }
@@ -527,7 +547,7 @@ function snapshot(G,me){
     pen:G.pen?{n:G.pen.n,v:G.pen.v}:null,
     chal:(G.phase==="challenge")?{by:G.chal.by,victim:G.chal.victim,v:G.chal.v,n:G.chal.n}:null,
     roul:(G.phase==="roulette")?{victim:G.roul.victim}:null,
-    players:G.players.map(function(p,i){ return {id:i,name:p.name,human:p.human,cards:p.hand.length,alive:p.alive,out:p.out,score:G.uscore?G.uscore[teamOf(G,i)]:0,team:G.o.teams?i%2:-1,called:p.called,vuln:G.unoVuln===i}; }),
+    players:G.players.map(function(p,i){ return {id:i,name:p.name,human:p.human,cards:p.hand.length,alive:p.alive,out:p.out,score:G.uscore?G.uscore[teamOf(G,i)]:0,team:G.o.teams?i%2:-1,called:p.called,vuln:G.unoVuln===i&&p.hand.length===1}; }),
     units:G.units,uscore:G.uscore,
     hand:mp?mp.hand.map(function(c){ return {id:c.id,f:c.f}; }):[],
     playable:(mp&&act===me)?playableIds(G,me):[],
@@ -539,7 +559,7 @@ function snapshot(G,me){
   return s;
 }
 
-Uno.Engine={VERSIONS:VERSIONS,HOUSE:HOUSE,defaultOpts:defaultOpts,mergeOpts:mergeOpts,versionOpts:versionOpts,buildDeck:buildDeck,newGame:newGame,startRound:startRound,
+Uno.Engine={VERSIONS:VERSIONS,HOUSE:HOUSE,houseFor:houseFor,namesColor:namesColor,defaultOpts:defaultOpts,mergeOpts:mergeOpts,versionOpts:versionOpts,buildDeck:buildDeck,newGame:newGame,startRound:startRound,
   canPlay:canPlay,playableIds:playableIds,actor:actor,play:play,drawAction:drawAction,passAction:passAction,respondChallenge:respondChallenge,respondRoulette:respondRoulette,
   chooseStartColor:chooseStartColor,callUno:callUno,catchUno:catchUno,jumpIn:jumpIn,jumpIds:jumpIds,aiAction:aiAction,applyAction:applyAction,aiCatchTarget:aiCatchTarget,
   snapshot:snapshot,cardName:cardName,cardPoints:cardPoints,handPoints:handPoints,colorsNow:colorsNow,CNAME:CNAME,VNAME:VNAME,DRAWN:DRAWN,LIGHT:LIGHT,DARK:DARK,isNum:isNum,needsTarget:needsTarget,alive:alive,nextIdx:nextIdx,bestColor:bestColor};
