@@ -22,24 +22,36 @@ function ensure(){
     var d=noiseBuf.getChannelData(0); for(var i=0;i<len;i++) d[i]=Math.random()*2-1;
     applyVol();
   }
-  if(ctx.state==="suspended"&&ctx.resume){ try{ ctx.resume(); }catch(e){} }
+  if(ctx.state==="suspended"&&ctx.resume&&!isHidden()){ try{ ctx.resume(); }catch(e){} }   // never wake the audio while the page/app is in the background
   return true;
 }
+function isHidden(){ try{ return !!(g.document&&g.document.hidden); }catch(e){ return false; } }
 function applyVol(){
   if(!ctx) return; var t=ctx.currentTime;
   musicGain.gain.setTargetAtTime(st.mm?0:st.music*0.55,t,0.05);
   sfxGain.gain.setTargetAtTime(st.sm?0:st.sfx*0.9,t,0.05);
+  if(st.mm) halt(); else run();          // muted music schedules no notes at all; unmuting starts it again
 }
 function hz(m){ return 440*Math.pow(2,(m-69)/12); }
 
 /* ---------- voices ---------- */
-var inSfx=false, sty=null;
-var STY={trouble:{wave:"square",pitch:1},sorry:{wave:"sawtooth",pitch:1.14},monopoly:{wave:"triangle",pitch:0.92},rummy500:{wave:"triangle",pitch:1.06},risk:{wave:"square",pitch:0.9},uno:{wave:"square",pitch:1.12},scatter:{wave:"triangle",pitch:1.08}};
+var inSfx=false, sty=null, mul=1;
+/* per-game sfx colour: wave, and the register (in whole semitones) the effects sit near */
+var STY={trouble:{wave:"square",reg:0},sorry:{wave:"sawtooth",reg:2},monopoly:{wave:"triangle",reg:-1},rummy500:{wave:"triangle",reg:1},risk:{wave:"square",reg:-2},uno:{wave:"square",reg:2},scatter:{wave:"triangle",reg:1}};
+/* the effects are written in C major; move them to the parent major key of the song that is playing
+   (whole semitones, so they stay on the music's tuning grid and in its key), in the octave nearest the game's register */
+var PARENT={major:0,mixo:5,minor:3,dorian:10};
+function sfxMul(){
+  if(!sty) return 1;
+  var th=curTheme, r=sty.reg||0, k=(th&&th.key!=null)?(th.key+(PARENT[th.scale]||0))%12:0;
+  while(k-r>6) k-=12; while(r-k>=6) k+=12;
+  return Math.pow(2,k/12);
+}
 function tone(f,t,dur,type,vol,dest,o){
   o=o||{};
   if(inSfx&&sty){
     if(sty.wave&&(type==="square"||type==="triangle")) type=sty.wave;
-    if(sty.pitch){ f=f*sty.pitch; if(o.to){ var o2={}; for(var kk in o) o2[kk]=o[kk]; o2.to=o.to*sty.pitch; o=o2; } }
+    if(mul!==1){ f=f*mul; if(o.to){ var o2={}; for(var kk in o) o2[kk]=o[kk]; o2.to=o.to*mul; o=o2; } }
   }
   var osc=ctx.createOscillator(), gn=ctx.createGain();
   osc.type=type||"sine"; osc.frequency.setValueAtTime(f,t);
@@ -58,39 +70,55 @@ function noise(t,dur,vol,freq,type,dest){
 
 /* ---------- sound effects ---------- */
 var SFX={
-  tick:function(t,d){ tone(900,t,0.05,"square",0.10,d); },
+  tick:function(t,d){ tone(880,t,0.05,"square",0.10,d); },
   click:function(t,d){ tone(660,t,0.06,"triangle",0.14,d); },
   dice:function(t,d){ for(var i=0;i<7;i++){ noise(t+i*0.07+Math.random()*0.02,0.05,0.5,1800+Math.random()*2500,"bandpass",d); tone(220+Math.random()*120,t+i*0.07,0.04,"square",0.05,d); } },
   coin:function(t,d){ tone(988,t,0.09,"square",0.13,d); tone(1319,t+0.08,0.28,"square",0.13,d); },
   pay:function(t,d){ tone(440,t,0.12,"triangle",0.2,d); tone(330,t+0.11,0.2,"triangle",0.2,d); },
   bump:function(t,d){ tone(160,t,0.25,"sine",0.5,d,{to:45}); noise(t,0.12,0.5,500,"lowpass",d); },
   slide:function(t,d){ tone(260,t,0.45,"sawtooth",0.11,d,{to:1100}); noise(t,0.4,0.16,3000,"highpass",d); },
-  card:function(t,d){ noise(t,0.09,0.5,5000,"highpass",d); noise(t+0.07,0.07,0.4,4200,"highpass",d); tone(700,t+0.1,0.06,"triangle",0.12,d); },
+  card:function(t,d){ noise(t,0.09,0.5,5000,"highpass",d); noise(t+0.07,0.07,0.4,4200,"highpass",d); tone(698,t+0.1,0.06,"triangle",0.12,d); },
   bell:function(t,d){ tone(880,t,0.5,"triangle",0.2,d); tone(1320,t,0.4,"sine",0.11,d); tone(1760,t+0.02,0.3,"sine",0.07,d); },
   jail:function(t,d){ tone(120,t,0.55,"square",0.22,d,{to:90}); tone(95,t+0.02,0.55,"sawtooth",0.12,d); },
   win:function(t,d){ [523,659,784,1047,784,1047,1319].forEach(function(f,i){ tone(f,t+i*0.11,i>5?0.6:0.16,"square",0.15,d); }); },
   lose:function(t,d){ [392,330,262,196].forEach(function(f,i){ tone(f,t+i*0.16,0.3,"triangle",0.2,d); }); },
   turn:function(t,d){ tone(660,t,0.08,"sine",0.13,d); tone(880,t+0.07,0.12,"sine",0.13,d); },
-  deal:function(t,d){ for(var i=0;i<6;i++){ noise(t+i*0.08,0.05,0.45,4500,"highpass",d); } tone(520,t+0.5,0.06,"triangle",0.1,d); },
-  draw:function(t,d){ noise(t,0.07,0.45,5200,"highpass",d); tone(600,t+0.05,0.05,"triangle",0.1,d); },
+  deal:function(t,d){ for(var i=0;i<6;i++){ noise(t+i*0.08,0.05,0.45,4500,"highpass",d); } tone(523,t+0.5,0.06,"triangle",0.1,d); },
+  draw:function(t,d){ noise(t,0.07,0.45,5200,"highpass",d); tone(587,t+0.05,0.05,"triangle",0.1,d); },
   discard:function(t,d){ noise(t,0.05,0.5,3000,"bandpass",d); tone(220,t+0.02,0.09,"sine",0.25,d,{to:150}); },
   meld:function(t,d){ tone(523,t,0.12,"triangle",0.18,d); tone(659,t+0.09,0.12,"triangle",0.18,d); tone(784,t+0.18,0.3,"triangle",0.18,d); },
   cannon:function(t,d){ noise(t,0.2,0.9,260,"lowpass",d); tone(95,t,0.32,"sine",0.42,d,{to:38}); noise(t+0.02,0.1,0.5,1600,"bandpass",d); },
   conquer:function(t,d){ [392,523,659,784].forEach(function(f,i){ tone(f,t+i*0.09,0.22,"sawtooth",0.1,d); }); tone(1047,t+0.4,0.5,"square",0.12,d); noise(t+0.4,0.2,0.3,3000,"highpass",d); },
   place:function(t,d){ tone(260,t,0.06,"square",0.12,d,{to:170}); noise(t,0.04,0.35,2000,"bandpass",d); },
-  build:function(t,d){ tone(300,t,0.07,"square",0.14,d); tone(450,t+0.08,0.1,"square",0.14,d); noise(t,0.05,0.3,900,"bandpass",d); }
+  build:function(t,d){ tone(294,t,0.07,"square",0.14,d); tone(440,t+0.08,0.1,"square",0.14,d); noise(t,0.05,0.3,900,"bandpass",d); }
 };
+/* one action plays one sound: sfx asked for in the same task are batched and only the most important one plays,
+   and a long jingle is not started again while it is still playing (e.g. "goes out" followed by the game-over fanfare) */
+var PRI={tick:0,click:1,card:2,draw:2,discard:2,place:2,deal:3,dice:3,turn:3,build:4,coin:4,pay:4,meld:4,slide:5,bump:5,cannon:5,jail:6,bell:6,conquer:7,lose:8,win:9};
+var HOLD={win:1600,lose:900,conquer:900,jail:700};
+var pend=null, lastAt={};
 function sfx(name){
   if(!AC||st.sm||!SFX[name]) return;
+  if(isHidden()) return;                       // background page/app: drop it (resuming here would restart the music unseen)
+  if(pend!==null){ if((PRI[name]||0)>(PRI[pend]||0)) pend=name; return; }
+  pend=name;
+  if(typeof Promise!=="undefined") Promise.resolve().then(playPending); else setTimeout(playPending,0);
+}
+function playPending(){
+  var name=pend; pend=null;
+  if(!name||st.sm||isHidden()) return;
+  var now=Date.now();
+  if(HOLD[name]&&lastAt[name]&&now-lastAt[name]<HOLD[name]) return;
   if(!ensure()) return;
-  try{ inSfx=true; sty=STY[styleName]||null; SFX[name](ctx.currentTime+0.01,sfxGain); }catch(e){} inSfx=false;
+  lastAt[name]=now;
+  try{ inSfx=true; sty=STY[styleName]||null; mul=sfxMul(); SFX[name](ctx.currentTime+0.01,sfxGain); }catch(e){} inSfx=false;
 }
 function fromText(m){
   m=String(m||"");
   if(/wins!|wins the game|🏆/i.test(m)) return sfx("win");
   if(/bankrupt/i.test(m)) return sfx("lose");
   if(/slid/i.test(m)) return sfx("slide");
-  if(/sent home|bumped|SORRY|swap/i.test(m)) return sfx("bump");
+  if(/sent home|bumped|SORRY/i.test(m)) return sfx("bump");
   if(/to Jail|goes to Jail|3 doubles/i.test(m)) return sfx("jail");
   if(/passes GO|landed on GO|collects/i.test(m)) return sfx("bell");
   if(/ says UNO!/i.test(m)) return sfx("bell");
@@ -99,22 +127,24 @@ function fromText(m){
   if(/FLIP!|knocked out by the Mercy/i.test(m)) return sfx(/FLIP/.test(m)?"dice":"lose");
   if(/Direction reversed| is skipped|are skipped|Everyone else is skipped/i.test(m)) return sfx("slide");
   if(/ plays [A-Z][a-z]+ |^[A-Za-z0-9 ]+ plays /.test(m)&&!/armies/.test(m)) return sfx("card");
-  if(/ draws d+ cards?| draws a card| keeps the card/i.test(m)) return sfx("draw");
+  if(/ draws \d+ cards?| draws a card| keeps the card/i.test(m)) return sfx("draw");
   if(/ picks .* for Color Roulette| passes their hand| swaps hands/i.test(m)) return sfx("deal");
   if(/conquers|captures .* headquarters/i.test(m)) return sfx("conquer");
   if(/eliminates/i.test(m)) return sfx("lose");
   if(/ attacks .* rolls /i.test(m)) return sfx("cannon");
   if(/trades in a set/i.test(m)) return sfx("meld");
   if(/draws a territory card/i.test(m)) return sfx("card");
-  if(/ places \d+ (armies|army)| places an army| claims | moves \d+ armies? (into|from)| moves 1 army (into|from)/i.test(m)) return sfx("place");
-  if(/goes out|wins the round/i.test(m)) return sfx("win");
-  if(/melds|lays off|laid off/i.test(m)) return sfx("meld");
-  if(/discards/i.test(m)) return sfx("discard");
-  if(/takes .* from the discard|draws from the (stock|pile)/i.test(m)) return sfx("draw");
+  if(/ places \d+ (armies|army)| places an army| claims | moves \d+ armies? (into|from)| moves 1 army (into|from)| shifts \d+ arm(y|ies) from/i.test(m)) return sfx("place");
+  /* Rummy 500 says "You draw / take / meld / lay off / discard / go out" for the single human player */
+  if(/goes out|\bgo out!|wins the round/i.test(m)) return sfx("win");
+  if(/\bmelds?\b|\blays? off\b|laid off/i.test(m)) return sfx("meld");
+  if(/\bdiscards?\b(?! pile)/i.test(m)) return sfx("discard");
+  if(/\btakes? .* from the discard|\bdraws? from the (stock|pile)/i.test(m)) return sfx("draw");
   if(/deals|shuffl/i.test(m)) return sfx("deal");
   if(/builds/i.test(m)) return sfx("build");
   if(/buys|Trade done| for \$/i.test(m)) return sfx("coin");
-  if(/pays|Tax|rent|fine/i.test(m)) return sfx("pay");
+  if(/Bank pays you|(^|[.:] )(Collect|Receive) \$|you get \$|You inherit|tax refund/.test(m)) return sfx("coin");   // money coming in (Chance / Chest)
+  if(/\bpays\b|\bTax\b|\brent\b|\bfine\b/i.test(m)&&!/no rent/i.test(m)) return sfx("pay");                      // whole words: not "Laurent", "Josefine", "rental"
 }
 
 /* ---------- music: a small composer makes 10 different songs per game; a shuffled playlist plays them ---------- */
@@ -207,7 +237,7 @@ function melody(r,sc,prog,rh,resolve){
 }
 function compose(game,idx){
   var S=STYLES[game], r=mulberry(hashStr(game)*131+idx*977+7);
-  var sc=SCALES[pickOf(r,S.scales)], key=pickOf(r,KEYS), bpm=Math.round(S.bpm[0]+r()*(S.bpm[1]-S.bpm[0]));
+  var scn=pickOf(r,S.scales), sc=SCALES[scn], key=pickOf(r,KEYS), bpm=Math.round(S.bpm[0]+r()*(S.bpm[1]-S.bpm[0]));
   var progA=pickOf(r,S.progs), progB=pickOf(r,S.bridge), rhA=pickOf(r,S.rhythms), rhB=pickOf(r,S.rhythms), wave=pickOf(r,S.waves), dr=pickOf(r,S.drums);
   var mA=melody(r,sc,progA,rhA,true), mB=melody(r,sc,progB,rhB,false), mA2=mA.slice(0,24).concat(melody(r,sc,progA,rhA,true).slice(24));
   var secs=[[progA,mA],[progA,mA],[progB,mB],[progA,mA2]];
@@ -230,7 +260,7 @@ function compose(game,idx){
       }
     }
   });
-  return { title:S.titles[idx], bpm:bpm, len:128, swing:S.swing, leadRoot:0, leadWave:wave, leadVol:S.leadVol*(0.9+r()*0.25), leadLen:(game==="sorry"?0.6:game==="monopoly"?1.1:0.9),
+  return { title:S.titles[idx], key:key, scale:scn, bpm:bpm, len:128, swing:S.swing, leadRoot:0, leadWave:wave, leadVol:S.leadVol*(0.9+r()*0.25), leadLen:(game==="sorry"?0.6:game==="monopoly"?1.1:0.9),
     lead:lead, bassRoot:0, bass:bass, bassVol:game==="monopoly"?0.24:0.2, chordRoot:0, chord:chord, chordVol:game==="monopoly"?0.06:0.045,
     kick:kick, snare:snare, hat:hat, hatVol:dr.hv||0.07, kickVol:dr.kv||0.5, snareVol:dr.sv||0.26 };
 }
@@ -264,7 +294,13 @@ function pump(){
     if(playlistMode&&step>=th.len*2) nextSong();      // each song plays twice, then the next one starts
   }
 }
-function stopMusic(){ if(timer){ clearInterval(timer); timer=null; } cur=null; }
+function halt(){ if(timer){ clearInterval(timer); timer=null; } }
+function stopMusic(){ halt(); cur=null; }
+function run(){            // (re)start the note scheduler for the current song; never while the music is muted
+  if(!ctx||!cur||timer||st.mm) return;
+  if(nextT<ctx.currentTime+0.05){ step-=step%8; nextT=ctx.currentTime+0.15; }   // after a pause: start again cleanly at the top of the bar
+  timer=setInterval(pump,80); pump();
+}
 function setupTheme(name){
   if(STYLES[name]){
     playlistMode=true; game=name;
@@ -275,12 +311,12 @@ function setupTheme(name){
 }
 function begin(){
   if(!want){ stopMusic(); return; }
-  if(cur===want&&timer) return;
+  if(cur===want&&(timer||st.mm)) return;
   stopMusic(); setupTheme(want);
-  cur=want; step=0; nextT=ctx.currentTime+0.15; timer=setInterval(pump,80); pump(); refreshPanel();
+  cur=want; step=0; nextT=ctx.currentTime+0.15; run(); refreshPanel();
 }
 function music(name){ want=name||null; styleName=(name&&(STYLES[name]||name==="menu"))?name:"menu"; if(!AC) return; if(unlocked&&ensure()) begin(); }
-function skip(){ if(playlistMode&&timer) nextSong(); }          // start a different song (used at the start of every game)
+function skip(){ if(playlistMode&&cur) nextSong(); }          // start a different song (used at the start of every game)
 function nowPlaying(){ return (playlistMode&&curTheme)?curTheme.title:""; }
 
 function unlock(){
@@ -294,7 +330,16 @@ if(g.document){
 }
 
 /* ---------- settings panel + floating button ---------- */
-function closePanel(){ var o=g.document.getElementById("bgSoundPanel"); if(o) o.remove(); }
+var panelKeys=null, panelTrap=null, panelBack=null;
+function closePanel(){
+  var d=g.document, o=d.getElementById("bgSoundPanel");
+  if(panelKeys){ g.removeEventListener("keydown",panelKeys,true); d.removeEventListener("focusin",panelTrap,true); panelKeys=panelTrap=null; }
+  if(!o) return;
+  o.remove();
+  var b=panelBack; panelBack=null;      // focus goes back to what had it (or to what the page focused while the window was open)
+  try{ if(b&&b!==d.body&&b.isConnected!==false&&b.focus) b.focus(); }catch(e){}
+  if(!d.activeElement||d.activeElement===d.body){ var sb=d.getElementById("bgSndBtn"); if(sb) try{ sb.focus(); }catch(e){} }
+}
 function setVol(which,v){ v=Math.max(0,Math.min(1,v)); if(which==="m") st.music=v; else st.sfx=v; save(); applyVol(); refreshPanel(); }
 function refreshPanel(){
   var d=g.document; var rm=d.getElementById("bgRm"), rs=d.getElementById("bgRs"); if(!rm||!rs) return;
@@ -305,6 +350,7 @@ function refreshPanel(){
 }
 function openPanel(){
   var d=g.document; closePanel();
+  var back=d.activeElement;
   var ov=d.createElement("div"); ov.id="bgSoundPanel";
   ov.style.cssText="position:fixed;inset:0;z-index:2147483000;background:rgba(6,10,26,.9);display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#eef2ff;padding:16px";
   var fs="clamp(17px,3vh,30px)";
@@ -327,19 +373,41 @@ function openPanel(){
   on("bgTest",function(){ unlock(); ensure(); sfx("dice"); setTimeout(function(){ sfx("coin"); },600); });
   on("bgNext",function(){ unlock(); skip(); refreshPanel(); });
   on("bgDone",closePanel);
-  /* remote / keyboard: Up/Down move between the controls (they must NOT change a slider), Left/Right adjust a slider, Back closes the window */
-  ov.addEventListener("keydown",function(e){
-    var k=e.key, list=Array.prototype.slice.call(ov.querySelectorAll("button,input")), i=list.indexOf(d.activeElement);
-    if(k==="Escape"||k==="Backspace"||k==="GoBack"||k==="BrowserBack"||e.keyCode===4){ e.preventDefault(); e.stopPropagation(); closePanel(); return; }
+  /* remote / keyboard: Up/Down move between the controls (they must NOT change a slider), Left/Right adjust a slider or move along a row
+     of buttons, Back closes the window. The window is modal: keys are taken at the window level and focus is kept inside it,
+     so a page that focuses one of its own buttons behind it (e.g. "Next round" on the TV) cannot take the remote away. */
+  var last=null;
+  function ctrls(){ return Array.prototype.slice.call(ov.querySelectorAll("button,input")); }
+  function home(){ var to=(last&&ov.contains(last))?last:d.getElementById("bgDone"); try{ if(to) to.focus(); }catch(e){} }
+  panelBack=back;
+  panelTrap=function(e){
+    if(!ov.isConnected){ closePanel(); return; }
+    if(ov.contains(e.target)){ last=e.target; return; }
+    panelBack=e.target; home();
+  };
+  panelKeys=function(e){
+    if(!ov.isConnected){ closePanel(); return; }
+    var k=e.key, a=d.activeElement, all=ctrls();
+    function stop(){ e.preventDefault(); e.stopPropagation(); }
+    if(k==="Escape"||k==="Backspace"||k==="GoBack"||k==="BrowserBack"||e.keyCode===4){ stop(); closePanel(); return; }
+    if(all.indexOf(a)<0){ stop(); home(); return; }                 // focus slipped out: take it back, never act on the page behind
+    e.stopPropagation();
     if(k==="ArrowDown"||k==="ArrowUp"){
-      e.preventDefault(); e.stopPropagation();
-      var j=k==="ArrowDown"?Math.min(list.length-1,i+1):Math.max(0,i-1); if(i<0) j=0;
-      // skip the − / + buttons beside a slider when moving vertically
-      while(list[j]&&list[j].hasAttribute("data-a")&&j>0&&j<list.length-1) j+=(k==="ArrowDown"?1:-1);
-      if(list[j]) list[j].focus(); return;
+      e.preventDefault();
+      // vertical moves skip the − / + buttons beside a slider (from one of them, move as if from its slider)
+      var col=all.filter(function(x){ return !x.hasAttribute("data-a"); }), from=a;
+      if(a.hasAttribute("data-a")) from=a.parentNode.querySelector("input")||a;
+      var i=col.indexOf(from), j=(i<0)?0:Math.max(0,Math.min(col.length-1,i+(k==="ArrowDown"?1:-1)));
+      if(col[j]) col[j].focus(); return;
     }
-    if((k==="ArrowLeft"||k==="ArrowRight")&&d.activeElement&&d.activeElement.type!=="range"){ e.preventDefault(); e.stopPropagation(); var jj=k==="ArrowRight"?Math.min(list.length-1,i+1):Math.max(0,i-1); if(list[jj]) list[jj].focus(); }
-  },true);
+    if((k==="ArrowLeft"||k==="ArrowRight")&&a.type!=="range"){
+      e.preventDefault();
+      var row=Array.prototype.filter.call(a.parentNode.children,function(x){ return all.indexOf(x)>=0; }), ri=row.indexOf(a)+(k==="ArrowRight"?1:-1);
+      if(row[ri]) row[ri].focus(); return;
+    }
+    if(k==="Tab"){ e.preventDefault(); var ti=(all.indexOf(a)+(e.shiftKey?-1:1)+all.length)%all.length; all[ti].focus(); }
+  };
+  g.addEventListener("keydown",panelKeys,true); d.addEventListener("focusin",panelTrap,true);
   refreshPanel(); try{ d.getElementById("bgDone").focus(); }catch(e){}
 }
 function panelOpen(){ return !!g.document.getElementById("bgSoundPanel"); }
