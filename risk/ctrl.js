@@ -173,7 +173,7 @@ function create(cfg){
           stat="<b>Reinforce</b> — "+V.reserve+" "+(V.reserve===1?"army":"armies")+" left. Tap any of your territories to place "+(S.amt==="all"?"all remaining":Math.min(V.reserve,S.amt|0||1))+" there."+(forced?" You must trade in cards first!":"");
           owned(V.me).forEach(function(i){ marks.mine[i]=1; });
           if(V.reserve>0) acts+='<div class="rkseg"><span>Armies per tap:</span>'+[1,5,10,"all"].map(function(a){ return '<button data-a="amt:'+a+'" class="'+(String(S.amt)===String(a)?"on":"")+'">'+(a==="all"?"All":a)+'</button>'; }).join("")+'</div>';
-          if(E.findSets(V.myCards).length) acts+=btn("🃏 Trade cards","cards",forced?"pri":"");
+          if(E.findSets(V.myCards).length&&!(V.mustDown&&V.myCards.length<=4)) acts+=btn("🃏 Trade cards","cards",forced?"pri":"");
           if(V.reserve===0) acts+=btn("Done — start attacking ▶","endReinforce","pri",forced);
           if(forced&&modalClosed()) setTimeout(function(){ openCards(); },50);
           break; }
@@ -181,8 +181,8 @@ function create(cfg){
           var sp=V.shiftPair;
           if(sp&&V.terr[sp.a].o===V.me&&V.terr[sp.b].o===V.me&&S.src==null){
             if(S.shiftOpen){
-              var ta=V.terr[sp.a].a, tb=V.terr[sp.b].a, mxA=ta-1, mxB=tb-1; if(S.shiftN==null||S.shiftN<1) S.shiftN=1; S.shiftN=Math.max(1,Math.min(S.shiftN,Math.max(mxA,mxB,1)));
-              stat="<b>Shift armies</b> between <b>"+esc(MP.names[sp.a])+"</b> ("+ta+") and <b>"+esc(MP.names[sp.b])+"</b> ("+tb+") — at least 1 stays in each.";
+              var ta=V.terr[sp.a].a, tb=V.terr[sp.b].a, kb=Math.max(1,sp.min||1), mxA=ta-1, mxB=tb-kb; if(S.shiftN==null||S.shiftN<1) S.shiftN=1; S.shiftN=Math.max(1,Math.min(S.shiftN,Math.max(mxA,mxB,1)));
+              stat="<b>Shift armies</b> between <b>"+esc(MP.names[sp.a])+"</b> ("+ta+") and <b>"+esc(MP.names[sp.b])+"</b> ("+tb+") — "+(kb>1?"at least "+kb+" stay in "+esc(MP.names[sp.b])+" (the dice you rolled) and 1 in "+esc(MP.names[sp.a])+".":"at least 1 stays in each.");
               marks.src[sp.a]=1; marks.src[sp.b]=1;
               acts+='<div class="rkstep"><button data-a="sh:-1">−</button><b>'+S.shiftN+'</b><button data-a="sh:1">+</button></div>'+
                 btn("◀ Move "+S.shiftN+" to "+esc(MP.names[sp.a]),"shmove:"+sp.b+":"+sp.a,"pri",S.shiftN>mxB)+btn("Move "+S.shiftN+" to "+esc(MP.names[sp.b])+" ▶","shmove:"+sp.a+":"+sp.b,"pri",S.shiftN>mxA)+btn("Done","shdone","");
@@ -234,11 +234,11 @@ function create(cfg){
   function openCards(){
     var cards=V.myCards;
     if(!cards.length){ openModal('<h2>🃏 Your cards</h2><p style="opacity:.8">You have no territory cards yet. You draw one at the end of any turn in which you conquer a territory.</p><div class="rkacts"><button data-m="close">Close</button></div>'); return; }
-    var sets=E.findSets(cards), canTrade=V.phase==="reinforce"&&mine();
+    var sets=E.findSets(cards), canTrade=V.phase==="reinforce"&&mine()&&!(V.mustDown&&cards.length<=4);   // after an elimination you stop trading at 4 cards
     var sel=S.cardSel.filter(function(id){ return cards.some(function(c){ return c.id===id; }); }); S.cardSel=sel;
     var sc=sel.map(function(id){ return cards.filter(function(c){ return c.id===id; })[0]; });
     var ok=sc.length===3&&E.validSet(sc), val=ok?E.setValue(V,sc):null;
-    var bonusOpts=[]; if(ok&&V.o.terrBonus==="cap2"){ sc.forEach(function(c){ if(c.t>=0&&V.terr[c.t].o===V.me&&bonusOpts.indexOf(c.t)<0) bonusOpts.push(c.t); }); }
+    var bonusOpts=[]; if(ok&&(V.o.terrBonus==="cap2"||V.o.terrBonus==="cap2turn"&&!V.bonusUsed)){ sc.forEach(function(c){ if(c.t>=0&&V.terr[c.t].o===V.me&&bonusOpts.indexOf(c.t)<0) bonusOpts.push(c.t); }); }
     var h='<h2>🃏 Your cards ('+cards.length+')</h2><div style="font-size:12.5px;opacity:.85">Sets: three alike, one of each, or any two plus a wild card. '+(V.nextSet?'Next set is worth <b>'+V.nextSet+'</b> armies':'Set values depend on the card types')+' · '+V.setsTraded+' traded so far.'+(V.o.terrBonus!=="none"?' ★ = you own that territory (+2 armies on it when traded).':'')+'</div>';
     h+='<div class="rkcards">'+cards.map(function(c){ return cardHTML(c,{sel:sel.indexOf(c.id)>=0,owned:V.o.terrBonus!=="none"&&c.t>=0&&V.terr[c.t].o===V.me}); }).join("")+'</div>';
     if(canTrade){ h+='<div class="rkacts">'+(ok?'<button class="pri" data-m="trade">Trade in for '+val+' armies</button>':'<button disabled>Select 3 cards to trade</button>')+(sets.length&&!ok?'<button data-m="auto">Pick a set for me</button>':'')+'</div>';
@@ -318,6 +318,7 @@ function create(cfg){
   };
   self.openCards=openCards; self.openPlayers=openPlayers; self.openMission=openMission;
   self.destroy=function(){ stopBlitz(); if(modal.parentNode) modal.parentNode.removeChild(modal); };
+  self.reset=function(){ stopBlitz(); S.key=""; S.src=null; S.tgt=null; S.fSrc=null; S.fTgt=null; S.cardSel=[]; S.shiftOpen=false; S.lastSeq=-1; closeModal(); };   // new game / load: nothing from the old game may act on the new one
   self.state=S;
   return self;
 }

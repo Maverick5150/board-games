@@ -11,7 +11,7 @@ function defaultOpts(){
     mode:"classic",          // classic (conquer the world) | mission (Secret Mission Risk) | capital (Capital / Headquarters Risk)
     setup:"deal1",           // deal1 (1959: deal all cards, 1 army each) | claim (1963+: take turns claiming, then deploy) | dealPlace (deal, then deploy the rest)
     startArmies:"auto",      // "auto" = 3p 35, 4p 30, 5p 25, 6p 20 (not used by deal1)
-    terrBonus:"none",        // none | perCard (+2 per traded card whose territory you own) | cap2 (max +2 per trade-in)
+    terrBonus:"none",        // none | perCard (+2 per traded card whose territory you own) | cap2turn (at most +2 a turn, 1980/1993 booklets) | cap2 (+2 on every trade-in)
     cardValues:"escalate",   // escalate 4,6,8,10,12,15,+5 | escalate1 (4,5,6,...) | fixed (Artillery 4, Infantry 6, Cavalry 8, mixed 10)
     wilds:true,
     forcedTrade:5,           // must trade a set when starting a turn holding this many cards
@@ -21,7 +21,9 @@ function defaultOpts(){
     cardOnElim:true,         // take an eliminated player's cards (old UK: no)
     capArmies:0,             // 12 = "experts" cap on armies per territory (0 = none)
     randomSetup:false,       // convenience: finish the starting placement automatically
-    occupyFree:true,         // after a conquest you choose how many armies move in (from 1) and can shift armies back and forth between the two territories
+    occupyMin1:false,        // house rule: after a conquest you may move in as few as 1 army (published rules: at least as many as the dice you rolled)
+    occupyFree:true,         // house rule (on by default): after a conquest, shift armies back and forth between the two territories for the rest of the attack phase
+    missionRules:"us",       // us | uk (old UK Secret Mission: kill the target yourself, else your mission becomes 24 territories; 14-card mission deck)
     maxPlayers:6
   };
 }
@@ -29,16 +31,16 @@ function mergeOpts(o){ var d=defaultOpts(); for(var k in (o||{})) d[k]=o[k]; ret
 var VERSIONS=[
   {id:"1959",name:"1959 Original",tag:"1960s Parker Brothers",desc:"The 1960s original: all 42 cards dealt, ONE army on each territory, no extra starting armies, no territory bonus on card trades, free move = one territory to one neighbour.",opts:{}},
   {id:"1963",name:"1963 Classic",tag:"Parker Brothers, 1963–75",desc:"Players take turns claiming territories, then place the rest of their starting armies (35/30/25/20). Trading in a card gives +2 armies for each card showing a territory you own.",opts:{setup:"claim",terrBonus:"perCard"}},
-  {id:"1980",name:"1980 Classic",tag:"Parker Brothers, 1980",desc:"As 1963, but the territory bonus is capped at +2 armies per trade-in.",opts:{setup:"claim",terrBonus:"cap2"}},
-  {id:"1993",name:"1993 Modern Classic",tag:"Hasbro / Parker Brothers",desc:"The 1993–2003 booklet: claim setup, +2 territory bonus (max 2), forced trade at 5+ cards, trade down to 4 after eliminating a player.",opts:{setup:"claim",terrBonus:"cap2"}},
-  {id:"modern",name:"Current Hasbro",tag:"2015–16 edition",desc:"Like 1993, but you may fortify along any connected path of your territories.",opts:{setup:"claim",terrBonus:"cap2",fortify:"connected"}},
-  {id:"uk",name:"Old UK Rules",tag:"European / UK rulebook",desc:"Reinforce OR attack each turn, fixed card values by type, redeploy up to 7 single armies, and you don't take an eliminated player's cards.",opts:{setup:"dealPlace",reinforceOrAttack:true,cardValues:"fixed",fortify:"steps7",cardOnElim:false,terrBonus:"none"}}
+  {id:"1980",name:"1980 Classic",tag:"Parker Brothers, 1980",desc:"As 1963, but the territory bonus is capped at +2 armies a turn.",opts:{setup:"claim",terrBonus:"cap2turn"}},
+  {id:"1993",name:"1993 Modern Classic",tag:"Hasbro / Parker Brothers",desc:"The 1993–2003 booklet: claim setup, +2 territory bonus (at most 2 a turn), forced trade at 5+ cards, trade down to 4 after eliminating a player.",opts:{setup:"claim",terrBonus:"cap2turn"}},
+  {id:"modern",name:"Current Hasbro",tag:"2015–16 edition",desc:"Like 1993, but you may fortify along any connected path of your territories, and the +2 territory bonus comes with every trade-in.",opts:{setup:"claim",terrBonus:"cap2",fortify:"connected"}},
+  {id:"uk",name:"Old UK Rules",tag:"European / UK rulebook",desc:"Reinforce OR attack each turn, fixed card values by type, redeploy up to 7 single armies, and you don't take an eliminated player's cards.",opts:{setup:"dealPlace",reinforceOrAttack:true,cardValues:"fixed",fortify:"steps7",cardOnElim:false,terrBonus:"none",missionRules:"uk"}}
 ];
 var GAMEMODES=[["classic","Conquer the World"],["mission","Secret Mission Risk"],["capital","Capital Risk"]];
 var HOUSE=[
   ["mode","Game type","choice",[["classic","Conquer the World"],["mission","Secret Mission"],["capital","Capital (HQ) Risk"]]],
   ["setup","Starting setup","choice",[["deal1","Deal cards, 1 army each (1959)"],["claim","Take turns claiming (1963+)"],["dealPlace","Deal, then place the rest"]]],
-  ["terrBonus","+2 for territory on a traded card","choice",[["none","None"],["perCard","+2 per card (1963)"],["cap2","Max +2 (1980+)"]]],
+  ["terrBonus","+2 for territory on a traded card","choice",[["none","None"],["perCard","+2 per card (1963)"],["cap2turn","Max +2 a turn (1980, 1993)"],["cap2","+2 per trade-in (2015+)"]]],
   ["cardValues","Card set values","choice",[["escalate","4,6,8,10,12,15,+5"],["escalate1","4,5,6,7,… (+1 each)"],["fixed","Fixed by type (UK)"]]],
   ["wilds","Wild cards (jokers)","bool"],
   ["fortify","Free move","choice",[["adjacent","One territory → one neighbour"],["connected","Any connected path"],["steps7","Up to 7 single steps"]]],
@@ -46,9 +48,11 @@ var HOUSE=[
   ["cardOnElim","Take cards of an eliminated player","bool"],
   ["capArmies","Army cap per territory","choice",[[0,"None"],[12,"12 (experts)"]]],
   ["randomSetup","Place starting armies automatically","bool"],
-  ["occupyFree","Choose how many move in after a conquest, and shift armies back and forth","bool"]
+  ["occupyMin1","Move in from 1 army after a conquest","bool"],
+  ["occupyFree","Shift armies back and forth after a conquest","bool"]
 ];
-var HOUSE_OFFICIAL={mode:1,setup:1,terrBonus:1,cardValues:1,wilds:0,fortify:1,reinforceOrAttack:1,cardOnElim:1,capArmies:1,randomSetup:0,occupyFree:0};
+/* 1 = published rule, 0 = house rule. occupyFree used to also lower the move-in minimum to 1; that part is now occupyMin1 (off), so old saved settings keep their meaning for the shift */
+var HOUSE_OFFICIAL={mode:1,setup:1,terrBonus:1,cardValues:1,wilds:1,fortify:1,reinforceOrAttack:1,cardOnElim:1,capArmies:1,randomSetup:0,occupyMin1:0,occupyFree:0};
 function versionOpts(id,extra){ var v=VERSIONS.filter(function(x){ return x.id===id; })[0]||VERSIONS[0]; var o={}; for(var k in v.opts) o[k]=v.opts[k]; for(var k2 in (extra||{})) o[k2]=extra[k2]; return mergeOpts(o); }
 
 /* ---------------- helpers ---------------- */
@@ -103,11 +107,11 @@ function setup(G){
     shuffle(terrCards,G.rnd); var d2=Math.floor(G.rnd()*np);
     for(i=0;i<MP.n;i++){ G.terr[terrCards[i]]={o:(d2+i)%np,a:1}; }
     var sa=startArmiesOf(G); G.initLeft=G.players.map(function(p,pi){ return sa-owned(G,pi).length; });
-    G.phase="deploy"; G.turn=(d2)%np; if(G.turn<0) G.turn=0;
+    G.phase="deploy"; G.turn=(d2)%np; if(G.turn<0) G.turn=0; G.deployStart=G.turn;   // whoever places the first army takes the first turn
     ev(G,"setup",{text:"Territories are dealt; players now place the rest of their starting armies one at a time."});
   } else {
     G.initLeft=G.players.map(function(){ return startArmiesOf(G); });
-    G.phase="claim"; G.turn=Math.floor(G.rnd()*np);
+    G.phase="claim"; G.turn=Math.floor(G.rnd()*np); G.deployStart=G.turn;   // whoever places the first army takes the first turn
     ev(G,"setup",{text:pn(G,G.turn)+" rolls highest and claims first. Take turns claiming an empty territory."});
   }
   afterSetupPrep(G);
@@ -144,7 +148,7 @@ function missionDeck(G){
 function missionText(G,m){
   var cn=map().continents;
   if(m.k==="kill") return "Destroy all "+(G.players[m.c]?G.players[m.c].name:"?")+"'s armies.";
-  if(m.k==="cont") return "Conquer "+m.c.map(function(c){ return cn[c].name; }).join(" and ")+".";
+  if(m.k==="cont") return "Conquer "+m.c.map(function(c){ return cn[c].name; }).join(" and ")+(m.plus?", plus a third continent of your choice":"")+".";
   return "Occupy "+m.n+" territories"+(m.min>1?" with at least "+m.min+" armies in each":"")+".";
 }
 /* continent order in map.js must be: 0 North America, 1 South America, 2 Europe, 3 Africa, 4 Asia, 5 Australia — mission continents are by NAME for safety */
@@ -154,6 +158,7 @@ function dealMissions(G){
   var NA=I("North America"),SA=I("South America"),EU=I("Europe"),AF=I("Africa"),AS=I("Asia"),AU=I("Australia");
   for(var c=0;c<np;c++) d.push({k:"kill",c:c});
   d.push({k:"cont",c:[AS,SA]},{k:"cont",c:[AS,AF]},{k:"cont",c:[NA,AF]},{k:"cont",c:[NA,AU]},{k:"terr",n:18,min:2},{k:"terr",n:24,min:1});
+  if(G.o.missionRules==="uk") d.push({k:"cont",c:[EU,SA],plus:1},{k:"cont",c:[EU,AU],plus:1});   // the UK/European deck has two more: Europe + South America / Australia + a third continent
   shuffle(d,G.rnd);
   realPlayers(G).forEach(function(p){ var m=d.pop(); if(m.k==="kill"&&m.c===p.id) m={k:"terr",n:24,min:1}; p.mission=m; });
   G.missionsDealt=true;
@@ -162,7 +167,12 @@ function dealMissions(G){
 function missionDone(G,p){
   var m=G.players[p].mission; if(!m) return false;
   if(m.k==="kill"){ return !G.players[m.c].alive||owned(G,m.c).length===0; }
-  if(m.k==="cont"){ return m.c.every(function(c){ return map().continents[c].terrs.every(function(t){ return G.terr[t].o===p; }); }); }
+  if(m.k==="cont"){
+    var full=function(c){ return map().continents[c].terrs.every(function(t){ return G.terr[t].o===p; }); };
+    if(!m.c.every(full)) return false;
+    var extra=0; map().continents.forEach(function(c,ci){ if(m.c.indexOf(ci)<0&&full(ci)) extra++; });
+    return extra>=(m.plus||0);
+  }
   var n=0; G.terr.forEach(function(t){ if(t.o===p&&t.a>=m.min) n++; }); return n>=m.n;
 }
 
@@ -183,7 +193,7 @@ function skipDone(G){
   while(G.initLeft[G.turn]<=0&&safety++<np+1&&!G.players[G.turn].neutral) G.turn=nextAlive(G,G.turn);
   if(G.initLeft.every(function(x,i){ return x<=0||G.players[i].neutral; })) finishDeploy(G);
 }
-function finishDeploy(G){ var first=G.firstTurn!=null?G.firstTurn:0; ev(G,"setup",{text:"All starting armies are placed."}); G.turn=G.deployStart!=null?G.deployStart:0; beginSetupDone(G); }
+function finishDeploy(G){ ev(G,"setup",{text:"All starting armies are placed."}); G.turn=G.deployStart!=null?G.deployStart:0; beginSetupDone(G); }
 function deployOne(G,t){
   if(G.phase!=="deploy") return {ok:false,msg:"Not deploying right now."};
   if(G.terr[t].o!==G.turn) return {ok:false,msg:"Place on one of your own territories."};
@@ -221,7 +231,7 @@ function terrArmies(G,p){ return Math.max(3,Math.floor(owned(G,p).length/3)); }
 function contBonus(G,p){ var s=0; map().continents.forEach(function(c){ if(c.terrs.every(function(t){ return G.terr[t].o===p; })) s+=c.bonus; }); return s; }
 function beginTurn(G){
   var p=G.turn, pl=G.players[p];
-  G.conquered=false; G.occ=null; G.noAttack=false; G.fortLeft=0; G.tradedThisTurn=false;
+  G.conquered=false; G.occ=null; G.noAttack=false; G.fortLeft=0; G.tradedThisTurn=false; G.terrBonusTurn=false;
   if(G.o.reinforceOrAttack){ G.phase="choose"; G.reserve=contBonus(G,p); ev(G,"turn",{p:p,text:pn(G,p)+"'s turn — reinforce or attack"}); return; }
   G.reserve=terrArmies(G,p)+contBonus(G,p); G.phase="reinforce"; G.returnTo="attack";
   ev(G,"turn",{p:p,text:pn(G,p)+" receives "+G.reserve+" armies ("+terrArmies(G,p)+" for territories"+(contBonus(G,p)?", "+contBonus(G,p)+" for continents":"")+")"});
@@ -236,8 +246,9 @@ function mustTrade(G){ var p=cur(G); return G.phase==="reinforce"&&(p.cards.leng
 function setValue(G,cards){
   var o=G.o;
   if(o.cardValues==="fixed"){
-    var s=cards.map(function(c){ return c.sym; });
-    if(s.indexOf("W")>=0||(new Set(s)).size===3) return 10;
+    var s=cards.map(function(c){ return c.sym; }), nw=s.filter(function(x){ return x!=="W"; });
+    if(nw.length===2&&nw[0]===nw[1]) return {A:4,I:6,C:8}[nw[0]]||10;   // a joker with a pair can only complete three alike
+    if(nw.length<3||(new Set(s)).size===3) return 10;
     return {A:4,I:6,C:8}[s[0]]||10;
   }
   var k=G.setsTraded, v;
@@ -260,6 +271,7 @@ function findSets(cards){
 }
 function tradeCards(G,ids,bonusTerr){
   if(G.phase!=="reinforce") return {ok:false,msg:"You can only trade in cards when you reinforce."};
+  if(!tradeOpen(G)) return {ok:false,msg:"You're down to 4 cards or fewer, so you must stop trading now."};
   var p=cur(G), cards=ids.map(function(id){ return p.cards.filter(function(c){ return c.id===id; })[0]; });
   if(cards.some(function(c){ return !c; })||cards.length!==3||(new Set(ids)).size!==3) return {ok:false,msg:"Pick three of your cards."};
   if(!validSet(cards)) return {ok:false,msg:"Those three cards aren't a set (three alike, one of each, or any two plus a wild card)."};
@@ -271,12 +283,14 @@ function tradeCards(G,ids,bonusTerr){
   if(G.o.terrBonus!=="none"){
     var mine=cards.filter(function(c){ return c.t>=0&&G.terr[c.t].o===G.turn; });
     if(G.o.terrBonus==="perCard"){ mine.forEach(function(c){ G.terr[c.t].a+=2; bonus+=2; }); }
-    else if(mine.length){ var bt=(bonusTerr!=null&&mine.some(function(c){ return c.t===bonusTerr; }))?bonusTerr:mine[0].t; G.terr[bt].a+=2; bonus=2; }
+    else if(mine.length&&!(G.o.terrBonus==="cap2turn"&&G.terrBonusTurn)){ var bt=(bonusTerr!=null&&mine.some(function(c){ return c.t===bonusTerr; }))?bonusTerr:mine[0].t; G.terr[bt].a+=2; bonus=2; G.terrBonusTurn=true; }   // 1980/1993: "On a single turn, you may receive no more than 2 extra armies"
   }
   events.push(ev(G,"trade",{p:G.turn,val:val,bonus:bonus,text:pn(G,G.turn)+" trades in a set for "+val+" armies"+(bonus?" (+"+bonus+" bonus on owned territories)":"")}));
   if(p.cards.length<G.o.forcedTrade) G.tradedThisTurnForced=false;
   return {ok:true,events:events,value:val,bonus:bonus};
 }
+/* after taking an eliminated player's cards you trade only until your hand is down to 4 or fewer, then you must stop */
+function tradeOpen(G){ return !(G.mustDown&&cur(G).cards.length<=4); }
 function forcedNow(G){ var p=cur(G); if(G.mustDown) return p.cards.length>4; return p.cards.length>=G.o.forcedTrade; }
 function place(G,t,n){
   if(G.phase!=="reinforce") return {ok:false,msg:"Not reinforcing."};
@@ -331,7 +345,7 @@ function attack(G,from,to,dice){
   G.lastAttack={seq:++G.seq,p:p,from:from,to:to,def:defOwner,ar:as,dr:ds,al:al,dl:dl,conquered:false,fromA:A.a,toA:D.a};
   if(D.a<=0){
     D.o=p; D.a=0; res.conquered=true; G.conquered=true; G.lastAttack.conquered=true;
-    var min=G.o.occupyFree?1:dice; if(min>A.a-1) min=A.a-1; if(min<1) min=1;
+    var min=G.o.occupyMin1?1:dice; if(min>A.a-1) min=A.a-1; if(min<1) min=1;   // published rule: move in at least as many armies as dice rolled
     G.occ={from:from,to:to,min:min,max:A.a-1}; G.phase="occupy";
     events.push(ev(G,"conquer",{p:p,t:to,from:defOwner,text:pn(G,p)+" conquers "+tname(to)}));
     if(G.players[defOwner]&&owned(G,defOwner).length===0){
@@ -347,6 +361,8 @@ function eliminate(G,victim,by,events){
   var v=G.players[victim], b=G.players[by];
   v.alive=false;
   events.push(ev(G,"eliminate",{p:by,victim:victim,text:pn(G,by)+" eliminates "+pn(G,victim)+"!"}));
+  // old UK Secret Mission: you must destroy your target yourself; if someone else does it, your mission becomes "occupy 24 territories"
+  if(G.o.mode==="mission"&&G.o.missionRules==="uk") G.players.forEach(function(q){ if(q.id!==by&&q.mission&&q.mission.k==="kill"&&q.mission.c===victim) q.mission={k:"terr",n:24,min:1}; });
   if(v.neutral) return;
   if(G.o.cardOnElim){ var cs=v.cards; v.cards=[]; b.cards=b.cards.concat(cs); if(cs.length) events.push(ev(G,"cards",{p:by,text:pn(G,by)+" takes "+cs.length+" card"+(cs.length>1?"s":"")+" from "+pn(G,victim)})); }
   else { v.cards.forEach(function(c){ G.discard.push(c); }); v.cards=[]; }
@@ -358,7 +374,7 @@ function occupy(G,n,auto){
   n=Math.max(oc.min,Math.min(n==null?oc.min:n,A.a-1));
   if(G.o.capArmies&&n>G.o.capArmies) n=G.o.capArmies;
   A.a-=n; D.a+=n; G.occ=null; G.phase="attack";
-  G.shiftPair=G.o.occupyFree?{a:oc.from,b:oc.to}:null;
+  G.shiftPair=G.o.occupyFree?{a:oc.from,b:oc.to,min:oc.min}:null;   // shifting back must leave at least the move-in minimum in the conquered territory
   var events=[ev(G,"occupy",{p:G.turn,from:oc.from,to:oc.to,n:n,text:pn(G,G.turn)+" moves "+n+" "+(n===1?"army":"armies")+" into "+tname(oc.to)})];
   if(G.pendingTradeDown){
     G.pendingTradeDown=false;
@@ -371,7 +387,9 @@ function shift(G,from,to,n){
   if(G.phase!=="attack"||!G.shiftPair) return {ok:false,msg:"You can only shift armies between the two territories right after a conquest."};
   var sp=G.shiftPair; if(!((from===sp.a&&to===sp.b)||(from===sp.b&&to===sp.a))) return {ok:false,msg:"Shift armies between the two territories you just fought over."};
   var A=G.terr[from], B=G.terr[to]; if(A.o!==G.turn||B.o!==G.turn) return {ok:false,msg:"Both territories must be yours."};
-  n=Math.max(1,Math.min(n||1,A.a-1)); if(A.a<2) return {ok:false,msg:"Leave at least one army behind."};
+  var keep=(from===sp.b&&sp.min>1)?sp.min:1;   // saves from before the minimum was kept have no min: 1
+  if(A.a-keep<1) return {ok:false,msg:keep>1?"At least "+keep+" armies must stay in "+tname(from)+" (one for each die you rolled).":"Leave at least one army behind."};
+  n=Math.max(1,Math.min(n||1,A.a-keep));
   if(G.o.capArmies&&B.a+n>G.o.capArmies) n=Math.max(0,G.o.capArmies-B.a); if(n<1) return {ok:false,msg:"That territory is full."};
   A.a-=n; B.a+=n;
   return {ok:true,events:[ev(G,"shift",{p:G.turn,from:from,to:to,n:n,text:pn(G,G.turn)+" shifts "+n+" "+(n===1?"army":"armies")+" from "+tname(from)+" to "+tname(to)})]};
@@ -451,23 +469,37 @@ function checkWin(G,events){
 }
 
 /* ======================= computer player ======================= */
-var DICE_P={}; // win probability cache for attacker armies a vs defender d (all-out, attacker rolls max dice)
-function winProb(a,d){
-  var key=a+"/"+d; if(DICE_P[key]!=null) return DICE_P[key];
-  var r;
-  if(d<=0) r=1; else if(a<=1) r=0; else {
-    // one exchange with max dice, then recurse (approximate using exact single-roll distributions)
-    var ad=Math.min(3,a-1), dd=Math.min(2,d), tot=0, res=0;
-    var rollsA=ad, rollsD=dd, i,j,k;
-    var ar=[],dr=[];
-    (function recA(n,cur){ if(n===0){ ar.push(cur.slice().sort(function(x,y){return y-x;})); return; } for(var v=1;v<=6;v++){ cur.push(v); recA(n-1,cur); cur.pop(); } })(ad,[]);
-    (function recD(n,cur){ if(n===0){ dr.push(cur.slice().sort(function(x,y){return y-x;})); return; } for(var v=1;v<=6;v++){ cur.push(v); recD(n-1,cur); cur.pop(); } })(dd,[]);
-    var outcomes={};
-    ar.forEach(function(x){ dr.forEach(function(y){ var al=0,dl=0; for(var q=0;q<Math.min(x.length,y.length);q++){ if(x[q]>y[q]) dl++; else al++; } var key2=al+","+dl; outcomes[key2]=(outcomes[key2]||0)+1; }); });
-    var total=ar.length*dr.length; r=0;
-    Object.keys(outcomes).forEach(function(kk){ var pr=outcomes[kk]/total, s=kk.split(","); r+=pr*winProb(a-(+s[0]),d-(+s[1])); });
+/* Chance that a attackers beat d defenders in an all-out attack (the attacker always rolls the most dice it can).
+   Up to WP_EXACT armies a side it is exact: one table filled once, row by row, from the single-roll odds below (under a
+   millisecond), then every call is a lookup. Bigger stacks use a normal approximation of the 3-vs-2 dice race (off by
+   well under 1%), so no call ever blocks the page, the CPU or a Fire TV Stick. */
+var ROLL=[null,   // ROLL[attacker dice][defender dice] = [[attacker loses, defender loses, probability], ...]
+  [null,[[1,0,21/36],[0,1,15/36]],[[1,0,161/216],[0,1,55/216]]],
+  [null,[[1,0,91/216],[0,1,125/216]],[[2,0,581/1296],[1,1,420/1296],[0,2,295/1296]]],
+  [null,[[1,0,441/1296],[0,1,855/1296]],[[2,0,2275/7776],[1,1,2611/7776],[0,2,2890/7776]]]];
+var WP_EXACT=200, WP_N=0, WP=null;
+var WP_MU=7161/7776, WP_SD=Math.sqrt(11711/7776-WP_MU*WP_MU), WP_C=1.8;   // 3-vs-2 roll: mean and spread of the attacker's loss; C = end-game offset
+function wpFill(n){
+  var W=n+1, P=new Float64Array(W*W), a, d, o, r, i;
+  for(a=0;a<=n;a++) for(d=0;d<=n;d++){
+    if(d===0){ P[a*W]=1; continue; }
+    if(a<=1) continue;
+    o=ROLL[Math.min(3,a-1)][Math.min(2,d)]; r=0;
+    for(i=0;i<o.length;i++) r+=o[i][2]*P[(a-o[i][0])*W+d-o[i][1]];
+    P[a*W+d]=r;
   }
-  DICE_P[key]=r; return r;
+  WP=P; WP_N=n;
+}
+function normCdf(z){ var t=1/(1+0.2316419*Math.abs(z)), y=t*(0.319381530+t*(-0.356563782+t*(1.781477937+t*(-1.821255978+t*1.330274429)))), p=1-Math.exp(-z*z/2)*0.3989422804014327*y; return z<0?1-p:p; }
+function winProb(a,d){
+  a=Math.floor(a); d=Math.floor(d);
+  if(d<=0) return 1; if(a<=1) return 0;
+  if(a<=WP_EXACT&&d<=WP_EXACT){
+    if(a>WP_N||d>WP_N){ var n=64; while(n<a||n<d) n*=2; wpFill(Math.min(n,WP_EXACT)); }
+    return WP[a*(WP_N+1)+d];
+  }
+  var k=(a+d-2)/2;   // rolls until a-1 attackers + d defenders are gone, two armies per roll
+  return normCdf((a-WP_C-WP_MU*k)/(WP_SD*Math.sqrt(k)));
 }
 function contOf(t){ return map().cont[t]; }
 function enemyAdj(G,t){ var p=G.terr[t].o, s=0; map().adj[t].forEach(function(u){ if(G.terr[u].o!==p&&G.terr[u].o>=0) s+=G.terr[u].a; }); return s; }
@@ -510,7 +542,7 @@ function aiPlaceTarget(G,p){
 function terrValueAdj(G,p,t){ var v=0; map().adj[t].forEach(function(u){ if(G.terr[u].o!==p) v+=terrValue(G,p,u); }); return v/Math.max(1,map().adj[t].length)*0.6+contProgress(G,p,contOf(t))*3; }
 function aiDeploy(G){ return {t:"deployOne",terr:aiPlaceTarget(G,G.turn)||owned(G,G.turn)[0]}; }
 function aiTrade(G){
-  var p=cur(G), sets=findSets(p.cards); if(!sets.length) return null;
+  var p=cur(G), sets=findSets(p.cards); if(!sets.length||!tradeOpen(G)) return null;
   // prefer sets without wilds, and sets that use cards of owned territories
   sets.sort(function(a,b){ var sa=score(a),sb=score(b); return sb-sa; });
   function score(s){ var sc=0; s.forEach(function(c){ if(c.sym==="W") sc-=3; else if(G.terr[c.t].o===G.turn) sc+=1; }); return sc; }
@@ -639,7 +671,7 @@ function snapshot(G,me){
   var mp=me>=0&&G.players[me]?G.players[me]:null;
   var cur0=G.players[G.turn];
   return {o:G.o,n:G.n,two:G.two,phase:G.phase,turn:G.turn,me:me,players:pl,terr:G.terr.map(function(t){ return {o:t.o,a:t.a}; }),
-    reserve:G.reserve,occ:G.occ,shiftPair:G.shiftPair||null,fortLeft:G.fortLeft,setsTraded:G.setsTraded,nextSet:nextSetValue(G),conquered:G.conquered,noAttack:G.noAttack,mustDown:!!G.mustDown,
+    reserve:G.reserve,occ:G.occ,shiftPair:G.shiftPair||null,fortLeft:G.fortLeft,setsTraded:G.setsTraded,nextSet:nextSetValue(G),conquered:G.conquered,noAttack:G.noAttack,mustDown:!!G.mustDown,bonusUsed:!!G.terrBonusTurn,
     initLeft:G.initLeft,returnTo:G.returnTo,deck:G.deck.length,
     myCards:mp?mp.cards.map(function(c){ return {id:c.id,t:c.t,sym:c.sym}; }):[],mission:(mp&&mp.mission)?G.o.mode==="mission"&&missionText(G,mp.mission):null,myHq:mp?mp.hq:null,
     cards:me===G.turn?null:undefined,lastAttack:G.lastAttack||null,over:G.over,winner:G.winner,round:G.round||0,

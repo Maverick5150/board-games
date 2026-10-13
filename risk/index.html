@@ -181,7 +181,7 @@ function startUI(){
   if(!board){
     board=R.Board.create($("rkboard"),{labels:"auto",tint:cfg.tint});
     ctrl=R.Ctrl.create({root:$("rkpanel"),board:board,toast:toast,send:send,blitzDelay:cfg.speed==="slow"?700:420});
-  }
+  } else if(ctrl.reset) ctrl.reset();   // a blitz or selection from the previous game must not carry over
   board.setTint(cfg.tint); board.fit();
   lastEv=G.log.length; refresh();
 }
@@ -196,6 +196,7 @@ function boardView(v){
 function refresh(){
   V=E.snapshot(G,meIndex());
   board.setView(boardView(V)); ctrl.update(V); legend();
+  if(G.over){ Saves.del("risk","auto"); return; }   // a finished game is not offered as "Continue last game"
   const pk=packG(); if(pk) Saves.auto("risk",pk);
 }
 function legend(){
@@ -245,8 +246,8 @@ function showWin(){
   $("winSheet").innerHTML=`<h2 style="font-size:30px">🏆 ${esc(w.name)} wins!</h2><p style="font-size:15px;color:var(--muted)">${G.o.mode==="mission"&&w.mission?"Mission complete: "+esc(E.missionText(G,w.mission)):G.o.mode==="capital"?"All required headquarters captured.":"The whole world is conquered."}</p>
     <div style="display:flex;gap:8px;margin-top:12px"><button class="btn primary" id="wnNew" style="flex:1">New game</button><button class="btn" id="wnMenu" style="flex:1">☰ Menu</button></div>`;
   $("winBox").classList.add("show"); Sound.sfx("win");
-  $("wnNew").addEventListener("click",()=>{ $("winBox").classList.remove("show"); $("resumeBtn").style.display="none"; drawSetup(); $("setup").classList.add("show"); });
-  $("wnMenu").addEventListener("click",()=>{ $("winBox").classList.remove("show"); $("resumeBtn").style.display="none"; drawSetup(); $("setup").classList.add("show"); });
+  $("wnNew").addEventListener("click",()=>{ $("winBox").classList.remove("show"); $("resumeBtn").style.display="none"; saveBar.refresh(); drawSetup(); $("setup").classList.add("show"); });
+  $("wnMenu").addEventListener("click",()=>{ $("winBox").classList.remove("show"); $("resumeBtn").style.display="none"; saveBar.refresh(); drawSetup(); $("setup").classList.add("show"); });
 }
 
 Skins.apply("risk"); Sound.mountButton(); Sound.music("risk");

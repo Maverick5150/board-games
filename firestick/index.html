@@ -1380,7 +1380,10 @@ function playRisk(){
       if(p.human&&seat[seatOf(i)]&&!afk[i]) await humanStep(i); else await cpuStep();
     }
     if(!alive()) return;
-    if(G.over){ var wn=nameOf(G.winner); announceOver(wn); showPlayAgain(); }
+    if(G.over){
+      gameSnap=null; viewHandler=null;   // a phone's keep-alive re-join must not re-send the map over its "X wins!" screen
+      var wn=nameOf(G.winner); announceOver(wn); showPlayAgain();
+    }
   }
   run();
 }

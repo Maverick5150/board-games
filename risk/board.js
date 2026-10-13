@@ -86,7 +86,7 @@ function drawSea(canvas,G){
   // ocean names
   c.save(); c.scale(SC,SC); c.fillStyle="rgba(20,60,95,.62)"; c.textAlign="center";
   function oname(t,x,y,rot,sz){ c.save(); c.translate(x,y); c.rotate(rot*Math.PI/180); c.font="italic "+(sz||19)+"px Georgia,'Times New Roman',serif"; c.fillText(t,0,0); c.restore(); }
-  oname("Pacific Ocean",58,430,-78,19); oname("Pacific Ocean",972,330,78,17); oname("Atlantic Ocean",338,292,-72,19); oname("Indian Ocean",668,505,-8,19); oname("Arctic Ocean",300,26,0,13);
+  oname("Pacific Ocean",58,430,-78,19); oname("Pacific Ocean",972,330,78,17); oname("Atlantic Ocean",338,292,-72,19); oname("Indian Ocean",668,505,-8,19); oname("Arctic Ocean",236,25,0,13);   // left of Greenland, so its land doesn't cover the end of the name
   // bonus circles (continent colour + army bonus)
   var bon=[[0,44,288],[1,128,484],[2,430,26],[3,360,486],[4,904,300],[5,752,538]];
   bon.forEach(function(b){ var ct=MP.continents[b[0]]; c.beginPath(); c.arc(b[1],b[2],15,0,Math.PI*2); c.fillStyle=ct.color; c.fill(); c.lineWidth=2.4; c.strokeStyle="#2a2014"; c.stroke(); c.fillStyle="#fff"; c.font="bold 18px Georgia,serif"; c.textBaseline="middle"; c.strokeStyle="rgba(0,0,0,.55)"; c.lineWidth=2.4; c.strokeText(String(ct.bonus),b[1],b[2]+1); c.fillText(String(ct.bonus),b[1],b[2]+1); c.textBaseline="alphabetic"; });
@@ -167,6 +167,7 @@ function create(container,opts){
   var labelLayer=document.createElementNS(SVGNS,"g"); labelLayer.setAttribute("class","rklabels"); svg.appendChild(labelLayer);
   var pieceLayer=document.createElementNS(SVGNS,"g"); svg.appendChild(pieceLayer);
   var LOFF={"Great Britain":[-27,-2,"end"],"Western Europe":[-6,41,"middle"],"Southern Europe":[8,41,"middle"],"Western Australia":[-4,41,"middle"],"Eastern Australia":[10,-20,"middle"],"Iceland":[-8,-26,"middle"],"Northwest Territory":[0,-20,"middle"],"Alberta":[-6,42,"middle"],"Eastern United States":[10,41,"middle"],"Western United States":[-12,41,"middle"],"Japan":[4,-26,"middle"],"Central America":[0,42,"middle"],"Argentina":[0,44,"middle"],"Madagascar":[0,44,"middle"],"South Africa":[0,44,"middle"],"New Guinea":[0,-20,"middle"],"Northern Europe":[2,-18,"middle"]};
+  var POFF={"Alaska":[10,0],"Greenland":[0,14],"Western Australia":[0,-4]};   // pieces + rings of edge territories nudged inward so the board edge doesn't cut them
   var LINES={"Western United States":["WESTERN","UNITED STATES"],"Eastern United States":["EASTERN","UNITED STATES"],"Northwest Territory":["NORTHWEST","TERRITORY"]};
   function splitLines(n){ if(LINES[n]) return LINES[n]; var u=n.toUpperCase(); if(u.length<=10||u.indexOf(" ")<0) return [u]; var best=-1,bd=99; for(var k=0;k<u.length;k++){ if(u[k]===" "&&Math.abs(k-u.length/2)<bd){ bd=Math.abs(k-u.length/2); best=k; } } return [u.slice(0,best),u.slice(best+1)]; }
   for(var t=0;t<MP.n;t++){
@@ -174,7 +175,8 @@ function create(container,opts){
     var tl=document.createElementNS(SVGNS,"text"); tl.setAttribute("text-anchor",lo[2]); tl.setAttribute("class","rkname"); tl.setAttribute("fill",MP.continents[MP.cont[t]].ink);
     lines.forEach(function(ln,k){ var ts=document.createElementNS(SVGNS,"tspan"); ts.setAttribute("x",MP.x[t]+lo[0]); ts.setAttribute("y",MP.y[t]+lo[1]-(lines.length-1-k)*9.5); ts.textContent=ln; tl.appendChild(ts); });
     labelLayer.appendChild(tl); labelEls.push(tl);
-    var gg=document.createElementNS(SVGNS,"g"); gg.setAttribute("class","tg"); gg.setAttribute("data-t",t); gg.setAttribute("transform","translate("+MP.x[t]+","+MP.y[t]+")"); pieceLayer.appendChild(gg); groups.push(gg);
+    var po=POFF[MP.names[t]]||[0,0];
+    var gg=document.createElementNS(SVGNS,"g"); gg.setAttribute("class","tg"); gg.setAttribute("data-t",t); gg.setAttribute("transform","translate("+(MP.x[t]+po[0])+","+(MP.y[t]+po[1])+")"); pieceLayer.appendChild(gg); groups.push(gg);
   }
   var keyCache=[];
   function drawGroup(t){
@@ -194,7 +196,8 @@ function create(container,opts){
     h+='<circle r="29" fill="transparent"/>';
     if(a>0&&o>=0){
       h+='<g class="rkpcs" transform="translate(-7,-2) scale(1.12)">'+piecesSVG(a,pc)+'</g>';
-      h+='<g><circle cx="23" cy="13" r="'+(a>99?14:12.5)+'" fill="#f7efd8" stroke="'+pc.d+'" stroke-width="2.6"/><text x="23" y="18.6" text-anchor="middle" class="rknum" fill="#2a1d0a">'+a+'</text></g>';
+      var nd=String(a).length, br=nd>=4?16.5:(nd===3?15:12.5), fs=nd>=5?7.5:(nd===4?9:(nd===3?11:14));   // 3-4 digit stacks: wider badge, smaller digits that stay inside the ring
+      h+='<g><circle cx="23" cy="13" r="'+br+'" fill="#f7efd8" stroke="'+pc.d+'" stroke-width="2.6"/><text x="23" y="'+(13+fs*0.4)+'" text-anchor="middle" class="rknum" fill="#2a1d0a"'+(nd>2?' style="font-size:'+fs+'px"':'')+'>'+a+'</text></g>';
     }
     gg.innerHTML=h;
   }
