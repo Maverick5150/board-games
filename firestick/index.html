@@ -635,8 +635,29 @@ function playTrouble(){
     if(mv.from!==null && mv.to-mv.from>1){ for(var d=mv.from+1; d<mv.to; d++){ pegs[c][mv.peg]=d; Sound.sfx("tick"); renderPegs(); await sleep(170); } }
     applyMove(c,mv); renderPegs(); await sleep(250);
   }
+  // official start: everyone pops once and the highest pop goes first; players tied for highest pop again
+  function rollOffFirst(cols){
+    var tied=cols.slice(), rounds=[];
+    while(tied.length>1){
+      var r=tied.map(function(c){ return [c,1+Math.floor(Math.random()*6)]; });
+      var hi=Math.max.apply(null, r.map(function(x){ return x[1]; }));
+      rounds.push(r);
+      tied=r.filter(function(x){ return x[1]===hi; }).map(function(x){ return x[0]; });
+    }
+    return {first:tied[0], rounds:rounds};
+  }
   async function run(){
-    gameFrame("tboard"); svg=$("tboard"); build();
+    gameFrame("tboard"); svg=$("tboard");
+    svg.setAttribute("viewBox","-12 -12 624 624");   // room for the home nests at the board edge (not clipped)
+    build();
+    if(active.length>1){
+      var ro=rollOffFirst(active), last=ro.rounds[ro.rounds.length-1];
+      var nm=function(c){ return seat[c]?players[seat[c]].name:CNAME[c]; };
+      turn=active.indexOf(ro.first);
+      die=last.filter(function(x){ return x[0]===ro.first; })[0][1]; renderDome(); Sound.sfx("dice");
+      setStatus('<span class="dot" style="background:'+COL[ro.first]+'"></span> First pop: '+ro.rounds.map(function(r){ return r.map(function(x){ return esc(nm(x[0]))+" "+x[1]; }).join(", "); }).join(" · tie, pop again: ")+" — <b>"+esc(nm(ro.first))+" goes first</b>");
+      await sleep(1800);
+    }
     while(!over){
       var c=active[turn]; die=0; renderPegs(); tvTurn();
       waitAllExcept(c, c);
@@ -659,7 +680,7 @@ function playTrouble(){
       } else {
         setStatus('<span class="dot" style="background:'+COL[c]+'"></span> Rolled '+die+" — no moves"); await sleep(1100);
       }
-      if(die===6 && sixStreak<3){ /* same player rolls again */ }
+      if(die===6){ /* official rules: every 6 earns another pop (no limit) - same player rolls again */ }
       else { sixStreak=0; turn=(turn+1)%active.length; }
       await sleep(300);
     }

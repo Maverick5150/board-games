@@ -85,7 +85,7 @@
   <h1>TROUBLE</h1>
   <div class="sub">Pop the die &middot; roll a 6 to leave home &middot; get all 4 pegs home to win</div>
   <div class="status" id="status">&nbsp;</div>
-  <div id="boardWrap"><svg id="board" viewBox="0 0 600 600"></svg></div>
+  <div id="boardWrap"><svg id="board" viewBox="-12 -12 624 624"></svg></div>
   <div class="controls" style="display:none">
     <button class="pop" id="pop">POP</button>
     <button class="btn" id="passBtn">Pass</button>
@@ -161,6 +161,8 @@ let extraRoll=false;
 let sixStreak=0;
 let gameOver=false;
 let busy=false;
+let gen=0;             // game generation: bumped by startGame/loadGame so an old game's timers can't act on a new one
+function later(fn,ms){ const g=gen; return setTimeout(()=>{ if(g===gen) fn(); },ms); }
 
 const svg=document.getElementById("board");
 const statusEl=document.getElementById("status");
@@ -195,7 +197,8 @@ function renderDome(){
   // pulsing ring in the CURRENT player's color — shows whose turn it is (human or CPU)
   if(!gameOver && c) inner+=`<circle class="domeRing" cx="${cx}" cy="${cy}" r="94" fill="none" stroke="${CSSCOL[c]}" stroke-width="5"/>`;
   g.innerHTML=inner;
-  if(canPop){ g.style.cursor="pointer"; g.addEventListener("click",doPop); }
+  g.addEventListener("click",doPop);   // always wired: doPop() itself checks that it's a human's turn to pop
+  if(canPop) g.style.cursor="pointer";
   svg.appendChild(g);
 }
 function doPop(){
@@ -361,17 +364,16 @@ function takeSnap(){
 function beginTurn(){
   if(gameOver) return;
   takeSnap();
-  die=0; awaitingMove=false;
+  const c=curColor();
+  die=0; awaitingMove=false; busy=!isHuman[c];   // a human's turn always starts with the dome tappable
   renderPegs();
   showTurn();
-  const c=curColor();
   passBtn.style.visibility="hidden";
   if(isHuman[c]){
     popBtn.disabled=false;
   }else{
     popBtn.disabled=true;
-    busy=true;
-    setTimeout(aiRoll, 1000);   // pause so you see whose turn it is before the CPU pops
+    later(aiRoll, 1000);   // pause so you see whose turn it is before the CPU pops
   }
 }
 
@@ -392,10 +394,8 @@ function afterRollResolve(color){
     setStatus(`<span class="dot" style="background:${CSSCOL[color]}"></span> Rolled <b>${die}</b> — no moves`);
     awaitingMove=false;
     renderPegs();
-    if(die===6 && sixStreak<3){
-      // rolled 6 but nothing to do -> still lose turn per no-move
-    }
-    setTimeout(()=>{ busy=false; nextTurn(); }, isHuman[color]?900:1500);
+    const again=(die===6);   // official rules: a 6 earns another pop even when no peg can move
+    later(()=>{ if(again) rollAgain(color); else { busy=false; nextTurn(); } }, isHuman[color]?900:1500);
     return;
   }
   awaitingMove=true;
@@ -406,7 +406,7 @@ function afterRollResolve(color){
   }else{
     setStatus(`<span class="dot" style="background:${CSSCOL[color]}"></span> ${NAME[color]} rolled <b>${die}</b>…`);
     renderPegs();
-    setTimeout(()=>aiPickMove(color,moves), 1300);   // hold on the rolled die so you can read it
+    later(()=>aiPickMove(color,moves), 1300);   // hold on the rolled die so you can read it
   }
 }
 
@@ -430,24 +430,26 @@ function humanMove(k){
 function finishMove(color){
   if(hasWon(color)){
     gameOver=true; Sound.sfx("win");
+    Saves.del("trouble","auto"); lastSnap=null;   // a finished game is not offered as "Continue last game"
     renderPegs();
     setStatus(`<span class="dot" style="background:${CSSCOL[color]}"></span> <b>${isHuman[color]?"You win! 🎉":NAME[color]+" wins"}</b>`);
     popBtn.disabled=true;
     return;
   }
-  const rolledSix = (die===6 && sixStreak<3);
-  setTimeout(()=>{
-    if(rolledSix){
-      // same player rolls again
-      die=0; awaitingMove=false;
-      showTurnRollAgain(color);
-      if(isHuman[color]){ busy=false; popBtn.disabled=false; }
-      else { setTimeout(aiRoll, 950); }
-    }else{
-      busy=false;
-      nextTurn();
-    }
+  const rolledSix = (die===6);   // official rules: every 6 earns another pop (no limit)
+  later(()=>{
+    if(rolledSix) rollAgain(color);
+    else { busy=false; nextTurn(); }
   }, isHuman[color]?350:800);
+}
+
+// same player pops again (after a 6)
+function rollAgain(color){
+  die=0; awaitingMove=false;
+  showTurnRollAgain(color);
+  if(isHuman[color]){ busy=false; popBtn.disabled=false; }
+  renderPegs();                                // re-draw: the dome shows POP again (and is tappable for a human)
+  if(!isHuman[color]) later(aiRoll, 950);
 }
 
 function showTurnRollAgain(c){
@@ -488,10 +490,11 @@ function aiPickMove(color,moves){
 
 // ---- pop animation ----
 function animatePop(cb){ Sound.sfx("dice");
-  let n=0;
+  const g=gen; let n=0;
   const iv=setInterval(()=>{
+    if(g!==gen){ clearInterval(iv); return; }          // a new game was started / loaded: drop this old pop
     die=1+Math.floor(Math.random()*6); renderDome();   // tumble the die in the dome
-    if(++n>=8){ clearInterval(iv); die=0; setTimeout(cb,150); }
+    if(++n>=8){ clearInterval(iv); die=0; later(cb,150); }
   },95);
 }
 
@@ -518,16 +521,19 @@ const saveBar=Saves.bar({game:"trouble",el:document.getElementById("svbar"),
 function loadGame(d){
   players=d.players; isHuman=d.isHuman; pegs=d.pegs; turn=d.turn; sixStreak=d.sixStreak||0; humanCount=d.humanCount||humanCount; cpuCount=d.cpuCount!=null?d.cpuCount:cpuCount;
   die=0; gameOver=false; busy=false; awaitingMove=false; armed=true;
+  gen++;                          // the previous game's pending timers must not act on the loaded one
+  setHumanSeg(); drawCpuSeg();    // New Game selectors show the loaded game's player counts
   document.getElementById("legend").innerHTML=players.map(c=>`<span><span class="dot" style="background:${CSSCOL[c]}"></span>${NAME[c]}${isHuman[c]?" (you)":" CPU"}</span>`).join("");
   buildBoard(); beginTurn();
 }
 document.getElementById("startBtn").addEventListener("click",()=>{
   Sound.skip(); armed=true;
-  startGame(humanCount, cpuCount);
+  startGame(humanCount, cpuCount, true);
   document.getElementById("setup").style.display="none";
 });
 document.getElementById("resumeBtn").addEventListener("click",()=>{
   document.getElementById("setup").style.display="none";
+  if(players.length) renderPegs();   // re-draw pegs + dome for the current turn
 });
 document.getElementById("menuBtn").addEventListener("click",()=>{
   // offer Resume only when a game is actually in progress
@@ -536,7 +542,19 @@ document.getElementById("menuBtn").addEventListener("click",()=>{
   document.getElementById("setup").style.display="flex";
 });
 
-function startGame(humans, cpus){
+// official start: everyone pops once and the highest pop goes first; players tied for highest pop again
+function rollOffFirst(cols){
+  let tied=cols.slice(); const rounds=[];
+  while(tied.length>1){
+    const r=tied.map(c=>[c,1+Math.floor(Math.random()*6)]);
+    const hi=Math.max(...r.map(x=>x[1]));
+    rounds.push(r);
+    tied=r.filter(x=>x[1]===hi).map(x=>x[0]);
+  }
+  return {first:tied[0], rounds:rounds};
+}
+
+function startGame(humans, cpus, rollOff){
   // total seats = humans + cpus (2..4). First `humans` are human, rest are CPU.
   const all=["red","green","yellow","blue"];
   let total=Math.min(4, Math.max(2, humans+(cpus||0)));
@@ -544,9 +562,20 @@ function startGame(humans, cpus){
   isHuman={}; pegs={};
   players.forEach((c,i)=>{ isHuman[c]= i<humans; pegs[c]=[null,null,null,null]; });
   turn=0; die=0; gameOver=false; busy=false; awaitingMove=false; sixStreak=0;
+  gen++;   // the previous game's pending timers must not act on this one
   // legend
   const leg=document.getElementById("legend");
   leg.innerHTML=players.map(c=>`<span><span class="dot" style="background:${CSSCOL[c]}"></span>${NAME[c]}${isHuman[c]?" (you)":" CPU"}</span>`).join("");
+  if(rollOff){
+    // a new game: pop for first player (Continue / Load keep the saved turn)
+    const ro=rollOffFirst(players), last=ro.rounds[ro.rounds.length-1];
+    turn=players.indexOf(ro.first);
+    die=last.find(x=>x[0]===ro.first)[1]; busy=true;   // the dome shows the winning pop; nobody can pop yet
+    buildBoard(); takeSnap(); Sound.sfx("dice");
+    setStatus(`<span class="dot" style="background:${CSSCOL[ro.first]}"></span> First pop: `+ro.rounds.map(r=>r.map(x=>NAME[x[0]]+" "+x[1]).join(", ")).join(" · tie, pop again: ")+` — <b>${NAME[ro.first]} goes first</b>`);
+    later(beginTurn, 1800);
+    return;
+  }
   buildBoard();
   beginTurn();
 }
