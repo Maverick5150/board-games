@@ -115,6 +115,7 @@ function drawSetup(){
 function drawHouse(){
   const o=curOpts(), box=$("houseRules"); box.innerHTML="";
   E.HOUSE.forEach(h=>{
+    if(h[5]&&h[5]!==o.mode) return;
     const key=h[0], tag=h[4]?'<span class="tag off">published</span>':'<span class="tag house">house</span>';
     const row=document.createElement("div"); row.className="row";
     if(h[2]==="bool"){ row.innerHTML=`<span>${esc(h[1])}${tag}</span><input type="checkbox"${o[key]?" checked":""}>`; row.querySelector("input").addEventListener("change",e=>{ cfg.over[key]=e.target.checked; drawSetup(); }); }
@@ -128,7 +129,7 @@ function drawHouse(){
 function packG(){ if(!G) return null; return {G:E.serialize(G),cfg:JSON.parse(JSON.stringify(cfg))}; }
 function loadSaved(d){
   gen++; clearTimeout(stopTimer); G=E.restore(JSON.parse(JSON.stringify(d.G))); Object.assign(cfg,d.cfg||{});
-  $("setup").classList.remove("show"); Sound.skip(); startUI(); resumePhase();
+  $("setup").classList.remove("show"); Sound.skip(); startUI(); resetView(); resumePhase();
 }
 const saveBar=Saves.bar({game:"scatter",el:$("svbar"),snapNote:"this round (writing restarts)",saveToast:"Game saved",
   getSettings:()=>({version:cfg.version,over:cfg.over,humans:cfg.humans,cpus:cfg.cpus}),
@@ -144,8 +145,10 @@ function startGame(){
   gen++; clearTimeout(stopTimer); clampSeats();
   const total=cfg.humans+cfg.cpus, names=[], humans=[];
   for(let i=0;i<total;i++){ const h=i<cfg.humans; humans.push(h); names.push(h?(cfg.humans===1?"You":"Player "+(i+1)):"CPU "+(i+1-cfg.humans)); }
-  G=E.newGame({names,humans,opts:curOpts()}); startUI(); newRound();
+  G=E.newGame({names,humans,opts:curOpts()}); startUI(); resetView(); newRound();
 }
+/* a new or loaded game starts clean: the old sheet's timer, vote window and hand-off must not act on it */
+function resetView(){ $("handoff").classList.remove("show"); $("rollBox").classList.remove("show"); voteMe=-1; ctrl.closeModal(); ctrl.update(snap(-1,{phase:"roll"})); }
 function startUI(){
   Skins.apply("scatter"); Sound.music("scatter");
   if(!ctrl) ctrl=Sc.UI.create({root:$("sctrl"),toast,send:onIntent,readyLabel:"Done scoring ▶"});
@@ -159,15 +162,23 @@ function newRound(){
     const hasLetter=G.o.mode==="letter";
     $("rollNote").textContent=hasLetter?"Round "+G.round+" — the letter is…":"Round "+G.round+" — the key word is…";
     $("rollBox").classList.add("show"); Sound.sfx("dice");
-    const L=hasLetter?G.letter:G.keyword, el=$("rollLetter"); let n=0;
+    const L=hasLetter?(G.star?"⭐":G.letter):G.keyword, el=$("rollLetter"); let n=0;
     el.style.fontSize=hasLetter?"150px":"64px";
-    const iv=setInterval(()=>{ el.textContent=hasLetter?E.LETTERS[Math.floor(Math.random()*20)]:E.KEYWORDS[Math.floor(Math.random()*20)].toUpperCase(); if(++n>=9){ clearInterval(iv); el.textContent=L; setTimeout(()=>{ if(my!==gen) return; $("rollBox").classList.remove("show"); beginWriting(); },900); } },90);
+    const iv=setInterval(()=>{ el.textContent=hasLetter?E.LETTERS[Math.floor(Math.random()*20)]:E.KEYWORDS[Math.floor(Math.random()*20)].toUpperCase(); if(++n>=9){ clearInterval(iv); el.textContent=L; setTimeout(()=>{ if(my!==gen) return; $("rollBox").classList.remove("show"); if(G.star) starPick(); else beginWriting(); },900); } },90);
   };
   showRoll();
 }
+/* star on the Junior die: the roller picks the letter before anyone writes (a computer roller keeps the rolled one) */
+function starPick(){
+  const p=G.players[G.starBy]||G.players[0];
+  if(!p.human){ G.star=false; banner("⭐ "+p.name+" rolled the star and picked "+G.letter); beginWriting(); return; }
+  ctrl.update(snap(p.id,{phase:"star"})); legend();
+}
 function beginWriting(){
-  // star on the junior die: the roller picks the letter (computers just keep it)
-  writeQueue=G.players.filter(p=>p.human).map(p=>p.id); stopped=false;
+  G.star=false;   // the letter is settled once writing starts
+  // a tie-break round is written only by the tied leaders
+  writeQueue=G.players.filter(p=>p.human&&E.inPlay(G,p.id)).map(p=>p.id); stopped=false;
+  if(G.tieActive) banner("Tie-break: "+G.tieActive.map(i=>G.players[i].name).join(" vs "));
   // computers decide their answers now so a stop call can be timed
   E.cpuFillAll(G); G._cpuStops=G.players.filter(p=>!p.human&&E.allFilled(G,p.id)).map(()=>G.o.timer*(0.55+Math.random()*0.3));
   nextWriter();
@@ -192,7 +203,7 @@ function onIntent(a){
     if(G.o.stopRule&&E.allFilled(G,curWriter)&&!stopped&&writeQueue.length===0){ stopped=true; }
     nextWriter(); return {ok:true};
   }
-  if(a.t==="star"){ const r=E.chooseStarLetter(G,a.letter); if(r.ok){ E.cpuFillAll(G); ctrl.update(snap(curWriter,{secLeft:G.o.timer})); } return r; }
+  if(a.t==="star"){ if(!G.star) return {ok:false,msg:"Writing has started — the letter is set."}; const r=E.chooseStarLetter(G,a.letter); if(r.ok) beginWriting(); return r; }
   if(a.t==="challenge"){ return doChallenge(a); }
   if(a.t==="vote"){ return doVote(a); }
   if(a.t==="ready"){ finishRound(); return {ok:true}; }
@@ -201,15 +212,29 @@ function onIntent(a){
   return {ok:false};
 }
 function toReview(){
-  E.beginReview(G); Sound.sfx("bell"); reviewMe=G.players.findIndex(p=>p.human); showReview(); autosave();
+  E.beginReview(G); Sound.sfx("bell"); reviewMe=G.players.findIndex(p=>p.human); voteMe=-1;
+  if(Object.keys(G.challenges).length) banner("⚖ A computer challenged an answer — vote!");
+  driveVotes(); autosave();
 }
 function showReview(){ ctrl.update(snap(voteMe>=0?voteMe:reviewMe)); legend(); }
 function doChallenge(a){
-  const by=reviewMe, r=E.openChallenge(G,by,a.slot,a.p,a.k); if(!r.ok) return r;
-  const ch=r.ch; // the challenger counts as voting "reject"; other humans vote next
+  // the challenger is one of the humans other than the answer's author; ask who when there is a choice (hot-seat)
+  const can=G.players.filter(p=>p.human&&p.id!==a.p).map(p=>p.id);
+  if(can.length>1){ pickChallenger(can,a); return {ok:true}; }
+  return openCh(a,can.length?can[0]:reviewMe);
+}
+function pickChallenger(ids,a){
+  const my=gen, sh=$("handoffSheet");
+  sh.innerHTML=`<h2 style="font-size:24px">Who is challenging?</h2><div style="display:flex;flex-direction:column;gap:8px;margin:14px 0">${ids.map(i=>`<button class="btn primary" data-who="${i}" style="font-size:17px;padding:12px 18px">${esc(G.players[i].name)}</button>`).join("")}</div><button class="btn" data-who="-1">Never mind</button>`;
+  $("handoff").classList.add("show");
+  sh.querySelectorAll("button[data-who]").forEach(b=>b.addEventListener("click",()=>{ $("handoff").classList.remove("show"); const who=+b.dataset.who; if(my!==gen||who<0||G.phase!=="review") return; const r=openCh(a,who); if(r&&r.ok===false) toast(r.msg||"Not allowed."); }));
+}
+function openCh(a,by){
+  const r=E.openChallenge(G,by,a.slot,a.p,a.k); if(!r.ok) return r;
+  const ch=r.ch; // the challenger counts as voting "reject"; every other human (the author too) votes next
   if(G.players[by].human) ch.votes[by]=false;
   const res=E.resolveChallenge(G,ch,false);
-  if(!res.done) driveVotes(); else showReview();
+  if(!res.done) driveVotes(); else { toast(res.state==="accepted"?"Answer kept ✔":"Answer voted out ✖"); showReview(); }
   autosave(); return {ok:true};
 }
 function driveVotes(){
@@ -224,7 +249,7 @@ function driveVotes(){
 function doVote(a){
   const r=E.castVote(G,voteMe>=0?voteMe:reviewMe,a.slot,a.p,a.k,a.accept); if(!r.ok) return r;
   if(r.done){ Sound.sfx(r.state==="accepted"?"coin":"lose"); toast(r.state==="accepted"?"Answer kept ✔":"Answer voted out ✖"); }
-  setTimeout(driveVotes,50); return {ok:true};
+  const my=gen; setTimeout(()=>{ if(my===gen) driveVotes(); },50); return {ok:true};
 }
 function finishRound(){
   // settle any challenge still open (a human walked away) in favour of the answer
@@ -234,8 +259,9 @@ function finishRound(){
 }
 function resumePhase(){
   // a loaded game: writing restarts for the humans; other phases continue
-  if(G.phase==="write"){ writeQueue=G.players.filter(p=>p.human).map(p=>p.id); G._cpuStops=[]; E.cpuFillAll(G); nextWriter(); }
-  else if(G.phase==="review"){ reviewMe=G.players.findIndex(p=>p.human); voteMe=-1; showReview(); }
+  if(G.phase==="write"&&G.star) starPick();   // saved before the star letter was picked
+  else if(G.phase==="write"){ writeQueue=G.players.filter(p=>p.human&&E.inPlay(G,p.id)).map(p=>p.id); G._cpuStops=[]; E.cpuFillAll(G); nextWriter(); }
+  else if(G.phase==="review"){ reviewMe=G.players.findIndex(p=>p.human); voteMe=-1; driveVotes(); }
   else if(G.phase==="scored"||G.phase==="over"){ reviewMe=G.players.findIndex(p=>p.human); ctrl.update(snap(reviewMe)); legend(); }
   else newRound();
 }
@@ -245,7 +271,7 @@ function showHandoff(p,kind,go){
   $("handoff").classList.add("show");
   $("hoBtn").addEventListener("click",()=>{ $("handoff").classList.remove("show"); go(); });
 }
-function autosave(){ const pk=packG(); if(pk) Saves.auto("scatter",pk); }
+function autosave(){ if(G&&G.over){ Saves.del("scatter","auto"); return; } const pk=packG(); if(pk) Saves.auto("scatter",pk); }   // a finished game is not offered as "Continue last game"
 
 Skins.apply("scatter"); Sound.mountButton(); Sound.music("scatter");
 drawSetup(); saveBar.refresh();

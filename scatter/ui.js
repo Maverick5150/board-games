@@ -26,7 +26,7 @@ var CSS=[
 ".scBtns button.pri,.scModal button.pri{background:#e8590c;border-color:#ffa56a}.scBtns button[disabled]{opacity:.4}",
 ".scSlot{background:#00000044;border-radius:12px;padding:8px 10px;margin:6px 0}",
 ".scCat{font-weight:900;font-size:13.5px;margin-bottom:4px}.scCat span{opacity:.6;margin-right:4px}",
-".scAns{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:5px 11px;margin:3px 4px 3px 0;font-size:13px;font-weight:800;border:2px solid transparent;cursor:default}",
+".scAns{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:5px 11px;margin:3px 4px 3px 0;font-size:13px;font-weight:800;border:2px solid transparent;cursor:default;max-width:100%;overflow-wrap:anywhere}",
 ".scAns .w{opacity:.8;font-weight:600;font-size:11px}.scAns b{margin-left:2px}",
 ".scAns.ok{background:#1f6b36;border-color:#5fe08a}.scAns.dup{background:#6b2a1f;border-color:#ff8a6a;text-decoration:line-through;opacity:.85}.scAns.invalid{background:#444;border-color:#888;opacity:.7;text-decoration:line-through}",
 ".scAns.chal{cursor:pointer}.scAns.me{box-shadow:0 0 0 2px #ffd23f}",
@@ -48,7 +48,7 @@ function create(cfg){
   root.classList.add("scT");
   var modal=document.createElement("div"); modal.className="scModal"; modal.innerHTML='<div class="sh" id="scsh"></div>'; document.body.appendChild(modal);
   function openModal(h){ modal.querySelector("#scsh").innerHTML=h; modal.classList.add("show"); }
-  function closeModal(){ modal.classList.remove("show"); }
+  function closeModal(){ modal.classList.remove("show"); modal.dataset.vote=""; }
   function send(a){ var r=cfg.send(a); if(r&&r.ok===false&&cfg.toast) cfg.toast(r.msg||"Not allowed."); return r; }
   function readInputs(){ var out=[]; root.querySelectorAll(".scRow").forEach(function(row){ var arr=[]; row.querySelectorAll("input").forEach(function(i){ arr.push(i.value); }); out.push(arr); }); return out; }
   function submit(){ if(sent) return; sent=true; var a=readInputs(); send({t:"submit",answers:a}); render(); }
@@ -62,8 +62,7 @@ function create(cfg){
   function buildWrite(){
     var o=S.o, kw=o.mode==="keyword", me=S.me;
     var h='<div class="scTop"><div class="scLetter'+(kw?" kw":"")+'">'+(kw?esc(S.keyword):esc(S.letter))+'</div><div class="scTimer" id="scTimer">0:00</div></div><div class="scBar" id="scBar"><i></i></div>';
-    h+='<div class="scHint">'+(kw?'Key word <b>'+esc(S.keyword)+'</b> — write <b>'+esc(S.slots[0].label)+'</b> for each letter':'Every answer must start with <b>'+esc(S.letter)+'</b>'+(o.startRule==="bonus"?' (2 points if it does, 1 if not)':'')+(o.answersPer>1?' · up to '+o.answersPer+' answers per category':''))+' · round '+S.round+(o.mode==="keyword"?'':'/'+S.rounds)+'</div>';
-    if(S.star&&me>=0) h+='<div class="scBtns"><button id="scStar">⭐ You rolled the star — pick any letter</button></div>';
+    h+='<div class="scHint">'+(kw?'Key word <b>'+esc(S.keyword)+'</b> — write <b>'+esc(S.slots[0].label)+'</b> for each letter':'Every answer must start with <b>'+esc(S.letter)+'</b>'+(o.startRule==="bonus"?' (2 points if it does, 1 if not)':'')+(o.answersPer>1?' · up to '+o.answersPer+' answers per category':''))+(S.tieActive?' · tie-break round':' · round '+S.round+(o.mode==="keyword"?'':'/'+S.rounds))+'</div>';
     h+='<div id="scForm">'+S.slots.map(function(s,i){
       var ins=""; for(var k=0;k<o.answersPer;k++) ins+='<input data-s="'+i+'" data-k="'+k+'" type="text" maxlength="60" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="'+(kw?esc(s.letter)+"…":esc(s.letter)+"…")+'" value="'+esc(((S.myAnswers||[])[i]||[])[k]||"")+'">';
       return '<div class="scRow"><span class="n">'+(i+1)+'</span><span class="lb">'+(kw?'<b style="font-size:20px;color:#ffd23f">'+esc(s.letter)+'</b>':esc(s.label))+'</span><span class="ins">'+ins+'</span></div>';
@@ -74,12 +73,7 @@ function create(cfg){
       inp.addEventListener("keydown",function(e){ if(e.key==="Enter"){ e.preventDefault(); var all=Array.prototype.slice.call(root.querySelectorAll("input")), i=all.indexOf(inp); if(all[i+1]) all[i+1].focus(); else inp.blur(); } });
     });
     var d=root.querySelector("#scDone"); d.addEventListener("click",function(){ submit(); });
-    var st=root.querySelector("#scStar"); if(st) st.addEventListener("click",function(){ pickStar(); });
     deadline=Date.now()+(S.secLeft!=null?S.secLeft:S.o.timer)*1000; startTimer(); paintTimer((deadline-Date.now())/1000);
-  }
-  function pickStar(){
-    var free=S.starFree||E.LETTERS; openModal('<h3>⭐ Star! Pick any unused letter</h3><div class="scLet">'+E.LETTERS.map(function(l){ return '<button data-l="'+l+'"'+(free.indexOf(l)<0?" disabled":"")+'>'+l+'</button>'; }).join("")+'</div>');
-    modal.querySelector("#scsh").onclick=function(e){ var b=e.target.closest&&e.target.closest("button[data-l]"); if(b&&!b.disabled){ closeModal(); send({t:"star",letter:b.dataset.l}); } };
   }
   /* ---------- review / results ---------- */
   function playerName(i){ return S.players[i]?S.players[i].name:"?"; }
@@ -99,15 +93,26 @@ function create(cfg){
     return h;
   }
   function scoreTable(){
-    var rows=S.players.slice().sort(function(a,b){ return b.score-a.score; }).map(function(p){ var cells=""; for(var i=0;i<(S.round);i++) cells+='<td>'+(p.rs[i]!=null?p.rs[i]:"—")+'</td>'; return '<tr><td>'+esc(p.name)+'</td>'+cells+'<td><b>'+p.score+'</b></td></tr>'; }).join("");
-    var head='<tr><th>Player</th>'; for(var i=0;i<S.round;i++) head+='<th>R'+(i+1)+'</th>'; head+='<th>Total</th></tr>';
-    return '<table class="scTab">'+head+rows+'</table>';
+    // long games (Key Word mode plays to 25 points) fold the oldest rounds into one "R1–n" column so Total stays on screen
+    var n=S.round, from=n>7?n-6:0, i;
+    var rows=S.players.slice().sort(function(a,b){ return b.score-a.score; }).map(function(p){ var cells="", sum=0; if(from){ for(i=0;i<from;i++) sum+=(+p.rs[i]||0); cells+='<td>'+sum+'</td>'; } for(i=from;i<n;i++) cells+='<td>'+(p.rs[i]!=null?p.rs[i]:"—")+'</td>'; return '<tr><td>'+esc(p.name)+'</td>'+cells+'<td><b>'+p.score+'</b></td></tr>'; }).join("");
+    var head='<tr><th>Player</th>'+(from?'<th>R1–'+from+'</th>':''); for(i=from;i<n;i++) head+='<th>R'+(i+1)+'</th>'; head+='<th>Total</th></tr>';
+    return '<div style="overflow-x:auto"><table class="scTab">'+head+rows+'</table></div>';
   }
   function render(){
     if(!S) return;
     var key=S.phase+":"+S.round+":"+S.me+":"+(S.letter||"")+":"+(S.keyword||"");
+    if(S.phase==="star"){   // the Junior star: the roller picks the round's letter before anyone writes
+      clearInterval(tick); built=key;
+      var mine=S.me>=0&&S.me===S.starBy, free=S.starFree||E.LETTERS;
+      root.innerHTML='<div class="scTop"><div class="scLetter">⭐</div></div><div class="scHint" style="font-size:15px;padding:6px 0">'+esc(playerName(S.starBy))+' rolled the star'+(mine?' — pick any unused letter for this round':' and is picking the letter…')+'</div>'+
+        (mine?'<div class="scLet">'+E.LETTERS.map(function(l){ return '<button data-l="'+l+'"'+(free.indexOf(l)<0?" disabled":"")+'>'+l+'</button>'; }).join("")+'</div>':'');
+      var lt=root.querySelector(".scLet"); if(lt) lt.addEventListener("click",function(e){ var b=e.target.closest&&e.target.closest("button[data-l]"); if(!b||b.disabled) return; lt.querySelectorAll("button").forEach(function(x){ x.disabled=true; }); var r=send({t:"star",letter:b.dataset.l}); if(r&&r.ok===false) render(); });
+      return;
+    }
     if(S.phase==="write"){
       if(S.me<0){ clearInterval(tick); root.innerHTML='<div class="scHint" style="padding:30px 0;font-size:16px">Waiting for the next player…</div>'; built=key; return; }
+      if(S.tieActive&&S.tieActive.indexOf(S.me)<0){ clearInterval(tick); root.innerHTML='<div class="scHint" style="padding:30px 0;font-size:16px">Tie-break round: '+esc(S.tieActive.map(playerName).join(" vs "))+'.<br>You sit this one out — waiting for them…</div>'; built=key; return; }
       if(sent){ clearInterval(tick); root.innerHTML='<div class="scTop"><div class="scLetter">'+(S.keyword?"✓":esc(S.letter))+'</div></div><div class="scHint" style="font-size:16px;padding:14px 0">Answers sent ✔<br>Waiting for the others…</div><div class="scTot">'+S.players.map(function(p){ return '<div>'+esc(p.name)+' <b>'+p.filled+'/'+S.slots.length+'</b></div>'; }).join("")+'</div>'; return; }
       if(built!==key){ built=key; buildWrite(); }
       else if(S.starChanged){ }

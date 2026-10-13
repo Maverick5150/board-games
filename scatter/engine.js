@@ -29,23 +29,24 @@ function defaultOpts(){
 function mergeOpts(o){ var d=defaultOpts(); for(var k in (o||{})) d[k]=o[k]; return d; }
 var VERSIONS=[
   {id:"classic",name:"Classic (1988 rules)",tag:"3 rounds · 12 categories · 3:00",desc:"The original: a letter is rolled and everyone fills in the same 12 categories with answers starting with it. 1 point for each answer nobody else wrote. 3 rounds, same list every round.",opts:{}},
-  {id:"modern",name:"Modern (2023 rules)",tag:"4 rounds · fresh lists",desc:"The current rulebook: 4 rounds, a new list of categories each round, and optional double points for an answer that repeats the letter (like “coffee cup”).",opts:{rounds:4,listMode:"new",bonus:"double"}},
-  {id:"refresh",name:"Refresh Edition (2016)",tag:"2 rounds · up to 3 answers",desc:"2 rounds, up to three different answers per category (1 point each if unique), double points for repeating the letter, tie → extra round.",opts:{rounds:2,answersPer:3,bonus:"double"}},
-  {id:"junior",name:"Junior",tag:"2 rounds · 90 seconds · easy lists",desc:"For kids: easy categories, 2 rounds, 90 seconds. 2 points for an answer starting with the letter, 1 point if it doesn't. A star on the die lets you pick any letter.",opts:{rounds:2,cats:8,timer:90,kidOnly:true,startRule:"bonus",star:true,judge:"auto",listMode:"new"}},
-  {id:"keyword",name:"Key Word (Categories style)",tag:"no die · first to 25",desc:"No letter die: one category and a KEY WORD. Fill a line for every letter of the word with an answer starting with that letter. 2:00, first to 25 points.",opts:{mode:"keyword",timer:120,target:25,rounds:99,cats:1,tieRound:false}}
+  {id:"modern",name:"Modern (2023 rules)",tag:"4 rounds · fresh lists",desc:"The current rulebook: 4 rounds, a new list of categories each round, and optional double points for an answer that repeats the letter (like “coffee cup”).",opts:{rounds:4,listMode:"new"}},
+  {id:"refresh",name:"Refresh (house variant)",tag:"2 rounds · up to 3 answers · house",desc:"A house variant (not from a published rulebook): 2 rounds, up to three different answers per category (1 point each if unique), double points for repeating the letter, tie → extra round.",opts:{rounds:2,answersPer:3,bonus:"double"}},
+  {id:"junior",name:"Junior",tag:"2 rounds · 90 seconds · easy lists",desc:"For kids: easy categories, 2 rounds, 90 seconds. 2 points for an answer starting with the letter, 1 point if it doesn't. A star on the die lets the roller pick any letter. (The 90-second timer and the star are house choices, not checked against the Junior rulebook.)",opts:{rounds:2,cats:8,timer:90,kidOnly:true,startRule:"bonus",star:true,judge:"auto",listMode:"new"}},
+  {id:"keyword",name:"Key Word (Categories style)",tag:"no die · first to 25 · house",desc:"No letter die: one category and a KEY WORD. Fill a line for every letter of the word with an answer starting with that letter. 2:00, first to 25 points. (A house version, not from a published rulebook.)",opts:{mode:"keyword",timer:120,target:25,rounds:99,cats:1,tieRound:false}}
 ];
+/* [key, label, kind, choices, published?, only in this mode] - rows for another mode are not shown (Key Word games have no rounds/lists: first to the target wins) */
 var HOUSE=[
-  ["rounds","Rounds","choice",[[1,"1"],[2,"2"],[3,"3"],[4,"4"],[5,"5"],[6,"6"]],1],
-  ["cats","Categories per round","choice",[[6,"6"],[8,"8"],[12,"12"]],0],
+  ["rounds","Rounds","choice",[[1,"1"],[2,"2"],[3,"3"],[4,"4"],[5,"5"],[6,"6"]],1,"letter"],
+  ["cats","Categories per round","choice",[[6,"6"],[8,"8"],[12,"12"]],0,"letter"],
   ["timer","Time to write","choice",[[60,"1:00"],[90,"1:30"],[120,"2:00"],[180,"3:00"],[240,"4:00"]],1],
   ["answersPer","Answers per category","choice",[[1,"1"],[2,"2"],[3,"3"]],1],
-  ["listMode","Category lists","choice",[["same","Same every round"],["new","New each round"]],1],
+  ["listMode","Category lists","choice",[["same","Same every round"],["new","New each round"]],1,"letter"],
   ["kidOnly","Easy / family categories only","bool",null,0],
   ["bonus","Bonus for repeating the letter","choice",[["none","None"],["double","Double points (2023)"],["extra","+1 per extra word (1988)"]],1],
   ["strict","Same answer means","choice",[["exact","Exactly the same"],["plurals","Same, or plural of it"],["fuzzy","Close spelling too"]],0],
   ["judge","Doubtful answers","choice",[["vote","Players can challenge & vote"],["auto","Accept anything that fits the letter"]],1],
   ["stopRule","Stop when someone finishes","bool",null,0],
-  ["tieRound","Tie → extra round","bool",null,1],
+  ["tieRound","Tie → extra round","bool",null,1,"letter"],
   ["cpuSkill","Computer players","choice",[["easy","Easy"],["normal","Normal"],["hard","Hard"]],0]
 ];
 function versionOpts(id,extra){ var v=VERSIONS.filter(function(x){ return x.id===id; })[0]||VERSIONS[0]; var o={}; for(var k in v.opts) o[k]=v.opts[k]; for(var k2 in (extra||{})) o[k2]=extra[k2]; return mergeOpts(o); }
@@ -53,8 +54,16 @@ function versionOpts(id,extra){ var v=VERSIONS.filter(function(x){ return x.id==
 /* ---------------- text helpers ---------------- */
 function fold(s){ s=String(s==null?"":s); try{ s=s.normalize("NFD").replace(/[̀-ͯ]/g,""); }catch(e){} return s.toLowerCase().replace(/&/g," and ").replace(/[^a-z0-9 ]+/g," ").replace(/\s+/g," ").trim(); }
 var ART={a:1,an:1,the:1};
-function words(s){ var w=fold(s).split(" ").filter(Boolean); if(w.length>1&&ART[w[0]]) w.shift(); else if(w.length===1&&ART[w[0]]) return []; return w; }
-function stemWord(w){ if(w.length>4&&/ies$/.test(w)) return w.replace(/ies$/,"y"); if(w.length>4&&/(ches|shes|xes|zes|sses)$/.test(w)) return w.replace(/es$/,""); if(w.length>3&&/s$/.test(w)&&!/ss$/.test(w)) return w.replace(/s$/,""); return w; }
+/* a leading "a / an / the" is dropped only when a space follows it ("A-line skirt" starts with A) */
+function words(s){ var raw=String(s==null?"":s), w=fold(raw).split(" ").filter(Boolean); if(w.length>1&&ART[w[0]]&&/^\s*(a|an|the)\s/i.test(raw)) w.shift(); else if(w.length===1&&ART[w[0]]) return []; return w; }
+function stemWord(w){
+  if(w.length>4&&/ies$/.test(w)) w=w.replace(/ies$/,"y"); else if(w.length>4&&/(ches|shes|xes|zes|sses)$/.test(w)) w=w.replace(/es$/,""); else if(w.length>3&&/s$/.test(w)&&!/ss$/.test(w)) w=w.replace(/s$/,"");
+  // fold what is left the same way for the singular and the plural: cookie/cookies, tomato/tomatoes, bus/buses, virus/viruses, shoe/shoes
+  if(w.length>3&&/ie$/.test(w)) w=w.slice(0,-2)+"y";
+  if(w.length>3&&/[os]e$/.test(w)) w=w.slice(0,-1);
+  if(w.length>3&&/s$/.test(w)&&!/ss$/.test(w)) w=w.slice(0,-1);
+  return w;
+}
 function keyOf(raw,strict){ var w=words(raw); if(!w.length) return ""; if(strict!=="exact"){ w[w.length-1]=stemWord(w[w.length-1]); } return w.join(" "); }
 function lev(a,b){ var m=a.length,n=b.length,i,j; if(Math.abs(m-n)>1) return 2; var d=[]; for(i=0;i<=m;i++){ d[i]=[i]; } for(j=1;j<=n;j++) d[0][j]=j; for(i=1;i<=m;i++) for(j=1;j<=n;j++) d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1)); return d[m][n]; }
 function same(a,b,strict){ if(!a||!b) return false; if(a===b) return true; if(strict==="fuzzy"&&a.length>=6&&b.length>=6&&lev(a,b)<=1) return true; return false; }
@@ -62,7 +71,7 @@ function startsWith(raw,letter){ var w=words(raw); return !!w.length&&w[0][0]===
 function letterWords(raw,letter){ var w=words(raw), n=0; w.forEach(function(x){ if(x[0]===letter.toLowerCase()) n++; }); return n; }
 
 /* ---------------- key words (only letters that are on the die) ---------------- */
-var KEYWORDS=("garden planet kitchen holiday summer winter puzzle castle market forest island rocket school family picnic jungle monster harbor candle button circus dragon feather guitar lantern mirror pencil rabbit shadow tractor wonder blanket bridge desert engine fabric gather hammer ladder magnet nature object palace ribbon saddle thunder wagon basket cabin dinner eagle finger glove honest jacket knight lemon melon needle orange parade quilt random season table tunnel window wallet carpet doctor flower golden harvest insect journey kettle laptop marble napkin orchard pirate remote spider travel whistle blossom compass diamond elephant fiction giraffe hundred isle lighter mammal notebook parcel rainbow sandwich theater package").split(" ");
+var KEYWORDS=("garden planet kitchen bonfire teapot winter sailboat castle market forest island rocket school windmill picnic starfish monster harbor candle snowman popcorn dragon feather pancake lantern mirror pencil rabbit shadow tractor wonder blanket bridge desert engine fabric gather hammer ladder magnet meadow object palace ribbon saddle camera wagon basket cabin dinner eagle finger balloon honest jacket knight lemon melon needle orange parade robot random season table acorn window wallet carpet doctor flower golden cobweb insect pebble kettle laptop marble napkin orchard pirate remote spider kitten whistle blossom compass diamond elephant fiction giraffe seashell isle lighter mammal notebook parcel rainbow sandwich theater package").split(" ");
 function goodKeyword(w){ return /^[abcdefghijklmnoprstw]{4,9}$/.test(w); }
 
 /* ---------------- new game / round ---------------- */
@@ -74,11 +83,13 @@ function newGame(cfg){
   return G;
 }
 function pickRandom(a,rnd){ return a[Math.floor(rnd()*a.length)]; }
+/* near-identical categories (mostly the same answers) are never dealt in the same list or game */
+var TWIN={f12:"g27",f04:"g23",p28:"t31",f17:"g06"}; Object.keys(TWIN).forEach(function(k){ TWIN[TWIN[k]]=k; });
 function pickCats(G,n){
   var pool=bank().filter(function(c){ return !G.o.kidOnly||c.kid; });
-  var fresh=pool.filter(function(c){ return G.usedCats.indexOf(c.id)<0; });
+  var fresh=pool.filter(function(c){ return G.usedCats.indexOf(c.id)<0&&!(TWIN[c.id]&&G.usedCats.indexOf(TWIN[c.id])>=0); });
   if(fresh.length<n){ G.usedCats=[]; fresh=pool.slice(); }
-  var out=[]; while(out.length<n&&fresh.length){ var i=Math.floor(G.rnd()*fresh.length); out.push(fresh.splice(i,1)[0]); }
+  var out=[]; while(out.length<n&&fresh.length){ var i=Math.floor(G.rnd()*fresh.length), c=fresh.splice(i,1)[0]; out.push(c); if(TWIN[c.id]) fresh=fresh.filter(function(x){ return x.id!==TWIN[c.id]; }); }
   return out;
 }
 function rollLetter(G){
@@ -87,7 +98,7 @@ function rollLetter(G){
   return {letter:pickRandom(free,G.rnd),star:star,free:free};
 }
 function startRound(G,opts){
-  opts=opts||{}; var o=G.o; if(G.tiebreak){ G.tieActive=G.tieIds; G.tiebreak=false; } G.round++; G.phase="write"; G.reviewed=false; G.answers={}; G.challenges={}; G.result=null; G.roundScores=null; G.stopped=false;
+  opts=opts||{}; var o=G.o; if(G.tiebreak){ G.tieActive=G.tieIds; G.tiebreak=false; G.tieRounds=(G.tieRounds||0)+1; } G.round++; G.phase="write"; G.reviewed=false; G.answers={}; G.challenges={}; G.result=null; G.roundScores=null; G.stopped=false;
   var slots=[];
   if(o.mode==="keyword"){
     var cat=pickCats(G,1)[0]; G.usedCats.push(cat.id);
@@ -99,15 +110,17 @@ function startRound(G,opts){
     var cats;
     if(o.listMode==="same"&&G.listCats&&!opts.newList) cats=G.listCats; else { cats=pickCats(G,o.cats); cats.forEach(function(c){ G.usedCats.push(c.id); }); G.listCats=cats; }
     var r=rollLetter(G); G.star=r.star; G.starFree=r.free; G.letter=r.letter; G.usedLetters.push(r.letter);
+    G.starBy=r.star?(G.round-1)%G.players.length:-1;   // players take turns rolling: the roller of a star picks the letter before anyone writes
     cats.forEach(function(c,i){ slots.push({label:c.text,letter:r.letter,bank:c,idx:i}); });
   }
   G.slots=slots;
   G.players.forEach(function(p){ G.answers[p.id]=slots.map(function(){ var a=[]; for(var i=0;i<o.answersPer;i++) a.push(""); return a; }); });
   return G;
 }
-/* star on the junior die: the roller picks any unused letter */
+/* star on the junior die: the roller picks any unused letter (the screens offer it only before writing starts and then clear G.star) */
 function chooseStarLetter(G,letter){
-  if(!G.star||G.phase!=="write") return {ok:false}; if(G.usedLetters.indexOf(letter)>=0&&letter!==G.letter) return {ok:false,msg:"That letter was already used."};
+  if(!G.star||G.phase!=="write") return {ok:false}; if(G.players.some(function(p){ return filledCount(G,p.id)>0; })) return {ok:false,msg:"Writing has started — the letter is set."};
+  if(G.usedLetters.indexOf(letter)>=0&&letter!==G.letter) return {ok:false,msg:"That letter was already used."};
   if(LETTERS.indexOf(letter)<0) return {ok:false,msg:"Pick a letter from the die."};
   var i=G.usedLetters.indexOf(G.letter); if(i>=0) G.usedLetters.splice(i,1); G.letter=letter; G.usedLetters.push(letter); G.star=false; G.slots.forEach(function(s){ s.letter=letter; });
   return {ok:true};
@@ -118,7 +131,17 @@ function setAnswers(G,p,answers){
   G.slots.forEach(function(s,i){ var a=(answers&&answers[i])||[]; if(!Array.isArray(a)) a=[a]; for(var k=0;k<o.answersPer;k++) cur[i][k]=String(a[k]==null?"":a[k]).slice(0,60); });
   return {ok:true};
 }
-function beginReview(G){ if(G.phase!=="write") return; cpuFillAll(G); G.phase="review"; }
+function beginReview(G){ if(G.phase!=="write") return; cpuFillAll(G); G.phase="review"; cpuChallenges(G); }
+/* computers challenge a human's scoring answer that is clearly made up (madeUp); the humans then vote as usual */
+function cpuChallenges(G){
+  var out=[]; if(G.o.judge!=="vote") return out;
+  evaluate(G).entries.forEach(function(e){
+    if(e.status!=="ok"||!G.players[e.p].human||!madeUp(e.raw)) return;
+    var by=G.players.filter(function(c){ return !c.human; })[0]; if(!by) return;
+    var r=openChallenge(G,by.id,e.slot,e.p,e.k); if(r.ok){ resolveChallenge(G,r.ch,false); out.push(r.ch); }
+  });
+  return out;
+}
 function filledCount(G,p){ var n=0; (G.answers[p]||[]).forEach(function(a){ if(a.some(function(x){ return String(x).trim(); })) n++; }); return n; }
 function allFilled(G,p){ return filledCount(G,p)===G.slots.length; }
 
@@ -139,10 +162,26 @@ function cpuAnswers(G,p){
   });
   return out;
 }
-function cpuFillAll(G){ G.players.forEach(function(p){ if(!p.human) setAnswers(G,p.id,cpuAnswers(G,p.id)); }); }
+function cpuFillAll(G){ G.players.forEach(function(p){ if(!p.human&&inPlay(G,p.id)) setAnswers(G,p.id,cpuAnswers(G,p.id)); }); }
+/* a tie-break round is played only by the tied leaders; everyone else sits it out */
+function inPlay(G,id){ return !G.tieActive||G.tieActive.indexOf(id)>=0; }
 
 /* ---------------- judging ---------------- */
 function inBank(s,raw){ var arr=((s.bank&&s.bank.answers)||{})[s.letter]||[]; var k=keyOf(raw,"plurals"); return arr.some(function(x){ return keyOf(x,"plurals")===k; }); }
+function inBankAny(s,raw){ var a=(s.bank&&s.bank.answers)||{}, k=keyOf(raw,"plurals"); return Object.keys(a).some(function(L){ return a[L].some(function(x){ return keyOf(x,"plurals")===k; }); }); }
+/* the computers' dictionary: every word used in the answer bank and the category names */
+var VOCAB=null;
+function vocab(){
+  if(VOCAB) return VOCAB; var v={}, add=function(t){ words(t).forEach(function(w){ v[w]=1; v[stemWord(w)]=1; }); };
+  bank().forEach(function(c){ add(c.text); Object.keys(c.answers||{}).forEach(function(L){ c.answers[L].forEach(add); }); });
+  if(bank().length) VOCAB=v; return v;
+}
+function knownWord(w){ var v=vocab(); return !!(v[w]||v[stemWord(w)])||/^[0-9]+$/.test(w); }
+function knownWords(raw){ var w=words(raw); return !!w.length&&w.every(knownWord); }
+/* clearly made-up: an unknown word that mixes letters and digits, has no vowel, repeats a letter 3 times or strings 6 consonants together */
+function madeUp(raw){ return words(raw).some(function(w){ return !knownWord(w)&&((w.length>=3&&/[0-9]/.test(w)&&/[a-z]/.test(w))||(w.length>=4&&!/[aeiouy]/.test(w))||/([a-z])\1\1/.test(w)||/[bcdfghjklmnpqrstvwxz]{6}/.test(w)); }); }
+/* a computer accepts an answer it knows for this category, or one made of real words; it rejects words it has never seen (no coin flips) */
+function cpuJudge(G,s,raw){ return inBank(s,raw)||(G.o.startRule!=="must"&&inBankAny(s,raw))||knownWords(raw); }
 /* compute every entry's status and points. challenges can already have been decided (rejected/accepted) */
 function evaluate(G){
   var o=G.o, entries=[], bySlot=[], pi, si, k;
@@ -151,6 +190,7 @@ function evaluate(G){
   G.players.forEach(function(p){ seenOwn[p.id]={}; });
   for(si=0;si<G.slots.length;si++){
     G.players.forEach(function(p){
+      if(!inPlay(G,p.id)) return;   // sitting out a tie-break round: no answers, can't cancel anyone's
       for(k=0;k<o.answersPer;k++){
         var raw=String((G.answers[p.id][si]||[])[k]||"").trim(), e={p:p.id,slot:si,k:k,raw:raw,key:keyOf(raw,o.strict),status:"ok",pts:0,reason:""};
         if(!raw||!e.key) e.status="blank";
@@ -158,14 +198,19 @@ function evaluate(G){
         else if(o.mode==="keyword"&&false){ }
         else {
           // the same answer can't be used twice by one player in a round (the first use stands)
-          var dupOwn=seenOwn[p.id][e.key]; if(dupOwn!=null){ e.status="invalid"; e.reason="already used in another line"; } else seenOwn[p.id][e.key]=si;
+          var dupOwn=seenOwn[p.id][e.key]; if(dupOwn!=null){ e.status="invalid"; e.reason=dupOwn===si?"already written in this category":"already used in another line"; } else seenOwn[p.id][e.key]=si;
         }
-        var ch=(G.challenges[si]||{})[p.id+"/"+k]; if(ch&&ch.state==="rejected"&&e.status==="ok"){ e.status="invalid"; e.reason="voted out"; }
+        var ch=(G.challenges[si]||{})[p.id+"/"+k]; if(ch&&ch.state==="rejected"&&e.status==="ok"){ e.status="invalid"; e.reason="voted out"; e.out=true; }
         e.challenge=ch?ch.state:null;
         entries.push(e); bySlot[si].push(e);
       }
     });
   }
+  // an answer the vote threw out is out for everyone who wrote it: a duplicate scores nothing, so its twin gets no free point
+  bySlot.forEach(function(list){
+    var out=list.filter(function(e){ return e.out; });
+    if(out.length) list.forEach(function(e){ if(e.status==="ok"&&out.some(function(x){ return same(x.key,e.key,o.strict); })){ e.status="invalid"; e.reason="voted out"; } });
+  });
   // duplicates between different players
   bySlot.forEach(function(list){
     var live=list.filter(function(e){ return e.status==="ok"; });
@@ -194,9 +239,9 @@ function openChallenge(G,by,slot,p,k){
   var key=p+"/"+k; G.challenges[slot]=G.challenges[slot]||{};
   if(G.challenges[slot][key]) return {ok:false,msg:"That answer was already challenged."};
   if(by===p&&false) return {ok:false};
-  var votes={}; // computers vote immediately: they accept anything in the answer bank and most other answers that fit the letter
+  var votes={}; // computers vote immediately (cpuJudge: answers they know or real words yes, made-up words no)
   var s=G.slots[slot], raw=((G.answers[p][slot]||[])[k])||"";
-  G.players.forEach(function(pl){ if(pl.human) return; var good=inBank(s,raw); votes[pl.id]=good?true:(startsWith(raw,s.letter)?G.rnd()<0.6:false); });
+  G.players.forEach(function(pl){ if(pl.human) return; votes[pl.id]=cpuJudge(G,s,raw); });
   G.challenges[slot][key]={by:by,p:p,k:k,slot:slot,votes:votes,state:"open"};
   return {ok:true,ch:G.challenges[slot][key]};
 }
@@ -219,13 +264,13 @@ function pendingVoters(G,ch){ return G.players.filter(function(p){ return ch.vot
 /* ---------------- finishing ---------------- */
 function finishRound(G){
   var ev=evaluate(G), t=totals(G,ev);
-  G.players.forEach(function(p){ p.score+=t[p.id]; p.roundScores.push(t[p.id]); });
+  G.players.forEach(function(p){ var on=inPlay(G,p.id); p.score+=on?t[p.id]:0; p.roundScores.push(on?t[p.id]:null); });   // null = sat out the tie-break ("—")
   G.result={entries:ev.entries,totals:t,letter:G.letter,keyword:G.keyword};
   G.phase="scored"; G.roundsDone++;
   var over=false, winners=null;
   if(G.tieActive){
     var ids=G.tieActive, bestR=Math.max.apply(null,ids.map(function(i){ return t[i]; })), tops2=ids.filter(function(i){ return t[i]===bestR; });
-    if(tops2.length>1){ G.tiebreak=true; G.tieIds=tops2; G.tieActive=null; }
+    if(tops2.length>1&&(G.tieRounds||0)<3){ G.tiebreak=true; G.tieIds=tops2; G.tieActive=null; }   // tied again: another round (after 3 tie-break rounds they share the win)
     else { G.over=true; G.winners=tops2; G.phase="over"; G.tieActive=null; }
     return G.result;
   }
@@ -243,7 +288,7 @@ function snapshot(G,me,extra){
   var s={o:G.o,round:G.round,rounds:G.o.rounds,phase:G.phase,letter:G.letter,star:!!G.star,keyword:G.keyword||null,me:me,starFree:G.starFree||null,
     slots:(G.slots||[]).map(function(x,i){ return {i:i,label:x.label,letter:x.letter}; }),
     players:G.players.map(function(p,i){ return {id:i,name:p.name,human:p.human,score:p.score,rs:p.roundScores.slice(),filled:G.answers&&G.answers[i]?filledCount(G,i):0}; }),
-    myAnswers:(me>=0&&G.answers&&G.answers[me])?G.answers[me]:null,over:G.over,winners:G.winners||null,tiebreak:!!G.tiebreak,tieIds:G.tieIds||null,
+    myAnswers:(me>=0&&G.answers&&G.answers[me])?G.answers[me]:null,over:G.over,winners:G.winners||null,tiebreak:!!G.tiebreak,tieIds:G.tieIds||null,tieActive:G.tieActive||null,starBy:G.starBy!=null?G.starBy:-1,
     result:G.result?{totals:G.result.totals,entries:G.result.entries}:null};
   if(G.phase==="review"){ var ev=evaluate(G); s.review={totals:totals(G,ev),entries:ev.entries}; }
   s.challenges=[]; Object.keys(G.challenges||{}).forEach(function(si){ Object.keys(G.challenges[si]).forEach(function(k){ var c=G.challenges[si][k]; s.challenges.push({slot:+si,p:c.p,k:c.k,by:c.by,state:c.state,votes:c.votes,yes:c.yes,no:c.no}); }); });
@@ -265,6 +310,7 @@ function restore(c){
 }
 Sc.Engine={serialize:serialize,restore:restore,beginReview:beginReview,VERSIONS:VERSIONS,HOUSE:HOUSE,LETTERS:LETTERS,defaultOpts:defaultOpts,mergeOpts:mergeOpts,versionOpts:versionOpts,fold:fold,words:words,keyOf:keyOf,same:same,startsWith:startsWith,
   newGame:newGame,startRound:startRound,chooseStarLetter:chooseStarLetter,setAnswers:setAnswers,filledCount:filledCount,allFilled:allFilled,cpuAnswers:cpuAnswers,cpuFillAll:cpuFillAll,
-  evaluate:evaluate,totals:totals,canChallenge:canChallenge,openChallenge:openChallenge,castVote:castVote,resolveChallenge:resolveChallenge,pendingVoters:pendingVoters,finishRound:finishRound,standings:standings,snapshot:snapshot,inBank:inBank,KEYWORDS:KEYWORDS,goodKeyword:goodKeyword};
+  evaluate:evaluate,totals:totals,canChallenge:canChallenge,openChallenge:openChallenge,castVote:castVote,resolveChallenge:resolveChallenge,pendingVoters:pendingVoters,finishRound:finishRound,standings:standings,snapshot:snapshot,inBank:inBank,KEYWORDS:KEYWORDS,goodKeyword:goodKeyword,
+  inPlay:inPlay,cpuChallenges:cpuChallenges,cpuJudge:cpuJudge,madeUp:madeUp,knownWords:knownWords};
 if(typeof module!=="undefined"&&module.exports) module.exports=Sc.Engine;
 })(typeof window!=="undefined"?window:globalThis);
