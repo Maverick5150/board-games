@@ -106,7 +106,7 @@ function meld(G,ids){
   var m=R.buildMeld(cards,G.o);
   if(!m) return {ok:false,msg:"That isn't a valid set or run."};
   m.id=G.nextMeldId++; m.owner=G.turn;
-  var dbl=G.o.doubleFour&&cards.length>=4;
+  var dbl=G.o.doubleFour&&cards.length===4;   // Persian: a meld of exactly four laid down at once counts double
   m.cards.forEach(function(e){ e.by=G.turn; if(dbl) e.dbl=true; });
   p.hand=p.hand.filter(function(c){ return ids.indexOf(c.id)<0; });
   if(G.mustUse!=null&&ids.indexOf(G.mustUse)>=0){ G.mustUse=null; G.mustNew=false; }
@@ -152,7 +152,7 @@ function finishOut(G,events){
 function handValue(G,p){ var s=0; p.hand.forEach(function(c){ s+=R.handCardValue(G.o,c); }); return s; }
 function endRound(G,reason,outP){
   var o=G.o, rows=G.units.map(function(u,ui){ return {id:ui,players:u.slice(),name:unitName(G,ui),melded:0,dead:0,bonus:0,oppHands:0,total:0}; });
-  G.melds.forEach(function(m){ m.cards.forEach(function(e){ rows[unitOf(G,e.by)].melded+=R.meldCardValue(o,e)*(e.dbl?2:1); }); });
+  G.melds.forEach(function(m){ m.cards.forEach(function(e){ rows[unitOf(G,e.by)].melded+=R.meldCardValue(o,e,m.kind)*(e.dbl?2:1); }); });
   var penalty=o.handPenalty&&!(reason==="stock"&&!o.stockEndPenalty);
   G.players.forEach(function(p){ if(penalty) rows[unitOf(G,p.id)].dead+=handValue(G,p); });
   if(outP!=null){
@@ -160,19 +160,28 @@ function endRound(G,reason,outP){
     if(o.addOppHands) G.players.forEach(function(p){ if(unitOf(G,p.id)!==ou) rows[ou].oppHands+=handValue(G,p); });
   }
   rows.forEach(function(r,ui){ r.total=r.melded-r.dead+r.bonus+r.oppHands; G.scores[ui]+=r.total; r.score=G.scores[ui]; });
+  var outU=outP!=null?unitOf(G,outP):null;
+  var winU=null, tops;
+  if(o.deals>0){
+    /* fixed-length game (Persian: two deals): the side with the best score then gets the bonus and wins; a tie plays one more deal */
+    if(G.round>=o.deals){ tops=leaders(G,G.scores.map(function(s,ui){ return ui; }));
+      if(tops.length===1){ winU=tops[0]; var wr=rows[winU]; wr.bonus+=o.dealsBonus; wr.total+=o.dealsBonus; G.scores[winU]+=o.dealsBonus; wr.score=G.scores[winU]; } }
+  } else {
+    var cands=[]; G.scores.forEach(function(s,ui){ if(s>=o.target&&(!o.mustGoOut||ui===outU)) cands.push(ui); });
+    if(cands.length){
+      if(o.winnerRule==="outPlayer"&&outU!=null&&cands.indexOf(outU)>=0) winU=outU;
+      else { tops=leaders(G,cands); if(tops.length===1) winU=tops[0]; }
+    }
+  }
   G.players.forEach(function(p){ p.score=G.scores[unitOf(G,p.id)]; });
   (G.history=G.history||[]).push({round:G.round,rows:rows.map(function(r){ return {t:r.total,s:r.score}; })});
-  var outU=outP!=null?unitOf(G,outP):null;
-  var cands=[]; G.scores.forEach(function(s,ui){ if(s>=o.target&&(!o.mustGoOut||ui===outU)) cands.push(ui); });
-  var winU=null;
-  if(cands.length){
-    if(o.winnerRule==="outPlayer"&&outU!=null&&cands.indexOf(outU)>=0) winU=outU;
-    else { var best=-Infinity; cands.forEach(function(ui){ if(G.scores[ui]>best) best=G.scores[ui]; }); var tops=cands.filter(function(ui){ return G.scores[ui]===best; }); if(tops.length===1) winU=tops[0]; }
-  }
   if(winU!=null){ G.over=true; G.winner=winU; }
   G.roundOver={reason:reason,out:outP,rows:rows,over:G.over,winner:G.winner,winnerName:winU!=null?unitName(G,winU):null};
   return {ok:true,roundOver:G.roundOver,events:[ev(G,"roundOver",{reason:reason,out:outP})]};
 }
+function leaders(G,units){ var best=-Infinity; units.forEach(function(ui){ if(G.scores[ui]>best) best=G.scores[ui]; }); return units.filter(function(ui){ return G.scores[ui]===best; }); }
+/* how the game ends, for the round sheets (phone + TV) */
+function goalText(G){ var o=G.o; if(!(o.deals>0)) return "First to "+o.target+" wins."; return G.round<o.deals?"The game ends after deal "+o.deals+"; the leader then gets +"+o.dealsBonus+".":"Tied — one more deal decides."; }
 
 /* ======================= computer player ======================= */
 function containing(cands,id){ return cands.filter(function(m){ return m.ids.indexOf(id)>=0; }); }
@@ -262,6 +271,6 @@ function hint(G){
 
 g.Rummy.Game={ newGame:newGame,startRound:startRound,cur:cur,unitOf:unitOf,unitName:unitName,drawStock:drawStock,takeDiscard:takeDiscard,takeFeasible:takeFeasible,mustUseRule:mustUseRule,
   mayLayOn:mayLayOn,layTarget:layTarget,
-  meld:meld,layOffCard:layOffCard,discardCard:discardCard,undo:undo,endRound:endRound,aiAction:aiAction,applyAction:applyAction,hint:hint,handValue:handValue,DEAL:DEAL };
+  meld:meld,layOffCard:layOffCard,discardCard:discardCard,undo:undo,endRound:endRound,goalText:goalText,aiAction:aiAction,applyAction:applyAction,hint:hint,handValue:handValue,DEAL:DEAL };
 if(typeof module!=="undefined"&&module.exports) module.exports=g.Rummy.Game;
 })(typeof window!=="undefined"?window:globalThis);

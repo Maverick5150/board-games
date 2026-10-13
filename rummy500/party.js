@@ -75,7 +75,7 @@ function tvHTML(G,ctx){
   var melds=nm?G.melds.map(function(m){ return UI.meldHTML(m,G,{cls:(ctx.flashMeld===m.id?"flash":"")}); }).join(""):'<div class="empty">No melds yet — sets of 3–4 of a kind, runs of 3+ in one suit</div>';
   var nd=G.discard.length, dcw=8, step=Math.min(4.6,100/Math.max(nd,1)), ml=-(dcw-step);
   var disc=nd?G.discard.map(function(c,i){ return UI.cardHTML(c,{cls:(ctx.pf!=null&&i>=ctx.pf?"pf ":"")+(ctx.flashCard===c.id?"flash":""),style:"margin-left:"+(i?ml:0)+"vh"}); }).join(""):'<span class="none">Discard pile is empty</span>';
-  return '<div class="rvscore">'+chips+'<div class="rvchip" style="background:#00000040">Round '+G.round+' · first to <b>'+G.o.target+'</b></div></div>'+
+  return '<div class="rvscore">'+chips+'<div class="rvchip" style="background:#00000040">Round '+G.round+(G.o.deals>0?' · <b>'+G.o.deals+'</b> deals':' · first to <b>'+G.o.target+'</b>')+'</div></div>'+
     '<div id="rtable"><div class="rvmelds" style="--mcw:'+cw+'vh">'+melds+'</div>'+
     '<div class="rvpiles"><div class="rvstock" style="--cw:7vh">'+UI.backHTML({label:G.stock.length?"":"EMPTY"})+G.stock.length+' in stock</div><div class="rvdisc" style="--cw:'+dcw+'vh">'+disc+'</div></div></div>';
 }
@@ -85,7 +85,7 @@ function roundSheetHTML(G){
   var rows=ro.rows.map(function(r){ return '<tr><td><span class="rd" style="display:inline-block;width:2.2vh;height:2.2vh;border-radius:50%;background:'+UI.colorOf(G,r.players[0])+'"></span> '+esc(r.name)+'</td><td>'+r.melded+'</td><td>'+(r.dead?-r.dead:0)+'</td><td>'+((r.bonus+r.oppHands)||0)+'</td><td class="'+(r.total>=0?"pos":"neg")+'">'+(r.total>0?"+":"")+r.total+'</td><td><b>'+r.score+'</b></td></tr>'; }).join("");
   return '<div class="rvsheet"><div style="font-size:3.6vh;font-weight:900">'+(ro.over?"🏆 Game over":"Round "+G.round+" complete")+'</div><div style="opacity:.8">'+why+'</div>'+
     '<table><tr><th>Player</th><th>Melds</th><th>Hand</th><th>Bonus</th><th>Round</th><th>Total</th></tr>'+rows+'</table>'+
-    (ro.over?'<div style="font-size:3.2vh;text-align:center"><b style="color:#ffd84a">'+esc(ro.winnerName)+'</b> win'+(/ & /.test(ro.winnerName)||ro.winnerName==="You"?"":"s")+' with '+G.scores[ro.winner]+' points!</div>':'<div style="opacity:.75;font-size:2.2vh">First to '+G.o.target+' wins.</div>')+'</div>';
+    (ro.over?'<div style="font-size:3.2vh;text-align:center"><b style="color:#ffd84a">'+esc(ro.winnerName)+'</b> win'+(/ & /.test(ro.winnerName)||ro.winnerName==="You"?"":"s")+' with '+G.scores[ro.winner]+' points!</div>':'<div style="opacity:.75;font-size:2.2vh">'+esc(GM.goalText(G))+'</div>')+'</div>';
 }
 
 /* ---------------- phone: private hand + controls ---------------- */
@@ -168,7 +168,7 @@ function phoneRender(root,st,ctx){
     var th=G.units.map(function(u){ return "<th>"+u.map(function(i){ return esc(st.names[i]); }).join(" &amp; ")+"</th>"; }).join("");
     var rowsH=(st.hist||[]).map(function(rw,ri){ return "<tr><td>"+(ri+1)+"</td>"+rw.map(function(r){ return "<td style=\"color:"+(r[0]>=0?"#8ff0b0":"#ff9a9a")+"\">"+(r[0]>0?"+":"")+r[0]+"</td>"; }).join("")+"</tr>"; }).join("")||"<tr><td colspan=\""+(G.units.length+1)+"\" style=\"text-align:center;opacity:.7\">No rounds finished yet</td></tr>";
     var tot=st.scores.map(function(s){ return "<td><b>"+s+"</b></td>"; }).join("");
-    ov.innerHTML="<div style=\"width:min(100%,520px);background:#0c3322;border:1px solid #3d7a58;border-radius:18px;padding:16px;color:#f3f7ee\"><h2 style=\"margin:0 0 4px\">📊 Scoreboard</h2><div style=\"opacity:.8;font-size:13px\">Playing to <b style=\"color:#ffd84a\">"+st.target+"</b> · round "+st.round+"</div><table style=\"width:100%;border-collapse:collapse;margin:8px 0;font-size:14px;text-align:right\"><tr><th style=\"text-align:left\">Round</th>"+th+"</tr>"+rowsH+"<tr style=\"border-top:2px solid #ffffff55\"><td style=\"text-align:left\"><b>Total</b></td>"+tot+"</tr></table><button id=\"rvScX\" style=\"width:100%;padding:12px;border-radius:12px;border:0;background:#d9a21b;font-weight:900;font-size:16px\">Close</button></div>";
+    ov.innerHTML="<div style=\"width:min(100%,520px);background:#0c3322;border:1px solid #3d7a58;border-radius:18px;padding:16px;color:#f3f7ee\"><h2 style=\"margin:0 0 4px\">📊 Scoreboard</h2><div style=\"opacity:.8;font-size:13px\">"+(st.o&&st.o.deals>0?"<b style=\"color:#ffd84a\">"+st.o.deals+" deals</b> (+"+st.o.dealsBonus+" to the leader)":"Playing to <b style=\"color:#ffd84a\">"+st.target+"</b>")+" · round "+st.round+"</div><table style=\"width:100%;border-collapse:collapse;margin:8px 0;font-size:14px;text-align:right\"><tr><th style=\"text-align:left\">Round</th>"+th+"</tr>"+rowsH+"<tr style=\"border-top:2px solid #ffffff55\"><td style=\"text-align:left\"><b>Total</b></td>"+tot+"</tr></table><button id=\"rvScX\" style=\"width:100%;padding:12px;border-radius:12px;border:0;background:#d9a21b;font-weight:900;font-size:16px\">Close</button></div>";
     document.body.appendChild(ov); ov.querySelector("#rvScX").onclick=function(){ ov.remove(); };
   };
   var send=function(id,data){ if(ui.busy) return; ui.busy=true; ctx.act(id,data); };

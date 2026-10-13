@@ -334,7 +334,7 @@ function rkShow(st,active,ask){
 }
 function showOver(o){
   var win = o.winner||"";
-  main.innerHTML='<div class="title">🏆 '+esc(win)+' wins!</div><div class="sub">Thanks for playing. The host can start a new game.</div>';
+  main.innerHTML='<div class="title">🏆 '+esc(win)+(/ & /.test(win)?' win!':' wins!')+'</div><div class="sub">Thanks for playing. The host can start a new game.</div>';   // a team ("X & Y") wins as a plural, like the TV
 }
 var toastT;
 function toast(m){ var d=document.createElement("div"); d.textContent=m; d.style.cssText="position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#000b;padding:10px 16px;border-radius:18px;font-size:14px;z-index:9"; document.body.appendChild(d); setTimeout(function(){d.remove();},1800); }

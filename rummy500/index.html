@@ -130,9 +130,11 @@ const R=Rummy, GM=Rummy.Game, UI=Rummy.UI;
 UI.injectCSS();
 const $=id=>document.getElementById(id);
 const SPEED={slow:1600,normal:1000,fast:450};
-const OFFICIAL_NOT={minNat:1,addOppHands:1,mustGoOut:1};
+const OFFICIAL_NOT={minNat:1,addOppHands:1,mustGoOut:1,deals:1};
 let cfg={version:"standard",over:{},humans:1,cpus:1,speed:"normal"};
-let G=null,sel=new Set(),pileFrom=null,sortMode="suit",flashCards={},flashMeld=null,logLines=[],gen=0,handoffOk=null,lastTurn=-1,busy=false,drawnAt={},customOrder=[];
+let G=null,sel=new Set(),pileFrom=null,flashCards={},flashMeld=null,logLines=[],gen=0,handoffOk=null,lastTurn=-1,busy=false,drawnAt={},sortPrefs={};
+/* each seat keeps its own sort mode and drag order (hot-seat players don't share one arrangement) */
+function sortPref(p){ return sortPrefs[p.id]||(sortPrefs[p.id]={mode:"suit",order:[]}); }
 
 function curOpts(){ return R.versionOpts(cfg.version,cfg.over); }
 function esc(s){ return String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
@@ -183,6 +185,8 @@ function takeSnap(){
 }
 function loadSaved(d){
   gen++; G=d.G; G.rnd=Math.random; G.log=[]; G.snap=null; G.roundOver=null;
+  /* saves from before the Persian deck fix hold 2 jokers: deal the published 4 from the next round on */
+  if(G.o&&G.o.jokerMode==="group"&&G.o.jokers===2&&d.cfg&&d.cfg.version==="persian"&&!(d.cfg.over&&d.cfg.over.jokers!=null)) G.o.jokers=4;
   Object.assign(cfg,d.cfg||{}); sel.clear(); pileFrom=null; flashCards={}; flashMeld=null; handoffOk=null; lastTurn=-1; drawnAt={}; busy=false;
   logLines=[]; say("Saved game loaded — round "+G.round,true);
   $("setup").classList.remove("show"); $("roundBox").classList.remove("show"); Sound.skip(); loop();
@@ -200,9 +204,10 @@ function showScores(){
   const rows=hist.map(hr=>`<tr><td>${hr.round}</td>${hr.rows.map(r=>`<td class="${r.t>=0?"pos":"neg"}">${r.t>0?"+":""}${r.t}</td>`).join("")}</tr>`).join("");
   const tot=units.map((u,ui)=>`<td><b>${G.scores[ui]}</b></td>`).join("");
   const lead=Math.max(...G.scores);
-  $("roundSheet").innerHTML=`<h2>📊 Scoreboard</h2><div style="color:var(--muted);font-size:13px">Playing to <b style="color:var(--gold)">${G.o.target}</b> · round ${G.round}</div>
+  const deals=G.o.deals>0;
+  $("roundSheet").innerHTML=`<h2>📊 Scoreboard</h2><div style="color:var(--muted);font-size:13px">${deals?`<b style="color:var(--gold)">${G.o.deals} deals</b> (+${G.o.dealsBonus} to the leader)`:`Playing to <b style="color:var(--gold)">${G.o.target}</b>`} · round ${G.round}</div>
     <table class="sc"><tr><th>Round</th>${head}</tr>${rows||`<tr><td colspan="${units.length+1}" style="text-align:center;color:var(--muted)">No rounds finished yet</td></tr>`}<tr style="border-top:2px solid #ffffff55"><td><b>Total</b></td>${tot}</tr></table>
-    <div style="font-size:12.5px;color:var(--muted)">${units.map((u,ui)=>`${esc(u.map(i=>G.players[i].name).join(" & "))}: ${Math.max(0,G.o.target-G.scores[ui])} to go`).join(" · ")}</div>
+    ${deals?"":`<div style="font-size:12.5px;color:var(--muted)">${units.map((u,ui)=>`${esc(u.map(i=>G.players[i].name).join(" & "))}: ${Math.max(0,G.o.target-G.scores[ui])} to go`).join(" · ")}</div>`}
     <div style="display:flex;gap:8px;margin-top:10px"><button class="btn primary" id="scClose" style="flex:1">Close</button></div>`;
   $("roundBox").classList.add("show"); $("scClose").addEventListener("click",()=>{ $("roundBox").classList.remove("show"); if(G&&G.roundOver) showRound(); });
 }
@@ -256,7 +261,9 @@ function perform(a){
 }
 
 function loop(){
-  if(G.roundOver){ busy=true; render(); setTimeout(showRound,cur().human?500:900); return; }
+  if(G.roundOver){
+    if(G.over){ Saves.del("rummy500","auto"); lastSnap=null; }   // a finished game is not offered as "Continue last game"
+    busy=true; render(); setTimeout(showRound,cur().human?500:900); return; }
   const p=cur();
   if(G.turn!==lastTurn){ lastTurn=G.turn; handoffOk=null; sel.clear(); pileFrom=null; if(!p.human) drawnAt={}; }
   busy=!p.human;
@@ -314,7 +321,7 @@ function render(){
   $("discard").scrollLeft=1e5;
   // hand
   const vh=viewerHand(), hd=$("hand");
-  if(vh){ hd.innerHTML=UI.sortHand(vh.hand,sortMode,customOrder).map(c=>UI.cardHTML(c,{cls:(sel.has(c.id)?"sel ":""),style:UI.drawnStyle(drawnAt,c.id)})).join(""); }
+  if(vh){ const sp=sortPref(vh); hd.innerHTML=UI.sortHand(vh.hand,sp.mode,sp.order).map(c=>UI.cardHTML(c,{cls:(sel.has(c.id)?"sel ":""),style:UI.drawnStyle(drawnAt,c.id)})).join(""); }
   else hd.innerHTML=`<div class="hint" style="padding:30px 0">${G.roundOver?"":esc(p.name)+" is playing…"}</div>`;
   // status
   const st=$("status");
@@ -342,7 +349,7 @@ function renderActions(human){
       add(`Take ${G.discard.length-pileFrom} from pile`,()=>act({t:"take",idx:pileFrom}),{primary:true,dis:!GM.takeFeasible(G,pileFrom)});
       add("Cancel",()=>{ pileFrom=null; render(); });
     } else { add("Draw from stock",()=>act({t:"stock"}),{primary:true}); }
-    add("Sort: "+sortMode,()=>{ sortMode=sortMode==="suit"?"rank":"suit"; render(); });
+    add("Sort: "+sortPref(cur()).mode,()=>{ const sp=sortPref(cur()); sp.mode=sp.mode==="suit"?"rank":"suit"; render(); });
     return;
   }
   const vh=viewerHand(), cs=vh.hand.filter(c=>sel.has(c.id));
@@ -358,7 +365,7 @@ function renderActions(human){
     else toast(G.mustUse!=null?"Look for a lay-off for the card you took":"No melds yet — discard your least useful card");
     render();
   });
-  add("Sort: "+sortMode,()=>{ sortMode=sortMode==="suit"?"rank":"suit"; render(); });
+  add("Sort: "+sortPref(cur()).mode,()=>{ const sp=sortPref(cur()); sp.mode=sp.mode==="suit"?"rank":"suit"; render(); });
 }
 function act(a){
   if(!G||busy||G.roundOver) return;
@@ -386,7 +393,7 @@ $("meldsArea").addEventListener("click",e=>{
   act({t:"layoff",meld:mid,card:cid});
 });
 UI.enablePeek(document.body);
-UI.enableDragSort(document.body,"#hand",ids=>{ customOrder=ids; sortMode="custom"; render(); });
+UI.enableDragSort(document.body,"#hand",ids=>{ const vh=G&&viewerHand(); if(!vh) return; const sp=sortPref(vh); sp.order=ids; sp.mode="custom"; render(); });
 
 /* ---------------- round summary ---------------- */
 function showRound(){
@@ -398,7 +405,7 @@ function showRound(){
   let h=`<h2>${ro.over?"🏆 Game over":"Round "+G.round+" complete"}</h2><div style="color:var(--muted);font-size:13px">${why}</div>
    <table class="sc"><tr><th>Player</th><th>Melds</th><th>Hand</th><th>Bonus</th><th>Round</th><th>Total</th></tr>${rows}</table>`;
   if(ro.over) h+=`<p style="font-size:18px;text-align:center"><b style="color:var(--gold)">${esc(ro.winnerName)}</b> ${ro.winnerName.indexOf(" & ")>0||/^You$/.test(ro.winnerName)?"win":"wins"} with ${G.scores[ro.winner]} points!</p>`;
-  else h+=`<p style="font-size:12px;color:var(--muted)">First to ${G.o.target} wins.</p>`;
+  else h+=`<p style="font-size:12px;color:var(--muted)">${esc(GM.goalText(G))}</p>`;
   h+=`<div style="display:flex;gap:8px;margin-top:8px">${ro.over?`<button class="btn primary" id="rbNew" style="flex:1">New game</button>`:`<button class="btn primary" id="rbNext" style="flex:1">Next round ▶</button>`}<button class="btn" id="rbMenu" style="flex:1">☰ Menu</button></div>`;
   sh.innerHTML=h; $("roundBox").classList.add("show");
   if(ro.over) Sound.sfx("win");

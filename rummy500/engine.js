@@ -30,6 +30,8 @@ function defaultOpts(){
     doubleFour:false,                    // Persian: a 4-card meld laid down at once counts double
     teams:false,                         // 4 players, partners sit opposite
     target:500,
+    deals:0,                             // 0: play to the target | N: the game ends after N deals (Persian: 2), a tie plays one more deal
+    dealsBonus:50,                       // after the last deal the side with the best score gets this bonus and wins
     winnerRule:"highest",                // "highest" | "outPlayer" (if several pass the target in one hand)
     mustGoOut:false                      // you must also have gone out to win
   };
@@ -43,11 +45,12 @@ var VERSIONS=[
   {id:"five",name:"5-10-15 Scoring",tag:"Wikipedia",desc:"Cards 2–9 are worth 5 each, 10–K are 10, ace is 15 (5 low). If several players pass 500, the player who went out wins. Nobody loses their hand when the stock runs out.",opts:{cardValues:"five",aceLowValue:5,winnerRule:"outPlayer",stockEndPenalty:false}},
   {id:"strict",name:"Strict 500",tag:"Tournament style",desc:"No jokers. You must discard to go out, pile pickups must be used, and the deepest card must go into a brand-new meld.",opts:{jokers:0,pickup:"always",deepestNewMeld:true,goOutNeedsDiscard:true}},
   {id:"partner",name:"Partnership 500",tag:"4 players, teams",desc:"Four players in two teams (partners sit opposite). Team scores are joint; partners can lay off on each other's melds.",opts:{teams:true}},
-  {id:"persian",name:"Persian Rummy",tag:"4 players, teams",desc:"Partnership game with 4 jokers worth 20 that are NOT wild — they only meld with other jokers. A 4-card meld laid at once counts double. Going out earns 25.",opts:{teams:true,jokers:2,decks:1,decksAuto:false,jokerMode:"group",jokerValue:20,doubleFour:true,goOutBonus:25}}
+  {id:"persian",name:"Persian Rummy",tag:"4 players, teams",desc:"Partnership game with 4 jokers worth 20 that are NOT wild — they only meld with other jokers. A meld of exactly four laid at once counts double. Going out earns 25. The game is two deals; the side ahead then gets 50.",opts:{teams:true,jokers:4,decks:1,decksAuto:false,jokerMode:"group",jokerValue:20,doubleFour:true,goOutBonus:25,deals:2}}
 ];
 /* house-rule toggles shown in the "Custom" setup: [key, label, kind, choices] */
 var HOUSE=[
-  ["jokers","Jokers","choice",[[0,"None"],[2,"2 per deck (wild)"]]],
+  ["jokers","Jokers","choice",[[0,"None"],[2,"2 per deck (wild)"],[4,"4 per deck"]]],
+  ["deals","Game length","choice",[[0,"Play to the target score"],[2,"Two deals (+50 to the leader)"]]],
   ["cardValues","Card values","choice",[["pips","2–9 face value"],["five","2–9 = 5 each"]]],
   ["pickup","Taking from the pile","choice",[["buried","Only buried cards must be used"],["always","Any card must be used"]]],
   ["deepestNewMeld","Deepest pile card needs a NEW meld","bool"],
@@ -77,9 +80,11 @@ function shuffle(a,rnd){ rnd=rnd||Math.random; for(var i=a.length-1;i>0;i--){ va
 
 /* ---------------- card values ---------------- */
 function pipValue(o,r){ if(r>=10&&r<=13) return 10; if(r===1||r===14) return o.aceValue; return o.cardValues==="five"?5:r; }
-function meldCardValue(o,e){
-  if(e.c.joker&&o.jokerMode==="group") return o.jokerValue;
-  return (e.r===1)?o.aceLowValue:pipValue(o,e.r);
+/* a melded card (kind = its meld's "set" | "run"): a joker always scores its flat value, never the card it stands for;
+   an ace scores its low value only when used low in a run (A-2-3) — aces in a set score aceValue (Pagat) */
+function meldCardValue(o,e,kind){
+  if(e.c.joker) return o.jokerValue;
+  return (e.r===1&&kind==="run")?o.aceLowValue:pipValue(o,e.r);
 }
 function handCardValue(o,c){ return c.joker?o.jokerValue:(c.r===1?o.aceValue:pipValue(o,c.r)); }
 
@@ -144,15 +149,36 @@ function buildMeld(cards,o){ return buildSet(cards,o)||buildRun(cards,o); }
 
 /* lay a single card off on an existing meld; returns the new meld (a copy) or null */
 function layOff(meld,card,o){
-  var cards=meld.cards.map(function(e){ return e.c; }).concat([card]);
-  var m=meld.kind==="set"?buildSet(cards,o):buildRun(cards,o);
-  if(!m) return null;
-  if(meld.kind==="set"&&m.rank!==meld.rank) return null;
-  if(meld.kind==="run"&&m.suit!==meld.suit) return null;
+  var m;
+  if(meld.kind==="set"){
+    m=buildSet(meld.cards.map(function(e){ return e.c; }).concat([card]),o);   // a set joker's suit may stay unstated (Pagat)
+    if(!m||m.rank!==meld.rank) return null;
+  } else {
+    m=extendRun(meld,card,o);
+    if(!m) return null;
+  }
   m.id=meld.id; m.owner=meld.owner; if(meld.double) m.double=meld.double;
   return m;
 }
-function meldPoints(meld,o){ var s=0; meld.cards.forEach(function(e){ s+=meldCardValue(o,e)*(e.dbl?2:1); }); return s; }
+/* runs only grow at their ends and every card keeps its place: a melded joker's rank can never change (Pagat) */
+function extendRun(meld,card,o){
+  var es=meld.cards, lo=es[0].r, hi=es[es.length-1].r, min=o.aceLow?1:2, max=o.aceHigh?14:13, at=null;
+  if(card.joker){
+    if(o.jokerMode==="group") return null;
+    at=hi<max?hi+1:(lo>min?lo-1:null);
+  } else {
+    if(card.s!==meld.suit) return null;
+    if(card.r===1){
+      if(es.some(function(e){ return !e.c.joker&&e.c.r===1; })) return null;   // one natural ace per run, as buildRun
+      at=(lo===2&&o.aceLow)?1:(hi===13&&o.aceHigh)?14:null;
+    } else if(card.r===lo-1||card.r===hi+1) at=card.r;
+  }
+  if(at==null) return null;
+  var cards=es.map(function(e){ return {c:e.c,r:e.r,s:e.s}; }), add={c:card,r:at,s:meld.suit};
+  if(at<lo) cards.unshift(add); else cards.push(add);
+  return {kind:"run",suit:meld.suit,lo:Math.min(lo,at),hi:Math.max(hi,at),cards:cards};
+}
+function meldPoints(meld,o){ var s=0; meld.cards.forEach(function(e){ s+=meldCardValue(o,e,meld.kind)*(e.dbl?2:1); }); return s; }
 function canLayOffAny(melds,card,o){ for(var i=0;i<melds.length;i++){ if(layOff(melds[i],card,o)) return melds[i].id; } return null; }
 
 /* ---------------- candidate melds from a hand (for AI + hints) ---------------- */
