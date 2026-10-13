@@ -332,6 +332,7 @@ function computeActive(order){
   if(chosenGame==="rummy500"&&Rummy.versionOpts(rvCfg.version,rvCfg.over).teams) nCpu=Math.max(0,Math.min(free.length,4-seated.length));
   if(seated.length+nCpu<2) nCpu=Math.min(free.length, 2-seated.length);  // need 2+ players
   var cpu=free.slice(0,nCpu);
+  if(chosenGame==="sorry"&&seated.length===1&&nCpu===1){ var opp={red:"yellow",yellow:"red",blue:"green",green:"blue"}[seated[0]]; if(free.indexOf(opp)>=0) cpu=[opp]; }   // Sorry! 2 players sit on opposite sides
   return order.filter(function(c){ return seat[c] || cpu.indexOf(c)>=0; });
 }
 var backbtn=$("backbtn");
@@ -726,18 +727,30 @@ function playSorry(){
   function resolveLand(mover,dest,allowSlide){ if(!dest)return; if(dest.t!=="ring"){ mover.loc=dest; return; }
     if(allowSlide){ var sl=slideTri(dest.i); if(sl&&sl.color!==mover.color){ var set={}; sl.cells.forEach(function(x){set[x]=1;}); allP().forEach(function(p){ if(p!==mover&&p.loc.t==="ring"&&set[p.loc.i]) toStart(p); }); mover.loc={t:"ring",i:sl.cells[sl.cells.length-1]}; toast(CNAME[mover.color]+" slid!"); return; } }
     occAtRing(dest.i,mover).forEach(function(p){ toStart(p); toast(CNAME[p.color]+" bumped!"); }); mover.loc=dest; }
+  // dry runs on a copy of the board (Map pawn -> loc), same rules as resolveLand
+  function boardNow(){ var m=new Map(); allP().forEach(function(p){ m.set(p,p.loc); }); return m; }
+  function simLand(locs,mover,dest){ if(dest.t==="ring"){ var sl=slideTri(dest.i), slides=!!(sl&&sl.color!==mover.color), hit=slides?sl.cells:[dest.i]; locs.forEach(function(l,p){ if(p!==mover&&l.t==="ring"&&hit.indexOf(l.i)>=0) locs.set(p,{t:"start"}); }); if(slides) dest={t:"ring",i:sl.cells[sl.cells.length-1]}; } locs.set(mover,dest); }
+  // 7 split: X moves x first, then Y moves y; null if this order can't use the full 7 (X's slide sent Y to Start, or Y would end on its own pawn)
+  function splitRes(X,x,Y,y){ var locs=boardNow(), ownAt2=function(p,loc){ return loc.t!=="home"&&pawns[p.color].some(function(q){ return q!==p&&same(locs.get(q),loc); }); };
+    var dX=travel(X.color,X.loc,x,1); if(!dX||ownAt2(X,dX)) return null; simLand(locs,X,dX);
+    var yl=locs.get(Y); if(yl.t==="start") return null;
+    var dY=travel(Y.color,yl,y,1); if(!dY||ownAt2(Y,dY)) return null; simLand(locs,Y,dY); return locs; }
+  function sameB(m1,m2){ var ok=true; m1.forEach(function(l,p){ if(!same(l,m2.get(p))) ok=false; }); return ok; }
   function legal(color,c){ var list=[],ps=pawns[color]; var onB=ps.filter(function(p){return p.loc.t!=="start"&&p.loc.t!=="home";}); var canL=function(p,loc){return !ownAt(color,loc,p);};
+    var inStart=ps.filter(function(p){return p.loc.t==="start";})[0];   // pawns in Start are interchangeable: one option, not one per pawn
     function fwd(n){ onB.forEach(function(p){ var d=travel(color,p.loc,n,1); if(d&&canL(p,d))list.push({k:"fwd",p:p,n:n}); }); }
     function bk(n){ onB.forEach(function(p){ var d=travel(color,p.loc,n,-1); if(d&&canL(p,d))list.push({k:"back",p:p,n:n}); }); }
-    function out(){ var ex={t:"ring",i:START_EXIT[color]}; ps.forEach(function(p){ if(p.loc.t==="start"&&canL(p,ex))list.push({k:"out",p:p}); }); }
+    function out(){ var ex={t:"ring",i:START_EXIT[color]}; if(inStart&&canL(inStart,ex))list.push({k:"out",p:inStart}); }
     if(c===1){out();fwd(1);} else if(c===2){out();fwd(2);} else if(c===3)fwd(3); else if(c===4)bk(4); else if(c===5)fwd(5); else if(c===8)fwd(8); else if(c===12)fwd(12);
     else if(c===10){fwd(10);bk(1);}
-    else if(c===11){ fwd(11); onB.filter(function(p){return p.loc.t==="ring";}).forEach(function(p){ allP().forEach(function(op){ if(op.color!==color&&op.loc.t==="ring")list.push({k:"swap",p:p,target:op}); }); }); }
-    else if(c===7){ fwd(7); for(var ai=0;ai<onB.length;ai++)for(var bi=0;bi<onB.length;bi++){ if(ai===bi)continue; var A=onB[ai],B=onB[bi]; for(var a=1;a<=6;a++){ var b=7-a; if(b<1)continue; var dA=travel(color,A.loc,a,1); if(!dA||!canL(A,dA))continue; var dB=travel(color,B.loc,b,1); if(!dB||!canL(B,dB))continue; if(same(dA,dB)&&dA.t!=="home")continue; if(a<=b)list.push({k:"split",A:A,a:a,B:B,b:b}); } } }
-    else if(c==="sorry"){ ps.filter(function(p){return p.loc.t==="start";}).forEach(function(p){ allP().forEach(function(op){ if(op.color!==color&&op.loc.t==="ring")list.push({k:"sorry",p:p,target:op}); }); }); }
+    else if(c===11){ fwd(11); var canF=list.length>0; onB.filter(function(p){return p.loc.t==="ring";}).forEach(function(p){ allP().forEach(function(op){ if(op.color!==color&&op.loc.t==="ring")list.push({k:"swap",p:p,target:op}); }); }); if(!canF&&list.length) list.push({k:"pass"}); /* official rules: switching is optional when 11 forward is impossible */ }
+    else if(c===7){ fwd(7); for(var ai=0;ai<onB.length;ai++)for(var bi=ai+1;bi<onB.length;bi++){ var A=onB[ai],B=onB[bi]; for(var a=1;a<=6;a++){ var b=7-a, rA=splitRes(A,a,B,b), rB=splitRes(B,b,A,a); if(rA&&rB&&!sameB(rA,rB)){ list.push({k:"split",A:A,a:a,B:B,b:b,first:"A",order:true}); list.push({k:"split",A:A,a:a,B:B,b:b,first:"B",order:true}); } else if(rA||rB) list.push({k:"split",A:A,a:a,B:B,b:b,first:rA?"A":"B"}); } } }
+    else if(c==="sorry"){ if(inStart) allP().forEach(function(op){ if(op.color!==color&&op.loc.t==="ring")list.push({k:"sorry",p:inStart,target:op}); }); }
     return list; }
   function hasWon(color){ return pawns[color].every(function(p){return p.loc.t==="home";}); }
-  function actLabel(a){ if(a.k==="out")return"#"+(a.p.id+1)+" leave Start"; if(a.k==="fwd")return"#"+(a.p.id+1)+" forward "+a.n; if(a.k==="back")return"#"+(a.p.id+1)+" back "+a.n; if(a.k==="swap")return"#"+(a.p.id+1)+" swap w/ "+CNAME[a.target.color]+" #"+(a.target.id+1); if(a.k==="sorry")return"SORRY! bump "+CNAME[a.target.color]+" #"+(a.target.id+1); if(a.k==="split")return"#"+(a.A.id+1)+"+"+a.a+" & #"+(a.B.id+1)+"+"+a.b; return"?"; }
+  function actLabel(a){ if(a.k==="out")return"#"+(a.p.id+1)+" leave Start"; if(a.k==="fwd")return"#"+(a.p.id+1)+" forward "+a.n; if(a.k==="back")return"#"+(a.p.id+1)+" back "+a.n; if(a.k==="swap")return"#"+(a.p.id+1)+" swap w/ "+CNAME[a.target.color]+" #"+(a.target.id+1); if(a.k==="sorry")return"SORRY! bump "+CNAME[a.target.color]+" #"+(a.target.id+1);
+    if(a.k==="split"){ var pA="#"+(a.A.id+1)+"+"+a.a, pB="#"+(a.B.id+1)+"+"+a.b, f=a.first==="B"?pB:pA, s=a.first==="B"?pA:pB; return a.order?f+", then "+s:f+" & "+s; }   // the pawn listed first moves first
+    if(a.k==="pass")return"Don't swap — end turn"; return"?"; }
 
   // rendering
   var svg;
@@ -769,22 +782,32 @@ function playSorry(){
   }
   function buildPath(color,loc,n,dir){ var path=[],cur=loc; for(var s=0;s<n;s++){ cur=dir>0?stepFwd(color,cur):stepBack(color,cur); if(!cur)break; path.push(cur); } return path; }
   async function animMove(pawn,path){ for(var k=0;k<path.length;k++){ pawn.loc=path[k]; Sound.sfx("tick"); renderPawns(); await sleep(150); } }
-  async function applyAnim(a){ var color=a.p?a.p.color:a.A.color;
+  // slides: ANY move that ends on another colour's triangle slides (forward, backward, 11 switch, Sorry!)
+  async function applyAnim(a){ if(a.k==="pass") return; var color=a.p?a.p.color:a.A.color;
     if(a.k==="out"){ a.p.loc={t:"ring",i:START_EXIT[color]}; renderPawns(); await sleep(150); resolveLand(a.p,a.p.loc,true); renderPawns(); }
     else if(a.k==="fwd"){ await animMove(a.p,buildPath(color,a.p.loc,a.n,1)); resolveLand(a.p,a.p.loc,true); renderPawns(); }
-    else if(a.k==="back"){ await animMove(a.p,buildPath(color,a.p.loc,a.n,-1)); resolveLand(a.p,a.p.loc,false); renderPawns(); }
-    else if(a.k==="swap"){ var mi=a.p.loc.i,ti=a.target.loc.i; a.p.loc={t:"ring",i:ti}; a.target.loc={t:"ring",i:mi}; renderPawns(); await sleep(320); }
-    else if(a.k==="sorry"){ var ti2=a.target.loc.i; toStart(a.target); a.p.loc={t:"ring",i:ti2}; toast(CNAME[a.target.color]+" — SORRY!"); renderPawns(); await sleep(320); }
-    else if(a.k==="split"){ await animMove(a.A,buildPath(color,a.A.loc,a.a,1)); resolveLand(a.A,a.A.loc,true); renderPawns(); if(a.B.loc.t!=="start"&&a.B.loc.t!=="home"){ await animMove(a.B,buildPath(color,a.B.loc,a.b,1)); resolveLand(a.B,a.B.loc,true); renderPawns(); } }
+    else if(a.k==="back"){ await animMove(a.p,buildPath(color,a.p.loc,a.n,-1)); resolveLand(a.p,a.p.loc,true); renderPawns(); }
+    else if(a.k==="swap"){ var mi=a.p.loc.i,ti=a.target.loc.i; a.p.loc={t:"ring",i:ti}; a.target.loc={t:"ring",i:mi}; renderPawns(); await sleep(320); resolveLand(a.p,a.p.loc,true); if(a.target.loc.t==="ring") resolveLand(a.target,a.target.loc,true); renderPawns(); await sleep(320); }
+    else if(a.k==="sorry"){ var ti2=a.target.loc.i; toStart(a.target); a.p.loc={t:"ring",i:ti2}; toast(CNAME[a.target.color]+" — SORRY!"); renderPawns(); await sleep(320); resolveLand(a.p,a.p.loc,true); renderPawns(); await sleep(320); }
+    else if(a.k==="split"){ var fB=a.first==="B", X=fB?a.B:a.A, x=fB?a.b:a.a, Y=fB?a.A:a.B, y=fB?a.a:a.b;   // legal() picked an order that uses the full 7
+      await animMove(X,buildPath(color,X.loc,x,1)); resolveLand(X,X.loc,true); renderPawns(); if(Y.loc.t!=="start"&&Y.loc.t!=="home"){ await animMove(Y,buildPath(color,Y.loc,y,1)); resolveLand(Y,Y.loc,true); renderPawns(); } }
   }
-  function prog(color,loc){ if(loc.t==="start")return -1; if(loc.t==="home")return 100; if(loc.t==="safe")return 60+loc.j; return (loc.i-START_EXIT[color]+60)%60; }
-  function scoreA(a){ var color=a.p?a.p.color:a.A.color; var ev=function(p,dest){ var sc=0; if(!dest)return -999; if(dest.t==="home")sc+=200; else if(dest.t==="safe")sc+=60+dest.j*4; else if(dest.t==="ring"){ var sl=slideTri(dest.i); if(sl&&sl.color!==color){sc+=70+sl.cells.length*4; sc+=occAtRing(dest.i,p).length*20;} else sc+=occAtRing(dest.i,p).filter(function(o){return o.color!==color;}).length*55; sc+=prog(color,dest)*0.6; } return sc; };
+  // squares travelled from the Start exit (0) to the safety entrance (58); the square just past the entrance is -1 (a full lap to go)
+  function prog(color,loc){ if(loc.t==="start")return -1; if(loc.t==="home")return 100; if(loc.t==="safe")return 60+loc.j; return 58-(SAFE_ENTRY[color]-loc.i+60)%60; }
+  function simAfter(a){ if(a.k==="split") return a.first==="B"?splitRes(a.B,a.b,a.A,a.a):splitRes(a.A,a.a,a.B,a.b);
+    var locs=boardNow(), tl=a.target.loc;
+    if(a.k==="swap"){ locs.set(a.target,a.p.loc); simLand(locs,a.p,tl); var t=locs.get(a.target); if(t.t==="ring") simLand(locs,a.target,t); }
+    else { locs.set(a.target,{t:"start"}); simLand(locs,a.p,tl); }
+    return locs; }
+  function sweepSc(color,locs,skip){ var s=0; locs.forEach(function(l,p){ if(p!==skip&&l.t==="start"&&p.loc.t!=="start") s+=p.color===color?-60:20; }); return s; }   // sent to Start: rivals +20, own -60
+  function scoreA(a){ if(a.k==="pass") return 20; var color=a.p?a.p.color:a.A.color; var ev=function(p,dest){ var sc=0; if(!dest)return -999; if(dest.t==="home")sc+=200; else if(dest.t==="safe")sc+=60+dest.j*4; else if(dest.t==="ring"){ var sl=slideTri(dest.i); if(sl&&sl.color!==color){sc+=70+sl.cells.length*4; sc+=occAtRing(dest.i,p).length*20;} else sc+=occAtRing(dest.i,p).filter(function(o){return o.color!==color;}).length*55; sc+=prog(color,dest)*0.6; } return sc; };
     if(a.k==="out")return 55+occAtRing(START_EXIT[color]).filter(function(o){return o.color!==color;}).length*55;
     if(a.k==="fwd")return ev(a.p,travel(color,a.p.loc,a.n,1))+2;
-    if(a.k==="back"){ var d=travel(color,a.p.loc,a.n,-1); var bump=d&&d.t==="ring"?occAtRing(d.i,a.p).filter(function(o){return o.color!==color;}).length:0; return bump*55-8; }
-    if(a.k==="swap")return prog(color,a.target.loc)-prog(color,a.p.loc)+20;
-    if(a.k==="sorry")return 150+prog(a.target.color,a.target.loc);
-    if(a.k==="split")return ev(a.A,travel(color,a.A.loc,a.a,1))+ev(a.B,travel(color,a.B.loc,a.b,1));
+    if(a.k==="back"){ var d=travel(color,a.p.loc,a.n,-1); if(!d||d.t!=="ring") return -8; var L=boardNow(); simLand(L,a.p,d); return sweepSc(color,L,a.p)/20*55-8; }
+    if(a.k==="swap"){ var L2=simAfter(a), gain=prog(color,L2.get(a.p))-prog(color,a.p.loc); return (gain>0?gain+20:gain-20)+sweepSc(color,L2,a.p); }   // never switch backwards
+    if(a.k==="sorry")return 150+prog(a.target.color,a.target.loc)+sweepSc(color,simAfter(a),a.target);
+    if(a.k==="split"){ var L3=simAfter(a), own=0; pawns[color].forEach(function(p){ if(p.loc.t!=="start"&&L3.get(p).t==="start") own++; });   // a split may slide over its own pawn
+      return ev(a.A,travel(color,a.A.loc,a.a,1))+ev(a.B,travel(color,a.B.loc,a.b,1))-own*150; }
     return 0; }
 
   function wrapTxt(t,n){ var w=String(t).split(" "),lines=[],cur=""; w.forEach(function(x){ if((cur+" "+x).trim().length>n){ lines.push(cur.trim()); cur=x; } else cur=cur+" "+x; }); if(cur.trim()) lines.push(cur.trim()); return lines; }
@@ -830,7 +853,7 @@ function playSorry(){
         await applyAnim(act); moved=true;
         if(hasWon(c)){ over=true; var wn=seat[c]?players[seat[c]].name:CNAME[c]; setStatus('<span class="dot" style="background:'+COL[c]+'"></span> 🏆 '+wn+" wins!"); announceOver(wn); showPlayAgain(); return; }
       } else { setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+(seat[c]?players[seat[c]].name:CNAME[c])+" — no move"); await sleep(1100); }
-      if(v===2 && moved){ /* draw again, same player */ }
+      if(v===2){ /* official rules: a 2 always draws again (same player), even when it could not be played */ }
       else turn=(turn+1)%active.length;
       await sleep(300);
     }

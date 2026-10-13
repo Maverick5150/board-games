@@ -29,6 +29,8 @@
   h1{font-size:19px; margin:4px 0 2px; letter-spacing:2px; font-weight:900;}
   .sub{color:var(--muted); font-size:11px; margin-bottom:6px; text-align:center;}
   #boardWrap{width:min(96vw,560px); aspect-ratio:1/1; position:relative;}
+  /* the Sorry! skin paints a 21px frame (box-shadow) around the board: make room so it covers neither the status line nor the card, and fits the screen */
+  body.skin-sorry #boardWrap{width:min(calc(100vw - 58px),560px); margin:15px 0 21px;}
   svg{width:100%; height:100%; display:block;}
   .status{
     width:min(96vw,560px); min-height:36px; display:flex; align-items:center; justify-content:center;
@@ -182,6 +184,8 @@ function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.rand
 
 // ---- state ----
 let players=[], isHuman={}, pawns={}, turn=0, deck=[], card=null, gameOver=false, busy=false;
+let gen=0;   // game generation: bumped by startGame/loadGame so an old game's timers can't act on the new one
+function later(fn,ms){ const g=gen; return setTimeout(()=>{ if(g===gen) fn(); },ms); }
 
 // pawn = {color,id,loc}; loc = {t:'start'} | {t:'ring',i} | {t:'safe',j} | {t:'home'}
 function newPawns(){
@@ -243,6 +247,29 @@ function resolveLanding(mover,dest,allowSlide){
   for(const p of occ){ sendToStart(p); toast(NAME[p.color]+" bumped home!"); }
   mover.loc=dest;
 }
+// dry run of resolveLanding on a copy of the board (Map pawn -> loc)
+function simLanding(locs,mover,dest){
+  if(dest.t==='ring'){
+    const sl=slideTriAt(dest.i), slides=!!(sl && sl.color!==mover.color);
+    const hit=new Set(slides?sl.cells:[dest.i]);
+    for(const [p,l] of locs){ if(p!==mover && l.t==='ring' && hit.has(l.i)) locs.set(p,{t:'start'}); }
+    if(slides) dest={t:'ring',i:sl.cells[sl.cells.length-1]};
+  }
+  locs.set(mover,dest);
+}
+// 7 split: X moves x first, then Y moves y. Returns the board after both moves, or null if this order can't use
+// the full 7 (X's slide sent Y back to Start, or Y would end on one of its own pawns).
+function splitResult(X,x,Y,y){
+  const locs=new Map(allPawns().map(p=>[p,p.loc]));
+  const ownAt=(p,loc)=>loc.t!=='home' && pawns[p.color].some(q=>q!==p && sameCell(locs.get(q),loc));
+  const dX=travel(X.color,X.loc,x,1); if(!dX||ownAt(X,dX)) return null;
+  simLanding(locs,X,dX);
+  const yl=locs.get(Y); if(yl.t==='start') return null;
+  const dY=travel(Y.color,yl,y,1); if(!dY||ownAt(Y,dY)) return null;
+  simLanding(locs,Y,dY);
+  return locs;
+}
+function sameBoard(m1,m2){ for(const [p,l] of m1){ if(!sameCell(l,m2.get(p))) return false; } return true; }
 
 // ---- legal actions ----
 function legalActions(color,c){
@@ -251,7 +278,8 @@ function legalActions(color,c){
   const canLand=(p,loc)=> !ownPawnAt(color,loc,p);
   const pushFwd=(n)=>{ for(const p of onBoard){ const d=travel(color,p.loc,n,1); if(d&&canLand(p,d)) list.push({k:'fwd',p,n}); } };
   const pushBack=(n)=>{ for(const p of onBoard){ const d=travel(color,p.loc,n,-1); if(d&&canLand(p,d)) list.push({k:'back',p,n}); } };
-  const pushOut=()=>{ const ex={t:'ring',i:START_EXIT[color]}; for(const p of ps){ if(p.loc.t==='start' && canLand(p,ex)) list.push({k:'out',p}); } };
+  const inStart=ps.find(p=>p.loc.t==='start');   // pawns in Start are interchangeable: one option, not one per pawn
+  const pushOut=()=>{ const ex={t:'ring',i:START_EXIT[color]}; if(inStart && canLand(inStart,ex)) list.push({k:'out',p:inStart}); };
 
   if(c===1){ pushOut(); pushFwd(1); }
   else if(c===2){ pushOut(); pushFwd(2); }
@@ -263,29 +291,27 @@ function legalActions(color,c){
   else if(c===10){ pushFwd(10); pushBack(1); }
   else if(c===11){
     pushFwd(11);
+    const canFwd=list.length>0;
     const mine=onBoard.filter(p=>p.loc.t==='ring');
     for(const p of mine){ for(const op of allPawns()){ if(op.color!==color && op.loc.t==='ring') list.push({k:'swap',p,target:op}); } }
+    if(!canFwd && list.length) list.push({k:'pass'});   // official rules: when 11 forward is impossible, switching is optional
   }
   else if(c===7){
     pushFwd(7);
-    // splits: two distinct pawns, a+b=7
+    // splits: two distinct pawns, a+b=7, moved in an order that uses the full 7 (one option per distinct result)
     for(let ai=0;ai<onBoard.length;ai++){
-      for(let bi=0;bi<onBoard.length;bi++){
-        if(ai===bi) continue;
+      for(let bi=ai+1;bi<onBoard.length;bi++){
         const A=onBoard[ai], B=onBoard[bi];
         for(let a=1;a<=6;a++){
-          const b=7-a; if(b<1) continue;
-          const dA=travel(color,A.loc,a,1); if(!dA||!canLand(A,dA)) continue;
-          const dB=travel(color,B.loc,b,1); if(!dB||!canLand(B,dB)) continue;
-          if(sameCell(dA,dB) && dA.t!=='home') continue; // can't both land same non-home cell
-          if(a<=b) list.push({k:'split',A,a,B,b}); // dedupe by a<=b ordering
+          const b=7-a, rA=splitResult(A,a,B,b), rB=splitResult(B,b,A,a);
+          if(rA && rB && !sameBoard(rA,rB)){ list.push({k:'split',A,a,B,b,first:'A',order:true}); list.push({k:'split',A,a,B,b,first:'B',order:true}); }
+          else if(rA||rB) list.push({k:'split',A,a,B,b,first:rA?'A':'B'});
         }
       }
     }
   }
   else if(c==='sorry'){
-    const inStart=ps.filter(p=>p.loc.t==='start');
-    for(const p of inStart){ for(const op of allPawns()){ if(op.color!==color && op.loc.t==='ring') list.push({k:'sorry',p,target:op}); } }
+    if(inStart){ for(const op of allPawns()){ if(op.color!==color && op.loc.t==='ring') list.push({k:'sorry',p:inStart,target:op}); } }
   }
   return list;
 }
@@ -299,26 +325,31 @@ function buildPath(color,loc,n,dir){
 }
 function animateMove(pawn,path,onEnd){
   let k=0;
-  const it=()=>{ if(k>=path.length){ onEnd(); return; } pawn.loc=path[k++]; Sound.sfx("tick"); renderPawns(); setTimeout(it,STEP_MS); };
+  const it=()=>{ if(k>=path.length){ onEnd(); return; } pawn.loc=path[k++]; Sound.sfx("tick"); renderPawns(); later(it,STEP_MS); };
   it();
 }
+// Slides: ANY move that ends on another colour's triangle slides (forward, backward, 11 switch, Sorry!)
 function applyActionAnimated(a,done){
+  if(a.k==='pass'){ done(); return; }
   const color=a.p?a.p.color:a.A.color;
   if(a.k==='out'){
     a.p.loc={t:'ring',i:START_EXIT[color]}; renderPawns();
-    setTimeout(()=>{ resolveLanding(a.p,a.p.loc,true); renderPawns(); done(); }, STEP_MS);
+    later(()=>{ resolveLanding(a.p,a.p.loc,true); renderPawns(); done(); }, STEP_MS);
   } else if(a.k==='fwd'){
     animateMove(a.p, buildPath(color,a.p.loc,a.n,1), ()=>{ resolveLanding(a.p,a.p.loc,true); renderPawns(); done(); });
   } else if(a.k==='back'){
-    animateMove(a.p, buildPath(color,a.p.loc,a.n,-1), ()=>{ resolveLanding(a.p,a.p.loc,false); renderPawns(); done(); });
+    animateMove(a.p, buildPath(color,a.p.loc,a.n,-1), ()=>{ resolveLanding(a.p,a.p.loc,true); renderPawns(); done(); });
   } else if(a.k==='swap'){
-    const mi=a.p.loc.i, ti=a.target.loc.i; a.p.loc={t:'ring',i:ti}; a.target.loc={t:'ring',i:mi}; renderPawns(); setTimeout(done,320);
+    const mi=a.p.loc.i, ti=a.target.loc.i; a.p.loc={t:'ring',i:ti}; a.target.loc={t:'ring',i:mi}; renderPawns();
+    later(()=>{ resolveLanding(a.p,a.p.loc,true); if(a.target.loc.t==='ring') resolveLanding(a.target,a.target.loc,true); renderPawns(); later(done,320); },320);
   } else if(a.k==='sorry'){
-    const ti=a.target.loc.i; sendToStart(a.target); a.p.loc={t:'ring',i:ti}; toast(NAME[a.target.color]+" — SORRY!"); renderPawns(); setTimeout(done,320);
+    const ti=a.target.loc.i; sendToStart(a.target); a.p.loc={t:'ring',i:ti}; toast(NAME[a.target.color]+" — SORRY!"); renderPawns();
+    later(()=>{ resolveLanding(a.p,a.p.loc,true); renderPawns(); later(done,320); },320);
   } else if(a.k==='split'){
-    animateMove(a.A, buildPath(color,a.A.loc,a.a,1), ()=>{
-      resolveLanding(a.A,a.A.loc,true); renderPawns();
-      if(a.B.loc.t!=='start' && a.B.loc.t!=='home'){ animateMove(a.B, buildPath(color,a.B.loc,a.b,1), ()=>{ resolveLanding(a.B,a.B.loc,true); renderPawns(); done(); }); }
+    const [X,x,Y,y]=a.first==='B'?[a.B,a.b,a.A,a.a]:[a.A,a.a,a.B,a.b];   // legalActions picked an order that uses the full 7
+    animateMove(X, buildPath(color,X.loc,x,1), ()=>{
+      resolveLanding(X,X.loc,true); renderPawns();
+      if(Y.loc.t!=='start' && Y.loc.t!=='home'){ animateMove(Y, buildPath(color,Y.loc,y,1), ()=>{ resolveLanding(Y,Y.loc,true); renderPawns(); done(); }); }
       else done();
     });
   } else { done(); }
@@ -446,7 +477,7 @@ function beginTurn(){
   const c=curColor();
   setStatus(`${dot(c)} ${isHuman[c]?"<b>Your turn</b> — draw a card":NAME[c]+" (CPU)…"}`);
   if(isHuman[c]){ showDeck(); }
-  else { deckSlot.innerHTML=`<div class="cardFace small" style="border-color:${CSS[c]}"><div class="cv" style="color:${CSS[c]}">…</div></div>`; busy=true; setTimeout(aiTurn,1050); }
+  else { deckSlot.innerHTML=`<div class="cardFace small" style="border-color:${CSS[c]}"><div class="cv" style="color:${CSS[c]}">…</div></div>`; busy=true; later(aiTurn,1050); }
 }
 function nextTurn(){ turn=(turn+1)%players.length; beginTurn(); }
 
@@ -459,7 +490,7 @@ function humanDraw(){
     const acts=legalActions(c,v);
     if(acts.length===0){
       setStatus(`${dot(c)} Drew <b>${v==='sorry'?'SORRY!':v}</b> — no legal move`);
-      setTimeout(()=>{ busy=false; endTurnOrAgain(c,v,false); },1000);
+      later(()=>{ busy=false; endTurnOrAgain(c,v,false); },1000);
       return;
     }
     currentActions=acts;
@@ -487,7 +518,11 @@ function actionLabel(a){
   if(a.k==='back') return `#${a.p.id+1} ▸ back ${a.n}`;
   if(a.k==='swap') return `#${a.p.id+1} ⇄ ${NAME[a.target.color]} #${a.target.id+1}`;
   if(a.k==='sorry') return `SORRY! #${a.p.id+1} ▸ bump ${NAME[a.target.color]} #${a.target.id+1}`;
-  if(a.k==='split') return `#${a.A.id+1}+${a.a} & #${a.B.id+1}+${a.b}`;
+  if(a.k==='split'){   // the pawn listed first moves first
+    const pA=`#${a.A.id+1}+${a.a}`, pB=`#${a.B.id+1}+${a.b}`, [f,s]=a.first==='B'?[pB,pA]:[pA,pB];
+    return a.order?`${f}, then ${s}`:`${f} & ${s}`;
+  }
+  if(a.k==='pass') return "Don't swap — end turn";
   return "?";
 }
 function tapPawn(p){
@@ -501,15 +536,19 @@ function chooseAction(idx){
   busy=true; actionsEl.innerHTML=""; highlightPawns=new Set(); renderPawns();
   const c=curColor(), v=card;
   applyActionAnimated(a, ()=>{
-    if(hasWon(c)){ gameOver=true; Sound.sfx("win"); setStatus(`${dot(c)} <b>${isHuman[c]?"You win! 🎉":NAME[c]+" wins!"}</b>`); deckSlot.innerHTML=""; return; }
+    if(hasWon(c)){ declareWinner(c); return; }
     busy=false; endTurnOrAgain(c,v,true);
   });
 }
+function declareWinner(c){
+  gameOver=true; Sound.sfx("win"); setStatus(`${dot(c)} <b>${isHuman[c]?"You win! 🎉":NAME[c]+" wins!"}</b>`); deckSlot.innerHTML="";
+  Saves.del("sorry","auto"); lastSnap=null;   // a finished game is not offered as "Continue last game"
+}
 function endTurnOrAgain(c,v,moved){
-  if(v===2 && moved){
+  if(v===2){   // official rules: a 2 always draws again, even when it could not be played
     card=null; currentActions=[]; actionsEl.innerHTML="";
     setStatus(`${dot(c)} Drew a 2 — ${isHuman[c]?"<b>draw again!</b>":"draws again…"}`);
-    if(isHuman[c]){ showDeck(); } else { setTimeout(aiTurn,1050); }
+    if(isHuman[c]){ showDeck(); } else { later(aiTurn,1050); }
   } else {
     nextTurn();
   }
@@ -520,9 +559,23 @@ function progress(color,loc){
   if(loc.t==='start') return -1;
   if(loc.t==='home') return 100;
   if(loc.t==='safe') return 60+loc.j;
-  return (loc.i-START_EXIT[color]+60)%60; // 0..59
+  return 58-(SAFE_ENTRY[color]-loc.i+60)%60; // squares travelled from the Start exit (0) to the safety entrance (58); the square just past the entrance is -1 (a full lap to go)
+}
+// board after a swap / Sorry! / split (dry run with the same rules as applyActionAnimated)
+function simAfter(a){
+  if(a.k==='split') return a.first==='B'?splitResult(a.B,a.b,a.A,a.a):splitResult(a.A,a.a,a.B,a.b);
+  const locs=new Map(allPawns().map(p=>[p,p.loc])), tl=a.target.loc;
+  if(a.k==='swap'){ locs.set(a.target,a.p.loc); simLanding(locs,a.p,tl); const t=locs.get(a.target); if(t.t==='ring') simLanding(locs,a.target,t); }
+  else { locs.set(a.target,{t:'start'}); simLanding(locs,a.p,tl); }
+  return locs;
+}
+function sweepScore(color,locs,skip){ // pawns the move sends back to Start: rivals +20, own pawns -60
+  let s=0;
+  for(const [p,l] of locs){ if(p!==skip && l.t==='start' && p.loc.t!=='start') s+= p.color===color?-60:20; }
+  return s;
 }
 function scoreAction(a){
+  if(a.k==='pass') return 20;   // decline an 11 switch unless it gains ground
   const color=a.p?a.p.color:a.A.color;
   const evalFwd=(p,dest)=>{
     let sc=0;
@@ -538,28 +591,33 @@ function scoreAction(a){
   };
   if(a.k==='out') return 55 + (occupantsAtRing(START_EXIT[color]).filter(o=>o.color!==color).length*55);
   if(a.k==='fwd') return evalFwd(a.p, travel(color,a.p.loc,a.n,1)) + 2;
-  if(a.k==='back'){ const d=travel(color,a.p.loc,a.n,-1); const bump=d.t==='ring'?occupantsAtRing(d.i,a.p).filter(o=>o.color!==color).length:0; return bump*55 - 8; }
-  if(a.k==='swap'){ return (progress(color,a.target.loc)-progress(color,a.p.loc)) + 20; }
-  if(a.k==='sorry') return 150 + progress(a.target.color,a.target.loc);
-  if(a.k==='split') return evalFwd(a.A,travel(color,a.A.loc,a.a,1)) + evalFwd(a.B,travel(color,a.B.loc,a.b,1));
+  if(a.k==='back'){ const d=travel(color,a.p.loc,a.n,-1); if(d.t!=='ring') return -8; const L=new Map(allPawns().map(p=>[p,p.loc])); simLanding(L,a.p,d); return sweepScore(color,L,a.p)/20*55 - 8; }
+  if(a.k==='swap'){ const L=simAfter(a), gain=progress(color,L.get(a.p))-progress(color,a.p.loc); return (gain>0?gain+20:gain-20) + sweepScore(color,L,a.p); }   // never switch backwards
+  if(a.k==='sorry') return 150 + progress(a.target.color,a.target.loc) + sweepScore(color,simAfter(a),a.target);
+  if(a.k==='split'){
+    let own=0; const L=simAfter(a);
+    for(const p of pawns[color]){ if(p.loc.t!=='start' && L.get(p).t==='start') own++; }   // a split may slide over its own pawn
+    return evalFwd(a.A,travel(color,a.A.loc,a.a,1)) + evalFwd(a.B,travel(color,a.B.loc,a.b,1)) - own*150;
+  }
   return 0;
 }
 function aiTurn(){
+  if(gameOver||isHuman[curColor()]) return;
   const c=curColor();
   animateDraw(()=>{
     const v=drawCard(); showCard(v);
     const acts=legalActions(c,v);
     if(acts.length===0){
       setStatus(`${dot(c)} ${NAME[c]} drew ${v==='sorry'?'SORRY!':v} — no move`);
-      setTimeout(()=>{ busy=false; endTurnOrAgain(c,v,false); },1600);
+      later(()=>{ busy=false; endTurnOrAgain(c,v,false); },1600);
       return;
     }
     let best=acts[0], bs=-1e9;
     for(const a of acts){ const s=scoreAction(a); if(s>bs){bs=s;best=a;} }
     setStatus(`${dot(c)} ${NAME[c]} drew <b>${v==='sorry'?'SORRY!':v}</b>`);
-    setTimeout(()=>{                // hold on the drawn card so you can read it before the CPU moves
+    later(()=>{                // hold on the drawn card so you can read it before the CPU moves
       applyActionAnimated(best, ()=>{
-        if(hasWon(c)){ gameOver=true; Sound.sfx("win"); setStatus(`${dot(c)} <b>${NAME[c]} wins!</b>`); deckSlot.innerHTML=""; return; }
+        if(hasWon(c)){ declareWinner(c); return; }
         busy=false; endTurnOrAgain(c,v,true);
       });
     },1500);
@@ -568,10 +626,13 @@ function aiTurn(){
 
 // ---- animations ----
 function animateDraw(cb){ Sound.sfx("card");
-  const col=CSS[curColor()];
+  const col=CSS[curColor()], g=gen;
   let n=0; deckSlot.innerHTML=`<div class="cardFace" style="border-color:${col}"><div class="cv" style="color:${col}">?</div></div>`;
   const face=deckSlot.querySelector(".cv");
-  const iv=setInterval(()=>{ face.textContent=String(1+Math.floor(Math.random()*9)); if(++n>=5){ clearInterval(iv); cb(); } },65);
+  const iv=setInterval(()=>{
+    if(g!==gen){ clearInterval(iv); return; }   // a new game was started / loaded: drop this old draw
+    face.textContent=String(1+Math.floor(Math.random()*9)); if(++n>=5){ clearInterval(iv); cb(); }
+  },65);
 }
 
 // ---- setup ----
@@ -593,6 +654,7 @@ const saveBar=Saves.bar({game:"sorry",el:document.getElementById("svbar"),
   getSnapshot:()=>(armed&&!gameOver)?lastSnap:null,
   loadSnapshot:d=>{ Sound.skip(); loadGame(d); document.getElementById("setup").style.display="none"; }});
 function loadGame(d){
+  gen++;   // the previous game's pending timers must not act on the loaded one
   players=d.players; isHuman=d.isHuman; pawns=d.pawns; turn=d.turn; deck=d.deck; humanCount=d.humanCount||humanCount; cpuCount=d.cpuCount!=null?d.cpuCount:cpuCount;
   card=null; gameOver=false; busy=false; armed=true;
   document.getElementById("legend").innerHTML=players.map(c=>`<span>${dot(c)}${NAME[c]}${isHuman[c]?" (you)":" CPU"}</span>`).join("");
@@ -608,9 +670,10 @@ document.getElementById("menuBtn").addEventListener("click",()=>{
 });
 
 function startGame(humans, cpus){
+  gen++;   // the previous game's pending timers must not act on this one
   const all=["red","blue","yellow","green"];
   let total=Math.min(4, Math.max(2, humans+(cpus||0)));
-  players = all.slice(0, total);
+  players = total===2 ? ["red","yellow"] : all.slice(0, total);   // 2 players sit on opposite sides (side-by-side seats favour one colour)
   isHuman={}; players.forEach((c,i)=>isHuman[c]=i<humans);
   newPawns(); turn=0; deck=shuffle(buildDeck()); card=null; gameOver=false; busy=false;
   document.getElementById("legend").innerHTML=players.map(c=>`<span>${dot(c)}${NAME[c]}${isHuman[c]?" (you)":" CPU"}</span>`).join("");
