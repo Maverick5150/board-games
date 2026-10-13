@@ -922,44 +922,53 @@ function playMonopoly(){
   async function payBank(c,amt){ cash[c]-=amt; if(R.fpJackpot) fpPool+=amt; if(cash[c]<0) await resolveDebt(c,null); }
   async function payTo(c,to,amt){ cash[c]-=amt; cash[to]+=amt; if(cash[c]<0) await resolveDebt(c,to); }
   function liquidatable(c){ var v=cash[c]; for(var i=0;i<40;i++) if(owner[i]===c){ var s=BOARD[i]; if(s.t==="prop"&&houses[i]>0) v+=Math.floor(houses[i]*s.house/2); if(!mort[i]) v+=Math.floor((s.price||0)/2); } return v; }
-  function aiRaise(c){ var guard=200; while(cash[c]<0 && guard-->0){ var best=-1,bh=0; for(var i=0;i<40;i++) if(owner[i]===c&&BOARD[i].t==="prop"&&houses[i]>bh){bh=houses[i];best=i;} if(best>=0){ sellHouse(c,best); continue; } var did=false; for(var j=0;j<40;j++) if(owner[j]===c&&!mort[j]&&(BOARD[j].t!=="prop"||houses[j]===0)){ doMort(c,j); did=true; break; } if(!did) break; } }
+  function aiRaise(c){ var guard=200; while(cash[c]<0 && guard-->0){ var best=-1,bh=0; for(var i=0;i<40;i++) if(owner[i]===c&&BOARD[i].t==="prop"&&houses[i]>bh){bh=houses[i];best=i;} if(best>=0){ sellHouse(c,best); continue; } var did=false; for(var j=0;j<40;j++) if(owner[j]===c&&!mort[j]&&groupBare(j)){ doMort(c,j); did=true; break; } if(!did) break; } }
+  function sellLabel(i){ return (hotelShort(i)?"Sell hotel — bank has only "+Math.max(0,housesLeft)+" houses":"Sell a building")+" (+"+money(sellGain(i))+")"; }
   function propActions(c,i,debt){ var s=BOARD[i], a=[];
-    if(debt){ if(s.t==="prop"&&houses[i]>0) a.push({id:"s"+i,label:"Sell a building (+"+money(Math.floor(s.house/2))+")"}); else if(!mort[i]) a.push({id:"m"+i,label:"Mortgage (+"+money(s.mort)+")",color:"red"}); return a; }
+    if(debt){ if(s.t==="prop"&&houses[i]>0){ if(canSell(c,i)) a.push({id:"s"+i,label:sellLabel(i)}); } else if(!mort[i]&&groupBare(i)) a.push({id:"m"+i,label:"Mortgage (+"+money(s.mort)+")",color:"red"}); return a; }
     if(canBuild(c,i)&&cash[c]>=s.house) a.push({id:"b"+i,label:(houses[i]===4?"🏨 Build Hotel":"🏠 Build House")+" — "+money(s.house),color:"green"});
-    if(s.t==="prop"&&houses[i]>0&&canSell(c,i)) a.push({id:"s"+i,label:"Sell a building (+"+money(Math.floor(s.house/2))+")"});
-    if(!mort[i]&&(s.t!=="prop"||houses[i]===0)) a.push({id:"m"+i,label:"Mortgage (+"+money(s.mort)+")",color:"red"});
+    if(s.t==="prop"&&houses[i]>0&&canSell(c,i)) a.push({id:"s"+i,label:sellLabel(i)});
+    if(!mort[i]&&groupBare(i)) a.push({id:"m"+i,label:"Mortgage (+"+money(s.mort)+")",color:"red"});
     if(mort[i]&&cash[c]>=Math.ceil(s.mort*1.1)) a.push({id:"u"+i,label:"Lift mortgage — "+money(Math.ceil(s.mort*1.1)),color:"green"});
     return a; }
   function propList(c,debt){ var arr=[]; for(var i=0;i<40;i++) if(owner[i]===c) arr.push({i:i,h:houses[i],m:mort[i],actions:propActions(c,i,debt)}); return arr; }
   async function resolveDebt(c,creditor){
     if(human(c)){
       while(cash[c]<0){
-        if(liquidatable(c)<0){ declareBankrupt(c,creditor); return; }
+        if(liquidatable(c)<0){ await goBankrupt(c,creditor); return; }
         var pick=await ask(c,"You owe "+money(-cash[c])+" more","Tap a property to sell buildings / mortgage, or declare bankruptcy",[{id:"bankrupt",label:"❌ Declare Bankruptcy"}],{kind:"manage",props:propList(c,true),extra:[{id:"bankrupt",label:"❌ Declare Bankruptcy",color:"red"}]});
-        if(!pick.id||pick.id==="bankrupt"){ declareBankrupt(c,creditor); return; }
+        if(!pick.id||pick.id==="bankrupt"){ await goBankrupt(c,creditor); return; }
         var op=pick.id[0], idx=parseInt(pick.id.slice(1),10);
         if(owner[idx]===c){ if(op==="s") sellHouse(c,idx); else if(op==="m") doMort(c,idx); }
         renderBoard(); turnBanner(c);
       }
-    } else { aiRaise(c); if(cash[c]<0) declareBankrupt(c,creditor); }
+    } else { aiRaise(c); if(cash[c]<0) await goBankrupt(c,creditor); }
   }
+  // official: what a player owes the bank and can't pay -> the bank auctions every deed taken (not with the "No auctions" house rule)
+  async function goBankrupt(c,creditor){ var lots=declareBankrupt(c,creditor); if(!creditor&&!R.noAuction&&alive().length>1){ for(var n=0;n<lots.length;n++) await auction(lots[n]); } }
   function declareBankrupt(c,creditor){
     toast(nm(c)+" is bankrupt!");
-    var refund=0;
+    var refund=0, lots=[];
     for(var i=0;i<40;i++) if(owner[i]===c && BOARD[i].t==="prop" && houses[i]>0){ refund+=Math.floor(houses[i]*BOARD[i].house/2); if(houses[i]===5)hotelsLeft++; else housesLeft+=houses[i]; houses[i]=0; }
     if(creditor){ cash[creditor]+=cash[c]+refund; jokers[creditor]+=jokers[c]; for(var j=0;j<40;j++) if(owner[j]===c) owner[j]=creditor; }
-    else { for(var k=0;k<40;k++) if(owner[k]===c){ owner[k]=null; mort[k]=false; } for(var jk=0;jk<jokers[c];jk++) returnJoker(); }
+    else { for(var k=0;k<40;k++) if(owner[k]===c){ owner[k]=null; mort[k]=false; lots.push(k); } for(var jk=0;jk<jokers[c];jk++) returnJoker(); }
     cash[c]=0; jokers[c]=0; bankrupt[c]=true;
     if(seat[c]) send({t:"wait", pid:seat[c], msg:"You went bankrupt — game over for you."});
     renderBoard();
+    return lots;
   }
 
   // ---------- build / mortgage ----------
-  function canBuild(c,i){ var s=BOARD[i]; if(s.t!=="prop"||owner[i]!==c) return false; if(!ownsGroup(c,s.g)) return false; if(GROUPS[s.g].some(function(x){return mort[x];})) return false; if(houses[i]>=5) return false; if(houses[i]===4){ return R.unlimited||hotelsLeft>0; } if(!R.unlimited&&housesLeft<=0) return false; if(!R.evenBuild) return true; var min=Math.min.apply(null,GROUPS[s.g].map(function(x){return houses[x];})); return houses[i]===min; }
+  function canBuild(c,i){ var s=BOARD[i]; if(s.t!=="prop"||owner[i]!==c) return false; if(!ownsGroup(c,s.g)) return false; if(GROUPS[s.g].some(function(x){return mort[x];})) return false; if(houses[i]>=5) return false; if(houses[i]===4){ if(R.evenBuild&&GROUPS[s.g].some(function(x){return houses[x]<4;})) return false; return R.unlimited||hotelsLeft>0; } if(!R.unlimited&&housesLeft<=0) return false; if(!R.evenBuild) return true; var min=Math.min.apply(null,GROUPS[s.g].map(function(x){return houses[x];})); return houses[i]===min; }
   function buildHouse(c,i){ var s=BOARD[i]; if(!canBuild(c,i)||cash[c]<s.house) return; cash[c]-=s.house; if(houses[i]===4){ houses[i]=5; hotelsLeft--; housesLeft+=4; } else { houses[i]++; housesLeft--; } }
   function canSell(c,i){ var s=BOARD[i]; if(s.t!=="prop"||owner[i]!==c||houses[i]<=0) return false; if(!R.evenBuild) return true; var max=Math.max.apply(null,GROUPS[s.g].map(function(x){return houses[x];})); return houses[i]===max; }
-  function sellHouse(c,i){ if(houses[i]<=0) return; cash[c]+=Math.floor(BOARD[i].house/2); if(houses[i]===5){ houses[i]=4; hotelsLeft++; housesLeft-=4; } else { houses[i]--; housesLeft++; } }
-  function doMort(c,i){ var s=BOARD[i]; if(owner[i]!==c||mort[i]) return; if(s.t==="prop"&&houses[i]>0){ while(houses[i]>0) sellHouse(c,i); } mort[i]=true; cash[c]+=s.mort; }
+  // a hotel sold back is exchanged for 4 houses; in a housing shortage it is sold down to the houses the bank has left
+  function hotelShort(i){ return houses[i]===5 && !R.unlimited && housesLeft<4; }
+  function sellGain(i){ var half=Math.floor(BOARD[i].house/2); return hotelShort(i)?(5-Math.max(0,housesLeft))*half:half; }
+  function sellHouse(c,i){ if(!canSell(c,i)) return; cash[c]+=sellGain(i); if(houses[i]===5){ var back=R.unlimited?4:Math.min(4,Math.max(0,housesLeft)); houses[i]=back; hotelsLeft++; housesLeft-=back; } else { houses[i]--; housesLeft++; } }
+  // official: every building in the colour group must be sold before any lot of it is mortgaged (or traded)
+  function groupBare(i){ var s=BOARD[i]; return s.t!=="prop" || GROUPS[s.g].every(function(x){return houses[x]===0;}); }
+  function doMort(c,i){ var s=BOARD[i]; if(owner[i]!==c||mort[i]||!groupBare(i)) return; mort[i]=true; cash[c]+=s.mort; }
   function unMort(c,i){ var s=BOARD[i]; if(owner[i]!==c||!mort[i]) return; var cost=Math.ceil(s.mort*1.1); if(cash[c]<cost) return; cash[c]-=cost; mort[i]=false; }
   async function manage(c){
     while(true){
@@ -982,7 +991,8 @@ function playMonopoly(){
   async function auction(i){
     toast("Auction: "+BOARD[i].n);
     var bidders=alive().slice(); var price=0, high=null, idx=0;
-    while(bidders.length>1){
+    // every player gets the chance to bid: it ends only when no one is left, or only the high bidder is left
+    while(bidders.length>1 || (bidders.length===1 && high!==bidders[0])){
       var c=bidders[idx%bidders.length];
       var need=price+(price<20?5:10);
       setGameCenter(deedBox(i,"🔨 Auction — "+(price?"high bid "+money(price)+" by "+esc(nm(high)):"no bids yet")+" · "+esc(nm(c))+" to bid"));
@@ -994,9 +1004,10 @@ function playMonopoly(){
         var pk=await ask(c,"Auction: "+BOARD[i].n,"High bid "+(price?money(price)+" by "+nm(high):"none"),opts);
         bid = pk.id==="bid";
       } else { await sleep(500); var val=aiAuctionVal(c,i); bid = (need<=val && cash[c]>=need); }
-      if(bid){ price=need; high=c; idx++; } else { bidders=bidders.filter(function(x){return x!==c;}); }
+      if(bid){ price=need; high=c; idx++; } else { var at=idx%bidders.length; bidders.splice(at,1); idx=bidders.length?at%bidders.length:0; }   // the next bidder moves up into this seat
     }
     if(high!=null){ cash[high]-=price; owner[i]=high; toast(nm(high)+" wins "+BOARD[i].n+" for "+money(price)); }
+    else toast("No bids — "+BOARD[i].n+" stays unowned");
     renderBoard();
   }
   function aiAuctionVal(c,i){ var s=BOARD[i]; var v=s.price; if(s.t==="prop"){ var owned=GROUPS[s.g].filter(function(x){return owner[x]===c;}).length; if(owned>0) v=Math.floor(s.price*(1+0.4*owned)); } if(s.t==="rr") v=Math.floor(s.price*1.2); return Math.min(v,Math.max(0,cash[c]-50)); }
@@ -1091,6 +1102,10 @@ function playMonopoly(){
     var cg=Math.max(0,Math.min(cash[c],parseInt(d.cg,10)||0)), cr=Math.max(0,Math.min(cash[p],parseInt(d.cr,10)||0));
     var jg=(d.jg&&jokers[c]>0)?1:0, jr=(d.jr&&jokers[p]>0)?1:0;
     if(!give.length&&!get.length&&!cg&&!cr&&!jg&&!jr) return;
+    // whoever receives a mortgaged deed pays the bank 10% interest at once, so each side must be able to cover it
+    var fee=function(list){ return list.filter(function(i){return mort[i];}).reduce(function(a,i){return a+Math.ceil(BOARD[i].mort*0.1);},0); };
+    if(cash[c]-cg+cr<fee(get)){ toast(nm(c)+" can’t cover the 10% interest on the mortgaged deed"); return; }
+    if(cash[p]-cr+cg<fee(give)){ toast(nm(p)+" can’t cover the 10% interest on the mortgaged deed"); return; }
     toast(nm(c)+" offers a trade to "+nm(p));
     setGameCenter('<div class="mtradebox"><b>🤝 Trade offer</b><div style="margin-top:1vh"><b>'+esc(nm(c))+' gives:</b> '+esc(sumTxt(give,cg,jg))+'</div><div style="margin-top:.8vh"><b>'+esc(nm(p))+' gives:</b> '+esc(sumTxt(get,cr,jr))+'</div><div style="margin-top:1vh;color:#555">'+esc(nm(p))+' is deciding…</div></div>');
     var accept;
@@ -1115,7 +1130,7 @@ function playMonopoly(){
       doublesCount=0;
       // play this player's turn (may repeat on doubles)
       var endTurn=false;
-      while(!endTurn && !over){
+      while(!endTurn && !over && !bankrupt[c] && alive().length>1){
         centerView=""; renderBoard(); turnBanner(c, injail[c]?"in Jail":"");
         active.forEach(function(x){ if(x!==c && seat[x]) waitPhone(x, nm(c)+" is playing…", c); });
         // jail handling
@@ -1128,7 +1143,7 @@ function playMonopoly(){
           else if(jp.id==="pay"){ await payBank(c,50); injail[c]=false; jailT[c]=0; }
           else { // roll for doubles
             await rollDice(c); if(dice[0]===dice[1]){ injail[c]=false; jailT[c]=0; toast(nm(c)+" rolled doubles — out!"); await stepTo(c,dice[0]+dice[1]); await resolveLanding(c,false); endTurn=true; break; }
-            else { jailT[c]++; if(jailT[c]>=3){ await payBank(c,50); injail[c]=false; toast(nm(c)+" pays $50, leaves Jail"); await stepTo(c,dice[0]+dice[1]); await resolveLanding(c,false); } else { toast(nm(c)+" stays in Jail"); } endTurn=true; break; }
+            else { jailT[c]++; if(jailT[c]>=3){ await payBank(c,50); if(bankrupt[c]){ endTurn=true; break; } injail[c]=false; jailT[c]=0; toast(nm(c)+" pays $50, leaves Jail"); await stepTo(c,dice[0]+dice[1]); await resolveLanding(c,false); } else { toast(nm(c)+" stays in Jail"); } endTurn=true; break; }   // bankrupted by the fine: no move
           }
         }
         // pre-roll menu
