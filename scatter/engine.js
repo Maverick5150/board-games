@@ -55,18 +55,31 @@ function versionOpts(id,extra){ var v=VERSIONS.filter(function(x){ return x.id==
 function fold(s){ s=String(s==null?"":s); try{ s=s.normalize("NFD").replace(/[̀-ͯ]/g,""); }catch(e){} return s.toLowerCase().replace(/&/g," and ").replace(/[^a-z0-9 ]+/g," ").replace(/\s+/g," ").trim(); }
 var ART={a:1,an:1,the:1};
 /* a leading "a / an / the" is dropped only when a space follows it ("A-line skirt" starts with A) */
-function words(s){ var raw=String(s==null?"":s), w=fold(raw).split(" ").filter(Boolean); if(w.length>1&&ART[w[0]]&&/^\s*(a|an|the)\s/i.test(raw)) w.shift(); else if(w.length===1&&ART[w[0]]) return []; return w; }
-function stemWord(w){
-  if(w.length>4&&/ies$/.test(w)) w=w.replace(/ies$/,"y"); else if(w.length>4&&/(ches|shes|xes|zes|sses)$/.test(w)) w=w.replace(/es$/,""); else if(w.length>3&&/s$/.test(w)&&!/ss$/.test(w)) w=w.replace(/s$/,"");
-  // fold what is left the same way for the singular and the plural: cookie/cookies, tomato/tomatoes, bus/buses, virus/viruses, shoe/shoes
-  if(w.length>3&&/ie$/.test(w)) w=w.slice(0,-2)+"y";
-  if(w.length>3&&/[os]e$/.test(w)) w=w.slice(0,-1);
-  if(w.length>3&&/s$/.test(w)&&!/ss$/.test(w)) w=w.slice(0,-1);
-  return w;
+/* (leading quotes or other punctuation are skipped: "The Hobbit" in quotes starts with H) */
+function words(s){ var raw=String(s==null?"":s), w=fold(raw).split(" ").filter(Boolean); if(w.length>1&&ART[w[0]]&&/^[^a-z0-9]*(a|an|the)\s/i.test(raw)) w.shift(); else if(w.length===1&&ART[w[0]]) return []; return w; }
+/* plurals: only a word that ends in s is ever changed, so Marie/Mary, Louise/Louis, Jesse/Jess, Tense/Ten stay different answers.
+   The possible singulars of a plural: cats -> cat; shoes -> shoe; cookies -> cookie or cooky; and after o, s, x, z, ch, sh
+   also without "es": tomatoes -> tomato, buses -> bus, boxes -> box, churches -> church (quizzes -> quiz) */
+function singulars(w){
+  var out=[]; if(w.length<=3||!/s$/.test(w)||/ss$/.test(w)) return out;
+  out.push(w.slice(0,-1));
+  if(w.length>4&&/ies$/.test(w)) out.push(w.slice(0,-3)+"y");
+  else if(w.length>=5&&/([osxz]|ch|sh)es$/.test(w)){ out.push(w.slice(0,-2)); if(/zzes$/.test(w)) out.push(w.slice(0,-3)); }
+  return out;
 }
-function keyOf(raw,strict){ var w=words(raw); if(!w.length) return ""; if(strict!=="exact"){ w[w.length-1]=stemWord(w[w.length-1]); } return w.join(" "); }
+/* two folded answers name the same thing up to a plural: every word but the last is identical, and the last words are equal,
+   one is a plural of the other, or both are plurals of the same word (tomatoes/tomatos) */
+function pluralSame(a,b){
+  if(a===b) return true; if(!a||!b) return false;
+  var i=a.lastIndexOf(" "), j=b.lastIndexOf(" "); if(a.slice(0,i+1)!==b.slice(0,j+1)) return false;
+  var x=a.slice(i+1), y=b.slice(j+1), sx=singulars(x), sy=singulars(y);
+  return sx.indexOf(y)>=0||sy.indexOf(x)>=0||sx.some(function(t){ return sy.indexOf(t)>=0; });
+}
+/* an answer's key: its folded words without a leading article. Plurals are matched by same()/eqKey(), never by changing the key */
+function keyOf(raw,strict){ return words(raw).join(" "); }
+function eqKey(a,b,strict){ return !!a&&!!b&&(a===b||(strict!=="exact"&&pluralSame(a,b))); }
 function lev(a,b){ var m=a.length,n=b.length,i,j; if(Math.abs(m-n)>1) return 2; var d=[]; for(i=0;i<=m;i++){ d[i]=[i]; } for(j=1;j<=n;j++) d[0][j]=j; for(i=1;i<=m;i++) for(j=1;j<=n;j++) d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1)); return d[m][n]; }
-function same(a,b,strict){ if(!a||!b) return false; if(a===b) return true; if(strict==="fuzzy"&&a.length>=6&&b.length>=6&&lev(a,b)<=1) return true; return false; }
+function same(a,b,strict){ if(!a||!b) return false; if(eqKey(a,b,strict)) return true; if(strict==="fuzzy"&&a.length>=6&&b.length>=6&&lev(a,b)<=1) return true; return false; }
 function startsWith(raw,letter){ var w=words(raw); return !!w.length&&w[0][0]===letter.toLowerCase(); }
 function letterWords(raw,letter){ var w=words(raw), n=0; w.forEach(function(x){ if(x[0]===letter.toLowerCase()) n++; }); return n; }
 
@@ -110,7 +123,8 @@ function startRound(G,opts){
     var cats;
     if(o.listMode==="same"&&G.listCats&&!opts.newList) cats=G.listCats; else { cats=pickCats(G,o.cats); cats.forEach(function(c){ G.usedCats.push(c.id); }); G.listCats=cats; }
     var r=rollLetter(G); G.star=r.star; G.starFree=r.free; G.letter=r.letter; G.usedLetters.push(r.letter);
-    G.starBy=r.star?(G.round-1)%G.players.length:-1;   // players take turns rolling: the roller of a star picks the letter before anyone writes
+    // players take turns rolling: the roller of a star picks the letter before anyone writes (in a tie-break only the tied leaders roll)
+    G.starBy=!r.star?-1:G.tieActive?G.tieActive[((G.tieRounds||1)-1)%G.tieActive.length]:(G.round-1)%G.players.length;
     cats.forEach(function(c,i){ slots.push({label:c.text,letter:r.letter,bank:c,idx:i}); });
   }
   G.slots=slots;
@@ -148,15 +162,15 @@ function allFilled(G,p){ return filledCount(G,p)===G.slots.length; }
 /* ---------------- computer players ---------------- */
 var SKILL={easy:{rate:0.6,deep:0.15},normal:{rate:0.85,deep:0.5},hard:{rate:0.97,deep:0.8}};
 function cpuAnswers(G,p){
-  var o=G.o, sk=SKILL[o.cpuSkill]||SKILL.normal, used={}, out=[];
+  var o=G.o, sk=SKILL[o.cpuSkill]||SKILL.normal, used=[], out=[];   // keys already written on this sheet (never twice, plurals included)
   G.slots.forEach(function(s,i){
     var row=[];
     for(var k=0;k<o.answersPer;k++){
-      var pool=((s.bank.answers||{})[s.letter]||[]).filter(function(x){ return !used[keyOf(x,"plurals")]; });
+      var pool=((s.bank.answers||{})[s.letter]||[]).filter(function(x){ var kx=keyOf(x); return !used.some(function(u){ return pluralSame(u,kx); }); });
       if(!pool.length||G.rnd()>(k===0?sk.rate:sk.rate*0.6)){ row.push(""); continue; }
       // "deep" players prefer the less obvious answers further down the list (more likely to be unique)
       var idx=G.rnd()<sk.deep?Math.floor(G.rnd()*pool.length):Math.floor(G.rnd()*Math.min(2,pool.length));
-      var ans=pool[idx]; used[keyOf(ans,"plurals")]=1; row.push(ans);
+      var ans=pool[idx]; used.push(keyOf(ans)); row.push(ans);
     }
     out.push(row);
   });
@@ -167,27 +181,59 @@ function cpuFillAll(G){ G.players.forEach(function(p){ if(!p.human&&inPlay(G,p.i
 function inPlay(G,id){ return !G.tieActive||G.tieActive.indexOf(id)>=0; }
 
 /* ---------------- judging ---------------- */
-function inBank(s,raw){ var arr=((s.bank&&s.bank.answers)||{})[s.letter]||[]; var k=keyOf(raw,"plurals"); return arr.some(function(x){ return keyOf(x,"plurals")===k; }); }
-function inBankAny(s,raw){ var a=(s.bank&&s.bank.answers)||{}, k=keyOf(raw,"plurals"); return Object.keys(a).some(function(L){ return a[L].some(function(x){ return keyOf(x,"plurals")===k; }); }); }
-/* the computers' dictionary: every word used in the answer bank and the category names */
-var VOCAB=null;
+function inList(arr,k){ return !!k&&arr.some(function(x){ return pluralSame(keyOf(x),k); }); }
+function inBank(s,raw){ return inList(((s.bank&&s.bank.answers)||{})[s.letter]||[],keyOf(raw)); }
+function inBankAny(s,raw){ var a=(s.bank&&s.bank.answers)||{}, k=keyOf(raw); return Object.keys(a).some(function(L){ return inList(a[L],k); }); }
+/* the computers' knowledge, built once from the bank (words are stored with their singulars, so plurals are found too):
+   VOCAB every word of the answers and category names; CATWORDS[id] the words of one category */
+var VOCAB=null, CATWORDS={};
+function addWord(v,w){ v[w]=1; singulars(w).forEach(function(t){ v[t]=1; }); }
+function hasWord(v,w){ return !!v[w]||singulars(w).some(function(t){ return !!v[t]; }); }
 function vocab(){
-  if(VOCAB) return VOCAB; var v={}, add=function(t){ words(t).forEach(function(w){ v[w]=1; v[stemWord(w)]=1; }); };
+  if(VOCAB) return VOCAB; var v={}, add=function(t){ words(t).forEach(function(w){ addWord(v,w); }); };
   bank().forEach(function(c){ add(c.text); Object.keys(c.answers||{}).forEach(function(L){ c.answers[L].forEach(add); }); });
   if(bank().length) VOCAB=v; return v;
 }
-function knownWord(w){ var v=vocab(); return !!(v[w]||v[stemWord(w)])||/^[0-9]+$/.test(w); }
+function knownWord(w){ return hasWord(vocab(),w)||/^[0-9]+$/.test(w); }
 function knownWords(raw){ var w=words(raw); return !!w.length&&w.every(knownWord); }
-/* clearly made-up: an unknown word that mixes letters and digits, has no vowel, repeats a letter 3 times or strings 6 consonants together */
-function madeUp(raw){ return words(raw).some(function(w){ return !knownWord(w)&&((w.length>=3&&/[0-9]/.test(w)&&/[a-z]/.test(w))||(w.length>=4&&!/[aeiouy]/.test(w))||/([a-z])\1\1/.test(w)||/[bcdfghjklmnpqrstvwxz]{6}/.test(w)); }); }
-/* a computer accepts an answer it knows for this category, or one made of real words; it rejects words it has never seen (no coin flips) */
-function cpuJudge(G,s,raw){ return inBank(s,raw)||(G.o.startRule!=="must"&&inBankAny(s,raw))||knownWords(raw); }
+/* the answer shares a real word with the category's name or answers ("Tiger costume" for "A Halloween costume") */
+var FILLER={the:1,and:1,for:1,with:1,from:1,you:1,your:1,our:1,its:1,his:1,her:1,not:1,off:1,out:1,that:1,are:1,can:1,thing:1,things:1,something:1,who:1,what:1,which:1,this:1,these:1,those:1,people:1,kind:1,kinds:1,type:1,types:1,famous:1,word:1,words:1,name:1,names:1};
+function catWords(c){
+  if(!c) return {}; if(c.id&&CATWORDS[c.id]) return CATWORDS[c.id];
+  var v={}, add=function(t){ words(t).forEach(function(w){ if(w.length>=3&&!FILLER[w]) addWord(v,w); }); };
+  add(c.text); Object.keys(c.answers||{}).forEach(function(L){ c.answers[L].forEach(add); });
+  if(c.id) CATWORDS[c.id]=v; return v;
+}
+function sharesCatWord(s,raw){ var v=catWords(s.bank); return words(raw).some(function(w){ return w.length>=3&&!FILLER[w]&&hasWord(v,w); }); }
+/* clearly made up (the computers challenge it and vote it out): an unknown word with no vowel and 4+ different letters (Qzxv),
+   a long letter-digit jumble (asd123), one letter 3 times running in a word with a vowel (Aaaah), or 7+ consonants in a row.
+   Not made up: abbreviations typed in capitals (HTML, CNBC), short letter-digit names (PS5, N64, MP3, 4x4, UB40, C-3PO),
+   sounds (Brrr, Zzz, Shhh, Psst) and long real words (Knightsbridge, Catchphrase) */
+function madeUp(raw){
+  var s=String(raw==null?"":raw); try{ s=s.normalize("NFD").replace(/[̀-ͯ]/g,""); }catch(e){}
+  return s.split(/[^A-Za-z0-9]+/).some(function(t){
+    var w=t.toLowerCase(); if(!w||knownWord(w)) return false;
+    if(/[0-9]/.test(w)) return /[a-z]/.test(w)&&w.length>=6;
+    if(/^[A-Z]{2,5}$/.test(t)) return false;
+    var vowel=/[aeiouy]/.test(w), seen={}; w.split("").forEach(function(ch){ seen[ch]=1; });
+    return (!vowel&&w.length>=4&&Object.keys(seen).length>=4)||(vowel&&/([a-z])\1\1/.test(w))||/[bcdfghjklmnpqrstvwxz]{7}/.test(w);
+  });
+}
+/* a computer's vote on a challenged answer (no coin flips): yes when this category's list knows it or it shares a word with the category;
+   no when it is clearly made up, or every word is one it knows from other categories only ("Table" or "Tuesday" for "A Halloween costume");
+   an answer with a word it has never seen gets the benefit of the doubt (it would not challenge that answer either) */
+function cpuJudge(G,s,raw){
+  if(inBankAny(s,raw)) return true;
+  if(madeUp(raw)) return false;
+  if(sharesCatWord(s,raw)) return true;
+  return !knownWords(raw);
+}
 /* compute every entry's status and points. challenges can already have been decided (rejected/accepted) */
 function evaluate(G){
   var o=G.o, entries=[], bySlot=[], pi, si, k;
   G.slots.forEach(function(){ bySlot.push([]); });
   var seenOwn={};
-  G.players.forEach(function(p){ seenOwn[p.id]={}; });
+  G.players.forEach(function(p){ seenOwn[p.id]=[]; });   // [{key, slot}] of the answers each player already used (plurals match unless "exact")
   for(si=0;si<G.slots.length;si++){
     G.players.forEach(function(p){
       if(!inPlay(G,p.id)) return;   // sitting out a tie-break round: no answers, can't cancel anyone's
@@ -198,7 +244,8 @@ function evaluate(G){
         else if(o.mode==="keyword"&&false){ }
         else {
           // the same answer can't be used twice by one player in a round (the first use stands)
-          var dupOwn=seenOwn[p.id][e.key]; if(dupOwn!=null){ e.status="invalid"; e.reason=dupOwn===si?"already written in this category":"already used in another line"; } else seenOwn[p.id][e.key]=si;
+          var dupOwn=null; seenOwn[p.id].some(function(x){ if(eqKey(x.key,e.key,o.strict)){ dupOwn=x.si; return true; } return false; });
+          if(dupOwn!=null){ e.status="invalid"; e.reason=dupOwn===si?"already written in this category":"already used in another line"; } else seenOwn[p.id].push({key:e.key,si:si});
         }
         var ch=(G.challenges[si]||{})[p.id+"/"+k]; if(ch&&ch.state==="rejected"&&e.status==="ok"){ e.status="invalid"; e.reason="voted out"; e.out=true; }
         e.challenge=ch?ch.state:null;
@@ -311,6 +358,6 @@ function restore(c){
 Sc.Engine={serialize:serialize,restore:restore,beginReview:beginReview,VERSIONS:VERSIONS,HOUSE:HOUSE,LETTERS:LETTERS,defaultOpts:defaultOpts,mergeOpts:mergeOpts,versionOpts:versionOpts,fold:fold,words:words,keyOf:keyOf,same:same,startsWith:startsWith,
   newGame:newGame,startRound:startRound,chooseStarLetter:chooseStarLetter,setAnswers:setAnswers,filledCount:filledCount,allFilled:allFilled,cpuAnswers:cpuAnswers,cpuFillAll:cpuFillAll,
   evaluate:evaluate,totals:totals,canChallenge:canChallenge,openChallenge:openChallenge,castVote:castVote,resolveChallenge:resolveChallenge,pendingVoters:pendingVoters,finishRound:finishRound,standings:standings,snapshot:snapshot,inBank:inBank,KEYWORDS:KEYWORDS,goodKeyword:goodKeyword,
-  inPlay:inPlay,cpuChallenges:cpuChallenges,cpuJudge:cpuJudge,madeUp:madeUp,knownWords:knownWords};
+  inPlay:inPlay,cpuChallenges:cpuChallenges,cpuJudge:cpuJudge,madeUp:madeUp,knownWords:knownWords,singulars:singulars,pluralSame:pluralSame};
 if(typeof module!=="undefined"&&module.exports) module.exports=Sc.Engine;
 })(typeof window!=="undefined"?window:globalThis);

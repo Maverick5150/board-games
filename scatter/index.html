@@ -170,8 +170,8 @@ function newRound(){
 }
 /* star on the Junior die: the roller picks the letter before anyone writes (a computer roller keeps the rolled one) */
 function starPick(){
-  const p=G.players[G.starBy]||G.players[0];
-  if(!p.human){ G.star=false; banner("⭐ "+p.name+" rolled the star and picked "+G.letter); beginWriting(); return; }
+  const p=G.players[G.starBy];   // (no recorded roller: keep the rolled letter rather than wait for a picker nobody sees)
+  if(!p||!p.human){ G.star=false; if(p) banner("⭐ "+p.name+" rolled the star and picked "+G.letter); beginWriting(); return; }
   ctrl.update(snap(p.id,{phase:"star"})); legend();
 }
 function beginWriting(){
@@ -259,8 +259,13 @@ function finishRound(){
 }
 function resumePhase(){
   // a loaded game: writing restarts for the humans; other phases continue
-  if(G.phase==="write"&&G.star) starPick();   // saved before the star letter was picked
-  else if(G.phase==="write"){ writeQueue=G.players.filter(p=>p.human&&E.inPlay(G,p.id)).map(p=>p.id); G._cpuStops=[]; E.cpuFillAll(G); nextWriter(); }
+  if(G.phase==="write"&&G.star){
+    // the star stage resumes only for a save taken before anyone wrote (newer saves record the roller in starBy). A save from
+    // the older version was taken after the computers had written and has no roller: keep the rolled letter, writing restarts
+    if(G.starBy>=0&&G.players.every(p=>E.filledCount(G,p.id)===0)){ starPick(); return; }
+    G.star=false; banner("⭐ Star round — this round's letter is "+G.letter);
+  }
+  if(G.phase==="write"){ writeQueue=G.players.filter(p=>p.human&&E.inPlay(G,p.id)).map(p=>p.id); G._cpuStops=[]; E.cpuFillAll(G); nextWriter(); }
   else if(G.phase==="review"){ reviewMe=G.players.findIndex(p=>p.human); voteMe=-1; driveVotes(); }
   else if(G.phase==="scored"||G.phase==="over"){ reviewMe=G.players.findIndex(p=>p.human); ctrl.update(snap(reviewMe)); legend(); }
   else newRound();
