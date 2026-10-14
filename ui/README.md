@@ -10,7 +10,7 @@ This folder is the shared look for all seven games, the hub and Party Mode. It's
 | File | What it is |
 |---|---|
 | `theme.css` | All tokens (custom properties), `@font-face`, the 8 per-game `[data-game]` themes, the 10 seats, TV scale (`html[data-tv]`), effects levels, reduced motion and every `bg-` component |
-| `ui.js` | `window.BGUI`: toast, sheet, win, celebrate, effects, hero, flip, tweenNumber, countdown, ambient, setTurn, focus (D-pad), dice, setTV, haptic, mark, trophy, mount.* |
+| `ui.js` | `window.BGUI`: toast, sheet, win, celebrate, effects, hero, flip, tweenNumber, countdown, ambient, setTurn, stage (the game-page stage), focus (D-pad), dice, setTV, haptic, mark, trophy, mount.* |
 | `icons.js` | `BGUI.icon(name)`: 39 original line icons as inline SVG (no `<text>`, no filters). Optional, but load it before `ui.js` if you want icons in helpers (stepper +/-, toast icons, CPU badge) |
 | `fonts/` | DM Serif Display regular (24.2 KB) and italic (24.0 KB), Manrope variable (24.3 KB): Latin WOFF2, SIL OFL 1.1 (`OFL-*.txt`). **Total 72.4 KB** (budget 150 KB) |
 | `tex/` | Pre-rendered images, so nothing is blurred or generated at runtime: `felt.webp` and `paper.webp` grain tiles (neutral alpha, they tint to any colour), `orb-gold.webp` and `orb-violet.webp` light orbs, `rays-core.webp` (one quadrant of the 20-ray win wheel). **Total 101 KB** (budget 150 KB) |
@@ -40,6 +40,31 @@ Then set the page up:
 <body class="bg-app bg-app--scene">      <!-- setup pages: the game's deep colour washes the whole page -->
 <body class="bg-app bg-app--felt">       <!-- Rummy / Uno in play: the spot-lit felt is the whole table -->
 ```
+
+**"This page is game X": keep calling `Skins.apply(game)`.** Every game and both Party pages already call it. On a page that loads `ui.js`, `skins.js` hands over to `BGUI.stage(game)`, which gives the page:
+
+- **the theme:** `html[data-game]` is set.
+- **the Luxe ambient layer:** `.bg-ambient` is the first child of `<body>`, fixed behind everything. It holds three light orbs (the house gold, the game's accent and violet) and gold-line game motifs (12 on a phone, 16 on TV) that rise slowly, sway and turn. They run on the one effects ticker (section 6) and stop for "Reduce effects", reduced motion and a hidden page.
+- **Luxe board frames:** the board elements the old skins framed get a gold hairline, a dark moat and a soft static shadow (`--frame-shadow`, no filter). These are `#boardWrap` (Trouble gets a round frame under the plate; Sorry! a rounded square), `#rkframe`, `#rtable`, and `#board` / `.mboard`.
+- **the logomark glint** on every `.bg-emblem`.
+
+How it behaves:
+
+- **Switching games:** call it again. The Party TV host does this on every game switch. The orbs stay and re-tint; the motifs are rebuilt.
+- **Load order:** `ui.js` loads with `defer`, so it runs after the page's own scripts. A `Skins.apply()` made while the page is still parsing is finished on DOMContentLoaded. If `ui.js` never arrives, the old skin is used.
+- **Pages without `ui.js`** keep the old animated skins, unchanged. `Skins.mode()` says which one is running: `"luxe"` or `"classic"`.
+- **New pages** can call `BGUI.stage(game, {frames: "#myBoard"})`, or put `data-bg-stage="uno"` on `<body>`.
+
+**The sound button and panel (automatic).** When theme.css is on the page, `sound.js` builds both in the Luxe style. The ids, keys, focus trap and behaviour don't change.
+
+- `Sound.mountButton()` docks the button (a `.bg-btn--icon`) as the first item of `.bg-topbar__end`, before the menu knob. So put the top bar in the markup before the script that calls it.
+- With no top bar, the button floats where the bar's end slot would be. `{top, right}` still move it, `{into: el}` docks it somewhere else, and `{dock: false}` always floats it.
+
+**"Reduce effects" lives in the sound panel (automatic).** Every page that loads both `sound.js` and `ui.js` gets a "Reduce effects" switch in the panel, which is then titled "Sound and effects". That covers all 7 games and the Party TV host.
+
+- It is bound to `BGUI.effects`. Default off = full effects.
+- It is saved per device under one key, `localStorage["bgui.effects"]`, and shared by every game on the origin. Verified: switched on in Sorry!, it was still on after a reload and in Trouble, and switching it off from Trouble's panel worked.
+- Pages without `sound.js` (the phones' `firestick/play.html`), or a game's own settings page, can add the same row with `BGUI.mount.effectsRow(container)`. Don't add a second switch to a page that has the sound panel.
 
 **Attributes**
 
@@ -89,6 +114,9 @@ Then set the page up:
 | `.bg-tiles` > `.bg-tile[data-game]` with `__art` (+ `.bg-tile__badge` player count), `__label`, `__name`, `__meta`, `__seal`, `.bg-tile--party` | Hub / TV game tile: spot-lit art fading into the game's deep colour, serif name, player-count badge, seal. 2 across on a phone, 4 on TV. Party Mode is a full tile. On focus the ring and the game's glow fade in on the tile's own `::after` layer |
 | `.bg-hero` > `.bg-hero__layer` x2, `.bg-hero__shade`, `.bg-hero__body` (`.bg-eyebrow`, `.bg-hero__title`, `.bg-hero__pitch`) | TV hub poster / lobby hero: two stacked backdrop layers crossfaded by `BGUI.hero.show` |
 | `.bg-orbs` > `i` x2-3 | Hub / lobby light orbs (pre-rendered glow images). `BGUI.mount.orbs(host)` adds them; the effects ticker drifts them |
+| `.bg-ambient` > `.bg-orbs.bg-orbs--stage` (`i.is-accent`) + `.bg-motifs` > `b` | The game stage built by `BGUI.stage(game)` (section 1). Don't write it by hand. The accent orb is a static gradient in `--accent-glow` |
+| `.bg-frame` (`--round`) | Board frame: gold hairline, dark moat and a soft static shadow (`--frame-shadow`). No filter |
+| `.bg-sound` (`__card`, `__head`, `__title`, `__now`, `__vol`, `__label`, `__val`, `__slide`, `__row`, `__fx`, `__done`), `.bg-range`, `.bg-sndbtn--float` | The Luxe sound panel, its volume slider (gold fill up to `--v`) and the floating sound button. `sound.js` builds them |
 | `.bg-emblem` (`--lg`, `.is-glint`) | The gold "diamond die" logomark with its glint. `BGUI.mount.emblem(el)` fills it and registers the glint with `BGUI.ambient` |
 | `.bg-die` (`--seat`, `--gold`) | Ivory die: `BGUI.dice.render/roll` |
 | `.bg-countdown` | Ring timer: `BGUI.countdown(el, s)` |
@@ -108,7 +136,8 @@ Every call is safe if its element is missing: it returns `null`, `false` or a re
 | `BGUI.sheet.open(el, {onClose, dismissible, focus})`, `.close(el?)`, `.isOpen(el?)`, `.top()` | Bottom sheet with a scrim. It traps focus (Tab and D-pad), closes on Back/Escape/scrim and restores focus to the opener. Nested sheets stack |
 | `BGUI.win.open(el, {focus})`, `.close(el?)`, `.isOpen()` | Opens or closes a `.bg-win`: builds the ray wheel, the confetti layer and the trophy once, adds `.is-open`, aims the rays at the trophy, moves focus inside and restores it to the opener on close. While it is open the orbs rest and the effects ticker turns the rays |
 | `BGUI.celebrate({ms, colors, count, origin, rays, into})` | One-shot canvas burst of gold confetti (diamonds and strips, a few jewels) plus a gold ray bloom, about 2.8 s (2 s and half the pieces under "Reduce effects"). The canvas is removed afterwards; returns a promise. Nothing under reduced motion or when the tab is hidden. Inside an open `.bg-win` it draws behind the card |
-| `BGUI.effects.get()`, `.set("full"\|"reduced")`, `.motion()`, `.state()`, `.key` | The one effects setting. `set` writes `html[data-effects]` and `localStorage["bgui.effects"]` (try/catch) and fires `bgui:effects`. `motion()` is what really runs: `"full"`, `"reduced"` or `"off"` under reduced motion. `state()` is `{level, motion, hz}` where `hz` is the effects ticker's rate (4 orbs, 24 win screen, 0 still). `rate` = `{orbs: 4, win: 24, beat: 30}` (updates a second; `beat` steps the hero crossfade) |
+| `BGUI.effects.get()`, `.set("full"\|"reduced")`, `.motion()`, `.state()`, `.key` | The one effects setting. `set` writes `html[data-effects]` and `localStorage["bgui.effects"]` (try/catch) and fires `bgui:effects`. A change made in another tab applies too (`storage` event). `motion()` is what really runs: `"full"`, `"reduced"` or `"off"` under reduced motion. `state()` is `{level, motion, hz}` where `hz` is the effects ticker's rate (4 orbs, 8 game stage, 24 win screen, 0 still). `rate` = `{orbs: 4, win: 24, beat: 30, stage: 8}` (updates a second; `beat` steps the hero crossfade; on the stage the orbs still move 4 times a second) |
+| `BGUI.stage(game, {theme, orbs, motifs, frames})`, `.current()`, `.clear()` | "This page is game X" (section 1): sets `html[data-game]` (`theme: false` leaves it), builds `.bg-ambient` (orbs unless `orbs: false` or the page has its own `body > .bg-orbs`; motifs unless `motifs: false`), adds `.bg-frame` to `frames` (a selector) and the glint to every `.bg-emblem`. Call it again to switch game. `Skins.apply(game)` calls it on pages that load `ui.js` |
 | `BGUI.hero.show(el, {src, game})`, `.layers(el)` | Crossfades the two `.bg-hero__layer` backdrops by opacity. With `src` the next image is decoded first; a newer call (fast D-pad) wins. `game` themes the layer and the hero |
 | `BGUI.mark()`, `BGUI.trophy()` | The gold logomark and the laurel trophy as inline SVG strings (gradients only: no filters, masks or `<text>`) |
 | `BGUI.flip(el, fromRectOrEl, {ms, spring})` | FLIP move: read the rect, move the DOM, then call `flip`. Uses transform only |
@@ -120,10 +149,10 @@ Every call is safe if its element is missing: it returns `null`, `false` or a re
 | `BGUI.dice.svg(n)`, `.render(el, n)`, `.roll(el, final?, {ms, flips})` | Pip faces, plus a roll made of a transform tumble and a few face swaps. Returns a promise of the final value |
 | `BGUI.setTV(on)`, `BGUI.isTV()` | Toggles `html[data-tv]` and D-pad navigation, and fires a `bgui:tv` event |
 | `BGUI.reducedMotion()`, `BGUI.setReducedMotion(true\|false\|null)` | Reads or forces reduced motion |
-| `BGUI.mount.seg(el, {options, value, onChange})`, `.stepper(el, {min, max, value, label, onChange})`, `.toggle(row, {checked, onChange})`, `.versions(el, {value, onChange})`, `.players(el, list, {turn, scroll})`, `.emblem(el, opts)`, `.orbs(host, {count})`, `.auto(scope)` | Builders and wiring. `data-bg-mount="seg\|stepper\|toggle\|versions\|emblem"` wires markup on load |
+| `BGUI.mount.seg(el, {options, value, onChange})`, `.stepper(el, {min, max, value, label, onChange})`, `.toggle(row, {checked, onChange})`, `.versions(el, {value, onChange})`, `.players(el, list, {turn, scroll})`, `.emblem(el, opts)`, `.orbs(host, {count})`, `.effectsRow(el, {title, desc, id})`, `.auto(scope)` | Builders and wiring. `data-bg-mount="seg\|stepper\|toggle\|versions\|emblem\|effectsRow"` wires markup on load. `effectsRow` appends the "Reduce effects" switch row to a container (or wires a given `.bg-row`), bound to `BGUI.effects` and kept in sync with changes made elsewhere. `orbs` returns the stage's orbs when a stage is up, so a page never gets two sets |
 | `BGUI.icon(name, {cls, label})`, `BGUI.icon.names`, `BGUI.icon.seal(game)` | Inline SVG icons from `icons.js` |
 
-Events on `document`: `bgui:sheet` (`{open, el, reason}`), `bgui:win` (`{open, el}`), `bgui:tv` (`{on}`), `bgui:effects` (`{level, motion}`).
+Events on `document`: `bgui:sheet` (`{open, el, reason}`), `bgui:win` (`{open, el}`), `bgui:tv` (`{on}`), `bgui:effects` (`{level, motion}`), `bgui:stage` (`{game, el}`).
 
 ## 4. Per-game accents and seats (final mapping)
 
@@ -172,8 +201,8 @@ Jewel tones mapped to how people picture each game, and checked for separation b
 | Monopoly `.dice .die`, Trouble/Sorry! roll results | `.bg-die` + `BGUI.dice.roll(el, value)`. Board-specific art such as the pop dome stays in the game |
 | Monopoly `.stickyact` | A sheet footer row of `.bg-btn--block` buttons, marked `data-toast-avoid` |
 | `.sub`, `.hint`, `.legend` text | `.bg-muted` / `.bg-faint`. On TV the remote legend is a `.bg-hintbar` |
-| `skins.js` animated backgrounds (`#bgskin`, infinite `steps()` loops at 20 fps) | The static `body.bg-app` / `--scene` / `--felt`, plus `.bg-orbs` on hub and lobby pages. Step 4 retires the looping skins: continuous motion only through the BGUI effects ticker, beats only through `BGUI.ambient` |
-| `sound.js` `#bgSndBtn` / `#bgSoundPanel` | Unchanged; sound.js owns them. Their ids have no hyphen, so they don't clash. Align the button with the top bar via `Sound.mountButton({top, right})`. BGUI's focus trap leaves that panel alone |
+| `skins.js` animated backgrounds (`#bgskin`, infinite `steps()` loops at 20 fps) and board frames (filter drop-shadows, colour rings) | Keep the `Skins.apply(game)` calls. Once the page loads `ui.js`, they give the Luxe stage and Luxe frames (section 1) instead: the static `body.bg-app` / `--scene` / `--felt` underneath, continuous motion only through the BGUI effects ticker, beats only through `BGUI.ambient`. Nothing else to remove |
+| `sound.js` `#bgSndBtn` / `#bgSoundPanel` | sound.js still owns them (same ids, keys and focus trap; the ids have no hyphen, so they don't clash). With theme.css on the page they are built Luxe: the button docks in `.bg-topbar__end`, and the panel carries "Reduce effects" (section 1). BGUI's focus trap leaves that panel alone |
 
 ## 6. Effects: all on, all cheap (measured)
 
@@ -200,8 +229,14 @@ The CEO's rule is **keep the fancy effects**: every Luxe effect is ON by default
 | Win opening beat: celebrate burst + rays bloom + card entrance (3 s) | 1x canvas for 2.8 s, removed after | 17.6 | 31.0 |
 | Hero crossfade every 1.5 s | the incoming pre-rendered backdrop fades in over the old one (one blended layer), stepped at 30 Hz; no rounded clip on the layers | 6.5 | 25.9 |
 | Tile focus move every 1 s (D-pad on the shelf) | ring + game glow painted once on the tile's `::after`, opacity swapped instantly | 2.0 | 26.7 (about 0.27 CPU-second per move) |
+| Game stage on a game page (`BGUI.stage`): 3 orbs + 12 (phone) / 16 (TV) rising gold-line motifs **** | every piece its own small promoted layer, transform only, ONE ticker: motifs 8 Hz (about 1 px a step on the phone, 1.3-1.8 px on TV), orbs 4 Hz | 8.3 | 26.5 |
+| Game stage under "Reduce effects" | ticker off, everything rests where it is | 0.3 | 1.6 |
+| Game stage under reduced motion | ticker off, no light-up | 0.5 | 0.5 |
+| The old `skins.js` background it replaces (same page, same run) | infinite CSS `steps()` loops, 20 frames a second | 23.5 | 49.5 |
 
 % of ONE core: OS CPU time of every Edge process, headless Edge with `--disable-gpu` (software compositing, so these are pessimistic upper bounds), 6 s windows with everything else held still, measured 2026-10-14 in a REAL window of each size (TV 1920x1080 @1x, phone 390x844 @2x) by `BG_audit/design/luxe-build/repair/perf2.js` through `.dev/run-one.ps1`. The core step's earlier TV figures were taken with 1920x1080 emulated inside a 390x844 window and read far too low; the review caught it. \* the review's real-window run of the same CSS glint (`luxe-review/run3.js`). \*\* core run, phone window. \*\*\* the same pulse stepped by a timer (A/B); the shipped CSS pulse was not re-measured in a TV window.
+
+\*\*\*\* Step 4 prep: the Sorry! setup screen loaded with the section 1 head snippet (an adoption preview in a full-window same-origin frame, so `ui.js` really runs deferred after the game's scripts), measured by `BG_audit/step4/check.js` with `step4/prep/actions-stage.js`, same method and real windows, the old skin measured on the same page in the same run. The step-4 BEFORE baseline of all 9 pages is in `BG_audit/step4/baseline/baseline.json`: the old skins cost 12.6-20.8 % on the phone and 24.7-44.7 % on TV. Trouble's setup screen costs 66 % / 53 % on its own, with motion off too: its board's `domeRing` CSS pulse runs forever (game CSS, not the skin; the Trouble agent fixes it).
 
 What the A/B runs showed (same look, real windows):
 
@@ -215,8 +250,11 @@ What the A/B runs showed (same look, real windows):
 | **Win, this build at 24 Hz (shipped)** | **17.9** | **38.0** |
 | Glint stepped by a timer at 30 Hz instead of the CSS animation | 19.9 | 15.3-17.5 |
 | Hero crossfade stepped at 60 Hz instead of 30 Hz | 10.0 | 25.5 |
+| Game stage with the motifs at 4 Hz (`BGUI.effects.rate.stage = 4`: 2.6-3.6 px steps on TV) | 6.6 | 13.0 |
+| Game stage, orbs only (no motifs) | 1.0 | 14.1 |
+| **Game stage, motifs at 8 Hz (shipped)** | **8.3** | **26.5** |
 
-**Still over ~15 % on TV in software compositing** (open for the CEO): the win screen (38 %), the hero crossfade (26 % while crossfading every 1.5 s), tile focus moves (27 % at one move a second), the orbs (about 15 %) and the glint fired back to back (17 %, but it ships 1 s in 12 s). Per-process numbers show the cost sits in the compositor (GPU process), not in page script: at 1920x1080 every composited frame redraws its damaged area in software (the whole screen for falling confetti, the ray wheel's rotated 1000 px square), so the cost follows area x frames. The cheaper options left all change the look - a smaller turning wheel means shorter rays, fewer than about 16 updates a second shows steps - so they are not taken. A Fire TV composites on its GPU, where this work largely leaves the CPU, and "Reduce effects" is the switch for a slow device.
+**Still over ~15 % on TV in software compositing** (open for the CEO): the win screen (38 %), the hero crossfade (26 % while crossfading every 1.5 s), tile focus moves (27 % at one move a second), the game stage (26.5 %; the old skin it replaces cost 49.5 % on the same page; at 4 Hz it is 13 %, but the motifs then visibly step by 3 px), the orbs (about 15 %) and the glint fired back to back (17 %, but it ships 1 s in 12 s). Per-process numbers show the cost sits in the compositor (GPU process), not in page script: at 1920x1080 every composited frame redraws its damaged area in software (the whole screen for falling confetti, the ray wheel's rotated 1000 px square), so the cost follows area x frames. The cheaper options left all change the look - a smaller turning wheel means shorter rays, fewer than about 16 updates a second shows steps - so they are not taken. A Fire TV composites on its GPU, where this work largely leaves the CPU, and "Reduce effects" is the switch for a slow device.
 
 The lesson: in software compositing a running CSS animation keeps the compositor producing frames at 60 Hz even when `steps()` changes the value only 10 times a second, and every full-screen layer costs a full-screen composite per frame. So endless motion goes through the low-rate ticker, and the win screen has one wheel layer, one confetti layer and an opaque scrim.
 
@@ -262,12 +300,20 @@ The hub's `sw.js` needs the same files with `ui/...` paths, plus the hub art it 
 ## 9. What belongs to later steps
 
 - **Art step: done** (section 10). Thumbnails with simplified `-sm` variants, icons, the Fire TV banner, the TV hero backdrops and every PNG export are in `art/`; the original Uno wild, the Monopoly DEED and the Trouble pegs are in place.
+- **Step 4 prep: done.**
+  - The game stage: `BGUI.stage`, plus the `Skins.apply` hand-over in `skins.js`.
+  - Luxe board frames (`--frame-shadow`, `.bg-frame`).
+  - The Luxe sound button and panel, with "Reduce effects" in the panel. Also available as `BGUI.mount.effectsRow`.
+  - The check harness `BG_audit/step4/check.js`, with example actions in `step4/actions/styleguide.js` and the adoption-preview technique in `step4/prep/actions-stage.js`.
+  - The BEFORE baseline of all 9 pages, `step4/baseline/` (`baseline.json` and setup screenshots). `check.js` compares against it by itself.
 - **Step 4 (games adopt ui/):**
+  - Add the section 1 head snippet. Keep `Skins.apply(game)` and `Sound.mountButton()`: the Luxe stage, the frames, the Luxe sound button and the "Reduce effects" switch then come by themselves. Nothing of the old skins needs removing.
+  - Put the `.bg-topbar` markup before the script that calls `Sound.mountButton()`, so the button docks in it.
   - Swap each game's patterns using the table in section 5; setup pages on `.bg-app--scene`.
   - Wire `setTurn`, `ambient`, the toast placement and `BGUI.win` + `celebrate` with stat pills (turns, bumps, time).
   - Write contextual CTA labels ("Start Uno · 5 players") and move-sheet detail lines with real data.
-  - Add a "Reduce effects" row to each game's settings (`BGUI.effects.set`).
-  - Retire the looping `skins.js` backgrounds.
+  - `firestick/play.html` has no sound panel: add `BGUI.mount.effectsRow()` to its settings, if it gets a settings sheet.
+  - Run `BG_audit/step4/check.js` on the page, phone and TV, with an actions module for the game's flow (start, sheet, win). Compare with the baseline.
   - Add the ui files to every `sw.js` (section 8).
 - **Step 5 (play surfaces):** the in-game boards and tables on the Luxe surfaces (`.bg-surface--felt / --paper / --parchment / --board`): Sorry! track, Monopoly board with money and deeds, Rummy felt with meld rows, Uno table, Scattergories pad with letter die and timer, the Risk world map. All filter-free, static rasters with pieces on transform-animated layers.
 - **Step 6 (Party Mode):** TV lobby with `.bg-seatcard` + `.bg-status` (HOST / READY / JOINING / CPU), `.bg-orbs`, a real runtime QR code next to the letter-tile room code, and the lobby copy.

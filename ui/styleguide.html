@@ -103,6 +103,7 @@
         <button class="bg-row" role="switch" aria-checked="false" id="sgTvRow"><span class="bg-row__main"><span class="bg-row__title">TV mode</span><span class="bg-row__desc">html[data-tv]: 1rem tied to the viewport, 21px type floor, D-pad focus</span></span><span class="bg-toggle"></span></button>
         <button class="bg-row" role="switch" aria-checked="false" id="sgFxRow"><span class="bg-row__main"><span class="bg-row__title">Reduce effects</span><span class="bg-row__desc">BGUI.effects.set("reduced"): orbs rest, rays hold still, no confetti drift. Saved on this device</span></span><span class="bg-toggle"></span></button>
         <button class="bg-row" role="switch" aria-checked="false" id="sgMotionRow"><span class="bg-row__main"><span class="bg-row__title">Reduce motion</span><span class="bg-row__desc">html[data-motion=reduce] (or the OS setting): nothing moves</span></span><span class="bg-toggle"></span></button>
+        <button class="bg-row" role="switch" aria-checked="false" id="sgStageRow"><span class="bg-row__main"><span class="bg-row__title">Game page stage</span><span class="bg-row__desc">BGUI.stage(game), what Skins.apply(game) does on game pages: gold and accent orbs, rising gold-line motifs (try ?stage=uno)</span></span><span class="bg-toggle"></span></button>
         <button class="bg-row" role="switch" aria-checked="false" id="sgSceneRow"><span class="bg-row__main"><span class="bg-row__title">Setup scene tint</span><span class="bg-row__desc">body.bg-app--scene: the game's deep colour washes the page</span></span><span class="bg-toggle"></span></button>
       </div>
     </div>
@@ -146,6 +147,7 @@
       <div class="bg-card bg-spot">
         <dl class="sg-kv">
           <dt>Orbs</dt><dd>.bg-orbs behind this page: pre-rendered glow images that drift forever (BGUI's effects ticker moves them 4 times a second)</dd>
+          <dt>Stage</dt><dd>BGUI.stage(game) on game pages: orbs in gold, the game's accent and violet, plus gold-line game motifs that rise, sway and turn (motifs 8 ticks a second, orbs 4)</dd>
           <dt>Glint</dt><dd>.bg-emblem logomark: one 1 s star every 12 s through BGUI.ambient</dd>
           <dt>Win</dt><dd>gold rays turn and confetti falls for as long as it is open (24 ticks a second), plus the laurel trophy and a gold burst</dd>
           <dt>Focus</dt><dd>ivory ring, dark gap, gold glow; tiles add their game's glow</dd>
@@ -297,6 +299,7 @@
     <div class="bg-surface--board" data-game="trouble">Board, Trouble<small>per-game --board / --board-lite</small></div>
     <div class="bg-surface--board" data-game="monopoly">Board, Monopoly<small>the property plane</small></div>
     <div class="bg-surface--rail">Rail<small>.bg-surface--rail (alias --oak): trays, frames</small></div>
+    <div class="bg-surface--board bg-frame" data-game="risk">Framed board<small>.bg-frame: gold hairline, dark moat, soft static shadow (no filter)</small></div>
   </div>
 
   <div class="bg-section"><span class="bg-eyebrow">Palette</span></div>
@@ -364,15 +367,26 @@ document.addEventListener("DOMContentLoaded", function () {
   B.mount.emblem("#sgEmblem");
 
   /* game theme picker */
-  B.mount.seg("#sgGame", { onChange: function (v) { if (v) root.setAttribute("data-game", v); else root.removeAttribute("data-game"); syncStart(); } });
+  var stageRow = null;
+  var gamePick = B.mount.seg("#sgGame", { onChange: function (v) { if (v) root.setAttribute("data-game", v); else root.removeAttribute("data-game"); if (stageRow && stageRow.checked) stageOn(true); syncStart(); } });
 
   /* TV, effects, motion, scene switches */
   var tvRow = B.mount.toggle("#sgTvRow", { checked: B.isTV(), onChange: function (on) { B.setTV(on); } });
   var fxRow = B.mount.toggle("#sgFxRow", { checked: B.effects.get() === "reduced", onChange: function (on) { B.effects.set(on ? "reduced" : "full"); fxState(); } });
   var mRow = B.mount.toggle("#sgMotionRow", { checked: B.reducedMotion(), onChange: function (on) { B.setReducedMotion(on ? true : null); fxState(); } });
+  /* the game-page stage (BGUI.stage): it brings its own orbs, so the page orbs step aside while it is on */
+  function stageOn(on) {
+    var g = root.getAttribute("data-game") || "", own = document.querySelector("body > .bg-orbs");
+    if (on) { if (own) own.parentNode.removeChild(own); B.stage(g || "party", { theme: !!g }); }
+    else { B.stage.clear(); B.mount.orbs(document.body); }
+    fxState();
+  }
+  stageRow = B.mount.toggle("#sgStageRow", { checked: false, onChange: stageOn });
   B.mount.toggle("#sgSceneRow", { checked: false, onChange: function (on) { document.body.classList.toggle("bg-app--scene", on); } });
   function fxState() { $("#sgFxState").textContent = "effects: " + B.effects.get(); var st = B.effects.state(); $("#sgMotionState").textContent = "running: " + st.motion + " · ticker " + st.hz + "/s"; }
   fxState();
+  var sp = /[?&]stage=([a-z0-9]+)/.exec(location.search);
+  if (sp) { root.setAttribute("data-game", sp[1]); gamePick.set(sp[1], true); stageRow.set(true); }
   document.addEventListener("bgui:effects", function (e) { fxRow.set(e.detail.level === "reduced", true); fxState(); });
   document.addEventListener("bgui:win", function () { setTimeout(fxState, 0); });
   $("#sgTvBtn").innerHTML = B.icon("tv");

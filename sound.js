@@ -1,5 +1,7 @@
 /* Board Games — synthesized music + sound effects (Web Audio, no audio files).
-   API: Sound.music(name) | Sound.sfx(name) | Sound.fromText(msg) | Sound.openPanel() | Sound.mountButton(opts) */
+   API: Sound.music(name) | Sound.sfx(name) | Sound.fromText(msg) | Sound.openPanel() | Sound.mountButton(opts)
+   mountButton opts: {top, right, size} (classic look); with ui/theme.css on the page the button is Luxe and docks in
+   .bg-topbar__end ({into: el} = another slot, {dock: false} = float; top/right still move a floating one). */
 (function(g){
 "use strict";
 var AC=g.AudioContext||g.webkitAudioContext;
@@ -336,6 +338,15 @@ if(g.document){
 }
 
 /* ---------- settings panel + floating button ---------- */
+/* Midnight Luxe: when ui/theme.css is on the page, the button and the panel are built with its bg- classes (ink panel, gold
+   hairlines, the ui fonts, 44 px targets / 72 px at 1080p TV, no emoji); the ids, keys, focus trap and behaviour are the same.
+   The button docks into the page's .bg-topbar__end (before the menu knob) or floats where that slot would be.
+   With ui/ui.js (window.BGUI) the panel also carries the "Reduce effects" switch: BGUI.effects, default off = full effects,
+   saved per device under "bgui.effects", so every game and Party Mode get the setting in the same place. */
+var SVG_SND='<svg class="bg-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" stroke-width="1.5"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6M18.2 6.5a8 8 0 0 1 0 11"/></svg>';
+var SVG_MUTE='<svg class="bg-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" stroke-width="1.5"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>';
+function luxe(){ try{ var d=g.document; return !!(d&&g.getComputedStyle&&g.getComputedStyle(d.documentElement).getPropertyValue("--gold-200").trim()); }catch(e){ return false; } }
+function fxApi(){ var B=g.BGUI; return (B&&B.effects&&typeof B.effects.set==="function"&&typeof B.effects.get==="function")?B.effects:null; }
 var panelKeys=null, panelTrap=null, panelBack=null;
 function closePanel(){
   var d=g.document, o=d.getElementById("bgSoundPanel");
@@ -348,27 +359,49 @@ function closePanel(){
 }
 function setVol(which,v){ v=Math.max(0,Math.min(1,v)); if(which==="m") st.music=v; else st.sfx=v; save(); applyVol(); refreshPanel(); }
 function refreshPanel(){
-  var d=g.document; var rm=d.getElementById("bgRm"), rs=d.getElementById("bgRs"); if(!rm||!rs) return;
+  var d=g.document;
+  var sb=d.getElementById("bgSndBtn"); if(sb&&sb.classList&&sb.classList.contains("bg-sndbtn")) sb.innerHTML=(st.mm&&st.sm)?SVG_MUTE:SVG_SND;
+  var rm=d.getElementById("bgRm"), rs=d.getElementById("bgRs"); if(!rm||!rs) return;
   rm.value=Math.round(st.music*100); rs.value=Math.round(st.sfx*100);
   d.getElementById("bgVm").textContent=Math.round(st.music*100)+"%"; d.getElementById("bgVs").textContent=Math.round(st.sfx*100)+"%";
-  d.getElementById("bgMm").textContent=st.mm?"🔇 Music off":"🎵 Music on"; d.getElementById("bgMs").textContent=st.sm?"🔇 Effects off":"🔊 Effects on";
-  var np=d.getElementById("bgNow"); if(np) np.textContent=nowPlaying()?("♪ Now playing: "+nowPlaying()):"♪ Menu music";
+  var lx=rm.classList&&rm.classList.contains("bg-range"), mm=d.getElementById("bgMm"), ms=d.getElementById("bgMs");
+  if(lx){
+    rm.style.setProperty("--v",rm.value+"%"); rs.style.setProperty("--v",rs.value+"%");
+    mm.textContent=st.mm?"Music off":"Music on"; ms.textContent=st.sm?"Effects off":"Effects on";
+    mm.setAttribute("aria-pressed",st.mm?"false":"true"); ms.setAttribute("aria-pressed",st.sm?"false":"true");
+  } else { mm.textContent=st.mm?"🔇 Music off":"🎵 Music on"; ms.textContent=st.sm?"🔇 Effects off":"🔊 Effects on"; }
+  var np=d.getElementById("bgNow"); if(np) np.textContent=lx?(nowPlaying()?("Now playing: "+nowPlaying()):"Menu music"):(nowPlaying()?("♪ Now playing: "+nowPlaying()):"♪ Menu music");
+  var fe=d.getElementById("bgFx"), F=fxApi();
+  if(fe&&F){ var red=F.get()==="reduced"; if(fe.getAttribute("role")==="switch") fe.setAttribute("aria-checked",red?"true":"false"); else fe.textContent="✨ Reduce effects: "+(red?"on":"off"); }
 }
 function openPanel(){
   var d=g.document; closePanel();
   var back=d.activeElement;
   var ov=d.createElement("div"); ov.id="bgSoundPanel";
+  var F=fxApi();
+  if(luxe()){
+    ov.className="bg-sound"; ov.setAttribute("role","dialog"); ov.setAttribute("aria-modal","true"); ov.setAttribute("aria-labelledby","bgSndTitle");
+    var vol=function(label,idr,idv,what){ return '<div class="bg-sound__vol"><div class="bg-sound__label"><span>'+label+'</span><span id="'+idv+'" class="bg-sound__val"></span></div>'+
+      '<div class="bg-sound__slide"><button type="button" data-a="'+idr+'-" class="bg-btn bg-btn--icon" aria-label="'+what+' quieter">−</button><input id="'+idr+'" class="bg-range" type="range" min="0" max="100" step="5" aria-label="'+label+'"><button type="button" data-a="'+idr+'+" class="bg-btn bg-btn--icon" aria-label="'+what+' louder">+</button></div></div>'; };
+    ov.innerHTML='<div class="bg-sound__card"><div class="bg-sound__head"><span class="bg-eyebrow">Settings</span><h2 class="bg-sound__title" id="bgSndTitle">'+(F?"Sound and effects":"Sound")+'</h2><div id="bgNow" class="bg-sound__now"></div></div>'+
+      vol("Music volume","bgRm","bgVm","Music")+vol("Sound-effects volume","bgRs","bgVs","Sound effects")+
+      '<div class="bg-sound__row"><button type="button" id="bgMm" class="bg-btn bg-btn--secondary"></button><button type="button" id="bgMs" class="bg-btn bg-btn--secondary"></button><button type="button" id="bgNext" class="bg-btn bg-btn--ghost">Next song</button><button type="button" id="bgTest" class="bg-btn bg-btn--ghost">Test</button></div>'+
+      (F?'<div class="bg-sound__fx bg-rows"><button type="button" id="bgFx" class="bg-row" role="switch" aria-checked="false"><span class="bg-row__main"><span class="bg-row__title">Reduce effects</span><span class="bg-row__desc">Calmer background motion for slower devices. Saved on this device.</span></span><span class="bg-toggle"></span></button></div>':'')+
+      '<button type="button" id="bgDone" class="bg-btn bg-btn--primary bg-btn--block bg-sound__done">Done</button></div>';
+  } else {
   ov.style.cssText="position:fixed;inset:0;z-index:2147483000;background:rgba(6,10,26,.9);display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#eef2ff;padding:16px";
   var fs="clamp(17px,3vh,30px)";
   var btn="font-size:"+fs+";font-weight:800;color:#fff;background:#2b7be0;border:3px solid #2b7be0;border-radius:14px;padding:.45em .9em;cursor:pointer";
-  function row(label,idr,idv){ return '<div style="margin:1.2em 0"><div style="font-size:'+fs+';font-weight:800;margin-bottom:.4em">'+label+' <span id="'+idv+'" style="color:#ffd86b"></span></div>'+
-      '<div style="display:flex;align-items:center;gap:.6em"><button data-a="'+idr+'-" style="'+btn+'">−</button><input id="'+idr+'" type="range" min="0" max="100" step="5" style="flex:1;height:2.4em"><button data-a="'+idr+'+" style="'+btn+'">+</button></div></div>'; }
+  var row=function(label,idr,idv){ return '<div style="margin:1.2em 0"><div style="font-size:'+fs+';font-weight:800;margin-bottom:.4em">'+label+' <span id="'+idv+'" style="color:#ffd86b"></span></div>'+
+      '<div style="display:flex;align-items:center;gap:.6em"><button data-a="'+idr+'-" style="'+btn+'">−</button><input id="'+idr+'" type="range" min="0" max="100" step="5" style="flex:1;height:2.4em"><button data-a="'+idr+'+" style="'+btn+'">+</button></div></div>'; };
   ov.innerHTML='<div style="background:#16203f;border:2px solid #39498a;border-radius:22px;padding:1.4em 1.6em;width:min(92vw,720px);max-height:92vh;overflow:auto">'+
     '<div style="font-size:calc('+fs+' * 1.3);font-weight:900">🔊 Sound settings</div>'+
     '<div id="bgNow" style="margin-top:.5em;color:#ffd86b;font-size:'+fs+';font-weight:700"></div>'+
     row("🎵 Music volume","bgRm","bgVm")+row("🔊 Sound-effects volume","bgRs","bgVs")+
     '<div style="display:flex;flex-wrap:wrap;gap:.6em;margin-top:.4em"><button id="bgMm" style="'+btn+';background:#2a3663;border-color:#3a4a7e"></button><button id="bgMs" style="'+btn+';background:#2a3663;border-color:#3a4a7e"></button><button id="bgNext" style="'+btn+';background:#6a2bd0;border-color:#6a2bd0">⏭ Next song</button><button id="bgTest" style="'+btn+';background:#27a758;border-color:#27a758">▶ Test</button></div>'+
+    (F?'<div style="margin-top:.6em"><button id="bgFx" style="'+btn+';width:100%;background:#2a3663;border-color:#3a4a7e"></button></div>':'')+
     '<button id="bgDone" style="'+btn+';width:100%;margin-top:1.2em">Done</button></div>';
+  }
   d.body.appendChild(ov);
   function on(id,fn){ var e=d.getElementById(id); if(e) e.onclick=fn; }
   d.getElementById("bgRm").oninput=function(){ setVol("m",this.value/100); };
@@ -378,6 +411,7 @@ function openPanel(){
   on("bgMs",function(){ st.sm=!st.sm; save(); applyVol(); refreshPanel(); });
   on("bgTest",function(){ unlock(); ensure(); sfx("dice"); setTimeout(function(){ sfx("coin"); },600); });
   on("bgNext",function(){ unlock(); skip(); refreshPanel(); });
+  on("bgFx",function(){ var E=fxApi(); if(E) E.set(E.get()==="reduced"?"full":"reduced"); refreshPanel(); });
   on("bgDone",closePanel);
   /* remote / keyboard: Up/Down move between the controls (they must NOT change a slider), Left/Right adjust a slider or move along a row
      of buttons, Back closes the window. The window is modal: keys are taken at the window level and focus is kept inside it,
@@ -419,6 +453,15 @@ function openPanel(){
 function panelOpen(){ return !!g.document.getElementById("bgSoundPanel"); }
 function mountButton(o){
   var d=g.document; if(!d||d.getElementById("bgSndBtn")) return; o=o||{};
+  if(luxe()){   // Midnight Luxe: a .bg-btn--icon in the top bar's end slot (o.into: another slot; o.dock:false: always float)
+    var lb=d.createElement("button"); lb.id="bgSndBtn"; lb.type="button"; lb.className="bg-btn bg-btn--icon bg-sndbtn";
+    lb.setAttribute("aria-label","Sound settings"); lb.innerHTML=(st.mm&&st.sm)?SVG_MUTE:SVG_SND;
+    lb.onclick=function(){ unlock(); openPanel(); };
+    var slot=null; try{ slot=o.dock===false?null:(o.into?(typeof o.into==="string"?d.querySelector(o.into):o.into):d.querySelector(".bg-topbar__end")); }catch(e){ slot=null; }
+    if(slot){ slot.insertBefore(lb,slot.firstChild); return; }
+    lb.classList.add("bg-sndbtn--float"); if(o.top) lb.style.top=o.top; if(o.right) lb.style.right=o.right;
+    d.body.appendChild(lb); return;
+  }
   var b=d.createElement("button"); b.id="bgSndBtn"; b.type="button"; b.textContent="🔊";
   b.setAttribute("aria-label","Sound settings");
   b.style.cssText="position:fixed;z-index:2147482000;top:"+(o.top||"6px")+";right:"+(o.right||"6px")+";background:#16203fdd;color:#eef2ff;border:1px solid #2e3b66;border-radius:10px;padding:6px 11px;font-size:"+(o.size||"16px")+";font-weight:700;cursor:pointer";

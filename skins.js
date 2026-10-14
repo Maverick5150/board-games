@@ -1,4 +1,10 @@
 /* Board Games — animated backgrounds + board frames. Skins.apply("trouble"|"sorry"|"monopoly"|"party") */
+/* Midnight Luxe (step 4): on a page that loads ui/ui.js, Skins.apply(game) hands over to BGUI.stage(game): html[data-game], the
+   Luxe ambient layer (orbs + rising gold-line motifs on the ONE effects ticker, honouring "Reduce effects", reduced motion and a
+   hidden page) and Luxe board frames (gold hairline + soft static shadow, no filter) on the same board elements as before.
+   ui.js is loaded with defer, so it runs after the page's own scripts: when the page calls Skins.apply() before BGUI exists,
+   the Luxe stage is applied on DOMContentLoaded (by then the deferred ui.js has run). If ui.js never arrives, the old skin is
+   used. Pages that do not load ui.js keep the old animated skins below, unchanged. Skins.mode() = "luxe" | "classic". */
 (function(g){
 "use strict";
 /* TV (?tv=1 = the Fire TV app, or its AndroidTV bridge): fewer moving pieces (the TV screen is wide, so they still fill it). */
@@ -120,12 +126,13 @@ function ensureCss(){
   if(document.getElementById("bgskinCss")) return;
   var s=document.createElement("style"); s.id="bgskinCss"; s.textContent=CSS; (document.head||document.documentElement).appendChild(s);
 }
-function apply(name){
-  if(typeof document==="undefined"||!document.body) return;
-  ensureCss();
-  var key=THEMES[name]?name:"party";
+function bodySkin(key){
   var cls=document.body.className.replace(/\bskin-\w+\b/g,"").trim();
   document.body.className=(cls?cls+" ":"")+"skin-"+key;
+}
+function classic(key){
+  ensureCss();
+  bodySkin(key);
   var old=document.getElementById("bgskin");
   if(old&&old.getAttribute("data-skin")===key) return;
   if(old) old.remove();
@@ -135,5 +142,39 @@ function apply(name){
   kf.textContent=KF.join(""); KF=[];
   document.body.insertBefore(root,document.body.firstChild);
 }
-g.Skins={apply:apply};
+
+/* ---------- Midnight Luxe path (pages that load ui/ui.js) ---------- */
+/* Luxe board frames on the same board elements the old skins framed (--frame-shadow comes from ui/theme.css). The Trouble plate
+   is round and its home nests overhang it, so its frame is a circle drawn UNDER the board svg. */
+var LUXE_CSS=
+'body.skin-trouble #boardWrap{isolation:isolate}'+
+'body.skin-trouble #boardWrap::before{content:"";position:absolute;inset:2.5%;z-index:-1;border-radius:50%;box-shadow:var(--frame-shadow);pointer-events:none}'+
+'body.skin-sorry #boardWrap{border-radius:3.7%;box-shadow:var(--frame-shadow)}'+
+'body.skin-risk #rkframe{border-radius:16px;box-shadow:var(--frame-shadow)}'+
+'body.skin-rummy500 #rtable,body.skin-rummy500 #boardWrap{border-radius:34px;box-shadow:var(--frame-shadow)}'+
+'body.skin-monopoly #board,body.skin-monopoly .mboard{border-radius:8px;box-shadow:var(--frame-shadow)}';
+function luxeReady(){ var B=g.BGUI; return !!(B&&typeof B.stage==="function"); }
+function luxePage(){ try{ return !!document.querySelector('script[src*="ui/ui.js"]'); }catch(e){ return false; } }
+function luxe(key){
+  if(!document.getElementById("bgskinLuxe")){ var s=document.createElement("style"); s.id="bgskinLuxe"; s.textContent=LUXE_CSS; (document.head||document.documentElement).appendChild(s); }
+  bodySkin(key);
+  var old=document.getElementById("bgskin"); if(old) old.remove();            // an old skin painted before ui.js arrived
+  var kf=document.getElementById("bgskinKf"); if(kf) kf.textContent="";
+  var oc=document.getElementById("bgskinCss"); if(oc) oc.remove();             // its filter / colour-ring frames must not stack under the Luxe ones
+  try{ g.BGUI.stage(key); }catch(e){ classic(key); return; }
+  mode="luxe";
+}
+var mode="classic", pending=null, waiting=false;
+function apply(name){
+  if(typeof document==="undefined"||!document.body) return;
+  var key=THEMES[name]?name:"party";
+  if(luxeReady()){ pending=null; luxe(key); return; }
+  if(luxePage()&&document.readyState==="loading"){                            // ui.js is deferred: finish on DOMContentLoaded
+    pending=key; bodySkin(key); document.documentElement.setAttribute("data-game",key);
+    if(!waiting){ waiting=true; document.addEventListener("DOMContentLoaded",function(){ waiting=false; var k=pending; pending=null; if(k) apply(k); }); }
+    return;
+  }
+  mode="classic"; classic(key);
+}
+g.Skins={apply:apply,mode:function(){ return mode; }};
 })(window);

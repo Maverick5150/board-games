@@ -9,8 +9,9 @@
    BGUI.celebrate(opts)              one-shot canvas burst of gold confetti + a gold ray bloom; auto-removes its canvas; nothing under reduced motion
    BGUI.effects.get()/set(level)     "full" (default) | "reduced": persisted (localStorage "bgui.effects"), reflected as html[data-effects];
                                      .motion() = what really runs ("full" | "reduced" | "off" under reduced motion);
-                                     .state() = {level, motion, hz}: hz of the ONE effects ticker (4 orbs, 24 win screen, 0 still);
-                                     .rate = {orbs, win, beat}: updates a second of the ticker and of the stepped hero fade
+                                     .state() = {level, motion, hz}: hz of the ONE effects ticker (4 orbs, 8 game stage, 24 win
+                                     screen, 0 still); .rate = {orbs, win, beat, stage}: updates a second of the ticker and of the
+                                     stepped hero fade; follows "bgui.effects" changes made in another tab
    BGUI.hero.show(el, {src, game})   crossfades the two .bg-hero__layer backdrops (the next image is decoded first, then fades in
                                      on top by opacity, stepped at effects.rate.beat)
    BGUI.mark() / BGUI.trophy()       the gold "diamond die" logomark and the laurel trophy as inline SVG strings
@@ -20,13 +21,18 @@
    BGUI.ambient                      ONE scheduler for rare one-shot beats (emblem glint, turn pulse): never two at once,
                                      paused while the page is hidden or motion is reduced (CSS animations on their own layers)
    BGUI.setTurn(playerEl)            moves the static turn ring and asks the scheduler for 3 pulses
+   BGUI.stage(game, opts)            "this page is game X": html[data-game], the Luxe ambient layer (.bg-ambient: orbs in the house
+                                     gold, the game's accent and violet + rising gold-line game motifs, moved by the effects ticker),
+                                     the glint on every .bg-emblem, .bg-frame on opts.frames; call again to switch game.
+                                     Skins.apply(game) calls it on pages that load ui.js. .current() / .clear()
    BGUI.focus                        D-pad spatial navigation (auto-enabled in TV mode); Enter = click; stays inside an open sheet/win;
                                      the top bar is its own zone and focus scrolls clear of it (Down never enters it; at the end of
                                      the page Down scrolls on only while the focused control stays clear of it); arrows never get
                                      stuck in select/text/radio
    BGUI.dice                         SVG pip faces + a cheap roll (transform tumble + a few face swaps)
    BGUI.setTV(on) / isTV()           html[data-tv]; auto for ?tv=1 and window.AndroidTV
-   BGUI.mount.*                      seg, stepper, toggle, versions, players, emblem, orbs, auto (declarative data-bg-mount)
+   BGUI.mount.*                      seg, stepper, toggle, versions, players, emblem, orbs, effectsRow (the "Reduce effects" switch
+                                     row), auto (declarative data-bg-mount)
    BGUI.icon(name)                   from ui/icons.js (optional) */
 (function (w, d) {
   "use strict";
@@ -89,13 +95,21 @@
       return fxLevel;
     },
     motion: function () { return reducedMotion() ? "off" : fxLevel; },
-    /* the continuous-effects ticker: hz = 4 (orbs drifting), 24 (win rays + confetti) or 0 (nothing endless is moving) */
+    /* the continuous-effects ticker: hz = 4 (orbs drifting), 8 (game stage: motifs, orbs still 4), 24 (win rays + confetti) or 0 (nothing endless is moving) */
     state: function () { return { level: fxLevel, motion: effects.motion(), hz: tick.hz, hidden: !!d.hidden }; }
   };
   /* everything pauses while the page is hidden: CSS loops via html[data-hidden], beats via the ambient scheduler */
   function hiddenFlag() { if (d.hidden) root.setAttribute("data-hidden", ""); else root.removeAttribute("data-hidden"); }
   hiddenFlag();
   d.addEventListener("visibilitychange", hiddenFlag);
+  /* one origin, one key: a change made in another tab of the collection applies here too */
+  w.addEventListener("storage", function (e) {
+    if (e.key !== FX_KEY && e.key !== null) return;
+    var v = fxStored();
+    if (v === fxLevel) return;
+    fxApply(v); ambientRefresh();
+    emit("effects", { level: fxLevel, motion: effects.motion() });
+  });
 
   /* ---------------- continuous effects: ONE ticker ----------------
      The endless effects (the light orbs' drift, the win screen's ray wheel and falling confetti) are moved by this timer,
@@ -108,14 +122,16 @@
      no full-screen confetti sheet is blended, and only the bright inner part of the ray wheel turns (its faint outer glow
      is a static gradient in the scrim). One ticker for the whole page; it stops while the page is hidden, under
      "Reduce effects" and under reduced motion. */
-  var RATE = { orbs: 4, win: 24, beat: 30 };   // updates a second: orb drift, win screen, the stepped hero fade
+  var RATE = { orbs: 4, win: 24, beat: 30, stage: 8 };   // updates a second: orb drift, win screen, the stepped hero fade, game-stage motifs
   var RAY_DEG_S = 6;                           // the mockup's ray wheel: one turn a minute
   var ORBS = [[9, 5, 46], [-8, -6, 58], [9, 5, 64]];   // drift: x rem, y rem, seconds per leg (eased there and back)
-  var tick = { id: 0, hz: 0, last: 0, orbT: 0, winT: 0, win: null, bits: null, H: 0, rem: 16 };
+  var tick = { id: 0, hz: 0, last: 0, orbT: 0, orbAt: 0, winT: 0, win: null, bits: null, H: 0, rem: 16 };
+  var stg = { game: null, el: null, bits: null, t: 0, H: 0, pad: 0 };   // the game stage (BGUI.stage)
   function fxWant() {
     if (d.hidden || reducedMotion() || fxLevel !== "full") return 0;
     var win = openWin();
     if (win) return win.querySelector(".bg-win__wheel, .bg-win__fall") ? Math.max(1, +RATE.win || 24) : 0;
+    if (stg.el && stg.el.parentNode && stg.el.querySelector(".bg-motifs > b")) return Math.max(1, +RATE.stage || 8);   // motifs 8 a second, orbs still 4
     return d.querySelector(".bg-orbs > i") ? Math.max(1, +RATE.orbs || 4) : 0;
   }
   /* the confetti pieces of an open win overlay with their flight data (data-f: y0, fall speed, sway rem, phase, spin) */
@@ -127,7 +143,7 @@
       return { el: el, y0: f[0] || 0, v: f[1] || 0.05, amp: (f[2] || 0) * tick.rem, ph: f[3] || 0, r0: f[4] || 0, spin: f[5] || 0 };
     });
   }
-  w.addEventListener("resize", function () { if (tick.win) tick.bits = null; });
+  w.addEventListener("resize", function () { if (tick.win) tick.bits = null; stg.bits = null; });
   function fxTick() {
     var t = now(), dt = tick.last ? Math.min(0.5, (t - tick.last) / 1000) : 0, win = openWin();
     tick.last = t;
@@ -143,16 +159,20 @@
       return;
     }
     var o = (tick.orbT += dt);
-    $$(".bg-orbs > i").forEach(function (el, i) {
-      var p = ORBS[i % 3], k = (1 - Math.cos(Math.PI * o / p[2])) / 2;
-      el.style.transform = "translate3d(" + (p[0] * k).toFixed(3) + "rem," + (p[1] * k).toFixed(3) + "rem,0)";
-    });
+    if (!tick.orbAt || t - tick.orbAt >= 1000 / Math.max(1, +RATE.orbs || 4) - 30) {   // the orbs move 4 times a second even when the stage ticks faster
+      tick.orbAt = t;
+      $$(".bg-orbs > i").forEach(function (el, i) {
+        var p = ORBS[i % 3], k = (1 - Math.cos(Math.PI * o / p[2])) / 2;
+        el.style.transform = "translate3d(" + (p[0] * k).toFixed(3) + "rem," + (p[1] * k).toFixed(3) + "rem,0)";
+      });
+    }
+    if (stg.el) motifPose(dt);
   }
   function fxRefresh() {
     var want = fxWant();
     if (want === tick.hz) return;
     if (tick.id) { clearInterval(tick.id); tick.id = 0; }
-    tick.hz = want; tick.last = 0;
+    tick.hz = want; tick.last = 0; tick.orbAt = 0;
     if (!openWin()) { tick.win = null; tick.bits = null; }
     if (want) { tick.id = setInterval(fxTick, Math.round(1000 / want)); fxTick(); }
   }
@@ -818,6 +838,103 @@
     return true;
   }
 
+  /* ---------------- game stage: BGUI.stage(game, opts) = "this page is game X" ----------------
+     One call gives a game page (or the Party pages) its Luxe identity, and calling it again switches game at runtime:
+     - html[data-game] = game (opts.theme === false leaves the page theme alone; the ambient layer is themed either way);
+     - the ambient layer .bg-ambient (first child of <body>, fixed, behind everything): three light orbs - the house gold, the
+       game's accent (a static gradient in --accent-glow) and violet - plus gold-line game motifs (dome, deed, cards, flag ...
+       and the logomark) that rise slowly, sway and turn. Each piece is its own promoted layer, moved by the ONE effects ticker
+       (transform only): motifs 8 times a second (about 1 px a step), the orbs 4. "Reduce effects", reduced motion and a
+       hidden page stop the ticker and everything rests where it is (the motifs stay spread over the page);
+     - the logomark glint on every .bg-emblem on the page (through BGUI.ambient);
+     - .bg-frame (gold hairline + soft static shadow, no filter) on the elements matched by opts.frames.
+     Skins.apply(game) in skins.js calls this on every page that loads ui.js (old pages keep the old skins). */
+  var STAGE_GAMES = ["trouble", "sorry", "monopoly", "rummy500", "risk", "uno", "scatter", "party"];
+  var MOTIF = {
+    trouble: ["dome", "dice", "pawn", "star"], sorry: ["slide", "pawn", "cards", "star"], monopoly: ["deed", "home", "dice", "star"],
+    rummy500: ["cards", "crown", "star", "cards"], risk: ["flag", "crown", "star", "pawn"], uno: ["cards", "swap", "star", "cards"],
+    scatter: ["letter", "pencil", "hourglass", "star"], party: ["tv", "dice", "cards", "music"]
+  };
+  function seedOf(s) { var h = 7; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 233280; return h; }
+  /* the motifs of a game: spread over the width, golden-ratio spaced in height, far ones smaller, fainter and slower */
+  function motifHTML(game) {
+    var names = MOTIF[game] || MOTIF.party, n = isTV() ? 16 : 12, r = seedOf(game) + 101, html = "";
+    function rnd() { r = (r * 9301 + 49297) % 233280; return r / 233280; }
+    for (var i = 0; i < n; i++) {
+      var far = i % 3 === 2, logo = i % 6 === 4, accent = !logo && i % 3 === 1;
+      var size = far ? 1.6 + rnd() * 0.8 : 2.5 + rnd() * 1.5;                         // rem
+      var x = (((i * 5) % n) + rnd() * 0.8) / n * 94 + 1;                               // % of the width
+      var y0 = (i * 0.618 + rnd() * 0.15) % 1;                                          // where in its climb it starts
+      var v = far ? 0.0062 + rnd() * 0.0018 : 0.0082 + rnd() * 0.003;                  // screens a second (about 100-160 s a climb)
+      var amp = (far ? 0.3 : 0.55) + rnd() * 0.6, wv = 0.2 + rnd() * 0.25, ph = rnd() * 6.283;   // sway: rem, rad/s, phase
+      var r0 = (rnd() - 0.5) * 50, spin = (rnd() < 0.5 ? -1 : 1) * (2 + rnd() * 6);    // degrees, degrees a second
+      var op = logo ? 0.22 : far ? 0.09 + rnd() * 0.04 : 0.13 + rnd() * 0.07;
+      var art = logo ? mark() : (icon(names[i % names.length]) || mark());
+      html += "<b" + (accent ? " class=\"is-accent\"" : logo ? " class=\"is-logo\"" : "") + " data-m=\"" + [y0, v, amp, wv, ph, r0, spin].map(function (f) { return +f.toFixed(4); }).join(",") +
+        "\" style=\"left:" + x.toFixed(1) + "%;width:" + size.toFixed(2) + "rem;height:" + size.toFixed(2) + "rem;opacity:" + op.toFixed(2) + "\">" + art + "</b>";
+    }
+    return html;
+  }
+  function motifBits() {
+    var el = stg.el; if (!el) return null;
+    var rem = parseFloat(w.getComputedStyle(root).fontSize) || 16, pad = 0;
+    stg.H = el.clientHeight || w.innerHeight || 800;
+    stg.bits = $$(".bg-motifs > b", el).map(function (b) {
+      var f = (b.getAttribute("data-m") || "").split(",").map(Number);
+      pad = Math.max(pad, b.offsetHeight || 48);
+      return { el: b, y0: f[0] || 0, v: f[1] || 0.008, amp: (f[2] || 0) * rem, wv: f[3] || 0.3, ph: f[4] || 0, r0: f[5] || 0, spin: f[6] || 0 };
+    });
+    stg.pad = pad + 8;
+    return stg.bits;
+  }
+  /* each motif climbs from below the bottom edge to above the top edge (the wrap happens off screen), swaying and turning */
+  function motifPose(dt) {
+    var bits = stg.bits || motifBits();
+    if (!bits || !bits.length) return;
+    var s = (stg.t += dt), span = stg.H + 2 * stg.pad;
+    for (var i = 0; i < bits.length; i++) {
+      var p = bits[i], y = (1 - ((p.y0 + s * p.v) % 1)) * span - stg.pad, dx = Math.sin(s * p.wv + p.ph) * p.amp;
+      p.el.style.transform = "translate3d(" + dx.toFixed(1) + "px," + y.toFixed(1) + "px,0) rotate(" + ((p.r0 + s * p.spin) % 360).toFixed(1) + "deg)";
+    }
+  }
+  function stage(game, opts) {
+    opts = opts || {};
+    if (!game) return null;
+    game = STAGE_GAMES.indexOf(game) >= 0 ? game : "party";
+    if (!d.body) { d.addEventListener("DOMContentLoaded", function () { stage(game, opts); }); return null; }
+    if (opts.theme !== false) root.setAttribute("data-game", game);
+    var el = stg.el && stg.el.parentNode ? stg.el : d.querySelector(".bg-ambient");
+    if (!el) { el = d.createElement("div"); el.className = "bg-ambient"; el.setAttribute("aria-hidden", "true"); d.body.insertBefore(el, d.body.firstChild); }
+    stg.el = el; stg.game = game;
+    el.setAttribute("data-game", game);
+    /* the orbs: kept across game switches (the accent orb re-tints with data-game); skipped when the page has its own .bg-orbs */
+    var orbs = el.querySelector(".bg-orbs"), pageOrbs = d.body.querySelector(":scope > .bg-orbs");
+    if (opts.orbs === false || pageOrbs) { if (orbs) orbs.parentNode.removeChild(orbs); }
+    else if (!orbs) el.insertAdjacentHTML("afterbegin", "<div class=\"bg-orbs bg-orbs--stage\"><i></i><i class=\"is-accent\"></i><i></i></div>");
+    /* the motifs: rebuilt for a new game (they light up again) */
+    var mot = el.querySelector(".bg-motifs");
+    if (opts.motifs === false) { if (mot) mot.parentNode.removeChild(mot); }
+    else if (!mot || mot.getAttribute("data-game") !== game) {
+      if (mot) mot.parentNode.removeChild(mot);
+      el.insertAdjacentHTML("beforeend", "<div class=\"bg-motifs\" data-game=\"" + game + "\">" + motifHTML(game) + "</div>");
+      stg.bits = null;
+      motifPose(0);   // the still pose: spread over the page (what "Reduce effects" and reduced motion show)
+    }
+    if (opts.frames) $$(opts.frames).forEach(function (f) { f.classList.add("bg-frame"); });
+    $$(".bg-emblem").forEach(function (e) { if (!e._bgGlint && !e._bgMounted) { e._bgGlint = true; mount.emblem(e); } });
+    fxRefresh();
+    emit("stage", { game: game, el: el });
+    return { el: el, game: game };
+  }
+  stage.current = function () { return stg.el && stg.el.parentNode ? stg.game : null; };
+  stage.clear = function () {
+    if (stg.el && stg.el.parentNode) stg.el.parentNode.removeChild(stg.el);
+    stg.el = null; stg.game = null; stg.bits = null;
+    fxRefresh();
+    emit("stage", { game: null, el: null });
+    return true;
+  };
+
   /* ---------------- focus: D-pad spatial navigation ---------------- */
   var focusOn = false, focusByTV = false, focusRoot = null, marked = null;
   var editing = null;   // the text field being typed in (entered with OK or by typing): only then do left/right stay in it
@@ -1175,7 +1292,7 @@
     orbs: function (target, opts) {
       var host = $(target) || d.body;
       if (!host) return null;
-      var el = host.querySelector(":scope > .bg-orbs");
+      var el = host.querySelector(":scope > .bg-orbs") || (stg.el && stg.el.parentNode ? stg.el.querySelector(".bg-orbs") : null);   // the game stage already has orbs: never two sets
       if (!el) {
         el = d.createElement("div"); el.className = "bg-orbs"; el.setAttribute("aria-hidden", "true");
         el.innerHTML = new Array(((opts && opts.count) || 2) + 1).join("<i></i>");
@@ -1184,7 +1301,32 @@
       }
       return { el: el };
     },
-    /* declarative wiring: data-bg-mount="seg|stepper|toggle|versions|emblem" (runs once on DOMContentLoaded) */
+    /* the "Reduce effects" switch row, bound to BGUI.effects (default off = full effects; saved per device in "bgui.effects").
+       mount.effectsRow(container) appends a <button class="bg-row" role="switch">; given a .bg-row it wires that row instead.
+       It follows changes made anywhere else (the sound panel, another tab). opts: {title, desc, id} */
+    effectsRow: function (target, opts) {
+      var host = $(target);
+      if (!host) return null;
+      opts = opts || {};
+      var row = host.classList.contains("bg-row") ? host : null;
+      if (!row) {
+        row = d.createElement("button"); row.type = "button"; row.className = "bg-row";
+        row.innerHTML = "<span class=\"bg-row__main\"><span class=\"bg-row__title\">" + esc(opts.title || "Reduce effects") + "</span><span class=\"bg-row__desc\">" +
+          esc(opts.desc || "Calmer background motion for slower devices. Saved on this device.") + "</span></span><span class=\"bg-toggle\"></span>";
+        host.appendChild(row);
+      }
+      if (opts.id) row.id = opts.id;
+      row.setAttribute("role", "switch");
+      function sync() { row.setAttribute("aria-checked", fxLevel === "reduced" ? "true" : "false"); }
+      if (!row._bgFx) {
+        row._bgFx = true;
+        row.addEventListener("click", function () { haptic("tap"); effects.set(fxLevel === "reduced" ? "full" : "reduced"); sync(); });
+        d.addEventListener("bgui:effects", sync);
+      }
+      sync();
+      return { el: row, sync: sync, get checked() { return fxLevel === "reduced"; } };
+    },
+    /* declarative wiring: data-bg-mount="seg|stepper|toggle|versions|emblem|effectsRow" (runs once on DOMContentLoaded) */
     auto: function (scope) {
       var n = 0;
       $$("[data-bg-mount]", $(scope) || d).forEach(function (el) {
@@ -1197,7 +1339,7 @@
   };
 
   /* ---------------- export ---------------- */
-  BGUI.version = "2.0.0";
+  BGUI.version = "2.1.0";
   BGUI.reducedMotion = reducedMotion;
   BGUI.setReducedMotion = setReducedMotion;
   BGUI.haptic = haptic;
@@ -1214,6 +1356,7 @@
   BGUI.countdown = countdown;
   BGUI.ambient = ambient;
   BGUI.setTurn = setTurn;
+  BGUI.stage = stage;
   BGUI.focus = focus;
   BGUI.dice = dice;
   BGUI.setTV = setTV;
@@ -1226,6 +1369,8 @@
     if (tvRequested() && !isTV()) setTV(true);
     else if (isTV() && !focusOn) { focus.enable(); focusByTV = true; }
     mount.auto();
+    var sg = d.body && d.body.getAttribute("data-bg-stage");   // declarative: <body data-bg-stage="uno">
+    if (sg && !stg.game) stage(sg);
     fxRefresh();
   }
   if (d.readyState === "loading") d.addEventListener("DOMContentLoaded", boot); else boot();
