@@ -122,7 +122,7 @@
   .deed{margin:.875rem 0 .25rem; border-radius:var(--r-md); overflow:hidden; color:var(--text-on-paper);
     background:radial-gradient(95% 70% at 50% 0%, var(--paper-50) 0%, var(--paper-100) 60%, var(--paper-200) 100%); box-shadow:inset 0 0 0 1px rgba(29,26,42,.18), 0 10px 24px -14px rgba(0,0,0,.9)}
   .deed-band{padding:.625rem .875rem .75rem; text-align:center; color:var(--paper-50); box-shadow:inset 0 -1px 0 rgba(0,0,0,.18)}
-  .deed-band.light{color:#15110a}
+  .deed-band.light{color:#0b0905}   /* >= 4.6:1 on every light band (pink 4.73, red 4.66) */
   .deed-title{display:inline-block; padding:.22rem .6rem; border-radius:var(--r-pill); font:var(--fw-caps) var(--fs-micro)/1 var(--font-ui); letter-spacing:var(--track-eyebrow); text-transform:uppercase; color:var(--gold-200); background:var(--ink-2)}
   .deed-name{margin-top:.35rem; font:400 1.5rem/1.1 var(--font-display); letter-spacing:-.005em}
   .deed-body{padding:.625rem .875rem .75rem}
@@ -155,7 +155,9 @@
   .mn-chip--util{background:#c4c8d8}
   .mn-pcards{display:grid; gap:.75rem}
   .mn-pcard{padding:.75rem .875rem; border-radius:var(--r-lg); background:var(--panel-fill); box-shadow:var(--panel-edge)}
-  .mn-pcard.is-out{opacity:.6}
+  .mn-pcard.is-out{background:var(--ink-2)}   /* a bankrupt player: the Out tag and a faded token; the text keeps full contrast */
+  .mn-pcard.is-out .bg-token{opacity:.45}
+  .mn-pcard.is-out .mn-pcard__cash{color:var(--text-3)}
   .mn-pcard__top{display:flex; align-items:center; gap:.65rem}
   .mn-pcard__top .bg-token{font-size:1.15rem}
   .mn-pcard__name{display:flex; flex-wrap:wrap; align-items:center; gap:.25rem .5rem; flex:1; min-width:0; font:var(--fw-ui-strong) var(--fs-md)/1.2 var(--font-ui)}
