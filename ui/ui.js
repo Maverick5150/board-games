@@ -3,7 +3,8 @@
 
    BGUI.haptic(pattern)              guarded navigator.vibrate; pattern = name ("tap","select","turn","success","warn","error","roll") | ms | array
    BGUI.toast(msg, opts)             one shared toast; placed in the first free band (bottom up, then top down) clear of every
-                                     visible .bg-players strip, the top bar, an open sheet and [data-toast-avoid]
+                                     visible .bg-players strip, the top bar, an open sheet and [data-toast-avoid]; when an open
+                                     sheet leaves no free band it is held out of sight until the sheet closes (never over a strip)
    BGUI.sheet.open(el, opts)/close() bottom sheet: focus trap, Back/Escape closes, restores focus; opts {onClose, dismissible, focus}
    BGUI.win.open(el)/close()         win overlay (.bg-win): modal (Tab + D-pad stay inside), restores focus to the opener on close
    BGUI.celebrate(opts)              one-shot canvas burst of gold confetti + a gold ray bloom; auto-removes its canvas; nothing under reduced motion
@@ -20,7 +21,8 @@
    BGUI.countdown(el, seconds, opts) ring timer (repaints 4x a second, no continuous animation); returns {stop,pause,resume,remaining,done}
    BGUI.ambient                      ONE scheduler for rare one-shot beats (emblem glint, turn pulse): never two at once,
                                      paused while the page is hidden or motion is reduced (CSS animations on their own layers)
-   BGUI.setTurn(playerEl)            moves the static turn ring and asks the scheduler for 3 pulses
+   BGUI.setTurn(playerEl)            moves the static turn ring and asks the scheduler for 3 pulses; the new turn's pulse replaces the
+                                     previous player's (running or queued) on the same strip, so it never waits behind it
    BGUI.stage(game, opts)            "this page is game X": html[data-game], the Luxe ambient layer (.bg-ambient: orbs in the house
                                      gold, the game's accent and violet + rising gold-line game motifs, moved by the effects ticker),
                                      the glint on every .bg-emblem, .bg-frame on opts.frames; call again to switch game.
@@ -213,7 +215,7 @@
   haptic.patterns = HAPTIC;
 
   /* ---------------- toast ---------------- */
-  var toastEl = null, toastTimer = 0;
+  var toastEl = null, toastTimer = 0, toastEnd = 0, toastHeld = false;   // held: waiting out of sight for an open sheet to close
   function toastNode() {
     if (toastEl && toastEl.parentNode) return toastEl;
     if (!d.body) return null;
@@ -257,16 +259,19 @@
     el.style.top = ""; el.style.bottom = "";
     var edge = parseFloat(w.getComputedStyle(el).bottom) || 20;    // the CSS resting gap (safe area included)
     var h = el.offsetHeight || 48, bands = avoidBands(vh);
-    var order = want === "top" ? ["top", "bottom"] : ["bottom", "top"], mode = order[0], y = null;
+    var order = want === "top" ? ["top", "bottom"] : ["bottom", "top"], mode = order[0], y = null, held = false;
     for (var i = 0; i < order.length && y === null; i++) { mode = order[i]; y = freeSpot(bands, vh, h, gap, edge, mode); }
-    if (y === null) {   // nothing is free (a tall sheet over a strip): just under the top bar, over the least important band
+    if (y === null) {   // nothing is free: just under the top bar, over the least important band
       mode = "top"; y = edge;
       $$(".bg-topbar").forEach(function (b) { if (isVisible(b)) { var r = b.getBoundingClientRect(); if (r.top <= 1 && r.bottom + gap > y) y = r.bottom + gap; } });
+      /* with a sheet open (a tall sheet over the strip) that spot would cover the player strip: the toast is HELD instead, out
+         of sight (parked there, clear of the sheet) until the sheet closes, then shown for what is left of its time */
+      held = !!sheetTop();
     }
     el.classList.toggle("is-top", mode === "top");
     if (mode === "top") { el.style.top = Math.round(y) + "px"; el.style.bottom = "auto"; }
     else { el.style.top = "auto"; el.style.bottom = Math.round(vh - y - h) + "px"; }
-    return mode;
+    return held ? "held" : mode;
   }
   function toast(msg, opts) {
     opts = opts || {};
@@ -279,17 +284,31 @@
     html += "<span class=\"bg-toast__msg\">" + (opts.html ? String(msg) : esc(msg)) + "</span>";
     el.innerHTML = html;
     el.classList.remove("is-show");
-    var mode = placeToast(el, opts.place);
-    void el.offsetWidth;
-    el.classList.add("is-show");
-    if (opts.haptic) haptic(opts.haptic);
     var ms = opts.ms === undefined ? 2600 : opts.ms;
+    toastEnd = ms > 0 ? now() + ms : Infinity;
+    var mode = placeToast(el, opts.place);
+    toastHeld = mode === "held";
+    if (!toastHeld) { void el.offsetWidth; el.classList.add("is-show"); }
+    if (opts.haptic) haptic(opts.haptic);
     if (ms > 0) toastTimer = setTimeout(hideToast, ms);
     return { el: el, place: mode, hide: hideToast };
   }
-  function hideToast() { clearTimeout(toastTimer); if (toastEl) toastEl.classList.remove("is-show"); }
+  function hideToast() { clearTimeout(toastTimer); toastHeld = false; if (toastEl) toastEl.classList.remove("is-show"); }
+  /* the layout changed (a sheet opened or closed, TV mode): place a showing toast again, hold it while a sheet leaves no free
+     band, or bring a held one back once there is room (unless its time is nearly over) */
+  function toastRelayout() {
+    if (!toastEl || !(toastHeld || toastEl.classList.contains("is-show"))) return;
+    var mode = placeToast(toastEl);
+    if (mode === "held") { toastHeld = true; toastEl.classList.remove("is-show"); return; }
+    if (!toastHeld) return;
+    toastHeld = false;
+    if (toastEnd - now() < 500) return;
+    void toastEl.offsetWidth;
+    toastEl.classList.add("is-show");
+  }
   toast.hide = hideToast;
-  toast.place = function () { if (toastEl) placeToast(toastEl); };
+  toast.place = toastRelayout;
+  toast.held = function () { return toastHeld; };
 
   /* ---------------- bottom sheet ---------------- */
   var stack = [], scrimEl = null, refocusing = false;
@@ -333,7 +352,7 @@
     el.classList.add("is-open");
     var first = $(opts.focus, el) || el.querySelector("[data-autofocus]") || tabbables(el)[0] || el;
     if (focusOn && stack[stack.length - 1].dpad && first !== el) setFocus(first); else focusEl(first);
-    if (toastEl && toastEl.classList.contains("is-show")) placeToast(toastEl);
+    toastRelayout();   // a showing toast is placed again (or held while the sheet leaves no free band); a held one comes back
     emit("sheet", { open: true, el: el });
     return el;
   }
@@ -350,7 +369,7 @@
     if (back && back.parentNode && back !== d.body && isVisible(back)) { if (focusOn && e.dpad) setFocus(back); else focusEl(back); }
     else if (stack.length) focusEl(tabbables(sheetTop())[0] || sheetTop());
     if (typeof e.opts.onClose === "function") { try { e.opts.onClose(reason || "close"); } catch (err) { setTimeout(function () { throw err; }); } }
-    if (toastEl && toastEl.classList.contains("is-show")) placeToast(toastEl);
+    toastRelayout();   // a showing toast is placed again (or held while the sheet leaves no free band); a held one comes back
     emit("sheet", { open: false, el: e.el, reason: reason || "close" });
     return true;
   }
@@ -828,12 +847,27 @@
     opts = opts || {};
     var strip = (el.closest && el.closest(".bg-players")) || el.parentNode;
     if (strip) $$(".bg-player.is-turn, .bg-player.is-pulse", strip).forEach(function (p) { if (p !== el) { p.classList.remove("is-turn"); p.classList.remove("is-pulse"); } });
+    /* a turn pulse belongs to its turn: the previous player's pulse on this strip (running, or still queued) ends here, so the
+       new turn's pulse starts at once instead of waiting 4.9 s behind it (fast turns used to build a queue of stale pulses) */
+    var ended = false;
+    if (strip && strip.contains) {
+      var stale = function (b) { return !!b && b.cls === "is-pulse" && b.el !== el && strip.contains(b.el); };
+      amb.queue = amb.queue.filter(function (b) { if (stale(b)) { if (b.done) b.done(false); return false; } return true; });
+      if (stale(amb.active)) {
+        var b = amb.active;
+        clearTimeout(b.t); amb.active = null; ended = true;
+        if (b.el) b.el.classList.remove(b.cls);
+        if (b.done) b.done(false);
+      }
+    }
     el.classList.add("is-turn");
     if (strip && strip.classList && strip.classList.contains("bg-players--scroll")) {   // scroll the strip only (scrollIntoView would also scroll the page)
       var sr = strip.getBoundingClientRect(), er = el.getBoundingClientRect();
       if (er.left < sr.left) strip.scrollLeft -= sr.left - er.left + 8; else if (er.right > sr.right) strip.scrollLeft += er.right - sr.right + 8;
     }
-    if (opts.pulse !== false) ambient.trigger(el, { cls: "is-pulse", ms: 3 * 1600 + 120 });
+    var pulsing = !!amb.active && amb.active.el === el && amb.active.cls === "is-pulse";   // already pulsing for this player: let it run
+    if (opts.pulse !== false && !pulsing) ambient.trigger(el, { cls: "is-pulse", ms: 3 * 1600 + 120 });   // starts now unless another beat (a glint) is running
+    if (ended && !amb.active) ambTick();   // no new pulse wanted: the scheduler carries on with whatever is next
     if (opts.haptic) haptic("turn");
     return true;
   }
@@ -1155,7 +1189,7 @@
     if (on) root.setAttribute("data-tv", ""); else root.removeAttribute("data-tv");
     if (on && !focusOn) { focus.enable(); focusByTV = true; }
     if (!on && focusByTV) focus.disable();
-    if (toastEl && toastEl.classList.contains("is-show")) placeToast(toastEl);
+    toastRelayout();   // the layout changed: a showing (or held) toast is placed again
     emit("tv", { on: on });
     return on;
   }
@@ -1339,7 +1373,7 @@
   };
 
   /* ---------------- export ---------------- */
-  BGUI.version = "2.1.0";
+  BGUI.version = "2.1.1";
   BGUI.reducedMotion = reducedMotion;
   BGUI.setReducedMotion = setReducedMotion;
   BGUI.haptic = haptic;

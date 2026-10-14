@@ -358,9 +358,13 @@ function closePanel(){
   if(!d.activeElement||d.activeElement===d.body){ var sb=d.getElementById("bgSndBtn"); if(sb) try{ sb.focus(); }catch(e){} }
 }
 function setVol(which,v){ v=Math.max(0,Math.min(1,v)); if(which==="m") st.music=v; else st.sfx=v; save(); applyVol(); refreshPanel(); }
+/* the Luxe button's icon follows the mute state, and is re-rendered ONLY when that state changes: the first tap of a page unlocks
+   audio inside its pointerdown (unlock -> begin -> refreshPanel), and replacing the svg under the finger there cancelled that
+   tap's click, so the first tap on the icon started the music instead of opening the panel */
+function sndIcon(sb){ var m=(st.mm&&st.sm)?"1":"0"; if(sb.getAttribute("data-muted")===m) return; sb.setAttribute("data-muted",m); sb.innerHTML=m==="1"?SVG_MUTE:SVG_SND; }
 function refreshPanel(){
   var d=g.document;
-  var sb=d.getElementById("bgSndBtn"); if(sb&&sb.classList&&sb.classList.contains("bg-sndbtn")) sb.innerHTML=(st.mm&&st.sm)?SVG_MUTE:SVG_SND;
+  var sb=d.getElementById("bgSndBtn"); if(sb&&sb.classList&&sb.classList.contains("bg-sndbtn")) sndIcon(sb);
   var rm=d.getElementById("bgRm"), rs=d.getElementById("bgRs"); if(!rm||!rs) return;
   rm.value=Math.round(st.music*100); rs.value=Math.round(st.sfx*100);
   d.getElementById("bgVm").textContent=Math.round(st.music*100)+"%"; d.getElementById("bgVs").textContent=Math.round(st.sfx*100)+"%";
@@ -455,7 +459,7 @@ function mountButton(o){
   var d=g.document; if(!d||d.getElementById("bgSndBtn")) return; o=o||{};
   if(luxe()){   // Midnight Luxe: a .bg-btn--icon in the top bar's end slot (o.into: another slot; o.dock:false: always float)
     var lb=d.createElement("button"); lb.id="bgSndBtn"; lb.type="button"; lb.className="bg-btn bg-btn--icon bg-sndbtn";
-    lb.setAttribute("aria-label","Sound settings"); lb.innerHTML=(st.mm&&st.sm)?SVG_MUTE:SVG_SND;
+    lb.setAttribute("aria-label","Sound settings"); sndIcon(lb);
     lb.onclick=function(){ unlock(); openPanel(); };
     var slot=null; try{ slot=o.dock===false?null:(o.into?(typeof o.into==="string"?d.querySelector(o.into):o.into):d.querySelector(".bg-topbar__end")); }catch(e){ slot=null; }
     if(slot){ slot.insertBefore(lb,slot.firstChild); return; }

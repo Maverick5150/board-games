@@ -64,13 +64,15 @@
   #svbar button .bg-ico{width:1.1em; height:1.1em; color:var(--gold-200)}
   #svbar button small{grid-column:1 / -1; margin:0; font:var(--fw-ui) var(--fs-micro)/1.2 var(--font-ui); color:var(--text-3); opacity:1}
   .tb-back{margin-top:var(--sp-6)}
-  /* the Start dock: sticky at the bottom of the phone screen (toasts keep clear of it) */
+  /* the Start dock: sticky at the bottom of the phone screen (toasts keep clear of it). In the mid-game Menu, Resume is the gold
+     primary and "New game" the secondary beside it (syncStart swaps the classes), so one stray tap or OK never ends the game */
   .tb-dock{position:sticky; bottom:0; z-index:5; display:flex; gap:.625rem; margin:0 calc(-1 * var(--gutter)); padding:1rem var(--gutter) calc(env(safe-area-inset-bottom,0px) + .875rem);
     background:linear-gradient(180deg,rgba(8,10,21,0),var(--ink-1) 32%)}
-  .tb-dock #startBtn{flex:1; min-width:0}
-  .tb-resume{flex:0 0 36%; min-width:0; padding:.5rem .75rem; border-radius:var(--r-lg)}
+  .tb-dock #startBtn{flex:1 1 0; min-width:0}
+  .tb-dock.has-resume #startBtn{padding-inline:.75rem}
+  .tb-resume{flex:1 1 0; min-width:0; padding:.5rem .75rem; border-radius:var(--r-lg)}
   .tb-resume > span{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.2rem; min-height:2.75rem}
-  .tb-resume .bg-btn__sub{color:var(--text-2)}
+  .tb-resume.bg-btn--secondary .bg-btn__sub, .tb-dock #startBtn.bg-btn--secondary .bg-btn__sub{color:var(--text-2)}
 
   /* ---------- in game ---------- */
   .tb-game{display:flex; flex-direction:column; align-items:center; padding:0 var(--gutter) 1.25rem}
@@ -85,10 +87,15 @@
   .tb-tie::before{content:" after a tie"}
   #boardWrap{position:relative; width:min(94vw,520px); aspect-ratio:1/1}
   #board{display:block; width:100%; height:100%}
-  /* the pop-o-matic dome: the D-pad / keyboard target (taps go through to the board art) and its pulsing turn ring */
+  /* the pop-o-matic dome: the D-pad / keyboard target (taps go through to the board art) and its pulsing turn ring. The ring's
+     opacity is set on the effects ticker's frames (8 a second, see pulseTick); the compositor glides between them (a one-shot
+     125 ms linear transition per update, opacity only on its own layer), so the breathe is smooth, as the old 60 fps ring was */
   #boardWrap .tb-domebtn{position:absolute; left:33.974%; top:33.974%; width:32.051%; height:32.051%; z-index:1; margin:0; padding:0; border:0; border-radius:50%;
     background:transparent; pointer-events:none; cursor:pointer}
-  .tb-pulse{position:absolute; left:33.974%; top:33.974%; width:32.051%; height:32.051%; pointer-events:none; opacity:.9; will-change:opacity; color:#e23b3b}
+  .tb-pulse{position:absolute; left:33.974%; top:33.974%; width:32.051%; height:32.051%; pointer-events:none; opacity:.9; will-change:opacity; color:#e23b3b;
+    transition:opacity 125ms linear}
+  @media (prefers-reduced-motion: reduce){ .tb-pulse{transition:none} }
+  html[data-motion="reduce"] .tb-pulse{transition:none}
   .tb-pulse > svg{display:block; width:100%; height:100%}
   .domeRing{opacity:0}
   .tb-gdock{display:flex; justify-content:center; gap:.75rem; min-height:var(--tap); margin-top:1rem}
@@ -114,7 +121,13 @@
   html[data-tv] .tb-hero .bg-hero__layer{border-radius:var(--r-xl) var(--r-xl) 0 0}
   html[data-tv] .tb-hero .bg-hero__body{padding:0}
   html[data-tv] .tb-sec--rules .bg-row{min-height:0; padding:.625rem .875rem}
-  html[data-tv] .tb-dock{position:static; margin:0; padding:1.5rem 0 0; background:none}
+  /* column B on TV: the players, then the Start dock (on screen at 1080p, straight under the setup it confirms), then save and
+     load and the way back. The dock's gap keeps the focused button's ring and lift clear of its neighbour */
+  html[data-tv] .tb-col--b{display:flex; flex-direction:column}
+  html[data-tv] .tb-dock{order:4; position:static; gap:1.75rem; margin:0; padding:1.5rem 0 0; background:none}
+  /* the save bar on TV: one layout for all six buttons (icon above the label, the date under it, centred) */
+  html[data-tv] #svbar button{grid-template-columns:minmax(0,1fr); justify-items:center; align-content:center; row-gap:.3rem; padding:.625rem .5rem}
+  html[data-tv] #svbar button .bg-ico{width:1.25em; height:1.25em}
   html[data-tv] .tb-game{display:grid; grid-template-columns:auto minmax(0,30rem); grid-template-rows:auto auto auto auto 1fr;
     grid-template-areas:"board strip" "board status" "board dock" "board hints" "board ."; column-gap:3rem; justify-content:center; align-items:start; padding:1.25rem var(--gutter)}
   html[data-tv] #legend{grid-area:strip; width:auto; grid-template-columns:1fr 1fr; padding:1rem 0 .25rem}
@@ -163,7 +176,7 @@
       <section class="tb-sec tb-sec--players" aria-labelledby="playersHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="playersHead">Players</h2></div>
         <div class="bg-card tb-card">
-          <div class="tb-field"><span class="bg-row__title">Players on this phone</span><span class="bg-row__desc">You are Red. Pass the phone when it's your turn.</span></div>
+          <div class="tb-field"><span class="bg-row__title" id="humansTitle">Players on this phone</span><span class="bg-row__desc" id="humansDesc">You are Red. Pass the phone when it's your turn.</span></div>
           <div class="bg-seg" id="humanSeg" role="group" aria-label="Players on this phone">
             <button type="button" data-n="1" class="on" aria-pressed="true">1</button>
             <button type="button" data-n="2" aria-pressed="false">2</button>
@@ -180,8 +193,8 @@
         <div id="svbar"></div>
       </section>
       <a href="../index.html" class="bg-btn bg-btn--ghost bg-btn--block tb-back" id="backHub" data-icon="home">Back to all games</a>
-      <div class="tb-dock" data-toast-avoid>
-        <button class="bg-btn bg-btn--secondary tb-resume" id="resumeBtn" type="button" style="display:none"><span><span class="bg-btn__label">Resume</span><span class="bg-btn__sub" id="resumeSub">Back to the game</span></span></button>
+      <div class="tb-dock" id="startDock" data-toast-avoid>
+        <button class="bg-btn bg-btn--secondary tb-resume" id="resumeBtn" type="button" style="display:none"><span><span class="bg-btn__label" id="resumeLabel">Resume</span><span class="bg-btn__sub" id="resumeSub">Back to the game</span></span></button>
         <button class="bg-btn bg-btn--primary bg-btn--cta" id="startBtn" type="button"><span class="bg-btn__label" id="startLabel">Start Trouble</span><span class="bg-btn__sub" id="startSub">2 players</span></button>
       </div>
     </div>
@@ -313,8 +326,13 @@ const startLabel=document.getElementById("startLabel");
 const startSub=document.getElementById("startSub");
 const seatPreview=document.getElementById("seatPreview");
 const svToastEl=document.getElementById("svtoast");
-const ui={strip:"", turnKey:"", meta:{}, sheetKey:"", winGen:-1, die:-1};
+const startBtn=document.getElementById("startBtn");
+const resumeBtn=document.getElementById("resumeBtn");
+const dockEl=document.getElementById("startDock");
+// winGen: the game whose end was handled; winShown: the game whose Victory screen opened; result: the Menu offers "See the result"
+const ui={strip:"", turnKey:"", meta:{}, sheetKey:"", winGen:-1, winShown:-1, result:false, die:-1};
 function BG(){ return window.BGUI||null; }
+function onTV(){ return document.documentElement.hasAttribute("data-tv"); }
 
 function toast(msg){
   Sound.fromText(msg); toastEl.textContent=msg;   // #toast keeps the last message (the no-ui fallback, and what older tests read)
@@ -685,7 +703,9 @@ function buildStrip(){
 }
 function setTurnChip(c){
   const el=chipOf(c), B=BG(); if(!el) return;
-  if(B&&B.setTurn) B.setTurn(el,{pulse:!gameOver});
+  // the strip's turn pulse plays only in a live game on screen: never for the hidden preview game drawn at load, never behind
+  // the Menu (computer turns go on there); showSetup(false) pulses the current player's chip as the board comes back
+  if(B&&B.setTurn) B.setTurn(el,{pulse:!gameOver&&armed&&!setupShown()});
   else { legendEl.querySelectorAll(".is-turn").forEach(x=>x.classList.remove("is-turn")); el.classList.add("is-turn"); }
 }
 // the roll-off: each player's pops go on their chip (the status line shows the deciding round)
@@ -709,19 +729,21 @@ function uiSync(){
     if(die>0){ if(B&&B.dice) B.dice.render(statusDie,die); else statusDie.textContent=String(die); statusDie.hidden=false; }
     else statusDie.hidden=true; }
   syncMoves();
-  if(gameOver&&ui.winGen!==gen){ ui.winGen=gen; clockOff(); scheduleWin(); }
+  if(gameOver&&ui.winGen!==gen){ ui.winGen=gen; clockOff(); scheduleWin(); if(setupShown()) menuResult(); }
   pulseRefresh(); barTitle();
 }
 function barTitle(){
-  const t=setupShown()?((armed&&players.length&&!gameOver)?"Game paused":"New game"):(gameOver?"Game over":"Turn "+Math.max(1,stats.turns));
+  const t=setupShown()?(ui.result?"Game over":(armed&&players.length&&!gameOver)?"Game paused":"New game"):(gameOver?"Game over":"Turn "+Math.max(1,stats.turns));
   if(barEyebrow.textContent!==t) barEyebrow.textContent=t;
 }
 
 // dome pulse: the ring in the current player's colour breathes (the old .domeRing look: opacity .35 to 1 and back every 1.1 s) on
-// its own promoted layer, opacity only. An endless CSS animation on the board svg repainted the whole board 60 times a second;
-// now the ring rides the ONE effects ticker: it steps in the same frames as the stage motifs (it follows their updates), so it
-// adds no frames of its own (a page without the stage steps it 8 times a second). It rests, lit, under "Reduce effects",
-// reduced motion, a hidden page, the win screen and the setup page.
+// its own promoted layer, opacity only. An endless CSS animation on the board svg repainted the whole board 60 times a second.
+// Now the ONE effects ticker sets the ring's opacity in the frames it already draws for the stage motifs (it follows their
+// updates, 8 a second; a page without the stage uses an 8 Hz timer), and a 125 ms linear CSS transition on #domePulse lets
+// the compositor glide from each value to the next, so the breathe is as smooth as the old 60 fps ring (no 0.2 opacity
+// steps) while the page draws nothing extra. It rests, lit, under "Reduce effects", reduced motion (no transition then), a
+// hidden page, the win screen and the setup page.
 const PULSE_MS=1100;
 const pulse={on:false,id:0,mo:null,t0:0};
 function pulseTick(){ const k=((performance.now()-pulse.t0)/PULSE_MS)%1; pulseEl.style.opacity=(0.35+0.65*(1-Math.cos(2*Math.PI*k))/2).toFixed(3); }
@@ -755,7 +777,7 @@ function fillMoveSheet(){
   if(B&&B.dice) B.dice.render("#sheetDie",die);
   document.getElementById("moveEyebrow").textContent=(humanCount>1?NAME[c]+" popped a ":"You popped a ")+die;
   document.getElementById("moveTitle").textContent=moves.length>1?"Choose your move":"Your move";
-  document.getElementById("moveSub").textContent=(best?"The best move is marked. ":"")+(die===6?"A 6 pops again after this move.":"You can also tap a highlighted peg on the board.");
+  document.getElementById("moveSub").textContent=(best?"The best move is marked. ":"")+(die===6?"A 6 pops again after this move.":onTV()?"Pick a move and press OK.":"You can also tap a highlighted peg on the board.");
   const chev=B&&B.icon?B.icon("chevron"):"";
   moveOpts.innerHTML=moves.map(mv=>{ const t=moveText(c,mv);
     return `<button type="button" class="bg-sheet__option${mv===best?" is-best":""}" data-peg="${mv.peg}"><span class="bg-token" data-seat="${SEAT[c]}" aria-hidden="true">${mv.peg+1}</span>`+
@@ -773,7 +795,12 @@ function openMoveSheet(){
 }
 function syncMoves(){
   const on=humanChoosing();
-  if(movesBtn.hidden===on) movesBtn.hidden=!on;
+  if(movesBtn.hidden===on){
+    // TV: "Choose a move" hides once the move is made. If it had the D-pad focus (a sheet opened from it hands focus back to it),
+    // the dome takes the focus, so the next OK ("roll again!") pops instead of falling on <body>
+    if(!on&&document.activeElement===movesBtn) focusTV(domeBtn);
+    movesBtn.hidden=!on;
+  }
   if(!on){ ui.sheetKey=""; closeMoveSheet(); return; }
   const key=gen+":"+turn+":"+die+":"+JSON.stringify(pegs[players[turn]]);
   if(key===ui.sheetKey) return;
@@ -794,9 +821,10 @@ moveOpts.addEventListener("click",e=>{
 // the win screen: Victory + the trophy, the ray wheel and confetti (BGUI.win + BGUI.celebrate) with this game's real numbers
 function fmtTime(ms){ const s=Math.max(0,Math.round(ms/1000)), h=Math.floor(s/3600), m=Math.floor(s/60)%60, x=s%60;
   return (h?h+":"+String(m).padStart(2,"0"):String(m))+":"+String(x).padStart(2,"0"); }
-function scheduleWin(){ const g=gen; setTimeout(()=>{ if(g===gen&&gameOver&&!setupShown()) openWin(); },1100); }
+function scheduleWin(){ const g=gen; setTimeout(()=>{ if(g===gen&&gameOver&&!setupShown()&&ui.winShown!==gen) openWin(); },1100); }
 function openWin(){
   const B=BG(); if(!B||!B.win) return;
+  ui.winShown=gen;
   const c=players[turn], human=!!isHuman[c], ms=playMs(), min=Math.round(ms/60000);
   document.getElementById("winEyebrow").textContent="Game over · "+(min<1?"under a minute":min===1?"1 minute":min+" minutes");
   document.getElementById("winTitle").textContent=human?"Victory":NAME[c]+" wins";
@@ -826,15 +854,42 @@ function showSetup(on){
   if(on){ closeMoveSheet(); closeWin(); syncStart(); }
   window.scrollTo(0,0);
   pulseRefresh(); barTitle();
-  if(!on) focusTV(domeBtn);
+  if(!on){
+    if(armed&&players.length&&!gameOver) setTurnChip(players[turn]);   // the board is back: the strip pulses whose turn it is
+    if(armed&&gameOver&&ui.winShown!==gen) scheduleWin();              // the game ended while the Menu was up: its Victory screen now
+    focusTV(domeBtn);
+  }
+}
+// the game ended while the Menu was up (a computer won behind it): Resume becomes "See the result" (the board, then the Victory
+// screen), Save game and Continue switch off, and the dock leads with Start again
+function menuResult(){
+  const c=players[turn];
+  if(resumeBtn.style.display!=="none"){
+    ui.result=true;
+    document.getElementById("resumeLabel").textContent="See the result";
+    document.getElementById("resumeSub").textContent=(isHuman[c]&&humanCount===1)?"You win":NAME[c]+" wins";
+  }
+  saveBar.refresh(); syncStart(); barTitle();
+}
+// the setup copy follows the device: "Players on this TV" and "Pass the remote" on the TV (html[data-tv]), the phone wording elsewhere
+function deviceCopy(){
+  const tv=onTV(), t=tv?"Players on this TV":"Players on this phone";
+  document.getElementById("humansTitle").textContent=t;
+  document.getElementById("humansDesc").textContent="You are Red. Pass the "+(tv?"remote":"phone")+" when it's your turn.";
+  document.getElementById("humanSeg").setAttribute("aria-label",t);
 }
 function syncStart(){
-  const total=Math.min(4,Math.max(2,humanCount+cpuCount)), cols=["red","green","yellow","blue"].slice(0,total);
+  const total=Math.min(4,Math.max(2,humanCount+cpuCount)), cols=["red","green","yellow","blue"].slice(0,total), tv=onTV();
   const resumable=armed&&players.length>0&&!gameOver;
-  startLabel.textContent=resumable?"Start a new game":"Start Trouble";
-  startSub.textContent=total+" players · "+(humanCount===1?"you":humanCount+" on this phone")+(cpuCount?" + "+cpuCount+(cpuCount===1?" computer":" computers"):"");
+  // mid-game the dock leads with Resume (gold) and keeps "New game" beside it as the secondary
+  startLabel.textContent=resumable?"New game":"Start Trouble";
+  dockEl.classList.toggle("is-resumable",resumable);
+  dockEl.classList.toggle("has-resume",resumeBtn.style.display!=="none");   // two buttons side by side: equal widths
+  startBtn.classList.toggle("bg-btn--primary",!resumable); startBtn.classList.toggle("bg-btn--secondary",resumable);
+  resumeBtn.classList.toggle("bg-btn--primary",resumable); resumeBtn.classList.toggle("bg-btn--secondary",!resumable);
+  startSub.textContent=total+" players · "+(humanCount===1?"you":humanCount+(tv?" on this TV":" on this phone"))+(cpuCount?" + "+cpuCount+(cpuCount===1?" computer":" computers"):"");
   seatPreview.innerHTML=`<span class="tb-table__tokens">`+cols.map(c=>`<span class="bg-token" data-seat="${SEAT[c]}" aria-hidden="true">${NAME[c].charAt(0)}</span>`).join("")+`</span>`+
-    `<span class="tb-table__txt"><b>${total} at the table</b>`+cols.map((c,i)=>NAME[c]+(i<humanCount?(humanCount===1?" (you)":" (phone)"):" (CPU)")).join(", ")+`</span>`;
+    `<span class="tb-table__txt"><b>${total} at the table</b>`+cols.map((c,i)=>NAME[c]+(i<humanCount?(humanCount===1?" (you)":tv?" (player)":" (phone)"):" (CPU)")).join(", ")+`</span>`;
 }
 
 // saves.js bar in Luxe: its emoji labels become line icons (ids, data-a and every behaviour stay saves.js's own)
@@ -870,15 +925,23 @@ function setHumanSeg(){ document.querySelectorAll("#humanSeg button").forEach(x=
 document.querySelectorAll("#humanSeg button").forEach(b=>{
   b.addEventListener("click",()=>{ humanCount=+b.dataset.n; setHumanSeg(); drawCpuSeg(); });
 });
-// D-pad (TV): Down from the players picker always lands on the computer picker, and Up from it (or from the first save-bar row)
-// goes back, even when the cell straight below is a disabled count. Registered before ui.js, so BGUI.focus sees it as handled.
+// D-pad (TV): Down from the players picker always lands on the computer picker and Up from it goes back, even when the cell
+// straight below is a disabled count. Down from the save bar's first row lands on the nearest button of the second row that is
+// on, so "Continue last game" stays on the path when Save game and Load saved game are off (spatial navigation would jump past
+// it to "Back to all games"). On TV the dock sits between the players and the save bar (CSS), so Up from the save bar reaches
+// it by itself. Registered before ui.js, so BGUI.focus sees these keys as handled.
+function nearestIn(row,a){
+  const r0=a.getBoundingClientRect(), x0=r0.left+r0.width/2; let best=null, bd=Infinity;
+  row.querySelectorAll("button:not([disabled])").forEach(b=>{ const r=b.getBoundingClientRect(), dx=Math.abs(r.left+r.width/2-x0); if(r.width>0&&dx<bd){ bd=dx; best=b; } });
+  return best;
+}
 document.addEventListener("keydown",e=>{
   const B=BG(); if(!B||!B.focus||!B.focus.enabled||e.defaultPrevented||e.altKey||e.ctrlKey||e.metaKey) return;
   const down=e.key==="ArrowDown"||e.keyCode===40, up=e.key==="ArrowUp"||e.keyCode===38, a=document.activeElement;
   if((!down&&!up)||!a||!a.closest) return;
   const pick=sel=>document.querySelector(sel+" button.on:not([disabled])")||document.querySelector(sel+" button:not([disabled])");
-  const row1=document.querySelector("#svbar .r");
-  const to=(down&&a.closest("#humanSeg"))?pick("#cpuSeg"):(up&&a.closest("#cpuSeg"))?pick("#humanSeg"):(up&&row1&&row1.contains(a))?pick("#cpuSeg"):null;
+  const rows=document.querySelectorAll("#svbar .r"), row1=rows[0], row2=rows[1];
+  const to=(down&&a.closest("#humanSeg"))?pick("#cpuSeg"):(up&&a.closest("#cpuSeg"))?pick("#humanSeg"):(down&&row1&&row2&&row1.contains(a))?nearestIn(row2,a):null;
   if(to){ e.preventDefault(); B.focus.set(to); }
 });
 drawCpuSeg();
@@ -892,7 +955,7 @@ function loadGame(d){
   players=d.players; isHuman=d.isHuman; pegs=d.pegs; turn=d.turn; sixStreak=d.sixStreak||0; humanCount=d.humanCount||humanCount; cpuCount=d.cpuCount!=null?d.cpuCount:cpuCount;
   die=0; gameOver=false; busy=false; awaitingMove=false; armed=true;
   gen++;                          // the previous game's pending timers must not act on the loaded one
-  stats=readStats(d.stats); clockOn();   // saves from before the stats field start fresh counters
+  stats=readStats(d.stats); clockOn(); ui.result=false;   // saves from before the stats field start fresh counters
   setHumanSeg(); drawCpuSeg();    // New Game selectors show the loaded game's player counts
   buildStrip();
   buildBoard(); beginTurn();
@@ -910,6 +973,7 @@ menuBtn.addEventListener("click",()=>{
   // offer Resume only when a game is actually in progress
   const resume=document.getElementById("resumeBtn");
   resume.style.display = (players.length>0 && !gameOver) ? "block" : "none";
+  ui.result=false; document.getElementById("resumeLabel").textContent="Resume";
   document.getElementById("resumeSub").textContent=gameOver?"":"Turn "+Math.max(1,stats.turns)+" · "+(NAME[players[turn]]||"");
   saveBar.refresh();
   showSetup(true);
@@ -937,7 +1001,7 @@ function startGame(humans, cpus, rollOff){
   players.forEach((c,i)=>{ isHuman[c]= i<humans; pegs[c]=[null,null,null,null]; });
   turn=0; die=0; gameOver=false; busy=false; awaitingMove=false; sixStreak=0;
   gen++;   // the previous game's pending timers must not act on this one
-  stats=freshStats(); clockOn();
+  stats=freshStats(); clockOn(); ui.result=false;
   // player strip
   buildStrip();
   if(rollOff){
@@ -971,10 +1035,12 @@ document.addEventListener("DOMContentLoaded",()=>{
   ui.strip=""; ui.die=-1; uiSync();
   document.addEventListener("bgui:effects",pulseRefresh);
   document.addEventListener("bgui:win",pulseRefresh);
+  document.addEventListener("bgui:tv",()=>{ deviceCopy(); syncStart(); });
 });
 
 // init board visuals even before start
 Skins.apply("trouble"); Sound.mountButton(); Sound.music("trouble");
+deviceCopy();
 buildBoard();
 startGame(1,1);
 saveBar.refresh();
