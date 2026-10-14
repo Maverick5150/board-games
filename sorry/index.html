@@ -239,7 +239,7 @@
     <div id="boardWrap"><svg id="board" viewBox="0 0 600 600"></svg></div>
     <div class="sr-table" id="table" data-toast-avoid>
       <div id="deckSlot"></div>
-      <div class="sr-tinfo">
+      <div class="sr-tinfo" data-stage-text>
         <span class="bg-eyebrow" id="cardEyebrow">Deck</span>
         <p class="sr-rule" id="cardRule"></p>
         <button class="bg-btn bg-btn--secondary" id="movesBtn" type="button" data-icon="cards" hidden>Choose a move</button>
@@ -1097,7 +1097,7 @@ function showSetup(on){
     if(armed&&players.length&&!gameOver) setTurnChip(players[turn]);   // the board is back: the strip pulses whose turn it is
     if(armed&&gameOver&&ui.winShown!==gen) scheduleWin();              // the game ended while the Menu was up: its Victory screen now
     if(!focusDeck()&&!movesBtn.hidden) focusTV(movesBtn);
-    guardBack();                                                        // TV browsers: the remote's Back now stays on this page
+    const B=BG(); if(armed&&B&&B.back) B.back.arm();                    // TV browsers: the remote's Back now stays on this page
   }
 }
 // the game ended while the Menu was up (a computer won behind it): Resume becomes "See the result" (the board, then the Victory
@@ -1213,39 +1213,16 @@ menuBtn.addEventListener("click",()=>{
 });
 
 // ---- the remote's Back (TV) ----
-// The Fire TV app calls window.__tvBack() on Back (MainActivity.onBackPressed closes the app when a page has none); a TV browser turns
-// Back into history.back() (a guard entry catches it once a game has started) and some send a Back key as well. Each Back closes the
-// top layer (the sound panel, the move sheet, the Victory screen), else opens the Menu from the board, else goes back to the game from
-// the Menu, else leaves for the hub.
+// ui.js gives every game page the same default (BGUI.back: window.__tvBack for the Fire TV app, a history guard for TV browsers once
+// a game has started, the Back key, one press = one step): it closes the top layer (the sound panel, the move sheet, the Victory
+// screen), then takes this page's step: from the board the Menu opens, from the Menu Resume goes back to the game (or "See the
+// result"); on the New game page it goes on to the hub.
 const homeBtn=document.getElementById("homeBtn");
-function isBackKey(e){ const k=e.key; return k==="Escape"||k==="Esc"||k==="GoBack"||k==="BrowserBack"||e.keyCode===27||e.keyCode===4||((k==="Backspace"||e.keyCode===8)&&!/^(INPUT|TEXTAREA|SELECT)$/.test((e.target&&e.target.tagName)||"")); }
 function backStep(){   // the page's own steps, once nothing is open on top
   if(!setupShown()){ menuBtn.click(); return "menu"; }
   if(resumeBtn.style.display!=="none"){ resumeBtn.click(); return "resume"; }
-  homeBtn.click(); return "hub";
+  return false;
 }
-function tvBack(){
-  if(window.Sound&&Sound.panelOpen&&Sound.panelOpen()){ Sound.closePanel(); return "panel"; }
-  const B=BG();
-  if(B&&B.sheet&&B.sheet.top&&B.sheet.top()){ B.sheet.close(B.sheet.top(),"back"); return "sheet"; }
-  if(B&&B.win&&B.win.isOpen()){ closeWin(); return "win"; }
-  return backStep();
-}
-window.__tvBack=tvBack;
-let backKeyAt=0;
-function guardBack(){ if(!onTV()||!armed) return; try{ if(!(history.state&&history.state.srBack)) history.pushState({srBack:1},""); }catch(e){} }
-try{ if(history.state&&history.state.srBack) history.replaceState(null,""); }catch(e){}   // reloaded on a guard entry: a game starting now pushes a fresh one
-window.addEventListener("keydown",e=>{ if(isBackKey(e)) backKeyAt=Date.now(); },true);
-// TV: a Back key that nothing on top took (the sheet, the panel and the Victory screen close themselves) is the page's next step
-document.addEventListener("keydown",e=>{
-  if(!onTV()||!armed||e.defaultPrevented||e.altKey||e.ctrlKey||e.metaKey||!isBackKey(e)) return;
-  e.preventDefault(); backStep();
-});
-window.addEventListener("popstate",()=>{
-  if(!onTV()||!armed) return;                              // before the first game Back leaves the page, as it always did
-  if(Date.now()-backKeyAt<700){ guardBack(); return; }     // the same press also came as a Back key, which already took the step
-  if(tvBack()!=="hub") guardBack();
-});
 
 function startGame(humans, cpus){
   gen++;   // the previous game's pending timers must not act on this one
@@ -1264,7 +1241,14 @@ document.addEventListener("visibilitychange",()=>{ if(document.hidden) clockOff(
 // ui/ui.js is deferred: it arrives after this script. Then the icons go in, the strip gets its CPU badges and turn ring, and the Luxe
 // sheet and toasts take over from the fallbacks.
 document.addEventListener("DOMContentLoaded",()=>{
-  const B=BG(); if(!B||!B.effects) return;
+  const B=BG();
+  if(B&&B.back) B.back.on(backStep);
+  else window.__tvBack=()=>{   // no ui.js: the same steps, without the Luxe layers
+    if(window.Sound&&Sound.panelOpen&&Sound.panelOpen()){ Sound.closePanel(); return "panel"; }
+    const r=backStep(); if(r) return r;
+    homeBtn.click(); return "hub";
+  };
+  if(!B||!B.effects) return;
   document.documentElement.classList.add("sr-luxe");
   if(B.icon) document.querySelectorAll("[data-icon]").forEach(el=>{ if(!el.querySelector("svg")) el.insertAdjacentHTML("afterbegin",B.icon(el.getAttribute("data-icon"))); });
   saveBar.refresh();
