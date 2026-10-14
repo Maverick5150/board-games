@@ -588,6 +588,7 @@ function renderRvRules(){
   var h='<div class="muted" style="font-size:2.2vh">🃏 Version</div><div>'+R.VERSIONS.map(function(v){ return '<button class="aibtn'+(v.id===rvCfg.version?" on":"")+'" data-v="'+v.id+'" style="margin:.5vh;padding:.9vh 1.6vh;font-size:2vh">'+esc(v.name)+'</button>'; }).join("")+'</div>'+
     '<div class="muted" style="font-size:2vh;max-width:80vw;margin:.6vh auto">'+esc(cur.tag)+' — '+esc(cur.desc)+'</div>'+
     '<div class="muted" style="font-size:2.2vh;margin-top:.6vh">⚙️ Rules (tap to change)</div><div>'+R.HOUSE.map(function(hr,k){
+      if(R.houseApplies&&!R.houseApplies(hr[0],o)) return "";   // e.g. Target score in a two-deal game
       var v=o[hr[0]], txt;
       if(hr[2]==="bool") txt=hr[1]+": "+(v?"ON":"off");
       else { var m=hr[3].filter(function(c){return String(c[0])===String(v);})[0]; txt=hr[1]+": "+(m?m[1]:v); }
@@ -1016,7 +1017,7 @@ function playMonopoly(){
   async function payTo(c,to,amt){ cash[c]-=amt; cash[to]+=amt; if(cash[c]<0) await resolveDebt(c,to); }
   function liquidatable(c){ var v=cash[c]; for(var i=0;i<40;i++) if(owner[i]===c){ var s=BOARD[i]; if(s.t==="prop"&&houses[i]>0) v+=Math.floor(houses[i]*s.house/2); if(!mort[i]) v+=Math.floor((s.price||0)/2); } return v; }
   function aiRaise(c){ var guard=200; while(cash[c]<0 && guard-->0){ var best=-1,bh=0; for(var i=0;i<40;i++) if(owner[i]===c&&BOARD[i].t==="prop"&&houses[i]>bh){bh=houses[i];best=i;} if(best>=0){ sellHouse(c,best); continue; } var did=false; for(var j=0;j<40;j++) if(owner[j]===c&&!mort[j]&&groupBare(j)){ doMort(c,j); did=true; break; } if(!did) break; } }
-  function sellLabel(i){ return (hotelShort(i)?"Sell hotel — bank has only "+Math.max(0,housesLeft)+" houses":"Sell a building")+" (+"+money(sellGain(i))+")"; }
+  function sellLabel(i){ return (hotelShort(i)?"Sell hotel — bank has only "+Math.max(0,housesLeft)+" house"+(Math.max(0,housesLeft)===1?"":"s"):"Sell a building")+" (+"+money(sellGain(i))+")"; }
   function propActions(c,i,debt){ var s=BOARD[i], a=[];
     if(debt){ if(s.t==="prop"&&houses[i]>0){ if(canSell(c,i)) a.push({id:"s"+i,label:sellLabel(i)}); } else if(!mort[i]&&groupBare(i)) a.push({id:"m"+i,label:"Mortgage (+"+money(s.mort)+")",color:"red"}); return a; }
     if(canBuild(c,i)&&cash[c]>=s.house) a.push({id:"b"+i,label:(houses[i]===4?"🏨 Build Hotel":"🏠 Build House")+" — "+money(s.house),color:"green"});

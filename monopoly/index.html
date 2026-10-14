@@ -424,8 +424,7 @@ function openDeed(i,fromManage){
     if(s.t==="prop"){
       if(canBuildOn(v,i)) h+=`<button class="btn go" style="width:100%;margin:0 0 6px" onclick="window.__dBuild(${i})">${G.houses[i]===4?"🏨 Build Hotel":"🏠 Build House"} — ${money(s.house)}</button>`;
       else if(!grpMort && ownsFullGroup(v,s.g) && G.houses[i]<5 && v.cash<s.house) h+=`<button class="btn" style="width:100%;margin:0 0 6px" disabled>Need ${money(s.house)} to build</button>`;
-      if(G.houses[i]>0 && canSellHouse(v,i)) h+=`<button class="btn" style="width:100%;margin:0 0 6px" onclick="window.__dSell(${i})">Sell building — +${money(Math.floor(s.house/2))}</button>`;
-      else if(hotelShort(i)) h+=`<button class="btn" style="width:100%;margin:0 0 6px" disabled>Bank has only ${G.housesLeft} house${G.housesLeft===1?"":"s"} — hotel can't be sold now</button>`;
+      if(G.houses[i]>0 && canSellHouse(v,i)){ const hl=Math.max(0,G.housesLeft); h+=`<button class="btn" style="width:100%;margin:0 0 6px" onclick="window.__dSell(${i})">${hotelShort(i)?`Sell hotel — bank has only ${hl} house${hl===1?"":"s"}`:"Sell building"} — +${money(sellGain(i))}</button>`; }
     }
     if(!G.mort[i] && groupBare(i)) h+=`<button class="btn warn" style="width:100%;margin:0 0 6px" onclick="window.__dMort(${i})">Mortgage — +${money(s.mort)}</button>`;
     if(G.mort[i]) h+=`<button class="btn go" style="width:100%;margin:0 0 6px" onclick="window.__dUnmort(${i})" ${v.cash<Math.ceil(s.mort*1.1)?"disabled":""}>Lift mortgage — ${money(Math.ceil(s.mort*1.1))}</button>`;
@@ -530,6 +529,7 @@ function later(fn,ms){ const e=EPOCH; return setTimeout(()=>{ if(e===EPOCH) fn()
 function loadSavedGame(d){
   EPOCH++;
   G=JSON.parse(JSON.stringify(d.G)); Object.assign(RULES,DEFAULT_RULES,d.rules||{}); if(d.setup) SETUP=d.setup;
+  if(G.housesLeft<0) G.housesLeft=0; if(G.hotelsLeft<0) G.hotelsLeft=0;   // old saves (pre-M5 fix) could hold a negative bank stock
   AUC=null; AUC_WAIT.length=0; TRADE=null; DEBT_THEN=null; G.bankAuctionActive=false;
   const lg=$("log"); lg.innerHTML=""; (d.log||[]).forEach(h=>{ const x=document.createElement("div"); x.innerHTML=h; lg.appendChild(x); });
   lg.scrollTop=lg.scrollHeight; log("<i>Saved game loaded.</i>");
@@ -974,20 +974,20 @@ function buildHouse(p,i){
 }
 // a hotel sold back is exchanged for 4 houses; when the bank has fewer (housing shortage) it can't be broken up
 function hotelShort(i){ return G.houses[i]===5 && RULES.hotelsRequire4 && !RULES.unlimitedBuildings && G.housesLeft<4; }
-// even selling: only from the most-built of the owner's lots in the group. A voluntary sale can't break up a
-// hotel during a shortage; a forced one (debt) sells it down to the houses the bank has left.
-function canSellHouse(p,i,forced){
+// even selling: only from the most-built of the owner's lots in the group. During a housing shortage a hotel
+// (sold by choice or to pay a debt) comes down to the houses the bank has left, as in the Party copy.
+function canSellHouse(p,i){
   const s=BOARD[i]; if(s.t!=="prop"||G.owner[i]!==p.id||G.houses[i]<=0) return false;
   if(RULES.evenBuild){ const max=Math.max(...ownLots(i).map(x=>G.houses[x])); if(G.houses[i]!==max) return false; }
-  return !!forced || !hotelShort(i);
+  return true;
 }
-function sellGain(i){ const half=Math.floor(BOARD[i].house/2); return hotelShort(i)?(5-G.housesLeft)*half:half; }
+function sellGain(i){ const half=Math.floor(BOARD[i].house/2); return hotelShort(i)?(5-Math.max(0,G.housesLeft))*half:half; }
 function sellHouse(p,i,force){
-  const s=BOARD[i]; if(!canSellHouse(p,i,force)) return;
+  const s=BOARD[i]; if(!canSellHouse(p,i)) return;
   const amt=sellGain(i); p.cash+=amt;
   if(G.houses[i]===5){
     G.houses[i]=4;
-    if(!RULES.unlimitedBuildings){ G.hotelsLeft++; if(RULES.hotelsRequire4){ const back=Math.min(4,G.housesLeft); G.houses[i]=back; G.housesLeft-=back; } }
+    if(!RULES.unlimitedBuildings){ G.hotelsLeft++; if(RULES.hotelsRequire4){ const back=Math.min(4,Math.max(0,G.housesLeft)); G.houses[i]=back; G.housesLeft-=back; } }
   }
   else { G.houses[i]--; if(!RULES.unlimitedBuildings) G.housesLeft++; }
   log(`${p.name} sells ${amt>Math.floor(s.house/2)?"buildings":"a building"} on ${s.n} (+${money(amt)}).`);

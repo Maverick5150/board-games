@@ -166,11 +166,12 @@ function drawSeats(){
 function drawHouse(){
   const o=curOpts(), box=$("houseRules"); box.innerHTML="";
   R.HOUSE.forEach(h=>{
+    if(!R.houseApplies(h[0],o)) return;   // e.g. Target score in a two-deal game
     const key=h[0], label=h[1], kind=h[2], tag=OFFICIAL_NOT[key]?'<span class="tag house">house</span>':'<span class="tag off">variant</span>';
     const row=document.createElement("div"); row.className="row";
     if(kind==="bool"){ row.innerHTML=`<span>${esc(label)}${tag}</span><input type="checkbox"${o[key]?" checked":""}>`; row.querySelector("input").addEventListener("change",e=>{ cfg.over[key]=e.target.checked; drawSeats(); }); }
     else { row.innerHTML=`<span>${esc(label)}${tag}</span><select>${h[3].map(c=>`<option value="${esc(c[0])}"${String(o[key])===String(c[0])?" selected":""}>${esc(c[1])}</option>`).join("")}</select>`;
-      row.querySelector("select").addEventListener("change",e=>{ const raw=e.target.value; const m=h[3].filter(c=>String(c[0])===raw)[0]; cfg.over[key]=m?m[0]:raw; drawSeats(); }); }
+      row.querySelector("select").addEventListener("change",e=>{ const raw=e.target.value; const m=h[3].filter(c=>String(c[0])===raw)[0]; cfg.over[key]=m?m[0]:raw; drawSeats(); if(key==="deals") drawHouse(); }); }
     box.appendChild(row);
   });
 }
@@ -354,7 +355,7 @@ function renderActions(human){
   }
   const vh=viewerHand(), cs=vh.hand.filter(c=>sel.has(c.id));
   const m=cs.length>=3?R.buildMeld(cs,G.o):null;
-  add(m?`Meld (+${R.meldPoints(m,G.o)})`:"Meld",()=>act({t:"meld",ids:cs.map(c=>c.id)}),{primary:!!m,dis:!m});
+  add(m?`Meld (+${R.meldPoints(m,G.o)*(G.o.doubleFour&&cs.length===4?2:1)})`:"Meld",()=>act({t:"meld",ids:cs.map(c=>c.id)}),{primary:!!m,dis:!m});
   let tgt=null; if(cs.length===1){ const ts=G.melds.filter(x=>GM.mayLayOn(G,x,G.turn)&&R.layOff(x,cs[0],G.o)&&!(G.mustNew&&G.mustUse===cs[0].id)); tgt=ts.length===1?ts[0]:(ts.length>1?"many":null); }
   add("Lay off",()=>{ if(tgt==="many") toast("Tap the glowing meld you want"); else act({t:"layoff",meld:tgt.id,card:cs[0].id}); },{dis:!tgt});
   add("Discard",()=>act({t:"discard",card:cs[0].id}),{dis:cs.length!==1});

@@ -78,7 +78,7 @@ function injectCSS(){ if(typeof document==="undefined"||document.getElementById(
 
 function create(cfg){
   injectCSS();
-  var root=cfg.root, board=cfg.board, V=null, S={key:"",src:null,tgt:null,amt:1,occN:null,fN:1,fSrc:null,fTgt:null,s2:[],s2n:null,cardSel:[],lastSeq:-1,dice:"",blitz:false,blitzT:null,infoT:null};
+  var root=cfg.root, board=cfg.board, V=null, S={key:"",src:null,tgt:null,amt:1,occN:null,fN:1,fSrc:null,fTgt:null,s2:[],s2n:null,cardSel:[],convSeen:{},lastSeq:-1,dice:"",blitz:false,blitzT:null,infoT:null};
   var self={};
   root.classList.add("rkpanel");
   root.innerHTML='<div class="rkstat" id="rkstat"></div><div class="rkdice" id="rkdice"></div><div class="rkacts" id="rkacts"></div><div class="rkbar" id="rkbar"></div><div class="rklog" id="rklog"></div>';
@@ -239,7 +239,7 @@ function create(cfg){
     var sc=sel.map(function(id){ return cards.filter(function(c){ return c.id===id; })[0]; });
     var ok=sc.length===3&&E.validSet(sc), val=ok?E.setValue(V,sc):null;
     var bonusOpts=[]; if(ok&&(V.o.terrBonus==="cap2"||V.o.terrBonus==="cap2turn"&&!V.bonusUsed)){ sc.forEach(function(c){ if(c.t>=0&&V.terr[c.t].o===V.me&&bonusOpts.indexOf(c.t)<0) bonusOpts.push(c.t); }); }
-    var h='<h2>🃏 Your cards ('+cards.length+')</h2><div style="font-size:12.5px;opacity:.85">Sets: three alike, one of each, or any two plus a wild card. '+(V.nextSet?'Next set is worth <b>'+V.nextSet+'</b> armies':'Set values depend on the card types')+' · '+V.setsTraded+' traded so far.'+(V.o.terrBonus!=="none"?' ★ = you own that territory (+2 armies on it when traded).':'')+'</div>';
+    var h='<h2>🃏 Your cards ('+cards.length+')</h2><div style="font-size:12.5px;opacity:.85">Sets: three alike, one of each, or any two plus a wild card. '+(V.nextSet?'Next set is worth <b>'+V.nextSet+'</b> armies':'Set values depend on the card types')+' · '+V.setsTraded+' traded so far.'+(V.o.terrBonus!=="none"?' ★ = you own that territory (+2 armies on it when traded'+(V.o.terrBonus==="cap2turn"&&V.bonusUsed?'; already used this turn':'')+').':'')+'</div>';
     h+='<div class="rkcards">'+cards.map(function(c){ return cardHTML(c,{sel:sel.indexOf(c.id)>=0,owned:V.o.terrBonus!=="none"&&c.t>=0&&V.terr[c.t].o===V.me}); }).join("")+'</div>';
     if(canTrade){ h+='<div class="rkacts">'+(ok?'<button class="pri" data-m="trade">Trade in for '+val+' armies</button>':'<button disabled>Select 3 cards to trade</button>')+(sets.length&&!ok?'<button data-m="auto">Pick a set for me</button>':'')+'</div>';
       if(bonusOpts.length>1) h+='<div style="font-size:12px;text-align:center">+2 bonus armies go on: '+bonusOpts.map(function(t,i){ return '<label style="margin:0 6px"><input type="radio" name="bt" value="'+t+'"'+(i===0?" checked":"")+'> '+esc(MP.names[t])+'</label>'; }).join("")+'</div>'; }
@@ -314,6 +314,8 @@ function create(cfg){
   board.onTap(tap);
   self.update=function(v){
     V=v; render();
+    if(V.missionConv&&V.me>=0&&!S.convSeen[V.me]){ S.convSeen[V.me]=1; toast("🎯 Another player eliminated your target. Your secret mission is now: "+V.mission); }   // old UK rules
+    else if(!V.missionConv&&V.me>=0) delete S.convSeen[V.me];
     if(S.blitz&&V.lastAttack&&V.lastAttack.seq!==S.blitzSeq){ S.blitzSeq=V.lastAttack.seq; clearTimeout(S.blitzT); S.blitzT=setTimeout(blitzStep,cfg.blitzDelay||420); }
   };
   self.openCards=openCards; self.openPlayers=openPlayers; self.openMission=openMission;

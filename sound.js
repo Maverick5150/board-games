@@ -93,22 +93,28 @@ var SFX={
   build:function(t,d){ tone(294,t,0.07,"square",0.14,d); tone(440,t+0.08,0.1,"square",0.14,d); noise(t,0.05,0.3,900,"bandpass",d); }
 };
 /* one action plays one sound: sfx asked for in the same task are batched and only the most important one plays,
-   and a long jingle is not started again while it is still playing (e.g. "goes out" followed by the game-over fanfare) */
+   and a long jingle is not started again while it is still playing (e.g. "goes out" followed by the game-over fanfare).
+   If the most important one is held that way, the next one in the batch plays instead (two quick Risk conquests
+   still click), except while the win fanfare is playing. */
 var PRI={tick:0,click:1,card:2,draw:2,discard:2,place:2,deal:3,dice:3,turn:3,build:4,coin:4,pay:4,meld:4,slide:5,bump:5,cannon:5,jail:6,bell:6,conquer:7,lose:8,win:9};
 var HOLD={win:1600,lose:900,conquer:900,jail:700};
 var pend=null, lastAt={};
 function sfx(name){
   if(!AC||st.sm||!SFX[name]) return;
   if(isHidden()) return;                       // background page/app: drop it (resuming here would restart the music unseen)
-  if(pend!==null){ if((PRI[name]||0)>(PRI[pend]||0)) pend=name; return; }
-  pend=name;
+  if(pend!==null){ if(pend.indexOf(name)<0) pend.push(name); return; }
+  pend=[name];
   if(typeof Promise!=="undefined") Promise.resolve().then(playPending); else setTimeout(playPending,0);
 }
+function held(n,now){ return !!(HOLD[n]&&lastAt[n]&&now-lastAt[n]<HOLD[n]); }
 function playPending(){
-  var name=pend; pend=null;
-  if(!name||st.sm||isHidden()) return;
+  var list=pend||[]; pend=null;
+  if(!list.length||st.sm||isHidden()) return;
   var now=Date.now();
-  if(HOLD[name]&&lastAt[name]&&now-lastAt[name]<HOLD[name]) return;
+  list.sort(function(a,b){ return (PRI[b]||0)-(PRI[a]||0); });
+  if(held(list[0],now)&&list[0]==="win") return;
+  var name=list.filter(function(n){ return !held(n,now); })[0];
+  if(!name) return;
   if(!ensure()) return;
   lastAt[name]=now;
   try{ inSfx=true; sty=STY[styleName]||null; mul=sfxMul(); SFX[name](ctx.currentTime+0.01,sfxGain); }catch(e){} inSfx=false;

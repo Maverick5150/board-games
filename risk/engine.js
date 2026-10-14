@@ -193,7 +193,9 @@ function skipDone(G){
   while(G.initLeft[G.turn]<=0&&safety++<np+1&&!G.players[G.turn].neutral) G.turn=nextAlive(G,G.turn);
   if(G.initLeft.every(function(x,i){ return x<=0||G.players[i].neutral; })) finishDeploy(G);
 }
-function finishDeploy(G){ ev(G,"setup",{text:"All starting armies are placed."}); G.turn=G.deployStart!=null?G.deployStart:0; beginSetupDone(G); }
+function finishDeploy(G){ ev(G,"setup",{text:"All starting armies are placed."}); G.turn=G.deployStart!=null?G.deployStart:firstPlacer(G); beginSetupDone(G); }
+/* saves from before deployStart existed: whoever made the first claim/placement still in the log (else player 0) */
+function firstPlacer(G){ for(var i=0;i<G.log.length;i++){ var e=G.log[i]; if((e.type==="claim"||e.type==="place")&&typeof e.p==="number"&&G.players[e.p]&&!G.players[e.p].neutral) return e.p; } return 0; }
 function deployOne(G,t){
   if(G.phase!=="deploy") return {ok:false,msg:"Not deploying right now."};
   if(G.terr[t].o!==G.turn) return {ok:false,msg:"Place on one of your own territories."};
@@ -362,7 +364,7 @@ function eliminate(G,victim,by,events){
   v.alive=false;
   events.push(ev(G,"eliminate",{p:by,victim:victim,text:pn(G,by)+" eliminates "+pn(G,victim)+"!"}));
   // old UK Secret Mission: you must destroy your target yourself; if someone else does it, your mission becomes "occupy 24 territories"
-  if(G.o.mode==="mission"&&G.o.missionRules==="uk") G.players.forEach(function(q){ if(q.id!==by&&q.mission&&q.mission.k==="kill"&&q.mission.c===victim) q.mission={k:"terr",n:24,min:1}; });
+  if(G.o.mode==="mission"&&G.o.missionRules==="uk") G.players.forEach(function(q){ if(q.id!==by&&q.mission&&q.mission.k==="kill"&&q.mission.c===victim) q.mission={k:"terr",n:24,min:1,conv:true}; });   // conv: the holder's screen says so (privately)
   if(v.neutral) return;
   if(G.o.cardOnElim){ var cs=v.cards; v.cards=[]; b.cards=b.cards.concat(cs); if(cs.length) events.push(ev(G,"cards",{p:by,text:pn(G,by)+" takes "+cs.length+" card"+(cs.length>1?"s":"")+" from "+pn(G,victim)})); }
   else { v.cards.forEach(function(c){ G.discard.push(c); }); v.cards=[]; }
@@ -673,7 +675,7 @@ function snapshot(G,me){
   return {o:G.o,n:G.n,two:G.two,phase:G.phase,turn:G.turn,me:me,players:pl,terr:G.terr.map(function(t){ return {o:t.o,a:t.a}; }),
     reserve:G.reserve,occ:G.occ,shiftPair:G.shiftPair||null,fortLeft:G.fortLeft,setsTraded:G.setsTraded,nextSet:nextSetValue(G),conquered:G.conquered,noAttack:G.noAttack,mustDown:!!G.mustDown,bonusUsed:!!G.terrBonusTurn,
     initLeft:G.initLeft,returnTo:G.returnTo,deck:G.deck.length,
-    myCards:mp?mp.cards.map(function(c){ return {id:c.id,t:c.t,sym:c.sym}; }):[],mission:(mp&&mp.mission)?G.o.mode==="mission"&&missionText(G,mp.mission):null,myHq:mp?mp.hq:null,
+    myCards:mp?mp.cards.map(function(c){ return {id:c.id,t:c.t,sym:c.sym}; }):[],mission:(mp&&mp.mission)?G.o.mode==="mission"&&missionText(G,mp.mission):null,missionConv:!!(mp&&mp.mission&&mp.mission.conv&&G.o.mode==="mission"),myHq:mp?mp.hq:null,
     cards:me===G.turn?null:undefined,lastAttack:G.lastAttack||null,over:G.over,winner:G.winner,round:G.round||0,
     log:G.log.slice(-6).map(function(e){ return e.text; }).filter(Boolean)};
 }

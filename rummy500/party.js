@@ -148,7 +148,7 @@ function phoneRender(root,st,ctx){
   } else if(play){
     var m=sel.length>=3?R.buildMeld(sel,G.o):null;
     var ts=one?G.melds.filter(function(x){ return GM.mayLayOn(G,x,me)&&R.layOff(x,one,G.o)&&!(st.mustNew&&st.mustUse===one.id); }):[];
-    btns+='<button class="'+(m?"pri":"")+'" data-a="meld"'+(m?"":" disabled")+'>Meld'+(m?" (+"+R.meldPoints(m,G.o)+")":"")+'</button>'+
+    btns+='<button class="'+(m?"pri":"")+'" data-a="meld"'+(m?"":" disabled")+'>Meld'+(m?" (+"+R.meldPoints(m,G.o)*(G.o.doubleFour&&sel.length===4?2:1)+")":"")+'</button>'+
       '<button data-a="lay"'+(ts.length?"":" disabled")+'>Lay off</button>'+
       '<button data-a="discard"'+(sel.length===1?"":" disabled")+'>Discard</button>'+
       '<button data-a="undo"'+(st.canUndo?"":" disabled")+'>↶ Undo</button><button data-a="hint">💡 Hint</button><button data-a="sort">Sort: '+ui.sort+'</button>';

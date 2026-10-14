@@ -6,9 +6,12 @@ var TV=(function(){ try{ return /[?&]tv=1(&|$)/.test(location.search)||!!g.Andro
 var STEP=50;   // ms between background frames: 20 a second, every 3rd refresh of a 60 Hz screen (was every refresh)
 /* "animation:" for a piece: duration (split in segs equal segments) and delay rounded to whole STEPs, steps() timing, so every
    piece changes at the same moments and nothing changes in between. */
+/* Apple WebKit (Safari and every iPhone/iPad browser) may not run steps() animations on the compositor, so there they keep
+   plain linear timing (same durations and paths), which it does accelerate. */
+var APPLE=(function(){ try{ var n=g.navigator||{}; return /Apple/.test(n.vendor||"")||/iP(hone|ad|od)/.test(n.userAgent||""); }catch(e){ return false; } })();
 function anim(name,durS,delS,segs){ segs=segs||1;
   var sd=Math.max(1,Math.round(durS*1000/segs/STEP)), l=Math.round(delS*1000/STEP)*STEP;
-  return "animation:"+name+" "+(sd*STEP*segs)+"ms steps("+sd+") "+(-l)+"ms infinite"; }
+  return "animation:"+name+" "+(sd*STEP*segs)+"ms "+(APPLE?"linear":"steps("+sd+")")+" "+(-l)+"ms infinite"; }
 function pulse(name,f){ var k="@keyframes "+name+"{"; for(var i=0;i<=16;i++) k+=(i*6.25)+"%{"+f((1-Math.cos(Math.PI*i/8))/2)+"}"; return k+"}"; }
 var CSS=
 '#bgskin{position:fixed;inset:0;overflow:hidden;z-index:-1;pointer-events:none}'+

@@ -49,7 +49,7 @@ var VERSIONS=[
 ];
 /* house-rule toggles shown in the "Custom" setup: [key, label, kind, choices] */
 var HOUSE=[
-  ["jokers","Jokers","choice",[[0,"None"],[2,"2 per deck (wild)"],[4,"4 per deck"]]],
+  ["jokers","Jokers","choice",[[0,"None"],[2,"2 per deck"],[4,"4 per deck"]]],   // wild or not is the version's joker rule (Persian jokers are never wild)
   ["deals","Game length","choice",[[0,"Play to the target score"],[2,"Two deals (+50 to the leader)"]]],
   ["cardValues","Card values","choice",[["pips","2–9 face value"],["five","2–9 = 5 each"]]],
   ["pickup","Taking from the pile","choice",[["buried","Only buried cards must be used"],["always","Any card must be used"]]],
@@ -65,6 +65,8 @@ var HOUSE=[
   ["mustGoOut","Must go out to win","bool"],
   ["minNat","Wild joker needs 2 natural cards in a meld","choice",[[1,"No"],[2,"Yes"]]]
 ];
+/* house rows that do nothing in a fixed-length (two-deal) game: the game ends after the deals, not at a target */
+function houseApplies(key,o){ return !(o.deals>0&&(key==="target"||key==="winnerRule"||key==="mustGoOut")); }
 function versionOpts(id,extra){ var v=VERSIONS.filter(function(x){ return x.id===id; })[0]||VERSIONS[0]; var o={}; for(var k in v.opts) o[k]=v.opts[k]; for(var k2 in (extra||{})) o[k2]=extra[k2]; return mergeOpts(o); }
 
 /* ---------------- deck ---------------- */
@@ -234,7 +236,7 @@ function bestMelds(hand,o){
   return best;
 }
 
-g.Rummy={ SUITS:SUITS,SYM:SYM,RED:RED,VERSIONS:VERSIONS,HOUSE:HOUSE,rankLabel:rankLabel,cardLabel:cardLabel,defaultOpts:defaultOpts,mergeOpts:mergeOpts,versionOpts:versionOpts,
+g.Rummy={ SUITS:SUITS,SYM:SYM,RED:RED,VERSIONS:VERSIONS,HOUSE:HOUSE,houseApplies:houseApplies,rankLabel:rankLabel,cardLabel:cardLabel,defaultOpts:defaultOpts,mergeOpts:mergeOpts,versionOpts:versionOpts,
   makeDeck:makeDeck,shuffle:shuffle,pipValue:pipValue,meldCardValue:meldCardValue,handCardValue:handCardValue,
   buildSet:buildSet,buildRun:buildRun,buildMeld:buildMeld,layOff:layOff,meldPoints:meldPoints,canLayOffAny:canLayOffAny,
   candidateMelds:candidateMelds,bestMelds:bestMelds,isNat:isNat };

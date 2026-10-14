@@ -33,7 +33,7 @@ function defaultOpts(){
 function mergeOpts(o){ var d=defaultOpts(); for(var k in (o||{})) d[k]=o[k]; return d; }
 var VERSIONS=[
   {id:"classic",name:"Classic Uno",tag:"Mattel, 108 cards",desc:"The standard game: 7 cards each, match colour, number or symbol, Skip / Reverse / Draw Two / Wild / Wild Draw Four, challenge a Wild Draw Four, call UNO, first to 500.",opts:{edition:"classic"}},
-  {id:"flip",name:"Uno Flip!",tag:"Two-sided deck, 112 cards",desc:"Light side (Draw One, Wild Draw Two) and a harsher Dark side (Draw Five, Skip Everyone, Wild Draw Color). A Flip card turns the whole game over.",opts:{edition:"flip",startRule:"2022"}},
+  {id:"flip",name:"Uno Flip!",tag:"Two-sided deck, 112 cards",desc:"Light side (Draw One, Wild Draw Two) and a harsher Dark side (Draw Five, Skip Everyone, Wild Draw Color). A Flip card turns the whole game over.",opts:{edition:"flip",startRule:"2008"}},
   {id:"nomercy",name:"Uno Show 'Em No Mercy",tag:"168 cards, stacking",desc:"Draw until you can play, stack bigger draw cards, 0s pass hands, 7s swap hands, Draw 6 / Draw 10, and you're out at 25 cards. First to 1000.",opts:{edition:"nomercy",startRule:"2022",drawRule:"untilPlay",forcePlay:true,stack:"mercy",sevenZero:true,challenge:false,mercy:25,target:1000}},
   {id:"allwild",name:"Uno All Wild",tag:"112 cards, nothing has to match",desc:"Every card is a Wild: play anything any time. Skips, Reverses, Draw Two / Four, targeted draws and forced hand swaps.",opts:{edition:"allwild",startRule:"2022",challenge:false}}
 ];
