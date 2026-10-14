@@ -57,6 +57,16 @@
   .sg-keys { display: grid; gap: .5rem; }
   html[data-tv] .sg-main { padding-top: var(--sp-6); }
   html[data-tv] .sg-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  /* hero backdrops are composed for a wide poster (art on the right ~55 %, text on the left): full width on TV;
+     on a narrow phone hero the art gets its own band on top and the text sits below it (README section 10) */
+  html[data-tv] .sg-block--hero { grid-column: 1 / -1; }
+  html[data-tv] #sgHero { min-height: 30rem; }
+  html:not([data-tv]) #sgHero { padding-top: 46%; }
+  html:not([data-tv]) #sgHero .bg-hero__layer { background-size: 100% auto; background-position: 100% 0; }
+  .sg-art { display: flex; flex-wrap: wrap; gap: .75rem 1rem; align-items: center; }
+  .sg-art figure { margin: 0; display: grid; justify-items: center; gap: .3rem; font: 600 var(--fs-micro)/1.2 var(--font-ui); color: var(--text-2); }
+  .sg-art figure img { display: block; width: 4rem; height: 4rem; }
+  .sg-art .sg-banner img { width: 20rem; max-width: 100%; height: auto; border-radius: var(--r-md); box-shadow: inset 0 0 0 1px var(--line-1); }
 </style>
 </head>
 <body class="bg-app">
@@ -117,7 +127,7 @@
   <!-- ===================== effects ===================== -->
   <div class="bg-section"><span class="bg-eyebrow">Effects (all on by default)</span></div>
   <div class="sg-grid sg-grid--wide">
-    <div class="sg-block">
+    <div class="sg-block sg-block--hero">
       <h3 class="bg-h3">Hero crossfade <small>(.bg-hero, BGUI.hero.show)</small></h3>
       <div class="bg-hero" id="sgHero" data-game="monopoly">
         <div class="bg-hero__layer is-on" data-game="monopoly" aria-hidden="true"></div><div class="bg-hero__layer" aria-hidden="true"></div>
@@ -129,7 +139,7 @@
           <div class="sg-hero-nav"><button class="bg-btn bg-btn--secondary bg-btn--sm" type="button" id="sgHeroPrev" data-icon-before="back">Previous</button><button class="bg-btn bg-btn--primary bg-btn--sm" type="button" id="sgHeroNext">Next game</button></div>
         </div>
       </div>
-      <p class="sg-note">Two stacked layers swap opacity (420 ms). Each layer is a pre-rendered backdrop (WebP from the art step) or, until then, the game's spot-lit scene gradient. No mask, no inline SVG.</p>
+      <p class="sg-note">Two stacked layers swap opacity (420 ms). Each layer is a pre-rendered backdrop, art/hero-&lt;game&gt;-960.webp or -1920.webp, with the fade into the game's deep colour baked in. No mask, no inline SVG.</p>
     </div>
     <div class="sg-block">
       <h3 class="bg-h3">Light, glint, glow</h3>
@@ -263,7 +273,11 @@
   <!-- ===================== hub tiles ===================== -->
   <div class="bg-section"><span class="bg-eyebrow">The shelf</span></div>
   <div class="bg-tiles sg-tiles" id="sgTiles"></div>
-  <p class="sg-note" style="margin-top:.75rem">Tile art: ui/art/thumb-*.svg until the art step re-draws it in Luxe (spot-lit, fading into each game's deep colour).</p>
+  <p class="sg-note" style="margin-top:.75rem">Tile art: ui/art/thumb-&lt;game&gt;.svg, with the simpler thumb-&lt;game&gt;-sm.svg on the phone's 2-up shelf (a &lt;picture&gt; source for max-width 30em).</p>
+
+  <!-- ===================== art ===================== -->
+  <div class="bg-section"><span class="bg-eyebrow">App icons and Fire TV banner</span></div>
+  <div class="sg-art" id="sgArt"></div>
 
   <!-- ===================== tokens ===================== -->
   <div class="bg-section"><span class="bg-eyebrow">Per-game accents</span></div>
@@ -395,10 +409,14 @@ document.addEventListener("DOMContentLoaded", function () {
   var games = [["trouble", "Trouble", "2-4", "Pop the dome"], ["sorry", "Sorry!", "2-4", "Slide and bump"], ["monopoly", "Monopoly", "2-8", "Buy the board"], ["rummy500", "500 Rummy", "2-8", "Melds on felt"],
     ["risk", "Risk", "2-6", "Take the world"], ["uno", "Uno", "2-10", "Match and dump"], ["scatter", "Scattergories", "2-6", "One letter, twelve lists"], ["party", "Party Mode", "2-10", "TV + phones"]];
   $("#sgTiles").innerHTML = games.map(function (g) {
-    return '<button type="button" class="bg-tile' + (g[0] === "party" ? " bg-tile--party" : "") + '" data-game="' + g[0] + '"><span class="bg-tile__art"><img src="art/thumb-' + g[0] + '.svg" alt="" width="320" height="240" decoding="async">' +
+    return '<button type="button" class="bg-tile' + (g[0] === "party" ? " bg-tile--party" : "") + '" data-game="' + g[0] + '"><span class="bg-tile__art"><picture><source media="(max-width: 30em)" srcset="art/thumb-' + g[0] + '-sm.svg"><img src="art/thumb-' + g[0] + '.svg" alt="" width="320" height="240" decoding="async"></picture>' +
       '<span class="bg-tile__badge">' + B.icon("user") + g[2] + '</span></span><span class="bg-tile__label"><span class="bg-tile__seal">' + B.icon(B.icon.seal(g[0])) +
       '</span><span class="bg-tile__name">' + g[1] + '</span><span class="bg-tile__meta">' + g[3] + '</span></span></button>';
   }).join("");
+  /* art: app icons (any purpose, rounded square) + the Fire TV banner, as plain images */
+  $("#sgArt").innerHTML = [["collection", "Board Games"]].concat(games).map(function (g) {
+    return '<figure><img src="art/icon-' + g[0] + '.svg" alt="" width="64" height="64" decoding="async">' + g[1] + '</figure>';
+  }).join("") + '<figure class="sg-banner"><img src="art/banner-tv.svg" alt="Board Games launcher banner" width="320" height="180" decoding="async">banner-tv.svg</figure>';
   $$("#sgTiles .bg-tile").forEach(function (t) { t.addEventListener("click", function () { B.toast(t.querySelector(".bg-tile__name").textContent + " · " + t.querySelector(".bg-tile__badge").textContent + " players", { icon: "play" }); }); });
 
   /* hero crossfade */
@@ -406,9 +424,12 @@ document.addEventListener("DOMContentLoaded", function () {
     rummy500: ["Meld · lay off · score", "Runs and sets on the felt, first to 500."], risk: ["Deploy · attack · fortify", "Take the world one continent at a time."], uno: ["Match · stack · call it", "Match colour or number and empty your hand."],
     scatter: ["One letter · twelve lists", "Beat the sand timer with answers nobody else wrote."], party: ["TV + phones", "Host on the TV, everyone joins from a phone."] };
   var hi = 2;
+  /* pre-rendered backdrops: 1920 on a 1080p TV, 960 everywhere else (phone, desktop, 960x540 TV WebView) */
+  function heroSrc(game) { return "art/hero-" + game + "-" + (document.documentElement.hasAttribute("data-tv") && innerWidth * (devicePixelRatio || 1) > 1280 ? 1920 : 960) + ".webp"; }
+  $("#sgHero .bg-hero__layer").style.backgroundImage = 'url("' + heroSrc("monopoly") + '")';
   function heroGo(step) {
     hi = (hi + step + games.length) % games.length; var g = games[hi];
-    B.hero.show("#sgHero", { game: g[0] });
+    B.hero.show("#sgHero", { game: g[0], src: heroSrc(g[0]) });
     $("#sgHeroTitle").textContent = g[1]; $("#sgHeroEyebrow").textContent = pitch[g[0]][0]; $("#sgHeroPitch").textContent = pitch[g[0]][1];
   }
   $("#sgHeroNext").addEventListener("click", function () { heroGo(1); });

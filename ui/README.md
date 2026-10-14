@@ -15,7 +15,7 @@ This folder is the shared look for all seven games, the hub and Party Mode. It's
 | `fonts/` | DM Serif Display regular (24.2 KB) and italic (24.0 KB), Manrope variable (24.3 KB): Latin WOFF2, SIL OFL 1.1 (`OFL-*.txt`). **Total 72.4 KB** (budget 150 KB) |
 | `tex/` | Pre-rendered images, so nothing is blurred or generated at runtime: `felt.webp` and `paper.webp` grain tiles (neutral alpha, they tint to any colour), `orb-gold.webp` and `orb-violet.webp` light orbs, `rays-q.webp` (one quadrant of the 20-ray win wheel). **Total 101 KB** (budget 150 KB) |
 | `styleguide.html` | The living style guide: phone and TV, all 8 accents, 10 seats, every component, the surfaces, every effect with a full/reduced switch, and a button for every helper |
-| `art/` | Original art from the Tabletop build (thumbnails, icons, Fire TV banner). The art step re-draws it in Luxe; the file names and sizes stay. See section 10 |
+| `art/` | Original Midnight Luxe art: tile thumbnails (+ simplified `-sm` variants), TV hero backdrops (WebP, 1920 and 960), app icons (SVG + PNG exports, maskable), the Fire TV banner and the Android launcher icons. See section 10 |
 
 ## 1. Adopting it in a game (step 4)
 
@@ -193,10 +193,10 @@ The CEO's rule is **keep the fancy effects**: every Luxe effect is ON by default
 | Win screen, held open: rays turning + confetti drifting | ONE ray wheel layer from a pre-rendered quadrant (`tex/rays-q.webp`), ONE confetti layer, opaque scrim, ticker 8 Hz | 10.0-14.4 | 11.6-14.0 |
 | Win screen under "Reduce effects" | ticker off | 0.0-0.5 | 0.0-0.2 |
 | Win opening beat: celebrate burst + rays bloom + card entrance | 1x canvas for 2.8 s, removed after | 9.9-11.1 | 10.8-11.2 |
-| Hero crossfade every 1.5 s | two stacked image layers swap opacity (420 ms) | 7.4 | 11.8-13.8 |
-| Tile focus move every 1 s (D-pad on the shelf) | ring + game glow painted once on the tile's `::after`, opacity swapped instantly; tiles pre-promoted on TV | 2.5 | 11.7 |
+| Hero crossfade every 1.5 s | two stacked image layers swap opacity (420 ms); with the shipped `art/hero-*.webp` backdrops (no mask, no inline SVG) | 7.4 (8.2-10.6 with the WebPs) | 11.8-13.8 (12.1-13.3 with the WebPs) |
+| Tile focus move every 1 s (D-pad on the shelf) | ring + game glow painted once on the tile's `::after`, opacity swapped instantly; tiles pre-promoted on TV | 2.5 (2.0-3.2 over the real thumbnails) | 11.7 (9.8-10.1 over the real thumbnails) |
 
-% of ONE core: OS CPU time of every Edge process, headless Edge with `--disable-gpu` (software compositing, so these are pessimistic upper bounds), ~6 s windows with everything else held still; ranges are two full runs (2026-10-14). Run by `BG_audit/design/luxe-build/perf.js` through `.dev/run-one.ps1`.
+% of ONE core: OS CPU time of every Edge process, headless Edge with `--disable-gpu` (software compositing, so these are pessimistic upper bounds), ~6 s windows with everything else held still; ranges are two full runs (2026-10-14). Run by `BG_audit/design/luxe-build/perf.js` through `.dev/run-one.ps1`; the "with the WebPs" / "real thumbnails" figures and the cost of ONE D-pad hero move (about 0.1 CPU-second on the phone, 0.25 on TV) come from `art-check.js` (section 10).
 
 What the A/B runs showed, and why the shipped versions look like this:
 
@@ -253,18 +253,11 @@ const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.png", ".
   "../ui/tex/felt.webp", "../ui/tex/paper.webp", "../ui/tex/orb-gold.webp", "../ui/tex/orb-violet.webp", "../ui/tex/rays-q.webp"];
 ```
 
-The hub's `sw.js` needs the same files with `ui/...` paths, plus the hub art it shows (`ui/art/thumb-*.svg` and the icon PNGs its manifest names; step 7 adds the hero backdrops). Each game caches its own icon PNGs. Every game shares one origin and the caches are per game, so each game must cache its own copy for offline play. `styleguide.html`, `README.md` and the OFL texts don't need caching. The old Tabletop files (`fraunces-var-latin.woff2`, `figtree-var-latin.woff2`, `tex/walnut.webp`, `tex/oak.webp`) are gone: drop them from any `ASSETS` list.
+The hub's `sw.js` needs the same files with `ui/...` paths, plus the hub art it shows: `ui/art/thumb-<game>.svg` and `thumb-<game>-sm.svg`, the hero backdrops it uses (`ui/art/hero-<game>-960.webp`, and `-1920.webp` on a 1080p TV: 409 KB for all 16) and the icon PNGs its manifest names. Each game caches its own icon PNGs. Every game shares one origin and the caches are per game, so each game must cache its own copy for offline play. `styleguide.html`, `README.md` and the OFL texts don't need caching. The old Tabletop files (`fraunces-var-latin.woff2`, `figtree-var-latin.woff2`, `tex/walnut.webp`, `tex/oak.webp`) are gone: drop them from any `ASSETS` list.
 
 ## 9. What belongs to later steps
 
-- **Art step (Luxe art):**
-  - Re-draw `art/thumb-*.svg`, the icons and the Fire TV banner in Luxe: spot-lit original vector art fading into each game's deep colour, DM Serif Display / Manrope outlined to paths with opentype.js (no `<text>`, no filters), every SVG through `art_lint.js`.
-  - Uno: an original wild (four-colour diamond or star medallion on lacquer cards); no black "WILD" card with a four-quadrant disc and no oval.
-  - Monopoly: "DEED" or "PROPERTY", never "TITLE DEED"; vary the green-house / red-hotel pairing.
-  - Trouble: pegs, not balls.
-  - Simplified "thumb" variants (160px and below) for busy art (Rummy, Monopoly).
-  - Pre-rendered TV hero backdrops per game (WebP, sized for 1920 and 960) for `BGUI.hero.show`.
-  - PNG exports: PWA icons 192 / 512 / maskable, apple-touch 180, Fire TV banner 320x180 and 640x360, Android launcher icons mdpi to xxxhdpi.
+- **Art step: done** (section 10). Thumbnails with simplified `-sm` variants, icons, the Fire TV banner, the TV hero backdrops and every PNG export are in `art/`; the original Uno wild, the Monopoly DEED and the Trouble pegs are in place.
 - **Step 4 (games adopt ui/):**
   - Swap each game's patterns using the table in section 5; setup pages on `.bg-app--scene`.
   - Wire `setTurn`, `ambient`, the toast placement and `BGUI.win` + `celebrate` with stat pills (turns, bumps, time).
@@ -277,18 +270,64 @@ The hub's `sw.js` needs the same files with `ui/...` paths, plus the hub art it 
 - **Step 7 (hub):** all 7 game tiles plus a full Party Mode tile, always present, with player-count badges (`.bg-tile__badge`); the Continue card separate from the grid; the TV poster hero on `.bg-hero` with pre-rendered backdrops (measure one D-pad move); `.bg-orbs` and the logomark glint.
 - **Step 8 (Android / Fire TV):** placement of the exported launcher icons and banner; the bridge sets `window.AndroidTV` so pages get `html[data-tv]`.
 
-## 10. Art (`ui/art/`, from the Tabletop build until the art step)
+## 10. Art (`ui/art/`)
 
-The current files are original and filter-free with every glyph outlined (no `<text>`), so a plain `<img>`, the launcher and the banner look identical without any font. They are drawn in the Tabletop look; the art step replaces them in Luxe with the same names and sizes (section 9).
+Original Midnight Luxe art: spot-lit vector scenes on each game's deep colour, jewel lacquer and champagne-gold trim, every edge fading into the game's `--accent-deep` so the art works sliced, letterboxed or scaled on that colour with no seam.
+
+- **Filter-free and font-free.** Glows and shadows are gradients (no SVG filters), every glyph is outlined to a path from DM Serif Display / Manrope (no `<text>`), and nothing references a URL. A plain `<img>`, a launcher and the Fire TV banner look identical with no font loaded.
+- **Original, no trade dress.** No official logos or names on the art.
+  - Monopoly shows a "DEED" for "Grand Avenue", gold houses and a sapphire hotel (never "TITLE DEED", never green houses with a red hotel).
+  - Uno shows lacquer number cards (serif numerals, no oval) and an original gold-lacquer card with a four-colour star on a midnight diamond inlay (no black "WILD" card, no quadrant disc, no disc or oval anywhere).
+  - Trouble shows pegs (the Tabletop peg shape, re-lit with a gold collar) round the pop-dome, not balls.
 
 | File | Size | Use |
 |---|---|---|
-| `thumb-<game>.svg` (trouble, sorry, monopoly, rummy500, risk, uno, scatter, party) | 320 x 240 (4:3) | Hub and TV tile art: `<span class="bg-tile__art"><img src="ui/art/thumb-uno.svg" alt="" width="320" height="240" decoding="async"></span>` |
-| `icon-<name>.svg` (collection + 7 games + party) | 512, rounded square | `purpose: "any"` source |
+| `thumb-<game>.svg` (trouble, sorry, monopoly, rummy500, risk, uno, scatter, party) | 320 x 240 (4:3), 5-18 KB | Hub and TV tile art, and any art box wider than about 220 CSS px |
+| `thumb-<game>-sm.svg` (same 8) | 320 x 240, 5-12 KB | Simplified variant (fewer, bigger things; the top-left corner kept clear for `.bg-tile__badge`) for art boxes of about 220 CSS px and below: the phone's 2-up shelf (160-175 px) and the TV lobby cards |
+| `hero-<game>-1920.webp`, `hero-<game>-960.webp` (7 games + party) | 1920 x 1080 (27-42 KB) and 960 x 540 (12-17 KB); 409 KB for all 16 | `.bg-hero` backdrops for `BGUI.hero.show`: TV hub poster, Party lobby, setup header. The fade into the deep colour is baked in |
+| `icon-<name>.svg` (collection + 7 games + party) | 512, rounded square (the art is clipped to it) | `purpose: "any"` source |
 | `icon-<name>-192.png`, `-512.png` | 192 / 512 | Manifest `purpose: "any"` |
-| `icon-<name>-maskable-512.png` | 512, full bleed | Manifest `purpose: "maskable"`: the key art sits inside the central 80% circle |
+| `icon-<name>-maskable-512.png` | 512, full bleed | Manifest `purpose: "maskable"`: the key art sits inside the central 80 % circle, with a gold ring at r 198 for circle masks |
 | `apple-touch-icon-180.png` | 180, full bleed | `<link rel="apple-touch-icon" href="ui/art/apple-touch-icon-180.png">` |
-| `banner-tv.svg`, `banner-tv-320x180.png`, `banner-tv-640x360.png` | 320 x 180 | Fire TV / Android TV launcher banner (`android:banner`) |
+| `banner-tv.svg`, `banner-tv-320x180.png`, `banner-tv-640x360.png` | 320 x 180 | Fire TV / Android TV launcher banner (`android:banner`): the gold "Board" + ivory italic "Games" wordmark, the logomark, fanned jewel cards and the gold die |
 | `android/ic_launcher-<density>-<px>.png` | 48 / 72 / 96 / 144 / 192 | Collection launcher icon for mdpi / hdpi / xhdpi / xxhdpi / xxxhdpi |
 
-**Checks and generators (dev-time only, outside the repo):** `BG_audit/design/luxe-build/` holds `verify.js` (style guide at 390x844, 1366x768, 1920x1080 TV and 960x540 TV: API, helpers, D-pad walk, sheet, win, effects switch, type floor, targets, zero console errors), `perf.js` (per-effect CPU), `contrast.js` (226 text/surface pairs), `accents.js` (accent separation), `palette.js` and `seats.js` (colour science) and `make-fx.js` (renders `tex/orb-*.webp` and `tex/rays-q.webp`). The art pipeline (`gen-art.js`, `render.js`, `art_lint.js`, `png_check.js`) is in `BG_audit/design/build/`.
+**Small variants.** Let the browser pick by width. The style guide's shelf does this:
+
+```html
+<span class="bg-tile__art"><picture>
+  <source media="(max-width: 30em)" srcset="ui/art/thumb-uno-sm.svg">
+  <img src="ui/art/thumb-uno.svg" alt="" width="320" height="240" decoding="async">
+</picture></span>
+```
+
+TV lobby cards (about 150 px at 1080p) use `thumb-<game>-sm.svg` directly.
+
+**Hero backdrops.** They are composed for a wide poster: the art fills the right ~55 % and the left is a clean deep-colour field for the title. The bottom and left edges are already faded into `--accent-deep`, which is also the layer's background colour.
+
+- Pick the size: 1920 on a 1080p TV, 960 everywhere else (phone, desktop, a 960x540 TV WebView).
+
+```js
+var src = "ui/art/hero-" + game + "-" + (document.documentElement.hasAttribute("data-tv") && innerWidth * (devicePixelRatio || 1) > 1280 ? 1920 : 960) + ".webp";
+BGUI.hero.show(".bg-hero", { game: game, src: src });
+```
+
+- **TV:** a full-width `.bg-hero` (16:9 or wider) with the text on the left. The default `background-size: cover; background-position: 100% 50%` is right.
+- **Narrow heroes** (phone, or any box narrower than about 16:10): give the art its own band above the text so nothing sits on it. Put `padding-top: 46%` on the `.bg-hero` and `background-size: 100% auto; background-position: 100% 0` on its layers, as the style guide does.
+- **Cost** (`luxe-build/art-check.js`, same method as section 6, % of one core):
+  - a crossfade every 1.5 s with the WebPs: 8.2-10.6 % on the phone, 12.1-13.3 % on TV;
+  - ONE D-pad move: about 0.1 CPU-second on the phone and 0.25 on TV, whether the image is new or already decoded;
+  - the 8-tile shelf with the art: idle 0-1 %; a focus move every second: 2.0-3.2 % on the phone, 9.8-10.1 % on TV.
+
+The art step added no new effect images: the core's `tex/orb-gold.webp`, `tex/orb-violet.webp` and `tex/rays-q.webp` are the shipped glow and ray set.
+
+**Checks and generators (dev-time only, outside the repo).** `BG_audit/design/luxe-build/` holds:
+
+- `gen-art.js`: writes every SVG above, plus the maskable and hero sources.
+- `render.js`: the PNG and WebP exports through headless Edge, and the contact sheet `shot-art-contact.png`.
+- `art_lint.js`: no filters, no `<text>`, no URLs, 25 KB or less, no "WILD" or "TITLE DEED" in labels or outlined words, and no solid disc or oval in the Uno art.
+- `png_check.js`: the pixel size of every PNG and WebP, read from its header, and the 1.5 MB hero budget.
+- `art-check.js`: the art in the style guide, the variant choice and the CPU figures.
+- `inst-fonts-luxe.py`: TTF copies of the shipped fonts for outlining.
+
+The core's checks are there too: `verify.js` (style guide at 390x844, 1366x768, 1920x1080 TV and 960x540 TV), `perf.js` (per-effect CPU), `contrast.js`, `accents.js`, `palette.js`, `seats.js` and `make-fx.js` (renders `tex/orb-*.webp` and `tex/rays-q.webp`).
