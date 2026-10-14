@@ -1,116 +1,274 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-game="monopoly">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<meta name="theme-color" content="#0e1630">
+<meta name="theme-color" content="#080a15">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <title>Monopoly</title>
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" type="image/png" href="../ui/art/icon-monopoly-192.png">
+<link rel="apple-touch-icon" href="../ui/art/icon-monopoly-maskable-512.png">
+<script>/* before first paint: TV for ?tv=1 or the Fire TV bridge, and the stored effects level */
+(function (h) {
+  if (/[?&]tv=1(&|$)/.test(location.search) || window.AndroidTV) h.setAttribute("data-tv", "");
+  try { if (localStorage.getItem("bgui.effects") === "reduced") h.setAttribute("data-effects", "reduced"); } catch (e) { }
+})(document.documentElement);</script>
+<link rel="stylesheet" href="../ui/theme.css">
+<script src="../ui/icons.js" defer></script>
+<script src="../ui/ui.js" defer></script>
 <style>
-  :root{
-    --bg:#0e1630; --panel:#16203f; --panel2:#101938; --ink:#eef2ff; --muted:#9fb0d8; --line:#2e3b66;
-    --board:#cfe8d4; --go:#f6a623;
-    --brown:#8b5a2b; --light_blue:#9fd0ef; --pink:#d93a96; --orange:#f08d1c;
-    --red:#e23b3b; --yellow:#f3d41b; --green:#1f9d54; --dark_blue:#2b4fe0;
-  }
-  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  html,body{margin:0; height:100%;}
-  body{background:
-      linear-gradient(#ffffff07 1px,transparent 1px) 0 0/44px 44px,
-      linear-gradient(90deg,#ffffff07 1px,transparent 1px) 0 0/44px 44px,
-      radial-gradient(120% 120% at 50% 0%,#1b2a55,var(--bg) 60%); color:var(--ink);
-    font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; display:flex; flex-direction:column;
-    align-items:center; min-height:100%; padding:max(6px,env(safe-area-inset-top)) 6px max(8px,env(safe-area-inset-bottom)); overflow-x:hidden; touch-action:manipulation;}
-  h1{font-size:17px; margin:3px 0; letter-spacing:1px; font-weight:900;}
-  #boardWrap{width:min(100vw,640px); aspect-ratio:1/1; position:relative;}
-  #board{width:100%; height:100%; display:grid; grid-template-columns:repeat(11,1fr); grid-template-rows:repeat(11,1fr);
-    background:var(--board); border:3px solid #0a0f22; border-radius:8px; overflow:hidden;}
-  .sp{position:relative; border:1px solid #2b6b42; background:#f7fbf4; overflow:hidden; color:#09250f; cursor:pointer;}
-  .sp:active{filter:brightness(1.08);}
+  /* Monopoly on the shared Midnight Luxe system (ui/theme.css). Page layout only (mn- prefix); every control is a bg- class.
+     The board (#board) is the game's own art, rebuilt on Luxe surfaces in step 5: here it only scales with its width (its sizes are
+     in em of a base that follows the board, 10px on a 390px board) and sits in the Luxe frame skins.js gives #board. Every dialog
+     is ONE host, #overlay > #modal (the game's own dialog engine): a Luxe bottom sheet through BGUI.sheet, or the setup page. */
+  *, *::before, *::after{box-sizing:border-box}
+  [hidden]{display:none !important}
+  :root{--m-board:#cfe8d4; --mn-bw:min(calc(100vw - 10px), 640px)}
+  html[data-tv]{--mn-bw:min(calc(100vh - 8rem), 46vw)}
+  body.bg-app{overflow-x:hidden; touch-action:manipulation}
+
+  /* ---------- the board (game art, step 5): unchanged look, sizes in em so it scales with the board ---------- */
+  #boardWrap{position:relative; flex:none; width:var(--mn-bw); aspect-ratio:1/1; margin:.5rem auto .5rem}
+  #board{width:100%; height:100%; display:grid; grid-template-columns:repeat(11,1fr); grid-template-rows:repeat(11,1fr); font-size:calc(var(--mn-bw) / 39);
+    background:var(--m-board); border:3px solid #0a0f22; border-radius:8px; overflow:hidden; color:#09250f; -webkit-tap-highlight-color:transparent}
+  .sp{position:relative; border:1px solid #2b6b42; background:#f7fbf4; overflow:hidden; color:#09250f; cursor:pointer}
+  .sp:active{background:#ffffff}
   /* rotated inner wrapper: content laid out as if bottom-row, then rotated to face the right way */
-  .spin{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; text-align:center;}
-  .cbar{width:100%; height:23%; flex:0 0 auto; border-bottom:1px solid #00000040;}
-  .nm2{flex:0 1 auto; min-height:0; overflow:hidden; font-size:6.6px; font-weight:800; line-height:1.02; letter-spacing:-.2px; padding:1px 1px 0; width:100%; word-break:break-word;}
-  .ic2{flex:0 0 auto; font-size:13px; line-height:1; margin-top:1px;}
-  .ic2.q{flex:0 0 auto; font-size:14px; font-weight:900; color:#d7263d;}
-  .pr2{flex:0 0 auto; margin-top:auto; padding-bottom:1px; font-size:6.2px; font-weight:700; opacity:.9;}
-  .ovl{position:absolute; inset:0; pointer-events:none;}
-  .corner{background:#eef6ea; font-size:7px; font-weight:800; display:flex; align-items:center; justify-content:center; text-align:center; position:absolute; inset:0; line-height:1.08; padding:2px;}
-  .corner .big{font-size:13px;}
-  .center{grid-column:2/11; grid-row:2/11; display:flex; align-items:center; justify-content:center; background:var(--board); position:relative;}
-  .logo{font-size:min(7vw,42px); font-weight:900; color:#d7263d; letter-spacing:2px; transform:rotate(-18deg); text-shadow:1px 1px 0 #0003; text-align:center;}
-  .owner{position:absolute; width:8px; height:8px; border-radius:50%; bottom:1px; right:1px; border:1px solid #0008; box-shadow:0 0 0 1px #fff8;}
-  .hs{position:absolute; top:1px; left:1px; display:flex; gap:1px;}
-  .hs i{width:3px; height:3px; background:#1f9d54; border:.5px solid #0a3; display:block;}
-  .hs i.hotel{width:5px; height:4px; background:#d7263d;}
-  .mort{position:absolute; inset:0; background:repeating-linear-gradient(45deg,#0000,#0000 3px,#0006 3px,#0006 5px);}
-  .toks{position:absolute; bottom:-1px; left:0; right:0; display:flex; flex-wrap:wrap; justify-content:center; gap:0; line-height:1; z-index:3; pointer-events:none;}
-  .tk{display:inline-block; font-size:14px; line-height:1; margin:0 -1px; filter:drop-shadow(0 0 1px var(--pc,#000)) drop-shadow(0 0 1.5px var(--pc,#000)) drop-shadow(0 1px 1px #0009);}
-  .tk.cur{animation:pulse 1s infinite;}
+  .spin{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; text-align:center}
+  .cbar{width:100%; height:23%; flex:0 0 auto; border-bottom:1px solid #00000040}
+  .nm2{flex:0 1 auto; min-height:0; overflow:hidden; font-size:.66em; font-weight:800; line-height:1.02; letter-spacing:-.03em; padding:.15em .15em 0; width:100%; word-break:break-word}
+  .ic2{flex:0 0 auto; font-size:1.3em; line-height:1; margin-top:.08em}
+  .ic2.q{flex:0 0 auto; font-size:1.4em; font-weight:900; color:#d7263d}
+  .pr2{flex:0 0 auto; margin-top:auto; padding-bottom:.16em; font-size:.62em; font-weight:700; opacity:.9}
+  .ovl{position:absolute; inset:0; pointer-events:none}
+  .corner{background:#eef6ea; font-size:.7em; font-weight:800; display:flex; align-items:center; justify-content:center; text-align:center; position:absolute; inset:0; line-height:1.08; padding:.3em}
+  .corner .big{font-size:1.857em}
+  .center{grid-column:2/11; grid-row:2/11; background:var(--m-board); position:relative}
+  .owner{position:absolute; width:.8em; height:.8em; border-radius:50%; bottom:.1em; right:.1em; border:1px solid #0008; box-shadow:0 0 0 1px #fff8}
+  .hs{position:absolute; top:.1em; left:.1em; display:flex; gap:.1em}
+  .hs i{width:.3em; height:.3em; background:#1f9d54; border:.5px solid #0a3; display:block}
+  .hs i.hotel{width:.5em; height:.4em; background:#d7263d}
+  .mort{position:absolute; inset:0; background:repeating-linear-gradient(45deg,#0000,#0000 .3em,#0006 .3em,#0006 .5em)}
+  .toks{position:absolute; bottom:-.1em; left:0; right:0; display:flex; flex-wrap:wrap; justify-content:center; gap:0; line-height:1; z-index:3; pointer-events:none}
+  .tk{display:inline-block; font-size:1.4em; line-height:1; margin:0 -.07em; filter:drop-shadow(0 0 1px var(--pc,#000)) drop-shadow(0 0 1.5px var(--pc,#000)) drop-shadow(0 1px 1px #0009)}
+  .tkp{display:inline-block; line-height:1}
+  .tkp.cur{animation:pulse 1s infinite}
   @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.3)}}
-  .status{width:min(98vw,600px); display:flex; align-items:center; gap:8px; background:var(--panel); border-radius:10px; padding:6px 10px; margin:6px 0 4px; font-size:13px; font-weight:600; min-height:34px; flex-wrap:wrap; justify-content:center;}
-  .pill{display:flex; align-items:center; gap:4px; background:var(--panel2); border-radius:8px; padding:3px 7px; font-size:12px;}
-  .dot{width:11px;height:11px;border-radius:50%;display:inline-block;border:1px solid #fff6;}
-  .dice{display:flex; gap:6px;}
-  .die{width:26px;height:26px;border-radius:5px;background:#fff;color:#111;font-weight:900;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 2px 4px #0006;}
-  .controls{width:min(98vw,600px); display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-top:4px;}
-  .btn{background:var(--panel2); color:var(--ink); border:1px solid var(--line); border-radius:9px; padding:9px 12px; font-size:13px; font-weight:700; cursor:pointer;}
-  .btn.primary{background:#2b7be0; border-color:#2b7be0;}
-  .btn.go{background:#1f9d54; border-color:#1f9d54;}
-  .btn.warn{background:#d7263d; border-color:#d7263d;}
-  .btn[disabled]{opacity:.4;}
-  #log{width:min(98vw,600px); height:58px; overflow-y:auto; background:#0b1430; border:1px solid var(--line); border-radius:9px; padding:5px 9px; font-size:11.5px; color:var(--muted); margin-top:6px;}
-  #log div{margin:1px 0;}
-  .overlay{position:fixed; inset:0; background:#0b1228ee; display:none; align-items:center; justify-content:center; padding:14px; z-index:30;}
-  .overlay.on{display:flex;}
-  .modal{background:var(--panel); border-radius:16px; padding:18px; width:min(94vw,440px); max-height:88vh; overflow-y:auto;}
-  .modal h2{margin:0 0 8px; font-size:19px;}
-  .modal h3{margin:12px 0 4px; font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px;}
-  .modal p{color:var(--muted); font-size:13px; margin:5px 0;}
-  .row{display:flex; gap:8px; align-items:center; justify-content:space-between; padding:6px 0; border-bottom:1px solid #ffffff10; font-size:13px;}
-  .row small{color:var(--muted); font-size:11px;}
-  .seg{display:flex; gap:6px; flex-wrap:wrap;}
-  .seg button{flex:1; min-width:40px; padding:10px 0; border-radius:9px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-size:15px; font-weight:800; cursor:pointer;}
-  .seg button.on{background:#2b7be0; border-color:#2b7be0;}
-  .tokgrid{display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin:6px 0;}
-  .tokbtn{display:flex; flex-direction:column; align-items:center; gap:1px; width:64px; padding:7px 3px; border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); cursor:pointer; font-size:9.5px; text-align:center;}
-  .tokbtn .e{font-size:23px; line-height:1;}
-  .tokbtn.sel{background:#2b7be0; border-color:#2b7be0;}
-  .tokbtn .pb{font-size:9px; font-weight:800; color:#bfe3ff;}
-  .sw{position:relative; width:42px; height:24px; border-radius:12px; background:#33406b; cursor:pointer; flex:0 0 auto;}
-  .sw.on{background:#27a758;}
-  .sw::after{content:""; position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%; background:#fff; transition:left .15s;}
-  .sw.on::after{left:20px;}
-  .badge{font-size:9px; padding:1px 5px; border-radius:6px; font-weight:800; margin-left:6px;}
-  .badge.off{background:#d7263d33; color:#ffb3bb;}
-  .badge.on{background:#27a75833; color:#b7f5cf;}
-  .cardbig{background:#fff; color:#111; border-radius:12px; padding:18px; text-align:center; font-size:16px; font-weight:600; border:4px solid; margin:10px 0;}
-  .deedline{display:flex; justify-content:space-between; font-size:12px; padding:2px 0;}
-  /* authentic title-deed card */
-  .deed{background:#f4f0e3; color:#15110a; border-radius:10px; overflow:hidden; border:2px solid #00000040; margin:10px 0; box-shadow:0 4px 14px #0007;}
-  .deed-band{padding:9px 10px; text-align:center; color:#fff; border-bottom:2px solid #0003;}
-  .deed-band.light{color:#1a1203;}
-  .deed-title{font-size:10px; letter-spacing:2.5px; font-weight:800; opacity:.92;}
-  .deed-name{font-size:18px; font-weight:900; letter-spacing:.3px; line-height:1.12; margin-top:1px; text-transform:uppercase;}
-  .homebtn{position:fixed; top:6px; left:6px; z-index:60; background:#16203fdd; border:1px solid #2e3b66; border-radius:10px; padding:7px 11px; font-size:13px; font-weight:700; text-decoration:none; color:#eef2ff;}
-  .deed-body{padding:9px 13px;}
-  .dl{display:flex; justify-content:space-between; padding:2.5px 0; font-size:13.5px;}
-  .dl b{font-weight:800;}
-  .dl.rule{border-top:1px solid #00000022; margin-top:5px; padding-top:5px;}
-  .dl.sub{color:#5a5240; font-size:12px;}
-  .deed-note{font-size:11px; color:#5a5240; margin-top:7px; text-align:center; font-style:italic; line-height:1.3;}
-  .icon-band{font-size:38px; text-align:center; padding:4px 0 8px;}
-  .stickyact{position:sticky; bottom:0; background:var(--panel); padding:9px 0 2px; margin-top:2px; border-top:1px solid #ffffff14;}
-  .cash{color:#7CFC9A; font-weight:800;}
-  .neg{color:#ff8a8a;}
-  .toast{position:fixed; bottom:14px; left:50%; transform:translateX(-50%); background:#000c; padding:9px 15px; border-radius:16px; font-size:13px; opacity:0; transition:opacity .2s; pointer-events:none; z-index:40; max-width:92vw; text-align:center;}
-  .toast.show{opacity:1;}
-  .itemrow{display:flex; align-items:center; gap:6px; padding:3px 0; font-size:12px;}
-  .itemrow input[type=checkbox]{width:16px;height:16px;}
+  /* the current token keeps its "whose turn" lift, still, under Reduce effects and reduced motion */
+  html[data-effects="reduced"] .tkp.cur, html[data-motion="reduce"] .tkp.cur{animation:none; transform:scale(1.15)}
+  @media (prefers-reduced-motion: reduce){ .tkp.cur{animation:none; transform:scale(1.15)} }
+  /* the board's middle: an original Luxe plate (the gold logomark with its glint and the name in DM Serif) in place of a logo */
+  .mn-center{position:absolute; inset:9.0909%; display:grid; place-items:center; pointer-events:none; font-size:calc(var(--mn-bw) / 39)}
+  .mn-plate{display:grid; justify-items:center; gap:.5em; padding:1.3em 2.6em 1.45em; border-radius:1.6em;
+    background:radial-gradient(120% 95% at 50% 0%, #1d6b45 0%, var(--accent-deep, #06391f) 58%, #031b0e 100%);
+    box-shadow:inset 0 0 0 1px rgba(230,201,143,.6), inset 0 0 0 .5em rgba(4,6,16,.22), inset 0 0 0 calc(.5em + 1px) rgba(230,201,143,.25), 0 1em 2.4em -1.2em rgba(0,0,0,.65)}
+  .mn-plate .bg-emblem{width:4.4em; height:4.4em}
+  .mn-word{font:400 3em/1 var(--font-display, Georgia, serif); letter-spacing:-.01em; color:var(--gold-100, #f4e3b8)}
+
+  /* ---------- in game (phone): the board first, so a sheet opened below it keeps the whole board in view ---------- */
+  .mn-game{display:flex; flex-direction:column; align-items:center; padding:.25rem 0 1.5rem}
+  body.mn-in-setup .mn-game{display:none !important}
+  #players{width:100%; max-width:40rem; padding:.875rem var(--gutter) .375rem}
+  .mn-statuscard{display:flex; align-items:center; gap:.75rem; width:calc(100% - 2 * var(--gutter)); max-width:38rem; margin:.25rem 0 0; padding:.625rem .875rem; border-radius:var(--r-lg)}
+  .mn-dice{display:flex; gap:.375rem; flex:none}
+  .mn-die{width:2.25rem; height:2.25rem; font:var(--fw-caps) var(--fs-lg)/1 var(--font-ui)}
+  .mn-die.is-blank{opacity:.32}
+  .status{flex:1; min-width:0; display:flex; flex-wrap:wrap; align-items:center; gap:.35rem .5rem; color:var(--text-1); font:var(--fw-ui) var(--fs-sm)/1.3 var(--font-ui)}
+  .mn-turn{flex:1 1 100%; min-width:0}
+  .mn-turn b{font-weight:var(--fw-caps)}
+  .pill{display:inline-flex; align-items:center; gap:.3rem; padding:.2rem .6rem; border-radius:var(--r-pill); font:var(--fw-ui) var(--fs-xs)/1.25 var(--font-ui); color:var(--text-2); background:var(--ink-2); box-shadow:inset 0 0 0 1px var(--line-1)}
+  .mn-dot{display:inline-block; flex:none; width:.75rem; height:.75rem; margin-right:.3rem; border-radius:50%; vertical-align:-.04em; background:var(--seat); box-shadow:0 0 0 2px var(--ink-1), 0 0 0 3px rgba(255,255,255,.18)}
+  .mn-controls{display:flex; flex-wrap:wrap; justify-content:center; gap:.5rem; width:calc(100% - 2 * var(--gutter)); max-width:38rem; margin:.75rem 0 0}
+  .mn-controls .bg-btn{flex:1 1 auto; min-width:6.5rem}
+  .mn-controls .mn-main{flex-basis:100%}
+  .mn-log{width:calc(100% - 2 * var(--gutter)); max-width:38rem; max-height:5.6rem; overflow-y:auto; margin:.5rem 0 0; padding:.5rem .75rem; border-radius:var(--r-md);
+    background:var(--ink-2); box-shadow:var(--well-edge); font:var(--fw-body) var(--fs-xs)/1.35 var(--font-ui); color:var(--text-2)}
+  .mn-log div{margin:.1rem 0}
+  .mn-log b{color:var(--text-1)}
+  html:not([data-tv]) .mn-hints{display:none}
+
+  /* ---------- the dialog host: a Luxe bottom sheet (BGUI.sheet), or the setup page in the flow ---------- */
+  .mn-ov{display:none}
+  .mn-ov.on{display:block}
+  .mn-ov.mn-ov--page{position:static; padding:0}
+  html.mn-luxe .mn-ov.bg-sheet{display:block}
+  /* without ui/ui.js: the old full-screen dialog (the Luxe sheet takes over when it is there) */
+  html:not(.mn-luxe) .mn-ov.on:not(.mn-ov--page){position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; padding:14px; background:rgba(8,10,21,.94)}
+  html:not(.mn-luxe) .mn-ov.on:not(.mn-ov--page) > .modal{width:min(94vw,30rem); max-height:88vh; overflow-y:auto; padding:1.125rem; border-radius:1rem; background:var(--ink-3, #151930); color:var(--text-1, #f6f1e7)}
+  /* a choice sheet that keeps the board in view (phone peek, every TV sheet beside the board): a lighter scrim over the board */
+  body.mn-peek, html[data-tv] body.bg-app{--scrim:rgba(3,4,10,.42)}
+  .mn-head{margin:0 0 .875rem}
+  .mn-head .bg-sheet__sub b{color:var(--text-1); font-weight:var(--fw-ui-strong)}
+  .mn-head .bg-sheet__sub .mn-dot{margin-left:.15rem}
+  .mn-title--neg{color:var(--danger-text)}
+  .mn-money{color:var(--accent-text); font-weight:var(--fw-ui-strong)}
+  .mn-neg{color:var(--danger-text)}
+  .mn-note{margin:.25rem 0 .875rem; font:var(--fw-body) var(--fs-sm)/1.4 var(--font-ui); color:var(--text-2)}
+  .mn-note b{color:var(--text-1)}
+  .mn-acts{display:grid; gap:.625rem; margin:.875rem 0 0}
+  .mn-acts .bg-btn{white-space:normal}
+  .mn-acts--2{display:grid; grid-template-columns:1fr 1fr; gap:inherit}
+  .mn-opts{margin:.25rem calc(-1 * var(--focus-room)) 0}
+  .mn-opts .bg-sheet__option > .bg-ico{width:1.4rem; height:1.4rem}
+  .mn-auto{display:block; height:3px; margin:.875rem 0 0; border-radius:var(--r-pill); background:var(--ink-2); overflow:hidden}
+  .mn-auto > i{display:block; height:100%; background:var(--gold-fill); transform-origin:0 50%; animation:mn-auto var(--mn-auto-ms,1700ms) linear forwards}
+  @keyframes mn-auto{from{transform:scaleX(1)} to{transform:scaleX(0)}}
+  html[data-motion="reduce"] .mn-auto > i{animation:none}
+  @media (prefers-reduced-motion: reduce){ .mn-auto > i{animation:none} }
+  /* the property deed: a lit paper card (DEED, never the official wording), the colour group's band on top */
+  .deed{margin:.875rem 0 .25rem; border-radius:var(--r-md); overflow:hidden; color:var(--text-on-paper);
+    background:radial-gradient(95% 70% at 50% 0%, var(--paper-50) 0%, var(--paper-100) 60%, var(--paper-200) 100%); box-shadow:inset 0 0 0 1px rgba(29,26,42,.18), 0 10px 24px -14px rgba(0,0,0,.9)}
+  .deed-band{padding:.625rem .875rem .75rem; text-align:center; color:var(--paper-50); box-shadow:inset 0 -1px 0 rgba(0,0,0,.18)}
+  .deed-band.light{color:#15110a}
+  .deed-title{display:inline-block; padding:.22rem .6rem; border-radius:var(--r-pill); font:var(--fw-caps) var(--fs-micro)/1 var(--font-ui); letter-spacing:var(--track-eyebrow); text-transform:uppercase; color:var(--gold-200); background:var(--ink-2)}
+  .deed-name{margin-top:.35rem; font:400 1.5rem/1.1 var(--font-display); letter-spacing:-.005em}
+  .deed-body{padding:.625rem .875rem .75rem}
+  .dl{display:flex; justify-content:space-between; gap:.75rem; padding:.2rem 0; font:var(--fw-body) var(--fs-sm)/1.3 var(--font-ui)}
+  .dl b{font-weight:var(--fw-caps); font-variant-numeric:tabular-nums}
+  .dl.rule{margin-top:.35rem; padding-top:.45rem; box-shadow:inset 0 1px 0 rgba(29,26,42,.16)}
+  .dl.sub{color:var(--text-on-paper-muted); font-size:var(--fs-xs)}
+  .deed-note{margin-top:.5rem; text-align:center; font:var(--fw-body) var(--fs-xs)/1.35 var(--font-ui); color:var(--text-on-paper-muted)}
+  .deed-note b{color:var(--text-on-paper)}
+  .icon-band{padding:.25rem 0 .5rem; text-align:center; font-size:2.25rem; line-height:1.1}
+  /* a Chance / Community Chest card: paper with the deck's colour inlay */
+  .cardbig{margin:.875rem 0 .25rem; padding:1.25rem 1.125rem; border-radius:var(--r-md); text-align:center; color:var(--text-on-paper); font:var(--fw-ui-strong) var(--fs-lg)/1.4 var(--font-ui);
+    background:radial-gradient(95% 70% at 50% 0%, var(--paper-50) 0%, var(--paper-100) 62%, var(--paper-300) 100%);
+    box-shadow:inset 0 0 0 .3125rem var(--paper-50), inset 0 0 0 calc(.3125rem + 2px) var(--mn-deck, #e07a10), 0 10px 24px -14px rgba(0,0,0,.9)}
+  .cardbig.is-chest{--mn-deck:#2b6fd0}
+  /* the debt dialog's rows, lists of properties, player cards, property chips */
+  .mn-debt{display:grid; gap:.5rem; margin:.25rem 0 0}
+  .mn-drow{display:flex; align-items:center; justify-content:space-between; gap:.75rem; padding:.45rem .5rem .45rem .875rem; border-radius:var(--r-md); background:var(--ink-2); box-shadow:var(--well-edge); font:var(--fw-ui) var(--fs-sm)/1.3 var(--font-ui)}
+  .mn-drow .bg-btn{flex:none}
+  .mn-ok{margin:.5rem 0; font:var(--fw-ui-strong) var(--fs-md)/1.3 var(--font-ui); color:var(--accent-text)}
+  .mn-list{display:grid; gap:.5rem; padding:var(--focus-room); margin:0 calc(-1 * var(--focus-room))}
+  .mn-lrow{display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:.75rem; width:100%; min-height:var(--tap); margin:0; padding:.55rem .75rem; border:0; border-radius:var(--r-md);
+    text-align:left; font:inherit; color:var(--text-1); background:var(--control-fill); box-shadow:inset 0 0 0 1px var(--line-2), inset 0 1px 0 rgba(255,255,255,.08); cursor:pointer; transition:transform var(--dur-instant) var(--ease-out)}
+  .mn-lrow:active{transform:scale(.98)}
+  .mn-lrow__name{display:block; font:var(--fw-ui-strong) var(--fs-md)/1.25 var(--font-ui)}
+  .mn-lrow__meta{display:block; font:var(--fw-body) var(--fs-xs)/1.3 var(--font-ui); color:var(--text-3)}
+  .mn-lrow > .bg-ico{color:var(--gold-200)}
+  .mn-chip{display:inline-block; flex:none; width:.875rem; height:.875rem; border-radius:3px; vertical-align:-.1em; box-shadow:inset 0 0 0 1px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.22)}
+  .mn-chip--rr{background:#1e1e1e}
+  .mn-chip--util{background:#c4c8d8}
+  .mn-pcards{display:grid; gap:.75rem}
+  .mn-pcard{padding:.75rem .875rem; border-radius:var(--r-lg); background:var(--panel-fill); box-shadow:var(--panel-edge)}
+  .mn-pcard.is-out{opacity:.6}
+  .mn-pcard__top{display:flex; align-items:center; gap:.65rem}
+  .mn-pcard__top .bg-token{font-size:1.15rem}
+  .mn-pcard__name{display:flex; flex-wrap:wrap; align-items:center; gap:.25rem .5rem; flex:1; min-width:0; font:var(--fw-ui-strong) var(--fs-md)/1.2 var(--font-ui)}
+  .mn-pcard__cash{font:400 var(--fs-xl)/1 var(--font-display); color:var(--accent-text)}
+  .mn-pcard__meta{margin:.35rem 0 .5rem; font:var(--fw-body) var(--fs-xs)/1.35 var(--font-ui); color:var(--text-3)}
+  .mn-pchips{display:flex; flex-wrap:wrap; gap:.4rem; padding:var(--focus-room); margin:calc(-1 * var(--focus-room))}
+  .mn-pchip{display:inline-flex; align-items:center; gap:.35rem; min-height:var(--tap); margin:0; padding:.3rem .65rem; border:0; border-radius:var(--r-sm); cursor:pointer;
+    font:var(--fw-ui) var(--fs-xs)/1.2 var(--font-ui); color:var(--text-1); background:var(--ink-2); box-shadow:inset 0 0 0 1px var(--line-2)}
+  .mn-pchip.is-mort{color:var(--text-3)}
+  .mn-sets{margin-top:.5rem; font:var(--fw-ui) var(--fs-xs)/1.3 var(--font-ui); color:var(--accent-text)}
+  .mn-trade .bg-section:first-of-type{margin-top:.5rem}
+  .mn-num{width:7rem; min-height:var(--tap); margin:0; padding:0 .75rem; border:0; border-radius:var(--r-sm); font:var(--fw-ui-strong) var(--fs-md)/1 var(--font-ui);
+    color:var(--text-1); background:var(--ink-2); box-shadow:inset 0 0 0 1px var(--line-gold)}
+  .mn-num:focus{outline:none; box-shadow:var(--focus-ring)}
+  .mn-none{margin:0; padding:.75rem 1rem; font:var(--fw-body) var(--fs-sm)/1.3 var(--font-ui); color:var(--text-3)}
+  .mn-trade .bg-row__title small, .mn-rules .bg-row__title small{font:var(--fw-body) var(--fs-xs)/1.2 var(--font-ui); color:var(--text-3)}
+  .mn-offer{display:grid; gap:.5rem; margin:.25rem 0 0}
+  .mn-offer p{margin:0; padding:.6rem .875rem; border-radius:var(--r-md); background:var(--ink-2); box-shadow:var(--well-edge); font:var(--fw-body) var(--fs-sm)/1.4 var(--font-ui); color:var(--text-2)}
+  .mn-offer b{color:var(--text-1)}
+
+  /* ---------- the setup page (also reached from the Menu's New Game) ---------- */
+  .mn-setup{display:flex; flex-direction:column; width:min(100%,40rem); margin:0 auto; padding:0 var(--gutter)}
+  .mn-col{display:contents}
+  .mn-hero{order:1} .mn-sec--players{order:2} .mn-sec--tokens{order:3} .mn-sec--rules{order:4} .mn-sec--save{order:5} .mn-back{order:6} .mn-dock{order:7}
+  /* hero art band on top, the title under it (README section 10, narrow hero); the art fades into the scene */
+  .mn-hero{min-height:0; margin:0 calc(-1 * var(--gutter)); padding-top:46%; border-radius:0; background:transparent}
+  .mn-hero .bg-hero__layer{bottom:auto; height:auto; aspect-ratio:16/9; border-radius:0; background-color:transparent;
+    background-image:url("../ui/art/hero-monopoly-960.webp"); background-size:100% auto; background-position:100% 0;
+    -webkit-mask-image:linear-gradient(180deg,#000 58%,rgba(0,0,0,0) 100%); mask-image:linear-gradient(180deg,#000 58%,rgba(0,0,0,0) 100%)}
+  .mn-hero .bg-hero__shade{display:none}
+  .mn-hero .bg-hero__body{max-width:none; padding:0 var(--gutter) .25rem}
+  .mn-hero .bg-hero__pitch{max-width:30rem}
+  .mn-sec{min-width:0}
+  .mn-card{display:grid; gap:.75rem}
+  .mn-field{display:grid; gap:.15rem}
+  .mn-field .bg-row__desc{margin-top:0}
+  .mn-seats{display:flex; align-items:center; gap:.875rem; padding:.625rem .875rem; border-radius:var(--r-md); background:var(--ink-2); box-shadow:var(--well-edge)}
+  .mn-seats__tokens{display:flex; flex:none; padding-left:.4rem}
+  .mn-seats__tokens .bg-token{width:2rem; height:2rem; margin-left:-.4rem; font-size:1rem}
+  .mn-seats__txt{min-width:0; font:var(--fw-ui) var(--fs-xs)/1.3 var(--font-ui); color:var(--text-2)}
+  .mn-seats__txt b{display:block; font:var(--fw-ui-strong) var(--fs-sm)/1.25 var(--font-ui); color:var(--text-1)}
+  /* the token picker: the eight pieces in a 4 x 2 keypad; a picked piece takes its player's seat colour and P1, P2 ... */
+  .mn-toks{grid-template-columns:repeat(4, minmax(0, 1fr))}
+  .mn-toks > button{display:grid; justify-items:center; align-content:center; gap:.3rem; min-height:5.25rem; padding:.5rem .25rem; white-space:normal;
+    font:var(--fw-ui-strong) var(--fs-xs)/1.15 var(--font-ui); color:var(--text-2)}
+  .mn-toks .bg-token{width:2.5rem; height:2.5rem; font-size:1.35rem}
+  .mn-toks .bg-token:not([data-seat]){background:radial-gradient(circle at 35% 30%, #3b4374 0%, #1d2240 60%, #12162c 100%)}
+  .mn-toks .pb{font:var(--fw-caps) var(--fs-micro)/1 var(--font-ui); letter-spacing:.06em; color:var(--text-on-gold)}
+  .mn-tokmsg{min-height:1.35em; margin:.5rem 0 0; font:var(--fw-body) var(--fs-xs)/1.35 var(--font-ui); color:var(--text-3)}
+  .mn-rules .bg-row__desc{color:var(--text-3)}
+  .mn-rulenote{margin:.5rem 0 0; font:var(--fw-body) var(--fs-xs)/1.35 var(--font-ui); color:var(--text-3)}
+  /* saves.js bars (setup #svbar, Menu #svbar2), dressed in Luxe (ids, data-a and behaviour unchanged) */
+  #svbar.svbar, #svbar2.svbar{margin:0; padding:var(--sp-3); border:0; border-radius:var(--r-lg); background:var(--panel-fill); box-shadow:var(--panel-edge),var(--elev-1)}
+  #svbar h4, #svbar2 h4{display:none}
+  #svbar .r, #svbar2 .r{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,8.5rem),1fr)); gap:.5rem; margin:0 0 .5rem}
+  #svbar .r:last-child, #svbar2 .r:last-child{margin-bottom:0}
+  #svbar button, #svbar2 button{display:grid; grid-template-columns:auto minmax(0,auto); align-items:center; justify-content:center; gap:.15rem .45rem; min-width:0; min-height:var(--tap); margin:0;
+    padding:.45rem .625rem; border:0; border-radius:var(--r-md); color:var(--text-1); background:var(--control-fill);
+    box-shadow:inset 0 0 0 1px var(--line-2), inset 0 1px 0 rgba(255,255,255,.08); font:var(--fw-ui-strong) var(--fs-sm)/1.15 var(--font-ui); white-space:normal; text-align:center}
+  #svbar button:active, #svbar2 button:active{background:var(--ink-5)}
+  #svbar button:focus, #svbar2 button:focus{outline:none}
+  #svbar button[disabled], #svbar2 button[disabled]{opacity:.42}
+  #svbar button .bg-ico, #svbar2 button .bg-ico{width:1.1em; height:1.1em; color:var(--gold-200)}
+  #svbar button small, #svbar2 button small{grid-column:1 / -1; margin:0; font:var(--fw-ui) var(--fs-micro)/1.2 var(--font-ui); color:var(--text-3); opacity:1}
+  .mn-back{margin-top:var(--sp-6)}
+  /* the Start dock: sticky at the bottom of the phone screen (toasts keep clear of it); mid-game it also holds Resume */
+  .mn-dock{position:sticky; bottom:0; z-index:5; display:flex; gap:.625rem; margin:0 calc(-1 * var(--gutter)); padding:1rem var(--gutter) calc(env(safe-area-inset-bottom,0px) + .875rem);
+    background:linear-gradient(180deg,rgba(8,10,21,0),var(--ink-1) 32%)}
+  .mn-dock #startBtn{flex:1 1 0; min-width:0}
+  .mn-dock.has-resume #startBtn{padding-inline:.75rem}
+  .mn-resume{flex:1 1 0; min-width:0; padding:.5rem .75rem; border-radius:var(--r-lg)}
+  .mn-resume > span{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.2rem; min-height:2.75rem}
+  .mn-resume .bg-btn__sub{color:var(--text-2)}
+  .mn-winhome{margin-top:.75rem}
+  /* fallbacks without ui/ui.js (the Luxe toasts take over when it is there) */
+  .toast{position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#000c; color:#fff; padding:9px 15px; border-radius:16px; font:600 14px system-ui,sans-serif; opacity:0; transition:opacity .2s; pointer-events:none; z-index:90; max-width:92vw; text-align:center}
+  .toast.show{opacity:1}
+  .mn-svtoast{position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom,0px) + 7rem); transform:translateX(-50%); max-width:90vw; padding:10px 16px; border-radius:12px; z-index:100000;
+    background:#000d; color:#fff; font:700 14px system-ui,sans-serif; text-align:center; opacity:0; pointer-events:none; transition:opacity .2s}
+  html.mn-luxe .toast, html.mn-luxe .mn-svtoast{display:none}
+
+  /* ---------- TV (html[data-tv], 1rem = 24px at 1080p) ---------- */
+  html[data-tv] .mn-setup{display:grid; grid-template-columns:minmax(0,30rem) minmax(0,34rem); column-gap:3.5rem; justify-content:center; align-items:start; width:auto; padding:0 var(--gutter) 2rem}
+  html[data-tv] .mn-col{display:block; min-width:0}
+  html[data-tv] .mn-hero{margin:1.5rem 0 0; border-radius:var(--r-xl)}
+  html[data-tv] .mn-hero .bg-hero__layer{border-radius:var(--r-xl) var(--r-xl) 0 0}
+  html[data-tv] .mn-hero .bg-hero__body{padding:0}
+  html[data-tv] .mn-rules .bg-row{min-height:0; padding:.625rem .875rem}
+  /* column B on TV: the players, then the Start dock (on screen at 1080p, straight under the setup it confirms), then save and
+     load and the way back. The dock's gap keeps the focused button's ring and lift clear of its neighbour */
+  html[data-tv] .mn-col--b{display:flex; flex-direction:column}
+  html[data-tv] .mn-dock{order:3; position:static; gap:1.75rem; margin:0; padding:1.5rem 0 0; background:none}
+  html[data-tv] #svbar button, html[data-tv] #svbar2 button{grid-template-columns:minmax(0,1fr); justify-items:center; align-content:center; row-gap:.3rem; padding:.625rem .5rem}
+  html[data-tv] #svbar button .bg-ico, html[data-tv] #svbar2 button .bg-ico{width:1.25em; height:1.25em}
+  /* in game: the board on the left, the players, the status, the actions and the log in a column beside it */
+  /* the grid is exactly as tall as the board, so the log takes the room left in the column and scrolls inside it: a long game never
+     makes the page taller than the screen (a scrolled page would slide the actions under the top bar) */
+  html[data-tv] .mn-game{display:grid; grid-template-columns:var(--mn-bw) minmax(0,30rem); grid-template-rows:auto auto auto minmax(0,1fr) auto; height:calc(var(--mn-bw) + 2.5rem);
+    grid-template-areas:"board strip" "board status" "board controls" "board log" "board hints"; column-gap:3rem; justify-content:center; align-items:start; padding:1.25rem var(--gutter)}
+  html[data-tv] #boardWrap{grid-area:board; margin:0}
+  html[data-tv] #players{grid-area:strip; width:auto; max-width:none; grid-template-columns:1fr 1fr; padding:1rem 0 .25rem}
+  html[data-tv] .mn-statuscard{grid-area:status; width:auto; max-width:none; margin:.5rem 0 0}
+  html[data-tv] .mn-die{width:3rem; height:3rem}
+  html[data-tv] .mn-controls{grid-area:controls; width:auto; max-width:none; justify-content:flex-start; gap:1.5rem; margin:1.25rem 0 0}
+  html[data-tv] .mn-controls .mn-main{flex-basis:auto}
+  html[data-tv] .mn-log{grid-area:log; align-self:stretch; width:auto; max-width:none; max-height:none; height:auto; min-height:0; margin:.75rem 0 0}
+  html[data-tv] .mn-hints{grid-area:hints; justify-content:flex-start; margin-top:1.25rem}
+  html[data-tv] .mn-acts{gap:1.5rem}
+  html[data-tv] .mn-list{gap:1rem}
+  /* TV: every sheet sits over the right-hand column (centred on it: 50% + (board + gap) / 2), so the board stays in view; toasts in
+     game sit in that column too */
+  html[data-tv] #overlay.bg-sheet{left:calc(50% + (var(--mn-bw) + 3rem) / 2 - 16rem); right:auto; width:32rem; margin:0; padding-left:1.75rem; padding-right:1.75rem}
+  html[data-tv] body:not(.mn-in-setup) .bg-toast{left:calc(50% + (var(--mn-bw) + 3rem) / 2); max-width:30rem}
 </style>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
@@ -118,15 +276,45 @@
 <script>window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
 <script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
 </head>
-<body>
-  <a href="../index.html" class="homebtn">🏠 Menu</a>
-  <h1>MONOPOLY</h1>
-  <div id="boardWrap"><div id="board"></div></div>
-  <div class="status" id="status"></div>
-  <div class="controls" id="controls"></div>
-  <div id="log"></div>
-  <div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
-  <div class="toast" id="toast"></div>
+<body class="bg-app bg-app--scene mn-in-setup">
+  <header class="bg-topbar">
+    <div class="bg-topbar__start"><a class="bg-btn bg-btn--icon" id="homeBtn" href="../index.html" aria-label="All games" data-icon="back"></a></div>
+    <div class="bg-topbar__title"><span class="bg-eyebrow" id="barEyebrow">New game</span><span class="bg-topbar__name">Monopoly</span></div>
+    <div class="bg-topbar__end"><button class="bg-btn bg-btn--icon" id="menuBtn" type="button" data-icon="menu" hidden><span class="bg-sr">Menu</span></button></div>
+  </header>
+
+  <main class="mn-game" id="game" aria-label="Monopoly board">
+    <div id="boardWrap"><div id="board"></div>
+      <div class="mn-center" aria-hidden="true"><div class="mn-plate"><span class="bg-emblem"></span><span class="mn-word bg-gold">Monopoly</span></div></div>
+    </div>
+    <ul class="bg-players" id="players" aria-label="Players"></ul>
+    <div class="bg-card mn-statuscard"><span class="mn-dice" aria-hidden="true"><span class="bg-die mn-die is-blank" id="die1"></span><span class="bg-die mn-die is-blank" id="die2"></span></span><div class="status" id="status"></div></div>
+    <div class="mn-controls" id="controls" data-toast-avoid></div>
+    <div class="mn-log" id="log" aria-label="Game log"></div>
+    <div class="bg-hintbar mn-hints"><span><span class="bg-key">OK</span> Choose</span><span><span class="bg-key">Back</span> Close a list, or the Menu</span></div>
+  </main>
+
+  <section class="mn-ov" id="overlay" aria-labelledby="dlgTitle"><div class="modal" id="modal"></div></section>
+
+  <div class="bg-win" id="winBox" aria-labelledby="winTitle">
+    <div class="bg-win__scrim"></div>
+    <div class="bg-win__rays"></div>
+    <div class="bg-win__card">
+      <div class="bg-win__medal"></div>
+      <p class="bg-eyebrow" id="winEyebrow">Game over</p>
+      <h2 class="bg-win__title" id="winTitle">Victory</h2>
+      <p class="bg-win__sub" id="winSub"></p>
+      <ul class="bg-stats bg-win__stats" id="winStats"></ul>
+      <div class="bg-win__actions">
+        <button class="bg-btn bg-btn--secondary bg-btn--lg" type="button" id="winMenu">Menu</button>
+        <button class="bg-btn bg-btn--primary bg-btn--lg" type="button" id="winAgain" data-icon="play">Play again</button>
+      </div>
+      <a class="bg-btn bg-btn--ghost bg-btn--block mn-winhome" href="../index.html" id="winHome">All games</a>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" aria-hidden="true"></div>
+  <div class="mn-svtoast" id="svtoast" aria-hidden="true"></div>
 
 <script>
 (function(){
@@ -248,7 +436,7 @@ const RULES={
 const DEFAULT_RULES=Object.assign({},RULES);
 const RULE_DEFS=[
  ["freeParkingJackpot","Free Parking jackpot","All taxes & fees collect in the middle; land on Free Parking to win the pool.","house"],
- ["fpSeed500","↳ Seed pool with $500","When claimed, the Free Parking pool resets to $500 instead of empty.","house"],
+ ["fpSeed500","Seed the pool with $500","With the Free Parking jackpot: when claimed, the pool resets to $500 instead of empty.","house"],
  ["incomeTaxChoice","Income Tax: $200 or 10%","Let the player choose to pay $200 or 10% of total worth (pre-2008 rule).","official"],
  ["luxury75","Luxury Tax = $75","Use the older $75 Luxury Tax instead of the current $100.","house"],
  ["noRentInJail","No rent while in Jail","A jailed owner cannot collect rent until released.","house"],
@@ -262,7 +450,7 @@ const RULE_DEFS=[
  ["unlimitedBuildings","Unlimited houses & hotels","Remove the 32-house / 12-hotel bank limit.","house"],
  ["doubleGoSalary","Double salary on GO","Landing exactly on GO pays $400 instead of $200.","house"],
  ["snakeEyesBonus","Snake-eyes bonus $500","Rolling double 1s pays a $500 bonus.","house"],
- ["threeDoublesJail","Three doubles → Jail","Rolling doubles 3× in one turn sends you to Jail (official).","official"]
+ ["threeDoublesJail","Three doubles: go to Jail","Rolling doubles 3 times in one turn sends you to Jail (official).","official"]
 ];
 
 /* ============================ STATE ============================ */
@@ -317,6 +505,282 @@ function taxWorth(pl){
 function ownLots(i){ return GROUPS[BOARD[i].g].filter(x=>G.owner[x]===G.owner[i]); }
 function groupBare(i){ return BOARD[i].t!=="prop" || ownLots(i).every(x=>G.houses[x]===0); }
 
+/* ============== MIDNIGHT LUXE: presentation only (ui/theme.css + ui/ui.js, step 4) ==============
+   Nothing here changes a rule. It dresses the game's own dialog engine (#overlay > #modal, MODAL_TAG, closeIf, whenFree) as a
+   Luxe bottom sheet (BGUI.sheet) or the setup page, keeps the player strip, the dice and the top bar in step with G, and adds
+   the Victory screen, Luxe toasts, the TV Back steps and the D-pad focus. Without ui/ui.js every dialog opens as it always did
+   (the jsdom harnesses run that path). */
+const SEATS=[1,2,3,4,5,7];   // players 1-6 -> Luxe seats red, blue, green, yellow, purple, orange (the board keeps PCOLORS until step 5)
+const DARK_BAND={light_blue:1,pink:1,orange:1,red:1,yellow:1,green:1};   // deed bands where dark text reads (the ivory reads on the others)
+const SV_ICON={ss:"save",ls:"load",std:"reset",sg:"save",lg:"load",au:"resume"};
+const CTRL_ICON={"Roll Dice":"dice","Roll for doubles":"dice","Roll Again (doubles)":"dice","End Turn":"check","Manage":"deed","Trade":"swap","Players":"user","New Game":"play","CPU thinking…":"hourglass","Moving…":"hourglass"};
+const ui={dlg:{}, closing:false, sheetDis:null, peek:false, strip:"", meta:{}, turnKey:"", rolls:0, rollShown:0, diceKey:"", clock0:0, winShown:-1, hadFocus:null, mainSeen:"", bar:null};
+function BG(){ return window.BGUI||null; }
+function luxeOn(){ const B=BG(); return !!(B&&B.sheet&&document.documentElement.classList.contains("mn-luxe")); }
+function onTV(){ return document.documentElement.hasAttribute("data-tv"); }
+function icon(n){ const B=BG(); return B&&B.icon?B.icon(n):""; }
+function seatOf(p){ return SEATS[p?p.id:0]||1; }
+function humansN(){ return G?G.players.filter(p=>p.human).length:1; }
+function devWord(){ return onTV()?"remote":"phone"; }
+function tapWord(){ return onTV()?"Press OK on":"Tap"; }
+function liveGame(){ return !!(G&&G.started&&!G.over); }
+function resultDue(){ const B=BG(); return !!(G&&G.started&&G.over&&ui.winShown!==EPOCH&&B&&B.win); }   // a win whose Victory screen has not opened yet
+function winnerLine(){ const w=G?alive()[0]:null; return w?(w.human&&humansN()===1?"You win":w.name+" wins"):"Game over"; }
+function hubHref(){ const B=BG(); return B&&B.back&&B.back.hub?B.back.hub():"../index.html"; }
+function plural(n,one,many){ return n+" "+(n===1?one:many); }
+// presentation-only counters in G.stats (the Turn N eyebrow, the Victory pills); saves made before step 4 start fresh ones
+function freshStats(){ return {turns:0,ms:0}; }
+function readStats(s){ if(!s||typeof s!=="object") return freshStats(); return {turns:Math.max(0,Math.floor(+s.turns||0)),ms:Math.max(0,+s.ms||0)}; }
+// the play clock: the time a live game is on screen
+function clockOn(){ ui.clock0=(liveGame()&&!document.hidden)?Date.now():0; }
+function clockOff(){ if(ui.clock0&&G&&G.stats) G.stats.ms+=Math.max(0,Date.now()-ui.clock0); ui.clock0=0; }
+function clockSync(){ if(ui.clock0&&G&&G.stats){ const n=Date.now(); G.stats.ms+=Math.max(0,n-ui.clock0); ui.clock0=n; } }
+function playMs(){ return G&&G.stats?G.stats.ms+(ui.clock0?Math.max(0,Date.now()-ui.clock0):0):0; }
+function fmtTime(ms){ const s=Math.max(0,Math.round(ms/1000)), h=Math.floor(s/3600), m=Math.floor(s/60)%60, x=s%60;
+  return (h?h+":"+String(m).padStart(2,"0"):String(m))+":"+String(x).padStart(2,"0"); }
+// a sheet's head: the title comes first (a dialog is read by its first words), then a plain-English line
+function head(title,sub,cls){ return `<div class="bg-sheet__grip" aria-hidden="true"></div><div class="mn-head"><h2 class="bg-sheet__title${cls?" "+cls:""}" id="dlgTitle">${title}</h2>${sub?`<p class="bg-sheet__sub">${sub}</p>`:""}</div>`; }
+
+/* ---- the dialog host: a Luxe bottom sheet (BGUI.sheet), or the setup page in the flow ---- */
+function setupShown(){ const ov=$("overlay"); return !!ov&&ov.classList.contains("on")&&ov.classList.contains("mn-ov--page"); }
+function sheetOpen(){ const B=BG(); return !!(B&&B.sheet&&B.sheet.isOpen($("overlay"))); }
+function sheetClose(){ const B=BG(); if(!sheetOpen()) return; ui.closing=true; try{ B.sheet.close($("overlay")); }finally{ ui.closing=false; } }
+function dlgShow(){
+  const ov=$("overlay"), o=ui.dlg||{}, B=BG();
+  if(o.page){
+    sheetClose(); peekOff(); ui.hadFocus=null;
+    const entering=!ov.classList.contains("mn-ov--page");
+    ov.classList.remove("bg-sheet"); ov.classList.add("mn-ov--page"); ov.style.zIndex="";
+    ["role","aria-modal","tabindex","aria-labelledby"].forEach(a=>ov.removeAttribute(a)); ov.setAttribute("aria-label","New game");
+    setupChrome(true,entering);
+    return;
+  }
+  if(ov.classList.contains("mn-ov--page")){ ov.classList.remove("mn-ov--page"); setupChrome(false,true); }
+  ov.removeAttribute("aria-label"); ov.setAttribute("aria-labelledby","dlgTitle");
+  if(!luxeOn()) return;   // no ui.js: the old full-screen dialog (fallback CSS)
+  const dis=typeof o.dismiss==="function";
+  if(sheetOpen()&&ui.sheetDis!==dis) sheetClose();   // whether Back / the scrim may close it is fixed when a sheet opens: open it again
+  if(!ov.classList.contains("bg-sheet")){ ov.classList.add("bg-sheet"); void ov.offsetWidth; }   // starts below the screen, so it slides in
+  ov.scrollTop=0;
+  if(o.peek) peekOn(); else peekOff();
+  if(sheetOpen()){ sheetFocus(); if(B.toast&&B.toast.place) B.toast.place(); return; }
+  ui.sheetDis=dis;
+  B.sheet.open(ov,{dismissible:dis,onClose:sheetClosed});
+}
+// BGUI closed the sheet by itself (Back, Escape, the scrim: dismissible dialogs only): that dialog's own way out
+function sheetClosed(){
+  if(ui.closing) return;
+  const f=ui.dlg&&ui.dlg.dismiss;
+  if(typeof f==="function") f(); else if(overlayOn()) dlgShow();
+}
+function dlgHide(){
+  const ov=$("overlay");
+  peekOff();
+  if(ov.classList.contains("mn-ov--page")){ ov.classList.remove("mn-ov--page"); setupChrome(false,true); }
+  sheetClose();
+  setTimeout(()=>tvKeep(null),0);
+}
+// the control a redraw should give the focus back to: its id, data key or label (prices after " — " change, the label does not)
+function focusKey(e){
+  if(!e||!e.getAttribute) return null;
+  if(e.id) return "#"+e.id;
+  for(const a of ["data-k","data-t","data-a","data-i"]){ const v=e.getAttribute(a); if(v!==null) return a+"="+v; }
+  const n=e.getAttribute("data-n"); if(n!==null) return ((e.parentNode&&e.parentNode.id)||"")+"/n="+n;
+  return "t="+(e.textContent||"").split(" — ")[0].trim();
+}
+function focusEl(el){ const B=BG(); if(!el) return; if(B&&B.focus&&B.focus.enabled&&onTV()) B.focus.set(el); else { try{ el.focus({preventScroll:true}); }catch(e){} } }
+function usableEl(e){ return !!e&&!e.disabled&&e.getClientRects().length>0; }
+function sheetFocus(){   // new content in an open sheet: the same control again (Build House twice), else the default one
+  const ov=$("overlay"), had=ui.hadFocus; ui.hadFocus=null;
+  const list=[].slice.call(ov.querySelectorAll("button, a[href], input, select"));
+  const el=(had&&list.find(e=>usableEl(e)&&focusKey(e)===had))||[].slice.call(ov.querySelectorAll("[data-autofocus]")).find(usableEl)||list.find(usableEl);
+  focusEl(el);
+}
+// content added to an open sheet after it opened (the debt list, the Menu's save bar) changes its height: a showing toast is placed
+// again, so it never sits on the sheet
+function sheetGrew(){ const B=BG(); if(sheetOpen()&&B.toast&&B.toast.place) B.toast.place(); }
+function refocusIn(box){   // a list redrawn under the focus (the debt dialog after a sale): the focus stays in it
+  const a=document.activeElement;
+  if(!box||(a&&a!==document.body&&a.isConnected)) return;
+  focusEl(box.querySelector("[data-autofocus]:not([disabled])")||box.querySelector("button:not([disabled])"));
+}
+function keepIn(box,fn){   // redraw a picker without losing the keyboard / D-pad focus
+  const a=document.activeElement, k=a&&box.contains(a)?focusKey(a):null;
+  fn();
+  if(k===null) return;
+  focusEl([].slice.call(box.querySelectorAll("button, input")).find(e=>!e.disabled&&focusKey(e)===k));
+}
+// a phone keeps the whole board in view above a choice sheet (the board comes first on the page): the sheet takes the room below
+// it when that leaves it a useful height, else it opens over the board as usual. A toast waits for such a sheet to close.
+function peekOn(){
+  const ov=$("overlay"), bw=$("boardWrap");
+  if(onTV()||!bw||!bw.getClientRects().length){ peekOff(); return; }
+  const vh=innerHeight, se=document.scrollingElement||document.documentElement, r=bw.getBoundingClientRect(), room=Math.floor(vh-(r.bottom+(se.scrollTop||0))-12);
+  if(r.height<1||room<Math.max(280,vh*0.36)){ peekOff(); return; }
+  ov.style.maxHeight=room+"px"; bw.setAttribute("data-toast-avoid",""); document.body.classList.add("mn-peek"); ui.peek=true;
+  if((se.scrollTop||0)>0){ const B=BG(); window.scrollTo({top:0,behavior:B&&B.reducedMotion&&B.reducedMotion()?"auto":"smooth"}); }
+}
+function peekOff(){ if(!ui.peek) return; ui.peek=false; $("overlay").style.maxHeight=""; document.body.classList.remove("mn-peek"); const bw=$("boardWrap"); if(bw) bw.removeAttribute("data-toast-avoid"); }
+// the setup page (and the scene tint) or the game
+function setupChrome(on,move){
+  const b=document.body;
+  b.classList.toggle("mn-in-setup",on); b.classList.toggle("bg-app--scene",on);
+  const m=$("menuBtn"); if(m) m.hidden=on;   // the setup page has Resume (mid-game) and Back to all games instead
+  if(move) (document.scrollingElement||document.documentElement).scrollTop=0;
+  if(!on&&G){ ui.turnKey=""; renderStatus(); }   // the board is back: the strip pulses whose turn it is
+  barTitle();
+}
+// TV: the D-pad focus stays on the actions across redraws. A new main action (Roll Dice, End Turn) takes the focus; otherwise the
+// same control keeps it. Focus left in a closed sheet counts as lost. It never takes the focus from the top bar, the sound panel,
+// an open sheet or the Victory screen.
+function tvKeep(had){
+  const B=BG(); if(!B||!B.focus||!B.focus.enabled||!onTV()) return;
+  const c=$("controls"), main=c.querySelector(".mn-main:not([disabled])"), label=main?main.textContent:"", fresh=label!==ui.mainSeen;
+  ui.mainSeen=label;
+  if(overlayOn()||(B.win&&B.win.isOpen())||(B.sheet&&B.sheet.top())) return;
+  const a=document.activeElement, ov=$("overlay");
+  const lost=!a||a===document.body||a===document.documentElement||!a.isConnected||!a.getClientRects().length||ov.contains(a);
+  if(!lost&&!had) return;
+  const list=[].slice.call(c.querySelectorAll("button:not([disabled])"));
+  const el=(fresh&&main)||(had&&list.find(b=>b.textContent===had))||main||list[0];
+  if(el) B.focus.set(el);
+}
+
+/* ---- the strip, the dice and the top bar ---- */
+function barTitle(){
+  const e=$("barEyebrow"); if(!e) return;
+  const t=setupShown()?(liveGame()?"Game in progress":resultDue()?"Game over":"New game"):(G&&G.over?"Game over":(G&&G.started?"Turn "+Math.max(1,(G.stats&&G.stats.turns)||1):"New game"));
+  if(e.textContent!==t) e.textContent=t;
+}
+function syncStrip(){
+  const el=$("players"); if(!el||!G) return;
+  const B=BG(), sk=G.players.map(p=>p.id+":"+p.name+":"+p.token.n+(p.human?"H":"C")).join("|");
+  if(sk!==ui.strip||el.children.length!==G.players.length){
+    el.classList.toggle("bg-players--scroll",G.players.length>4);
+    el.innerHTML=G.players.map(p=>`<li class="bg-player" data-seat="${seatOf(p)}" data-p="${p.id}"><span class="bg-token" aria-hidden="true">${p.token.e}</span>`+
+      (p.human?"":`<span class="bg-player__cpu" aria-hidden="true">${icon("cpu")}</span>`)+
+      `<span class="bg-player__txt"><span class="bg-player__name">${p.name}</span><span class="bg-player__meta"></span></span></li>`).join("");
+    ui.strip=sk; ui.meta={}; ui.turnKey="";
+  }
+  G.players.forEach(p=>{
+    const deeds=G.owner.filter(o=>o===p.id).length;
+    const m=p.bankrupt?"Bankrupt":money(p.cash)+(p.jail?" · In Jail":deeds?" · "+plural(deeds,"deed","deeds"):"");
+    if(ui.meta[p.id]===m) return;
+    ui.meta[p.id]=m; const c=el.children[p.id];
+    if(c){ c.querySelector(".bg-player__meta").textContent=m; c.classList.toggle("is-out",!!p.bankrupt); }
+  });
+  const tk=G.over?"over":EPOCH+":"+(G.stats?G.stats.turns:0)+":"+G.cur;
+  if(tk===ui.turnKey) return;
+  ui.turnKey=tk;
+  const chip=el.children[G.cur];
+  if(G.over||!chip){ [].forEach.call(el.children,c=>{ c.classList.remove("is-turn"); c.classList.remove("is-pulse"); }); return; }
+  // the turn pulse plays in a live game on screen only (never behind the setup page, never for the placeholder at load)
+  if(B&&B.setTurn) B.setTurn(chip,{pulse:liveGame()&&!setupShown()&&!document.hidden});
+  else [].forEach.call(el.children,c=>c.classList.toggle("is-turn",c===chip));
+}
+function syncDice(){
+  const a=$("die1"), b=$("die2"); if(!a||!b||!G) return;
+  const B=BG(), on=!!(G.dice&&G.dice[0]), key=on?G.dice[0]+"+"+G.dice[1]:"";
+  if(on&&ui.rolls!==ui.rollShown){   // a new roll: the ivory dice tumble to it (BGUI.dice: transform + a few face swaps)
+    ui.rollShown=ui.rolls; ui.diceKey=key; a.classList.remove("is-blank"); b.classList.remove("is-blank");
+    if(B&&B.dice&&!setupShown()){ B.dice.roll(a,G.dice[0],{ms:560,haptic:false}); B.dice.roll(b,G.dice[1],{ms:640}); return; }
+  }
+  else if(key===ui.diceKey) return;
+  ui.diceKey=key;
+  [a,b].forEach((d,k)=>{
+    d.classList.toggle("is-blank",!on);
+    if(on){ if(B&&B.dice) B.dice.render(d,G.dice[k]); else d.textContent=String(G.dice[k]); }
+    else { d.innerHTML=""; d.removeAttribute("data-value"); d.removeAttribute("aria-label"); }
+  });
+}
+
+/* ---- the Victory screen (BGUI.win + BGUI.celebrate) with this game's real numbers ---- */
+function showWin(w){
+  const B=BG();
+  if(!(B&&B.win&&luxeOn())){ openModal(`<h2>${w?w.name:"Game Over"} wins!</h2><p>Last player standing with assets.</p><button type="button" class="bg-btn bg-btn--primary bg-btn--block" onclick="window.__close()">OK</button>`); return; }
+  ui.winShown=EPOCH;
+  const st=G.stats||freshStats(), ms=playMs(), min=Math.round(ms/60000), one=humansN()===1, props=w?G.owner.filter(o=>o===w.id).length:0;
+  $("winEyebrow").textContent="Game over · "+(min<1?"under a minute":min===1?"1 minute":min+" minutes");
+  $("winTitle").textContent=w&&w.human?"Victory":(w?w.name+" wins":"Game over");
+  $("winSub").innerHTML=w?`<b>${w.human&&one?"You":w.name}</b> ${w.human&&one?"are":"is"} the last player standing, with ${plural(props,"property","properties")}.`:"Nobody is left standing.";
+  const pill=(v,l)=>`<li class="bg-stat"><b>${v}</b><span>${l}</span></li>`;
+  $("winStats").innerHTML=pill(st.turns,st.turns===1?"turn":"turns")+pill(money(w?netWorth(w):0),"net worth")+pill(fmtTime(ms),"time");
+  barTitle();
+  B.win.open($("winBox"),{focus:"#winAgain"});
+  if(B.celebrate) B.celebrate();
+}
+function closeWin(){ const B=BG(); if(B&&B.win&&B.win.isOpen()) B.win.close($("winBox")); }
+// the game ended behind the Menu or the setup page: Resume becomes "See the result" (the board, then the Victory screen)
+function gameEnded(){
+  barTitle();
+  if(!resultDue()) return;
+  const line=winnerLine(), r=$("mnResume");
+  if(overlayOn()&&ui.dlg.kind==="menu"&&r){
+    r.querySelector(".bg-btn__label").textContent="See the result"; r.querySelector(".bg-btn__sub").textContent=line;
+    const sub=$("modal").querySelector(".mn-head .bg-sheet__sub"); if(sub) sub.textContent="The game is over.";
+  }
+  if(setupShown()&&$("resumeLabel")){ $("resumeLabel").textContent="See the result"; $("resumeSub").textContent=line; }
+  if(overlayOn()&&ui.bar&&ui.bar.refresh) ui.bar.refresh();   // Save game switches off (a finished game is not saved)
+}
+
+/* ---- the remote's Back on TV: ui.js gives every game page one default (BGUI.back). It closes the top layer first (the sound
+   panel, a sheet that may be closed, the Victory screen); then this page's step: the board opens the Menu, the setup page
+   reached mid-game goes back to the game; the New game page goes on to the hub ---- */
+function armBack(){ const B=BG(); if(B&&B.back&&B.back.arm) B.back.arm(); }   // inside the Start / Continue / Load tap
+function resumeGame(){ closeModal(); }
+function backStep(){
+  if(setupShown()){ if(liveGame()||resultDue()){ resumeGame(); return "resume"; } return false; }
+  if(overlayOn()){ const f=ui.dlg&&ui.dlg.dismiss; if(typeof f==="function"){ f(); return "sheet"; } return "held"; }
+  if(G&&G.started){ openMenu(); return "menu"; }
+  return false;
+}
+
+/* ---- saves.js bars in Luxe: line icons instead of emoji (ids, data-a and every behaviour stay saves.js's own) ---- */
+function dressSaveBar(el){
+  if(!el) return;
+  const run=()=>{ const B=BG(); el.querySelectorAll("button[data-a]").forEach(b=>{
+    if(b.getAttribute("data-lux")) return; b.setAttribute("data-lux","1");
+    const t=b.firstChild; if(t&&t.nodeType===3) t.nodeValue=t.nodeValue.replace(/^[^A-Za-z]+/,"");
+    b.classList.add("bg-btn","bg-btn--secondary");
+    if(B&&B.icon) b.insertAdjacentHTML("afterbegin",B.icon(SV_ICON[b.getAttribute("data-a")]||"save"));
+  }); };
+  run();
+  if(window.MutationObserver&&!el._mnObs){ el._mnObs=new MutationObserver(run); el._mnObs.observe(el,{childList:true}); }
+}
+
+/* ---- the rules as whole-row switches (setup page and the Menu's House Rules), tagged Official or House ---- */
+function rulesHTML(){
+  const row=([k,name,desc,kind])=>`<label class="bg-row"><span class="bg-row__main"><span class="bg-row__title">${name} <span class="bg-tag bg-tag--${kind==="official"?"official":"house"}">${kind==="official"?"Official":"House"}</span></span><span class="bg-row__desc">${desc}</span></span><input type="checkbox" class="bg-toggle" data-k="${k}"${RULES[k]?" checked":""}></label>`;
+  return `<div class="bg-section"><h3 class="bg-eyebrow">Official rules</h3></div><div class="bg-rows mn-rules">${RULE_DEFS.filter(r=>r[3]==="official").map(row).join("")}</div>`+
+    `<div class="bg-section"><h3 class="bg-eyebrow">House rules</h3></div><p class="mn-rulenote">Variants many families play. Each one is off until you switch it on.</p>`+
+    `<div class="bg-rows mn-rules">${RULE_DEFS.filter(r=>r[3]!=="official").map(row).join("")}</div>`;
+}
+function wireRules(scope){ [].forEach.call(scope.querySelectorAll("input.bg-toggle[data-k]"),el=>{ el.onchange=()=>{ RULES[el.dataset.k]=el.checked; }; }); }
+// the Start button says what it starts, and the seat preview who sits at the table
+function syncCTA(){
+  const lab=$("startLabel"), sub=$("startSub"), pv=$("seatPreview"); if(!lab||!sub) return;
+  const tv=onTV(), nH=SETUP.humans, nP=Math.min(6,Math.max(2,nH+SETUP.cpus)), nC=nP-nH, tk=SETUP.humanTokens||[];
+  lab.textContent="Start Game · "+nP+" players";
+  sub.textContent=(nH===1?"You":nH+(tv?" on this TV":" on this phone"))+(nC?" + "+plural(nC,"computer","computers"):"")+" · "+money(RULES.startingCash)+" each";
+  if(!pv) return;
+  const names=[]; for(let i=0;i<nP;i++) names.push(i<nH?("You"+(nH>1?" "+(i+1):"")):"CPU "+(i+1-nH));
+  pv.innerHTML=`<span class="mn-seats__tokens">`+names.map((n,i)=>`<span class="bg-token" data-seat="${SEATS[i]}" aria-hidden="true">${i<nH&&tk[i]!==undefined?TOKENS[tk[i]].e:"?"}</span>`).join("")+`</span>`+
+    `<span class="mn-seats__txt"><b>${nP} at the table</b>${names.map((n,i)=>n+(i<nH&&tk[i]!==undefined?" ("+TOKENS[tk[i]].n+")":"")).join(", ")}</span>`;
+}
+function nearestIn(row,a){   // D-pad: the nearest enabled button of a save-bar row
+  const r0=a.getBoundingClientRect(), x0=r0.left+r0.width/2; let best=null, bd=Infinity;
+  row.querySelectorAll("button:not([disabled])").forEach(b=>{ const r=b.getBoundingClientRect(), dx=Math.abs(r.left+r.width/2-x0); if(r.width>0&&dx<bd){ bd=dx; best=b; } });
+  return best;
+}
+function buyWhy(p,i){   // the plain-English line under "Buy for $X"
+  const s=BOARD[i];
+  if(s.t==="rr"){ const n=rrOwned(p.id)+1; return n===1?"Your first railroad: rent $25.":"Railroad number "+n+" for you: rent "+money(25*Math.pow(2,n-1))+" on each."; }
+  if(s.t==="util") return utilOwned(p.id)?"Both utilities: rent 10 times the dice.":"Rent is 4 times the dice.";
+  const g=GROUPS[s.g], mine=g.filter(x=>G.owner[x]===p.id).length+1, name=s.g.replace("_"," ");
+  if(mine===g.length) return "Completes your "+name+" set: double rent, and you can build.";
+  return "Rent "+money(s.rent[0])+". You would own "+mine+" of the "+g.length+" "+name+" streets.";
+}
+
 /* ========================= RENDER ========================= */
 function spGridPos(i){
   let r,c;
@@ -335,7 +799,9 @@ function barSide(i){
 function tokenHTML(i){
   const here=G.players.filter(p=>!p.bankrupt && p.pos===i);
   if(!here.length) return "";
-  return `<div class="toks">`+here.map(p=>`<span class="tk${(G.started&&p.id===G.cur)?' cur':''}" style="--pc:${p.color}" title="${p.name}">${p.token.e}</span>`).join("")+`</div>`;
+  // the current player's piece pulses on a plain wrapper (.tkp): its colour glow (a filter on .tk) is painted once into the wrapper's
+  // layer and only the transform changes per frame (step 4: the same pulse at a fraction of the cost of a pulsing filtered piece)
+  return `<div class="toks">`+here.map(p=>`<span class="tkp${(G.started&&p.id===G.cur)?' cur':''}"><span class="tk" style="--pc:${p.color}" title="${p.name}">${p.token.e}</span></span>`).join("")+`</div>`;
 }
 function sideAngle(i){ return i<=10?0 : i<=20?90 : i<=30?180 : 270; }  // bottom,left,top,right
 function spaceIcon(i){
@@ -384,7 +850,7 @@ function renderBoard(){
     const [r,c]=spGridPos(i);
     html+=`<div class="sp" data-i="${i}" style="grid-row:${r+1};grid-column:${c+1}">${spaceInner(i)}</div>`;
   }
-  html+=`<div class="center"><div class="logo">MONOPOLY</div></div>`;
+  html+=`<div class="center"></div>`;   // the middle's plate (.mn-center) sits over it, outside the board's redraws
   b.innerHTML=html;
 }
 function spaceDesc(s){
@@ -400,37 +866,36 @@ function spaceDesc(s){
 }
 function openDeed(i,fromManage){
   const s=BOARD[i];
-  let h=`<h2 style="text-align:center;margin-bottom:0">${s.n}</h2>`;
+  const opt={dismiss:fromManage?openManage:closeModal,kind:"deed"};   // Back (TV) / the scrim: back to Manage, or closed
   if(!s.price){
-    h+=`<p style="text-align:center;margin:8px 0">${spaceDesc(s)}</p>`;
+    let h=head(s.n,spaceDesc(s));
     if(s.t==="fp" && RULES.freeParkingJackpot){
-      h+=`<div style="text-align:center;margin:6px 0 2px;font-size:13px;color:var(--muted)">Current pot</div><div class="cash" style="text-align:center;font-size:26px;font-weight:900">${money(G.fpPool)}</div>`;
+      h+=`<p class="mn-note">Current pot <b class="mn-money">${money(G.fpPool)}</b></p>`;
     }
-    h+=`<button class="btn primary" style="width:100%;margin-top:8px" onclick="window.__close()">Close</button>`;
-    openModal(h); return;
+    h+=`<div class="mn-acts"><button type="button" class="bg-btn bg-btn--secondary bg-btn--block" data-autofocus onclick="window.__close()">Close</button></div>`;
+    openModal(h,"",opt); return;
   }
   const own=G.owner[i];
   const v=viewer();
   const mine = own===v.id && v.human && !v.bankrupt;
-  h+=`<div style="text-align:center;color:var(--muted);font-size:12.5px;margin:2px 0 4px">Price <b style="color:var(--ink)">${money(s.price)}</b>`;
-  if(own<0) h+=` · <b>Unowned</b>`;
-  else { h+=` · Owner ${dotc(G.players[own])} <b style="color:var(--ink)">${G.players[own].name}</b>`; if(G.mort[i]) h+=` · <span class="neg">mortgaged</span>`; }
-  h+=`</div>`;
-  if(own>=0 && !G.mort[i]) h+=`<div style="text-align:center;font-size:12.5px;margin-bottom:2px">Rent if landed on now: <b class="cash">${money(computeRent(i,own,1))}</b></div>`;
-  h+=deedCardHTML(i);
-  h+=`<div class="stickyact">`;
+  let sub=`Price <b>${money(s.price)}</b>`;
+  if(own<0) sub+=` · Unowned`;
+  else { sub+=` · Owner ${dotc(G.players[own])}<b>${G.players[own].name}</b>`; if(G.mort[i]) sub+=` · <span class="mn-neg">mortgaged</span>`; }
+  if(own>=0 && !G.mort[i]) sub+=`<br>Rent if landed on now: <b class="mn-money">${money(computeRent(i,own,1))}</b>`;
+  let h=head(s.n,sub), acts="";
   if(mine){
     const grpMort = s.t==="prop" && GROUPS[s.g].some(x=>G.mort[x]);
     if(s.t==="prop"){
-      if(canBuildOn(v,i)) h+=`<button class="btn go" style="width:100%;margin:0 0 6px" onclick="window.__dBuild(${i})">${G.houses[i]===4?"🏨 Build Hotel":"🏠 Build House"} — ${money(s.house)}</button>`;
-      else if(!grpMort && ownsFullGroup(v,s.g) && G.houses[i]<5 && v.cash<s.house) h+=`<button class="btn" style="width:100%;margin:0 0 6px" disabled>Need ${money(s.house)} to build</button>`;
-      if(G.houses[i]>0 && canSellHouse(v,i)){ const hl=Math.max(0,G.housesLeft); h+=`<button class="btn" style="width:100%;margin:0 0 6px" onclick="window.__dSell(${i})">${hotelShort(i)?`Sell hotel — bank has only ${hl} house${hl===1?"":"s"}`:"Sell building"} — +${money(sellGain(i))}</button>`; }
+      if(canBuildOn(v,i)) acts+=`<button type="button" class="bg-btn bg-btn--primary bg-btn--block" onclick="window.__dBuild(${i})">${G.houses[i]===4?"Build Hotel":"Build House"} — ${money(s.house)}</button>`;
+      else if(!grpMort && ownsFullGroup(v,s.g) && G.houses[i]<5 && v.cash<s.house) acts+=`<button type="button" class="bg-btn bg-btn--secondary bg-btn--block" disabled>Need ${money(s.house)} to build</button>`;
+      if(G.houses[i]>0 && canSellHouse(v,i)){ const hl=Math.max(0,G.housesLeft); acts+=`<button type="button" class="bg-btn bg-btn--secondary bg-btn--block" onclick="window.__dSell(${i})">${hotelShort(i)?`Sell hotel — bank has only ${hl} house${hl===1?"":"s"}`:"Sell building"} — +${money(sellGain(i))}</button>`; }
     }
-    if(!G.mort[i] && groupBare(i)) h+=`<button class="btn warn" style="width:100%;margin:0 0 6px" onclick="window.__dMort(${i})">Mortgage — +${money(s.mort)}</button>`;
-    if(G.mort[i]) h+=`<button class="btn go" style="width:100%;margin:0 0 6px" onclick="window.__dUnmort(${i})" ${v.cash<Math.ceil(s.mort*1.1)?"disabled":""}>Lift mortgage — ${money(Math.ceil(s.mort*1.1))}</button>`;
+    if(!G.mort[i] && groupBare(i)) acts+=`<button type="button" class="bg-btn bg-btn--danger bg-btn--block" onclick="window.__dMort(${i})">Mortgage — +${money(s.mort)}</button>`;
+    if(G.mort[i]) acts+=`<button type="button" class="bg-btn bg-btn--accent bg-btn--block" onclick="window.__dUnmort(${i})" ${v.cash<Math.ceil(s.mort*1.1)?"disabled":""}>Lift mortgage — ${money(Math.ceil(s.mort*1.1))}</button>`;
   }
-  h+=`<button class="btn primary" style="width:100%" onclick="${fromManage?"window.__backManage()":"window.__close()"}">${fromManage?"‹ Back":"Close"}</button></div>`;
-  openModal(h);
+  acts+=`<button type="button" class="bg-btn bg-btn--secondary bg-btn--block" onclick="${fromManage?"window.__backManage()":"window.__close()"}">${fromManage?"Back":"Close"}</button>`;
+  h+=`<div class="mn-acts">${acts}</div>`+deedCardHTML(i);   // the actions first, so they are on screen; the deed under them
+  openModal(h,"",opt);
   const reopen=()=>{ refresh(); openDeed(i,fromManage); };
   window.__dBuild=()=>{ buildHouse(v,i); reopen(); };
   window.__dSell=()=>{ sellHouse(v,i); reopen(); };
@@ -441,36 +906,60 @@ function openDeed(i,fromManage){
 
 /* ========================= UI BITS ========================= */
 let toastT;
-function toast(m){ Sound.fromText(m); const t=$("toast"); t.textContent=m; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"),1600); }
+// #toast still receives every message (the fallback without ui.js, and what the harnesses read); BGUI.toast shows it in Luxe,
+// placed clear of the player strip, the actions, an open sheet and the top bar
+function toast(m){ Sound.fromText(m); const t=$("toast"); t.textContent=m; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"),1600);
+  const B=BG(); if(!B||!B.toast||!luxeOn()) return;
+  const who=G&&/ (accepts!|rejects\.)$/.test(m)?G.players.find(q=>m.indexOf(q.name+" ")===0):null;
+  B.toast(m,who?{seat:seatOf(who),token:who.token.e,ms:2400}:{icon:"info",ms:2400}); }
 function log(m){ Sound.fromText(m); const l=$("log"); const d=document.createElement("div"); d.innerHTML=m; l.appendChild(d); l.scrollTop=l.scrollHeight; }
 function money(n){ return (n<0?"-$":"$")+Math.abs(n); }
-function dotc(p){ return `<span class="dot" style="background:${p.color}"></span>`; }
+function dotc(p){ return `<span class="mn-dot" data-seat="${seatOf(p)}" aria-hidden="true"></span>`; }   // the Luxe seat colour
 
+// the status card: whose turn and what to do, then the bank (the .pill hooks stay); the strip, the dice and the top bar follow G
 function renderStatus(){
+  if(!G) return;
   const p=cur();
-  let h=`<span class="pill">${p.token.e} ${dotc(p)}<b>${p.name}</b></span>`;
-  h+=`<span class="pill cash">${money(p.cash)}</span>`;
-  if(G.dice[0]) h+=`<span class="dice"><span class="die">${G.dice[0]}</span><span class="die">${G.dice[1]}</span></span>`;
-  if(p.jail) h+=`<span class="pill">🔒 In Jail (${p.jailTurns})</span>`;
-  if(G.fpPool>0) h+=`<span class="pill">🅿️ ${money(G.fpPool)}</span>`;
-  h+=`<span class="pill">🏠${G.housesLeft} 🏨${G.hotelsLeft}</span>`;
+  let h;
+  if(G.over) h=`<span class="mn-turn"><b>Game over</b> · ${winnerLine()}</span>`;
+  else if(!G.started) h=`<span class="mn-turn">Set up a new game to play.</span>`;
+  else {
+    let what;
+    if(!p.human) what=G.phase==="moving"&&G.dice[0]?"rolled "+G.dice[0]+" + "+G.dice[1]:"is playing";
+    else if(G.phase==="preroll"){
+      const o=["roll for doubles"]; if(p.cash>=50) o.push("pay $50"); if(p.jokers>0) o.push("use your Jail card");
+      what=p.jail?"in Jail: "+(o.length<3?o.join(" or "):o.slice(0,-1).join(", ")+" or "+o[o.length-1]):"roll the dice";
+    }
+    else if(G.phase==="rolledAgain") what="doubles, roll again";
+    else if(G.phase==="action") what="buy, build, trade or end the turn";
+    else what=G.dice[0]?"rolled "+G.dice[0]+" + "+G.dice[1]:"moving";
+    h=`<span class="mn-turn">${dotc(p)}<b>${p.name}</b> · ${what}</span>`;
+  }
+  if(p.jail&&!G.over) h+=`<span class="pill">In Jail (${p.jailTurns})</span>`;
+  if(G.fpPool>0) h+=`<span class="pill">Free Parking ${money(G.fpPool)}</span>`;
+  h+=`<span class="pill">${plural(G.housesLeft,"house","houses")} · ${plural(G.hotelsLeft,"hotel","hotels")}</span>`;
   $("status").innerHTML=h;
+  syncDice(); syncStrip(); barTitle();
 }
-function addBtn(c,label,cls,fn,dis){ const b=document.createElement("button"); b.className="btn "+(cls||""); b.textContent=label; if(dis)b.disabled=true; else b.onclick=fn; c.appendChild(b); return b; }
+// actions: the main one (Roll, End Turn) is the gold primary, the rest lit secondary; line icons, no emoji
+function addBtn(c,label,cls,fn,dis){ const b=document.createElement("button"); b.type="button";
+  b.className="bg-btn "+((cls==="primary"||cls==="go")?"bg-btn--primary mn-main":cls==="warn"?"bg-btn--danger":"bg-btn--secondary");
+  b.textContent=label; const ic=CTRL_ICON[label]?icon(CTRL_ICON[label]):""; if(ic) b.insertAdjacentHTML("afterbegin",ic);
+  if(dis)b.disabled=true; else b.onclick=fn; c.appendChild(b); return b; }
 function renderControls(){
-  const c=$("controls"); c.innerHTML="";
+  const c=$("controls"), fa=document.activeElement, had=fa&&c.contains(fa)?fa.textContent:null; c.innerHTML="";
   const add=(label,cls,fn,dis)=>addBtn(c,label,cls,fn,dis);
-  if(!G || !G.started){ add("🎲 New Game","primary",openSetup); return; }
+  if(!G || !G.started){ add("New Game","primary",openSetup); tvKeep(had); return; }
   const p=cur();
-  if(G.over){ add("🎲 New Game","primary",openSetup); add("☰ Menu","",openMenu); return; }
-  if(!p.human){ add("CPU thinking…","",()=>{},true); if(G.players.some(x=>x.human&&!x.bankrupt)){ add("Manage","",openManage); } add("👥","",openPlayers); add("☰","",openMenu); return; }
+  if(G.over){ add("New Game","primary",openSetup); add("Players","",openPlayers); tvKeep(had); return; }
+  if(!p.human){ add("CPU thinking…","",()=>{},true); if(G.players.some(x=>x.human&&!x.bankrupt)){ add("Manage","",openManage); } add("Players","",openPlayers); tvKeep(had); return; }
   if(G.phase==="preroll"){
     if(p.jail){
-      add("🎲 Roll for doubles","go",humanRoll);
+      add("Roll for doubles","go",humanRoll);
       if(p.cash>=50) add("Pay $50","",()=>{ payBank(p,50,true); p.jail=false; p.jailTurns=0; log(`${p.name} pays $50 to leave Jail.`); refresh(); });
       if(p.jokers>0) add("Use Jail card","",()=>{ p.jokers--; p.jail=false; p.jailTurns=0; returnJoker(); log(`${p.name} uses Get Out of Jail Free.`); refresh(); });
     } else {
-      add("🎲 Roll Dice","go",humanRoll);
+      add("Roll Dice","go",humanRoll);
     }
     add("Manage","",openManage);
     add("Trade","",openTradeSetup);
@@ -479,24 +968,32 @@ function renderControls(){
     add("Manage","",openManage);
     add("Trade","",openTradeSetup);
   } else if(G.phase==="rolledAgain"){
-    add("🎲 Roll Again (doubles)","go",humanRoll);
+    add("Roll Again (doubles)","go",humanRoll);
     add("Manage","",openManage);
   } else {
     // "moving"/processing — show a working indicator so the human is never left with a blank screen
-    add("…working…","",()=>{},true);
+    add("Moving…","",()=>{},true);
   }
-  add("👥 Players","",openPlayers);
-  add("☰","",openMenu);
+  add("Players","",openPlayers);
+  tvKeep(had);
 }
+// the Menu (the top bar's menu knob, or Back on TV): Resume is the gold primary and New Game a secondary further down, so one
+// stray tap never ends a game; once the game is over it offers "See the result" until the Victory screen has opened
 function openMenu(){
-  openModal(`<h2>Menu</h2>
-    <button class="btn" style="width:100%;margin:4px 0" onclick="window.__close()">Resume Game</button>
-    <button class="btn" style="width:100%;margin:4px 0" onclick="window.__mplayers()">👥 Players &amp; holdings</button>
-    <div id="svbar2"></div>
-    <button class="btn" style="width:100%;margin:4px 0" onclick="window.__mrules()">⚙️ House Rules</button>
-    <button class="btn warn" style="width:100%;margin:4px 0" onclick="window.__mnew()">🎲 New Game</button>
-    <button class="btn" style="width:100%;margin:4px 0" onclick="location.href='../index.html'">🏠 Back to All Games</button>`);
-  Saves.bar({game:"monopoly",el:$("svbar2"),noSettings:true,getSnapshot:()=>(G&&G.started&&!G.over)?lastSnap:null,loadSnapshot:loadSavedGame});
+  const due=resultDue(), over=!!(G&&G.over), p=G&&G.started?cur():null;
+  let top;
+  if(due) top=`<button type="button" class="bg-btn bg-btn--primary bg-btn--cta bg-btn--block" id="mnResume" data-autofocus onclick="window.__close()"><span class="bg-btn__label">See the result</span><span class="bg-btn__sub">${winnerLine()}</span></button>`;
+  else if(over) top=`<button type="button" class="bg-btn bg-btn--primary bg-btn--cta bg-btn--block" data-autofocus onclick="window.__mnew()"><span class="bg-btn__label">New Game</span><span class="bg-btn__sub">Choose the players and the rules</span></button>`+
+    `<button type="button" class="bg-btn bg-btn--secondary bg-btn--block" onclick="window.__close()">Back to the board</button>`;
+  else top=`<button type="button" class="bg-btn bg-btn--primary bg-btn--cta bg-btn--block" id="mnResume" data-autofocus onclick="window.__close()"><span class="bg-btn__label">Resume Game</span><span class="bg-btn__sub">${p?"Turn "+Math.max(1,G.stats?G.stats.turns:1)+" · "+p.name+(p.human?" to play":" is playing"):"Back to the board"}</span></button>`;
+  openModal(head("Menu",over?"The game is over.":"Game in progress.")+
+    `<div class="mn-acts">${top}<div class="mn-acts--2"><button type="button" class="bg-btn bg-btn--secondary" onclick="window.__mplayers()">${icon("user")}Players &amp; holdings</button>`+
+    `<button type="button" class="bg-btn bg-btn--secondary" onclick="window.__mrules()">${icon("gear")}House Rules</button></div></div>`+
+    `<div class="bg-section"><h3 class="bg-eyebrow">Save and load</h3></div><div id="svbar2"></div>`+
+    `<div class="mn-acts">${over?"":`<button type="button" class="bg-btn bg-btn--secondary bg-btn--block" onclick="window.__mnew()">${icon("play")}New Game</button>`}`+
+    `<a class="bg-btn bg-btn--ghost bg-btn--block" href="${hubHref()}">${icon("home")}All games</a></div>`,"",{dismiss:closeModal,kind:"menu"});
+  ui.bar=Saves.bar({game:"monopoly",el:$("svbar2"),noSettings:true,getSnapshot:()=>(G&&G.started&&!G.over)?lastSnap:null,loadSnapshot:loadSavedGame});
+  dressSaveBar($("svbar2")); sheetGrew();
   window.__mplayers=openPlayers;
   window.__mrules=openRules;
   window.__mnew=openSetup;
@@ -519,6 +1016,7 @@ function payTo(p,creditor,amt){
 let lastSnap=null;
 function takeSnap(){
   if(!G||!G.started||G.over) return;
+  clockSync();   // the play time so far goes into the snapshot (G.stats, presentation only)
   const lg=$("log"); const kids=lg?Array.from(lg.children).slice(-60).map(x=>x.innerHTML):[];
   lastSnap=JSON.parse(JSON.stringify({G:G,rules:RULES,setup:SETUP,log:kids}));
   Saves.auto("monopoly",lastSnap);
@@ -530,16 +1028,18 @@ function loadSavedGame(d){
   EPOCH++;
   G=JSON.parse(JSON.stringify(d.G)); Object.assign(RULES,DEFAULT_RULES,d.rules||{}); if(d.setup) SETUP=d.setup;
   if(G.housesLeft<0) G.housesLeft=0; if(G.hotelsLeft<0) G.hotelsLeft=0;   // old saves (pre-M5 fix) could hold a negative bank stock
+  G.stats=readStats(G.stats);   // presentation-only counters: saves made before step 4 have none and start fresh ones
   AUC=null; AUC_WAIT.length=0; TRADE=null; DEBT_THEN=null; G.bankAuctionActive=false;
   const lg=$("log"); lg.innerHTML=""; (d.log||[]).forEach(h=>{ const x=document.createElement("div"); x.innerHTML=h; lg.appendChild(x); });
   lg.scrollTop=lg.scrollHeight; log("<i>Saved game loaded.</i>");
-  closeModal(); Sound.skip(); startTurn();
+  closeModal(); armBack(); clockOn(); Sound.skip(); startTurn();
 }
 function startTurn(){
   if(G.over) return;
   const p=cur();
   if(p.bankrupt){ advancePlayer(); return; }
   G.dice=[0,0]; G.phase="preroll"; G.turnDouble=false; takeSnap();
+  if(G.stats) G.stats.turns++;   // presentation only (Turn N, the Victory pills): counted after the snapshot, so a Continue counts this turn once
   G.dice=[0,0]; G.phase="preroll"; refresh();
   if(!p.human){ later(aiTurn,650); }
 }
@@ -555,9 +1055,9 @@ function endGame(){
   G.over=true;
   Saves.del("monopoly","auto"); lastSnap=null;   // a finished game is not offered as "Continue last game"
   const w=alive()[0];
-  log(`<b>🏆 ${w?w.name:"?"} wins the game!</b>`);
-  refresh();
-  whenFree(()=>openModal(`<h2>🏆 ${w?w.name:"Game Over"} wins!</h2><p>Last player standing with assets.</p><button class="btn primary" style="width:100%" onclick="window.__close()">OK</button>`));
+  log(`<b>${w?w.name:"?"} wins the game!</b>`);
+  clockOff(); refresh(); gameEnded();
+  whenFree(()=>showWin(w));   // the Victory screen (Luxe), or the old dialog without ui.js; it waits for a Menu / Manage the human has open
 }
 
 function humanRoll(){ if(G.phase!=="preroll"&&G.phase!=="rolledAgain")return; doRoll(); }
@@ -566,7 +1066,7 @@ function doRoll(){ Sound.sfx("dice");
   const p=cur();
   setMoving();   // lock out double-rolls during movement
   const d1=1+rnd(6), d2=1+rnd(6);
-  G.dice=[d1,d2];
+  G.dice=[d1,d2]; ui.rolls++;   // presentation: the dice tumble to the new roll
   const dbl=d1===d2;
   G.turnDouble=false;
   log(`${p.name} rolls ${d1}+${d2}${dbl?" (doubles)":""}.`);
@@ -628,10 +1128,10 @@ function goToJail(p){ p.pos=10; p.jail=true; p.jailTurns=0; G.doublesCount=0; }
 function doTax(p,s){
   if(s.tax==="income"){
     if(RULES.incomeTaxChoice && p.human){
-      const pct=Math.floor(taxWorth(p)*0.1);
-      openModal(`<h2>Income Tax</h2><p>Pay $200 or 10% of your total worth (${money(pct)})?</p>
-        <button class="btn" style="width:100%;margin:4px 0" onclick="window.__tax(200)">Pay $200</button>
-        <button class="btn" style="width:100%" onclick="window.__tax(${pct})">Pay 10% (${money(pct)})</button>`);
+      const pct=Math.floor(taxWorth(p)*0.1), flatBest=pct>=200;   // the cheaper choice is marked
+      const opt=(amt,label,desc,best)=>`<button type="button" class="bg-sheet__option${best?" is-best":""}"${best?" data-autofocus":""} onclick="window.__tax(${amt})">${icon("check")}<span class="bg-sheet__text"><span class="bg-sheet__label">${label}</span><span class="bg-sheet__desc">${desc}</span><span class="bg-sheet__detail">Cash ${money(p.cash)} to ${money(p.cash-amt)}</span></span></button>`;
+      openModal(head("Income Tax",`Pay $200, or 10% of your total worth: your cash, the printed price of every deed you own and your buildings, ${money(taxWorth(p))} in all.`)+
+        `<div class="bg-sheet__options mn-opts">${opt(200,"Pay $200","The flat amount.",flatBest)}${opt(pct,`Pay 10% (${money(pct)})`,"10% of your total worth.",!flatBest)}</div>`,"",{peek:true,kind:"tax"});
       window.__tax=(amt)=>{ closeModal(); payBank(p,amt,true); log(`${p.name} pays Income Tax ${money(amt)}.`); endOrContinue(false); };
       return;
     }
@@ -693,23 +1193,25 @@ function offerBuy(p,i,wasDouble){
   if(p.bankrupt){ endOrContinue(); return; }
   const s=BOARD[i];
   if(p.human){
-    openModal(`<div style="text-align:center;font-weight:800;font-size:15px">Buy this property?</div>
-      <div style="text-align:center;color:var(--muted);font-size:12.5px;margin:3px 0 0">Price <b style="color:var(--ink)">${money(s.price)}</b> · Your cash <b class="cash">${money(p.cash)}</b></div>
-      ${deedCardHTML(i)}
-      <div class="stickyact">
-        <button class="btn go" style="width:100%;padding:16px;font-size:16px;margin:0 0 6px" ${p.cash<s.price?"disabled":""} onclick="window.__buy()">✅ Buy for ${money(s.price)}</button>
-        <button class="btn warn" style="width:100%;padding:12px" onclick="window.__decline()">${RULES.noAuction?"❌ Don't buy":"❌ Decline → Auction"}</button>
-      </div>`);
+    // the choice first (each with its exact outcome; Buy is marked when you can afford it), the deed under it
+    const can=p.cash>=s.price, one=humansN()===1;
+    openModal(head("Buy this property?",`${s.n} · price <b>${money(s.price)}</b> · ${one?"your":p.name+"'s"} cash <b class="mn-money">${money(p.cash)}</b>`)+
+      `<div class="bg-sheet__options mn-opts">`+
+      `<button type="button" class="bg-sheet__option${can?" is-best":""}"${can?" data-autofocus":""} ${p.cash<s.price?"disabled":""} onclick="window.__buy()">${icon("check")}<span class="bg-sheet__text"><span class="bg-sheet__label">Buy for ${money(s.price)}</span>`+
+        `<span class="bg-sheet__desc">${can?buyWhy(p,i):"Not enough cash. Decline, and it goes to auction."}</span><span class="bg-sheet__detail">${can?"Cash "+money(p.cash)+" to "+money(p.cash-s.price):"Needs "+money(s.price-p.cash)+" more"}</span></span></button>`+
+      `<button type="button" class="bg-sheet__option" onclick="window.__decline()">${icon("close")}<span class="bg-sheet__text"><span class="bg-sheet__label">${RULES.noAuction?"Don't buy":"Decline"}</span>`+
+        `<span class="bg-sheet__desc">${RULES.noAuction?"It stays with the bank for now.":"Then every player, you too, can bid for it at auction."}</span><span class="bg-sheet__detail">${RULES.noAuction?"Stays unowned":"Auction from $1"}</span></span></button>`+
+      `</div>${deedCardHTML(i)}`,"",{peek:true,kind:"buy"});
     window.__buy=()=>{ closeModal(); buyProp(p,i); endOrContinue(); };
     window.__decline=()=>{ closeModal(); if(RULES.noAuction){ log(`${p.name} declines ${s.n}.`); endOrContinue();} else startAuction(i,endOrContinue); };
   } else {
     // AI decides — show the decision so the human can follow along
     const wants=aiWantsToBuy(p,i);
     const title = wants ? `${p.name} buys ${s.n}` : `${p.name} ${RULES.noAuction?"passes on":"declines"} ${s.n}`;
-    cpuShow(`<div style="text-align:center;font-weight:800;font-size:15px">${title}</div><div style="text-align:center;color:var(--muted);font-size:12px;margin-top:2px">Price ${money(s.price)} · ${p.name} has ${money(p.cash)}</div>${deedCardHTML(i)}`, ()=>{
+    cpuShow(head(title,`Price ${money(s.price)} · ${p.name} has ${money(p.cash)}`), ()=>{
       if(wants){ buyProp(p,i); endOrContinue(); }
       else { if(RULES.noAuction){ log(`${p.name} declines ${s.n}.`); endOrContinue();} else startAuction(i,endOrContinue); }
-    }, 1700);
+    }, 1700, deedCardHTML(i));
   }
 }
 function buyProp(p,i){ const s=BOARD[i]; p.cash-=s.price; G.owner[i]=p.id; log(`${p.name} buys ${s.n} for ${money(s.price)}.`); }
@@ -754,12 +1256,12 @@ function auctionStep(){
   const need=AUC.price+ (AUC.price<20?5:10);
   if(b.human){ const a=AUC;
     whenFree(()=>{ if(AUC!==a) return;   // the bid prompt waits for a Menu / Manage the human has open
-    openModal(`<h2>Auction: ${BOARD[AUC.i].n}</h2>${deedCardHTML(AUC.i,true)}
-      <p>High bid: <b>${AUC.price?money(AUC.price):"none"}</b>${AUC.high!=null?" by "+G.players[AUC.high].name:""}</p>
-      <p>Your turn, ${b.name} — cash ${money(b.cash)}</p>
-      <button class="btn go" style="width:100%;margin:4px 0" ${b.cash<need?"disabled":""} onclick="window.__bid(${need})">Bid ${money(need)}</button>
-      <button class="btn" style="width:100%" onclick="window.__bid('custom')">Bid other amount</button>
-      <button class="btn warn" style="width:100%;margin-top:4px" onclick="window.__pass()">Pass (drop out)</button>`,"auction");
+    const one=humansN()===1, can=b.cash>=need;
+    openModal(head(`Auction: ${BOARD[AUC.i].n}`,`High bid <b>${AUC.price?money(AUC.price):"none"}</b>${AUC.high!=null?" by "+G.players[AUC.high].name:""} · ${one?"your":b.name+"'s"} cash <b class="mn-money">${money(b.cash)}</b>`)+
+      `<p class="mn-note">Your turn${one?"":", "+b.name}. ${can?`The next bid is <b>${money(need)}</b>: win at that and you keep ${money(b.cash-need)}.`:`The next bid, ${money(need)}, is more than your cash.`}</p>`+
+      `<div class="mn-acts"><button type="button" class="bg-btn bg-btn--primary bg-btn--block"${can?" data-autofocus":""} ${b.cash<need?"disabled":""} onclick="window.__bid(${need})">Bid ${money(need)}</button>`+
+      `<div class="mn-acts--2"><button type="button" class="bg-btn bg-btn--secondary" onclick="window.__bid('custom')">Bid other amount</button>`+
+      `<button type="button" class="bg-btn bg-btn--danger" onclick="window.__pass()">Pass (drop out)</button></div></div>${deedCardHTML(AUC.i,true)}`,"auction",{peek:true,kind:"auction"});
     window.__bid=(amt)=>{ if(amt==="custom"){ const v=parseInt(prompt("Enter your bid (> "+AUC.price+"):"),10); if(!v||v<=AUC.price||v>b.cash){ return; } amt=v; } placeBid(bidderId,amt); };
     window.__pass=()=>{ dropBidder(bidderId); };
     });
@@ -798,10 +1300,10 @@ function drawCard(p,deck){ Sound.sfx("card");
   if(draw.length===0){ endOrContinue(); return; } // only possible if every card is held (impossible here)
   const cardIdx=draw.shift();
   const card=src[cardIdx];
-  const col=isCh?"#f08d1c":"#2b7be0";
+  const face=`<div class="cardbig${isCh?"":" is-chest"}">${card.text}</div>`;   // a paper card with the deck's colour inlay
   const show=cb=>{
-    if(p.human){ openModal(`<h2>${isCh?"Chance":"Community Chest"}</h2><div class="cardbig" style="border-color:${col}">${card.text}</div><button class="btn primary" style="width:100%" onclick="window.__ok()">OK</button>`); window.__ok=()=>{ closeModal(); cb(); }; }
-    else { log(`${p.name} — ${isCh?"Chance":"Chest"}: ${card.text}`); cpuShow(`<h2>${isCh?"Chance":"Community Chest"} — ${p.name}</h2><div class="cardbig" style="border-color:${col}">${card.text}</div>`, cb, 1900); }
+    if(p.human){ openModal(head(isCh?"Chance":"Community Chest",humansN()>1?p.name+" draws a card.":"You draw a card.")+face+`<div class="mn-acts"><button type="button" class="bg-btn bg-btn--primary bg-btn--block" data-autofocus onclick="window.__ok()">OK</button></div>`,"",{peek:true,kind:"card"}); window.__ok=()=>{ closeModal(); cb(); }; }
+    else { log(`${p.name} — ${isCh?"Chance":"Chest"}: ${card.text}`); cpuShow(head(`${isCh?"Chance":"Community Chest"} — ${p.name}`)+face, cb, 1900); }
   };
   show(()=>{
     if(card.fx==="joker"){ G.jokersHeld[deck]++; }   // held by player, stays out of the pile
@@ -929,24 +1431,28 @@ function openDebtModal(p,creditor,toPool){
   const need=-p.cash;
   // assets can't cover it: bankrupt now, and the caller moves the turn on (once)
   if(liquidatableValue(p)<0){ declareBankrupt(p,creditor,toPool); return; }
-  openModal(`<h2 class="neg">${G.players.filter(x=>x.human).length>1?p.name+" owes":"You owe"} ${money(need)} more</h2><p>Sell buildings or mortgage properties to raise the cash, or declare bankruptcy.</p>
-    <div id="debtList"></div>
-    <button class="btn warn" style="width:100%;margin-top:8px" onclick="window.__bankrupt()">Declare Bankruptcy</button>`,"debt");
+  openModal(head(`${G.players.filter(x=>x.human).length>1?p.name+" owes":"You owe"} ${money(need)} more`,"Sell buildings or mortgage properties to raise the cash, or declare bankruptcy.","mn-title--neg")+
+    `<div id="debtList" class="mn-debt"></div>
+    <div class="mn-acts"><button type="button" class="bg-btn bg-btn--danger bg-btn--block" onclick="window.__bankrupt()">Declare Bankruptcy</button></div>`,"debt",{kind:"debt"});
   window.__bankrupt=()=>finishBankrupt(p,creditor,toPool);
   renderDebtList(p,creditor);
+  const first=$("debtList")&&$("debtList").querySelector("button:not([disabled])");
+  if(first&&luxeOn()) focusEl(first);   // the focus starts on a sale or a mortgage, never on Declare Bankruptcy
 }
 function renderDebtList(p,creditor){
   const el=$("debtList"); if(!el) return; let h="";
   // even selling: only the most-built lots of a group can sell; no lot is mortgaged while its group has buildings
   for(let i=0;i<40;i++) if(G.owner[i]===p.id){ const s=BOARD[i];
-    if(s.t==="prop" && G.houses[i]>0){ if(canSellHouse(p,i,true)) h+=`<div class="row"><span>${s.n} — sell building (+${money(sellGain(i))})</span><button class="btn" onclick="window.__sell(${i})">Sell</button></div>`; }
-    else if(!G.mort[i] && groupBare(i)) h+=`<div class="row"><span>${s.n} — mortgage (+${money(s.mort)})</span><button class="btn" onclick="window.__mort(${i})">Mortgage</button></div>`;
+    if(s.t==="prop" && G.houses[i]>0){ if(canSellHouse(p,i,true)) h+=`<div class="mn-drow"><span>${s.n} — sell building (+${money(sellGain(i))})</span><button type="button" class="bg-btn bg-btn--secondary bg-btn--sm" data-i="${i}" onclick="window.__sell(${i})">Sell</button></div>`; }
+    else if(!G.mort[i] && groupBare(i)) h+=`<div class="mn-drow"><span>${s.n} — mortgage (+${money(s.mort)})</span><button type="button" class="bg-btn bg-btn--secondary bg-btn--sm" data-i="${i}" onclick="window.__mort(${i})">Mortgage</button></div>`;
   }
-  if(p.cash>=0){ h=`<p class="cash">Debt cleared! Cash ${money(p.cash)}.</p><button class="btn primary" style="width:100%" onclick="window.__done()">Continue</button>`; }
+  if(p.cash>=0){ h=`<p class="mn-ok">Debt cleared! Cash ${money(p.cash)}.</p><button type="button" class="bg-btn bg-btn--primary bg-btn--block" data-autofocus onclick="window.__done()">Continue</button>`; }
   el.innerHTML=h;
   window.__sell=(i)=>{ sellHouse(p,i,true); renderDebtList(p,creditor); renderStatus(); };
   window.__mort=(i)=>{ mortgage(p,i,true); renderDebtList(p,creditor); renderStatus(); };
   window.__done=()=>{ closeModal(); const f=DEBT_THEN; DEBT_THEN=null; if(f) f(); };
+  refocusIn(el);   // TV: the D-pad focus stays in the list after a sale
+  sheetGrew();
 }
 
 /* ========================= BUILD / MORTGAGE ========================= */
@@ -1049,56 +1555,59 @@ function aiBuildPhase(p){
 /* ========================= MANAGE MODAL ========================= */
 function openManage(){
   const p=viewer();
-  let h=`<h2>Manage — ${p.name}</h2><p class="cash">Cash ${money(p.cash)} · Net worth ${money(netWorth(p))}${p.jokers?` · 🎫 ${p.jokers} Jail card(s)`:""}</p>`;
-  h+=`<p style="color:var(--muted);font-size:12px;margin:2px 0 8px">Tap a property to see its title deed and build / mortgage it.</p>`;
+  let h=head(`Manage — ${p.name}`,`Cash <b class="mn-money">${money(p.cash)}</b> · Net worth <b>${money(netWorth(p))}</b>${p.jokers?` · ${plural(p.jokers,"Jail card","Jail cards")}`:""}`);
+  h+=`<p class="mn-note">${tapWord()} a property to see its deed and build or mortgage it.</p>`;
   // group owned properties by color group for a tidy list
-  let any=false;
-  for(let i=0;i<40;i++) if(G.owner[i]===p.id){ any=true; const s=BOARD[i];
-    const tag = s.t==="prop"&&G.houses[i] ? (G.houses[i]===5?' 🏨':' '+'🏠'.repeat(G.houses[i])) : '';
-    const full = s.t==="prop"&&ownsFullGroup(p,s.g) ? ' <small style="color:#7CFC9A">●SET</small>' : '';
-    h+=`<div class="row deedrow" data-i="${i}" style="cursor:pointer"><span>${colorChip(i)} ${s.n}${tag}${full} ${G.mort[i]?'<small class="neg">(mortgaged)</small>':''}</span><span style="opacity:.6">view ›</span></div>`;
+  let any=false, rows="";
+  for(let i=0;i<40;i++) if(G.owner[i]===p.id){ const s=BOARD[i], tags=[];
+    if(s.t==="prop"&&G.houses[i]) tags.push(G.houses[i]===5?"Hotel":plural(G.houses[i],"house","houses"));
+    if(s.t==="prop"&&ownsFullGroup(p,s.g)) tags.push("Full set");
+    if(G.mort[i]) tags.push("Mortgaged");
+    if(!tags.length) tags.push(s.t==="rr"?"Railroad":s.t==="util"?"Utility":"No buildings");
+    rows+=`<button type="button" class="deedrow mn-lrow bg-focus" data-i="${i}"${any?"":" data-autofocus"}>${colorChip(i)}<span><span class="mn-lrow__name">${s.n}</span><span class="mn-lrow__meta">${tags.join(" · ")}</span></span>${icon("chevron")}</button>`;
+    any=true;
   }
-  if(!any) h+=`<p>You don't own any properties yet.</p>`;
-  h+=`<button class="btn primary" style="width:100%;margin-top:10px" onclick="window.__close()">Close</button>`;
-  openModal(h);
+  h+=any?`<div class="mn-list">${rows}</div>`:`<p class="mn-note">You don't own any properties yet.</p>`;
+  h+=`<div class="mn-acts"><button type="button" class="bg-btn bg-btn--secondary bg-btn--block"${any?"":" data-autofocus"} onclick="window.__close()">Close</button></div>`;
+  openModal(h,"",{dismiss:closeModal,kind:"manage"});
   document.querySelectorAll(".deedrow").forEach(el=>{ el.onclick=()=>openDeed(+el.dataset.i,true); });
 }
-function colorChip(i){ const s=BOARD[i]; if(s.t==="prop") return `<span class="dot" style="border-radius:2px;background:${COLORVAR[s.g]}"></span>`; if(s.t==="rr")return "🚂"; if(s.t==="util")return i===12?"💡":"🚰"; return ""; }
+// the colour key of a property in a list: its group's colour, dark for a railroad, silver for a utility (no emoji)
+function colorChip(i){ const s=BOARD[i]; if(s.t==="prop") return `<span class="mn-chip" style="background:${COLORVAR[s.g]}" aria-hidden="true"></span>`; if(s.t==="rr") return `<span class="mn-chip mn-chip--rr" aria-hidden="true"></span>`; if(s.t==="util") return `<span class="mn-chip mn-chip--util" aria-hidden="true"></span>`; return ""; }
 function openPlayers(){
-  let h=`<h2>Players</h2>`;
+  let h=head("Players",`${tapWord()} a property to see its deed.`)+`<div class="mn-pcards">`;
   for(const p of G.players){
     const props=[]; for(let i=0;i<40;i++) if(G.owner[i]===p.id) props.push(i);
-    h+=`<div style="border:1px solid var(--line);border-radius:12px;padding:9px 11px;margin:7px 0;${p.bankrupt?'opacity:.45':''}">`;
-    h+=`<div style="display:flex;justify-content:space-between;align-items:center">`;
-    h+=`<div style="font-weight:800">${p.token.e} ${dotc(p)} ${p.name}${p.human?'':' <small style="color:var(--muted)">CPU</small>'}${(p.id===G.cur&&!G.over&&!p.bankrupt)?' <small style="color:#7CFC9A">● turn</small>':''}${p.bankrupt?' <small class="neg">OUT</small>':''}</div>`;
-    h+=`<div class="cash" style="font-size:15px">${money(p.cash)}</div></div>`;
-    let tags=[]; if(p.jail) tags.push("🔒 In Jail"); if(p.jokers) tags.push(`🎫 ${p.jokers} jail card${p.jokers>1?'s':''}`);
+    h+=`<div class="mn-pcard${p.bankrupt?" is-out":""}"><div class="mn-pcard__top"><span class="bg-token" data-seat="${seatOf(p)}" aria-hidden="true">${p.token.e}</span>`;
+    h+=`<span class="mn-pcard__name">${p.name}${p.human?'':' <span class="bg-tag bg-tag--house">CPU</span>'}${(p.id===G.cur&&!G.over&&!p.bankrupt)?' <span class="bg-tag bg-tag--ok">Turn</span>':''}${p.bankrupt?' <span class="bg-tag bg-tag--paper">Out</span>':''}</span>`;
+    h+=`<span class="mn-pcard__cash">${money(p.cash)}</span></div>`;
+    let tags=[]; if(p.jail) tags.push("In Jail"); if(p.jokers) tags.push(`${p.jokers} jail card${p.jokers>1?'s':''}`);
     tags.push(`Net worth ${money(netWorth(p))}`);
-    h+=`<div style="font-size:11.5px;color:var(--muted);margin:2px 0 4px">${tags.join(" · ")}</div>`;
+    h+=`<div class="mn-pcard__meta">${tags.join(" · ")}</div>`;
     if(props.length){
-      h+=`<div style="display:flex;flex-wrap:wrap;gap:4px">`;
+      h+=`<div class="mn-pchips">`;
       for(const i of props){ const s=BOARD[i];
-        const hs=s.t==="prop"&&G.houses[i]?(G.houses[i]===5?' 🏨':' '+'🏠'.repeat(G.houses[i])):'';
-        h+=`<span class="pchip" data-i="${i}" style="font-size:11px;display:inline-flex;align-items:center;gap:3px;background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:2px 6px;cursor:pointer;${G.mort[i]?'opacity:.55':''}">${colorChip(i)} ${s.n}${hs}${G.mort[i]?' ✖':''}</span>`;
+        const hs=s.t==="prop"&&G.houses[i]?(G.houses[i]===5?" · hotel":" · "+plural(G.houses[i],"house","houses")):"";
+        h+=`<button type="button" class="pchip mn-pchip bg-focus${G.mort[i]?" is-mort":""}" data-i="${i}">${colorChip(i)} ${s.n}${hs}${G.mort[i]?" · mortgaged":""}</button>`;
       }
       h+=`</div>`;
       const sets=[]; for(const g in GROUPS) if(ownsFullGroup(p,g)) sets.push(g.replace('_',' '));
       const rr=rrOwned(p.id), ut=utilOwned(p.id);
       let extra=[]; if(sets.length) extra.push("Sets: "+sets.join(", ")); if(rr) extra.push(rr+" railroad"+(rr>1?'s':'')); if(ut) extra.push(ut+" utilit"+(ut>1?'ies':'y'));
-      if(extra.length) h+=`<div style="font-size:11px;color:#7CFC9A;margin-top:4px">${extra.join(" · ")}</div>`;
-    } else h+=`<div style="font-size:11.5px;color:var(--muted)">No properties yet.</div>`;
+      if(extra.length) h+=`<div class="mn-sets">${extra.join(" · ")}</div>`;
+    } else h+=`<div class="mn-pcard__meta">No properties yet.</div>`;
     h+=`</div>`;
   }
-  h+=`<button class="btn primary" style="width:100%;margin-top:6px" onclick="window.__close()">Close</button>`;
-  openModal(h);
+  h+=`</div><div class="mn-acts"><button type="button" class="bg-btn bg-btn--secondary bg-btn--block" data-autofocus onclick="window.__close()">Close</button></div>`;
+  openModal(h,"",{dismiss:closeModal,kind:"players"});
   document.querySelectorAll(".pchip").forEach(el=>{ el.onclick=()=>openDeed(+el.dataset.i); });
 }
 function deedCardHTML(i){
   const s=BOARD[i];
-  const lightText=(s.g==="yellow"||s.g==="light_blue");
+  const dark=!!DARK_BAND[s.g];   // the group colours where dark text reads; the ivory reads on the others
   let band="", body="";
   if(s.t==="prop"){
-    band=`<div class="deed-band${lightText?" light":""}" style="background:${COLORVAR[s.g]}"><div class="deed-title">TITLE DEED</div><div class="deed-name">${s.n}</div></div>`;
+    band=`<div class="deed-band${dark?" light":""}" style="background:${COLORVAR[s.g]}"><div class="deed-title">DEED</div><div class="deed-name">${s.n}</div></div>`;
     const L=["Rent","Rent with 1 House","Rent with 2 Houses","Rent with 3 Houses","Rent with 4 Houses","Rent with HOTEL"];
     for(let k=0;k<6;k++) body+=`<div class="dl"><span>${L[k]}</span><b>${money(s.rent[k])}</b></div>`;
     body+=`<div class="dl rule"><span>Mortgage Value</span><b>${money(s.mort)}</b></div>`;
@@ -1106,7 +1615,7 @@ function deedCardHTML(i){
     body+=`<div class="dl sub"><span>Hotels</span><b>${money(s.house)} + 4 houses</b></div>`;
     body+=`<div class="deed-note">If a player owns ALL the lots of this color group, the rent is doubled on unimproved lots.</div>`;
   } else if(s.t==="rr"){
-    band=`<div class="deed-band" style="background:#1e1e1e"><div class="deed-title">TITLE DEED</div><div class="deed-name">${s.n}</div></div>`;
+    band=`<div class="deed-band" style="background:#1e1e1e"><div class="deed-title">DEED</div><div class="deed-name">${s.n}</div></div>`;
     body+=`<div class="icon-band">🚂</div>`;
     body+=`<div class="dl"><span>Rent</span><b>$25</b></div>`;
     body+=`<div class="dl"><span>If 2 Railroads are owned</span><b>$50</b></div>`;
@@ -1114,9 +1623,9 @@ function deedCardHTML(i){
     body+=`<div class="dl"><span>If 4 Railroads are owned</span><b>$200</b></div>`;
     body+=`<div class="dl rule"><span>Mortgage Value</span><b>$100</b></div>`;
   } else if(s.t==="util"){
-    band=`<div class="deed-band" style="background:#1e1e1e"><div class="deed-title">TITLE DEED</div><div class="deed-name">${s.n}</div></div>`;
+    band=`<div class="deed-band" style="background:#1e1e1e"><div class="deed-title">DEED</div><div class="deed-name">${s.n}</div></div>`;
     body+=`<div class="icon-band">${i===12?"💡":"🚰"}</div>`;
-    body+=`<div class="deed-note" style="font-style:normal;font-size:12.5px;color:#15110a">If <b>one</b> Utility is owned, rent is <b>4×</b> the amount shown on the dice.<br>If <b>both</b> Utilities are owned, rent is <b>10×</b> the amount shown on the dice.</div>`;
+    body+=`<div class="deed-note">If <b>one</b> Utility is owned, rent is <b>4×</b> the amount shown on the dice.<br>If <b>both</b> Utilities are owned, rent is <b>10×</b> the amount shown on the dice.</div>`;
     body+=`<div class="dl rule"><span>Mortgage Value</span><b>$75</b></div>`;
   }
   return `<div class="deed">${band}<div class="deed-body">${body}</div></div>`;
@@ -1130,10 +1639,11 @@ function openTradeSetup(){
   const others=alive().filter(p=>p!==me);
   if(!others.length){ toast("No one to trade with."); return; }
   if(!tradableList()){ toast("Trading locked until all property owned."); return; }
-  let h=`<h2>Trade</h2><p>Choose a player to trade with:</p>`;
-  others.forEach(o=>h+=`<button class="btn" style="width:100%;margin:3px 0" onclick="window.__tp(${o.id})">${dotc(o)} ${o.name}</button>`);
-  h+=`<button class="btn" style="width:100%;margin-top:8px" onclick="window.__close()">Cancel</button>`;
-  openModal(h);
+  let h=head("Trade","Choose a player to trade with.")+`<div class="bg-sheet__options mn-opts">`;
+  others.forEach((o,k)=>{ const n=propsOf(o).length; h+=`<button type="button" class="bg-sheet__option"${k?"":" data-autofocus"} onclick="window.__tp(${o.id})"><span class="bg-token" data-seat="${seatOf(o)}" aria-hidden="true">${o.token.e}</span>`+
+    `<span class="bg-sheet__text"><span class="bg-sheet__label">${o.name}</span><span class="bg-sheet__desc">${o.human?"Plays on this "+devWord()+": they accept or decline.":"A computer player: it decides at once."}</span><span class="bg-sheet__detail">${money(o.cash)} · ${plural(n,"property","properties")}</span></span>${icon("chevron")}</button>`; });
+  h+=`</div><div class="mn-acts"><button type="button" class="bg-btn bg-btn--secondary bg-btn--block" onclick="window.__close()">Cancel</button></div>`;
+  openModal(h,"",{dismiss:closeModal,kind:"trade"});
   window.__tp=(id)=>buildTrade(me,G.players[id]);
 }
 function buildTrade(me,them){
@@ -1143,17 +1653,17 @@ function buildTrade(me,them){
 function propsOf(pl){ const a=[]; for(let i=0;i<40;i++) if(G.owner[i]===pl.id) a.push(i); return a; }
 function renderTrade(){
   const me=G.players[TRADE.me], them=G.players[TRADE.them];
-  const list=(pl,set,side)=>propsOf(pl).map(i=>`<label class="itemrow"><input type="checkbox" ${set.has(i)?"checked":""} onchange="window.__tog('${side}',${i})"> ${colorChip(i)} ${BOARD[i].n}${G.houses[i]?' <small>(has buildings)</small>':(groupBare(i)?'':' <small>(set has buildings)</small>')}</label>`).join("")||"<small>none</small>";
-  let h=`<h2>Trade with ${them.name}</h2>`;
-  h+=`<h3>You give</h3>${list(me,TRADE.give,"give")}`;
-  h+=`<div class="itemrow">Cash: <input type="number" min="0" value="${TRADE.cashGive}" style="width:90px" oninput="window.__cash('give',this.value)"></div>`;
-  if(me.jokers>0) h+=`<label class="itemrow"><input type="checkbox" ${TRADE.giveJoker?"checked":""} onchange="window.__joker('give')"> Give a Jail card</label>`;
-  h+=`<h3>You receive</h3>${list(them,TRADE.get,"get")}`;
-  h+=`<div class="itemrow">Cash: <input type="number" min="0" value="${TRADE.cashGet}" style="width:90px" oninput="window.__cash('get',this.value)"></div>`;
-  if(them.jokers>0) h+=`<label class="itemrow"><input type="checkbox" ${TRADE.getJoker?"checked":""} onchange="window.__joker('get')"> Receive a Jail card</label>`;
-  h+=`<button class="btn go" style="width:100%;margin-top:10px" onclick="window.__offer()">Propose Trade</button>`;
-  h+=`<button class="btn" style="width:100%;margin-top:4px" onclick="window.__close()">Cancel</button>`;
-  openModal(h);
+  // each property a whole-row switch; the cash a number field; the same window.__ hooks as before
+  const list=(pl,set,side)=>propsOf(pl).map(i=>`<label class="bg-row"><span class="bg-row__main"><span class="bg-row__title">${colorChip(i)} ${BOARD[i].n}${G.houses[i]?' <small>(has buildings)</small>':(groupBare(i)?'':' <small>(set has buildings)</small>')}${G.mort[i]?' <small>(mortgaged)</small>':''}</span></span><input type="checkbox" class="bg-toggle" ${set.has(i)?"checked":""} onchange="window.__tog('${side}',${i})"></label>`).join("");
+  const rows=(pl,set,side)=>{ const r=list(pl,set,side); return r?`<div class="bg-rows">${r}</div>`:`<p class="mn-none">No properties to offer.</p>`; };
+  const extra=(side,cash,jk,jkOn,jkLabel)=>`<div class="bg-rows"><label class="bg-row bg-row--static"><span class="bg-row__main"><span class="bg-row__title">Cash</span></span><input type="number" min="0" inputmode="numeric" class="mn-num" aria-label="Cash" value="${cash}" oninput="window.__cash('${side}',this.value)"></label>`+
+    (jk?`<label class="bg-row"><span class="bg-row__main"><span class="bg-row__title">${jkLabel}</span></span><input type="checkbox" class="bg-toggle" ${jkOn?"checked":""} onchange="window.__joker('${side}')"></label>`:"")+`</div>`;
+  let h=head(`Trade with ${them.name}`,them.human?`Pick what each side gives, then propose it. ${them.name} accepts or declines.`:`Pick what each side gives, then propose it. ${them.name} decides at once.`)+`<div class="mn-trade">`;
+  h+=`<div class="bg-section"><h3 class="bg-eyebrow">You give</h3></div>${rows(me,TRADE.give,"give")}${extra("give",TRADE.cashGive,me.jokers>0,TRADE.giveJoker,"Give a Jail card")}`;
+  h+=`<div class="bg-section"><h3 class="bg-eyebrow">You receive</h3></div>${rows(them,TRADE.get,"get")}${extra("get",TRADE.cashGet,them.jokers>0,TRADE.getJoker,"Receive a Jail card")}</div>`;
+  h+=`<div class="mn-acts"><button type="button" class="bg-btn bg-btn--primary bg-btn--block" onclick="window.__offer()">Propose Trade</button>`;
+  h+=`<button type="button" class="bg-btn bg-btn--secondary bg-btn--block" onclick="window.__close()">Cancel</button></div>`;
+  openModal(h,"",{dismiss:closeModal,kind:"trade"});
   window.__tog=(side,i)=>{ const set=side==="give"?TRADE.give:TRADE.get; if(set.has(i))set.delete(i); else set.add(i); };
   window.__cash=(side,v)=>{ v=Math.max(0,parseInt(v||"0",10)); if(side==="give")TRADE.cashGive=v; else TRADE.cashGet=v; };
   window.__joker=(side)=>{ if(side==="give")TRADE.giveJoker=TRADE.giveJoker?0:1; else TRADE.getJoker=TRADE.getJoker?0:1; };
@@ -1181,11 +1691,9 @@ function proposeTrade(){
   if(them.cash-TRADE.cashGet+TRADE.cashGive<fee(giveIdx)){ toast(them.name+" can't cover the 10% interest on the mortgaged deed."); return; }
   if(them.human){   // hot-seat: the other human decides
     const side=(idx,cash,jk)=>[...idx.map(i=>BOARD[i].n+(G.mort[i]?" (mortgaged)":"")),...(cash?[money(cash)]:[]),...(jk?["a Get Out of Jail Free card"]:[])].join(", ")||"nothing";
-    openModal(`<h2>Trade offer for ${them.name}</h2><p>Pass the phone to <b>${them.name}</b>.</p>
-      <p>${me.name} gives you: <b>${side(giveIdx,TRADE.cashGive,TRADE.giveJoker)}</b></p>
-      <p>${me.name} wants: <b>${side(getIdx,TRADE.cashGet,TRADE.getJoker)}</b></p>
-      <button class="btn go" style="width:100%;margin:4px 0" onclick="window.__tAcc()">✅ Accept</button>
-      <button class="btn warn" style="width:100%" onclick="window.__tRej()">❌ Decline</button>`);
+    openModal(head(`Trade offer for ${them.name}`,`Pass the ${devWord()} to <b>${them.name}</b>.`)+
+      `<div class="mn-offer"><p>${me.name} gives you: <b>${side(giveIdx,TRADE.cashGive,TRADE.giveJoker)}</b></p><p>${me.name} wants: <b>${side(getIdx,TRADE.cashGet,TRADE.getJoker)}</b></p></div>`+
+      `<div class="mn-acts mn-acts--2"><button type="button" class="bg-btn bg-btn--primary" data-autofocus onclick="window.__tAcc()">Accept</button><button type="button" class="bg-btn bg-btn--danger" onclick="window.__tRej()">Decline</button></div>`,"",{kind:"offer"});
     window.__tAcc=()=>{ execTrade(); log(`${them.name} accepts the trade.`); toast(them.name+" accepts!"); };
     window.__tRej=()=>{ TRADE=null; log(`${them.name} rejects the trade.`); toast(them.name+" rejects."); closeModal(); };
     return;
@@ -1219,74 +1727,97 @@ function execTrade(){
 
 /* ========================= MODAL / RULES / SETUP ========================= */
 let MODAL_TAG="";   // game step that owns the open dialog ("cpu", "auction", "debt"); "" = any other dialog
-function openModal(html,tag){ $("modal").innerHTML=html; $("overlay").classList.add("on"); MODAL_TAG=tag||""; }
+// opt (presentation only): {page} the setup page; {dismiss: fn} Back / Escape / the scrim may close it, fn is its way out;
+// {peek} a choice that keeps the board in view on a phone; {kind} what it is (the Menu offers "See the result")
+function openModal(html,tag,opt){ const a=document.activeElement; ui.hadFocus=a&&$("overlay").contains(a)?focusKey(a):null;
+  $("modal").innerHTML=html; $("overlay").classList.add("on"); MODAL_TAG=tag||""; ui.dlg=opt||{}; dlgShow(); }
 function overlayOn(){ return $("overlay").classList.contains("on"); }
 // close the dialog only if that game step opened it, so a Menu / Manage / trade the human has open stays put
 function closeIf(tag){ if(MODAL_TAG===tag && overlayOn()) closeModal(); }
 // run fn once no dialog is open: a CPU's dialog waits until the human closes their Menu / Manage / setup / trade
 function whenFree(fn){ if(!overlayOn()) fn(); else { G.phaseSince=Date.now(); later(()=>whenFree(fn),250); } }
-// show a CPU's card / decision so the human can follow along; auto-continues, or tap to skip
-function cpuShow(html,cb,ms){
+// show a CPU's card / decision so the human can follow along; auto-continues, or tap to skip (Back on TV skips too).
+// body: what goes under the Continue button (a tall deed), so the button stays on screen
+function cpuShow(html,cb,ms,body){
   whenFree(()=>{
-    openModal(html+`<button class="btn primary" style="width:100%;margin-top:8px" onclick="window.__cpuGo()">Continue ▸</button>`,"cpu");
     let done=false; const e=EPOCH;
     const go=()=>{ if(done||e!==EPOCH) return; done=true; closeIf("cpu"); cb(); };
+    openModal(html+`<span class="mn-auto" aria-hidden="true" style="--mn-auto-ms:${ms||1700}ms"><i></i></span><div class="mn-acts"><button type="button" class="bg-btn bg-btn--secondary bg-btn--block" data-autofocus onclick="window.__cpuGo()">Continue</button></div>`+(body||""),"cpu",{dismiss:go,peek:true,kind:"cpu"});
     window.__cpuGo=go;
     later(go, ms||1700);
   });
 }
-function closeModal(){ $("overlay").classList.remove("on"); MODAL_TAG=""; }
+function closeModal(){ $("overlay").classList.remove("on"); MODAL_TAG=""; dlgHide(); }
 window.__close=closeModal;
 
 function openRules(){
-  let h=`<h2>House Rules</h2><p>Defaults match the official classic game. <span class="badge off">House</span> = non-official variant. <span class="badge on">Official</span> = real rule (toggling off is the deviation).</p>`;
-  RULE_DEFS.forEach(([key,name,desc,kind])=>{
-    h+=`<div class="row"><div style="flex:1"><div>${name} <span class="badge ${kind==="official"?"on":"off"}">${kind==="official"?"Official":"House"}</span></div><small>${desc}</small></div><div class="sw ${RULES[key]?"on":""}" data-k="${key}"></div></div>`;
-  });
-  h+=`<button class="btn primary" style="width:100%;margin-top:10px" onclick="window.__close()">Done</button>`;
-  openModal(h);
-  document.querySelectorAll(".sw[data-k]").forEach(el=>{ el.onclick=()=>{ const k=el.dataset.k; RULES[k]=!RULES[k]; el.classList.toggle("on"); }; });
+  let h=head("House Rules","Defaults match the official classic game. Official is the real rule (switching it off is the variant); House is a variant, off by default.")+rulesHTML();
+  h+=`<div class="mn-acts"><button type="button" class="bg-btn bg-btn--primary bg-btn--block" onclick="window.__close()">Done</button></div>`;
+  openModal(h,"",{dismiss:closeModal,kind:"rules"});
+  wireRules($("modal"));
 }
 
 let SETUP={humans:1,cpus:3,humanTokens:[0]};
+// the setup page (Midnight Luxe): the hero, the players, the tokens, the rules as switches, save and load, and the Start dock with
+// a contextual label. Reached at load and from the Menu's New Game; mid-game its dock also holds Resume
 function openSetup(){
-  let h=`<h2>New Game</h2>`;
-  h+=`<h3>Human players</h3><div class="seg" id="segH"></div>`;
-  h+=`<h3>Computer players</h3><div class="seg" id="segC"></div>`;
-  h+=`<h3 id="tokHdr">Pick your token</h3><div class="tokgrid" id="tokGrid"></div><div id="tokMsg" style="text-align:center;color:var(--muted);font-size:11px"></div>`;
-  h+=`<button class="btn" style="width:100%;margin:10px 0 6px" onclick="window.__rules()">⚙️ House Rules</button><div id="svbar"></div>`;
-  h+=`<button class="btn primary" style="width:100%" onclick="window.__start()">Start Game</button>`;
-  h+=`<button class="btn" style="width:100%;margin-top:8px" onclick="location.href='../index.html'">🏠 Back to All Games</button>`;
-  openModal(h);
+  const tv=onTV(), live=liveGame(), due=resultDue(), redraw=setupShown(), B=BG(), p=G&&G.started?cur():null;
+  const fa=document.activeElement, had=redraw&&fa&&$("modal").contains(fa)?focusKey(fa):null;   // a redraw (Standard rules, Load settings) keeps the focus
+  let h=`<div class="mn-setup"><div class="mn-col mn-col--a">`;
+  h+=`<section class="bg-hero mn-hero" aria-labelledby="setupTitle"><div class="bg-hero__layer is-on"></div><div class="bg-hero__shade"></div><div class="bg-hero__body">`+
+     `<span class="bg-eyebrow bg-eyebrow--accent">Roll · buy · build</span><h2 class="bg-hero__title" id="setupTitle">Monopoly</h2>`+
+     `<p class="bg-hero__pitch">Roll round the board, buy streets, railroads and utilities, build houses and hotels, and be the last player standing.</p></div></section>`;
+  h+=`<section class="mn-sec mn-sec--tokens"><div class="bg-section"><h3 class="bg-eyebrow" id="tokHdr">Pick your token</h3></div>`+
+     `<div class="bg-seg bg-seg--grid5 mn-toks" id="tokGrid" role="group" aria-labelledby="tokHdr"></div><p class="mn-tokmsg" id="tokMsg"></p></section>`;
+  h+=`<section class="mn-sec mn-sec--rules">${rulesHTML()}</section></div>`;
+  h+=`<div class="mn-col mn-col--b"><section class="mn-sec mn-sec--players"><div class="bg-section"><h3 class="bg-eyebrow">Players</h3></div><div class="bg-card mn-card">`+
+     `<div class="mn-field"><span class="bg-row__title" id="humTitle">${tv?"Players on this TV":"Players on this phone"}</span><span class="bg-row__desc">Pass the ${tv?"remote":"phone"} when it's a player's turn. 2 to 6 players in all.</span></div>`+
+     `<div class="bg-seg" id="segH" role="group" aria-labelledby="humTitle"></div>`+
+     `<div class="mn-field"><span class="bg-row__title" id="cpuTitle">Computer players</span><span class="bg-row__desc">They buy, build, bid and trade on their own.</span></div>`+
+     `<div class="bg-seg" id="segC" role="group" aria-labelledby="cpuTitle"></div><div class="mn-seats" id="seatPreview"></div></div></section>`;
+  h+=`<section class="mn-sec mn-sec--save"><div class="bg-section"><h3 class="bg-eyebrow">Save and load</h3></div><div id="svbar"></div></section>`;
+  h+=`<a href="${hubHref()}" class="bg-btn bg-btn--ghost bg-btn--block mn-back" id="backHub">${icon("home")}Back to all games</a>`;
+  h+=`<div class="mn-dock${live||due?" has-resume":""}" id="startDock" data-toast-avoid>`+
+     (live||due?`<button type="button" class="bg-btn bg-btn--secondary mn-resume" id="resumeBtn" onclick="window.__resume()"><span><span class="bg-btn__label" id="resumeLabel">${due?"See the result":"Resume"}</span>`+
+       `<span class="bg-btn__sub" id="resumeSub">${due?winnerLine():"Turn "+Math.max(1,G.stats?G.stats.turns:1)+" · "+p.name}</span></span></button>`:"")+
+     `<button type="button" class="bg-btn bg-btn--primary bg-btn--cta" id="startBtn" onclick="window.__start()"><span class="bg-btn__label" id="startLabel">Start Game</span><span class="bg-btn__sub" id="startSub"></span></button></div>`;
+  h+=`</div></div>`;
+  openModal(h,"",{page:true,kind:"setup"});
   const drawTok=()=>{
     const hdr=$("tokHdr"), grid=$("tokGrid"), msg=$("tokMsg");
     hdr.textContent = SETUP.humans>1 ? "Pick tokens (Player 1 = You)" : "Pick your token";
     grid.innerHTML = TOKENS.map((t,i)=>{
-      const slot=SETUP.humanTokens.indexOf(i);
-      return `<button class="tokbtn ${slot>=0?"sel":""}" data-t="${i}"><span class="e">${t.e}</span><span>${t.n}</span>${slot>=0?`<span class="pb">P${slot+1}</span>`:""}</button>`;
+      const slot=SETUP.humanTokens.indexOf(i);   // a picked piece takes its player's seat colour, P1, P2 ...
+      return `<button type="button" class="tokbtn" data-t="${i}" aria-pressed="${slot>=0}"><span class="bg-token"${slot>=0?` data-seat="${SEATS[slot]}"`:""} aria-hidden="true">${t.e}</span><span>${t.n}</span>${slot>=0?`<span class="pb">P${slot+1}</span>`:""}</button>`;
     }).join("");
     const need=SETUP.humans-SETUP.humanTokens.length;
-    msg.textContent = need>0 ? `Tap ${need} more (unchosen will be random).` : (SETUP.humans>1?"All human tokens chosen. Tap to change.":"");
+    msg.textContent = need>0 ? `${tv?"Pick":"Tap"} ${need} more (unchosen will be random).` : (SETUP.humans>1?`All human tokens chosen. ${tv?"Press OK on one":"Tap one"} to change.`:"The computers get the other tokens at random.");
     grid.querySelectorAll(".tokbtn").forEach(b=>b.onclick=()=>{
       const t=+b.dataset.t, at=SETUP.humanTokens.indexOf(t);
       if(at>=0) SETUP.humanTokens.splice(at,1);                       // unpick
       else if(SETUP.humanTokens.length<SETUP.humans) SETUP.humanTokens.push(t); // pick into next slot
       else if(SETUP.humans===1) SETUP.humanTokens=[t];               // single-human: just switch
-      drawTok();
+      keepIn(grid,drawTok);
     });
+    syncCTA();
   };
   const clampTokens=()=>{ if(SETUP.humanTokens.length>SETUP.humans) SETUP.humanTokens=SETUP.humanTokens.slice(0,SETUP.humans); };
-  const drawH=()=>{ const seg=$("segH"); seg.innerHTML=[1,2,3,4,5,6].map(n=>`<button data-n="${n}" class="${SETUP.humans===n?"on":""}">${n}</button>`).join(""); seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{ SETUP.humans=+b.dataset.n; clampTokens(); drawH(); drawC(); drawTok(); }); };
-  const drawC=()=>{ const seg=$("segC"); const maxC=6-SETUP.humans, minC=SETUP.humans>=2?0:(2-SETUP.humans); if(SETUP.cpus>maxC)SETUP.cpus=maxC; if(SETUP.cpus<minC)SETUP.cpus=minC; seg.innerHTML=[0,1,2,3,4,5].map(n=>`<button data-n="${n}" class="${SETUP.cpus===n?"on":""}"${(n>maxC||n<minC)?' disabled style="opacity:.3"':''}>${n}</button>`).join(""); seg.querySelectorAll("button:not([disabled])").forEach(b=>b.onclick=()=>{ SETUP.cpus=+b.dataset.n; drawC(); }); };
+  const drawH=()=>{ const seg=$("segH"); seg.innerHTML=[1,2,3,4,5,6].map(n=>`<button type="button" data-n="${n}" class="${SETUP.humans===n?"on":""}" aria-pressed="${SETUP.humans===n}">${n}</button>`).join(""); seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{ SETUP.humans=+b.dataset.n; clampTokens(); keepIn(seg,()=>{ drawH(); drawC(); drawTok(); }); }); };
+  const drawC=()=>{ const seg=$("segC"); const maxC=6-SETUP.humans, minC=SETUP.humans>=2?0:(2-SETUP.humans); if(SETUP.cpus>maxC)SETUP.cpus=maxC; if(SETUP.cpus<minC)SETUP.cpus=minC; seg.innerHTML=[0,1,2,3,4,5].map(n=>`<button type="button" data-n="${n}" class="${SETUP.cpus===n?"on":""}" aria-pressed="${SETUP.cpus===n}"${(n>maxC||n<minC)?" disabled":""}>${n}</button>`).join(""); seg.querySelectorAll("button:not([disabled])").forEach(b=>b.onclick=()=>{ SETUP.cpus=+b.dataset.n; keepIn(seg,drawC); }); syncCTA(); };
   drawH(); drawC(); drawTok();
-  Saves.bar({game:"monopoly",el:$("svbar"),
+  ui.bar=Saves.bar({game:"monopoly",el:$("svbar"),
     getSettings:()=>({setup:SETUP,rules:RULES}),
     applySettings:s=>{ Object.assign(RULES,DEFAULT_RULES,s.rules||{}); SETUP=Object.assign({humans:1,cpus:3,humanTokens:[0]},s.setup||{}); openSetup(); },
     standard:()=>{ Object.assign(RULES,DEFAULT_RULES); SETUP={humans:1,cpus:3,humanTokens:[0]}; openSetup(); },
     getSnapshot:()=>(G&&G.started&&!G.over)?lastSnap:null,
     loadSnapshot:loadSavedGame});
+  dressSaveBar($("svbar"));
+  wireRules($("modal"));
   window.__rules=openRules;
   window.__start=()=>{ Sound.skip(); const nH=SETUP.humans, nP=Math.min(6,Math.max(2,nH+SETUP.cpus)); startGame(nP,nH); };
+  window.__resume=resumeGame;
+  if(had) focusEl([].slice.call($("modal").querySelectorAll("button, input, a[href]")).find(e=>!e.disabled&&focusKey(e)===had));
+  else if(!redraw&&(live||due)&&B&&B.focus&&B.focus.enabled&&tv){ const r=$("resumeBtn"); setTimeout(()=>{ if(r&&r.isConnected&&setupShown()) B.focus.set(r); },0); }   // a stray OK goes back to the game
 }
 function startGame(nP,nH){
   EPOCH++; AUC=null; AUC_WAIT.length=0; TRADE=null; DEBT_THEN=null;   // nothing from the old game carries over
@@ -1296,13 +1827,12 @@ function startGame(nP,nH){
   const toks=[];
   for(let i=0;i<nP;i++){ toks.push( (i<nH && chosen[i]!==undefined) ? chosen[i] : remaining.shift() ); }
   G=freshState(nP,nH,toks);
-  G.started=true;
+  G.started=true; G.stats=freshStats();   // presentation-only counters (Turn N, the Victory pills)
   $("log").innerHTML="";
   log(`New game: ${nP} players, ${nH} human. Good luck!`);
-  closeModal();
+  closeModal(); armBack(); clockOn();
   startTurn();
 }
-
 /* ========================= BOOT ========================= */
 // placeholder empty board before start
 G=freshState(4,1,[0,1,2,3]);
@@ -1315,6 +1845,53 @@ $("board").addEventListener("click",e=>{
   openDeed(+sp.dataset.i);
 });
 openSetup();
+
+/* ---- Midnight Luxe wiring (presentation only) ---- */
+$("menuBtn").addEventListener("click",()=>openMenu());   // the top bar's menu knob (it took over from the old menu glyph button in the action row)
+// the Victory screen's buttons; Escape (or a TV Back key) closes it, then the board is back
+$("winAgain").addEventListener("click",()=>{ closeWin(); if(window.__start) window.__start(); });
+$("winMenu").addEventListener("click",()=>{ closeWin(); openMenu(); });
+document.addEventListener("keydown",e=>{
+  const B=BG(); if(e.defaultPrevented||!B||!B.win||!B.win.isOpen()) return;
+  if(e.key==="Escape"||e.key==="GoBack"||e.key==="BrowserBack"||e.keyCode===27||e.keyCode===4){ e.preventDefault(); closeWin(); }
+});
+// D-pad (TV): Down from the players picker always lands on the computer picker and Up goes back, even past a disabled count;
+// Down from a save bar's first row lands on the nearest button of the second row that is on. Registered before ui.js, so
+// BGUI.focus sees these keys as handled.
+document.addEventListener("keydown",e=>{
+  const B=BG(); if(!B||!B.focus||!B.focus.enabled||e.defaultPrevented||e.altKey||e.ctrlKey||e.metaKey) return;
+  const down=e.key==="ArrowDown"||e.keyCode===40, up=e.key==="ArrowUp"||e.keyCode===38, a=document.activeElement;
+  if((!down&&!up)||!a||!a.closest) return;
+  const pick=sel=>document.querySelector(sel+" button.on:not([disabled])")||document.querySelector(sel+" button:not([disabled])");
+  const bar=a.closest("#svbar, #svbar2"), rows=bar?bar.querySelectorAll(".r"):[], row1=rows[0], row2=rows[1];
+  const to=(down&&a.closest("#segH"))?pick("#segC"):(up&&a.closest("#segC"))?pick("#segH"):(down&&row1&&row2&&row1.contains(a))?nearestIn(row2,a):null;
+  if(to){ e.preventDefault(); B.focus.set(to); }
+});
+// the play clock counts while the page is on screen
+document.addEventListener("visibilitychange",()=>{ if(document.hidden) clockOff(); else clockOn(); });
+// saves.js toasts ("Game saved ...") go through BGUI.toast, so they are placed clear of the dock and the player strip
+if(window.MutationObserver){
+  const sv=$("svtoast");
+  new MutationObserver(()=>{ const B=BG(), m=sv.textContent; if(B&&B.toast&&luxeOn()&&m) B.toast(m,{icon:"save",ms:2200}); }).observe(sv,{childList:true,characterData:true,subtree:true});
+}
+// ui/ui.js is deferred: it arrives after this script. Then the icons go in, the strip gets its CPU badges and turn ring, the
+// dialogs become Luxe sheets, the toasts Luxe toasts, and the page's Back steps join the shared TV Back default.
+document.addEventListener("DOMContentLoaded",()=>{
+  const B=BG();
+  if(B&&B.back) B.back.on(backStep);
+  else window.__tvBack=()=>{   // no ui.js: the same steps, without the Luxe layers
+    if(window.Sound&&Sound.panelOpen&&Sound.panelOpen()){ Sound.closePanel(); return "panel"; }
+    const r=backStep(); if(r) return r;
+    location.href=$("homeBtn").getAttribute("href"); return "hub";
+  };
+  if(!B||!B.effects) return;
+  document.documentElement.classList.add("mn-luxe");
+  if(B.icon) document.querySelectorAll("[data-icon]").forEach(el=>{ if(!el.querySelector("svg")) el.insertAdjacentHTML("afterbegin",B.icon(el.getAttribute("data-icon"))); });
+  const hub=hubHref(); ["homeBtn","winHome"].forEach(id=>{ const a=$(id); if(a) a.setAttribute("href",hub); });   // TV: keeps ?tv=1
+  ui.strip=""; renderStatus(); renderControls();
+  if(setupShown()) openSetup();   // the setup page again, now with its icons
+  document.addEventListener("bgui:tv",()=>{ ui.strip=""; renderStatus(); renderControls(); if(setupShown()) openSetup(); });
+});
 
 // Watchdog: if a turn ever gets stuck "moving" with no dialog/auction open, auto-recover
 setInterval(()=>{
