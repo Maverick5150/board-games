@@ -11,6 +11,13 @@ on:
 permissions:
   contents: write
 
+# One build per branch at a time: a newer push waits for the running build (GitHub drops an older one still waiting),
+# so two quick pushes to main never publish out of order (an older run overwriting a newer tv/version.json + APK) or
+# race each other's pull --rebase / push.
+concurrency:
+  group: build-tv-apk-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest

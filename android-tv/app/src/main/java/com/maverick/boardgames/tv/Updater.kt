@@ -1,11 +1,13 @@
 package com.maverick.boardgames.tv
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
+import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -23,9 +25,10 @@ import java.security.MessageDigest
 
 /**
  * Self-update for the sideloaded Fire TV app.
- * On launch (at most once every 6 hours) it reads tv/version.json from the website. When that lists a newer
- * versionCode it asks once; on Install it downloads the APK into the app's own storage, checks its SHA-256 and
- * hands it to the system installer. Every failure is silent or a short toast: the games never wait on this.
+ * On launch and whenever the app comes back to the front (at most once every 6 hours) it reads tv/version.json from
+ * the website. When that lists a newer versionCode it asks; on Install it downloads the APK into the app's own storage,
+ * checks its SHA-256 and hands it to the system installer. Every failure is silent or a short toast: the games never
+ * wait on this.
  */
 class Updater(private val act: Activity, private val focusBack: View) {
 
@@ -34,10 +37,13 @@ class Updater(private val act: Activity, private val focusBack: View) {
         private const val VERSION_URL = SITE + "tv/version.json"
         private const val PREFS = "updater"
         private const val KEY_LAST_CHECK = "lastCheck"
+        /** versionCode the user said Install to before being sent to the "Install unknown apps" setting (0 = none). */
+        private const val KEY_PENDING = "pendingCode"
         private const val CHECK_EVERY_MS = 6L * 60 * 60 * 1000
         private const val TIMEOUT_MS = 8000
         private const val DOWNLOAD_READ_TIMEOUT_MS = 20000
         private const val FAILED = "The update didn't download. Try again later."
+        private const val SKIPPED = "Update skipped. Turn on Install unknown apps for Board Games to get updates."
         private val DIALOG_THEME = android.R.style.Theme_Material_Dialog_Alert
         private val SHA256_HEX = Regex("[0-9a-f]{64}")
 
@@ -71,30 +77,46 @@ class Updater(private val act: Activity, private val focusBack: View) {
     private var dialog: AlertDialog? = null
     private var waitingForPermission: Release? = null
 
-    /** Called from onCreate. Runs off the UI thread; at most one completed check every 6 hours. */
+    private fun prefs(): SharedPreferences = act.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    /** Called from onCreate (and from [onResume]). Runs off the UI thread; at most one completed check every 6 hours,
+     *  except while an update the user already said Install to is waiting for the "Install unknown apps" setting. */
     fun checkOnLaunch() {
-        if (BuildConfig.DEBUG || busy) return    // a debug build can't take a release-signed update
-        val prefs = act.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (BuildConfig.DEBUG || busy || closed) return    // a debug build can't take a release-signed update
+        val prefs = prefs()
+        val pending = prefs.getInt(KEY_PENDING, 0)
         val since = System.currentTimeMillis() - prefs.getLong(KEY_LAST_CHECK, 0L)
-        if (since in 0L until CHECK_EVERY_MS) return
+        if (pending <= 0 && since in 0L until CHECK_EVERY_MS) return
         busy = true
         Thread(Runnable {
             val rel = try { fetchRelease() } catch (e: Exception) { null }
             main.post {
                 busy = false
                 if (closed || rel == null) return@post    // offline / bad JSON: try again next launch, say nothing
-                prefs.edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).apply()
-                if (rel.code > BuildConfig.VERSION_CODE) offer(rel) else apkFile(act)?.delete()
+                prefs.edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).remove(KEY_PENDING).apply()
+                when {
+                    rel.code <= BuildConfig.VERSION_CODE -> apkFile(act)?.delete()
+                    // Back from "Install unknown apps" after Fire OS 8 (Android 11) restarted the app for it: the user
+                    // already chose Install for this version, so carry on with it.
+                    rel.code == pending && canInstall() -> download(rel)
+                    rel.code == pending -> toast(SKIPPED)
+                    else -> offer(rel)
+                }
             }
         }, "update-check").start()
     }
 
-    /** Called from onResume: carries on after the user was sent to the "Install unknown apps" setting. */
+    /** Called from onResume: carries on after the user was sent to the "Install unknown apps" setting; otherwise
+     *  checks again (same 6-hour limit), because Fire TV usually brings the running app back instead of restarting it. */
     fun onResume() {
-        val rel = waitingForPermission ?: return
+        val rel = waitingForPermission
+        if (rel == null) {
+            if (dialog == null) checkOnLaunch()
+            return
+        }
         waitingForPermission = null
-        if (canInstall()) download(rel)
-        else toast("Update skipped. Turn on Install unknown apps for Board Games to get updates.")
+        prefs().edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).remove(KEY_PENDING).apply()
+        if (canInstall()) download(rel) else toast(SKIPPED)
     }
 
     /** Called from onDestroy. */
@@ -192,9 +214,13 @@ class Updater(private val act: Activity, private val focusBack: View) {
             .setNegativeButton("Later", null))
     }
 
+    @SuppressLint("ApplySharedPref")
     private fun openInstallSettings(rel: Release) {
         if (Build.VERSION.SDK_INT < 26) return
         waitingForPermission = rel     // also covers the user getting there on their own
+        // Fire OS 8 (Android 11) kills the app when this setting is turned on, which loses the line above: keep the
+        // choice on disk as well (written now, before Settings opens) so checkOnLaunch() carries on after the restart.
+        prefs().edit().putInt(KEY_PENDING, rel.code).commit()
         val intents = listOf(
             Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + act.packageName)),
             Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)

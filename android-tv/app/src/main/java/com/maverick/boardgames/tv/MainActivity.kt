@@ -70,7 +70,7 @@ class MainActivity : Activity() {
         web.requestFocus()
         if (savedInstanceState == null) web.loadUrl(startUrl) else web.restoreState(savedInstanceState)
 
-        // self-update: asks once when a newer version is on the website, never blocks the games
+        // self-update: asks when a newer version is on the website (checked again from onResume), never blocks the games
         updater = Updater(this, web).also { it.checkOnLaunch() }
     }
 
