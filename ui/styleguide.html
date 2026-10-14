@@ -135,9 +135,9 @@
       <h3 class="bg-h3">Light, glint, glow</h3>
       <div class="bg-card bg-spot">
         <dl class="sg-kv">
-          <dt>Orbs</dt><dd>.bg-orbs behind this page: pre-rendered glow images drifting forever (10 steps a second)</dd>
+          <dt>Orbs</dt><dd>.bg-orbs behind this page: pre-rendered glow images that drift forever (BGUI's effects ticker moves them 4 times a second)</dd>
           <dt>Glint</dt><dd>.bg-emblem logomark: one 1 s star every 12 s through BGUI.ambient</dd>
-          <dt>Win</dt><dd>gold rays spin and confetti drifts for as long as it is open, plus the trophy and a gold burst</dd>
+          <dt>Win</dt><dd>gold rays turn and confetti drifts for as long as it is open (8 ticks a second), plus the laurel trophy and a gold burst</dd>
           <dt>Focus</dt><dd>ivory ring, dark gap, gold glow; tiles add their game's glow</dd>
           <dt>Spotlight</dt><dd>.bg-spot, tile art and every surface carry a static pool of light</dd>
         </dl>
@@ -357,9 +357,10 @@ document.addEventListener("DOMContentLoaded", function () {
   var fxRow = B.mount.toggle("#sgFxRow", { checked: B.effects.get() === "reduced", onChange: function (on) { B.effects.set(on ? "reduced" : "full"); fxState(); } });
   var mRow = B.mount.toggle("#sgMotionRow", { checked: B.reducedMotion(), onChange: function (on) { B.setReducedMotion(on ? true : null); fxState(); } });
   B.mount.toggle("#sgSceneRow", { checked: false, onChange: function (on) { document.body.classList.toggle("bg-app--scene", on); } });
-  function fxState() { $("#sgFxState").textContent = "effects: " + B.effects.get(); $("#sgMotionState").textContent = "running: " + B.effects.motion(); }
+  function fxState() { $("#sgFxState").textContent = "effects: " + B.effects.get(); var st = B.effects.state(); $("#sgMotionState").textContent = "running: " + st.motion + " · ticker " + st.hz + "/s"; }
   fxState();
   document.addEventListener("bgui:effects", function (e) { fxRow.set(e.detail.level === "reduced", true); fxState(); });
+  document.addEventListener("bgui:win", function () { setTimeout(fxState, 0); });
   $("#sgTvBtn").innerHTML = B.icon("tv");
   $("#sgTvBtn").addEventListener("click", function () { tvRow.set(!B.isTV()); });
   document.addEventListener("bgui:tv", function (e) { tvRow.set(e.detail.on, true); });

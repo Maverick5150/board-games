@@ -168,13 +168,13 @@
    accent-ink: text ON the accent   accent-paper: accent as text on paper (>= 5.2:1)   accent-deep: tile / scene backdrop
    felt*: the spot-lit table   board*: the board plane */
 [data-game="trouble"]  { --accent: #fbdc5e; --accent-bright: #fdeba0; --accent-deep: #463808; --accent-ink: #1a1405; --accent-text: #fbdc5e; --accent-paper: #584d2a; --accent-glow: rgba(251, 220, 94, .3);
-                         --felt: #3b3009; --felt-deep: #120f04; --felt-lite: #6a5919; --board: #403410; --board-lite: #6f5d1f; }
+                         --felt: #3b3009; --felt-deep: #120f04; --felt-lite: #5f5017; --board: #403410; --board-lite: #5f501b; }
 [data-game="sorry"]    { --accent: #5c9cff; --accent-bright: #a6caff; --accent-deep: #0a2459; --accent-ink: #050b1d; --accent-text: #5c9cff; --accent-paper: #304d7f; --accent-glow: rgba(92, 156, 255, .32);
                          --felt: #0b2050; --felt-deep: #040a1d; --felt-lite: #1a3c7a; --board: #0e265e; --board-lite: #23498e; }
 [data-game="monopoly"] { --accent: #3fc477; --accent-bright: #93e0b3; --accent-deep: #06391f; --accent-ink: #04140b; --accent-text: #3fc477; --accent-paper: #20543a; --accent-glow: rgba(63, 196, 119, .3);
                          --felt: #07341d; --felt-deep: #02120a; --felt-lite: #115531; --board: #0a3d23; --board-lite: #19613a; }
 [data-game="rummy500"] { --accent: #4fd8d2; --accent-bright: #9debe7; --accent-deep: #04343a; --accent-ink: #031416; --accent-text: #4fd8d2; --accent-paper: #235457; --accent-glow: rgba(79, 216, 210, .3);
-                         --felt: #053a3c; --felt-deep: #021314; --felt-lite: #135f60; --board: #063c41; --board-lite: #146064; }
+                         --felt: #053a3c; --felt-deep: #021314; --felt-lite: #125b5c; --board: #063c41; --board-lite: #135c60; }
 [data-game="risk"]     { --accent: #ea9a4a; --accent-bright: #f5c799; --accent-deep: #3a1e08; --accent-ink: #1a0d03; --accent-text: #ea9a4a; --accent-paper: #69462a; --accent-glow: rgba(234, 154, 74, .3);
                          --felt: #33200c; --felt-deep: #110a03; --felt-lite: #5d3715; --board: #3d2410; --board-lite: #64401d; }
 [data-game="uno"]      { --accent: #ff5e4e; --accent-bright: #ffa59b; --accent-deep: #540d10; --accent-ink: #1a0504; --accent-text: #ff5e4e; --accent-paper: #80322f; --accent-glow: rgba(255, 94, 78, .32);
@@ -253,7 +253,7 @@ html[data-tv] {
 }
 .bg-surface--parchment {
   color: var(--text-on-paper); background-color: #e6d2a6;
-  background-image: url("tex/paper.webp"), radial-gradient(90% 75% at 50% 30%, #f3e4bf 0%, #e6d2a6 52%, #c9aa72 100%);
+  background-image: url("tex/paper.webp"), radial-gradient(90% 75% at 50% 30%, #f3e4bf 0%, #e6d2a6 52%, #d0b37e 100%);
   background-size: 200px 200px, 100% 100%;
 }
 .bg-surface--board {
@@ -301,12 +301,17 @@ html[data-tv] {
 .bg-focus, .bg-btn, .bg-version, .bg-seg > button, .bg-stepper__btn, .bg-row, .bg-toggle, .bg-select, .bg-sheet__option, .bg-tile, [data-focus] { scroll-margin: calc(var(--focus-room) + .5rem); }
 .bg-focus:focus, .bg-btn:focus, .bg-version:focus, .bg-seg > button:focus, .bg-stepper__btn:focus, .bg-row:focus, .bg-toggle:focus, .bg-select:focus, .bg-sheet__option:focus, .bg-tile:focus { outline: none; }
 /* three separate rules: an old WebView that lacks :focus-visible or :has() must still get the .is-focus ring BGUI.focus sets */
-.bg-focus.is-focus, .bg-btn.is-focus, .bg-version.is-focus, .bg-seg > button.is-focus, .bg-stepper__btn.is-focus, .bg-row.is-focus, .bg-select.is-focus, .bg-sheet__option.is-focus, .bg-tile.is-focus { box-shadow: var(--focus-ring) !important; position: relative; z-index: 2; }
-.bg-focus:focus-visible, .bg-btn:focus-visible, .bg-version:focus-visible, .bg-seg > button:focus-visible, .bg-stepper__btn:focus-visible, .bg-row:focus-visible, .bg-select:focus-visible, .bg-sheet__option:focus-visible, .bg-tile:focus-visible { box-shadow: var(--focus-ring) !important; position: relative; z-index: 2; }
+.bg-focus.is-focus, .bg-btn.is-focus, .bg-version.is-focus, .bg-seg > button.is-focus, .bg-stepper__btn.is-focus, .bg-row.is-focus, .bg-select.is-focus, .bg-sheet__option.is-focus { box-shadow: var(--focus-ring) !important; position: relative; z-index: 2; }
+.bg-focus:focus-visible, .bg-btn:focus-visible, .bg-version:focus-visible, .bg-seg > button:focus-visible, .bg-stepper__btn:focus-visible, .bg-row:focus-visible, .bg-select:focus-visible, .bg-sheet__option:focus-visible { box-shadow: var(--focus-ring) !important; position: relative; z-index: 2; }
 .bg-row:has(.bg-toggle:focus-visible) { box-shadow: var(--focus-ring) !important; position: relative; z-index: 2; }
 html[data-tv] .bg-row:focus-within { box-shadow: var(--focus-ring) !important; position: relative; z-index: 2; }
-/* tiles add their game's glow to the ring (swapped, never animated) */
-.bg-tile.is-focus, .bg-tile:focus-visible { box-shadow: var(--focus-ring), 0 0 3.5rem .75rem var(--accent-glow) !important; }
+/* tiles: ring + the game's glow are painted ONCE on their own ::after layer and only fade by opacity, so a D-pad move never
+   repaints a tile (the tile itself is pre-promoted on TV, so its focus lift is a pure compositor transform) */
+.bg-tile::after { content: ""; position: absolute; inset: 0; z-index: 3; border-radius: inherit; pointer-events: none; opacity: 0; will-change: opacity;
+  box-shadow: var(--focus-ring), 0 0 3.5rem .75rem var(--accent-glow); }   /* swaps instantly, like every focus ring */
+.bg-tile.is-focus, .bg-tile:focus-visible { position: relative; z-index: 2; }
+.bg-tile.is-focus::after, .bg-tile:focus-visible::after { opacity: 1; }
+html[data-tv] .bg-tile { will-change: transform; }
 html[data-tv] .bg-btn, html[data-tv] .bg-tile, html[data-tv] .bg-version, html[data-tv] .bg-focus, html[data-tv] .bg-sheet__option { transition: transform var(--dur-fast) var(--ease-out); }
 html[data-tv] .bg-btn.is-focus, html[data-tv] .bg-tile.is-focus, html[data-tv] .bg-version.is-focus, html[data-tv] .bg-focus.is-focus { transform: scale(var(--focus-scale)); }
 html[data-tv] .bg-btn:focus-visible, html[data-tv] .bg-tile:focus-visible, html[data-tv] .bg-version:focus-visible, html[data-tv] .bg-focus:focus-visible { transform: scale(var(--focus-scale)); }
@@ -362,7 +367,7 @@ html[data-tv] .bg-btn:focus-visible, html[data-tv] .bg-tile:focus-visible, html[
   display: grid; grid-template-columns: minmax(var(--tap), auto) 1fr minmax(var(--tap), auto); align-items: center; gap: var(--sp-2);
   padding: calc(env(safe-area-inset-top, 0px) + .5rem) var(--gutter) .5rem;
   color: var(--text-1);
-  background: linear-gradient(180deg, rgba(8, 10, 21, .98) 55%, rgba(8, 10, 21, .9)); box-shadow: 0 1px 0 var(--line-1);
+  background: linear-gradient(180deg, #0b0d1b, var(--ink-1)); box-shadow: 0 1px 0 var(--line-1);
 }
 .bg-topbar__start, .bg-topbar__end { display: flex; align-items: center; gap: var(--sp-2); }
 .bg-topbar__end { justify-content: flex-end; }
@@ -672,32 +677,30 @@ html[data-tv] { scroll-padding-top: var(--bg-bar-h, 0px); }   /* BGUI.focus meas
 /* =====================================================================
    Win overlay. KEEP THE FANCY EFFECTS: gold rays spin for as long as it is open, confetti bursts then keeps drifting, laurel trophy.
    Cheap by construction: the ray wheel is ONE promoted layer built from a pre-rendered quadrant image (tex/rays-q.webp, 30 KB)
-   and only rotates; the drifting confetti is two pre-built layers that only translate; both tick on the same 20 fps step grid,
-   so the compositor redraws 20 times a second, not 60. Everything pauses while the page is hidden.
+   and only rotates; the drifting confetti is ONE pre-built layer that only translates; the scrim is opaque. BGUI's effects
+   ticker turns the wheel and moves the confetti together 8 times a second (one composite per tick, no 60 Hz CSS loop: README
+   section 6 has the A/B numbers). Everything stops while the page is hidden, under "Reduce effects" and under reduced motion.
    <div class="bg-win"><div class="bg-win__scrim"></div><div class="bg-win__rays"></div><div class="bg-win__card">
      <div class="bg-win__medal"></div> eyebrow, .bg-win__title, .bg-win__sub, .bg-stats.bg-win__stats, .bg-win__actions </div></div>
-   BGUI.win.open() fills the rays wheel, the confetti layers and an empty medal with the trophy.
+   BGUI.win.open() fills the rays wheel, the confetti layer and an empty medal with the trophy.
    ===================================================================== */
 .bg-win { position: fixed; inset: 0; z-index: var(--z-overlay); display: none; place-items: center; padding: calc(env(safe-area-inset-top, 0px) + var(--gutter)) var(--gutter) calc(env(safe-area-inset-bottom, 0px) + var(--gutter)); overflow: hidden auto; color: var(--text-1); }
 .bg-win.is-open { display: grid; }
-.bg-win__scrim { position: fixed; inset: 0; background: radial-gradient(70% 45% at 50% 30%, rgba(231, 202, 144, .22), rgba(231, 202, 144, 0) 70%), radial-gradient(100% 60% at 50% 112%, var(--accent-glow), rgba(0, 0, 0, 0) 70%), rgba(4, 5, 11, .95); }
+.bg-win__scrim { position: fixed; inset: 0; background-color: #05060d; background-image: radial-gradient(70% 45% at 50% 30%, rgba(231, 202, 144, .22), rgba(231, 202, 144, 0) 70%), radial-gradient(100% 60% at 50% 112%, var(--accent-glow), rgba(0, 0, 0, 0) 70%); }
 .bg-win__rays { position: fixed; left: 50%; top: var(--bg-rays-y, 30%); width: 46rem; height: 46rem; margin: -23rem 0 0 -23rem; pointer-events: none; opacity: .6; animation: bg-rays-in var(--dur-celebrate) var(--ease-out) both; }
 html[data-tv] .bg-win__rays { width: 64rem; height: 64rem; margin: -32rem 0 0 -32rem; }
 @keyframes bg-rays-in { from { transform: scale(.5) rotate(-12deg); opacity: 0; } to { transform: none; opacity: .6; } }
-.bg-win__wheel { position: absolute; inset: 0; will-change: transform; animation: bg-rays-spin 120s steps(2400) infinite; }
+.bg-win__wheel { position: absolute; inset: 0; will-change: transform; }   /* turned by the BGUI ticker: 3 degrees a second */
 .bg-win__wheel > i { position: absolute; left: 50%; top: 50%; width: 50%; height: 50%; transform-origin: 0 0; background: url("tex/rays-q.webp") 0 0 / 100% 100% no-repeat; }
 .bg-win__wheel > i:nth-child(2) { transform: rotate(90deg); }
 .bg-win__wheel > i:nth-child(3) { transform: rotate(180deg); }
 .bg-win__wheel > i:nth-child(4) { transform: rotate(270deg); }
-@keyframes bg-rays-spin { to { transform: rotate(360deg); } }
 .bg-win__confetti { position: fixed; inset: 0; overflow: hidden; pointer-events: none; contain: strict; }
-.bg-win__fall { position: absolute; left: 0; top: -100%; width: 100%; height: 200%; will-change: transform; animation: bg-fall 12s steps(60) infinite; }
-.bg-win__fall--far { opacity: .55; animation-duration: 20s; animation-timing-function: steps(100); }
+.bg-win__fall { position: absolute; left: 0; top: -100%; width: 100%; height: 200%; will-change: transform; }   /* moved by the BGUI ticker: one screen every 20 s */
 .bg-win__fall > b { position: absolute; display: block; width: .5rem; height: .875rem; border-radius: 2px; }
-.bg-win__fall--far > b { width: .375rem; height: .625rem; }
+.bg-win__fall > b.is-far { width: .375rem; height: .625rem; opacity: .55; }
 .bg-win__fall > b.is-dot { width: .5rem; height: .5rem; border-radius: 50%; }
 .bg-win__fall > b.is-gem { width: .55rem; height: .55rem; border-radius: 1px; }
-@keyframes bg-fall { 0% { transform: translate3d(0, 0, 0); } 25% { transform: translate3d(1.2%, 12.5%, 0); } 50% { transform: translate3d(0, 25%, 0); } 75% { transform: translate3d(-1.2%, 37.5%, 0); } 100% { transform: translate3d(0, 50%, 0); } }
 .bg-win__card { position: relative; width: min(100%, 26rem); margin: 0; padding: .5rem 0 0; text-align: center; animation: bg-win-in 700ms var(--ease-spring) both; }
 html[data-tv] .bg-win__card { width: min(100%, 36rem); }
 @keyframes bg-win-in { from { transform: translateY(2rem) scale(.94); opacity: 0; } to { transform: none; opacity: 1; } }
@@ -756,20 +759,19 @@ html:not([data-tv]) .bg-tile__name { font-size: min(var(--fs-lg), 4.6vw); }   /*
    Effects. KEEP THE FANCY EFFECTS, make them cheap (README section 6 has the measured CPU of each):
    html[data-effects="reduced"] turns ambient motion down; reduced motion (OS or data-motion) turns motion off.
    ===================================================================== */
-/* --- Light orbs (hub, lobby, style guide): pre-rendered glow images drifting forever on promoted layers.
-       The drift is slow (about 3px a second), so it ticks at 10 steps a second: identical to the eye, a sixth of the redraws. */
+/* --- Light orbs (hub, lobby, style guide): pre-rendered glow images (tex/orb-*.webp) on promoted layers. They light up once
+       (opacity) and then drift forever: BGUI's effects ticker writes their transform 4 times a second (about 3 px a second, so it
+       reads as continuous) - measured 8-11 % of a core as a CSS steps() loop, 1-6 % this way. */
 .bg-orbs { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; contain: strict; }
 .bg-orbs > i { position: absolute; display: block; width: 26rem; height: 26rem; opacity: .2; will-change: transform;
   background: url("tex/orb-gold.webp") 0 0 / 100% 100% no-repeat;
-  animation: bg-orbs-in 2.6s var(--ease-out) both, bg-orb-a 46s steps(460) 2.6s infinite alternate; }
+  animation: bg-orbs-in 2.6s var(--ease-out) both; }
 .bg-orbs > i:nth-child(1) { left: -9rem; top: 2rem; }
-.bg-orbs > i:nth-child(2) { right: -11rem; top: 26rem; opacity: .26; background-image: url("tex/orb-violet.webp"); animation-name: bg-orbs-in, bg-orb-b; animation-duration: 2.6s, 58s; animation-timing-function: var(--ease-out), steps(580); }
-.bg-orbs > i:nth-child(3) { left: 30%; bottom: -16rem; width: 22rem; height: 22rem; opacity: .14; animation-duration: 2.6s, 64s; animation-timing-function: var(--ease-out), steps(640); }
+.bg-orbs > i:nth-child(2) { right: -11rem; top: 26rem; opacity: .26; background-image: url("tex/orb-violet.webp"); animation-delay: .3s; }
+.bg-orbs > i:nth-child(3) { left: 30%; bottom: -16rem; width: 22rem; height: 22rem; opacity: .14; animation-delay: .6s; }
 html[data-tv] .bg-orbs > i { width: 34rem; height: 34rem; }
 html[data-tv] .bg-orbs > i:nth-child(2) { top: 14rem; }
 @keyframes bg-orbs-in { from { opacity: 0; } }
-@keyframes bg-orb-a { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(9rem, 5rem, 0); } }
-@keyframes bg-orb-b { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(-8rem, -6rem, 0); } }
 
 /* --- Logomark ("diamond die") with its glint: the 4-point star is its own tiny layer, fired by BGUI.ambient (.is-glint) --- */
 .bg-emblem { position: relative; display: inline-grid; place-items: center; flex: none; width: 3rem; height: 3rem; color: var(--gold-200); }
@@ -799,12 +801,11 @@ html[data-tv] .bg-orbs > i:nth-child(2) { top: 14rem; }
 html[data-tv] .bg-hero { min-height: 26rem; }
 html[data-tv] .bg-hero__body { padding: 2.5rem; }
 
-/* --- motion levels: reduced effects = no endless drift/spin/fall, the rest stays; reduced motion = nothing moves --- */
-html[data-effects="reduced"] .bg-orbs > i { animation: bg-orbs-in 2.6s var(--ease-out) both; }
-html[data-effects="reduced"] .bg-win__wheel { animation: none; }
+/* --- motion levels. "Reduce effects" (html[data-effects=reduced]): the ticker stops (orbs rest, rays hold still) and the
+       confetti drift is hidden; glows, light pools, the trophy, focus and crossfades stay. Reduced motion: nothing moves.
+       The ticker also stops while the page is hidden (BGUI sets html[data-hidden]) and the orbs rest under an open win (data-win). --- */
 html[data-effects="reduced"] .bg-win__confetti { display: none; }
-/* paused while the page is hidden (BGUI sets data-hidden) and the orbs while a win overlay covers them (data-win) */
-html[data-hidden] .bg-orbs > i, html[data-hidden] .bg-win__wheel, html[data-hidden] .bg-win__fall, html[data-win] .bg-orbs > i { animation-play-state: paused; }
+html[data-hidden] .bg-orbs > i, html[data-hidden] .bg-win__rays, html[data-hidden] .bg-win__card { animation-play-state: paused; }
 
 /* ---------- Small pieces: dice, countdown ring, TV hint keys, celebration canvas ---------- */
 .bg-die { position: relative; display: inline-grid; place-items: center; width: 3rem; height: 3rem; border-radius: 22%; color: #1d1a2a;

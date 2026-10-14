@@ -7,7 +7,8 @@
    BGUI.win.open(el)/close()         win overlay (.bg-win): modal (Tab + D-pad stay inside), restores focus to the opener on close
    BGUI.celebrate(opts)              one-shot canvas burst of gold confetti + a gold ray bloom; auto-removes its canvas; nothing under reduced motion
    BGUI.effects.get()/set(level)     "full" (default) | "reduced": persisted (localStorage "bgui.effects"), reflected as html[data-effects];
-                                     .motion() = what really runs ("full" | "reduced" | "off" under reduced motion)
+                                     .motion() = what really runs ("full" | "reduced" | "off" under reduced motion);
+                                     .state() = {level, motion, hz}: hz of the ONE effects ticker (4 orbs, 8 win screen, 0 still)
    BGUI.hero.show(el, {src, game})   crossfades the two .bg-hero__layer backdrops by opacity (the next image is decoded first)
    BGUI.mark() / BGUI.trophy()       the gold "diamond die" logomark and the laurel trophy as inline SVG strings
    BGUI.flip(el, fromRect, opts)     FLIP move (transform only)
@@ -20,7 +21,7 @@
                                      the top bar is its own zone and focus scrolls clear of it; arrows never get stuck in select/text/radio
    BGUI.dice                         SVG pip faces + a cheap roll (transform tumble + a few face swaps)
    BGUI.setTV(on) / isTV()           html[data-tv]; auto for ?tv=1 and window.AndroidTV
-   BGUI.mount.*                      seg, stepper, toggle, versions, players, auto (declarative data-bg-mount)
+   BGUI.mount.*                      seg, stepper, toggle, versions, players, emblem, orbs, auto (declarative data-bg-mount)
    BGUI.icon(name)                   from ui/icons.js (optional) */
 (function (w, d) {
   "use strict";
@@ -82,12 +83,56 @@
       emit("effects", { level: fxLevel, motion: effects.motion() });
       return fxLevel;
     },
-    motion: function () { return reducedMotion() ? "off" : fxLevel; }
+    motion: function () { return reducedMotion() ? "off" : fxLevel; },
+    /* the continuous-effects ticker: hz = 4 (orbs drifting), 8 (win rays + confetti) or 0 (nothing endless is moving) */
+    state: function () { return { level: fxLevel, motion: effects.motion(), hz: tick.hz, hidden: !!d.hidden }; }
   };
   /* everything pauses while the page is hidden: CSS loops via html[data-hidden], beats via the ambient scheduler */
   function hiddenFlag() { if (d.hidden) root.setAttribute("data-hidden", ""); else root.removeAttribute("data-hidden"); }
   hiddenFlag();
   d.addEventListener("visibilitychange", hiddenFlag);
+
+  /* ---------------- continuous effects: ONE low-rate ticker ----------------
+     The endless effects (the light orbs' drift, the win screen's ray wheel and confetti drift) are moved by this timer,
+     not by CSS animations. Measured in software compositing (README section 6): any running CSS animation keeps the
+     compositor producing frames at 60 Hz (a steps() timing still costs 8-11 % of a core for the orbs and 46-52 % for the
+     win screen), while a timer that moves promoted layers N times a second costs about N composites. The motions are slow
+     (orbs about 3 px a second, rays 3 degrees a second), so 4 and 8 updates a second look continuous. Only transform is
+     written, on layers that are already promoted (will-change), so a tick never lays out or repaints. One ticker for the
+     whole page; it stops while the page is hidden, under "Reduce effects" and under reduced motion. */
+  var ORB_HZ = 4, WIN_HZ = 8;
+  var ORBS = [[9, 5, 46], [-8, -6, 58], [9, 5, 64]];   // drift: x rem, y rem, seconds per leg (eased there and back)
+  var tick = { id: 0, hz: 0, last: 0, orbT: 0, winT: 0, win: null };
+  function fxWant() {
+    if (d.hidden || reducedMotion() || fxLevel !== "full") return 0;
+    var win = openWin();
+    if (win) return win.querySelector(".bg-win__wheel, .bg-win__fall") ? WIN_HZ : 0;
+    return d.querySelector(".bg-orbs > i") ? ORB_HZ : 0;
+  }
+  function fxTick() {
+    var t = now(), dt = tick.last ? Math.min(0.5, (t - tick.last) / 1000) : 0, win = openWin();
+    tick.last = t;
+    if (win) {
+      if (win !== tick.win) { tick.win = win; tick.winT = 0; }
+      var s = (tick.winT += dt), wheel = win.querySelector(".bg-win__wheel"), fall = win.querySelector(".bg-win__fall");
+      if (wheel) wheel.style.transform = "rotate(" + (s * 3 % 360).toFixed(2) + "deg)";
+      if (fall) fall.style.transform = "translate3d(" + (Math.sin(s * 0.5712) * 1.2).toFixed(3) + "%," + (s % 20 / 20 * 50).toFixed(3) + "%,0)";
+      return;
+    }
+    var o = (tick.orbT += dt);
+    $$(".bg-orbs > i").forEach(function (el, i) {
+      var p = ORBS[i % 3], k = (1 - Math.cos(Math.PI * o / p[2])) / 2;
+      el.style.transform = "translate3d(" + (p[0] * k).toFixed(3) + "rem," + (p[1] * k).toFixed(3) + "rem,0)";
+    });
+  }
+  function fxRefresh() {
+    var want = fxWant();
+    if (want === tick.hz) return;
+    if (tick.id) { clearInterval(tick.id); tick.id = 0; }
+    tick.hz = want; tick.last = 0;
+    if (!openWin()) tick.win = null;
+    if (want) { tick.id = setInterval(fxTick, Math.round(1000 / want)); fxTick(); }
+  }
 
   /* ---------------- haptics ---------------- */
   var HAPTIC = { tap: 8, select: 12, turn: 20, success: [18, 40, 28], warn: [40, 30, 40], error: [60, 40, 60], roll: [6, 30, 6, 30, 10] };
@@ -299,18 +344,20 @@
   }
 
   /* win overlay dressing, built once per overlay: the ray wheel (4 quadrants of ONE pre-rendered image on one layer),
-     two pre-built confetti layers that only translate, and the trophy in an empty medal */
+     ONE pre-built confetti layer that only translates (near pieces plus smaller, dimmer far ones: measured, every extra
+     full-screen layer costs a full-screen composite per tick), and the trophy in an empty medal */
   var CONFETTI = ["#f9ebc6", "#e9cd93", "#c99f5e", "#fff6dc", "#d5af6d", "#ff5d73", "#5f95ff", "#3fd391", "#b383ff", "#ffcb4f"];
-  function fallLayer(far, seed) {
-    var html = "", n = far ? 22 : 16, r = seed;
+  function fallLayer(seed) {
+    var html = "", n = 36, r = seed;
     function rnd() { r = (r * 9301 + 49297) % 233280; return r / 233280; }
     for (var i = 0; i < n; i++) {
       var x = (rnd() * 96 + 2).toFixed(1), y = (rnd() * 48 + 1).toFixed(1), rot = Math.round(rnd() * 180), k = rnd();
-      var cls = k < 0.18 ? " class=\"is-dot\"" : k < 0.34 ? " class=\"is-gem\"" : "";
-      var c = CONFETTI[Math.floor(rnd() * CONFETTI.length)], st = "left:" + x + "%;background:" + c + ";transform:rotate(" + (cls === " class=\"is-gem\"" ? 45 : rot) + "deg);";
+      var cls = (k < 0.18 ? "is-dot" : k < 0.34 ? "is-gem" : "") + (i % 5 > 2 ? " is-far" : "");
+      var c = CONFETTI[Math.floor(rnd() * CONFETTI.length)], st = "left:" + x + "%;background:" + c + ";transform:rotate(" + (/is-gem/.test(cls) ? 45 : rot) + "deg);";
+      cls = cls ? " class=\"" + cls.replace(/^ /, "") + "\"" : "";
       html += "<b" + cls + " style=\"top:" + y + "%;" + st + "\"></b><b" + cls + " style=\"top:" + (+y + 50).toFixed(1) + "%;" + st + "\"></b>";   // each piece twice: the loop is seamless
     }
-    return "<i class=\"bg-win__fall" + (far ? " bg-win__fall--far" : "") + "\">" + html + "</i>";
+    return "<i class=\"bg-win__fall\">" + html + "</i>";
   }
   function winDress(el) {
     var rays = el.querySelector(".bg-win__rays");
@@ -318,7 +365,7 @@
     if (!el.querySelector(".bg-win__confetti")) {
       var cf = d.createElement("div");
       cf.className = "bg-win__confetti"; cf.setAttribute("aria-hidden", "true");
-      cf.innerHTML = fallLayer(true, 7) + fallLayer(false, 31);
+      cf.innerHTML = fallLayer(31);
       el.insertBefore(cf, el.querySelector(".bg-win__card"));
     }
     var medal = el.querySelector(".bg-win__medal");
@@ -345,8 +392,9 @@
     var dpad = !!marked || isTV();
     winDress(el);
     el.classList.add("is-open");
-    root.setAttribute("data-win", "");   // the orbs under the overlay pause while it is open
+    root.setAttribute("data-win", "");   // the orbs under the overlay rest while it is open
     winAim(el);
+    fxRefresh();   // the ticker switches from the orbs to the rays + confetti (8 a second) for as long as it is open
     var first = $(opts.focus, el) || el.querySelector("[data-autofocus]") || tabbables(el)[0] || el;
     if (focusOn && dpad && first !== el) setFocus(first); else focusEl(first);
     emit("win", { open: true, el: el });
@@ -358,6 +406,7 @@
     var dpad = !!marked || isTV();
     el.classList.remove("is-open");
     if (!openWin()) root.removeAttribute("data-win");
+    fxRefresh();
     var back = winOpener;
     winOpener = null;
     if (back && back.parentNode && back !== d.body && isVisible(back)) { if (focusOn && dpad) setFocus(back); else focusEl(back); }
@@ -591,6 +640,7 @@
     ambBegin({ el: it.el, cls: it.cls, ms: it.ms });
   }
   function ambientRefresh() {
+    fxRefresh();   // the continuous-effects ticker follows the same signals (hidden, reduced motion, effects level)
     if (!ambRunnable()) {
       clearTimeout(amb.timer); amb.timer = 0;
       amb.queue.splice(0).forEach(function (b) { if (b.done) b.done(false); });
@@ -636,12 +686,12 @@
   /* ---------------- hero: two stacked layers crossfade by opacity (TV hub poster, lobby) ---------------- */
   var heroGen = typeof WeakMap === "function" ? new WeakMap() : null;
   function heroLayers(el) {
-    var ls = $(":scope > .bg-hero__layer", el);
-    if (!ls.length) ls = $(".bg-hero__layer", el);
+    var ls = $$(":scope > .bg-hero__layer", el);
+    if (!ls.length) ls = $$(".bg-hero__layer", el);
     while (ls.length < 2) {
       var l = d.createElement("div");
       l.className = "bg-hero__layer" + (ls.length ? "" : " is-on"); l.setAttribute("aria-hidden", "true");
-      el.insertBefore(l, el.firstChild); ls = $(".bg-hero__layer", el);
+      el.insertBefore(l, el.firstChild); ls = $$(".bg-hero__layer", el);
     }
     return ls;
   }
@@ -1034,6 +1084,7 @@
         el = d.createElement("div"); el.className = "bg-orbs"; el.setAttribute("aria-hidden", "true");
         el.innerHTML = new Array(((opts && opts.count) || 2) + 1).join("<i></i>");
         host.insertBefore(el, host.firstChild);
+        fxRefresh();
       }
       return { el: el };
     },
@@ -1079,6 +1130,7 @@
     if (tvRequested() && !isTV()) setTV(true);
     else if (isTV() && !focusOn) { focus.enable(); focusByTV = true; }
     mount.auto();
+    fxRefresh();
   }
   if (d.readyState === "loading") d.addEventListener("DOMContentLoaded", boot); else boot();
 })(typeof window !== "undefined" ? window : null, typeof document !== "undefined" ? document : null);
