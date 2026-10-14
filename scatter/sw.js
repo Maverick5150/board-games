@@ -1,13 +1,17 @@
 // Offline cache for Scattergories (bump VERSION to force update)
 const VERSION = "scatter-v1";
+const PREFIX = VERSION.replace(/v[0-9]+$/, "");   // every game shares one origin (one CacheStorage): only ever delete THIS game's old caches
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.png", "../sound.js", "../skins.js", "../saves.js", "./bank.js", "./engine.js", "./ui.js"];
 
+// Updates: a new VERSION re-downloads every asset (cache "reload" skips the browser's HTTP cache, so cache-first icons are fresh too)
+// and takes over at once (skipWaiting + clients.claim). Pages and scripts are network-first, so a published update loads on the
+// next launch or navigation by itself; an open game is never reloaded.
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(VERSION).then(c => c.addAll(ASSETS.map(u => new Request(u, { cache: "reload" })))).then(() => self.skipWaiting()));
 });
 self.addEventListener("activate", e => {
   e.waitUntil(
-    caches.keys().then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k))))
+    caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith(PREFIX) && k !== VERSION).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });

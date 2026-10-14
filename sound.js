@@ -417,6 +417,10 @@ function mountButton(o){
   b.setAttribute("aria-label","Sound settings");
   b.style.cssText="position:fixed;z-index:2147482000;top:"+(o.top||"6px")+";right:"+(o.right||"6px")+";background:#16203fdd;color:#eef2ff;border:1px solid #2e3b66;border-radius:10px;padding:6px 11px;font-size:"+(o.size||"16px")+";font-weight:700;cursor:pointer";
   b.onclick=function(){ unlock(); openPanel(); };
+  if(!d.getElementById("bgSndCss")){   // clear focus ring for the TV remote (keyboard/D-pad focus only; taps on phones show none)
+    var cs=d.createElement("style"); cs.id="bgSndCss"; cs.textContent="#bgSndBtn:focus{outline:3px solid #fff;outline-offset:2px}#bgSndBtn:focus:not(:focus-visible){outline:none}";
+    (d.head||d.documentElement).appendChild(cs);
+  }
   d.body.appendChild(b);
 }
 

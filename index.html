@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0e1630">
 <title>Board Games</title>
+<link rel="icon" href="icon.png" type="image/png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.png">
 <style>
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   body{margin:0; min-height:100vh; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:#eef2ff;
@@ -164,5 +167,6 @@
     📺 Party Mode <span style="font-weight:600;font-size:13px;opacity:.9">— TV board, phones as controllers</span>
   </a>
   <footer>Single games work offline · Party Mode needs internet &amp; a TV browser</footer>
+<script>if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }</script>
 </body>
 </html>

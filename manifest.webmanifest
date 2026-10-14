@@ -1,0 +1,14 @@
+{
+  "name": "Board Games",
+  "short_name": "Board Games",
+  "description": "Trouble, Sorry!, Monopoly, 500 Rummy, Risk, Uno and Scattergories, plus Party Mode for the TV.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0e1630",
+  "theme_color": "#0e1630",
+  "icons": [
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

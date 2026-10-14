@@ -411,7 +411,7 @@ function showRound(){
   if(ro.over) Sound.sfx("win");
   const nx=$("rbNext"); if(nx) nx.addEventListener("click",()=>{ $("roundBox").classList.remove("show"); startRound(); });
   const nw=$("rbNew"); if(nw) nw.addEventListener("click",()=>{ $("roundBox").classList.remove("show"); startGame(); });
-  $("rbMenu").addEventListener("click",()=>{ $("roundBox").classList.remove("show"); $("resumeBtn").style.display="none"; $("setup").classList.add("show"); });
+  $("rbMenu").addEventListener("click",()=>{ $("roundBox").classList.remove("show"); $("resumeBtn").style.display="none"; saveBar.refresh(); $("setup").classList.add("show"); });   // the finished game is no longer offered as "Continue last game"
 }
 
 Skins.apply("rummy500"); Sound.mountButton(); Sound.music("rummy500");

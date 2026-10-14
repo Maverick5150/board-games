@@ -208,7 +208,7 @@ function onIntent(a){
   if(a.t==="vote"){ return doVote(a); }
   if(a.t==="ready"){ finishRound(); return {ok:true}; }
   if(a.t==="next"){ newRound(); return {ok:true}; }
-  if(a.t==="again"){ $("resumeBtn").style.display="none"; drawSetup(); $("setup").classList.add("show"); return {ok:true}; }
+  if(a.t==="again"){ $("resumeBtn").style.display="none"; saveBar.refresh(); drawSetup(); $("setup").classList.add("show"); return {ok:true}; }
   return {ok:false};
 }
 function toReview(){
