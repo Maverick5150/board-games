@@ -129,9 +129,10 @@ var COL={red:"#e23b3b",blue:"#2b7be0",green:"#27a758",yellow:"#eec21b",orange:"#
 var CNAME={brown:"Brown",black:"Black",red:"Red",blue:"Blue",green:"Green",yellow:"Yellow",orange:"Orange",purple:"Purple",teal:"Teal",pink:"Pink"};
 var ORDER6=["red","blue","green","yellow","black","pink"];
 var ORDERU=["red","blue","green","yellow","orange","purple","teal","pink","black","brown"];
-function ORDER(){ return (chosenGame==="rummy500"||chosenGame==="scatter")?ORDER8:chosenGame==="risk"?ORDER6:chosenGame==="uno"?ORDERU:chosenGame==="sorry"?ORDERS:ORDER4; }
+function ORDER(){ return (chosenGame==="rummy500"||chosenGame==="scatter")?ORDER8:chosenGame==="risk"?ORDER6:chosenGame==="uno"?ORDERU:chosenGame==="sorry"?ORDERS:chosenGame==="trouble"?ORDERT:ORDER4; }
 var ORDER4=["red","blue","green","yellow"], ORDER8=["red","blue","green","yellow","orange","purple","teal","pink"];
 var ORDERS=["red","blue","yellow","green"];   // Sorry! play order (clockwise round the board) - the lobby seats and shows computers in this order too
+var ORDERT=["red","green","yellow","blue"];   // Trouble play order - same idea, so the lobby and the game agree on which colours the computers get
 var runId=0, noWait=false, gameOver=false;
 function maxPlayers(){ return (chosenGame==="rummy500"||chosenGame==="scatter")?8:chosenGame==="risk"?6:chosenGame==="uno"?10:4; }
 var PACE=1.8;   // game-speed multiplier (every pause in every game is scaled by this)
@@ -261,6 +262,7 @@ function onMsg(o){
     var pl=players[o.pid]; if(!pl) return;
     delete players[o.pid]; if(seat[pl.color]===o.pid) delete seat[pl.color]; delete lastAsk[o.pid];
     if(inLobby){ toast(pl.name+" left"); broadcastLobby(); renderLobby(); }
+    else if(gameOver){ toast(pl.name+" left"); settlePending(o.pid); }   // the game is finished: nobody takes the seat over
     else {   // mid-game: a computer takes the seat; a prompt the phone was answering gets its safe default
       toast(pl.name+" left — the computer plays "+CNAME[pl.color]);
       if(leaveHandler) leaveHandler(pl.color);
@@ -600,7 +602,7 @@ function renderRvRules(){
 }
 
 function startGame(){
-  inLobby=false; gameOver=false; Sound.skip();
+  inLobby=false; gameOver=false; leaveHandler=null; Sound.skip();   // each game sets its own leaveHandler
   send({t:"started"}, true);   // retained so a reconnecting phone knows the game is on (not the lobby)
   if(chosenGame==="trouble") playTrouble();
   else if(chosenGame==="sorry") playSorry();
@@ -624,7 +626,7 @@ function gameFrame(boardId){
 function playTrouble(){
   var RG=runGate(++runId), live=RG.live, sleep=RG.sleep, ask=RG.ask;   // a quit game stops at its next await
   var TRACK=28, MAXD=31, cx=300, cy=300, trackR=228, homeR=272;
-  var order=["red","green","yellow","blue"];               // play order
+  var order=ORDERT;                                       // play order (the lobby uses the same one)
   var START={red:0, green:7, yellow:14, blue:21};
   var active=computeActive(order);
   var human={}; active.forEach(function(c){ human[c]=!!seat[c]; });
@@ -1005,7 +1007,7 @@ function playMonopoly(){
     if(R.fpJackpot) h+='<div class="msfp">🅿️ Free Parking: '+money(fpPool)+'</div>';
     el.innerHTML=h; }
   function snapNow(){ var pl=active.map(function(c){ var props=[]; for(var i=0;i<40;i++) if(owner[i]===c) props.push({i:i,h:houses[i],m:mort[i]}); return {color:c,pid:seat[c]||null,name:nm(c),cash:cash[c],net:netWorth(c),jail:injail[c],jokers:jokers[c],bankrupt:bankrupt[c],props:props}; }); send({t:"snap",players:pl,fp:R.fpJackpot?fpPool:0}); }
-  function snapSoon(){ clearTimeout(snapT); snapT=setTimeout(snapNow,400); }
+  function snapSoon(){ clearTimeout(snapT); snapT=setTimeout(function(){ if(live()) snapNow(); },400); }
   function tv(html){ setStatus(html); }
   function turnBanner(c,extra){ tv('<span class="dot" style="background:'+PC(c)+'"></span> '+tokE[c]+' <b>'+nm(c)+'</b> · '+money(cash[c])+(R.fpJackpot&&fpPool>0?' · 🅿️ '+money(fpPool):'')+(extra?' · '+extra:'')); }
 
@@ -1590,6 +1592,11 @@ function playScatter(){
   document.head.appendChild(st0);
   wrap.innerHTML='<div id="scTv"></div><div class="status" id="status" style="margin:1vh 0"></div><div class="hintbar" id="hint">Players: use your phones</div>';
   function alive(){ return myRun===runId; }
+  function seatedHumans(){ return G.players.map(function(p,i){ return (p.human&&seat[active[i]])?i:-1; }).filter(function(i){ return i>=0; }); }   // re-read each time: a phone can Leave mid-round
+  leaveHandler=function(c){   // a phone left: the computer plays that seat from now on (it fills the sheet now if the round is being written)
+    var i=active.indexOf(c); if(i<0) return; G.players[i].human=false;
+    if(phase==="write"&&G.phase==="write"&&SE.inPlay(G,i)) SE.setAnswers(G,i,SE.cpuAnswers(G,i));
+  };
   function idxOfPid(pid){ var r=-1; G.players.forEach(function(p,i){ if(seat[active[i]]===pid) r=i; }); return r; }
   function secLeft(){ return Math.max(0,(endAt-Date.now())/1000); }
   function snapFor(i,x){ var st=SE.snapshot(G,i,x||{}); if(phase==="roll"||phase==="star"){ st.phase=phase; st.letter=null; st.keyword=null; st.slots=[]; } else if(G.phase==="write") st.secLeft=secLeft(); return st; }
@@ -1634,7 +1641,7 @@ function playScatter(){
     if(pid){
       setPhase("star"); pushAll(-1);
       el=$("scTv"); if(el) el.innerHTML='<div style="font-size:4vh;opacity:.8">Round '+G.round+'</div><div class="scBig">⭐</div><div style="font-size:4vh;font-weight:800">'+esc(p.name)+' rolled the star — picking a letter on their phone…</div>';
-      var t0=Date.now(); while(alive()&&G.star&&Date.now()-t0<30000) await sleep(300);
+      var t0=Date.now(); while(alive()&&G.star&&seat[active[by]]===pid&&Date.now()-t0<30000) await sleep(300);   // the roller left -> keep the rolled letter
       if(!alive()) return;
     }
     G.star=false; toast("⭐ "+p.name+" picked "+G.letter);
@@ -1689,8 +1696,9 @@ function playScatter(){
     drawReview(false); pushAll(-1);
     while(alive()&&revealN<G.slots.length){ await sleep(1500); revealN++; drawReview(false); }
     if(!alive()) return;
-    var t0=Date.now(), hs=G.players.map(function(p,i){ return (p.human&&seat[active[i]])?i:-1; }).filter(function(i){ return i>=0; });
+    var t0=Date.now(), hs;
     while(alive()&&Date.now()-t0<70000){
+      hs=seatedHumans();
       var open=Object.keys(G.challenges).some(function(s){ return Object.keys(G.challenges[s]).some(function(k){ return G.challenges[s][k].state==="open"; }); });
       if(!open&&hs.length&&hs.every(function(i){ return ready[i]; })) break;
       if(!hs.length) break;
@@ -1703,8 +1711,7 @@ function playScatter(){
     setStatus(G.over?"🏆 "+esc(G.winners.map(function(i){ return G.players[i].name; }).join(" & "))+(G.winners.length>1?" tie!":" wins!"):"Round "+G.round+" complete");
     if(G.over) return;
     var el=$("scTv"), b=document.createElement("button"); b.className="big"; b.textContent=(G.tiebreak?"Tie-break round ▶":"Next round ▶"); el.appendChild(b); b.focus();
-    var hs=G.players.map(function(p,i){ return (p.human&&seat[active[i]])?i:-1; }).filter(function(i){ return i>=0; });
-    await new Promise(function(res){ var done=false,fin=function(){ if(!done){ done=true; clearInterval(iv); res(); } }; b.onclick=fin; var t0=Date.now(); var iv=setInterval(function(){ if(!alive()||(hs.length&&hs.every(function(i){ return nexts[i]; }))||Date.now()-t0>30000) fin(); },400); });
+    await new Promise(function(res){ var done=false,fin=function(){ if(!done){ done=true; clearInterval(iv); res(); } }; b.onclick=fin; var t0=Date.now(); var iv=setInterval(function(){ var hs=seatedHumans(); if(!alive()||(hs.length&&hs.every(function(i){ return nexts[i]; }))||Date.now()-t0>30000) fin(); },400); });
   }
   async function run(){
     while(alive()){

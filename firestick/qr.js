@@ -1,9 +1,32 @@
-/* Minimal QR Code encoder for the Party Mode join code (original code, no third-party service).
+/* Minimal QR Code encoder for the Party Mode join code (runs locally, no third-party service).
    Byte mode, error-correction level L/M/Q/H, versions 1-10 (up to 213 bytes at level M), automatic mask choice.
    Follows the public QR specification (ISO/IEC 18004).
    QR.matrix(text,{ecl:"M",mask:-1}) -> {size, mask, version, dark(x,y)}
    QR.svg(text,{ecl:"M",margin:4}) -> "<svg ...>" (black modules on white, crisp edges)
-   "QR Code" is a registered trademark of DENSO WAVE INCORPORATED. */
+   "QR Code" is a registered trademark of DENSO WAVE INCORPORATED.
+
+   Parts of this file (raw module count, GF(256) multiply, Reed-Solomon divisor/remainder, block split and
+   interleave, the 0xEC/0x11 pad bytes and the mask penalty rules) are adapted from
+   Project Nayuki's "QR Code generator library" - https://www.nayuki.io/page/qr-code-generator-library
+   and are used under its MIT License:
+
+   Copyright (c) Project Nayuki. (MIT License)
+
+   Permission is hereby granted, free of charge, to any person obtaining a copy of
+   this software and associated documentation files (the "Software"), to deal in
+   the Software without restriction, including without limitation the rights to
+   use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+   the Software, and to permit persons to whom the Software is furnished to do so,
+   subject to the following conditions:
+   - The above copyright notice and this permission notice shall be included in
+     all copies or substantial portions of the Software.
+   - The Software is provided "as is", without warranty of any kind, express or
+     implied, including but not limited to the warranties of merchantability,
+     fitness for a particular purpose and noninfringement. In no event shall the
+     authors or copyright holders be liable for any claim, damages or other
+     liability, whether in an action of contract, tort or otherwise, arising from,
+     out of or in connection with the Software or the use or other dealings in the
+     Software. */
 (function(global){
   "use strict";
   // per version 1..10: [L, M, Q, H]
