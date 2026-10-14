@@ -5,7 +5,11 @@
    BGUI.toast(msg, opts)             one shared toast; position computed from the layout (open sheet, top bar, [data-toast-avoid])
    BGUI.sheet.open(el, opts)/close() bottom sheet: focus trap, Back/Escape closes, restores focus; opts {onClose, dismissible, focus}
    BGUI.win.open(el)/close()         win overlay (.bg-win): modal (Tab + D-pad stay inside), restores focus to the opener on close
-   BGUI.celebrate(opts)              one-shot canvas confetti + ray bloom; auto-removes its canvas; nothing under reduced motion
+   BGUI.celebrate(opts)              one-shot canvas burst of gold confetti + a gold ray bloom; auto-removes its canvas; nothing under reduced motion
+   BGUI.effects.get()/set(level)     "full" (default) | "reduced": persisted (localStorage "bgui.effects"), reflected as html[data-effects];
+                                     .motion() = what really runs ("full" | "reduced" | "off" under reduced motion)
+   BGUI.hero.show(el, {src, game})   crossfades the two .bg-hero__layer backdrops by opacity (the next image is decoded first)
+   BGUI.mark() / BGUI.trophy()       the gold "diamond die" logomark and the laurel trophy as inline SVG strings
    BGUI.flip(el, fromRect, opts)     FLIP move (transform only)
    BGUI.tweenNumber(el, a, b, ms)    counts a number up/down
    BGUI.countdown(el, seconds, opts) ring timer (repaints 4x a second, no continuous animation); returns {stop,pause,resume,remaining,done}
@@ -59,6 +63,32 @@
   }
   if (mq) { var mqf = function () { ambientRefresh(); }; if (mq.addEventListener) mq.addEventListener("change", mqf); else if (mq.addListener) mq.addListener(mqf); }
 
+  /* ---------------- effects level: "full" (default) | "reduced" ----------------
+     Every Luxe effect is ON by default. "reduced" turns the endless ambient motion down for slow devices (orbs rest after
+     lighting up, the win rays hold still, no confetti drift, half the confetti burst, glints half as often).
+     Reduced motion (OS or data-motion) still wins and stops all motion. */
+  var FX_KEY = "bgui.effects", fxLevel = "full";
+  function fxStored() { try { return w.localStorage && w.localStorage.getItem(FX_KEY) === "reduced" ? "reduced" : "full"; } catch (e) { return "full"; } }
+  function fxApply(v) { fxLevel = v === "reduced" ? "reduced" : "full"; root.setAttribute("data-effects", fxLevel); return fxLevel; }
+  fxApply(root.getAttribute("data-effects") || fxStored());   // a page's head script may already have set it (no first-paint flash)
+  var effects = {
+    key: FX_KEY,
+    levels: ["full", "reduced"],
+    get: function () { return fxLevel; },
+    set: function (v) {
+      fxApply(v);
+      try { if (w.localStorage) w.localStorage.setItem(FX_KEY, fxLevel); } catch (e) { }
+      ambientRefresh();
+      emit("effects", { level: fxLevel, motion: effects.motion() });
+      return fxLevel;
+    },
+    motion: function () { return reducedMotion() ? "off" : fxLevel; }
+  };
+  /* everything pauses while the page is hidden: CSS loops via html[data-hidden], beats via the ambient scheduler */
+  function hiddenFlag() { if (d.hidden) root.setAttribute("data-hidden", ""); else root.removeAttribute("data-hidden"); }
+  hiddenFlag();
+  d.addEventListener("visibilitychange", hiddenFlag);
+
   /* ---------------- haptics ---------------- */
   var HAPTIC = { tap: 8, select: 12, turn: 20, success: [18, 40, 28], warn: [40, 30, 40], error: [60, 40, 60], roll: [6, 30, 6, 30, 10] };
   function haptic(pattern) {
@@ -84,10 +114,12 @@
     d.body.appendChild(toastEl);
     return toastEl;
   }
-  /* px covered at the top (top bar, [data-toast-avoid] in the top half) and at the bottom (open sheet, [data-toast-avoid]) */
+  /* px covered at the top (top bar, player strip, [data-toast-avoid] in the top half) and at the bottom (open sheet,
+     player strip, [data-toast-avoid]): the toast is placed clear of all of them, so it never covers the player strip */
   function layoutCover() {
     var vh = w.innerHeight || root.clientHeight, top = 0, bottom = 0;
-    $$(".bg-topbar, [data-toast-avoid]").forEach(function (el) {
+    $$(".bg-topbar, .bg-players, [data-toast-avoid]").forEach(function (el) {
+      if (el.closest && el.closest(".bg-sheet, .bg-win")) return;
       if (!isVisible(el)) return;
       var r = el.getBoundingClientRect();
       if (r.bottom <= 0 || r.top >= vh) return;
@@ -235,6 +267,71 @@
   }, true);
   var sheet = { open: openSheet, close: closeSheet, top: sheetTop, isOpen: function (el) { el = $(el); if (!el) return stack.length > 0; for (var i = 0; i < stack.length; i++) if (stack[i].el === el) return true; return false; } };
 
+  /* ---------------- art strings: logomark + trophy (original, filter-free, no <text>) ---------------- */
+  var uidN = 0;
+  function mark() {
+    var u = "bgmk" + (++uidN);
+    var pips = [[24, 14.5], [14.5, 24], [24, 24], [33.5, 24], [24, 33.5]].map(function (p) { return "<circle cx=\"" + p[0] + "\" cy=\"" + p[1] + "\" r=\"2.6\" fill=\"url(#" + u + ")\"/>"; }).join("");
+    return "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 48 48\" aria-hidden=\"true\" focusable=\"false\"><defs><linearGradient id=\"" + u + "\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">" +
+      "<stop offset=\"0\" stop-color=\"#fff1cc\"/><stop offset=\".5\" stop-color=\"#e2c48a\"/><stop offset=\"1\" stop-color=\"#a67b3f\"/></linearGradient></defs>" +
+      "<rect x=\"9\" y=\"9\" width=\"30\" height=\"30\" rx=\"7\" transform=\"rotate(45 24 24)\" fill=\"none\" stroke=\"url(#" + u + ")\" stroke-width=\"2.6\"/>" +
+      "<rect x=\"14.5\" y=\"14.5\" width=\"19\" height=\"19\" rx=\"4\" transform=\"rotate(45 24 24)\" fill=\"url(#" + u + ")\" opacity=\".16\"/>" + pips + "</svg>";
+  }
+  function f1(v) { return Math.round(v * 10) / 10; }
+  function trophy() {
+    var u = "bgtr" + (++uidN), lau = "<path d=\"M60 112A54 54 0 0 1 32 34M100 112A54 54 0 0 0 128 34\" fill=\"none\" stroke=\"url(#" + u + ")\" stroke-width=\"2.2\"/>";
+    for (var l = 0; l < 7; l++) {
+      var th = (118 + l * 17) * Math.PI / 180, tg = 118 + l * 17 + 90;
+      [[60, tg + 28], [47, tg - 28]].forEach(function (lv) {
+        var x = 80 + lv[0] * Math.cos(th), y = 64 + lv[0] * Math.sin(th);
+        lau += "<ellipse cx=\"" + f1(x) + "\" cy=\"" + f1(y) + "\" rx=\"8.5\" ry=\"3.4\" transform=\"rotate(" + f1(lv[1]) + " " + f1(x) + " " + f1(y) + ")\"/>" +
+          "<ellipse cx=\"" + f1(160 - x) + "\" cy=\"" + f1(y) + "\" rx=\"8.5\" ry=\"3.4\" transform=\"rotate(" + f1(180 - lv[1]) + " " + f1(160 - x) + " " + f1(y) + ")\"/>";
+      });
+    }
+    return "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 136\" aria-hidden=\"true\" focusable=\"false\"><defs><linearGradient id=\"" + u + "\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">" +
+      "<stop offset=\"0\" stop-color=\"#fff3cf\"/><stop offset=\".45\" stop-color=\"#e2c48a\"/><stop offset=\".75\" stop-color=\"#a77d41\"/><stop offset=\"1\" stop-color=\"#f0d9a6\"/></linearGradient></defs>" +
+      "<g fill=\"url(#" + u + ")\">" + lau + "</g>" +
+      "<path d=\"M58 20h44v26c0 14-10 24-22 24S58 60 58 46Z\" fill=\"url(#" + u + ")\"/>" +
+      "<path d=\"M64 24h8v24c0 6 3 11 8 14-9-1-16-8-16-18Z\" fill=\"#fff\" opacity=\".35\"/>" +
+      "<path d=\"M58 26H46c0 12 6 20 15 22M102 26h12c0 12-6 20-15 22\" fill=\"none\" stroke=\"url(#" + u + ")\" stroke-width=\"4\"/>" +
+      "<rect x=\"74\" y=\"70\" width=\"12\" height=\"14\" fill=\"url(#" + u + ")\"/><rect x=\"62\" y=\"84\" width=\"36\" height=\"10\" rx=\"3\" fill=\"url(#" + u + ")\"/><rect x=\"56\" y=\"94\" width=\"48\" height=\"8\" rx=\"3\" fill=\"#a77d41\"/>" +
+      "<path d=\"M80 31l3.2 6.6 7.2 1-5.2 5 1.3 7.2L80 47.4l-6.5 3.4 1.3-7.2-5.2-5 7.2-1Z\" style=\"fill:var(--accent-paper,#6b5124)\" opacity=\".9\"/></svg>";
+  }
+
+  /* win overlay dressing, built once per overlay: the ray wheel (4 quadrants of ONE pre-rendered image on one layer),
+     two pre-built confetti layers that only translate, and the trophy in an empty medal */
+  var CONFETTI = ["#f9ebc6", "#e9cd93", "#c99f5e", "#fff6dc", "#d5af6d", "#ff5d73", "#5f95ff", "#3fd391", "#b383ff", "#ffcb4f"];
+  function fallLayer(far, seed) {
+    var html = "", n = far ? 22 : 16, r = seed;
+    function rnd() { r = (r * 9301 + 49297) % 233280; return r / 233280; }
+    for (var i = 0; i < n; i++) {
+      var x = (rnd() * 96 + 2).toFixed(1), y = (rnd() * 48 + 1).toFixed(1), rot = Math.round(rnd() * 180), k = rnd();
+      var cls = k < 0.18 ? " class=\"is-dot\"" : k < 0.34 ? " class=\"is-gem\"" : "";
+      var c = CONFETTI[Math.floor(rnd() * CONFETTI.length)], st = "left:" + x + "%;background:" + c + ";transform:rotate(" + (cls === " class=\"is-gem\"" ? 45 : rot) + "deg);";
+      html += "<b" + cls + " style=\"top:" + y + "%;" + st + "\"></b><b" + cls + " style=\"top:" + (+y + 50).toFixed(1) + "%;" + st + "\"></b>";   // each piece twice: the loop is seamless
+    }
+    return "<i class=\"bg-win__fall" + (far ? " bg-win__fall--far" : "") + "\">" + html + "</i>";
+  }
+  function winDress(el) {
+    var rays = el.querySelector(".bg-win__rays");
+    if (rays && !rays.querySelector(".bg-win__wheel")) rays.innerHTML = "<span class=\"bg-win__wheel\"><i></i><i></i><i></i><i></i></span>";
+    if (!el.querySelector(".bg-win__confetti")) {
+      var cf = d.createElement("div");
+      cf.className = "bg-win__confetti"; cf.setAttribute("aria-hidden", "true");
+      cf.innerHTML = fallLayer(true, 7) + fallLayer(false, 31);
+      el.insertBefore(cf, el.querySelector(".bg-win__card"));
+    }
+    var medal = el.querySelector(".bg-win__medal");
+    if (medal && !medal.firstElementChild) medal.innerHTML = trophy();
+  }
+  /* centre the rays on the trophy (layout offsets, so the card's entrance transform does not skew it) */
+  function winAim(el) {
+    var medal = el.querySelector(".bg-win__medal"), card = el.querySelector(".bg-win__card");
+    if (!medal || !card) { el.style.removeProperty("--bg-rays-y"); return; }
+    var y = el.getBoundingClientRect().top + card.offsetTop + medal.offsetTop + medal.offsetHeight / 2 - el.scrollTop;
+    el.style.setProperty("--bg-rays-y", Math.round(y) + "px");
+  }
+
   /* ---------------- win overlay: BGUI.win.open/close add .is-open, move focus in and give it back on close ---------------- */
   var winOpener = null;
   function openWinEl(target, opts) {
@@ -246,7 +343,10 @@
     el.setAttribute("aria-modal", "true");
     if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
     var dpad = !!marked || isTV();
+    winDress(el);
     el.classList.add("is-open");
+    root.setAttribute("data-win", "");   // the orbs under the overlay pause while it is open
+    winAim(el);
     var first = $(opts.focus, el) || el.querySelector("[data-autofocus]") || tabbables(el)[0] || el;
     if (focusOn && dpad && first !== el) setFocus(first); else focusEl(first);
     emit("win", { open: true, el: el });
@@ -257,6 +357,7 @@
     if (!el || !el.classList.contains("is-open")) return false;
     var dpad = !!marked || isTV();
     el.classList.remove("is-open");
+    if (!openWin()) root.removeAttribute("data-win");
     var back = winOpener;
     winOpener = null;
     if (back && back.parentNode && back !== d.body && isVisible(back)) { if (focusOn && dpad) setFocus(back); else focusEl(back); }
@@ -265,12 +366,14 @@
   }
   var winApi = { open: openWinEl, close: closeWinEl, isOpen: function () { return !!openWin(); } };
 
-  /* ---------------- celebrate: one-shot canvas confetti + ray bloom ---------------- */
+  /* ---------------- celebrate: one-shot canvas burst of gold confetti + a gold ray bloom ---------------- */
   var fx = null;
-  function seatColours() {
-    var cs = w.getComputedStyle(root), out = [];
-    for (var i = 1; i <= 8; i++) { var c = (cs.getPropertyValue("--seat-" + i) || "").trim(); if (c) out.push(c); }
-    return out.length ? out : ["#d63c2f", "#2f66c9", "#279957", "#ebb81f", "#8a52c8", "#17a09b", "#ee7b22", "#e0609a"];
+  /* mostly champagne golds, a few jewels (the game's accent + seat colours) */
+  function luxeColours(from) {
+    var cs = w.getComputedStyle(from && from.nodeType === 1 ? from : root), acc = (cs.getPropertyValue("--accent") || "").trim();
+    var out = ["#f9ebc6", "#e9cd93", "#c99f5e", "#fff6dc", "#d5af6d", "#f4e3b8", "#e7ca90", "#b68b4b"];
+    [acc || "#e7ca90", "#ff5d73", "#5f95ff", "#3fd391", "#b383ff"].forEach(function (c) { out.push(c); });
+    return out;
   }
   function celebrate(opts) {
     opts = opts || {};
@@ -286,9 +389,10 @@
     cv.className = "bg-celebrate"; cv.setAttribute("aria-hidden", "true");
     if (win) win.insertBefore(cv, win.querySelector(".bg-win__card")); else d.body.appendChild(cv);
     ctx.scale(scale, scale);
-    var cols = opts.colors || seatColours().concat(["#f3db97", "#fff3d1"]);
-    var N = opts.count || clamp(Math.round(W * H / 7000), 50, 150);
-    var ms = opts.ms || 2800, rays = opts.rays !== false && opts.confetti !== "only";
+    var cols = opts.colors || luxeColours(win || opts.origin);
+    var lite = fxLevel === "reduced";   // "Reduce effects": half the pieces, a shorter burst
+    var N = opts.count || clamp(Math.round(W * H / (lite ? 14000 : 7000)), lite ? 30 : 50, lite ? 80 : 150);
+    var ms = opts.ms || (lite ? 2000 : 2800), rays = opts.rays !== false && opts.confetti !== "only";
     var ox = W / 2, oy = H * 0.42, o = opts.origin;
     if (o && o.nodeType === 1) { var r = o.getBoundingClientRect(); ox = r.left + r.width / 2; oy = r.top + r.height / 2; }
     else if (o && typeof o.x === "number") { ox = o.x; oy = o.y; }
@@ -296,7 +400,7 @@
     var bits = [];
     for (var i = 0; i < (opts.confetti === false ? 0 : N); i++) {
       bits.push({ x: Math.random() * W, y: -20 - Math.random() * H * 0.6, vx: (Math.random() - 0.5) * 80, vy: 120 + Math.random() * 170,
-        w: 6 + Math.random() * 5, h: 9 + Math.random() * 7, a: Math.random() * 6.28, va: 4 + Math.random() * 8, c: cols[i % cols.length] });
+        w: 6 + Math.random() * 5, h: 9 + Math.random() * 7, a: Math.random() * 6.28, va: 4 + Math.random() * 8, c: cols[i % cols.length], g: i % 5 === 0 });
     }
     var t0 = now(), last = t0, id = 0, done = false, res = null;
     var p = promise(function (r2) { res = r2; });
@@ -319,10 +423,14 @@
         var alpha = (el < 900 ? pr : Math.max(0, 1 - (el - 900) / (ms - 1200))) * 0.32;
         if (alpha > 0.01) {
           var R = (0.3 + 0.7 * ease) * Math.max(W, H) * 0.7, rot = -0.3 + 0.3 * ease;
-          ctx.fillStyle = "rgba(255,214,140," + alpha.toFixed(3) + ")";
+          var grd = ctx.createRadialGradient(ox, oy, 0, ox, oy, R);   // gold light that fades out along each ray
+          grd.addColorStop(0, "rgba(255,240,205," + Math.min(1, alpha * 2.2).toFixed(3) + ")");
+          grd.addColorStop(0.45, "rgba(236,210,155," + alpha.toFixed(3) + ")");
+          grd.addColorStop(1, "rgba(231,202,144,0)");
+          ctx.fillStyle = grd;
           ctx.beginPath();
-          for (var k = 0; k < 16; k++) {
-            var a0 = rot + k * Math.PI / 8, a1 = a0 + 0.17;
+          for (var k = 0; k < 20; k++) {
+            var a0 = rot + k * Math.PI / 10, a1 = a0 + 0.13;
             ctx.moveTo(ox, oy); ctx.lineTo(ox + Math.cos(a0) * R, oy + Math.sin(a0) * R); ctx.lineTo(ox + Math.cos(a1) * R, oy + Math.sin(a1) * R);
           }
           ctx.fill();
@@ -336,7 +444,8 @@
         if (b.y > H + 20) continue;
         var fh = Math.abs(Math.cos(b.a)) * b.h + 1;       // the "flip" without a rotate transform
         ctx.fillStyle = b.c;
-        ctx.fillRect(b.x, b.y, b.w, fh);
+        if (b.g) { ctx.beginPath(); ctx.moveTo(b.x + b.w / 2, b.y); ctx.lineTo(b.x + b.w, b.y + fh / 2); ctx.lineTo(b.x + b.w / 2, b.y + fh); ctx.lineTo(b.x, b.y + fh / 2); ctx.fill(); }   // gold diamonds
+        else ctx.fillRect(b.x, b.y, b.w, fh);
       }
       ctx.globalAlpha = 1;
       id = raf(frame);
@@ -449,7 +558,7 @@
   }
 
   /* ---------------- ambient: ONE scheduler for rare one-shot beats ---------------- */
-  var amb = { every: 14000, items: [], queue: [], active: null, timer: 0, idx: 0, last: 0, paused: false };
+  var amb = { every: 12000, items: [], queue: [], active: null, timer: 0, idx: 0, last: 0, paused: false };
   function ambRunnable() { return !d.hidden && !reducedMotion() && !amb.paused; }
   function ambBegin(b) {
     if (!b.el || !b.el.parentNode) { if (b.done) b.done(false); return false; }
@@ -475,7 +584,7 @@
     while (amb.queue.length) { if (ambBegin(amb.queue.shift())) return; }
     amb.items = amb.items.filter(function (it) { return it.el && it.el.parentNode; });
     if (!amb.items.length) return;                      // nothing registered: no timer at all
-    var due = amb.last + amb.every - now();
+    var due = amb.last + amb.every * (fxLevel === "reduced" ? 2 : 1) - now();   // "Reduce effects": beats half as often
     if (due > 20) { amb.timer = setTimeout(ambTick, due); return; }
     var it = amb.items[amb.idx++ % amb.items.length];
     amb.last = now();
@@ -522,7 +631,44 @@
     resume: function () { amb.paused = false; ambientRefresh(); },
     state: function () { return { running: ambRunnable(), active: amb.active ? amb.active.cls : null, queued: amb.queue.length, items: amb.items.length, timer: !!amb.timer, every: amb.every }; }
   };
-  Object.defineProperty(ambient, "every", { get: function () { return amb.every; }, set: function (v) { amb.every = Math.max(2000, +v || 14000); if (!amb.active) ambTick(); } });
+  Object.defineProperty(ambient, "every", { get: function () { return amb.every; }, set: function (v) { amb.every = Math.max(2000, +v || 12000); if (!amb.active) ambTick(); } });
+
+  /* ---------------- hero: two stacked layers crossfade by opacity (TV hub poster, lobby) ---------------- */
+  var heroGen = typeof WeakMap === "function" ? new WeakMap() : null;
+  function heroLayers(el) {
+    var ls = $(":scope > .bg-hero__layer", el);
+    if (!ls.length) ls = $(".bg-hero__layer", el);
+    while (ls.length < 2) {
+      var l = d.createElement("div");
+      l.className = "bg-hero__layer" + (ls.length ? "" : " is-on"); l.setAttribute("aria-hidden", "true");
+      el.insertBefore(l, el.firstChild); ls = $(".bg-hero__layer", el);
+    }
+    return ls;
+  }
+  function heroShow(target, opts) {
+    var el = $(target);
+    if (!el) return resolved(false);
+    opts = opts || {};
+    var ls = heroLayers(el), cur = ls[0].classList.contains("is-on") ? ls[0] : ls[1], next = cur === ls[0] ? ls[1] : ls[0];
+    var gen = ((heroGen && heroGen.get(el)) || 0) + 1;
+    if (heroGen) heroGen.set(el, gen);
+    function swap() {
+      if (heroGen && heroGen.get(el) !== gen) return false;     // a newer show() (fast D-pad) won: drop this one
+      if (opts.game) next.setAttribute("data-game", opts.game); else next.removeAttribute("data-game");
+      next.style.backgroundImage = opts.src ? "url(\"" + String(opts.src).replace(/"/g, "%22") + "\")" : "";
+      next.classList.add("is-on"); cur.classList.remove("is-on");
+      if (opts.game) el.setAttribute("data-game", opts.game);
+      return true;
+    }
+    if (!opts.src || !w.Image) return resolved(swap());
+    return promise(function (res) {
+      var im = new w.Image(), done = false;
+      function go() { if (!done) { done = true; res(swap()); } }
+      im.onload = go; im.onerror = go; im.src = opts.src;
+      if (im.decode) im.decode().then(go, go);
+    });
+  }
+  var hero = { show: heroShow, layers: heroLayers };
 
   function setTurn(target, opts) {
     var el = $(target);
@@ -871,7 +1017,27 @@
       if (opts.turn !== undefined && chips[opts.turn]) setTurn(chips[opts.turn], { pulse: opts.pulse });
       return chips;
     },
-    /* declarative wiring: data-bg-mount="seg|stepper|toggle|versions" (runs once on DOMContentLoaded) */
+    /* logomark with its glint: fills an empty .bg-emblem with the diamond die and registers it with the ambient scheduler */
+    emblem: function (target, opts) {
+      var el = $(target);
+      if (!el) return null;
+      if (!el.firstElementChild) el.innerHTML = mark();
+      ambient.add(el, opts);
+      return { el: el };
+    },
+    /* light orbs: <div class="bg-orbs"><i></i><i></i></div> as the first child of the container (default body) */
+    orbs: function (target, opts) {
+      var host = $(target) || d.body;
+      if (!host) return null;
+      var el = host.querySelector(":scope > .bg-orbs");
+      if (!el) {
+        el = d.createElement("div"); el.className = "bg-orbs"; el.setAttribute("aria-hidden", "true");
+        el.innerHTML = new Array(((opts && opts.count) || 2) + 1).join("<i></i>");
+        host.insertBefore(el, host.firstChild);
+      }
+      return { el: el };
+    },
+    /* declarative wiring: data-bg-mount="seg|stepper|toggle|versions|emblem" (runs once on DOMContentLoaded) */
     auto: function (scope) {
       var n = 0;
       $$("[data-bg-mount]", $(scope) || d).forEach(function (el) {
@@ -884,7 +1050,7 @@
   };
 
   /* ---------------- export ---------------- */
-  BGUI.version = "1.0.0";
+  BGUI.version = "2.0.0";
   BGUI.reducedMotion = reducedMotion;
   BGUI.setReducedMotion = setReducedMotion;
   BGUI.haptic = haptic;
@@ -892,6 +1058,10 @@
   BGUI.sheet = sheet;
   BGUI.win = winApi;
   BGUI.celebrate = celebrate;
+  BGUI.effects = effects;
+  BGUI.hero = hero;
+  BGUI.mark = mark;
+  BGUI.trophy = trophy;
   BGUI.flip = flip;
   BGUI.tweenNumber = tweenNumber;
   BGUI.countdown = countdown;

@@ -3,10 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Board Games UI - style guide</title>
-<script>/* TV mode before first paint (pages do the same for ?tv=1 / the AndroidTV bridge) */
-if (/[?&]tv=1(&|$)/.test(location.search) || window.AndroidTV) document.documentElement.setAttribute("data-tv", "");
-if (/[?&]motion=reduce(&|$)/.test(location.search)) document.documentElement.setAttribute("data-motion", "reduce");</script>
+<meta name="theme-color" content="#080a15">
+<title>Board Games UI - Midnight Luxe style guide</title>
+<script>/* before first paint (pages do the same): TV for ?tv=1 / the AndroidTV bridge, the stored effects level, forced motion */
+(function (h) {
+  if (/[?&]tv=1(&|$)/.test(location.search) || window.AndroidTV) h.setAttribute("data-tv", "");
+  try { h.setAttribute("data-effects", localStorage.getItem("bgui.effects") === "reduced" ? "reduced" : "full"); } catch (e) { }
+  if (/[?&]effects=reduced(&|$)/.test(location.search)) h.setAttribute("data-effects", "reduced");
+  if (/[?&]motion=reduce(&|$)/.test(location.search)) h.setAttribute("data-motion", "reduce");
+})(document.documentElement);</script>
 <link rel="stylesheet" href="theme.css">
 <script src="icons.js" defer></script>
 <script src="ui.js" defer></script>
@@ -17,62 +22,63 @@ if (/[?&]motion=reduce(&|$)/.test(location.search)) document.documentElement.set
   .sg-grid--wide { grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr)); }
   .sg-block { display: grid; gap: var(--sp-3); padding: var(--focus-room); min-width: 0; }
   .sg-block > h3 { margin: 0; }
+  .sg-block > h3 small { font: var(--fw-ui) var(--fs-xs)/1 var(--font-ui); color: var(--text-3); }
   .sg-row { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
-  .sg-intro { display: grid; grid-template-columns: auto 1fr; gap: 1rem; align-items: center; margin: var(--sp-2) 0 var(--sp-4); }
-  .sg-intro p { margin: .25rem 0 0; color: var(--text-muted); font-size: var(--fs-sm); }
-  .sg-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(6.25rem, 1fr)); gap: .5rem; }
-  html[data-tv] .sg-swatches { grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); }
-  .sg-sw { display: grid; border-radius: var(--r-sm); overflow: hidden; background: var(--paper-100); box-shadow: var(--sh-1); }
-  .sg-sw i { display: block; height: 2.5rem; }
-  .sg-sw b, .sg-sw span { display: block; padding: 0 .5rem; font: 700 var(--fs-micro)/1.35 var(--font-ui); color: var(--ink-900); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .sg-sw span { color: var(--ink-500); padding-bottom: .35rem; font-weight: 600; }
-  .sg-seats { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.75rem, 1fr)); gap: .5rem; }
+  .sg-intro { display: grid; grid-template-columns: auto 1fr; gap: 1rem; align-items: center; margin: var(--sp-4) 0 var(--sp-4); }
+  .sg-intro h1 em { font-style: italic; }
+  .sg-intro p { margin: .35rem 0 0; color: var(--text-2); font-size: var(--fs-sm); max-width: 40rem; }
+  .sg-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr)); gap: .5rem; }
+  html[data-tv] .sg-swatches { grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); }
+  .sg-sw { display: grid; border-radius: var(--r-sm); overflow: hidden; background: var(--ink-3); box-shadow: inset 0 0 0 1px var(--line-1); }
+  .sg-sw i { display: block; height: 2.5rem; box-shadow: inset 0 -1px 0 var(--line-1); }
+  .sg-sw b, .sg-sw span { display: block; padding: 0 .5rem; font: 700 var(--fs-micro)/1.4 var(--font-ui); color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sg-sw span { color: var(--text-3); padding-bottom: .35rem; font-weight: 600; }
+  .sg-seats { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: 1rem .5rem; padding-top: .5rem; }
   .sg-games { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); gap: .875rem; }
-  .sg-game { display: grid; gap: .625rem; padding: .875rem; border-radius: var(--r-lg); box-shadow: var(--sh-2), inset 0 0 0 1px rgba(0,0,0,.3); }
-  .sg-game h4 { margin: 0; display: flex; align-items: center; justify-content: space-between; gap: .5rem; font: 720 var(--fs-lg)/1.1 var(--font-display); font-variation-settings: var(--display-soft); color: var(--cream); }
-  .sg-game .sg-acc { font: 750 var(--fs-sm)/1.2 var(--font-ui); color: var(--accent-text); }
-  .sg-surf { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: .75rem; }
-  .sg-surf > div { min-height: 5.5rem; padding: .75rem; border-radius: var(--r-md); box-shadow: var(--sh-1); font: 700 var(--fs-sm)/1.3 var(--font-ui); }
+  .sg-game { display: grid; gap: .625rem; padding: 1rem; border-radius: var(--r-lg); background: linear-gradient(180deg, var(--accent-deep), var(--ink-3) 92%); box-shadow: var(--panel-edge), var(--elev-2); }
+  .sg-game h4 { margin: 0; display: flex; align-items: center; justify-content: space-between; gap: .5rem; font: 400 var(--fs-xl)/1.1 var(--font-display); color: var(--text-1); }
+  .sg-game .sg-acc { font: 700 var(--fs-sm)/1.2 var(--font-ui); color: var(--accent-text); }
+  .sg-game code { font: 600 var(--fs-micro)/1.3 var(--font-ui); color: var(--text-2); }
+  .sg-surf { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 12rem), 1fr)); gap: .75rem; }
+  .sg-surf > div { min-height: 7rem; padding: .875rem; border-radius: var(--r-lg); font: 700 var(--fs-md)/1.3 var(--font-ui); box-shadow: var(--elev-2); }
+  .sg-surf small { display: block; font: 500 var(--fs-xs)/1.35 var(--font-ui); color: var(--text-faint); margin-top: .25rem; }
   .sg-type > * { margin: 0 0 .35rem; }
-  .sg-kv { display: grid; grid-template-columns: auto 1fr; gap: .25rem .75rem; margin: 0; font-size: var(--fs-sm); }
-  .sg-kv dt { font-weight: 750; color: var(--cream); }
-  .sg-kv dd { margin: 0; color: var(--text-muted); }
-  .sg-board { display: grid; place-items: center; gap: .75rem; padding: 1rem; border-radius: var(--r-lg); min-height: 9rem; }
+  .sg-kv { display: grid; grid-template-columns: auto 1fr; gap: .3rem .75rem; margin: 0; font-size: var(--fs-sm); }
+  .sg-kv dt { font-weight: 700; color: var(--text-1); }
+  .sg-kv dd { margin: 0; color: var(--text-2); }
+  .sg-board { display: grid; place-items: center; gap: .75rem; padding: 1.25rem 1rem; border-radius: var(--r-lg); min-height: 10rem; }
   .sg-flip { display: flex; gap: .75rem; align-items: center; min-height: 3rem; }
-  .sg-flip > .sg-slot { width: 3rem; height: 3rem; border-radius: 50%; box-shadow: inset 0 2px 4px rgba(0,0,0,.5); background: rgba(0,0,0,.25); display: grid; place-items: center; }
-  .sg-num { font: 760 var(--fs-3xl)/1 var(--font-display); font-variation-settings: var(--display-soft); color: var(--cream); font-variant-numeric: tabular-nums; }
-  .sg-art { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); align-items: start; }
-  .sg-icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(5.25rem, 1fr)); gap: .875rem .5rem; }
-  .sg-icon, .sg-banner { margin: 0; display: grid; gap: .375rem; font: 650 var(--fs-xs)/1.2 var(--font-ui); color: var(--text-muted); }
-  .sg-icon { justify-items: center; text-align: center; }
-  .sg-icon img { width: 4.5rem; height: 4.5rem; display: block; }
-  .sg-banner img { width: min(100%, 20rem); height: auto; display: block; border-radius: var(--r-md); box-shadow: var(--sh-2); }
+  .sg-flip > .sg-slot { width: 3rem; height: 3rem; border-radius: 50%; box-shadow: inset 0 2px 5px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.08); background: rgba(0,0,0,.22); display: grid; place-items: center; }
+  .sg-num { font: 400 var(--fs-3xl)/1 var(--font-display); color: var(--gold-100); font-variant-numeric: tabular-nums; }
   .sg-gamepick { grid-template-columns: repeat(3, 1fr); }
-  html[data-tv] .sg-gamepick { grid-template-columns: repeat(3, 1fr); }
-  .sg-note { margin: 0; font-size: var(--fs-xs); color: var(--text-faint); }
+  .sg-note { margin: 0; font: 500 var(--fs-xs)/1.4 var(--font-ui); color: var(--text-3); }
+  .sg-hero-nav { display: flex; gap: .625rem; flex-wrap: wrap; margin-top: .5rem; }
+  .sg-lobby { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: .75rem; }
+  .sg-keys { display: grid; gap: .5rem; }
   html[data-tv] .sg-main { padding-top: var(--sp-6); }
   html[data-tv] .sg-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 </style>
 </head>
 <body class="bg-app">
+<div class="bg-orbs" aria-hidden="true"><i></i><i></i></div>
 
-<header class="bg-topbar" data-game="party">
+<header class="bg-topbar">
   <div class="bg-topbar__start"><a class="bg-btn bg-btn--icon" href="../index.html" aria-label="Back to the games" id="sgBack"></a></div>
-  <div class="bg-topbar__title"><span class="bg-eyebrow">Board Games UI</span><span class="bg-topbar__name">Tabletop style guide</span></div>
+  <div class="bg-topbar__title"><span class="bg-eyebrow">Board Games UI</span><span class="bg-topbar__name">Midnight Luxe</span></div>
   <div class="bg-topbar__end"><button class="bg-btn bg-btn--icon" type="button" id="sgTvBtn" aria-label="Toggle TV mode"></button></div>
 </header>
 
 <main class="sg-main">
   <div class="sg-intro">
-    <span class="bg-emblem" id="sgEmblem" aria-hidden="true"></span>
-    <div><h1 class="bg-h1">One box, seven games</h1><p>Walnut table, cream card stock, brass and enamel. Pick a game to re-theme the page; every helper below is live.</p></div>
+    <span class="bg-emblem bg-emblem--lg" id="sgEmblem" aria-hidden="true"></span>
+    <div><span class="bg-eyebrow">The collection</span><h1 class="bg-h1">Game night, <em>set the table</em></h1><p>Deep ink, hairline panels lit from above, champagne gold and one jewel tone per game. Pick a game to re-theme the page; every helper and effect below is live.</p></div>
   </div>
 
   <!-- ===================== controls ===================== -->
   <div class="bg-section"><span class="bg-eyebrow">Controls</span></div>
   <div class="sg-grid">
     <div class="sg-block">
-      <h3 class="bg-h3">Game theme <small class="bg-faint">(data-game)</small></h3>
+      <h3 class="bg-h3">Game theme <small>(data-game)</small></h3>
       <div class="bg-seg bg-seg--text bg-seg--grid5 sg-gamepick" id="sgGame" role="group" aria-label="Game theme">
         <button type="button" data-value="" aria-pressed="true">House</button>
         <button type="button" data-value="trouble">Trouble</button><button type="button" data-value="sorry">Sorry!</button>
@@ -84,16 +90,18 @@ if (/[?&]motion=reduce(&|$)/.test(location.search)) document.documentElement.set
     <div class="sg-block">
       <h3 class="bg-h3">Display</h3>
       <div class="bg-rows">
-        <button class="bg-row" role="switch" aria-checked="false" id="sgTvRow"><span class="bg-row__main"><span class="bg-row__title">TV mode</span><span class="bg-row__desc">html[data-tv]: 1rem = 1/80 of the width, 21px type floor, D-pad focus</span></span><span class="bg-toggle"></span></button>
-        <button class="bg-row" role="switch" aria-checked="false" id="sgMotionRow"><span class="bg-row__main"><span class="bg-row__title">Reduce motion</span><span class="bg-row__desc">html[data-motion=reduce]: durations 0, no beats, no confetti</span></span><span class="bg-toggle"></span></button>
+        <button class="bg-row" role="switch" aria-checked="false" id="sgTvRow"><span class="bg-row__main"><span class="bg-row__title">TV mode</span><span class="bg-row__desc">html[data-tv]: 1rem tied to the viewport, 21px type floor, D-pad focus</span></span><span class="bg-toggle"></span></button>
+        <button class="bg-row" role="switch" aria-checked="false" id="sgFxRow"><span class="bg-row__main"><span class="bg-row__title">Reduce effects</span><span class="bg-row__desc">BGUI.effects.set("reduced"): orbs rest, rays hold still, no confetti drift. Saved on this device</span></span><span class="bg-toggle"></span></button>
+        <button class="bg-row" role="switch" aria-checked="false" id="sgMotionRow"><span class="bg-row__main"><span class="bg-row__title">Reduce motion</span><span class="bg-row__desc">html[data-motion=reduce] (or the OS setting): nothing moves</span></span><span class="bg-toggle"></span></button>
+        <button class="bg-row" role="switch" aria-checked="false" id="sgSceneRow"><span class="bg-row__main"><span class="bg-row__title">Setup scene tint</span><span class="bg-row__desc">body.bg-app--scene: the game's deep colour washes the page</span></span><span class="bg-toggle"></span></button>
       </div>
     </div>
     <div class="sg-block">
-      <h3 class="bg-h3">Helpers <small class="bg-faint">(window.BGUI)</small></h3>
+      <h3 class="bg-h3">Helpers <small>(window.BGUI)</small></h3>
       <div class="sg-row" id="sgHelpers">
         <button class="bg-btn bg-btn--secondary bg-btn--sm" type="button" data-act="toast">Toast</button>
         <button class="bg-btn bg-btn--secondary bg-btn--sm" type="button" data-act="sheet" id="sgOpenSheet">Move sheet</button>
-        <button class="bg-btn bg-btn--secondary bg-btn--sm" type="button" data-act="win">Win + celebrate</button>
+        <button class="bg-btn bg-btn--primary bg-btn--sm" type="button" data-act="win" id="sgOpenWin">Win screen</button>
         <button class="bg-btn bg-btn--secondary bg-btn--sm" type="button" data-act="celebrate">Celebrate</button>
         <button class="bg-btn bg-btn--secondary bg-btn--sm" type="button" data-act="flip">Flip</button>
         <button class="bg-btn bg-btn--secondary bg-btn--sm" type="button" data-act="tween">Tween</button>
@@ -106,17 +114,49 @@ if (/[?&]motion=reduce(&|$)/.test(location.search)) document.documentElement.set
     </div>
   </div>
 
+  <!-- ===================== effects ===================== -->
+  <div class="bg-section"><span class="bg-eyebrow">Effects (all on by default)</span></div>
+  <div class="sg-grid sg-grid--wide">
+    <div class="sg-block">
+      <h3 class="bg-h3">Hero crossfade <small>(.bg-hero, BGUI.hero.show)</small></h3>
+      <div class="bg-hero" id="sgHero" data-game="monopoly">
+        <div class="bg-hero__layer is-on" data-game="monopoly" aria-hidden="true"></div><div class="bg-hero__layer" aria-hidden="true"></div>
+        <div class="bg-hero__shade"></div>
+        <div class="bg-hero__body">
+          <span class="bg-eyebrow bg-eyebrow--accent" id="sgHeroEyebrow">Buy · build · bargain</span>
+          <h2 class="bg-hero__title" id="sgHeroTitle">Monopoly</h2>
+          <p class="bg-hero__pitch" id="sgHeroPitch">Trade your way around the board with the house rules your table plays.</p>
+          <div class="sg-hero-nav"><button class="bg-btn bg-btn--secondary bg-btn--sm" type="button" id="sgHeroPrev" data-icon-before="back">Previous</button><button class="bg-btn bg-btn--primary bg-btn--sm" type="button" id="sgHeroNext">Next game</button></div>
+        </div>
+      </div>
+      <p class="sg-note">Two stacked layers swap opacity (420 ms). Each layer is a pre-rendered backdrop (WebP from the art step) or, until then, the game's spot-lit scene gradient. No mask, no inline SVG.</p>
+    </div>
+    <div class="sg-block">
+      <h3 class="bg-h3">Light, glint, glow</h3>
+      <div class="bg-card bg-spot">
+        <dl class="sg-kv">
+          <dt>Orbs</dt><dd>.bg-orbs behind this page: pre-rendered glow images drifting forever (10 steps a second)</dd>
+          <dt>Glint</dt><dd>.bg-emblem logomark: one 1 s star every 12 s through BGUI.ambient</dd>
+          <dt>Win</dt><dd>gold rays spin and confetti drifts for as long as it is open, plus the trophy and a gold burst</dd>
+          <dt>Focus</dt><dd>ivory ring, dark gap, gold glow; tiles add their game's glow</dd>
+          <dt>Spotlight</dt><dd>.bg-spot, tile art and every surface carry a static pool of light</dd>
+        </dl>
+      </div>
+      <div class="sg-row"><span class="bg-chip" id="sgFxState">effects: full</span><span class="bg-chip" id="sgMotionState">motion: full</span></div>
+    </div>
+  </div>
+
   <!-- ===================== in game ===================== -->
   <div class="bg-section"><span class="bg-eyebrow">At the table</span></div>
   <div class="sg-grid sg-grid--wide">
     <div class="sg-block">
-      <h3 class="bg-h3">Players <small class="bg-faint">(.bg-player, .is-turn)</small></h3>
+      <h3 class="bg-h3">Players <small>(.bg-player, .is-turn)</small></h3>
       <ul class="bg-players" id="sgPlayers" style="padding-inline:0"></ul>
       <ul class="bg-players bg-players--scroll" id="sgPlayers10" style="padding-inline:0"></ul>
     </div>
     <div class="sg-block">
-      <h3 class="bg-h3">Dice, timer, count, move</h3>
-      <div class="sg-board bg-surface--felt">
+      <h3 class="bg-h3">Dice, timer, count, move <small>(on .bg-surface--felt)</small></h3>
+      <div class="sg-board bg-surface--felt" data-game="rummy500">
         <div class="sg-row">
           <span class="bg-die" id="sgDie1"></span><span class="bg-die" id="sgDie2"></span>
           <span class="bg-die bg-die--seat" data-seat="2" id="sgDie3"></span>
@@ -127,7 +167,7 @@ if (/[?&]motion=reduce(&|$)/.test(location.search)) document.documentElement.set
       </div>
     </div>
     <div class="sg-block">
-      <h3 class="bg-h3">Scoreboard <small class="bg-faint">(.bg-score)</small></h3>
+      <h3 class="bg-h3">Scoreboard <small>(.bg-score)</small></h3>
       <div class="bg-scorepad">
         <table class="bg-score">
           <thead><tr><th>Player</th><th>R1</th><th>R2</th><th>R3</th><th>Total</th></tr></thead>
@@ -145,27 +185,28 @@ if (/[?&]motion=reduce(&|$)/.test(location.search)) document.documentElement.set
   <div class="bg-section"><span class="bg-eyebrow">Setup</span></div>
   <div class="sg-grid sg-grid--wide">
     <div class="sg-block">
-      <h3 class="bg-h3">Version <small class="bg-faint">(.bg-version)</small></h3>
+      <h3 class="bg-h3">Version <small>(.bg-version)</small></h3>
       <div class="bg-versions" id="sgVersions">
-        <button type="button" class="bg-version" data-value="classic" aria-checked="true"><span class="bg-version__art" data-icon="cards"></span><span class="bg-version__title">Classic</span><span class="bg-version__meta">2-10 players · 20 min</span><span class="bg-version__desc">The rules on the box. Draw until you can play.</span></button>
-        <button type="button" class="bg-version" data-value="flip"><span class="bg-version__art" data-icon="swap"></span><span class="bg-version__title">Flip side</span><span class="bg-version__meta">2-10 players · 25 min</span><span class="bg-version__desc">A dark side with nastier action cards.</span></button>
+        <button type="button" class="bg-version" data-value="classic" aria-checked="true"><span class="bg-version__art" data-icon="cards"></span><span class="bg-version__title">Classic</span><span class="bg-version__meta">2-10 players</span><span class="bg-version__desc">The rules on the box. Match colour or number.</span></button>
+        <button type="button" class="bg-version" data-value="flip"><span class="bg-version__art" data-icon="swap"></span><span class="bg-version__title">Flip side</span><span class="bg-version__meta">2-10 players</span><span class="bg-version__desc">A dark side with nastier action cards.</span></button>
         <button type="button" class="bg-version" data-value="party"><span class="bg-version__art" data-icon="tv"></span><span class="bg-version__title">Party table</span><span class="bg-version__meta">TV + phones</span><span class="bg-version__desc">Everyone plays on their own phone.</span></button>
       </div>
     </div>
     <div class="sg-block">
       <h3 class="bg-h3">Players and computers</h3>
       <div class="bg-seg" id="sgHumans"></div>
-      <div class="bg-seg bg-seg--text" id="sgSpeed"></div>
+      <div class="sg-keys"><span class="bg-row__title">Computer players <small class="bg-faint">keypad (.bg-seg--grid5)</small></span><div class="bg-seg bg-seg--grid5" id="sgCpuKeys" role="group" aria-label="Computer players"></div></div>
       <div id="sgCpu"></div>
+      <div class="bg-seg bg-seg--text" id="sgSpeed"></div>
       <h3 class="bg-h3">Call to action</h3>
-      <button class="bg-btn bg-btn--primary bg-btn--cta bg-btn--block" type="button" id="sgStart"><span class="bg-btn__label">Start game</span><span class="bg-btn__sub" id="sgStartSub">3 players · Classic</span></button>
+      <button class="bg-btn bg-btn--primary bg-btn--cta bg-btn--block" type="button" id="sgStart"><span class="bg-btn__label" id="sgStartLabel">Start game</span><span class="bg-btn__sub" id="sgStartSub">3 players · Classic</span></button>
     </div>
     <div class="sg-block">
-      <h3 class="bg-h3">Rules <small class="bg-faint">(whole-row .bg-row toggles)</small></h3>
+      <h3 class="bg-h3">Rules <small>(whole-row .bg-row toggles)</small></h3>
       <div class="bg-rows">
-        <label class="bg-row"><span class="bg-row__main"><span class="bg-row__title">Stack draw cards <span class="bg-tag bg-tag--house">House rule</span></span><span class="bg-row__desc">A +2 can answer a +2. Most families play this way.</span></span><input type="checkbox" class="bg-toggle" checked></label>
+        <label class="bg-row"><span class="bg-row__main"><span class="bg-row__title">Stack draw cards <span class="bg-tag bg-tag--house">House</span></span><span class="bg-row__desc">A +2 can answer a +2. Most families play this way.</span></span><input type="checkbox" class="bg-toggle" checked></label>
         <label class="bg-row"><span class="bg-row__main"><span class="bg-row__title">Draw one, then pass <span class="bg-tag bg-tag--official">Official</span></span><span class="bg-row__desc">If you can't play, draw a single card and end your turn.</span></span><input type="checkbox" class="bg-toggle"></label>
-        <button class="bg-row" role="switch" aria-checked="true" data-bg-mount="toggle"><span class="bg-row__main"><span class="bg-row__title">Seven-zero swap <span class="bg-tag bg-tag--house">House rule</span></span><span class="bg-row__desc">7 swaps hands with a player; 0 passes every hand on.</span></span><span class="bg-toggle"></span></button>
+        <button class="bg-row" role="switch" aria-checked="true" data-bg-mount="toggle"><span class="bg-row__main"><span class="bg-row__title">Seven-zero swap <span class="bg-tag bg-tag--house">House</span></span><span class="bg-row__desc">7 swaps hands with a player; 0 passes every hand on.</span></span><span class="bg-toggle"></span></button>
         <div class="bg-row bg-row--static"><span class="bg-row__main"><span class="bg-row__title">Points to win</span></span><select class="bg-select" aria-label="Points to win"><option>500</option><option>250</option><option>1000</option></select></div>
       </div>
     </div>
@@ -177,23 +218,24 @@ if (/[?&]motion=reduce(&|$)/.test(location.search)) document.documentElement.set
     <div class="sg-block">
       <h3 class="bg-h3">Buttons</h3>
       <div class="sg-row">
-        <button class="bg-btn bg-btn--primary" type="button">Roll</button>
-        <button class="bg-btn bg-btn--secondary" type="button">Rules</button>
-        <button class="bg-btn bg-btn--ghost" type="button">Skip</button>
+        <button class="bg-btn bg-btn--primary" type="button">Start</button>
+        <button class="bg-btn bg-btn--secondary" type="button">Continue</button>
+        <button class="bg-btn bg-btn--ghost" type="button">Rules</button>
+        <button class="bg-btn bg-btn--accent" type="button" data-icon-before="play">Play</button>
         <button class="bg-btn bg-btn--danger" type="button">Quit</button>
       </div>
       <div class="sg-row">
-        <button class="bg-btn bg-btn--primary bg-btn--lg" type="button" data-icon-before="play">Play</button>
+        <button class="bg-btn bg-btn--primary bg-btn--lg" type="button" data-icon-before="play">Host on TV</button>
         <button class="bg-btn bg-btn--secondary bg-btn--sm" type="button">Small label</button>
         <button class="bg-btn bg-btn--primary" type="button" disabled>Disabled</button>
         <button class="bg-btn bg-btn--icon" type="button" aria-label="Menu" data-icon="menu"></button>
-        <button class="bg-btn bg-btn--icon" type="button" aria-label="Help" data-icon="help"></button>
+        <button class="bg-btn bg-btn--icon is-on" type="button" aria-label="Help" data-icon="help"></button>
       </div>
     </div>
     <div class="sg-block">
       <h3 class="bg-h3">Tags, chips, badges</h3>
       <div class="sg-row">
-        <span class="bg-tag bg-tag--official">Official</span><span class="bg-tag bg-tag--house">House rule</span>
+        <span class="bg-tag bg-tag--official">Official</span><span class="bg-tag bg-tag--house">House</span>
         <span class="bg-tag bg-tag--accent">Uno</span><span class="bg-tag bg-tag--new">New</span><span class="bg-tag bg-tag--ok">Ready</span>
       </div>
       <div class="sg-row">
@@ -202,23 +244,26 @@ if (/[?&]motion=reduce(&|$)/.test(location.search)) document.documentElement.set
         <span class="bg-chip" data-chip-icon="user">2-4 players</span>
         <span class="bg-badge">3</span><span class="bg-badge">12</span>
       </div>
-      <div class="bg-card"><span class="bg-eyebrow">On card stock</span><p style="margin:.35rem 0 .5rem">Paper tag and a brass plaque.</p><div class="sg-row"><span class="bg-tag bg-tag--paper">Optional</span><span class="bg-plaque">Game night</span></div></div>
+      <div class="sg-row"><span class="bg-plaque">Game night</span><span class="bg-tag bg-tag--paper">On paper</span></div>
+      <ul class="bg-stats"><li class="bg-stat"><b>38</b><span>turns</span></li><li class="bg-stat"><b>5</b><span>bumps</span></li><li class="bg-stat"><b>12:40</b><span>time</span></li></ul>
     </div>
     <div class="sg-block">
+      <h3 class="bg-h3">Lobby seats <small>(.bg-seatcard, .bg-status)</small></h3>
+      <div class="sg-lobby">
+        <div class="bg-seatcard" data-seat="1"><span class="bg-token">Y</span><span class="bg-seatcard__name">You</span><span class="bg-status bg-status--host">Host</span></div>
+        <div class="bg-seatcard" data-seat="2"><span class="bg-token">A</span><span class="bg-seatcard__name">Ava</span><span class="bg-status bg-status--ready">Ready</span></div>
+        <div class="bg-seatcard" data-seat="3"><span class="bg-token">J</span><span class="bg-seatcard__name">Jules</span><span class="bg-status bg-status--joining">Joining</span></div>
+        <div class="bg-seatcard" data-seat="5"><span class="bg-token">R</span><span class="bg-seatcard__name">Robo</span><span class="bg-status bg-status--cpu">CPU</span></div>
+      </div>
       <h3 class="bg-h3">TV remote legend</h3>
       <div class="bg-hintbar"><span><span class="bg-key" data-icon="arrow"></span>Move</span><span><span class="bg-key">OK</span>Choose</span><span><span class="bg-key">Back</span>Close</span></div>
-      <p class="sg-note">Arrow keys move focus (BGUI.focus) when TV mode is on; Enter clicks; Back/Escape closes a sheet.</p>
     </div>
   </div>
 
   <!-- ===================== hub tiles ===================== -->
   <div class="bg-section"><span class="bg-eyebrow">The shelf</span></div>
   <div class="bg-tiles sg-tiles" id="sgTiles"></div>
-
-  <!-- ===================== art (ui/art) ===================== -->
-  <div class="bg-section"><span class="bg-eyebrow">App icons and TV banner</span></div>
-  <div class="sg-art" id="sgArt"></div>
-  <p class="sg-note">ui/art: filter-free SVG with every glyph outlined to paths, so it renders the same as a plain &lt;img&gt;. PNG exports sit next to them (manifest 192 / 512 / maskable 512, apple-touch 180, Android launcher 48-192, Fire TV banner 320x180 and 640x360).</p>
+  <p class="sg-note" style="margin-top:.75rem">Tile art: ui/art/thumb-*.svg until the art step re-draws it in Luxe (spot-lit, fading into each game's deep colour).</p>
 
   <!-- ===================== tokens ===================== -->
   <div class="bg-section"><span class="bg-eyebrow">Per-game accents</span></div>
@@ -227,13 +272,17 @@ if (/[?&]motion=reduce(&|$)/.test(location.search)) document.documentElement.set
   <div class="bg-section"><span class="bg-eyebrow">Seats</span></div>
   <div class="sg-seats" id="sgSeats"></div>
 
-  <div class="bg-section"><span class="bg-eyebrow">Surfaces</span></div>
+  <div class="bg-section"><span class="bg-eyebrow">Surfaces (a tactile home for each game)</span></div>
   <div class="sg-surf">
-    <div class="bg-surface--wood">Walnut table<br><span class="bg-muted">cream on wood</span></div>
-    <div class="bg-surface--felt" data-game="rummy500">Baize felt<br><span class="bg-muted">per-game --felt</span></div>
-    <div class="bg-surface--paper">Card stock<br><span style="color:var(--ink-500)">ink on paper</span></div>
-    <div class="bg-surface--parchment">Parchment<br><span style="color:var(--ink-700)">Risk map paper</span></div>
-    <div class="bg-surface--oak">Oak rail<br><span>frames, trays</span></div>
+    <div class="bg-surface--stage">Stage<small>.bg-surface--stage (alias --wood): the ink everything sits on</small></div>
+    <div class="bg-surface--felt" data-game="rummy500">Felt, Rummy<small>.bg-surface--felt: spot-lit felt, per-game --felt</small></div>
+    <div class="bg-surface--felt" data-game="uno">Felt, Uno<small>a pool of light on deep felt</small></div>
+    <div class="bg-surface--paper">Paper pad<small>.bg-surface--paper: Scattergories</small></div>
+    <div class="bg-surface--parchment">Parchment<small>.bg-surface--parchment: the Risk map</small></div>
+    <div class="bg-surface--board" data-game="sorry">Board, Sorry!<small>.bg-surface--board: gold-framed plane</small></div>
+    <div class="bg-surface--board" data-game="trouble">Board, Trouble<small>per-game --board / --board-lite</small></div>
+    <div class="bg-surface--board" data-game="monopoly">Board, Monopoly<small>the property plane</small></div>
+    <div class="bg-surface--rail">Rail<small>.bg-surface--rail (alias --oak): trays, frames</small></div>
   </div>
 
   <div class="bg-section"><span class="bg-eyebrow">Palette</span></div>
@@ -242,19 +291,18 @@ if (/[?&]motion=reduce(&|$)/.test(location.search)) document.documentElement.set
   <div class="bg-section"><span class="bg-eyebrow">Type, motion, layers</span></div>
   <div class="sg-grid">
     <div class="sg-block sg-type">
-      <p class="bg-display" style="font-size:var(--fs-5xl)">Aa 48</p>
-      <p class="bg-h1">Display 30 Fraunces</p>
-      <p class="bg-h2">Display 24</p>
+      <p class="bg-display bg-gold" style="font-size:var(--fs-5xl)">Victory</p>
+      <p class="bg-h1">Display 34 DM Serif</p>
+      <p class="bg-h2 bg-italic">Set the table, italic 26</p>
       <p class="bg-h3">Display 20</p>
-      <p style="font-size:var(--fs-lg);font-weight:720">UI 17 Figtree 720</p>
-      <p style="font-size:var(--fs-md)">UI 15 body: the quick brown fox jumps over the lazy dog.</p>
-      <p style="font-size:var(--fs-sm)" class="bg-muted">UI 13.5 muted secondary text</p>
-      <p style="font-size:var(--fs-xs)" class="bg-faint">UI 12 faint caption text</p>
-      <p class="bg-eyebrow">Eyebrow 11 brass</p>
+      <p style="font-size:var(--fs-lg);font-weight:700">Control label 17 Manrope 700</p>
+      <p style="font-size:var(--fs-md)">Body 15 Manrope 500: the quick brown fox jumps over the lazy dog.</p>
+      <p style="font-size:var(--fs-sm)" class="bg-muted">Secondary 14 text-2, weight 500</p>
+      <p style="font-size:var(--fs-xs)" class="bg-faint">Caption 13 text-3, weight 500</p>
+      <p class="bg-eyebrow">Eyebrow 12 gold, 800</p>
     </div>
     <div class="sg-block">
       <dl class="sg-kv" id="sgMotion"></dl>
-      <p class="sg-note">Motion is event-only: one glint every 14 s, three pulses when a turn starts, one ray bloom on a win. Nothing loops.</p>
     </div>
   </div>
 </main>
@@ -263,8 +311,8 @@ if (/[?&]motion=reduce(&|$)/.test(location.search)) document.documentElement.set
 <section class="bg-sheet" id="sgSheet" aria-labelledby="sgSheetTitle">
   <div class="bg-sheet__grip"></div>
   <div class="bg-sheet__head">
-    <div><h2 class="bg-sheet__title" id="sgSheetTitle">Move which peg?</h2><p class="bg-sheet__sub">You rolled a 6. Pick a peg.</p></div>
-    <button class="bg-btn bg-btn--icon bg-btn--paper" type="button" aria-label="Close" data-close data-icon="close"></button>
+    <div><span class="bg-eyebrow bg-eyebrow--accent">You rolled a 6</span><h2 class="bg-sheet__title" id="sgSheetTitle">Move which peg?</h2><p class="bg-sheet__sub">Pick a peg. The best move is marked.</p></div>
+    <button class="bg-btn bg-btn--icon" type="button" aria-label="Close" data-close data-icon="close"></button>
   </div>
   <div class="bg-sheet__options">
     <button type="button" class="bg-sheet__option is-best" data-close><span class="bg-token" data-seat="4">2</span><span class="bg-sheet__text"><span class="bg-sheet__label">Peg 2 moves six spaces</span><span class="bg-sheet__desc">Lands on Ava and sends her home.</span><span class="bg-sheet__detail">space 22 to 28</span></span><span data-icon="chevron"></span></button>
@@ -278,14 +326,14 @@ if (/[?&]motion=reduce(&|$)/.test(location.search)) document.documentElement.set
   <div class="bg-win__scrim"></div>
   <div class="bg-win__rays"></div>
   <div class="bg-win__card">
-    <div class="bg-win__medal" data-icon="trophy"></div>
-    <p class="bg-eyebrow">Game over · 12:40</p>
-    <h2 class="bg-win__title" id="sgWinTitle">Ava wins!</h2>
-    <p class="bg-win__sub">All four pegs home with two rolls to spare.</p>
-    <ul class="bg-stats bg-win__stats"><li class="bg-stat"><b>38</b><span>turns</span></li><li class="bg-stat"><b>5</b><span>bumps</span></li><li class="bg-stat"><b>12:40</b><span>time</span></li></ul>
+    <div class="bg-win__medal"></div>
+    <p class="bg-eyebrow">Game over · 23 minutes</p>
+    <h2 class="bg-win__title" id="sgWinTitle">Victory</h2>
+    <p class="bg-win__sub"><b>Ava</b> brought all four pegs home first.</p>
+    <ul class="bg-stats bg-win__stats"><li class="bg-stat"><b>38</b><span>turns</span></li><li class="bg-stat"><b>5</b><span>bumps</span></li><li class="bg-stat"><b>23:10</b><span>time</span></li></ul>
     <div class="bg-win__actions">
-      <button class="bg-btn bg-btn--primary bg-btn--lg bg-btn--block" type="button" data-win-close>Play again</button>
-      <button class="bg-btn bg-btn--secondary bg-btn--block" type="button" data-win-close>Back to the shelf</button>
+      <button class="bg-btn bg-btn--secondary bg-btn--lg" type="button" data-win-close>Back to games</button>
+      <button class="bg-btn bg-btn--primary bg-btn--lg" type="button" data-win-close data-autofocus>Play again</button>
     </div>
   </div>
 </div>
@@ -299,15 +347,19 @@ document.addEventListener("DOMContentLoaded", function () {
   $$("[data-icon-before]").forEach(function (el) { el.insertAdjacentHTML("afterbegin", B.icon(el.getAttribute("data-icon-before"))); });
   $$("[data-chip-icon]").forEach(function (el) { el.insertAdjacentHTML("afterbegin", B.icon(el.getAttribute("data-chip-icon"))); });
   $("#sgBack").innerHTML = B.icon("back");
-  $("#sgEmblem").innerHTML = B.icon("dice");
-  B.ambient.add("#sgEmblem", { cls: "is-glint", ms: 1700 });
+  B.mount.emblem("#sgEmblem");
 
   /* game theme picker */
-  B.mount.seg("#sgGame", { onChange: function (v) { if (v) root.setAttribute("data-game", v); else root.removeAttribute("data-game"); } });
+  B.mount.seg("#sgGame", { onChange: function (v) { if (v) root.setAttribute("data-game", v); else root.removeAttribute("data-game"); syncStart(); } });
 
-  /* TV + motion switches */
+  /* TV, effects, motion, scene switches */
   var tvRow = B.mount.toggle("#sgTvRow", { checked: B.isTV(), onChange: function (on) { B.setTV(on); } });
-  var mRow = B.mount.toggle("#sgMotionRow", { checked: B.reducedMotion(), onChange: function (on) { B.setReducedMotion(on ? true : null); } });
+  var fxRow = B.mount.toggle("#sgFxRow", { checked: B.effects.get() === "reduced", onChange: function (on) { B.effects.set(on ? "reduced" : "full"); fxState(); } });
+  var mRow = B.mount.toggle("#sgMotionRow", { checked: B.reducedMotion(), onChange: function (on) { B.setReducedMotion(on ? true : null); fxState(); } });
+  B.mount.toggle("#sgSceneRow", { checked: false, onChange: function (on) { document.body.classList.toggle("bg-app--scene", on); } });
+  function fxState() { $("#sgFxState").textContent = "effects: " + B.effects.get(); $("#sgMotionState").textContent = "running: " + B.effects.motion(); }
+  fxState();
+  document.addEventListener("bgui:effects", function (e) { fxRow.set(e.detail.level === "reduced", true); fxState(); });
   $("#sgTvBtn").innerHTML = B.icon("tv");
   $("#sgTvBtn").addEventListener("click", function () { tvRow.set(!B.isTV()); });
   document.addEventListener("bgui:tv", function (e) { tvRow.set(e.detail.on, true); });
@@ -316,7 +368,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var players = [{ name: "You", meta: "Rolled 6 · 2 home" }, { name: "Ava", meta: "1 home" }, { name: "Jules", meta: "Joining from a phone", cpu: false }, { name: "Robo", meta: "0 home", cpu: true }];
   var chips = B.mount.players("#sgPlayers", players.map(function (p, i) { p.seat = [4, 1, 2, 3][i]; return p; }), { turn: 0 });
   var ten = []; for (var i = 1; i <= 10; i++) ten.push({ name: ["You", "Ava", "Jules", "Max", "Priya", "Theo", "Lena", "Omar", "Iris", "Kai"][i - 1], meta: (i * 7) % 11 + " cards", seat: i, cpu: i > 6 });
-  var chips10 = B.mount.players("#sgPlayers10", ten, { turn: 2, pulse: false });
+  B.mount.players("#sgPlayers10", ten, { turn: 2, pulse: false });
   var turn = 0;
 
   /* dice, timer */
@@ -324,12 +376,16 @@ document.addEventListener("DOMContentLoaded", function () {
   $("#sgTimer").innerHTML = '<svg viewBox="0 0 48 48" aria-hidden="true"><circle class="bg-countdown__track" cx="24" cy="24" r="20"/></svg><b class="bg-countdown__num">60</b>';
 
   /* setup */
+  var names = { "": "game", trouble: "Trouble", sorry: "Sorry!", monopoly: "Monopoly", rummy500: "500 Rummy", risk: "Risk", uno: "Uno", scatter: "Scattergories", party: "Party Mode" };
   B.mount.versions("#sgVersions", { onChange: syncStart });
-  var humans = B.mount.seg("#sgHumans", { options: [{ value: 1, label: 1, sub: "player" }, { value: 2, label: 2 }, { value: 3, label: 3 }, { value: 4, label: 4 }], value: 1, onChange: syncStart });
-  B.mount.seg("#sgSpeed", { options: [{ value: "calm", label: "Calm" }, { value: "normal", label: "Normal" }, { value: "quick", label: "Quick" }], value: "normal" });
-  var cpu = B.mount.stepper("#sgCpu", { min: 0, max: 9, value: 2, label: "Computer players", onChange: syncStart });
+  var humans = B.mount.seg("#sgHumans", { options: [{ value: 1, label: 1, sub: "player" }, { value: 2, label: 2, sub: "pass" }, { value: 3, label: 3, sub: "pass" }, { value: 4, label: 4, sub: "pass" }], value: 1, onChange: syncStart });
+  var keys = B.mount.seg("#sgCpuKeys", { options: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], value: 2, onChange: function (v) { cpu.set(+v, true); syncStart(); } });
+  B.mount.seg("#sgSpeed", { options: [{ value: "calm", label: "Relaxed", sub: "slow CPUs" }, { value: "normal", label: "Normal", sub: "1s turns" }, { value: "quick", label: "Fast", sub: "snappy" }], value: "normal" });
+  var cpu = B.mount.stepper("#sgCpu", { min: 0, max: 9, value: 2, label: "Computer players", onChange: function (v) { keys.set(v, true); syncStart(); } });
   function syncStart() {
+    if (!humans || !cpu) return;
     var n = (+humans.value || 1) + cpu.value, v = ($("#sgVersions [aria-checked='true'] .bg-version__title") || {}).textContent || "Classic";
+    $("#sgStartLabel").textContent = "Start " + names[root.getAttribute("data-game") || ""];
     $("#sgStartSub").textContent = n + (n === 1 ? " player" : " players") + " · " + v;
   }
   syncStart();
@@ -344,36 +400,46 @@ document.addEventListener("DOMContentLoaded", function () {
   }).join("");
   $$("#sgTiles .bg-tile").forEach(function (t) { t.addEventListener("click", function () { B.toast(t.querySelector(".bg-tile__name").textContent + " · " + t.querySelector(".bg-tile__badge").textContent + " players", { icon: "play" }); }); });
 
-  /* art: app icons + Fire TV banner */
-  $("#sgArt").innerHTML = '<div class="sg-icons">' + [["collection", "Board Games"]].concat(games).map(function (g) {
-    return '<figure class="sg-icon"><img src="art/icon-' + g[0] + '.svg" alt="" width="512" height="512" decoding="async"><figcaption>' + g[1] + '</figcaption></figure>';
-  }).join("") + '</div><figure class="sg-banner"><img src="art/banner-tv.svg" alt="Board Games Fire TV banner" width="320" height="180" decoding="async"><figcaption>Fire TV banner, 320 x 180</figcaption></figure>';
+  /* hero crossfade */
+  var pitch = { trouble: ["Pop · move · bump", "Pop the dome and race four pegs home."], sorry: ["Slide · bump · sorry", "Draw a card, slide, and send them back to start."], monopoly: ["Buy · build · bargain", "Trade your way around the board with the house rules your table plays."],
+    rummy500: ["Meld · lay off · score", "Runs and sets on the felt, first to 500."], risk: ["Deploy · attack · fortify", "Take the world one continent at a time."], uno: ["Match · stack · call it", "Match colour or number and empty your hand."],
+    scatter: ["One letter · twelve lists", "Beat the sand timer with answers nobody else wrote."], party: ["TV + phones", "Host on the TV, everyone joins from a phone."] };
+  var hi = 2;
+  function heroGo(step) {
+    hi = (hi + step + games.length) % games.length; var g = games[hi];
+    B.hero.show("#sgHero", { game: g[0] });
+    $("#sgHeroTitle").textContent = g[1]; $("#sgHeroEyebrow").textContent = pitch[g[0]][0]; $("#sgHeroPitch").textContent = pitch[g[0]][1];
+  }
+  $("#sgHeroNext").addEventListener("click", function () { heroGo(1); });
+  $("#sgHeroPrev").addEventListener("click", function () { heroGo(-1); });
 
   /* accents */
   $("#sgGames").innerHTML = games.map(function (g) {
-    return '<div class="sg-game bg-surface--felt" data-game="' + g[0] + '"><h4>' + g[1] + ' <span class="bg-tile__seal" style="position:static">' + B.icon(B.icon.seal(g[0])) + '</span></h4>' +
-      '<span class="sg-acc">accent text on felt</span><div class="sg-row"><button type="button" class="bg-btn bg-btn--primary">Start</button><span class="bg-tag bg-tag--accent">' + g[0] + '</span><span class="bg-badge">4</span></div>' +
-      '<div class="bg-seg"><button type="button" aria-pressed="true">2</button><button type="button">3</button><button type="button">4</button></div></div>';
+    var cs = null;
+    return '<div class="sg-game" data-game="' + g[0] + '"><h4>' + g[1] + ' <span class="bg-tile__seal" style="position:static">' + B.icon(B.icon.seal(g[0])) + '</span></h4>' +
+      '<span class="sg-acc">accent text on ink</span><code data-tok></code><div class="sg-row"><button type="button" class="bg-btn bg-btn--accent bg-btn--sm">Play</button><span class="bg-tag bg-tag--accent">' + g[1] + '</span><span class="bg-badge">4</span></div>' +
+      '<div class="bg-pips"><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i><i></i><i></i></div></div>';
   }).join("");
+  $$("#sgGames .sg-game").forEach(function (el) { var cs = getComputedStyle(el); el.querySelector("[data-tok]").textContent = "accent " + cs.getPropertyValue("--accent").trim() + " · deep " + cs.getPropertyValue("--accent-deep").trim(); });
 
   /* seats */
-  var seatNames = ["Red", "Blue", "Green", "Yellow", "Purple", "Teal", "Orange", "Pink", "Pewter", "Walnut"];
+  var seatNames = ["Red", "Blue", "Green", "Yellow", "Purple", "Teal", "Orange", "Pink", "Silver", "Bronze"];
   $("#sgSeats").innerHTML = seatNames.map(function (n, i) {
     return '<div class="bg-player is-turn" data-seat="' + (i + 1) + '"><span class="bg-token">' + (i + 1) + '</span><span class="bg-player__txt"><span class="bg-player__name" style="color:var(--seat-text)">' + n + '</span><span class="bg-player__meta">--seat-' + (i + 1) + '</span></span></div>';
   }).join("");
 
   /* palette swatches (read live from theme.css) */
   var cs = getComputedStyle(root);
-  $("#sgPalette").innerHTML = ["walnut-950", "walnut-900", "walnut-700", "walnut-500", "oak-700", "oak-500", "oak-300", "paper-50", "paper-200", "paper-400", "ink-900", "ink-700", "ink-500", "brass-200", "brass-400", "brass-600",
-    "cream", "cream-2", "cream-3", "ok", "warn", "danger", "info", "focus-ivory", "tag-official-bg", "tag-house-bg"].map(function (t) {
+  $("#sgPalette").innerHTML = ["ink-0", "ink-1", "ink-2", "ink-3", "ink-4", "ink-5", "text-1", "text-2", "text-3", "gold-50", "gold-100", "gold-200", "gold-300", "gold-400", "gold-500",
+    "paper-50", "paper-100", "paper-300", "ok", "warn", "danger", "info", "focus-ivory", "tag-official-bg", "tag-house-bg", "tag-ok-bg"].map(function (t) {
     return '<div class="sg-sw"><i style="background:var(--' + t + ')"></i><b>--' + t + '</b><span>' + cs.getPropertyValue("--" + t).trim() + '</span></div>';
   }).join("");
-  $("#sgMotion").innerHTML = ["dur-instant", "dur-fast", "dur-base", "dur-slow", "dur-move", "dur-deal", "dur-celebrate", "dur-glint", "ease-out", "ease-spring", "z-sheet", "z-toast", "z-overlay"].map(function (t) {
+  $("#sgMotion").innerHTML = ["dur-instant", "dur-fast", "dur-base", "dur-slow", "dur-hero", "dur-celebrate", "dur-glint", "dur-pulse", "ease-out", "ease-spring", "z-sheet", "z-toast", "z-overlay"].map(function (t) {
     return "<dt>--" + t + "</dt><dd>" + cs.getPropertyValue("--" + t).trim() + "</dd>";
   }).join("");
 
   /* helper buttons */
-  var slots = ["#sgSlotA", "#sgSlotB", "#sgSlotC"], slot = 0, timer = null, money = 1500;
+  var slots = ["#sgSlotA", "#sgSlotB", "#sgSlotC"], slot = 0, money = 1500;
   var acts = {
     toast: function () { B.toast("Ava rolled a <b>6</b> and bumped Jules", { seat: 1, token: "A", html: true }); },
     sheet: function () { B.sheet.open("#sgSheet"); },
@@ -381,16 +447,16 @@ document.addEventListener("DOMContentLoaded", function () {
     celebrate: function () { B.celebrate({ origin: $("#sgEmblem") }); },
     flip: function () { var p = $("#sgPiece"), from = p.getBoundingClientRect(); slot = (slot + 1) % slots.length; $(slots[slot]).appendChild(p); B.flip(p, from, { spring: true }); B.haptic("tap"); },
     tween: function () { var to = money + (Math.random() < .5 ? -200 : 350); B.tweenNumber("#sgCount", money, to, 700); money = to; },
-    countdown: function () { timer = B.countdown("#sgTimer", 10, { low: 3 }); },
+    countdown: function () { B.countdown("#sgTimer", 10, { low: 3 }); },
     roll: function () { B.dice.roll("#sgDie1"); B.dice.roll("#sgDie2"); },
     turn: function () { turn = (turn + 1) % chips.length; B.setTurn(chips[turn], { haptic: true }); },
-    glint: function () { B.ambient.trigger("#sgEmblem", { cls: "is-glint", ms: 1700 }); },
+    glint: function () { B.ambient.trigger("#sgEmblem", { cls: "is-glint", ms: 1100 }); },
     haptic: function () { var ok = B.haptic("success"); B.toast(ok ? "Buzz" : "No vibration on this device", { icon: ok ? "check" : "info" }); }
   };
   $("#sgHelpers").addEventListener("click", function (e) { var b = e.target.closest("[data-act]"); if (b && acts[b.getAttribute("data-act")]) acts[b.getAttribute("data-act")](); });
   $$("#sgSheet [data-close]").forEach(function (b) { b.addEventListener("click", function () { B.sheet.close("#sgSheet"); if (b.classList.contains("bg-sheet__option")) B.toast(b.querySelector(".bg-sheet__label").textContent, { seat: 4, token: b.querySelector(".bg-token").textContent }); }); });
   $$("[data-win-close]").forEach(function (b) { b.addEventListener("click", function () { B.win.close("#sgWin"); }); });
-  $("#sgStart").addEventListener("click", function () { B.toast("Starting: " + $("#sgStartSub").textContent, { icon: "play", haptic: "select" }); });
+  $("#sgStart").addEventListener("click", function () { B.toast(($("#sgStartLabel").textContent) + ": " + $("#sgStartSub").textContent, { icon: "play", haptic: "select" }); });
 });
 </script>
 </body>
