@@ -4,6 +4,7 @@
    BGUI.haptic(pattern)              guarded navigator.vibrate; pattern = name ("tap","select","turn","success","warn","error","roll") | ms | array
    BGUI.toast(msg, opts)             one shared toast; position computed from the layout (open sheet, top bar, [data-toast-avoid])
    BGUI.sheet.open(el, opts)/close() bottom sheet: focus trap, Back/Escape closes, restores focus; opts {onClose, dismissible, focus}
+   BGUI.win.open(el)/close()         win overlay (.bg-win): modal (Tab + D-pad stay inside), restores focus to the opener on close
    BGUI.celebrate(opts)              one-shot canvas confetti + ray bloom; auto-removes its canvas; nothing under reduced motion
    BGUI.flip(el, fromRect, opts)     FLIP move (transform only)
    BGUI.tweenNumber(el, a, b, ms)    counts a number up/down
@@ -11,7 +12,8 @@
    BGUI.ambient                      ONE scheduler for rare one-shot beats (emblem glint, turn pulse): never two at once,
                                      paused while the page is hidden or motion is reduced
    BGUI.setTurn(playerEl)            moves the static turn ring and asks the scheduler for 3 pulses
-   BGUI.focus                        D-pad spatial navigation (auto-enabled in TV mode); Enter = click; stays inside an open sheet
+   BGUI.focus                        D-pad spatial navigation (auto-enabled in TV mode); Enter = click; stays inside an open sheet/win;
+                                     the top bar is its own zone and focus scrolls clear of it; arrows never get stuck in select/text/radio
    BGUI.dice                         SVG pip faces + a cheap roll (transform tumble + a few face swaps)
    BGUI.setTV(on) / isTV()           html[data-tv]; auto for ?tv=1 and window.AndroidTV
    BGUI.mount.*                      seg, stepper, toggle, versions, players, auto (declarative data-bg-mount)
@@ -201,8 +203,18 @@
     if (t.tagName === "TEXTAREA") return true;
     return t.tagName === "INPUT" && !/^(checkbox|radio|button|submit|reset|range|color|image|file)$/i.test(t.type || "text");
   }
+  function openWin() { return d.querySelector(".bg-win.is-open"); }
+  function trapTab(e, box) {
+    var list = tabbables(box);
+    if (!list.length) { e.preventDefault(); focusEl(box); return; }
+    var i = list.indexOf(d.activeElement), n = list.length;
+    var j = e.shiftKey ? (i <= 0 ? n - 1 : i - 1) : (i < 0 || i >= n - 1 ? 0 : i + 1);
+    e.preventDefault(); focusEl(list[j]);
+  }
   d.addEventListener("keydown", function (e) {
-    if (!stack.length || e.defaultPrevented) return;
+    if (e.defaultPrevented) return;
+    var tab = e.key === "Tab" || e.keyCode === 9;
+    if (!stack.length) { var wn = tab ? openWin() : null; if (wn) trapTab(e, wn); return; }   // an open win overlay is modal too
     var top = stack[stack.length - 1];
     if (isBackKey(e)) {
       if (top.opts.dismissible === false) return;
@@ -210,24 +222,48 @@
       closeSheet(top.el, "back");
       return;
     }
-    if (e.key === "Tab" || e.keyCode === 9) {
-      var list = tabbables(top.el);
-      if (!list.length) { e.preventDefault(); focusEl(top.el); return; }
-      var i = list.indexOf(d.activeElement), n = list.length;
-      var j = e.shiftKey ? (i <= 0 ? n - 1 : i - 1) : (i < 0 || i >= n - 1 ? 0 : i + 1);
-      e.preventDefault(); focusEl(list[j]);
-    }
+    if (tab) trapTab(e, top.el);
   }, true);
-  /* focus trap: focus that lands outside the top sheet goes back inside, unless another (foreign) dialog took it */
+  /* focus trap: focus that lands outside the top sheet (or the open win overlay) goes back inside, unless another (foreign) dialog took it */
   d.addEventListener("focusin", function (e) {
-    if (!stack.length || refocusing) return;
-    var top = sheetTop(), t = e.target;
-    if (!t || top.contains(t)) return;
+    if (refocusing) return;
+    var top = sheetTop() || openWin(), t = e.target;
+    if (!top || !t || top.contains(t)) return;
     if (t.closest && t.closest("[aria-modal='true'], [role='dialog'], #bgSoundPanel")) return;
     refocusing = true;
     try { focusEl(tabbables(top)[0] || top); } finally { refocusing = false; }
   }, true);
   var sheet = { open: openSheet, close: closeSheet, top: sheetTop, isOpen: function (el) { el = $(el); if (!el) return stack.length > 0; for (var i = 0; i < stack.length; i++) if (stack[i].el === el) return true; return false; } };
+
+  /* ---------------- win overlay: BGUI.win.open/close add .is-open, move focus in and give it back on close ---------------- */
+  var winOpener = null;
+  function openWinEl(target, opts) {
+    var el = $(target);
+    if (!el) return null;
+    opts = opts || {};
+    if (!el.classList.contains("is-open")) winOpener = d.activeElement;
+    if (!el.getAttribute("role")) el.setAttribute("role", "dialog");
+    el.setAttribute("aria-modal", "true");
+    if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
+    var dpad = !!marked || isTV();
+    el.classList.add("is-open");
+    var first = $(opts.focus, el) || el.querySelector("[data-autofocus]") || tabbables(el)[0] || el;
+    if (focusOn && dpad && first !== el) setFocus(first); else focusEl(first);
+    emit("win", { open: true, el: el });
+    return el;
+  }
+  function closeWinEl(target) {
+    var el = $(target) || openWin();
+    if (!el || !el.classList.contains("is-open")) return false;
+    var dpad = !!marked || isTV();
+    el.classList.remove("is-open");
+    var back = winOpener;
+    winOpener = null;
+    if (back && back.parentNode && back !== d.body && isVisible(back)) { if (focusOn && dpad) setFocus(back); else focusEl(back); }
+    emit("win", { open: false, el: el });
+    return true;
+  }
+  var winApi = { open: openWinEl, close: closeWinEl, isOpen: function () { return !!openWin(); } };
 
   /* ---------------- celebrate: one-shot canvas confetti + ray bloom ---------------- */
   var fx = null;
@@ -506,6 +542,32 @@
 
   /* ---------------- focus: D-pad spatial navigation ---------------- */
   var focusOn = false, focusByTV = false, focusRoot = null, marked = null;
+  var editing = null;   // the text field being typed in (entered with OK or by typing): only then do left/right stay in it
+  var ZONE = ".bg-topbar, [data-focus-zone]";   // the top bar is its own zone: reached from the page only when nothing in the page lies above
+  function zoneOf(el) { return (el && el.closest && el.closest(ZONE)) || null; }
+  /* px of the viewport top hidden by a sticky/fixed .bg-topbar */
+  function barCover() {
+    var h = 0;
+    $$(".bg-topbar").forEach(function (el) {
+      if (!isVisible(el)) return;
+      var p = w.getComputedStyle(el).position;
+      if (p !== "sticky" && p !== "fixed") return;
+      var r = el.getBoundingClientRect();
+      if (r.top <= 1 && r.bottom > h) h = r.bottom;
+    });
+    return h;
+  }
+  /* scroll a page control into view below the sticky top bar (scroll-padding via --bg-bar-h, then a manual check) */
+  function reveal(el) {
+    if (zoneOf(el)) return;   // the bar itself never scrolls
+    var inPage = !(el.closest && el.closest(".bg-sheet, .bg-win")), cover = inPage ? barCover() : 0;
+    if (inPage) root.style.setProperty("--bg-bar-h", Math.round(cover) + "px");
+    try { el.scrollIntoView({ block: "nearest", inline: "nearest" }); } catch (e) { try { el.scrollIntoView(false); } catch (e2) { } }
+    if (cover) {
+      var r = el.getBoundingClientRect(), want = cover + (parseFloat(w.getComputedStyle(el).scrollMarginTop) || 0);
+      if (r.top < want - 1) { try { w.scrollBy(0, r.top - want); } catch (e3) { } }
+    }
+  }
   function usable(el) {
     if (el.disabled || el.getAttribute("aria-disabled") === "true" || el.getAttribute("data-focus") === "off") return false;
     if (el.getAttribute("tabindex") === "-1" && !el.hasAttribute("data-focus")) return false;
@@ -525,27 +587,41 @@
     focusEl(el);
     marked = ringOf(el);
     marked.classList.add("is-focus");
-    try { el.scrollIntoView({ block: "nearest", inline: "nearest" }); } catch (e) { try { el.scrollIntoView(false); } catch (e2) { } }
+    reveal(el);
     return d.activeElement === el;
   }
   function firstIn(scope) {
     scope = scope || focusScope();
     var pref = scope.querySelector ? scope.querySelector("[data-focus-first]") : null;
     if (pref && usable(pref)) return pref;
-    var list = candidates(scope), vh = w.innerHeight || root.clientHeight;
+    var list = candidates(scope), vh = w.innerHeight || root.clientHeight, cover = barCover(), i, r;
     if (!list.length) return null;
     list.sort(function (a, b) { var ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(); return (Math.round(ra.top / 8) - Math.round(rb.top / 8)) || (ra.left - rb.left); });
-    for (var i = 0; i < list.length; i++) { var r = list[i].getBoundingClientRect(); if (r.bottom > 0 && r.top < vh) return list[i]; }
+    for (i = 0; i < list.length; i++) { r = list[i].getBoundingClientRect(); if (!zoneOf(list[i]) && r.top >= cover - 1 && r.top < vh) return list[i]; }   // page first, not the bar
+    for (i = 0; i < list.length; i++) { r = list[i].getBoundingClientRect(); if (r.bottom > 0 && r.top < vh) return list[i]; }
     return list[0];
   }
   function move(dir) {
     var scope = focusScope(), list = candidates(scope), cur = d.activeElement;
     if (!list.length) return false;
     if (!cur || cur === d.body || list.indexOf(cur) < 0) return setFocus(firstIn(scope));
-    var a = cur.getBoundingClientRect(), acx = a.left + a.width / 2, acy = a.top + a.height / 2;
-    var best = null, bestScore = Infinity;
+    var a = cur.getBoundingClientRect(), z = zoneOf(cur), same = [], other = [];
+    list.forEach(function (el) { if (el !== cur) (zoneOf(el) === z ? same : other).push(el); });
+    var best = pick(a, same, dir);
+    if (!best && other.length && (dir === "up" || dir === "down")) {   // leave the zone (page <-> top bar) only when nothing is left this way
+      var clear = other;
+      if (z) {
+        var zr = z.getBoundingClientRect();
+        clear = other.filter(function (el) { var r = el.getBoundingClientRect(); return dir === "down" ? r.top >= zr.bottom - 1 : r.bottom <= zr.top + 1; });
+        if (!clear.length) clear = other;
+      }
+      best = pick(a, clear, dir);
+    }
+    return best ? setFocus(best) : false;
+  }
+  function pick(a, list, dir) {
+    var acx = a.left + a.width / 2, acy = a.top + a.height / 2, best = null, bestScore = Infinity;
     list.forEach(function (el) {
-      if (el === cur) return;
       var b = el.getBoundingClientRect(), bcx = b.left + b.width / 2, bcy = b.top + b.height / 2, main, cross, off;
       if (dir === "right" || dir === "left") {
         if (dir === "right" ? !(bcx > acx + 1 && b.right > a.right - 1) : !(bcx < acx - 1 && b.left < a.left + 1)) return;
@@ -561,7 +637,7 @@
       var score = (cross === 0 ? 0 : 100000) + main + cross * 2 + off * 0.1;   // same row/column (in the beam) always wins
       if (score < bestScore) { bestScore = score; best = el; }
     });
-    return best ? setFocus(best) : false;
+    return best;
   }
   function dirOf(e) {
     var k = e.key, c = e.keyCode;
@@ -571,19 +647,25 @@
     if (k === "ArrowDown" || k === "Down" || c === 40) return "down";
     return null;
   }
+  /* a remote has no Tab key, so the D-pad must always be able to leave a control:
+     SELECT never keeps arrows (OK opens its picker); a text field keeps left/right only while typing (after OK or a keystroke);
+     radios and sliders keep left/right, up/down move on */
   function keepsArrows(t, dir) {
     if (!t || !t.tagName) return false;
-    if (isTextField(t) || t.tagName === "SELECT") return true;
-    if (t.tagName === "INPUT" && t.type === "range") return dir === "left" || dir === "right";
-    if (t.tagName === "INPUT" && t.type === "radio") return true;
+    var h = dir === "left" || dir === "right";
+    if (t.tagName === "SELECT") return false;
+    if (isTextField(t)) return h && editing === t;
+    if (t.tagName === "INPUT" && /^(range|radio)$/i.test(t.type)) return h;
     return false;
   }
   function onFocusKey(e) {
     if (!focusOn || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
-    var dir = dirOf(e);
+    var dir = dirOf(e), t = e.target;
     if (dir) {
-      if (keepsArrows(e.target, dir)) return;
-      if (move(dir)) e.preventDefault();
+      if (keepsArrows(t, dir)) return;
+      if (editing === t) editing = null;
+      var moved = move(dir);
+      if (moved || (t && (t.tagName === "SELECT" || (t.tagName === "INPUT" && /^(range|radio)$/i.test(t.type))))) e.preventDefault();   // an arrow never changes a value by accident
       return;
     }
     var k = e.key, c = e.keyCode;
@@ -591,7 +673,9 @@
       var el = d.activeElement;
       if (!el || el === d.body || el === root) return;
       var tag = el.tagName, enter = k === "Enter" || c === 13;
-      var native = enter && (tag === "BUTTON" || tag === "A" || tag === "SUMMARY" || tag === "SELECT" || isTextField(el) ||
+      if (isTextField(el)) { editing = editing === el ? null : el; if (enter) return; }   // OK starts typing (the TV keyboard opens), OK again ends it
+      if (tag === "SELECT" && typeof el.showPicker === "function") { try { el.showPicker(); e.preventDefault(); return; } catch (err) { } }
+      var native = enter && (tag === "BUTTON" || tag === "A" || tag === "SUMMARY" || tag === "SELECT" ||
         (tag === "INPUT" && /^(submit|button|reset|image)$/i.test(el.type)));
       if (native) return;
       e.preventDefault();
@@ -600,7 +684,11 @@
   }
   d.addEventListener("keydown", onFocusKey, false);
   d.addEventListener("pointerdown", function () { unmark(); }, true);
-  d.addEventListener("focusin", function (e) { if (marked && e.target && ringOf(e.target) !== marked) unmark(); }, true);   // focus moved by tap/Tab: drop the D-pad mark
+  d.addEventListener("focusin", function (e) {
+    if (editing && e.target !== editing) editing = null;
+    if (marked && e.target && ringOf(e.target) !== marked) unmark();   // focus moved by tap/Tab: drop the D-pad mark
+  }, true);
+  d.addEventListener("input", function (e) { if (focusOn && isTextField(e.target)) editing = e.target; }, true);   // typing = editing
   var focus = {
     enable: function (opts) { opts = opts || {}; focusOn = true; if (opts.root !== undefined) focusRoot = $(opts.root); if (opts.autofocus) setFocus(firstIn()); return true; },
     disable: function () { focusOn = false; focusByTV = false; unmark(); return false; },
@@ -802,6 +890,7 @@
   BGUI.haptic = haptic;
   BGUI.toast = toast;
   BGUI.sheet = sheet;
+  BGUI.win = winApi;
   BGUI.celebrate = celebrate;
   BGUI.flip = flip;
   BGUI.tweenNumber = tweenNumber;
@@ -816,6 +905,7 @@
   BGUI.util = { $: $, $$: $$, esc: esc, isVisible: isVisible };
 
   function boot() {
+    toastNode();   // the live region exists (empty) before the first message, so screen readers announce it
     if (tvRequested() && !isTV()) setTV(true);
     else if (isTV() && !focusOn) { focus.enable(); focusByTV = true; }
     mount.auto();

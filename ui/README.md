@@ -54,7 +54,7 @@ Then set three attributes:
 - **`data-seat="1".."10"`** on any element sets `--seat`, `--seat-hi`, `--seat-lo`, `--seat-ink` (text on the piece) and `--seat-text` (the seat colour as readable text on wood).
   - Seats: 1 red, 2 blue, 3 green, 4 yellow, 5 purple, 6 teal, 7 orange, 8 pink, 9 pewter, 10 walnut.
 - **`data-motion="reduce"`** on `<html>` forces reduced motion, for example from an in-game setting. The OS setting is always honoured as well.
-- **`data-focus`** marks a non-button element as a D-pad stop. Use `data-focus="off"` to skip an element and `data-focus-first` to choose where D-pad focus starts.
+- **`data-focus`** marks a non-button element as a D-pad stop. Use `data-focus="off"` to skip an element and `data-focus-first` to choose where D-pad focus starts. `data-focus-zone` makes a container its own D-pad zone, like the top bar: Up/Down only cross into or out of it when nothing is left in that direction.
 - **`data-toast-avoid`** tells toasts to stay clear of an element, such as a sticky action bar or a player strip.
 
 ## 2. Class reference
@@ -62,26 +62,26 @@ Then set three attributes:
 | Class | Use |
 |---|---|
 | `.bg-app`, `.bg-app--felt` | Body: walnut or felt table on a fixed layer, plus fonts and colour |
-| `.bg-surface--wood / --felt / --paper / --parchment / --oak` | Element backgrounds made of a grain tile plus a gradient. Text colour is set for you. Oak is for rails and frames: use walnut-950 text only |
+| `.bg-surface--wood / --felt / --paper / --parchment / --oak` | Element backgrounds made of a grain tile plus a gradient. Text colour is set for you. Oak is for rails and frames: use walnut-950 text only (a cream wash keeps its darkest grain at 4.7:1). On felt (`.bg-app--felt`, `.bg-surface--felt`) `--text-faint` is cream-2, because the lit felt is too bright for cream-3 |
 | `.bg-display`, `.bg-h1/h2/h3`, `.bg-eyebrow`, `.bg-muted`, `.bg-faint`, `.bg-num`, `.bg-section`, `.bg-rule`, `.bg-sr` | Type helpers. `.bg-section` is a brass eyebrow followed by a hairline. `.bg-sr` is screen-reader-only text |
 | `.bg-btn` with `--primary`, `--secondary`, `--ghost`, `--danger`, `--icon` (round knob), `--paper` (with `--icon`, on paper), `--sm`, `--lg`, `--block` | Buttons. Primary is enamel in `--accent` with a brass bezel. Press feedback is transform only. `--sm` shrinks the label, never the 44px target |
 | `.bg-btn--cta` with `.bg-btn__label` and `.bg-btn__sub` | Start button with a confirming sub-label ("Start game / 5 players · Classic") |
-| `.bg-topbar` with `__start`, `__title` (`.bg-eyebrow` + `.bg-topbar__name`), `__end` | Sticky walnut bar |
+| `.bg-topbar` with `__start`, `__title` (`.bg-eyebrow` + `.bg-topbar__name`), `__end` | Sticky walnut bar. For the D-pad it is its own zone, and focused page controls are scrolled clear of it |
 | `.bg-card`, `.bg-inlay`, `.bg-plaque` | Card-stock panel, a recessed panel routed into the wood, and a brass nameplate |
 | `.bg-versions` > `.bg-version[data-value][aria-checked]` with `__art`, `__title`, `__meta`, `__desc` | Version / option cards. Selected cards get an accent ring and an enamel check seal. Wire with `BGUI.mount.versions` |
 | `.bg-seg` (`--text`, `--grid5`) > `button[aria-pressed]` (or `.is-on` / `.on`) with an optional `<small>` | Segmented picker. Selected shows ivory card stock with a dot in the game colour. Wire with `BGUI.mount.seg` |
 | `.bg-stepper` with `__btn`, `__val`, and `.bg-pips > i.is-on` | CPU stepper (- [3] +) with a pip row. Use `BGUI.mount.stepper` to build it |
 | `.bg-rows` > `.bg-row` (`label` with `input.bg-toggle`, or `button[role=switch][aria-checked]` with `span.bg-toggle`), `__main`, `__title`, `__desc`, `.bg-row--static` | Whole-row rule toggles (60px). The row is the target, not the switch |
-| `.bg-select` | Native select, 44px |
+| `.bg-select` | Native select, 44px. On TV the D-pad never gets stuck on it: arrows move on, OK opens the picker |
 | `.bg-tag--official / --house / --accent / --paper / --new / --ok` | Tags. Fills are opaque, so they stay legible on artwork |
-| `.bg-chip` (+ `.bg-chip__dot`, `[data-seat]`), `.bg-badge` | Info chips and count badges |
+| `.bg-chip` (+ `.bg-chip__dot`, `[data-seat]`), `.bg-badge` | Info chips and count badges. They are labels, not controls (32px, no focus ring): use a `.bg-btn` for anything tappable |
 | `.bg-stats` > `.bg-stat` (`<b>38</b><span>turns</span>`) | Stat pills for win screens and summaries |
 | `.bg-players` (`--scroll` for 5-10 players) > `.bg-player[data-seat]` with `.bg-token`, `__txt`, `__name`, `__meta`, `__cpu`, `.is-turn`, `.is-out` | Player strip. The default is a wrapping grid (2-up on a phone). Names and meta get an ellipsis. On the turn chip the meta text is cream with a seat-colour dot, so colour never carries the text. `BGUI.mount.players` and `BGUI.setTurn` drive it |
 | `.bg-token[data-seat]` | Top-down game piece. Its label sits on a flat cap in `--seat-ink` |
 | `.bg-scorepad` > `table.bg-score` with `tr.is-lead`, `.bg-score__who[data-seat]`, `.bg-score__total` | Scoreboard on a ruled score-pad page |
-| `.bg-sheet` with `__grip`, `__head`, `__title`, `__sub`, `__options` > `button.bg-sheet__option` (`.bg-token`, `.bg-sheet__text` > `__label` + `__desc` + `__detail`, then a chevron), `.is-best` | Bottom sheet. Each choice has a plain-English line and a concrete detail line ("space 22 → 28"). Open and close it with `BGUI.sheet` |
+| `.bg-sheet` with `__grip`, `__head`, `__title`, `__sub`, `__options` > `button.bg-sheet__option` (`.bg-token`, `.bg-sheet__text` > `__label` + `__desc` + `__detail`, then a chevron), `.is-best` | Bottom sheet. Each choice has a plain-English line and a concrete detail line ("space 22 to 28"). Write "to", not an arrow: the font subsets have no U+2192, so an arrow would fall back to a system font. Open and close it with `BGUI.sheet` |
 | `.bg-toast` | Created by `BGUI.toast()`. Don't place it by hand |
-| `.bg-win.is-open` > `.bg-win__scrim`, `.bg-win__rays`, `.bg-win__card` > `.bg-win__medal`, `.bg-eyebrow`, `.bg-win__title`, `.bg-win__sub`, `.bg-stats.bg-win__stats`, `.bg-win__actions` | Win overlay. The card is centred vertically, the rays bloom once and the medal is pure CSS. Call `BGUI.celebrate()` after adding `.is-open` |
+| `.bg-win.is-open` > `.bg-win__scrim`, `.bg-win__rays`, `.bg-win__card` > `.bg-win__medal`, `.bg-eyebrow`, `.bg-win__title`, `.bg-win__sub`, `.bg-stats.bg-win__stats`, `.bg-win__actions` | Win overlay. The card is centred vertically, the rays bloom once and the medal is pure CSS. Open it with `BGUI.win.open(el)` (it is modal: Tab and the D-pad stay inside, and `BGUI.win.close()` gives focus back), then call `BGUI.celebrate()` |
 | `.bg-tiles` > `.bg-tile[data-game]` with `__art` (+ `.bg-tile__badge` player count), `__label`, `__name`, `__meta`, `__seal`, `.bg-tile--party` | Hub / TV game tile. Tiles are 2 across on a phone and 4 across on TV |
 | `.bg-emblem` (`.is-glint`) | Brass emblem with a one-shot glint. Register it with `BGUI.ambient.add(el)` |
 | `.bg-die` (`--seat`) | Ivory die: `BGUI.dice.render/roll` |
@@ -100,13 +100,14 @@ Every call is safe if its element is missing: it returns `null`, `false` or a re
 | `BGUI.haptic("tap"\|"select"\|"turn"\|"success"\|"warn"\|"error"\|"roll"\|ms\|[pattern])` | Guarded `navigator.vibrate` that returns a boolean. Turn it off with `BGUI.haptic.enabled = false` |
 | `BGUI.toast(msg, {ms, seat, token, icon, html, place: "auto"\|"top"\|"bottom", haptic})` | One shared toast. Its position is computed from the layout: above an open sheet or `[data-toast-avoid]` elements, below the top bar. `BGUI.toast.hide()` |
 | `BGUI.sheet.open(el, {onClose, dismissible, focus})`, `.close(el?)`, `.isOpen(el?)`, `.top()` | Bottom sheet with a scrim. It traps focus (Tab and D-pad), closes on Back/Escape/scrim and restores focus to the opener. Nested sheets stack |
+| `BGUI.win.open(el, {focus})`, `.close(el?)`, `.isOpen()` | Opens or closes a `.bg-win` overlay: adds `.is-open`, moves focus inside and restores it to the opener on close. While a win overlay is open, Tab and the D-pad stay inside it |
 | `BGUI.celebrate({ms, colors, count, origin, rays, into})` | One-shot canvas confetti plus a ray bloom, about 2.8 s. The canvas is removed afterwards and the call returns a promise. It does nothing under reduced motion or when the tab is hidden. Inside an open `.bg-win` it draws behind the card |
 | `BGUI.flip(el, fromRectOrEl, {ms, spring})` | FLIP move: read the rect, move the DOM, then call `flip`. Uses transform only |
 | `BGUI.tweenNumber(el, from, to, ms, {format})` | Counts cash, scores and similar values |
 | `BGUI.countdown(el, seconds, {low, onTick, onDone})` | Ring timer that updates 4 times a second, not as a continuous animation. Returns `{stop, pause, resume, remaining(), done}` |
 | `BGUI.ambient.add(el, {cls, ms, delay})`, `.remove(el)`, `.trigger(el, {cls, ms})`, `.pause()`, `.resume()`, `.state()`, `.every` | The ONE scheduler for decorative beats. One beat at a time, a periodic beat every 14 s, paused while hidden or under reduced motion. With nothing registered no timer runs |
 | `BGUI.setTurn(playerEl, {pulse, haptic})` | Moves the static turn ring and asks `ambient` for 3 pulses. Call it every turn |
-| `BGUI.focus.enable({root, autofocus})`, `.disable()`, `.move(dir)`, `.set(el)`, `.first(scope)`, `.candidates()`, `.enabled` | D-pad spatial navigation over `[data-focus]` and focusable elements. Same-row/column moves win, Enter/OK clicks, focus is scrolled into view, and it never leaves an open sheet or win overlay. It is on automatically in TV mode |
+| `BGUI.focus.enable({root, autofocus})`, `.disable()`, `.move(dir)`, `.set(el)`, `.first(scope)`, `.candidates()`, `.enabled` | D-pad spatial navigation over `[data-focus]` and focusable elements. Same-row/column moves win, Enter/OK clicks, focus is scrolled into view below the sticky top bar, and it never leaves an open sheet or win overlay. The top bar (and any `[data-focus-zone]`) is a zone of its own. A remote has no Tab key, so arrows never get stuck: a `<select>` never keeps them (OK opens its picker), a text field keeps Left/Right only while typing (after OK or a keystroke), and radios and sliders keep Left/Right but let Up/Down move on. It is on automatically in TV mode |
 | `BGUI.dice.svg(n)`, `.render(el, n)`, `.roll(el, final?, {ms, flips})` | Pip faces, plus a roll made of a transform tumble and a few face swaps. Returns a promise of the final value |
 | `BGUI.setTV(on)`, `BGUI.isTV()` | Toggles `html[data-tv]` and D-pad navigation, and fires a `bgui:tv` event |
 | `BGUI.reducedMotion()`, `BGUI.setReducedMotion(true\|false\|null)` | Reads or forces reduced motion |
@@ -148,7 +149,7 @@ Events: `bgui:sheet` (`{open, el, reason}`) and `bgui:tv` (`{on}`), both dispatc
 ## 5. Do and don't
 
 **Do**
-- Theme with `data-game`. Use `--accent-text` for accent-coloured text on wood or felt, and `--accent-deep` for accent text or icons on paper. Use `--seat-ink` on a seat colour and `--seat-text` for seat-coloured text on wood.
+- Theme with `data-game`. Use `--accent-text` for accent-coloured text on wood or felt, and `--accent-deep` for accent text or icons on paper (every game's `--accent-deep` is at least 5.3:1 on the darkest paper grain; Uno's is #7a4f00). Use `--seat-ink` on a seat colour and `--seat-text` for seat-coloured text on wood.
 - Keep text tokens: `--fs-micro` through `--fs-5xl`. Never hard-code a px or rem font size below `--fs-micro`, or the 21px TV floor breaks.
 - Keep every target at least `var(--tap)`, and make whole rows the target.
 - Put the concrete outcome under each move choice (`.bg-sheet__detail`) and the confirmed setup under the Start button (`.bg-btn__sub`).

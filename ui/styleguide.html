@@ -21,6 +21,7 @@ if (/[?&]motion=reduce(&|$)/.test(location.search)) document.documentElement.set
   .sg-intro { display: grid; grid-template-columns: auto 1fr; gap: 1rem; align-items: center; margin: var(--sp-2) 0 var(--sp-4); }
   .sg-intro p { margin: .25rem 0 0; color: var(--text-muted); font-size: var(--fs-sm); }
   .sg-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(6.25rem, 1fr)); gap: .5rem; }
+  html[data-tv] .sg-swatches { grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); }
   .sg-sw { display: grid; border-radius: var(--r-sm); overflow: hidden; background: var(--paper-100); box-shadow: var(--sh-1); }
   .sg-sw i { display: block; height: 2.5rem; }
   .sg-sw b, .sg-sw span { display: block; padding: 0 .5rem; font: 700 var(--fs-micro)/1.35 var(--font-ui); color: var(--ink-900); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -47,7 +48,7 @@ if (/[?&]motion=reduce(&|$)/.test(location.search)) document.documentElement.set
   .sg-icon img { width: 4.5rem; height: 4.5rem; display: block; }
   .sg-banner img { width: min(100%, 20rem); height: auto; display: block; border-radius: var(--r-md); box-shadow: var(--sh-2); }
   .sg-gamepick { grid-template-columns: repeat(3, 1fr); }
-  html[data-tv] .sg-gamepick { grid-template-columns: repeat(5, 1fr); }
+  html[data-tv] .sg-gamepick { grid-template-columns: repeat(3, 1fr); }
   .sg-note { margin: 0; font-size: var(--fs-xs); color: var(--text-faint); }
   html[data-tv] .sg-main { padding-top: var(--sp-6); }
   html[data-tv] .sg-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -266,9 +267,9 @@ if (/[?&]motion=reduce(&|$)/.test(location.search)) document.documentElement.set
     <button class="bg-btn bg-btn--icon bg-btn--paper" type="button" aria-label="Close" data-close data-icon="close"></button>
   </div>
   <div class="bg-sheet__options">
-    <button type="button" class="bg-sheet__option is-best" data-close><span class="bg-token" data-seat="4">2</span><span class="bg-sheet__text"><span class="bg-sheet__label">Peg 2 → six spaces</span><span class="bg-sheet__desc">Lands on Ava and sends her home.</span><span class="bg-sheet__detail">space 22 → 28</span></span><span data-icon="chevron"></span></button>
-    <button type="button" class="bg-sheet__option" data-close><span class="bg-token" data-seat="4">3</span><span class="bg-sheet__text"><span class="bg-sheet__label">Peg 3 out of start</span><span class="bg-sheet__desc">A six lets a new peg onto the track.</span><span class="bg-sheet__detail">start → 1</span></span><span data-icon="chevron"></span></button>
-    <button type="button" class="bg-sheet__option" data-close><span class="bg-token" data-seat="4">1</span><span class="bg-sheet__text"><span class="bg-sheet__label">Peg 1 into home</span><span class="bg-sheet__desc">Safe for good.</span><span class="bg-sheet__detail">space 26 → home 2</span></span><span data-icon="chevron"></span></button>
+    <button type="button" class="bg-sheet__option is-best" data-close><span class="bg-token" data-seat="4">2</span><span class="bg-sheet__text"><span class="bg-sheet__label">Peg 2 moves six spaces</span><span class="bg-sheet__desc">Lands on Ava and sends her home.</span><span class="bg-sheet__detail">space 22 to 28</span></span><span data-icon="chevron"></span></button>
+    <button type="button" class="bg-sheet__option" data-close><span class="bg-token" data-seat="4">3</span><span class="bg-sheet__text"><span class="bg-sheet__label">Peg 3 out of start</span><span class="bg-sheet__desc">A six lets a new peg onto the track.</span><span class="bg-sheet__detail">start to 1</span></span><span data-icon="chevron"></span></button>
+    <button type="button" class="bg-sheet__option" data-close><span class="bg-token" data-seat="4">1</span><span class="bg-sheet__text"><span class="bg-sheet__label">Peg 1 into home</span><span class="bg-sheet__desc">Safe for good.</span><span class="bg-sheet__detail">space 26 to home 2</span></span><span data-icon="chevron"></span></button>
   </div>
 </section>
 
@@ -376,7 +377,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var acts = {
     toast: function () { B.toast("Ava rolled a <b>6</b> and bumped Jules", { seat: 1, token: "A", html: true }); },
     sheet: function () { B.sheet.open("#sgSheet"); },
-    win: function () { $("#sgWin").classList.add("is-open"); B.focus.enabled ? B.focus.first("#sgWin") : $("#sgWin [data-win-close]").focus(); B.celebrate(); },
+    win: function () { B.win.open("#sgWin"); B.celebrate(); },
     celebrate: function () { B.celebrate({ origin: $("#sgEmblem") }); },
     flip: function () { var p = $("#sgPiece"), from = p.getBoundingClientRect(); slot = (slot + 1) % slots.length; $(slots[slot]).appendChild(p); B.flip(p, from, { spring: true }); B.haptic("tap"); },
     tween: function () { var to = money + (Math.random() < .5 ? -200 : 350); B.tweenNumber("#sgCount", money, to, 700); money = to; },
@@ -388,7 +389,7 @@ document.addEventListener("DOMContentLoaded", function () {
   };
   $("#sgHelpers").addEventListener("click", function (e) { var b = e.target.closest("[data-act]"); if (b && acts[b.getAttribute("data-act")]) acts[b.getAttribute("data-act")](); });
   $$("#sgSheet [data-close]").forEach(function (b) { b.addEventListener("click", function () { B.sheet.close("#sgSheet"); if (b.classList.contains("bg-sheet__option")) B.toast(b.querySelector(".bg-sheet__label").textContent, { seat: 4, token: b.querySelector(".bg-token").textContent }); }); });
-  $$("[data-win-close]").forEach(function (b) { b.addEventListener("click", function () { $("#sgWin").classList.remove("is-open"); $("[data-act='win']").focus(); }); });
+  $$("[data-win-close]").forEach(function (b) { b.addEventListener("click", function () { B.win.close("#sgWin"); }); });
   $("#sgStart").addEventListener("click", function () { B.toast("Starting: " + $("#sgStartSub").textContent, { icon: "play", haptic: "select" }); });
 });
 </script>

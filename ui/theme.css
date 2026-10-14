@@ -71,7 +71,7 @@
   --ink-900: #24180e; --ink-800: #33251a; --ink-700: #4b3a2a; --ink-500: #64513d; --ink-400: #96826a; --ink-300: #b4a184;
   --brass-100: #fcf1cc; --brass-200: #f3db97; --brass-300: #e4c171; --brass-400: #cfa553; --brass-500: #b38a3d; --brass-600: #8f6c2b; --brass-700: #654b1c;
   --baize-500: #23694a; --baize-600: #1b573c; --baize-700: #13412c; --baize-800: #0c2c1e;
-  --cream: #f8eed9; --cream-2: #e2d0ae; --cream-3: #b9a283;
+  --cream: #f8eed9; --cream-2: #e2d0ae; --cream-3: #c2ac8e;
   /* feedback: fills carry their own ink; *-text is the readable version on dark wood */
   --ok: #2f7d49; --ok-ink: #fffaf0; --ok-text: #8fd9a6;
   --warn: #d8922a; --warn-ink: #241503; --warn-text: #f3be6a;
@@ -80,7 +80,7 @@
 
   /* ---------- Seats: 10 piece colours. hi/lo shade the 3-D pieces; ink is text ON the colour;
      text is the colour's readable form on dark wood. Chip meta text stays cream + a seat dot. ---------- */
-  --seat-1: #d63c2f;  --seat-1-hi: #ff8a72;  --seat-1-lo: #861d14;  --seat-1-ink: #ffffff;  --seat-1-text: #ff8a72;   /* red    */
+  --seat-1: #d63c2f;  --seat-1-hi: #ff8a72;  --seat-1-lo: #861d14;  --seat-1-ink: #ffffff;  --seat-1-text: #ff927b;   /* red    */
   --seat-2: #2f66c9;  --seat-2-hi: #86b3ff;  --seat-2-lo: #163d84;  --seat-2-ink: #ffffff;  --seat-2-text: #86b3ff;   /* blue   */
   --seat-3: #279957;  --seat-3-hi: #7fdc9f;  --seat-3-lo: #0f5a2f;  --seat-3-ink: #1c110a;  --seat-3-text: #7fdc9f;   /* green  */
   --seat-4: #ebb81f;  --seat-4-hi: #ffe485;  --seat-4-lo: #976d00;  --seat-4-ink: #1c110a;  --seat-4-text: #ffe485;   /* yellow */
@@ -168,7 +168,7 @@
                          --felt: #1b573c; --felt-deep: #0c2c1e; --felt-lite: #1f6143; }
 [data-game="risk"]     { --accent: #a84e17; --accent-deep: #62290a; --accent-bright: #f19b58; --accent-ink: #fffaf0; --accent-text: #f8bf91; --accent-glow: rgba(241, 155, 88, .5); --accent-ink-shadow: rgba(0, 0, 0, .25);
                          --felt: #3c3a24; --felt-deep: #1b1a0e; --felt-lite: #4f4d30; }
-[data-game="uno"]      { --accent: #e9a91a; --accent-deep: #9a6400; --accent-bright: #ffd760; --accent-ink: #261703; --accent-text: #ffd25c; --accent-glow: rgba(255, 205, 80, .55); --accent-ink-shadow: rgba(255, 255, 255, .35);
+[data-game="uno"]      { --accent: #e9a91a; --accent-deep: #7a4f00; --accent-bright: #ffd760; --accent-ink: #261703; --accent-text: #ffd25c; --accent-glow: rgba(255, 205, 80, .55); --accent-ink-shadow: rgba(255, 255, 255, .35);
                          --felt: #1d2246; --felt-deep: #0b0d22; --felt-lite: #2d346a; }
 [data-game="scatter"]  { --accent: #117a7f; --accent-deep: #0a4c50; --accent-bright: #5fd3cc; --accent-ink: #fffaf0; --accent-text: #6fd8d1; --accent-glow: rgba(95, 211, 204, .5); --accent-ink-shadow: rgba(0, 0, 0, .25);
                          --felt: #173c40; --felt-deep: #08191b; --felt-lite: #22585c; }
@@ -237,10 +237,13 @@ html[data-motion="reduce"] .bg-celebrate { display: none !important; }
 /* ---------- Surfaces (element level) ---------- */
 .bg-surface--wood { color: var(--text); background-color: var(--walnut-800); background-image: url("tex/walnut.webp"), var(--mat-wood); background-size: 520px 520px, 100% 100%; }
 /* felt gradient is written out here (not in a :root token) so each element's own data-game felt applies */
+/* felt's lamp-lit centre is brighter than walnut: faint text (row descriptions, .bg-faint) steps up to cream-2 there (cream-3 sampled 3.1-4.2:1) */
+.bg-app--felt, .bg-surface--felt { --text-faint: var(--cream-2); }
 .bg-surface--felt { color: var(--text); background-color: var(--felt); background-image: url("tex/felt.webp"), radial-gradient(110% 80% at 50% 12%, var(--felt-lite) 0%, var(--felt) 48%, var(--felt-deep) 100%); background-size: 180px 180px, 100% 100%; }
 .bg-surface--paper { color: var(--text-on-paper); background-color: var(--paper-100); background-image: url("tex/paper.webp"), var(--mat-paper); background-size: 200px 200px, 100% 100%; }
 .bg-surface--parchment { color: var(--text-on-paper); background-color: #ecd9aa; background-image: url("tex/paper.webp"), var(--mat-parchment); background-size: 200px 200px, 100% 100%; }
-.bg-surface--oak { color: var(--walnut-950); background-color: var(--oak-500); background-image: url("tex/oak.webp"), var(--mat-oak); background-size: 520px 520px, 100% 100%; }
+/* oak: a .18 cream wash over the grain keeps the darkest grain >= 4.5:1 under walnut-950 text (sampled pixels, build/verify-3b.js) */
+.bg-surface--oak { color: var(--walnut-950); background-color: var(--oak-500); background-image: linear-gradient(rgba(255, 244, 224, .18), rgba(255, 244, 224, .18)), url("tex/oak.webp"), var(--mat-oak); background-size: 100% 100%, 520px 520px, 100% 100%; }
 
 /* ---------- Type helpers ---------- */
 .bg-display { font-family: var(--font-display); font-variation-settings: var(--display-soft); font-weight: var(--fw-display); letter-spacing: -.01em; line-height: var(--lh-tight); }
@@ -265,7 +268,7 @@ html[data-motion="reduce"] .bg-celebrate { display: none !important; }
    Focus (keyboard + TV D-pad). One ring everywhere: dark gap + ivory ring + soft glow.
    It swaps instantly (never transitions); on TV focused controls also lift with a transform.
    ===================================================================== */
-.bg-focus, .bg-btn, .bg-version, .bg-seg > button, .bg-stepper__btn, .bg-row, .bg-toggle, .bg-select, .bg-sheet__option, .bg-tile, .bg-chip[tabindex], [data-focus] { scroll-margin: calc(var(--focus-room) + .5rem); }
+.bg-focus, .bg-btn, .bg-version, .bg-seg > button, .bg-stepper__btn, .bg-row, .bg-toggle, .bg-select, .bg-sheet__option, .bg-tile, [data-focus] { scroll-margin: calc(var(--focus-room) + .5rem); }
 .bg-focus:focus, .bg-btn:focus, .bg-version:focus, .bg-seg > button:focus, .bg-stepper__btn:focus, .bg-row:focus, .bg-toggle:focus, .bg-select:focus, .bg-sheet__option:focus, .bg-tile:focus { outline: none; }
 /* three separate rules: an old WebView that lacks :focus-visible or :has() must still get the .is-focus ring BGUI.focus sets */
 .bg-focus.is-focus, .bg-btn.is-focus, .bg-version.is-focus, .bg-seg > button.is-focus, .bg-stepper__btn.is-focus, .bg-row.is-focus, .bg-select.is-focus, .bg-sheet__option.is-focus, .bg-tile.is-focus { box-shadow: var(--focus-ring) !important; position: relative; z-index: 2; }
@@ -701,6 +704,7 @@ html[data-tv] .bg-btn:focus-visible, html[data-tv] .bg-tile:focus-visible, html[
    ===================================================================== */
 .bg-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .875rem; padding: var(--focus-room); margin: calc(-1 * var(--focus-room)); }
 html[data-tv] .bg-topbar { padding-top: .875rem; padding-bottom: .75rem; }
+html[data-tv] { scroll-padding-top: var(--bg-bar-h, 0px); }   /* BGUI.focus measures the sticky top bar, so D-pad focus never lands under it */
 html[data-tv] .bg-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.25rem; }
 .bg-tile {
   position: relative; display: flex; flex-direction: column; min-width: 0; margin: 0; padding: 0; border: 0; text-decoration: none; text-align: left; font: inherit;
@@ -709,7 +713,8 @@ html[data-tv] .bg-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); gap:
   transition: transform var(--dur-fast) var(--ease-out); touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
 .bg-tile:active, .bg-tile.is-pressed { transform: translateY(2px) scale(.985); }
-.bg-tile__art { position: relative; display: block; aspect-ratio: 4 / 3; border-radius: var(--r-lg) var(--r-lg) 0 0; overflow: hidden; background: radial-gradient(110% 80% at 50% 12%, var(--felt-lite) 0%, var(--felt) 48%, var(--felt-deep) 100%); }
+/* the art gets its own layer: a D-pad focus move then re-rasters only the label, not the SVG art (about -57 % CPU per move) */
+.bg-tile__art { will-change: transform; position: relative; display: block; aspect-ratio: 4 / 3; border-radius: var(--r-lg) var(--r-lg) 0 0; overflow: hidden; background: radial-gradient(110% 80% at 50% 12%, var(--felt-lite) 0%, var(--felt) 48%, var(--felt-deep) 100%); }
 .bg-tile__art img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .bg-tile__art::after { content: ""; position: absolute; inset: .375rem; border-radius: calc(var(--r-lg) - .3rem); box-shadow: inset 0 0 0 1px rgba(255, 246, 222, .38); pointer-events: none; }
 .bg-tile__badge {                      /* player count on the art: opaque walnut pill */
@@ -718,12 +723,14 @@ html[data-tv] .bg-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); gap:
   color: var(--tag-dark-ink); background: var(--tag-dark-bg); box-shadow: 0 0 0 1px rgba(228, 193, 113, .55), 0 2px 4px rgba(0, 0, 0, .35);
 }
 .bg-tile__badge .bg-ico { width: 1.1em; height: 1.1em; stroke-width: 2.4; }
-.bg-tile__label { position: relative; display: grid; gap: .1875rem; padding: .6875rem 3rem .6875rem .75rem; border-radius: 0 0 var(--r-lg) var(--r-lg);
+.bg-tile__label { position: relative; display: grid; gap: .1875rem; padding: .6875rem .75rem; border-radius: 0 0 var(--r-lg) var(--r-lg);
   background-color: var(--paper-100); background-image: url("tex/paper.webp"), var(--mat-paper); background-size: 200px 200px, 100% 100%; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7); }
 .bg-tile__label::before { content: ""; position: absolute; left: 0; right: 0; top: -.1875rem; height: .1875rem; background: linear-gradient(180deg, var(--accent-bright), var(--accent) 60%, var(--accent-deep)); }
 .bg-tile__name { font: 720 var(--fs-lg)/1.1 var(--font-display); font-variation-settings: var(--display-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html:not([data-tv]) .bg-tile__name { font-size: min(var(--fs-lg), 4.5vw); }   /* "Scattergories" fits a 2-up tile down to 320px */
 .bg-tile__meta { font: 650 var(--fs-xs)/1.2 var(--font-ui); color: var(--ink-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bg-tile__seal { position: absolute; right: .625rem; top: -1.0625rem; width: 2rem; height: 2rem; border-radius: 50%; display: grid; place-items: center;
+.bg-tile__seal { position: absolute; right: .625rem; top: -1.375rem;   /* sits on the band, clear of the name line */
+  width: 2rem; height: 2rem; border-radius: 50%; display: grid; place-items: center;
   color: var(--accent-ink); background: var(--mat-enamel), var(--accent); box-shadow: 0 0 0 1.5px var(--brass-400), 0 0 0 3px rgba(120, 90, 50, .18), 0 2px 3px rgba(0, 0, 0, .3); }
 .bg-tile__seal .bg-ico { width: 1.05rem; height: 1.05rem; stroke-width: 2.4; }
 .bg-tile--party .bg-tile__label { background: linear-gradient(180deg, #3a2a5e, #241a40); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14); color: var(--cream); }
