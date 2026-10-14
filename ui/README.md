@@ -13,7 +13,7 @@ This folder is the shared look for all seven games, the hub and Party Mode. It's
 | `ui.js` | `window.BGUI`: toast, sheet, win, celebrate, effects, hero, flip, tweenNumber, countdown, ambient, setTurn, focus (D-pad), dice, setTV, haptic, mark, trophy, mount.* |
 | `icons.js` | `BGUI.icon(name)`: 39 original line icons as inline SVG (no `<text>`, no filters). Optional, but load it before `ui.js` if you want icons in helpers (stepper +/-, toast icons, CPU badge) |
 | `fonts/` | DM Serif Display regular (24.2 KB) and italic (24.0 KB), Manrope variable (24.3 KB): Latin WOFF2, SIL OFL 1.1 (`OFL-*.txt`). **Total 72.4 KB** (budget 150 KB) |
-| `tex/` | Pre-rendered images, so nothing is blurred or generated at runtime: `felt.webp` and `paper.webp` grain tiles (neutral alpha, they tint to any colour), `orb-gold.webp` and `orb-violet.webp` light orbs, `rays-q.webp` (one quadrant of the 20-ray win wheel). **Total 101 KB** (budget 150 KB) |
+| `tex/` | Pre-rendered images, so nothing is blurred or generated at runtime: `felt.webp` and `paper.webp` grain tiles (neutral alpha, they tint to any colour), `orb-gold.webp` and `orb-violet.webp` light orbs, `rays-core.webp` (one quadrant of the 20-ray win wheel). **Total 101 KB** (budget 150 KB) |
 | `styleguide.html` | The living style guide: phone and TV, all 8 accents, 10 seats, every component, the surfaces, every effect with a full/reduced switch, and a button for every helper |
 | `art/` | Original Midnight Luxe art: tile thumbnails (+ simplified `-sm` variants), TV hero backdrops (WebP, 1920 and 960), app icons (SVG + PNG exports, maskable), the Fire TV banner and the Android launcher icons. See section 10 |
 
@@ -108,7 +108,7 @@ Every call is safe if its element is missing: it returns `null`, `false` or a re
 | `BGUI.sheet.open(el, {onClose, dismissible, focus})`, `.close(el?)`, `.isOpen(el?)`, `.top()` | Bottom sheet with a scrim. It traps focus (Tab and D-pad), closes on Back/Escape/scrim and restores focus to the opener. Nested sheets stack |
 | `BGUI.win.open(el, {focus})`, `.close(el?)`, `.isOpen()` | Opens or closes a `.bg-win`: builds the ray wheel, the confetti layer and the trophy once, adds `.is-open`, aims the rays at the trophy, moves focus inside and restores it to the opener on close. While it is open the orbs rest and the effects ticker turns the rays |
 | `BGUI.celebrate({ms, colors, count, origin, rays, into})` | One-shot canvas burst of gold confetti (diamonds and strips, a few jewels) plus a gold ray bloom, about 2.8 s (2 s and half the pieces under "Reduce effects"). The canvas is removed afterwards; returns a promise. Nothing under reduced motion or when the tab is hidden. Inside an open `.bg-win` it draws behind the card |
-| `BGUI.effects.get()`, `.set("full"\|"reduced")`, `.motion()`, `.state()`, `.key` | The one effects setting. `set` writes `html[data-effects]` and `localStorage["bgui.effects"]` (try/catch) and fires `bgui:effects`. `motion()` is what really runs: `"full"`, `"reduced"` or `"off"` under reduced motion. `state()` is `{level, motion, hz}` where `hz` is the effects ticker's rate (4 orbs, 8 win screen, 0 still) |
+| `BGUI.effects.get()`, `.set("full"\|"reduced")`, `.motion()`, `.state()`, `.key` | The one effects setting. `set` writes `html[data-effects]` and `localStorage["bgui.effects"]` (try/catch) and fires `bgui:effects`. `motion()` is what really runs: `"full"`, `"reduced"` or `"off"` under reduced motion. `state()` is `{level, motion, hz}` where `hz` is the effects ticker's rate (4 orbs, 24 win screen, 0 still). `rate` = `{orbs: 4, win: 24, beat: 30}` (updates a second; `beat` steps the hero crossfade) |
 | `BGUI.hero.show(el, {src, game})`, `.layers(el)` | Crossfades the two `.bg-hero__layer` backdrops by opacity. With `src` the next image is decoded first; a newer call (fast D-pad) wins. `game` themes the layer and the hero |
 | `BGUI.mark()`, `BGUI.trophy()` | The gold logomark and the laurel trophy as inline SVG strings (gradients only: no filters, masks or `<text>`) |
 | `BGUI.flip(el, fromRectOrEl, {ms, spring})` | FLIP move: read the rect, move the DOM, then call `flip`. Uses transform only |
@@ -131,7 +131,7 @@ Jewel tones mapped to how people picture each game, and checked for separation b
 
 | `data-game` | Accent (UI tint) | Deep (tile / scene) | Felt-lite (pool of light) | Why |
 |---|---|---|---|---|
-| `trouble` | `#fbdc5e` sunflower | `#463808` | `#5f5017` | the yellow pop-dome box |
+| `trouble` | `#f5e52e` sunflower | `#463808` | `#5f5017` | the yellow pop-dome box |
 | `sorry` | `#5c9cff` sapphire | `#0a2459` | `#1a3c7a` | the blue slide track |
 | `monopoly` | `#3fc477` money green | `#06391f` | `#115531` | banknote and board green |
 | `rummy500` | `#4fd8d2` card-table teal | `#04343a` | `#125b5c` | the felt card table |
@@ -179,40 +179,44 @@ Jewel tones mapped to how people picture each game, and checked for separation b
 
 The CEO's rule is **keep the fancy effects**: every Luxe effect is ON by default and none is removed for performance. Each one is built so it costs little: only `transform` and `opacity` change, on layers that are already promoted; glows and rays are pre-rendered images or static gradients (no live blur, no box-shadow animation, no masked SVG); and everything stops while the page is hidden.
 
-**One setting.** `BGUI.effects.set("reduced")` ("Reduce effects", default off, saved per device) turns the endless motion down for slow devices: the orbs rest after lighting up, the win rays hold still, there is no confetti drift, the opening burst is shorter, and glints come half as often. Glows, light pools, the trophy, focus and crossfades stay. The OS `prefers-reduced-motion` (or `html[data-motion=reduce]`) still wins: nothing moves at all.
+**One setting.** `BGUI.effects.set("reduced")` ("Reduce effects", default off, saved per device) turns the endless motion down for slow devices: the orbs rest after lighting up, the win rays and the confetti hold still (the confetti stays on screen), the opening burst is shorter, and glints come half as often. Glows, light pools, the trophy, focus and crossfades stay. The OS `prefers-reduced-motion` (or `html[data-motion=reduce]`) still wins: nothing moves and there is no confetti.
 
-**One ticker.** The two endless effects (the orbs' drift and the win screen's turning rays + drifting confetti) are moved by ONE `BGUI` timer, not by CSS animations: 4 updates a second for the orbs (about 3 px a second, so it reads as continuous), 8 for the win screen (rays turn 3 degrees a second, confetti drifts one screen per 20 s). It writes only `transform` on promoted layers, so a tick never lays out or repaints, and it is off while hidden, under "Reduce effects" and under reduced motion. Everything else is a one-shot CSS transition or animation.
+**One ticker.** The endless effects (the orbs' drift and the win screen's turning rays + falling confetti) are moved by ONE `BGUI` timer, not by CSS animations: 4 updates a second for the orbs (a few px a second, so it reads as continuous) and 24 for the win screen (film rate): the rays turn 6 degrees a second (the mockup's 60 s a turn, 0.25 degrees a step) and each of the 36 confetti pieces falls about one screen per 20 s (far ones slower), sways and spins (steps of about 2.3 px on TV and 1.8 px on the phone). It writes only `transform` on promoted layers, so a tick never lays out or repaints, and it is off while hidden, under "Reduce effects" and under reduced motion. The hero crossfade is stepped by a timer at `BGUI.effects.rate.beat` (30 a second). The glint, the turn pulse and everything else are one-shot CSS transitions or animations (compositor-driven).
+
+**Why the win screen is cheaper now, with the same look** (review step 3c):
+- The page under the opaque scrim is not drawn while a win is open (`body:has(.bg-win.is-open){visibility:hidden}`; browsers without `:has()` simply draw it). TV 66.7 % -> 38.0 %, phone 31.0 % -> 17.9 %.
+- Only the bright inner 64 % of the ray wheel turns (`tex/rays-core.webp`, 23 KB, the same ray shapes and falloff with a soft edge); the faint outer rays (at most ~12 % alpha) are replaced by their angle-averaged light as a static halo gradient in the scrim.
+- No animation stays applied after it ends (`animation-fill-mode: backwards` on the rays bloom, the card entrance and the orbs' light-up) and the wheel carries its own .6 opacity, so the rays box needs no offscreen surface: TV 50.6 % -> 37.6 % on a game-like page.
+- Each confetti piece is its own tiny layer: no full-screen confetti sheet is blended on every tick.
 
 | Effect | How it stays cheap | Phone 390x844 @2x | TV 1920x1080 |
 |---|---|---|---|
-| Idle page, everything still (control) | static stage on a fixed layer | 2.2 | 0.8-1.3 |
-| "Reduce effects", ambient on | orbs rest, glint every 24 s | 1.9-3.2 | 0.3-0.8 |
-| Light orbs drifting forever (hub, lobby) | 2-3 pre-rendered glow WebPs (`tex/orb-*.webp`) on promoted layers, ticker 4 Hz | 2.3-5.8 | 2.8-4.6 |
-| Logomark glint, fired back to back | own 16px layer, opacity + transform, through `BGUI.ambient` (ships once every 12 s, so about 1/12 of this: ~1 %) | 12.6-12.9 | 12.8-15.0 |
-| Turn-ring pulse (3 pulses) | opacity + transform on the ring pseudo-element, through `BGUI.ambient` | 0.5-1.7 | 0.5-1.7 |
-| Win screen, held open: rays turning + confetti drifting | ONE ray wheel layer from a pre-rendered quadrant (`tex/rays-q.webp`), ONE confetti layer, opaque scrim, ticker 8 Hz | 10.0-14.4 | 11.6-14.0 |
-| Win screen under "Reduce effects" | ticker off | 0.0-0.5 | 0.0-0.2 |
-| Win opening beat: celebrate burst + rays bloom + card entrance | 1x canvas for 2.8 s, removed after | 9.9-11.1 | 10.8-11.2 |
-| Hero crossfade every 1.5 s | two stacked image layers swap opacity (420 ms); with the shipped `art/hero-*.webp` backdrops (no mask, no inline SVG) | 7.4 (8.2-10.6 with the WebPs) | 11.8-13.8 (12.1-13.3 with the WebPs) |
-| Tile focus move every 1 s (D-pad on the shelf) | ring + game glow painted once on the tile's `::after`, opacity swapped instantly; tiles pre-promoted on TV | 2.5 (2.0-3.2 over the real thumbnails) | 11.7 (9.8-10.1 over the real thumbnails) |
+| Idle page, everything still (control) | static stage on a fixed layer | 2.7 | 1.5 |
+| Light orbs drifting forever (hub, lobby) | 3 pre-rendered glow WebPs (`tex/orb-*.webp`) on promoted layers, ticker 4 Hz | 5.9 | 13.5-16.7 |
+| Logomark glint, fired back to back | own 16px layer, CSS opacity + transform through `BGUI.ambient`; ships 1 s in every 12 s, so about 1/12 of this on average | 11.7 * | 16.7 * |
+| Turn-ring pulse (3 pulses, 4.8 s) | CSS opacity + transform on the ring pseudo-element through `BGUI.ambient` | 0.5-1.7 ** | 7.5 *** |
+| Win screen held open: rays turning + confetti falling, 24 Hz | inner wheel from `tex/rays-core.webp` + static halo, 36 piece layers, opaque scrim, page under it not drawn | 17.9 | 38.0 |
+| Win screen under "Reduce effects" | ticker off, confetti still | 0.0 | 0.2 |
+| Win opening beat: celebrate burst + rays bloom + card entrance (3 s) | 1x canvas for 2.8 s, removed after | 17.6 | 31.0 |
+| Hero crossfade every 1.5 s | the incoming pre-rendered backdrop fades in over the old one (one blended layer), stepped at 30 Hz; no rounded clip on the layers | 6.5 | 25.9 |
+| Tile focus move every 1 s (D-pad on the shelf) | ring + game glow painted once on the tile's `::after`, opacity swapped instantly | 2.0 | 26.7 (about 0.27 CPU-second per move) |
 
-% of ONE core: OS CPU time of every Edge process, headless Edge with `--disable-gpu` (software compositing, so these are pessimistic upper bounds), ~6 s windows with everything else held still; ranges are two full runs (2026-10-14). Run by `BG_audit/design/luxe-build/perf.js` through `.dev/run-one.ps1`; the "with the WebPs" / "real thumbnails" figures and the cost of ONE D-pad hero move (about 0.1 CPU-second on the phone, 0.25 on TV) come from `art-check.js` (section 10).
+% of ONE core: OS CPU time of every Edge process, headless Edge with `--disable-gpu` (software compositing, so these are pessimistic upper bounds), 6 s windows with everything else held still, measured 2026-10-14 in a REAL window of each size (TV 1920x1080 @1x, phone 390x844 @2x) by `BG_audit/design/luxe-build/repair/perf2.js` through `.dev/run-one.ps1`. The core step's earlier TV figures were taken with 1920x1080 emulated inside a 390x844 window and read far too low; the review caught it. \* the review's real-window run of the same CSS glint (`luxe-review/run3.js`). \*\* core run, phone window. \*\*\* the same pulse stepped by a timer (A/B); the shipped CSS pulse was not re-measured in a TV window.
 
-What the A/B runs showed, and why the shipped versions look like this:
+What the A/B runs showed (same look, real windows):
 
 | Same look, implementation | Phone | TV |
 |---|---|---|
-| Orbs: CSS animation, linear 60 fps | 21.9 | 30.0 |
-| Orbs: CSS animation, `steps()` 10 fps | 11.1 | 7.9 |
-| **Orbs: BGUI ticker 4 Hz (shipped)** | **2.3-5.8** | **2.8-4.6** |
-| Win: CSS rays + 2 confetti layers, linear 60 fps | 49.6 | 49.9 |
-| Win: CSS rays + 2 confetti layers, `steps()` 20 fps | 46-48 | 52-53 |
-| Win: ticker 12 Hz, 2 confetti layers, see-through scrim | 21-22 | 23 |
-| Win: ticker 8 Hz, 2 confetti layers, opaque scrim | 15.2 | 14.8 |
-| **Win: ticker 8 Hz, 1 confetti layer, opaque scrim (shipped)** | **10.0-14.4** | **11.6-14.0** |
-| Tile focus: ring + 3.5rem blur glow box-shadow on the tile | 2.5 | 20.7 |
-| Tile focus: ring + glow on a pre-promoted `::after` with a 110 ms opacity fade | 8.6 | 16.9 |
-| **Tile focus: the same `::after`, swapped instantly (shipped)** | **2.5** | **11.7** |
+| Win, core build: ticker 8 Hz, rays 3 deg/s (half the mockup speed), one confetti sheet (review run) | 13.0 | 39.5 |
+| Win, core build moved at 24 Hz (review run) | 28.5 | 68.2 |
+| Win, this build, 24 Hz, page under the scrim still drawn | 31.0 | 66.7 |
+| Win, this build, 24 Hz, rays only / confetti only | 18.6 / 13.9 | 34.3 / 25.8 |
+| Win, this build at 16 Hz (3.4 px confetti steps on TV) | 15.2 | 31.6 |
+| **Win, this build at 24 Hz (shipped)** | **17.9** | **38.0** |
+| Glint stepped by a timer at 30 Hz instead of the CSS animation | 19.9 | 15.3-17.5 |
+| Hero crossfade stepped at 60 Hz instead of 30 Hz | 10.0 | 25.5 |
+
+**Still over ~15 % on TV in software compositing** (open for the CEO): the win screen (38 %), the hero crossfade (26 % while crossfading every 1.5 s), tile focus moves (27 % at one move a second), the orbs (about 15 %) and the glint fired back to back (17 %, but it ships 1 s in 12 s). Per-process numbers show the cost sits in the compositor (GPU process), not in page script: at 1920x1080 every composited frame redraws its damaged area in software (the whole screen for falling confetti, the ray wheel's rotated 1000 px square), so the cost follows area x frames. The cheaper options left all change the look - a smaller turning wheel means shorter rays, fewer than about 16 updates a second shows steps - so they are not taken. A Fire TV composites on its GPU, where this work largely leaves the CPU, and "Reduce effects" is the switch for a slow device.
 
 The lesson: in software compositing a running CSS animation keeps the compositor producing frames at 60 Hz even when `steps()` changes the value only 10 times a second, and every full-screen layer costs a full-screen composite per frame. So endless motion goes through the low-rate ticker, and the win screen has one wheel layer, one confetti layer and an opaque scrim.
 
@@ -250,7 +254,7 @@ Each game's `sw.js` must list the ui files in `ASSETS` and bump `VERSION`:
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.png", "../sound.js", "../skins.js", "../saves.js",
   "../ui/theme.css", "../ui/ui.js", "../ui/icons.js",
   "../ui/fonts/dmserifdisplay-latin.woff2", "../ui/fonts/dmserifdisplay-italic-latin.woff2", "../ui/fonts/manrope-var-latin.woff2",
-  "../ui/tex/felt.webp", "../ui/tex/paper.webp", "../ui/tex/orb-gold.webp", "../ui/tex/orb-violet.webp", "../ui/tex/rays-q.webp"];
+  "../ui/tex/felt.webp", "../ui/tex/paper.webp", "../ui/tex/orb-gold.webp", "../ui/tex/orb-violet.webp", "../ui/tex/rays-core.webp"];
 ```
 
 The hub's `sw.js` needs the same files with `ui/...` paths, plus the hub art it shows: `ui/art/thumb-<game>.svg` and `thumb-<game>-sm.svg`, the hero backdrops it uses (`ui/art/hero-<game>-960.webp`, and `-1920.webp` on a 1080p TV: 409 KB for all 16) and the icon PNGs its manifest names. Each game caches its own icon PNGs. Every game shares one origin and the caches are per game, so each game must cache its own copy for offline play. `styleguide.html`, `README.md` and the OFL texts don't need caching. The old Tabletop files (`fraunces-var-latin.woff2`, `figtree-var-latin.woff2`, `tex/walnut.webp`, `tex/oak.webp`) are gone: drop them from any `ASSETS` list.
@@ -319,7 +323,7 @@ BGUI.hero.show(".bg-hero", { game: game, src: src });
   - ONE D-pad move: about 0.1 CPU-second on the phone and 0.25 on TV, whether the image is new or already decoded;
   - the 8-tile shelf with the art: idle 0-1 %; a focus move every second: 2.0-3.2 % on the phone, 9.8-10.1 % on TV.
 
-The art step added no new effect images: the core's `tex/orb-gold.webp`, `tex/orb-violet.webp` and `tex/rays-q.webp` are the shipped glow and ray set.
+The art step added no new effect images: the core's `tex/orb-gold.webp`, `tex/orb-violet.webp` and `tex/rays-core.webp` are the shipped glow and ray set.
 
 **Checks and generators (dev-time only, outside the repo).** `BG_audit/design/luxe-build/` holds:
 
@@ -330,4 +334,4 @@ The art step added no new effect images: the core's `tex/orb-gold.webp`, `tex/or
 - `art-check.js`: the art in the style guide, the variant choice and the CPU figures.
 - `inst-fonts-luxe.py`: TTF copies of the shipped fonts for outlining.
 
-The core's checks are there too: `verify.js` (style guide at 390x844, 1366x768, 1920x1080 TV and 960x540 TV), `perf.js` (per-effect CPU), `contrast.js`, `accents.js`, `palette.js`, `seats.js` and `make-fx.js` (renders `tex/orb-*.webp` and `tex/rays-q.webp`).
+The core's checks are there too: `verify.js` (style guide at 390x844, 1366x768, 1920x1080 TV and 960x540 TV), `perf.js` (per-effect CPU), `contrast.js`, `accents.js`, `palette.js`, `seats.js` and `make-fx.js` (renders `tex/orb-*.webp` and `tex/rays-core.webp`).

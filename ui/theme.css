@@ -167,7 +167,7 @@
    accent: UI tint (seals, pips, toggles-on, accent buttons)   accent-text: the accent as text on ink (>= 4.9:1 on panels)
    accent-ink: text ON the accent   accent-paper: accent as text on paper (>= 5.2:1)   accent-deep: tile / scene backdrop
    felt*: the spot-lit table   board*: the board plane */
-[data-game="trouble"]  { --accent: #fbdc5e; --accent-bright: #fdeba0; --accent-deep: #463808; --accent-ink: #1a1405; --accent-text: #fbdc5e; --accent-paper: #584d2a; --accent-glow: rgba(251, 220, 94, .3);
+[data-game="trouble"]  { --accent: #f5e52e; --accent-bright: #faf08e; --accent-deep: #463808; --accent-ink: #1a1405; --accent-text: #f5e52e; --accent-paper: #584d2a; --accent-glow: rgba(245, 229, 46, .3);
                          --felt: #3b3009; --felt-deep: #120f04; --felt-lite: #5f5017; --board: #403410; --board-lite: #5f501b; }
 [data-game="sorry"]    { --accent: #5c9cff; --accent-bright: #a6caff; --accent-deep: #0a2459; --accent-ink: #050b1d; --accent-text: #5c9cff; --accent-paper: #304d7f; --accent-glow: rgba(92, 156, 255, .32);
                          --felt: #0b2050; --felt-deep: #040a1d; --felt-lite: #1a3c7a; --board: #0e265e; --board-lite: #23498e; }
@@ -567,6 +567,12 @@ html[data-tv] { scroll-padding-top: var(--bg-bar-h, 0px); }   /* BGUI.focus meas
 .bg-players--scroll { display: flex; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; padding-block: .875rem .625rem; }
 .bg-players--scroll::-webkit-scrollbar { display: none; }
 .bg-players--scroll > .bg-player { flex: 0 0 auto; width: 9.75rem; }
+.bg-players--scroll::after {          /* phone: the row fades out at the right edge, so it reads as scrollable (sticky: gone at the end) */
+  content: ""; position: sticky; right: 0; flex: 0 0 2.25rem; margin-left: -1.75rem; align-self: stretch; pointer-events: none;
+  background: linear-gradient(90deg, rgba(8, 10, 21, 0), var(--ink-1) 85%); }
+html[data-tv] .bg-players--scroll { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); overflow: visible; }
+html[data-tv] .bg-players--scroll > .bg-player { width: auto; }
+html[data-tv] .bg-players--scroll::after { content: none; }
 .bg-player {
   position: relative; display: flex; align-items: center; gap: .55rem; min-width: 0;
   padding: .4rem .75rem .4rem .4rem; border-radius: var(--r-pill);
@@ -594,6 +600,9 @@ html[data-tv] { scroll-padding-top: var(--bg-bar-h, 0px); }   /* BGUI.focus meas
   box-shadow: inset 0 -3px 6px rgba(0, 0, 0, .3), 0 0 0 2px var(--ink-1), 0 0 0 3px rgba(255, 255, 255, .1);
   color: var(--seat-ink); font: var(--fw-caps) var(--fs-xs)/1 var(--font-ui);
 }
+/* on paper and parchment a pale seat fill (yellow, silver, green) sits close to the surface: the piece keeps a solid ink
+   outline there (2px ink-1 + a 1px ink edge, >= 14:1 against both surfaces), so it never depends on the fill */
+.bg-surface--paper .bg-token, .bg-surface--parchment .bg-token { box-shadow: inset 0 -3px 6px rgba(0, 0, 0, .3), 0 0 0 2px var(--ink-1), 0 0 0 3px rgba(8, 10, 21, .55); }
 .bg-player.is-turn .bg-token::after {             /* the turn ring: static light around the piece */
   content: ""; position: absolute; inset: -.375rem; border-radius: 50%;
   box-shadow: 0 0 0 2px var(--seat), 0 0 1rem .125rem var(--seat-ring);
@@ -676,32 +685,43 @@ html[data-tv] { scroll-padding-top: var(--bg-bar-h, 0px); }   /* BGUI.focus meas
 
 /* =====================================================================
    Win overlay. KEEP THE FANCY EFFECTS: gold rays spin for as long as it is open, confetti bursts then keeps drifting, laurel trophy.
-   Cheap by construction: the ray wheel is ONE promoted layer built from a pre-rendered quadrant image (tex/rays-q.webp, 30 KB)
-   and only rotates; the drifting confetti is ONE pre-built layer that only translates; the scrim is opaque. BGUI's effects
-   ticker turns the wheel and moves the confetti together 8 times a second (one composite per tick, no 60 Hz CSS loop: README
-   section 6 has the A/B numbers). Everything stops while the page is hidden, under "Reduce effects" and under reduced motion.
+   Cheap by construction: the ray wheel is ONE promoted layer built from a pre-rendered quadrant image (tex/rays-core.webp, 23 KB)
+   of the bright inner rays and only rotates (the faint outer rays are a static halo in the scrim); each of the 36 confetti
+   pieces is its own tiny layer that only moves; the scrim is opaque and the page under it is not drawn. BGUI's effects ticker
+   turns the wheel (6 degrees a second) and moves the confetti 24 times a second (one composite per tick, no 60 Hz CSS loop:
+   README section 6 has the A/B numbers). Everything stops while the page is hidden, under "Reduce effects" (the confetti
+   then stays, still) and under reduced motion.
    <div class="bg-win"><div class="bg-win__scrim"></div><div class="bg-win__rays"></div><div class="bg-win__card">
      <div class="bg-win__medal"></div> eyebrow, .bg-win__title, .bg-win__sub, .bg-stats.bg-win__stats, .bg-win__actions </div></div>
    BGUI.win.open() fills the rays wheel, the confetti layer and an empty medal with the trophy.
    ===================================================================== */
-.bg-win { position: fixed; inset: 0; z-index: var(--z-overlay); display: none; place-items: center; padding: calc(env(safe-area-inset-top, 0px) + var(--gutter)) var(--gutter) calc(env(safe-area-inset-bottom, 0px) + var(--gutter)); overflow: hidden auto; color: var(--text-1); }
-.bg-win.is-open { display: grid; }
-.bg-win__scrim { position: fixed; inset: 0; background-color: #05060d; background-image: radial-gradient(70% 45% at 50% 30%, rgba(231, 202, 144, .22), rgba(231, 202, 144, 0) 70%), radial-gradient(100% 60% at 50% 112%, var(--accent-glow), rgba(0, 0, 0, 0) 70%); }
-.bg-win__rays { position: fixed; left: 50%; top: var(--bg-rays-y, 30%); width: 46rem; height: 46rem; margin: -23rem 0 0 -23rem; pointer-events: none; opacity: .6; animation: bg-rays-in var(--dur-celebrate) var(--ease-out) both; }
+.bg-win { --bg-halo: 23rem; position: fixed; inset: 0; z-index: var(--z-overlay); display: none; place-items: center; padding: calc(env(safe-area-inset-top, 0px) + var(--gutter)) var(--gutter) calc(env(safe-area-inset-bottom, 0px) + var(--gutter)); overflow: hidden auto; color: var(--text-1); }
+.bg-win.is-open { display: grid; visibility: visible; }
+html[data-tv] .bg-win { --bg-halo: 32rem; }
+/* the scrim is opaque, so the page under an open win is not drawn at all (nothing under it is re-composited on a tick);
+   browsers without :has() just draw it as before */
+body:has(.bg-win.is-open) { visibility: hidden; }
+/* the scrim carries the static outer glow of the ray wheel (the angle-averaged light of the faint outer rays, centred on the
+   trophy): only the bright inner rays turn */
+.bg-win__scrim { position: fixed; inset: 0; background-color: #05060d;
+  background-image: radial-gradient(circle var(--bg-halo) at 50% var(--bg-rays-y, 30%), rgba(246, 230, 188, 0) 46%, rgba(246, 230, 188, .052) 55%, rgba(246, 230, 188, .077) 64%, rgba(246, 230, 188, .032) 80%, rgba(246, 230, 188, .011) 90%, rgba(246, 230, 188, 0) 100%),
+    radial-gradient(70% 45% at 50% 30%, rgba(231, 202, 144, .22), rgba(231, 202, 144, 0) 70%), radial-gradient(100% 60% at 50% 112%, var(--accent-glow), rgba(0, 0, 0, 0) 70%); }
+.bg-win__rays { position: fixed; left: 50%; top: var(--bg-rays-y, 30%); width: 46rem; height: 46rem; margin: -23rem 0 0 -23rem; pointer-events: none; animation: bg-rays-in var(--dur-celebrate) var(--ease-out) backwards; }   /* fill backwards: nothing stays applied after the bloom */
 html[data-tv] .bg-win__rays { width: 64rem; height: 64rem; margin: -32rem 0 0 -32rem; }
-@keyframes bg-rays-in { from { transform: scale(.5) rotate(-12deg); opacity: 0; } to { transform: none; opacity: .6; } }
-.bg-win__wheel { position: absolute; inset: 0; will-change: transform; }   /* turned by the BGUI ticker: 3 degrees a second */
-.bg-win__wheel > i { position: absolute; left: 50%; top: 50%; width: 50%; height: 50%; transform-origin: 0 0; background: url("tex/rays-q.webp") 0 0 / 100% 100% no-repeat; }
+@keyframes bg-rays-in { from { transform: scale(.5) rotate(-12deg); opacity: 0; } }
+.bg-win__wheel { position: absolute; inset: 18%; opacity: .6; will-change: transform; }   /* the bright inner 64 %: turned by the BGUI ticker, 6 degrees a second */
+.bg-win__wheel > i { position: absolute; left: 50%; top: 50%; width: 50%; height: 50%; transform-origin: 0 0; background: url("tex/rays-core.webp") 0 0 / 100% 100% no-repeat; }
 .bg-win__wheel > i:nth-child(2) { transform: rotate(90deg); }
 .bg-win__wheel > i:nth-child(3) { transform: rotate(180deg); }
 .bg-win__wheel > i:nth-child(4) { transform: rotate(270deg); }
-.bg-win__confetti { position: fixed; inset: 0; overflow: hidden; pointer-events: none; contain: strict; }
-.bg-win__fall { position: absolute; left: 0; top: -100%; width: 100%; height: 200%; will-change: transform; }   /* moved by the BGUI ticker: one screen every 20 s */
-.bg-win__fall > b { position: absolute; display: block; width: .5rem; height: .875rem; border-radius: 2px; }
+.bg-win__confetti { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; contain: strict; }   /* under the card */
+.bg-win__fall { position: absolute; inset: 0; }
+/* every piece is its own tiny layer, moved by the BGUI ticker (about a screen every 20 s, swaying and spinning); "Reduce effects" holds them still */
+.bg-win__fall > b { position: absolute; display: block; width: .5rem; height: .875rem; border-radius: 2px; will-change: transform; }
 .bg-win__fall > b.is-far { width: .375rem; height: .625rem; opacity: .55; }
 .bg-win__fall > b.is-dot { width: .5rem; height: .5rem; border-radius: 50%; }
 .bg-win__fall > b.is-gem { width: .55rem; height: .55rem; border-radius: 1px; }
-.bg-win__card { position: relative; width: min(100%, 26rem); margin: 0; padding: .5rem 0 0; text-align: center; animation: bg-win-in 700ms var(--ease-spring) both; }
+.bg-win__card { position: relative; z-index: 1; width: min(100%, 26rem); margin: 0; padding: .5rem 0 0; text-align: center; animation: bg-win-in 700ms var(--ease-spring) backwards; }
 html[data-tv] .bg-win__card { width: min(100%, 36rem); }
 @keyframes bg-win-in { from { transform: translateY(2rem) scale(.94); opacity: 0; } to { transform: none; opacity: 1; } }
 .bg-win__medal { position: relative; width: 9rem; height: 7.65rem; margin: 0 auto .75rem; display: grid; place-items: center; color: var(--gold-200); }
@@ -717,6 +737,7 @@ html[data-tv] .bg-win__card { width: min(100%, 36rem); }
 .bg-win__stats { margin: 1rem 0 0; }
 .bg-win__actions { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: .75rem; margin-top: 1.5rem; padding: var(--focus-room); margin-inline: calc(-1 * var(--focus-room)); }
 .bg-win__actions .bg-btn { white-space: normal; }
+html[data-tv] .bg-win__actions { gap: 1.5rem; }   /* the focused button's 1.04 lift + ring stays clear of its neighbour */
 
 /* =====================================================================
    Hub / TV game tile: spot-lit art fading into the game's deep colour, serif name, player-count badge, seal.
@@ -726,7 +747,7 @@ html[data-tv] .bg-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); gap:
 .bg-tile {
   position: relative; display: flex; flex-direction: column; min-width: 0; margin: 0; padding: 0; border: 0; text-decoration: none; text-align: left; font: inherit;
   color: var(--text-1); border-radius: var(--r-xl); cursor: pointer;
-  background: linear-gradient(180deg, var(--accent-deep) 0%, var(--accent-deep) 60%, #0b0c18 100%);
+  background: var(--accent-deep);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .09), 0 18px 34px -18px rgba(0, 0, 0, .95);
   transition: transform var(--dur-fast) var(--ease-out); touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
@@ -736,14 +757,16 @@ html[data-tv] .bg-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); gap:
   background: radial-gradient(80% 70% at 50% 28%, var(--felt-lite) 0%, var(--accent-deep) 70%); }
 .bg-tile__art img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .bg-tile__art::before { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: radial-gradient(70% 55% at 50% 0%, rgba(255, 238, 205, .18), rgba(255, 238, 205, 0) 70%); }   /* spotlight */
-.bg-tile__art::after { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(180deg, rgba(0, 0, 0, 0) 52%, var(--accent-deep) 100%); }   /* art fades into the deep colour */
+.bg-tile__art::after { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(180deg, rgba(0, 0, 0, 0) 52%, var(--accent-deep) 96%); }   /* art fades into the deep colour */
 .bg-tile__badge {                      /* player count on the art: opaque ink pill */
   position: absolute; left: .5rem; top: .5rem; z-index: 2; display: inline-flex; align-items: center; gap: .25rem; min-height: 1.5rem; padding: .2rem .5rem;
   border-radius: var(--r-pill); font: var(--fw-caps) var(--fs-micro)/1 var(--font-ui); font-variant-numeric: tabular-nums; letter-spacing: .02em;
   color: var(--tag-dark-ink); background: var(--tag-dark-bg); box-shadow: inset 0 0 0 1px var(--line-gold);
 }
 .bg-tile__badge .bg-ico { width: 1.1em; height: 1.1em; stroke-width: 2.4; }
-.bg-tile__label { position: relative; display: grid; gap: .2rem; padding: .25rem .875rem .875rem; border-radius: 0 0 var(--r-xl) var(--r-xl); }
+.bg-tile__label { position: relative; display: grid; gap: .2rem; padding: .25rem .875rem .875rem; border-radius: 0 0 var(--r-xl) var(--r-xl);
+  background: linear-gradient(180deg, var(--accent-deep) 0%, #0b0c18 100%);   /* starts at the colour the art fades into: no seam */
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, .09), inset -1px 0 0 rgba(255, 255, 255, .09), inset 0 -1px 0 rgba(255, 255, 255, .09); }
 .bg-tile__label::before { content: ""; position: absolute; left: .875rem; top: -.125rem; width: 1.75rem; height: 2px; border-radius: 2px; background: var(--accent); }
 .bg-tile__name { padding-top: .375rem; font: 400 var(--fs-lg)/1.1 var(--font-display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 html:not([data-tv]) .bg-tile__name { font-size: min(var(--fs-lg), 4.6vw); }   /* "Scattergories" fits a 2-up tile down to 320px */
@@ -752,7 +775,9 @@ html:not([data-tv]) .bg-tile__name { font-size: min(var(--fs-lg), 4.6vw); }   /*
   width: 2rem; height: 2rem; border-radius: 50%; display: grid; place-items: center;
   color: var(--accent-ink); background: radial-gradient(circle at 35% 30%, var(--accent-bright), var(--accent) 60%); box-shadow: 0 0 0 2px var(--accent-deep), 0 4px 10px rgba(0, 0, 0, .45); }
 .bg-tile__seal .bg-ico { width: 1.05rem; height: 1.05rem; stroke-width: 2.4; }
-.bg-tile--party { background: linear-gradient(180deg, var(--accent-deep) 0%, #2a0b33 60%, #0b0c18 100%); box-shadow: inset 0 0 0 1px rgba(231, 202, 144, .35), 0 18px 34px -18px rgba(0, 0, 0, .95); }
+.bg-tile--party { background: var(--accent-deep); box-shadow: inset 0 0 0 1px rgba(231, 202, 144, .35), 0 18px 34px -18px rgba(0, 0, 0, .95); }
+.bg-tile--party .bg-tile__label { background: linear-gradient(180deg, var(--accent-deep) 0%, #2a0b33 45%, #0b0c18 100%);
+  box-shadow: inset 1px 0 0 rgba(231, 202, 144, .35), inset -1px 0 0 rgba(231, 202, 144, .35), inset 0 -1px 0 rgba(231, 202, 144, .35); }
 .bg-tile--party .bg-tile__label::before { background: var(--gold-fill); }
 
 /* =====================================================================
@@ -765,7 +790,7 @@ html:not([data-tv]) .bg-tile__name { font-size: min(var(--fs-lg), 4.6vw); }   /*
 .bg-orbs { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; contain: strict; }
 .bg-orbs > i { position: absolute; display: block; width: 26rem; height: 26rem; opacity: .2; will-change: transform;
   background: url("tex/orb-gold.webp") 0 0 / 100% 100% no-repeat;
-  animation: bg-orbs-in 2.6s var(--ease-out) both; }
+  animation: bg-orbs-in 2.6s var(--ease-out) backwards; }
 .bg-orbs > i:nth-child(1) { left: -9rem; top: 2rem; }
 .bg-orbs > i:nth-child(2) { right: -11rem; top: 26rem; opacity: .26; background-image: url("tex/orb-violet.webp"); animation-delay: .3s; }
 .bg-orbs > i:nth-child(3) { left: 30%; bottom: -16rem; width: 22rem; height: 22rem; opacity: .14; animation-delay: .6s; }
@@ -779,21 +804,22 @@ html[data-tv] .bg-orbs > i:nth-child(2) { top: 14rem; }
 .bg-emblem > .bg-ico { width: 60%; height: 60%; }
 .bg-emblem--lg { width: 5rem; height: 5rem; }
 .bg-emblem::after {
-  content: ""; position: absolute; left: 50%; top: 4%; width: 34%; height: 34%; margin-left: -17%; pointer-events: none; opacity: 0; will-change: transform, opacity;
+  content: ""; position: absolute; left: 50%; top: 4%; width: 34%; height: 34%; margin-left: -17%; pointer-events: none; will-change: transform, opacity;
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 0C8.6 5 11 7.4 16 8 11 8.6 8.6 11 8 16 7.4 11 5 8.6 0 8 5 7.4 7.4 5 8 0Z' fill='%23fcf5e3'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
-  transform: scale(.4);
+  opacity: 0; transform: scale(.4);
 }
 .bg-emblem.is-glint::after { animation: bg-glint var(--dur-glint) var(--ease-in-out) 1 both; }
 @keyframes bg-glint { 0%, 100% { opacity: 0; transform: scale(.4) rotate(0deg); } 45% { opacity: 1; transform: scale(1) rotate(45deg); } }
 
 /* --- Hero (TV hub poster, lobby): two stacked layers crossfade pre-rendered backdrops by opacity (BGUI.hero.show).
        No live mask, no inline SVG: a layer is an image (or the game's spot-lit scene gradient until the art lands). --- */
-.bg-hero { position: relative; isolation: isolate; overflow: hidden; display: grid; align-items: end; min-height: 16rem; border-radius: var(--r-xl); background: var(--ink-1); }
-.bg-hero__layer { position: absolute; inset: 0; z-index: -2; opacity: 0; will-change: opacity; transition: opacity var(--dur-hero) var(--ease-out);
+.bg-hero { position: relative; isolation: isolate; display: grid; align-items: end; min-height: 16rem; border-radius: var(--r-xl); background: var(--ink-1); }
+.bg-hero__layer { position: absolute; inset: 0; z-index: -3; border-radius: inherit; opacity: 0; will-change: opacity;
   background-color: var(--accent-deep); background-repeat: no-repeat; background-position: 100% 50%; background-size: cover;
   background-image: radial-gradient(55% 75% at 76% 38%, var(--felt-lite) 0%, var(--accent-deep) 62%, var(--ink-1) 100%); }
 .bg-hero__layer.is-on { opacity: 1; }
-.bg-hero__shade { position: absolute; inset: 0; z-index: -1; pointer-events: none;
+.bg-hero__layer.is-in { z-index: -2; }   /* the incoming backdrop fades in over the old one (BGUI.hero.show, --dur-hero) */
+.bg-hero__shade { position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
   background: linear-gradient(90deg, var(--ink-1) 0%, rgba(8, 10, 21, .86) 34%, rgba(8, 10, 21, 0) 68%), linear-gradient(0deg, var(--ink-1) 0%, rgba(8, 10, 21, 0) 42%); }
 .bg-hero__body { position: relative; display: grid; gap: .5rem; max-width: 34rem; padding: 1.5rem; }
 .bg-hero__title { margin: 0; font: 400 var(--fs-4xl)/.98 var(--font-display); letter-spacing: -.015em; }
@@ -801,10 +827,10 @@ html[data-tv] .bg-orbs > i:nth-child(2) { top: 14rem; }
 html[data-tv] .bg-hero { min-height: 26rem; }
 html[data-tv] .bg-hero__body { padding: 2.5rem; }
 
-/* --- motion levels. "Reduce effects" (html[data-effects=reduced]): the ticker stops (orbs rest, rays hold still) and the
-       confetti drift is hidden; glows, light pools, the trophy, focus and crossfades stay. Reduced motion: nothing moves.
-       The ticker also stops while the page is hidden (BGUI sets html[data-hidden]) and the orbs rest under an open win (data-win). --- */
-html[data-effects="reduced"] .bg-win__confetti { display: none; }
+/* --- motion levels. "Reduce effects" (html[data-effects=reduced]): the ticker stops (orbs rest, rays and confetti hold
+       still); glows, light pools, the trophy, the still confetti, focus and crossfades stay. Reduced motion: nothing moves
+       and there is no confetti. The ticker also stops while the page is hidden (BGUI sets html[data-hidden]) and the orbs
+       rest under an open win (data-win). --- */
 html[data-hidden] .bg-orbs > i, html[data-hidden] .bg-win__rays, html[data-hidden] .bg-win__card { animation-play-state: paused; }
 
 /* ---------- Small pieces: dice, countdown ring, TV hint keys, celebration canvas ---------- */

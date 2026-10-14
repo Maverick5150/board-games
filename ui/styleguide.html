@@ -147,7 +147,7 @@
         <dl class="sg-kv">
           <dt>Orbs</dt><dd>.bg-orbs behind this page: pre-rendered glow images that drift forever (BGUI's effects ticker moves them 4 times a second)</dd>
           <dt>Glint</dt><dd>.bg-emblem logomark: one 1 s star every 12 s through BGUI.ambient</dd>
-          <dt>Win</dt><dd>gold rays turn and confetti drifts for as long as it is open (8 ticks a second), plus the laurel trophy and a gold burst</dd>
+          <dt>Win</dt><dd>gold rays turn and confetti falls for as long as it is open (24 ticks a second), plus the laurel trophy and a gold burst</dd>
           <dt>Focus</dt><dd>ivory ring, dark gap, gold glow; tiles add their game's glow</dd>
           <dt>Spotlight</dt><dd>.bg-spot, tile art and every surface carry a static pool of light</dd>
         </dl>
@@ -380,7 +380,7 @@ document.addEventListener("DOMContentLoaded", function () {
   document.addEventListener("bgui:tv", function (e) { tvRow.set(e.detail.on, true); });
 
   /* players */
-  var players = [{ name: "You", meta: "Rolled 6 · 2 home" }, { name: "Ava", meta: "1 home" }, { name: "Jules", meta: "Joining from a phone", cpu: false }, { name: "Robo", meta: "0 home", cpu: true }];
+  var players = [{ name: "You", meta: "Rolled a 6" }, { name: "Ava", meta: "1 home" }, { name: "Jules", meta: "On a phone", cpu: false }, { name: "Robo", meta: "0 home", cpu: true }];
   var chips = B.mount.players("#sgPlayers", players.map(function (p, i) { p.seat = [4, 1, 2, 3][i]; return p; }), { turn: 0 });
   var ten = []; for (var i = 1; i <= 10; i++) ten.push({ name: ["You", "Ava", "Jules", "Max", "Priya", "Theo", "Lena", "Omar", "Iris", "Kai"][i - 1], meta: (i * 7) % 11 + " cards", seat: i, cpu: i > 6 });
   B.mount.players("#sgPlayers10", ten, { turn: 2, pulse: false });

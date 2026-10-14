@@ -2,23 +2,28 @@
    Pairs with ui/theme.css. Plain ES5, no dependencies, no build step. Every call is safe when its element is missing.
 
    BGUI.haptic(pattern)              guarded navigator.vibrate; pattern = name ("tap","select","turn","success","warn","error","roll") | ms | array
-   BGUI.toast(msg, opts)             one shared toast; position computed from the layout (open sheet, top bar, [data-toast-avoid])
+   BGUI.toast(msg, opts)             one shared toast; placed in the first free band (bottom up, then top down) clear of every
+                                     visible .bg-players strip, the top bar, an open sheet and [data-toast-avoid]
    BGUI.sheet.open(el, opts)/close() bottom sheet: focus trap, Back/Escape closes, restores focus; opts {onClose, dismissible, focus}
    BGUI.win.open(el)/close()         win overlay (.bg-win): modal (Tab + D-pad stay inside), restores focus to the opener on close
    BGUI.celebrate(opts)              one-shot canvas burst of gold confetti + a gold ray bloom; auto-removes its canvas; nothing under reduced motion
    BGUI.effects.get()/set(level)     "full" (default) | "reduced": persisted (localStorage "bgui.effects"), reflected as html[data-effects];
                                      .motion() = what really runs ("full" | "reduced" | "off" under reduced motion);
-                                     .state() = {level, motion, hz}: hz of the ONE effects ticker (4 orbs, 8 win screen, 0 still)
-   BGUI.hero.show(el, {src, game})   crossfades the two .bg-hero__layer backdrops by opacity (the next image is decoded first)
+                                     .state() = {level, motion, hz}: hz of the ONE effects ticker (4 orbs, 24 win screen, 0 still);
+                                     .rate = {orbs, win, beat}: updates a second of the ticker and of the stepped hero fade
+   BGUI.hero.show(el, {src, game})   crossfades the two .bg-hero__layer backdrops (the next image is decoded first, then fades in
+                                     on top by opacity, stepped at effects.rate.beat)
    BGUI.mark() / BGUI.trophy()       the gold "diamond die" logomark and the laurel trophy as inline SVG strings
    BGUI.flip(el, fromRect, opts)     FLIP move (transform only)
    BGUI.tweenNumber(el, a, b, ms)    counts a number up/down
    BGUI.countdown(el, seconds, opts) ring timer (repaints 4x a second, no continuous animation); returns {stop,pause,resume,remaining,done}
    BGUI.ambient                      ONE scheduler for rare one-shot beats (emblem glint, turn pulse): never two at once,
-                                     paused while the page is hidden or motion is reduced
+                                     paused while the page is hidden or motion is reduced (CSS animations on their own layers)
    BGUI.setTurn(playerEl)            moves the static turn ring and asks the scheduler for 3 pulses
    BGUI.focus                        D-pad spatial navigation (auto-enabled in TV mode); Enter = click; stays inside an open sheet/win;
-                                     the top bar is its own zone and focus scrolls clear of it; arrows never get stuck in select/text/radio
+                                     the top bar is its own zone and focus scrolls clear of it (Down never enters it; at the end of
+                                     the page Down scrolls on only while the focused control stays clear of it); arrows never get
+                                     stuck in select/text/radio
    BGUI.dice                         SVG pip faces + a cheap roll (transform tumble + a few face swaps)
    BGUI.setTV(on) / isTV()           html[data-tv]; auto for ?tv=1 and window.AndroidTV
    BGUI.mount.*                      seg, stepper, toggle, versions, players, emblem, orbs, auto (declarative data-bg-mount)
@@ -66,7 +71,7 @@
 
   /* ---------------- effects level: "full" (default) | "reduced" ----------------
      Every Luxe effect is ON by default. "reduced" turns the endless ambient motion down for slow devices (orbs rest after
-     lighting up, the win rays hold still, no confetti drift, half the confetti burst, glints half as often).
+     lighting up, the win rays hold still, the confetti holds still, half the confetti burst, glints half as often).
      Reduced motion (OS or data-motion) still wins and stops all motion. */
   var FX_KEY = "bgui.effects", fxLevel = "full";
   function fxStored() { try { return w.localStorage && w.localStorage.getItem(FX_KEY) === "reduced" ? "reduced" : "full"; } catch (e) { return "full"; } }
@@ -84,7 +89,7 @@
       return fxLevel;
     },
     motion: function () { return reducedMotion() ? "off" : fxLevel; },
-    /* the continuous-effects ticker: hz = 4 (orbs drifting), 8 (win rays + confetti) or 0 (nothing endless is moving) */
+    /* the continuous-effects ticker: hz = 4 (orbs drifting), 24 (win rays + confetti) or 0 (nothing endless is moving) */
     state: function () { return { level: fxLevel, motion: effects.motion(), hz: tick.hz, hidden: !!d.hidden }; }
   };
   /* everything pauses while the page is hidden: CSS loops via html[data-hidden], beats via the ambient scheduler */
@@ -92,31 +97,49 @@
   hiddenFlag();
   d.addEventListener("visibilitychange", hiddenFlag);
 
-  /* ---------------- continuous effects: ONE low-rate ticker ----------------
-     The endless effects (the light orbs' drift, the win screen's ray wheel and confetti drift) are moved by this timer,
-     not by CSS animations. Measured in software compositing (README section 6): any running CSS animation keeps the
-     compositor producing frames at 60 Hz (a steps() timing still costs 8-11 % of a core for the orbs and 46-52 % for the
-     win screen), while a timer that moves promoted layers N times a second costs about N composites. The motions are slow
-     (orbs about 3 px a second, rays 3 degrees a second), so 4 and 8 updates a second look continuous. Only transform is
-     written, on layers that are already promoted (will-change), so a tick never lays out or repaints. One ticker for the
-     whole page; it stops while the page is hidden, under "Reduce effects" and under reduced motion. */
-  var ORB_HZ = 4, WIN_HZ = 8;
+  /* ---------------- continuous effects: ONE ticker ----------------
+     The endless effects (the light orbs' drift, the win screen's ray wheel and falling confetti) are moved by this timer,
+     not by CSS animations: a running CSS animation keeps the compositor producing 60 frames a second, while a timer that
+     moves promoted layers N times a second costs about N composites (README section 6 has the measured CPU of each rate).
+     Only transform is written, on layers that are already promoted (will-change), so a tick never lays out or repaints.
+     The orbs drift a few px a second, so 4 updates a second look continuous. The win screen runs at film rate (24 a second):
+     the rays turn 6 degrees a second (the mockup's 60 s a turn) and every confetti piece falls, sways and spins on its own
+     tiny layer. That fits the budget because the page under the opaque win scrim is not drawn at all (theme.css hides it),
+     no full-screen confetti sheet is blended, and only the bright inner part of the ray wheel turns (its faint outer glow
+     is a static gradient in the scrim). One ticker for the whole page; it stops while the page is hidden, under
+     "Reduce effects" and under reduced motion. */
+  var RATE = { orbs: 4, win: 24, beat: 30 };   // updates a second: orb drift, win screen, the stepped hero fade
+  var RAY_DEG_S = 6;                           // the mockup's ray wheel: one turn a minute
   var ORBS = [[9, 5, 46], [-8, -6, 58], [9, 5, 64]];   // drift: x rem, y rem, seconds per leg (eased there and back)
-  var tick = { id: 0, hz: 0, last: 0, orbT: 0, winT: 0, win: null };
+  var tick = { id: 0, hz: 0, last: 0, orbT: 0, winT: 0, win: null, bits: null, H: 0, rem: 16 };
   function fxWant() {
     if (d.hidden || reducedMotion() || fxLevel !== "full") return 0;
     var win = openWin();
-    if (win) return win.querySelector(".bg-win__wheel, .bg-win__fall") ? WIN_HZ : 0;
-    return d.querySelector(".bg-orbs > i") ? ORB_HZ : 0;
+    if (win) return win.querySelector(".bg-win__wheel, .bg-win__fall") ? Math.max(1, +RATE.win || 24) : 0;
+    return d.querySelector(".bg-orbs > i") ? Math.max(1, +RATE.orbs || 4) : 0;
   }
+  /* the confetti pieces of an open win overlay with their flight data (data-f: y0, fall speed, sway rem, phase, spin) */
+  function winBits(win) {
+    tick.rem = parseFloat(w.getComputedStyle(root).fontSize) || 16;
+    tick.H = win.clientHeight || w.innerHeight || 800;
+    return $$(".bg-win__fall > b", win).map(function (el) {
+      var f = (el.getAttribute("data-f") || "").split(",").map(Number);
+      return { el: el, y0: f[0] || 0, v: f[1] || 0.05, amp: (f[2] || 0) * tick.rem, ph: f[3] || 0, r0: f[4] || 0, spin: f[5] || 0 };
+    });
+  }
+  w.addEventListener("resize", function () { if (tick.win) tick.bits = null; });
   function fxTick() {
     var t = now(), dt = tick.last ? Math.min(0.5, (t - tick.last) / 1000) : 0, win = openWin();
     tick.last = t;
     if (win) {
-      if (win !== tick.win) { tick.win = win; tick.winT = 0; }
-      var s = (tick.winT += dt), wheel = win.querySelector(".bg-win__wheel"), fall = win.querySelector(".bg-win__fall");
-      if (wheel) wheel.style.transform = "rotate(" + (s * 3 % 360).toFixed(2) + "deg)";
-      if (fall) fall.style.transform = "translate3d(" + (Math.sin(s * 0.5712) * 1.2).toFixed(3) + "%," + (s % 20 / 20 * 50).toFixed(3) + "%,0)";
+      if (win !== tick.win) { tick.win = win; tick.winT = 0; tick.bits = null; }
+      if (!tick.bits) tick.bits = winBits(win);
+      var s = (tick.winT += dt), wheel = win.querySelector(".bg-win__wheel"), span = tick.H + 64;
+      if (wheel) wheel.style.transform = "rotate(" + (s * RAY_DEG_S % 360).toFixed(2) + "deg)";
+      for (var i = 0; i < tick.bits.length; i++) {   // each piece: down one screen in about 20 s (far ones slower), swaying and spinning
+        var p = tick.bits[i], dy = (((p.y0 + s * p.v) % 1) - p.y0) * span, dx = Math.sin(s * 0.9 + p.ph) * p.amp;
+        p.el.style.transform = "translate3d(" + dx.toFixed(1) + "px," + dy.toFixed(1) + "px,0) rotate(" + ((p.r0 + s * p.spin) % 360).toFixed(1) + "deg)";
+      }
       return;
     }
     var o = (tick.orbT += dt);
@@ -130,8 +153,30 @@
     if (want === tick.hz) return;
     if (tick.id) { clearInterval(tick.id); tick.id = 0; }
     tick.hz = want; tick.last = 0;
-    if (!openWin()) tick.win = null;
+    if (!openWin()) { tick.win = null; tick.bits = null; }
     if (want) { tick.id = setInterval(fxTick, Math.round(1000 / want)); fxTick(); }
+  }
+  effects.rate = RATE;
+
+  /* ---------------- stepped fade (hero crossfade) ----------------
+     A timer at RATE.beat (30 a second) writes the incoming layer's opacity instead of a 60 fps CSS transition: an opacity
+     ramp looks the same at video rate and measured cheaper on the phone (README section 6). The short beats (glint, turn
+     pulse) stay compositor-driven CSS animations: stepping those by a timer measured dearer. */
+  function stepper(ms, f, done) {
+    var t0 = now(), id = 0, over = false;
+    function end(ok) { if (over) return; over = true; if (id) clearInterval(id); if (done) done(ok); }
+    function run() { if (over) return; var k = ms > 0 ? Math.min(1, (now() - t0) / ms) : 1; f(k); if (k >= 1) end(true); }
+    run();
+    if (!over) id = setInterval(run, Math.round(1000 / Math.max(1, +RATE.beat || 30)));
+    return { stop: function () { end(false); }, over: function () { return over; } };
+  }
+  function easeOut(k) { return 1 - Math.pow(1 - k, 3); }
+  function cssMs(el, name, dflt) {
+    var v = "";
+    try { v = (w.getComputedStyle(el).getPropertyValue(name) || "").trim(); } catch (e) { }
+    var n = parseFloat(v);
+    if (isNaN(n)) return dflt;
+    return /ms$/.test(v) ? n : /s$/.test(v) ? n * 1000 : n;
   }
 
   /* ---------------- haptics ---------------- */
@@ -159,27 +204,48 @@
     d.body.appendChild(toastEl);
     return toastEl;
   }
-  /* px covered at the top (top bar, player strip, [data-toast-avoid] in the top half) and at the bottom (open sheet,
-     player strip, [data-toast-avoid]): the toast is placed clear of all of them, so it never covers the player strip */
-  function layoutCover() {
-    var vh = w.innerHeight || root.clientHeight, top = 0, bottom = 0;
+  /* every visible band the toast must not cover: the top bar, EACH .bg-players strip (wherever it sits: top, middle or
+     bottom), [data-toast-avoid] and an open sheet. Bands are treated as full width (the toast is centred). */
+  function avoidBands(vh) {
+    var out = [];
     $$(".bg-topbar, .bg-players, [data-toast-avoid]").forEach(function (el) {
       if (el.closest && el.closest(".bg-sheet, .bg-win")) return;
       if (!isVisible(el)) return;
       var r = el.getBoundingClientRect();
-      if (r.bottom <= 0 || r.top >= vh) return;
-      if (r.top + r.height / 2 < vh / 2) top = Math.max(top, r.bottom); else bottom = Math.max(bottom, vh - r.top);
+      if (r.bottom <= 0 || r.top >= vh || r.height <= 0) return;
+      out.push({ top: Math.max(0, r.top), bottom: Math.min(vh, r.bottom) });
     });
     var s = sheetTop();
-    if (s) bottom = Math.max(bottom, Math.min(vh, s.offsetHeight));   // layout height: correct even mid-slide
-    return { top: top, bottom: bottom, vh: vh };
+    if (s) out.push({ top: Math.max(0, vh - s.offsetHeight), bottom: vh });   // layout height: correct even mid-slide
+    return out;
+  }
+  /* first free spot for a toast of height h: scanning up from the bottom edge, or down from the top edge */
+  function freeSpot(bands, vh, h, gap, edge, from) {
+    var y = from === "top" ? edge : vh - edge - h, guard = 0, moved = true;
+    while (moved && guard++ < 40) {
+      moved = false;
+      for (var i = 0; i < bands.length; i++) {
+        var b = bands[i];
+        if (y < b.bottom + gap && y + h > b.top - gap) { y = from === "top" ? b.bottom + gap : b.top - gap - h; moved = true; }
+      }
+      if (y < 0 || y + h > vh) return null;
+    }
+    return moved ? null : y;
   }
   function placeToast(el, want) {
-    var c = layoutCover(), gap = 12, mode = want || "auto";
-    if (mode === "auto") mode = c.bottom > c.vh * 0.45 ? "top" : "bottom";
+    var vh = w.innerHeight || root.clientHeight, gap = 12;
+    el.style.top = ""; el.style.bottom = "";
+    var edge = parseFloat(w.getComputedStyle(el).bottom) || 20;    // the CSS resting gap (safe area included)
+    var h = el.offsetHeight || 48, bands = avoidBands(vh);
+    var order = want === "top" ? ["top", "bottom"] : ["bottom", "top"], mode = order[0], y = null;
+    for (var i = 0; i < order.length && y === null; i++) { mode = order[i]; y = freeSpot(bands, vh, h, gap, edge, mode); }
+    if (y === null) {   // nothing is free (a tall sheet over a strip): just under the top bar, over the least important band
+      mode = "top"; y = edge;
+      $$(".bg-topbar").forEach(function (b) { if (isVisible(b)) { var r = b.getBoundingClientRect(); if (r.top <= 1 && r.bottom + gap > y) y = r.bottom + gap; } });
+    }
     el.classList.toggle("is-top", mode === "top");
-    if (mode === "top") { el.style.top = Math.round(c.top + gap) + "px"; el.style.bottom = "auto"; }
-    else { el.style.top = "auto"; el.style.bottom = c.bottom ? Math.round(c.bottom + gap) + "px" : ""; }
+    if (mode === "top") { el.style.top = Math.round(y) + "px"; el.style.bottom = "auto"; }
+    else { el.style.top = "auto"; el.style.bottom = Math.round(vh - y - h) + "px"; }
     return mode;
   }
   function toast(msg, opts) {
@@ -343,19 +409,22 @@
       "<path d=\"M80 31l3.2 6.6 7.2 1-5.2 5 1.3 7.2L80 47.4l-6.5 3.4 1.3-7.2-5.2-5 7.2-1Z\" style=\"fill:var(--accent-paper,#6b5124)\" opacity=\".9\"/></svg>";
   }
 
-  /* win overlay dressing, built once per overlay: the ray wheel (4 quadrants of ONE pre-rendered image on one layer),
-     ONE pre-built confetti layer that only translates (near pieces plus smaller, dimmer far ones: measured, every extra
-     full-screen layer costs a full-screen composite per tick), and the trophy in an empty medal */
+  /* win overlay dressing, built once per overlay: the ray wheel (4 quadrants of ONE pre-rendered image of the bright inner
+     rays on one layer; the faint outer glow is a static gradient in the scrim), the confetti (36 pieces, each its own tiny
+     promoted layer moved by the ticker: no full-screen sheet to blend on every tick) and the trophy in an empty medal */
   var CONFETTI = ["#f9ebc6", "#e9cd93", "#c99f5e", "#fff6dc", "#d5af6d", "#ff5d73", "#5f95ff", "#3fd391", "#b383ff", "#ffcb4f"];
   function fallLayer(seed) {
     var html = "", n = 36, r = seed;
     function rnd() { r = (r * 9301 + 49297) % 233280; return r / 233280; }
     for (var i = 0; i < n; i++) {
-      var x = (rnd() * 96 + 2).toFixed(1), y = (rnd() * 48 + 1).toFixed(1), rot = Math.round(rnd() * 180), k = rnd();
-      var cls = (k < 0.18 ? "is-dot" : k < 0.34 ? "is-gem" : "") + (i % 5 > 2 ? " is-far" : "");
-      var c = CONFETTI[Math.floor(rnd() * CONFETTI.length)], st = "left:" + x + "%;background:" + c + ";transform:rotate(" + (/is-gem/.test(cls) ? 45 : rot) + "deg);";
-      cls = cls ? " class=\"" + cls.replace(/^ /, "") + "\"" : "";
-      html += "<b" + cls + " style=\"top:" + y + "%;" + st + "\"></b><b" + cls + " style=\"top:" + (+y + 50).toFixed(1) + "%;" + st + "\"></b>";   // each piece twice: the loop is seamless
+      var far = i % 5 > 2, k = rnd(), cls = (k < 0.18 ? "is-dot" : k < 0.34 ? "is-gem" : "") + (far ? " is-far" : "");
+      var x = (rnd() * 96 + 2).toFixed(1), y0 = rnd(), rot = Math.round(rnd() * 180), c = CONFETTI[Math.floor(rnd() * CONFETTI.length)];
+      var v = far ? 0.032 + rnd() * 0.012 : 0.044 + rnd() * 0.018;                   // screens a second: about 20 s a screen, far ones slower
+      var amp = (far ? 0.3 : 0.55) + rnd() * 0.6, ph = rnd() * 6.283;                 // sway in rem
+      var spin = (rnd() < 0.5 ? -1 : 1) * (far ? 18 + rnd() * 24 : 30 + rnd() * 50);  // degrees a second
+      cls = cls.replace(/^ /, "");
+      html += "<b" + (cls ? " class=\"" + cls + "\"" : "") + " data-f=\"" + [y0.toFixed(3), v.toFixed(4), amp.toFixed(2), ph.toFixed(2), rot, spin.toFixed(1)].join(",") +
+        "\" style=\"left:" + x + "%;top:calc(" + y0.toFixed(3) + " * (100% + 64px) - 32px);background:" + c + ";transform:rotate(" + rot + "deg)\"></b>";
     }
     return "<i class=\"bg-win__fall\">" + html + "</i>";
   }
@@ -394,7 +463,7 @@
     el.classList.add("is-open");
     root.setAttribute("data-win", "");   // the orbs under the overlay rest while it is open
     winAim(el);
-    fxRefresh();   // the ticker switches from the orbs to the rays + confetti (8 a second) for as long as it is open
+    fxRefresh();   // the ticker switches from the orbs to the rays + confetti (24 a second) for as long as it is open
     var first = $(opts.focus, el) || el.querySelector("[data-autofocus]") || tabbables(el)[0] || el;
     if (focusOn && dpad && first !== el) setFocus(first); else focusEl(first);
     emit("win", { open: true, el: el });
@@ -704,10 +773,23 @@
     if (heroGen) heroGen.set(el, gen);
     function swap() {
       if (heroGen && heroGen.get(el) !== gen) return false;     // a newer show() (fast D-pad) won: drop this one
+      if (el._bgFade) el._bgFade.stop();                        // a fade still running settles to its nearer end first
+      var ls2 = heroLayers(el), cur = ls2[0].classList.contains("is-on") ? ls2[0] : ls2[1], next = cur === ls2[0] ? ls2[1] : ls2[0];
       if (opts.game) next.setAttribute("data-game", opts.game); else next.removeAttribute("data-game");
       next.style.backgroundImage = opts.src ? "url(\"" + String(opts.src).replace(/"/g, "%22") + "\")" : "";
-      next.classList.add("is-on"); cur.classList.remove("is-on");
       if (opts.game) el.setAttribute("data-game", opts.game);
+      /* the incoming (opaque) backdrop fades in ON TOP of the old one, which stays fully on underneath: a true crossfade
+         with one blended layer per step instead of two, stepped at RATE.beat */
+      next.style.opacity = "0";
+      next.classList.add("is-in");
+      next.classList.add("is-on");
+      var run = stepper(reducedMotion() ? 0 : cssMs(el, "--dur-hero", 420), function (k) { next.style.opacity = easeOut(k).toFixed(3); }, function (ok) {
+        if (el._bgFade === run) el._bgFade = null;
+        if (ok || (parseFloat(next.style.opacity) || 0) >= 0.5) cur.classList.remove("is-on"); else next.classList.remove("is-on");
+        next.classList.remove("is-in");
+        next.style.opacity = "";
+      });
+      if (!run.over()) el._bgFade = run;
       return true;
     }
     if (!opts.src || !w.Image) return resolved(swap());
@@ -811,9 +893,23 @@
         clear = other.filter(function (el) { var r = el.getBoundingClientRect(); return dir === "down" ? r.top >= zr.bottom - 1 : r.bottom <= zr.top + 1; });
         if (!clear.length) clear = other;
       }
-      best = pick(a, clear, dir);
+      else if (dir === "down") clear = other.filter(function (el) { return !(el.closest && el.closest(".bg-topbar")); });   // from the page, Down never lands in the top bar
+      best = clear.length ? pick(a, clear, dir) : null;
     }
-    return best ? setFocus(best) : false;
+    if (best) return setFocus(best);
+    if (!z && dir === "down" && !sheetTop() && !openWin()) return pageEnd(a);
+    return false;
+  }
+  /* Down with nothing below in the page: scroll on (there may be text to read) but only as far as the focused control stays
+     fully clear of the sticky top bar; the key is consumed either way, so the page never scrolls natively and the ring
+     never slides under the bar */
+  function pageEnd(a) {
+    var vh = w.innerHeight || root.clientHeight, se = d.scrollingElement || root;
+    var room = Math.floor(a.top - barCover() - 24);                       // keep the ring and its glow below the bar
+    var left = se.scrollHeight - vh - (w.pageYOffset || se.scrollTop || 0);
+    var step = Math.min(room, left, Math.round(vh * 0.6));
+    if (step > 0) { try { w.scrollBy(0, step); } catch (e) { } }
+    return true;
   }
   function pick(a, list, dir) {
     var acx = a.left + a.width / 2, acy = a.top + a.height / 2, best = null, bestScore = Infinity;
