@@ -40,8 +40,12 @@ if (/[?&]motion=reduce(&|$)/.test(location.search)) document.documentElement.set
   .sg-flip { display: flex; gap: .75rem; align-items: center; min-height: 3rem; }
   .sg-flip > .sg-slot { width: 3rem; height: 3rem; border-radius: 50%; box-shadow: inset 0 2px 4px rgba(0,0,0,.5); background: rgba(0,0,0,.25); display: grid; place-items: center; }
   .sg-num { font: 760 var(--fs-3xl)/1 var(--font-display); font-variation-settings: var(--display-soft); color: var(--cream); font-variant-numeric: tabular-nums; }
-  .sg-tile-art { display: grid; place-items: center; color: var(--accent-bright); }
-  .sg-tile-art > .bg-ico { width: 38%; height: 38%; stroke-width: 1.6; }
+  .sg-art { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); align-items: start; }
+  .sg-icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(5.25rem, 1fr)); gap: .875rem .5rem; }
+  .sg-icon, .sg-banner { margin: 0; display: grid; gap: .375rem; font: 650 var(--fs-xs)/1.2 var(--font-ui); color: var(--text-muted); }
+  .sg-icon { justify-items: center; text-align: center; }
+  .sg-icon img { width: 4.5rem; height: 4.5rem; display: block; }
+  .sg-banner img { width: min(100%, 20rem); height: auto; display: block; border-radius: var(--r-md); box-shadow: var(--sh-2); }
   .sg-gamepick { grid-template-columns: repeat(3, 1fr); }
   html[data-tv] .sg-gamepick { grid-template-columns: repeat(5, 1fr); }
   .sg-note { margin: 0; font-size: var(--fs-xs); color: var(--text-faint); }
@@ -210,6 +214,11 @@ if (/[?&]motion=reduce(&|$)/.test(location.search)) document.documentElement.set
   <div class="bg-section"><span class="bg-eyebrow">The shelf</span></div>
   <div class="bg-tiles sg-tiles" id="sgTiles"></div>
 
+  <!-- ===================== art (ui/art) ===================== -->
+  <div class="bg-section"><span class="bg-eyebrow">App icons and TV banner</span></div>
+  <div class="sg-art" id="sgArt"></div>
+  <p class="sg-note">ui/art: filter-free SVG with every glyph outlined to paths, so it renders the same as a plain &lt;img&gt;. PNG exports sit next to them (manifest 192 / 512 / maskable 512, apple-touch 180, Android launcher 48-192, Fire TV banner 320x180 and 640x360).</p>
+
   <!-- ===================== tokens ===================== -->
   <div class="bg-section"><span class="bg-eyebrow">Per-game accents</span></div>
   <div class="sg-games" id="sgGames"></div>
@@ -328,11 +337,16 @@ document.addEventListener("DOMContentLoaded", function () {
   var games = [["trouble", "Trouble", "2-4", "Pop the dome"], ["sorry", "Sorry!", "2-4", "Slide and bump"], ["monopoly", "Monopoly", "2-8", "Buy the board"], ["rummy500", "500 Rummy", "2-8", "Melds on felt"],
     ["risk", "Risk", "2-6", "Take the world"], ["uno", "Uno", "2-10", "Match and dump"], ["scatter", "Scattergories", "2-6", "One letter, twelve lists"], ["party", "Party Mode", "2-10", "TV + phones"]];
   $("#sgTiles").innerHTML = games.map(function (g) {
-    return '<button type="button" class="bg-tile' + (g[0] === "party" ? " bg-tile--party" : "") + '" data-game="' + g[0] + '"><span class="bg-tile__art bg-surface--felt sg-tile-art">' +
-      '<span class="bg-tile__badge">' + B.icon("user") + g[2] + '</span>' + B.icon(B.icon.seal(g[0])) + '</span><span class="bg-tile__label"><span class="bg-tile__seal">' + B.icon(B.icon.seal(g[0])) +
+    return '<button type="button" class="bg-tile' + (g[0] === "party" ? " bg-tile--party" : "") + '" data-game="' + g[0] + '"><span class="bg-tile__art"><img src="art/thumb-' + g[0] + '.svg" alt="" width="320" height="240" decoding="async">' +
+      '<span class="bg-tile__badge">' + B.icon("user") + g[2] + '</span></span><span class="bg-tile__label"><span class="bg-tile__seal">' + B.icon(B.icon.seal(g[0])) +
       '</span><span class="bg-tile__name">' + g[1] + '</span><span class="bg-tile__meta">' + g[3] + '</span></span></button>';
   }).join("");
   $$("#sgTiles .bg-tile").forEach(function (t) { t.addEventListener("click", function () { B.toast(t.querySelector(".bg-tile__name").textContent + " · " + t.querySelector(".bg-tile__badge").textContent + " players", { icon: "play" }); }); });
+
+  /* art: app icons + Fire TV banner */
+  $("#sgArt").innerHTML = '<div class="sg-icons">' + [["collection", "Board Games"]].concat(games).map(function (g) {
+    return '<figure class="sg-icon"><img src="art/icon-' + g[0] + '.svg" alt="" width="512" height="512" decoding="async"><figcaption>' + g[1] + '</figcaption></figure>';
+  }).join("") + '</div><figure class="sg-banner"><img src="art/banner-tv.svg" alt="Board Games Fire TV banner" width="320" height="180" decoding="async"><figcaption>Fire TV banner, 320 x 180</figcaption></figure>';
 
   /* accents */
   $("#sgGames").innerHTML = games.map(function (g) {

@@ -14,6 +14,7 @@ This folder is the shared look for all seven games, the hub and Party Mode. It's
 | `fonts/` | Fraunces (display, 62.4 KB) and Figtree (UI, 20.2 KB), both variable WOFF2, Latin subset, SIL OFL 1.1 (`OFL-*.txt`). Total 82.5 KB |
 | `tex/` | Grain tiles pre-rendered once from the Tabletop feTurbulence textures: walnut, oak, felt and paper WebP, 114 KB total. No SVG filter ever runs at runtime |
 | `styleguide.html` | The living style guide: phone, TV, all 8 accents and all 10 seats, plus a button for every helper |
+| `art/` | Final original art: 8 hub thumbnails, 9 app icons, the Fire TV banner (SVG, filter-free, every glyph outlined to paths) and their PNG exports. See section 9 |
 
 ## 1. Adopting it in a game (step 4)
 
@@ -194,7 +195,7 @@ const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.png", ".
   "../ui/tex/walnut.webp", "../ui/tex/felt.webp", "../ui/tex/paper.webp", "../ui/tex/oak.webp"];
 ```
 
-The hub's `sw.js` needs the same files with `ui/...` paths. Every game shares one origin and the caches are per game, so each game must cache its own copy for offline play. `styleguide.html`, `README.md` and the OFL texts don't need caching.
+The hub's `sw.js` needs the same files with `ui/...` paths. The hub also caches `ui/art/thumb-*.svg` (8 files, 139 KB) and the icon PNGs its manifest names; each game caches its own icon PNGs. Every game shares one origin and the caches are per game, so each game must cache its own copy for offline play. `styleguide.html`, `README.md` and the OFL texts don't need caching.
 
 ## 8. What belongs to later steps
 
@@ -212,5 +213,52 @@ The hub's `sw.js` needs the same files with `ui/...` paths. Every game shares on
 - **Step 6 (Party Mode):** lobby seat status pills (HOST / READY / JOINING / CPU), a real runtime QR code placed next to the letter-tile room code, and the lobby copy ("Jules can take a seat next game").
 - **Step 7 (hub):**
   - The TV hub poster hero: focused game art as a masked backdrop with title, pitch, chips and Host / Resume / Rules, cross-faded on opacity.
-  - The real tile art, player-count badges on every tile (`.bg-tile__badge` is ready) and the continue card.
-- **Step 8 (Android / Fire TV):** icon and banner placement: launcher PNGs, the 320x180 banner, the five missing game icons, and SVG text outlined to paths.
+  - Wire the finished tile art (`art/thumb-*.svg`, section 9), player-count badges on every tile (`.bg-tile__badge` is ready) and the continue card.
+- **Step 8 (Android / Fire TV):** placement only. The art is finished (section 9): copy `art/android/ic_launcher-*.png` into `android-tv/res/mipmap-*/ic_launcher.png`, `art/banner-tv-320x180.png` into `res/drawable-xhdpi/banner.png` (or `banner-tv-640x360.png` into `drawable-xxhdpi`), and point the manifests at the PNGs below.
+
+## 9. Art (`ui/art/`)
+
+All art is original (no official logos, trade dress or mascots), static and filter-free. Shadows and glows are gradients or feathered strokes, never `feGaussianBlur`. Wood grain is drawn as static strokes, never `feTurbulence`. There is no `<text>`: every glyph is outlined to paths from the self-hosted Fraunces/Figtree, so a plain `<img>`, the launcher and the banner all look identical without any font. Each SVG is 25 KB or less.
+
+| File | Size | Use |
+|---|---|---|
+| `thumb-<game>.svg` (trouble, sorry, monopoly, rummy500, risk, uno, scatter, party) | 320 x 240 (4:3) | Hub and TV tile art: `<span class="bg-tile__art"><img src="ui/art/thumb-uno.svg" alt="" width="320" height="240" decoding="async"></span>` |
+| `icon-<name>.svg` (collection + 7 games + party) | 512, rounded square | `purpose: "any"` source; transparent corners |
+| `icon-<name>-192.png`, `-512.png` | 192 / 512 | Manifest `purpose: "any"` |
+| `icon-<name>-maskable-512.png` | 512, full bleed | Manifest `purpose: "maskable"`: the key art sits inside the central 80% circle |
+| `apple-touch-icon-180.png` | 180, full bleed | `<link rel="apple-touch-icon" href="ui/art/apple-touch-icon-180.png">` (hub; games can use their own maskable 512) |
+| `banner-tv.svg`, `banner-tv-320x180.png`, `banner-tv-640x360.png` | 320 x 180 | Fire TV / Android TV launcher banner (`android:banner`) |
+| `android/ic_launcher-<density>-<px>.png` | 48 / 72 / 96 / 144 / 192 | Collection launcher icon for mdpi / hdpi / xhdpi / xxhdpi / xxxhdpi |
+
+Manifest example for a game (paths relative to the game folder):
+
+```json
+"icons": [
+  { "src": "../ui/art/icon-uno-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+  { "src": "../ui/art/icon-uno-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+  { "src": "../ui/art/icon-uno-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+]
+```
+
+What the art shows:
+
+- **Trouble:** the glass bubble dome and die on the peg track.
+- **Sorry!:** a pawn slides and bumps another (starburst), the HOME circle, and an 11 and a 4 dealt apart so they never read as "14".
+- **Monopoly:** banknotes, a "PROPERTY DEED" card (never "TITLE DEED"), teal houses and an ochre hotel.
+- **500 Rummy:** a heart run and a meld of sevens on baize with a brass 500 chip.
+- **Risk:** an original parchment world map with six continent groups, territory borders, sea lanes, wooden army blocks, dice and a compass.
+- **Uno:** cards with a cream diamond medallion (no oval anywhere), plus a four-colour diamond Wild with a star.
+- **Scattergories:** the answer pad, a d20 letter die and a sand timer.
+- **Party Mode:** the TV with a room code and phones as controllers.
+
+**Performance:** drawing all 8 thumbnails at 2x tile size (640 x 480) in headless Edge with software raster takes 121 ms in total, against 439 ms for the old filtered mockups. Nothing in the art animates.
+
+**PNG weight:** Chrome's canvas encoder produces about 400 KB per 512 icon. The exports are therefore re-encoded as 256-colour dithered palettes when the error stays under RMSE 3.2/255, which is visually identical. The total is 1.6 MB for all 35 PNGs.
+
+**Regenerating (dev-time only, nothing here ships):** the generator and checks live outside the repo in `BG_audit/design/build/`:
+
+- `inst-fonts.py` pins static TTF instances of `ui/fonts/*.woff2` (fontTools) and flattens composite glyphs.
+- `gen-art.js` writes the SVGs (opentype.js outlining).
+- `render.js export` (run through `.dev/run-one.ps1`) writes the PNGs.
+- `art_lint.js` fails on `<filter`, `<text`, `feTurbulence`, `feGaussianBlur`, `http(s)` URLs, "TITLE DEED" or any file over 25 KB.
+- `png_check.js` verifies every PNG's pixel size from its header.
