@@ -6,9 +6,11 @@
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0e1630",
-  "theme_color": "#0e1630",
+  "background_color": "#080a15",
+  "theme_color": "#080a15",
   "icons": [
-    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "../ui/art/icon-sorry-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "../ui/art/icon-sorry-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "../ui/art/icon-sorry-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
