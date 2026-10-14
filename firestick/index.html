@@ -29,6 +29,10 @@
   .qrbox{background:#fff;padding:2vh;border-radius:2vh;display:inline-block;margin:1.4vh 0 .6vh;}
   .qrimg{display:block;width:min(40vh,66vw);height:auto;}
   .qrfallback{color:#111;background:#fff;padding:3vh;border-radius:2vh;font-weight:700;text-align:center;max-width:70vw;}
+  .lobby{display:flex;flex-direction:column;align-items:center;width:100%;}
+  .lobby .lcol,.lobby .rcol{display:flex;flex-direction:column;align-items:center;min-width:0;}
+  /* TV (landscape, e.g. 960x540): QR + room code + Start on the left, players and options on the right, so they all fit on one screen */
+  @media (min-aspect-ratio:4/3){ .lobby{flex-direction:row;align-items:flex-start;justify-content:center;gap:4vw;} .lobby .rcol{max-height:80vh;max-width:62vw;overflow-y:auto;padding:0 1vh;flex:0 1 auto;} }
   .join-url{font-size:2.2vh;color:#cfe0ff;text-align:center;word-break:break-all;margin-bottom:1vh;}
   .codewrap{text-align:center;margin:1vh 0;}
   .code{font-size:8vh;font-weight:900;letter-spacing:1vh;color:#ffd86b;line-height:1;}
@@ -95,7 +99,7 @@
   <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="qr.js"></script>
 <script src="net.js"></script>
 <script src="monodata.js"></script>
 <script src="../sound.js"></script>
@@ -125,9 +129,10 @@ var COL={red:"#e23b3b",blue:"#2b7be0",green:"#27a758",yellow:"#eec21b",orange:"#
 var CNAME={brown:"Brown",black:"Black",red:"Red",blue:"Blue",green:"Green",yellow:"Yellow",orange:"Orange",purple:"Purple",teal:"Teal",pink:"Pink"};
 var ORDER6=["red","blue","green","yellow","black","pink"];
 var ORDERU=["red","blue","green","yellow","orange","purple","teal","pink","black","brown"];
-function ORDER(){ return (chosenGame==="rummy500"||chosenGame==="scatter")?ORDER8:chosenGame==="risk"?ORDER6:chosenGame==="uno"?ORDERU:ORDER4; }
+function ORDER(){ return (chosenGame==="rummy500"||chosenGame==="scatter")?ORDER8:chosenGame==="risk"?ORDER6:chosenGame==="uno"?ORDERU:chosenGame==="sorry"?ORDERS:ORDER4; }
 var ORDER4=["red","blue","green","yellow"], ORDER8=["red","blue","green","yellow","orange","purple","teal","pink"];
-var runId=0, noWait=false;
+var ORDERS=["red","blue","yellow","green"];   // Sorry! play order (clockwise round the board) - the lobby seats and shows computers in this order too
+var runId=0, noWait=false, gameOver=false;
 function maxPlayers(){ return (chosenGame==="rummy500"||chosenGame==="scatter")?8:chosenGame==="risk"?6:chosenGame==="uno"?10:4; }
 var PACE=1.8;   // game-speed multiplier (every pause in every game is scaled by this)
 try{ var _pp=parseFloat(localStorage.getItem("bgfs_pace")); if(_pp>0) PACE=_pp; }catch(e){}
@@ -207,6 +212,7 @@ var pending={};         // reqId -> {pid, resolve}
 var gameSnap=null;      // set by Monopoly: re-sends the holdings snapshot to phones
 var viewHandler=null;   // set by Monopoly: shows the deed a phone is looking at
 var lastAsk={};         // pid -> last ask message (for reconnect re-send)
+var leaveHandler=null;  // set by a game whose own state marks seats as human: called with the colour of a phone that left mid-game
 var reqSeq=1;
 var inLobby=true;
 
@@ -214,7 +220,7 @@ function send(o,retain){ if(net) net.send(o,retain); }
 function startRoom(){
   closeRoom("The host opened a new game room. Scan the new QR code to join.");
   room=BGNet.roomCode();
-  players={}; seat={}; pending={}; lastAsk={};
+  players={}; seat={}; settlePending(); lastAsk={};
   JOIN_URL=BASE+"play.html?room="+room; SHORT_URL=JOIN_URL.replace(/^https?:\/\//,"");
   net=BGNet.connect(room,"host",{
     status:function(s){ connEl.textContent = s==="online"?"● relay connected":(s==="connecting"?"connecting…":"reconnecting…"); connEl.style.color=s==="online"?"#7CFC9A":"#ffcf7a"; },
@@ -239,8 +245,9 @@ function onMsg(o){
       players[o.pid]={pid:o.pid,name:(o.name||"Player"),color:color};
       seat[color]=o.pid;
       toast((o.name||"Player")+" joined");
-    } else if(!inLobby){
-      return;   // unknown late joiner mid-game — ignore
+    } else {
+      send({t:"nojoin", pid:o.pid, why:inLobby?"full":"started", max:maxPlayers()});   // tell the phone why it can't sit down (room full / game already on)
+      return;
     }
     if(players[o.pid]) send({t:"you", pid:o.pid, color:players[o.pid].color, name:players[o.pid].name});
     if(inLobby){ broadcastLobby(); renderLobby(); }
@@ -249,6 +256,15 @@ function onMsg(o){
       var la=lastAsk[o.pid];
       if(la||!noWait) send(la ? la : {t:"wait", pid:o.pid, msg:"Waiting for your turn…"});
       if(gameSnap) gameSnap();
+    }
+  } else if(o.t==="leave"){
+    var pl=players[o.pid]; if(!pl) return;
+    delete players[o.pid]; if(seat[pl.color]===o.pid) delete seat[pl.color]; delete lastAsk[o.pid];
+    if(inLobby){ toast(pl.name+" left"); broadcastLobby(); renderLobby(); }
+    else {   // mid-game: a computer takes the seat; a prompt the phone was answering gets its safe default
+      toast(pl.name+" left — the computer plays "+CNAME[pl.color]);
+      if(leaveHandler) leaveHandler(pl.color);
+      settlePending(o.pid);
     }
   } else if(o.t==="view"){ if(viewHandler) viewHandler(o);
   } else if(o.t==="pick"){
@@ -262,26 +278,46 @@ function firstFreeColor(){ var order=ORDER(); for(var i=0;i<order.length;i++){ i
    and auto-advances after a long timeout so a non-responding phone can't hang the game. */
 function ask(color, title, sub, options, extraFields){
   var pid=seat[color];
-  if(!pid) return Promise.resolve(options&&options[0]?{id:options[0].id,i:0}:{id:null,i:0}); // no controller -> auto first
+  // the answer used when nobody answers (timeout, phone left, game quit): extraFields.dflt = the SAFE option's id
+  // (Pass, Decline, don't buy...), otherwise the first option
+  var dk=extraFields&&extraFields.dflt, di=-1; (options||[]).forEach(function(op,i){ if(di<0&&op.id===dk) di=i; });
+  var def=dk!=null?{id:dk,i:Math.max(di,0)}:(options&&options[0]?{id:options[0].id,i:0}:{id:null,i:0});
+  if(!pid) return Promise.resolve(def); // no controller -> default
   var reqId=reqSeq++;
-  var msg={t:"ask", pid:pid, reqId:reqId, title:title, sub:sub, options:options}; if(extraFields){ for(var k in extraFields) msg[k]=extraFields[k]; }
+  var msg={t:"ask", pid:pid, reqId:reqId, title:title, sub:sub, options:options}; if(extraFields){ for(var k in extraFields) if(k!=="dflt") msg[k]=extraFields[k]; }
   lastAsk[pid]=msg;
   var who = players[pid] ? players[pid].name : "player";
   var hint=$("hint"); if(hint) hint.textContent = "⏳ Waiting for "+who+" — check your phone ("+title+")";
   return new Promise(function(resolve){
     var done=false;
     var fin=function(v){ if(done) return; done=true; clearTimeout(to); if(lastAsk[pid]===msg) delete lastAsk[pid]; var h=$("hint"); if(h) h.textContent="Players: use your phones"; resolve(v); };
-    var to=setTimeout(function(){ delete pending[reqId]; fin(options&&options[0]?{id:options[0].id,i:0}:{id:null,i:0}); }, (extraFields&&extraFields.timeoutMs)||120000); // 2 min safety (long rounds can ask for more)
-    pending[reqId]={pid:pid, resolve:fin};
+    var to=setTimeout(function(){ delete pending[reqId]; fin(def); }, (extraFields&&extraFields.timeoutMs)||120000); // 2 min safety (long rounds can ask for more)
+    pending[reqId]={pid:pid, resolve:fin, dflt:def};
     send(msg);
   });
+}
+/* answer every open prompt (or one phone's) with its default right away: used when a game is quit or a phone leaves,
+   so no 2-minute ask timer outlives its game */
+function settlePending(pid){
+  Object.keys(pending).forEach(function(k){ var pr=pending[k]; if(pid&&pr.pid!==pid) return; delete pending[k]; try{ pr.resolve(pr.dflt||{id:null,i:0}); }catch(e){} });
+}
+/* Trouble / Sorry! / Monopoly: a quit game must never act again. Once runId moves on, the game's sleeps and asks
+   never resolve, so its loop stops at its next await (same effect as "if(myRun!==runId) return" after every await,
+   including the awaits inside helpers like auctions, trades and animations). */
+function runGate(myRun){
+  var stop=function(){ return new Promise(function(){}); };
+  return {
+    live:function(){ return myRun===runId; },
+    sleep:function(ms){ return sleep(ms).then(function(v){ return myRun===runId?v:stop(); }); },
+    ask:function(){ return ask.apply(null,arguments).then(function(v){ return myRun===runId?v:stop(); }); }
+  };
 }
 function waitPhone(color, msg, turnColor){ var pid=seat[color]; if(pid){ delete lastAsk[pid]; send({t:"wait", pid:pid, msg:msg, turn:turnColor}); } }
 function waitAllExcept(activeColor, turnColor){
   Object.keys(seat).forEach(function(c){ if(c!==activeColor) waitPhone(c, CNAME[turnColor]+"’s turn…", turnColor); });
 }
 function announceStart(){ send({t:"started"}); }
-function announceOver(name){ Sound.sfx("win"); send({t:"over", winner:name}, true); }
+function announceOver(name){ gameOver=true; Sound.sfx("win"); send({t:"over", winner:name}, true); }
 
 /* ---------- toast ---------- */
 var toastT;
@@ -292,7 +328,7 @@ var BASE=location.href.replace(/[?#].*$/,"").replace(/[^\/]*$/,"");   // directo
 var JOIN_URL=BASE+"play.html?room="+room;
 var SHORT_URL=JOIN_URL.replace(/^https?:\/\//,"");
 function screenSelect(){
-  runId++; noWait=false; inLobby=true; screenState="select"; gameSnap=null; viewHandler=null; Skins.apply("party"); Sound.music("menu"); setBack((window.AndroidTV?"✕ Exit":"🏠 Hub"), true);
+  runId++; settlePending(); noWait=false; inLobby=true; screenState="select"; gameSnap=null; viewHandler=null; leaveHandler=null; unguardHistory(); Skins.apply("party"); Sound.music("menu"); setBack((window.AndroidTV?"✕ Exit":"🏠 Hub"), true);
   closeRoom("The host went back to the game menu.");                  // each game gets its own brand-new room
   wrap.innerHTML='<h1>🎲 Board Games — Party Mode</h1><p class="muted" style="font-size:2.6vh">Pick a game, then players scan to join from their phones</p>'+
     '<div class="cards" id="cards"></div>';
@@ -344,11 +380,24 @@ backbtn.onclick=function(){
     if(!backbtn._armed){ backbtn._armed=true; toast("Press Back again to quit the game"); clearTimeout(backbtn._t); backbtn._t=setTimeout(function(){ backbtn._armed=false; },3000); return; }
     backbtn._armed=false; clearTimeout(backbtn._t);
     try{ send({t:"wait", pid:"*", msg:"Host left the game"}); }catch(e){}
-    runId++; seat={}; players={}; pending={}; lastAsk={}; screenSelect();
+    runId++; settlePending(); seat={}; players={}; lastAsk={}; screenSelect();
   }
 };
 /* Fire TV app: the remote Back button calls this */
 window.__tvBack=function(){ if(window.Sound&&Sound.panelOpen&&Sound.panelOpen()){ Sound.closePanel(); return; } backbtn.click(); };
+/* Plain TV browsers (not the app) turn the remote's Back into history.back(). Outside the game picker one extra
+   history entry is kept, so that Back lands here and goes through the same steps as the app's Back
+   (lobby -> picker, game -> "press Back again to quit"). On the picker Back leaves Party Mode as before. */
+var unguarding=false;
+function guardHistory(){ try{ if(!(history.state&&history.state.bgGuard)) history.pushState({bgGuard:1},""); }catch(e){} }
+function unguardHistory(){ try{ if(history.state&&history.state.bgGuard){ unguarding=true; history.back(); } }catch(e){} }
+window.addEventListener("popstate",function(){
+  if(unguarding){ unguarding=false; if(screenState!=="select") guardHistory(); return; }
+  if(screenState==="select") return;
+  window.__tvBack();
+  if(screenState!=="select") guardHistory();
+});
+window.addEventListener("beforeunload",function(e){ if(screenState==="game"&&!gameOver){ e.preventDefault(); e.returnValue=""; return ""; } });
 function cardArt(id){
   var s='<svg class="art2" viewBox="0 0 100 114" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">';
   if(id==="trouble"){
@@ -394,11 +443,14 @@ function screenLobby(){
   monoRules=JSON.parse(MONO_DEFAULT); rvCfg={version:"standard",over:{}}; rkCfg={version:"1959",over:{}}; unCfg={version:"classic",over:{}}; scCfg={version:"classic",over:{}};      // every game opens on the standard rules
   inLobby=true; screenState="lobby"; setBack("‹ Back", true); Skins.apply(chosenGame); Sound.music(chosenGame);
   startRoom();                                                          // new random code + new QR for this game
-  var qrSrc="https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=12&data="+encodeURIComponent(JOIN_URL);
-  wrap.innerHTML='<h1 style="margin-top:1vh">'+gameTitle(chosenGame)+' — Scan to join</h1>'+
-    '<div class="qrbox"><img class="qrimg" id="qrimg" src="'+qrSrc+'" alt="QR"></div>'+
+  guardHistory();
+  var qr; try{ qr=QR.svg(JOIN_URL,{margin:3,cls:"qrimg"}); }catch(e){ qr=null; }   // made on the TV itself (firestick/qr.js), no outside service
+  wrap.innerHTML='<h1 style="margin-top:1vh">'+gameTitle(chosenGame)+' — Scan to join</h1><div class="lobby"><div class="lcol">'+
+    (qr?'<div class="qrbox">'+qr+'</div>':'<div class="qrfallback">(QR unavailable — type the room code on phones)</div>')+
     '<div class="join-url">or on your phone open:<br><b>'+SHORT_URL+'</b></div>'+
     '<div class="codewrap"><div class="muted" style="font-size:2.4vh">Room code</div><div class="code">'+room+'</div></div>'+
+    '<button class="big" id="startBtn">▶ Start Game</button>'+
+    '<div class="hintbar" id="lobhint"></div></div><div class="rcol">'+
     '<div class="players" id="players"></div>'+
     '<div class="aitoggle">🤖 Computer players: <span id="cpuBtns"></span></div>'+
     '<div class="aitoggle">🐢 Game speed: <span id="paceBtns"></span></div>'+
@@ -407,11 +459,7 @@ function screenLobby(){
     (chosenGame==="risk"?'<div class="rulebox" id="rkbox"></div>':'')+
     (chosenGame==="uno"?'<div class="rulebox" id="unbox"></div>':'')+
     (chosenGame==="scatter"?'<div class="rulebox" id="scbox"></div>':'')+
-    '<div id="svbar" style="max-width:92vw;font-size:2vh;margin:1vh auto"></div>'+
-    '<button class="big" id="startBtn">▶ Start Game</button>'+
-    '<div class="hintbar" id="lobhint"></div>';
-  var img=$("qrimg");
-  img.onerror=function(){ img.replaceWith(Object.assign(document.createElement("div"),{className:"qrfallback",textContent:"(QR unavailable — type the room code on phones)"})); };
+    '<div id="svbar" style="max-width:92vw;font-size:2vh;margin:1vh auto"></div></div></div>';
   renderLobby();
   if(chosenGame==="monopoly") renderRules();
   if(chosenGame==="rummy500") renderRvRules();
@@ -425,10 +473,20 @@ function screenLobby(){
     standard:function(){ cpuCount=3; PACE=1.8; try{localStorage.setItem("bgfs_pace","1.8");}catch(e){} monoRules=JSON.parse(MONO_DEFAULT); rvCfg={version:"standard",over:{}}; rkCfg={version:"1959",over:{}}; unCfg={version:"classic",over:{}}; scCfg={version:"classic",over:{}}; redrawRules(); }});
   broadcastLobby();
   $("startBtn").onclick=startGame;
-  $("startBtn").focus();
+  lobbyFocus();
+}
+/* D-pad: the lobby never sits with nothing focused. Start takes the focus as soon as it can be pressed (first phone
+   seated); before that the computer-player buttons hold it. Re-drawn buttons keep the focus on the same choice. */
+function lobbyFocus(){
+  var a=document.activeElement, sb=$("startBtn");
+  if(a&&a!==document.body&&document.contains(a)&&!a.disabled) return;
+  if(sb&&!sb.disabled){ sb.focus(); return; }
+  var on=document.querySelector("#cpuBtns .aibtn.on")||document.querySelector("#cpuBtns button:not([disabled])")||document.querySelector("#paceBtns button"); if(on) on.focus();
 }
 function renderLobby(){
   var el=$("players"); if(!el) return;
+  var fa=document.activeElement, fd=fa&&fa.dataset||{}, fpar=fa&&fa.parentNode&&fa.parentNode.id, wasOff=!$("startBtn")||$("startBtn").disabled;
+  var fsel=fpar&&(fd.n!=null||fd.p!=null)?"#"+fpar+" button["+(fd.n!=null?'data-n="'+fd.n+'"':'data-p="'+fd.p+'"')+"]":null;
   var isRv=chosenGame==="rummy500"||chosenGame==="risk"||chosenGame==="uno"||chosenGame==="scatter", order=ORDER(), teams=chosenGame==="rummy500"&&isRv&&Rummy.versionOpts(rvCfg.version,rvCfg.over).teams;
   var seated=Object.keys(seat).length;
   if(teams) cpuCount=Math.max(0,4-seated);
@@ -452,6 +510,9 @@ function renderLobby(){
   if(pbx){ var PO=[["Normal",1],["Slow",1.8],["Very slow",2.6]];
     pbx.innerHTML=PO.map(function(p){ return '<button class="aibtn'+(Math.abs(PACE-p[1])<0.05?" on":"")+'" data-p="'+p[1]+'" style="padding:.7vh 1.9vh">'+p[0]+'</button>'; }).join("");
     Array.prototype.forEach.call(pbx.querySelectorAll("button"),function(b){ b.onclick=function(){ PACE=parseFloat(b.dataset.p); try{localStorage.setItem("bgfs_pace",String(PACE));}catch(e){} renderLobby(); }; }); }
+  if(fsel){ var nf=document.querySelector(fsel); if(nf&&!nf.disabled) nf.focus(); }
+  if(wasOff&&sb&&!sb.disabled&&!(document.activeElement&&document.activeElement.closest&&document.activeElement.closest(".rulebox,#svbar"))) sb.focus();
+  lobbyFocus();
   var h=$("lobhint"); if(h) h.textContent = (teams&&seated>4? "Partnership games need exactly 4 players — pick another version for "+seated+" people." : total<2? "Add a computer player or another human (need 2+)." : total+" players: "+seated+" human + "+Math.min(cpuCount,maxC)+" computer"+(teams?" (partners sit opposite)":"")+".");
 }
 function gameTitle(id){ return id==="trouble"?"Trouble":id==="sorry"?"Sorry!":id==="rummy500"?"500 Rummy":id==="risk"?"Risk":id==="uno"?"Uno":id==="scatter"?"Scattergories":"Monopoly"; }
@@ -539,7 +600,7 @@ function renderRvRules(){
 }
 
 function startGame(){
-  inLobby=false; Sound.skip();
+  inLobby=false; gameOver=false; Sound.skip();
   send({t:"started"}, true);   // retained so a reconnecting phone knows the game is on (not the lobby)
   if(chosenGame==="trouble") playTrouble();
   else if(chosenGame==="sorry") playSorry();
@@ -561,11 +622,13 @@ function gameFrame(boardId){
    TROUBLE  (TV host)
    ============================================================ */
 function playTrouble(){
+  var RG=runGate(++runId), live=RG.live, sleep=RG.sleep, ask=RG.ask;   // a quit game stops at its next await
   var TRACK=28, MAXD=31, cx=300, cy=300, trackR=228, homeR=272;
   var order=["red","green","yellow","blue"];               // play order
   var START={red:0, green:7, yellow:14, blue:21};
   var active=computeActive(order);
   var human={}; active.forEach(function(c){ human[c]=!!seat[c]; });
+  leaveHandler=function(c){ human[c]=false; };                // a phone left: the computer plays that colour
   var pegs={}; active.forEach(function(c){ pegs[c]=[null,null,null,null]; });
   var die=0, turn=0, sixStreak=0, over=false;
 
@@ -661,7 +724,7 @@ function playTrouble(){
       setStatus('<span class="dot" style="background:'+COL[ro.first]+'"></span> First pop: '+ro.rounds.map(function(r){ return r.map(function(x){ return esc(nm(x[0]))+" "+x[1]; }).join(", "); }).join(" · tie, pop again: ")+" — <b>"+esc(nm(ro.first))+" goes first</b>");
       await sleep(1800);
     }
-    while(!over){
+    while(!over && live()){
       var c=active[turn]; die=0; renderPegs(); tvTurn();
       waitAllExcept(c, c);
       if(human[c]){ await ask(c, "Your turn", "Pop the die!", [{id:"pop",label:"🎲 POP THE DIE"}]); }
@@ -695,8 +758,9 @@ function playTrouble(){
    SORRY!  (TV host)
    ============================================================ */
 function playSorry(){
+  var RG=runGate(++runId), live=RG.live, sleep=RG.sleep, ask=RG.ask;   // a quit game stops at its next await
   var CELL=36, OFF=12, HALF=18;
-  var order=["red","blue","yellow","green"];
+  var order=ORDERS;
   var INK={red:"#ffdede",blue:"#dbe9ff",yellow:"#4a3c00",green:"#dcffe9"};
   var ROT={red:180,blue:270,yellow:0,green:90};
   var START_EXIT={red:4,blue:19,yellow:34,green:49};
@@ -716,6 +780,7 @@ function playSorry(){
   var active=computeActive(order);
   var pawns={}; active.forEach(function(c){ pawns[c]=[0,1,2,3].map(function(id){return {color:c,id:id,loc:{t:"start"}};}); });
   var human={}; active.forEach(function(c){ human[c]=!!seat[c]; });
+  leaveHandler=function(c){ human[c]=false; };                // a phone left: the computer plays that colour
   var deck=shuffle(buildDeck()), over=false;
 
   function allP(){ var a=[]; active.forEach(function(c){ a=a.concat(pawns[c]); }); return a; }
@@ -835,7 +900,7 @@ function playSorry(){
   async function run(){
     gameFrame("sboard"); svg=$("sboard"); build();
     var turn=0;
-    while(!over){
+    while(!over && live()){
       var c=active[turn]; waitAllExcept(c,c);
       setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+(seat[c]?players[seat[c]].name:CNAME[c]+" (CPU)")+" — "+(human[c]?"draw on your phone":"drawing…"));
       centerCard(null,c,(seat[c]?players[seat[c]].name:CNAME[c]),true);
@@ -868,6 +933,7 @@ function playSorry(){
    tax, jail, build, mortgage, auctions, bankruptcy. (Trading next.)
    ============================================================ */
 function playMonopoly(){
+  var RG=runGate(++runId), live=RG.live, sleep=RG.sleep, ask=RG.ask;   // a quit game stops at its next await
   var order=["red","blue","green","yellow"];
   var active=computeActive(order);
   var COLORVAR={brown:"#8b5a2b",light_blue:"#9fd0ef",pink:"#d93a96",orange:"#f08d1c",red:"#e23b3b",yellow:"#f3d41b",green:"#1f9d54",dark_blue:"#2b4fe0"};
@@ -961,7 +1027,8 @@ function playMonopoly(){
     if(human(c)){
       while(cash[c]<0){
         if(liquidatable(c)<0){ await goBankrupt(c,creditor); return; }
-        var pick=await ask(c,"You owe "+money(-cash[c])+" more","Tap a property to sell buildings / mortgage, or declare bankruptcy",[{id:"bankrupt",label:"❌ Declare Bankruptcy"}],{kind:"manage",props:propList(c,true),extra:[{id:"bankrupt",label:"❌ Declare Bankruptcy",color:"red"}]});
+        var pick=await ask(c,"You owe "+money(-cash[c])+" more","Tap a property to sell buildings / mortgage, or declare bankruptcy",[{id:"bankrupt",label:"❌ Declare Bankruptcy"}],{kind:"manage",props:propList(c,true),extra:[{id:"bankrupt",label:"❌ Declare Bankruptcy",color:"red"}],dflt:"auto"});
+        if(pick.id==="auto"){ aiRaise(c); renderBoard(); turnBanner(c); if(cash[c]<0){ await goBankrupt(c,creditor); return; } continue; }   // no answer: sell/mortgage like the computer, never a surprise bankruptcy
         if(!pick.id||pick.id==="bankrupt"){ await goBankrupt(c,creditor); return; }
         var op=pick.id[0], idx=parseInt(pick.id.slice(1),10);
         if(owner[idx]===c){ if(op==="s") sellHouse(c,idx); else if(op==="m") doMort(c,idx); }
@@ -1026,7 +1093,7 @@ function playMonopoly(){
         var opts=[{id:"bid",label:"Bid "+money(need),color:"green"},{id:"pass",label:"Pass",color:"red"}];
         if(cash[c]<need) opts=[{id:"pass",label:"Pass (can’t afford "+money(need)+")",color:"red"}];
         turnBanner(c,"Auction "+BOARD[i].n+" — high "+(price?money(price):"none"));
-        var pk=await ask(c,"Auction: "+BOARD[i].n,"High bid "+(price?money(price)+" by "+nm(high):"none"),opts);
+        var pk=await ask(c,"Auction: "+BOARD[i].n,"High bid "+(price?money(price)+" by "+nm(high):"none"),opts,{dflt:"pass"});
         bid = pk.id==="bid";
       } else { await sleep(500); var val=aiAuctionVal(c,i); bid = (need<=val && cash[c]>=need); }
       if(bid){ price=need; high=c; idx++; } else { var at=idx%bidders.length; bidders.splice(at,1); idx=bidders.length?at%bidders.length:0; }   // the next bidder moves up into this seat
@@ -1078,7 +1145,7 @@ function playMonopoly(){
     if(human(c)){
       var opts=[{id:"buy",label:"✅ Buy "+s.n+" for "+money(s.price),color:"green"},{id:"no",label:R.noAuction?"❌ Don’t buy":"❌ Decline → Auction",color:"red"}];
       if(cash[c]<s.price) opts=[{id:"no",label:R.noAuction?"Can’t afford":"Can’t afford — to Auction",color:"red"}];
-      var pk=await ask(c,"Buy property?",s.n+" — "+money(s.price)+" · you have "+money(cash[c]),opts);
+      var pk=await ask(c,"Buy property?",s.n+" — "+money(s.price)+" · you have "+money(cash[c]),opts,{dflt:"no"});
       if(pk.id==="buy"&&cash[c]>=s.price){ cash[c]-=s.price; owner[i]=c; toast(nm(c)+" buys "+s.n); renderBoard(); } else { await declineBuy(i); }
     } else {
       if(aiWantsBuy(c,i)){ cash[c]-=s.price; owner[i]=c; toast(nm(c)+" buys "+s.n); renderBoard(); } else { await declineBuy(i); }
@@ -1115,7 +1182,7 @@ function playMonopoly(){
   async function tradeFlow(c){
     var others=alive().filter(function(x){return x!==c;}); if(!others.length) return;
     var popts=others.map(function(x){ return {id:x,label:tokE[x]+" "+nm(x)+" — "+money(cash[x]),color:x}; }); popts.push({id:"cancel",label:"Cancel",color:"blue"});
-    var pk=await ask(c,"Trade with who?","Pick a player",popts);
+    var pk=await ask(c,"Trade with who?","Pick a player",popts,{dflt:"cancel"});
     if(!pk.id||pk.id==="cancel"||others.indexOf(pk.id)<0) return; var p=pk.id;
     var tr=await ask(c,"Trade","",[{id:"cancel",label:"Cancel"}],{kind:"trade",partner:{name:nm(p),color:p},mine:tradeableOf(c),theirs:tradeableOf(p),myCash:cash[c],theirCash:cash[p],myJokers:jokers[c],theirJokers:jokers[p]});
     if(tr.id!=="offer"||!tr.data) return;
@@ -1134,7 +1201,7 @@ function playMonopoly(){
     toast(nm(c)+" offers a trade to "+nm(p));
     setGameCenter('<div class="mtradebox"><b>🤝 Trade offer</b><div style="margin-top:1vh"><b>'+esc(nm(c))+' gives:</b> '+esc(sumTxt(give,cg,jg))+'</div><div style="margin-top:.8vh"><b>'+esc(nm(p))+' gives:</b> '+esc(sumTxt(get,cr,jr))+'</div><div style="margin-top:1vh;color:#555">'+esc(nm(p))+' is deciding…</div></div>');
     var accept;
-    if(human(p)){ var ans=await ask(p,"Trade offer from "+nm(c),"You GET: "+sumTxt(give,cg,jg)+"   ·   You GIVE: "+sumTxt(get,cr,jr),[{id:"yes",label:"✅ Accept",color:"green"},{id:"no",label:"❌ Decline",color:"red"}]); accept=(ans.id==="yes"); }
+    if(human(p)){ var ans=await ask(p,"Trade offer from "+nm(c),"You GET: "+sumTxt(give,cg,jg)+"   ·   You GIVE: "+sumTxt(get,cr,jr),[{id:"yes",label:"✅ Accept",color:"green"},{id:"no",label:"❌ Decline",color:"red"}],{dflt:"no"}); accept=(ans.id==="yes"); }
     else { await sleep(1200); accept=aiTradeOK(p,give,cg,jg,get,cr,jr); }
     setGameCenter(""); if(!accept){ toast(nm(p)+" declined the trade"); return; }
     give.forEach(function(i){ owner[i]=p; if(mort[i]) cash[p]-=Math.ceil(BOARD[i].mort*0.1); });
@@ -1150,12 +1217,12 @@ function playMonopoly(){
   function aiPreRoll(c){ aiBuild(c); }
   async function run(){
     monoFrame(); boardEl=$("mboard"); gameSnap=snapNow; renderBoard(); snapNow();
-    while(alive().length>1){
+    while(alive().length>1 && live()){
       var c=active[turn]; if(bankrupt[c]){ turn=(turn+1)%active.length; continue; }
       doublesCount=0;
       // play this player's turn (may repeat on doubles)
       var endTurn=false;
-      while(!endTurn && !over && !bankrupt[c] && alive().length>1){
+      while(!endTurn && !over && !bankrupt[c] && alive().length>1 && live()){
         centerView=""; renderBoard(); turnBanner(c, injail[c]?"in Jail":"");
         active.forEach(function(x){ if(x!==c && seat[x]) waitPhone(x, nm(c)+" is playing…", c); });
         // jail handling
@@ -1228,6 +1295,7 @@ function playRummy(){
   var names=active.map(function(c){ return seat[c]?players[seat[c]].name:CNAME[c]+" CPU"; });
   var humans=active.map(function(c){ return !!seat[c]; });
   var G=GM.newGame({names:names,humans:humans,opts:opts});
+  leaveHandler=function(c){ var i=active.indexOf(c); if(i>=0) G.players[i].human=false; };   // a phone left: the computer plays that hand
   if(G.o.teams){ var c0=COL[active[0]], c1=COL[active[1]]; G.colors=[c0,c1,c0,c1]; } else G.colors=active.map(function(c){ return COL[c]; });
   G.logText=[];
   var flashMeld=null, flashCard=null, mirrorPf=null, askingIdx=-1;
@@ -1655,7 +1723,7 @@ function monoFrame(){ screenState="game"; setBack("‹ Quit", true); wrap.innerH
 
 function showPlayAgain(){
   var b=document.createElement("button"); b.className="big"; b.textContent="New Game"; b.style.marginTop="2vh";
-  b.onclick=function(){ seat={}; players={}; pending={}; screenSelect(); };
+  b.onclick=function(){ seat={}; players={}; screenSelect(); };
   wrap.appendChild(b); b.focus();
 }
 

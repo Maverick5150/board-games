@@ -33,6 +33,7 @@
   <div class="top">
     <span id="room">Room —</span>
     <button id="plbtn" class="pill" style="display:none;border:none;color:#eef2ff;cursor:pointer;font-size:13px">👥 Players</button>
+    <button id="lvbtn" class="pill" style="display:none;border:none;color:#eef2ff;cursor:pointer;font-size:13px">✕ Leave</button>
     <span id="conn" class="pill">connecting…</span>
   </div>
   <div class="big" id="main"></div>
@@ -89,9 +90,34 @@ function setConn(s){ connEl.textContent = s==="online"?"● connected":(s==="con
 
 if(!room){ askRoom(); } else { roomEl.textContent="Room "+room; startJoin(); }
 
-function askRoom(){
-  main.innerHTML='<div class="title">Enter Room Code</div><input id="rc" maxlength="5" autocapitalize="characters" placeholder="ABCDE"><button class="opt" id="go" style="max-width:360px">Join</button>';
-  $("go").onclick=function(){ var v=($("rc").value||"").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,5); if(v.length===5){ room=v; roomEl.textContent="Room "+room; startJoin(); } };
+function askRoom(msg){
+  main.className="big";
+  main.innerHTML=(msg?'<div class="sub" style="max-width:440px">'+esc(msg)+'</div>':'')+'<div class="title">Enter Room Code</div><input id="rc" maxlength="5" autocapitalize="characters" placeholder="ABCDE"><button class="opt" id="go" style="max-width:360px">Join</button>'+hubLink();
+  var go=function(){ var v=($("rc").value||"").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,5); if(v.length===5){ room=v; roomEl.textContent="Room "+room; startJoin(); } else toast("The room code has 5 letters/numbers"); };
+  $("go").onclick=go; $("rc").onkeydown=function(e){ if(e.key==="Enter") go(); };
+}
+function hubLink(){ return '<a href="../index.html" class="pill" style="color:#eef2ff;text-decoration:none;margin-top:6px">🏠 Back to all games</a>'; }
+/* stop talking to this room (Leave, or the TV said we can't sit down) and forget the seat */
+function stopNet(){
+  if(joinTimer){ clearInterval(joinTimer); joinTimer=null; }
+  var old=net; net=null; if(old){ try{ old.close(); }catch(e){} }
+  joined=false; started=false; curReq=null; overShown=false; lastSnap=null; myColor=null;
+  try{ Rummy.Party.resetUI(); }catch(e){} try{ if(sc&&sc.ctrl) sc.ctrl.destroy(); }catch(e){} sc=null; document.body.style.background=""; main.style.justifyContent="";
+  $("plbtn").style.display="none"; $("lvbtn").style.display="none"; closeOv(); connEl.textContent=""; roomEl.textContent="Room —";
+}
+function leaveRoom(){
+  var r=room;
+  try{ if(net) net.send({t:"leave", pid:myPid}); }catch(e){}
+  stopNet(); askRoom("You left room "+r+".");
+}
+function showNoJoin(o){
+  var full=o.why==="full";
+  main.className="big";
+  main.innerHTML='<div class="title">'+(full?"This room is full":"This game has already started")+'</div>'+
+    '<div class="sub" style="max-width:440px">'+(full?"All "+(o.max||"")+" seats are taken. Ask someone to leave, or join the next game.":"Wait for the host to start a new game on the TV, then scan the new QR code.")+'</div>'+
+    '<div class="opts"><button class="opt" id="again">Try again</button><button class="opt ghost" id="other">Enter another code</button></div>'+hubLink();
+  $("again").onclick=function(){ roomEl.textContent="Room "+room; connect(); };
+  $("other").onclick=function(){ askRoom(); };
 }
 function startJoin(){ askName(); }
 function askName(){
@@ -105,7 +131,8 @@ function connect(){
   joined=false; joinTick=0; if(joinTimer){ clearInterval(joinTimer); joinTimer=null; }
   showWaiting("Connecting to the TV…", true);
   if(net){ try{ net.close(); }catch(e){} }
-  net=BGNet.connect(room,"ctrl",{
+  var self=null;
+  self=net=BGNet.connect(room,"ctrl",{
     status:setConn,
     ready:function(){
       sendJoin();
@@ -117,14 +144,15 @@ function connect(){
       },2000);
     },
     up:function(){ if(!joined && joinTimer) sendJoin(); },   // a relay just came up: knock on it right away
-    msg:onMsg
+    msg:function(o){ if(self&&net===self) onMsg(o); }   // a closed connection (Leave / new room) can't change the screen any more
   });
 }
 function sendJoin(){ net && net.send({t:"join", pid:myPid, name:myName}); }
 
 var overShown=false;   // the "X wins!" screen stays until the host is back in the lobby (a keep-alive re-join must not replace it)
 function onMsg(o){
-  if(o.t==="you" && o.pid===myPid){ myColor=o.color; if(o.name) myName=o.name; joined=true; if(!started && !isAsking() && !overShown) showLobby({players:[{pid:myPid,name:myName,color:myColor}]}); }
+  if(o.t==="nojoin" && o.pid===myPid){ if(!joined){ var r=room; stopNet(); room=r; showNoJoin(o); } }
+  else if(o.t==="you" && o.pid===myPid){ $("lvbtn").style.display="inline-block"; myColor=o.color; if(o.name) myName=o.name; joined=true; if(!started && !isAsking() && !overShown) showLobby({players:[{pid:myPid,name:myName,color:myColor}]}); }
   else if(o.t==="lobby"){ overShown=false; if(!started && !isAsking()) showLobby(o); }   // never fall back to lobby once the game is on
   else if(o.t==="ask" && o.pid===myPid){ started=true; showAsk(o); }
   else if(o.t==="rvs" && o.pid===myPid){ started=true; curReq=null; rvShow(o.st,false,null); }
@@ -238,6 +266,12 @@ function showPlayers(){
   $("ovc").onclick=closeOv;
 }
 $("plbtn").onclick=showPlayers;
+$("lvbtn").onclick=function(){
+  ovMode="leave";
+  ovShow('<div class="title" style="font-size:22px">Leave the game?</div><div class="sub">'+(started?"The computer will play your seat.":"Your seat will be freed for someone else.")+'</div>'+
+    '<button class="opt sm" id="lvy" style="background:#e23b3b;box-shadow:0 6px 0 #9b2323">✕ Leave</button><button class="opt sm ghost" id="lvn">Stay</button>');
+  $("lvy").onclick=leaveRoom; $("lvn").onclick=closeOv;
+};
 
 function showAsk(o){
   curReq=o.reqId; main.className="big";
