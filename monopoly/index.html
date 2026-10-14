@@ -72,6 +72,10 @@
   .mn-game{display:flex; flex-direction:column; align-items:center; padding:.25rem 0 1.5rem}
   body.mn-in-setup .mn-game{display:none !important}
   #players{width:100%; max-width:40rem; padding:.875rem var(--gutter) .375rem}
+  /* a bankrupt player's chip: the shared is-out fades the whole chip (its "Bankrupt" line fell to 2.7:1); here the token fades and the
+     text keeps full contrast (text-3 on ink-2: 7.8:1) */
+  #players .bg-player.is-out{opacity:1; background:var(--ink-2)}
+  #players .bg-player.is-out .bg-token, #players .bg-player.is-out .bg-player__cpu{opacity:.45}
   .mn-statuscard{display:flex; align-items:center; gap:.75rem; width:calc(100% - 2 * var(--gutter)); max-width:38rem; margin:.25rem 0 0; padding:.625rem .875rem; border-radius:var(--r-lg)}
   .mn-dice{display:flex; gap:.375rem; flex:none}
   .mn-die{width:2.25rem; height:2.25rem; font:var(--fw-caps) var(--fs-lg)/1 var(--font-ui)}
