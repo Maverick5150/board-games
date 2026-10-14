@@ -24,7 +24,8 @@
    BGUI.setTurn(playerEl)            moves the static turn ring and asks the scheduler for 3 pulses; the new turn's pulse replaces the
                                      previous player's (running or queued) on the same strip, so it never waits behind it
    BGUI.stage(game, opts)            "this page is game X": html[data-game], the Luxe ambient layer (.bg-ambient: orbs in the house
-                                     gold, the game's accent and violet + rising gold-line game motifs, moved by the effects ticker),
+                                     gold, the game's accent and violet, soft light beams that sweep across the stage + rising gold-line
+                                     game motifs that keep to the columns a board leaves free, all moved by the effects ticker),
                                      the glint on every .bg-emblem, .bg-frame on opts.frames; call again to switch game.
                                      Skins.apply(game) calls it on pages that load ui.js. .current() / .clear()
    BGUI.focus                        D-pad spatial navigation (auto-enabled in TV mode); Enter = click; stays inside an open sheet/win;
@@ -128,12 +129,12 @@
   var RAY_DEG_S = 6;                           // the mockup's ray wheel: one turn a minute
   var ORBS = [[9, 5, 46], [-8, -6, 58], [9, 5, 64]];   // drift: x rem, y rem, seconds per leg (eased there and back)
   var tick = { id: 0, hz: 0, last: 0, orbT: 0, orbAt: 0, winT: 0, win: null, bits: null, H: 0, rem: 16 };
-  var stg = { game: null, el: null, bits: null, t: 0, H: 0, pad: 0 };   // the game stage (BGUI.stage)
+  var stg = { game: null, el: null, bits: null, beams: null, t: 0, H: 0, W: 0, pad: 0, chk: -9, cols: "" };   // the game stage (BGUI.stage)
   function fxWant() {
     if (d.hidden || reducedMotion() || fxLevel !== "full") return 0;
     var win = openWin();
     if (win) return win.querySelector(".bg-win__wheel, .bg-win__fall") ? Math.max(1, +RATE.win || 24) : 0;
-    if (stg.el && stg.el.parentNode && stg.el.querySelector(".bg-motifs > b")) return Math.max(1, +RATE.stage || 8);   // motifs 8 a second, orbs still 4
+    if (stg.el && stg.el.parentNode && stg.el.querySelector(".bg-motifs > b, .bg-beams > i")) return Math.max(1, +RATE.stage || 8);   // motifs and beams 8 a second, orbs still 4
     return d.querySelector(".bg-orbs > i") ? Math.max(1, +RATE.orbs || 4) : 0;
   }
   /* the confetti pieces of an open win overlay with their flight data (data-f: y0, fall speed, sway rem, phase, spin) */
@@ -875,20 +876,32 @@
   /* ---------------- game stage: BGUI.stage(game, opts) = "this page is game X" ----------------
      One call gives a game page (or the Party pages) its Luxe identity, and calling it again switches game at runtime:
      - html[data-game] = game (opts.theme === false leaves the page theme alone; the ambient layer is themed either way);
-     - the ambient layer .bg-ambient (first child of <body>, fixed, behind everything): three light orbs - the house gold, the
-       game's accent (a static gradient in --accent-glow) and violet - plus gold-line game motifs (dome, deed, cards, flag ...
-       and the logomark) that rise slowly, sway and turn. Each piece is its own promoted layer, moved by the ONE effects ticker
-       (transform only): motifs 8 times a second (about 1 px a step), the orbs 4. "Reduce effects", reduced motion and a
-       hidden page stop the ticker and everything rests where it is (the motifs stay spread over the page);
+     - the ambient layer .bg-ambient (first child of <body>, fixed, behind everything):
+       - three light orbs: the house gold, the game's accent (a static gradient in --accent-glow) and violet;
+       - soft light beams (the house gold, the game's accent and violet) that sweep slowly across the
+         stage. On a game page the board and its panels cover most of the screen; the beams light whatever the page leaves
+         visible (step 4 review: the motifs alone left a game page almost still, against the old animated skin). Beside a
+         framed board that leaves a wide free column (TV) they sweep that column only, and fade in there again;
+       - gold-line game motifs (dome, deed, cards, flag ... and the logomark) that rise slowly, sway and turn. A motif keeps
+         out of the columns a framed board covers (TV: beside the board; a phone has no free column, so nothing changes there):
+         a motif the board hides moves to a free column and lights up again there, and each new climb starts in one.
+       Each piece is its own promoted layer, moved by the ONE effects ticker (transform only): motifs and beams 8 times a second
+       (1-1.8 px a step), the orbs 4. "Reduce effects", reduced motion and a hidden page stop the ticker and everything rests
+       where it is (the pieces stay spread over the page);
      - the logomark glint on every .bg-emblem on the page (through BGUI.ambient);
      - .bg-frame (gold hairline + soft static shadow, no filter) on the elements matched by opts.frames.
-     Skins.apply(game) in skins.js calls this on every page that loads ui.js (old pages keep the old skins). */
+     opts.beams: false = no beams, or how many. Skins.apply(game) in skins.js calls this on every page that loads ui.js (old pages
+     keep the old skins). BGUI.stage.beam = {deg, remS, gap}: the beams' tilt, sweep speed (rem a second) and how long each waits
+     off screen between sweeps (as a share of the width it sweeps). */
   var STAGE_GAMES = ["trouble", "sorry", "monopoly", "rummy500", "risk", "uno", "scatter", "party"];
   var MOTIF = {
     trouble: ["dome", "dice", "pawn", "star"], sorry: ["slide", "pawn", "cards", "star"], monopoly: ["deed", "home", "dice", "star"],
     rummy500: ["cards", "crown", "star", "cards"], risk: ["flag", "crown", "star", "pawn"], uno: ["cards", "swap", "star", "cards"],
     scatter: ["letter", "pencil", "hourglass", "star"], party: ["tv", "dice", "cards", "music"]
   };
+  /* the boards a motif keeps clear of: .bg-frame, [data-stage-solid] and the board elements skins.js frames on the game pages */
+  var STAGE_SOLID = ".bg-frame, [data-stage-solid], #boardWrap, #rkframe, #rtable, .mboard";
+  var BEAM = { deg: -20, remS: 0.6, gap: 0 };   // tilt; about 10 px a second on a phone, 14 on a 1080p TV; no wait off screen: the three keep coming
   function seedOf(s) { var h = 7; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 233280; return h; }
   /* the motifs of a game: spread over the width, golden-ratio spaced in height, far ones smaller, fainter and slower */
   function motifHTML(game) {
@@ -896,39 +909,116 @@
     function rnd() { r = (r * 9301 + 49297) % 233280; return r / 233280; }
     for (var i = 0; i < n; i++) {
       var far = i % 3 === 2, logo = i % 6 === 4, accent = !logo && i % 3 === 1;
-      var size = far ? 1.6 + rnd() * 0.8 : 2.5 + rnd() * 1.5;                         // rem
+      var size = far ? 2.1 + rnd() * 0.9 : 3.4 + rnd() * 2;                            // rem
       var x = (((i * 5) % n) + rnd() * 0.8) / n * 94 + 1;                               // % of the width
       var y0 = (i * 0.618 + rnd() * 0.15) % 1;                                          // where in its climb it starts
-      var v = far ? 0.0062 + rnd() * 0.0018 : 0.0082 + rnd() * 0.003;                  // screens a second (about 100-160 s a climb)
+      var v = far ? 0.0059 + rnd() * 0.0017 : 0.0078 + rnd() * 0.0028;                 // screens a second (about 100-170 s a climb)
       var amp = (far ? 0.3 : 0.55) + rnd() * 0.6, wv = 0.2 + rnd() * 0.25, ph = rnd() * 6.283;   // sway: rem, rad/s, phase
       var r0 = (rnd() - 0.5) * 50, spin = (rnd() < 0.5 ? -1 : 1) * (2 + rnd() * 6);    // degrees, degrees a second
-      var op = logo ? 0.22 : far ? 0.09 + rnd() * 0.04 : 0.13 + rnd() * 0.07;
+      var op = logo ? 0.26 : far ? 0.11 + rnd() * 0.04 : 0.17 + rnd() * 0.08;
       var art = logo ? mark() : (icon(names[i % names.length]) || mark());
       html += "<b" + (accent ? " class=\"is-accent\"" : logo ? " class=\"is-logo\"" : "") + " data-m=\"" + [y0, v, amp, wv, ph, r0, spin].map(function (f) { return +f.toFixed(4); }).join(",") +
         "\" style=\"left:" + x.toFixed(1) + "%;width:" + size.toFixed(2) + "rem;height:" + size.toFixed(2) + "rem;opacity:" + op.toFixed(2) + "\">" + art + "</b>";
     }
     return html;
   }
+  function beamHTML(n) {
+    var cls = ["", "is-accent", "is-violet"], h = "";
+    for (var i = 0; i < n; i++) h += "<i" + (cls[i % 3] ? " class=\"" + cls[i % 3] + "\"" : "") + "></i>";
+    return h;
+  }
   function motifBits() {
     var el = stg.el; if (!el) return null;
-    var rem = parseFloat(w.getComputedStyle(root).fontSize) || 16, pad = 0;
+    var rem = parseFloat(w.getComputedStyle(root).fontSize) || 16, pad = 0, a = Math.abs(BEAM.deg) * Math.PI / 180;
     stg.H = el.clientHeight || w.innerHeight || 800;
+    stg.W = el.clientWidth || w.innerWidth || 400;
     stg.bits = $$(".bg-motifs > b", el).map(function (b) {
       var f = (b.getAttribute("data-m") || "").split(",").map(Number);
       pad = Math.max(pad, b.offsetHeight || 48);
-      return { el: b, y0: f[0] || 0, v: f[1] || 0.008, amp: (f[2] || 0) * rem, wv: f[3] || 0.3, ph: f[4] || 0, r0: f[5] || 0, spin: f[6] || 0 };
+      if (b._bgX0 === undefined) b._bgX0 = b.style.left;   // its spread-out column: where it climbs when no board is in the way
+      return { el: b, y0: f[0] || 0, v: f[1] || 0.008, amp: (f[2] || 0) * rem, wv: f[3] || 0.3, ph: f[4] || 0, r0: f[5] || 0, spin: f[6] || 0, k: null, size: b.offsetWidth || 48 };
     });
     stg.pad = pad + 8;
+    /* a beam's tilted footprint is fp px wide: it sweeps in from fully off the left edge of its range (the stage, or the free
+       column beside a board) to fully off the right one (then waits off screen for BEAM.gap of that width); the beams are evenly
+       phased, so their shafts never overlap */
+    var beams = $$(".bg-beams > i", el);
+    stg.beams = beams.map(function (b, i) {
+      var bw = b.offsetWidth || 7 * rem, bh = b.offsetHeight || stg.H;
+      return { el: b, w: bw, fp: bw * Math.cos(a) + bh * Math.sin(a), ph: i / beams.length, v: (+BEAM.remS || 0.5) * rem };
+    });
+    stg.chk = -9; stg.cols = ""; stg.beamCol = null;
     return stg.bits;
   }
-  /* each motif climbs from below the bottom edge to above the top edge (the wrap happens off screen), swaying and turning */
+  /* the stretches of the stage width that no framed board covers (a board taller than 40 % of the screen, plus a 24 px margin);
+     null when nothing is in the way or when the free stretches are too narrow to matter (a phone: the board is the width) */
+  function freeCols() {
+    var W = stg.W || w.innerWidth || 0, H = stg.H || w.innerHeight || 0, free = [[0, W]], cut = false, room = 0;
+    $$(STAGE_SOLID).forEach(function (f) {
+      if (!isVisible(f)) return;
+      var r = f.getBoundingClientRect();
+      if (r.height < H * 0.4 || r.bottom <= 0 || r.top >= H || r.right <= 0 || r.left >= W) return;
+      var a = r.left - 24, b = r.right + 24, next = [];
+      cut = true;
+      free.forEach(function (c) { if (b <= c[0] || a >= c[1]) next.push(c); else { if (a > c[0]) next.push([c[0], a]); if (b < c[1]) next.push([b, c[1]]); } });
+      free = next;
+    });
+    free.forEach(function (c) { room += c[1] - c[0]; });
+    return cut && room >= W * 0.18 ? free : null;
+  }
+  /* a motif's column: a free one beside the board (any spot that fits it), or its own spread-out column when nothing is in the way */
+  function motifPlace(p, cols, again) {
+    var W = stg.W || 1, left = null;
+    if (cols) {
+      var fit = cols.filter(function (c) { return c[1] - c[0] >= p.size; }), tot = 0;
+      fit.forEach(function (c) { tot += c[1] - c[0] - p.size; });
+      var x = Math.random() * tot;
+      for (var i = 0; i < fit.length && left === null; i++) { var len = fit[i][1] - fit[i][0] - p.size; if (x <= len || i === fit.length - 1) left = fit[i][0] + Math.min(x, len); else x -= len; }
+    }
+    var v = left === null ? (p.el._bgX0 || p.el.style.left) : (left / W * 100).toFixed(1) + "%";
+    if (p.el.style.left === v) return;
+    p.el.style.left = v;
+    if (again) relight(p.el);   // it fades in again there (a one-shot animation)
+  }
+  function relight(el) { var on = el.classList.contains("is-relit"); el.classList.toggle("is-relit", !on); el.classList.toggle("is-relit2", on); }
+  /* every 1.5 s of stage time: when a board appears, moves or goes, the motifs it hides take a free column (and light up there),
+     and the beams sweep the widest free column when it is at least a quarter of the stage (else the whole stage) */
+  function stageSteer(s) {
+    if (s - stg.chk < 1.5) return stg.steer || null;
+    stg.chk = s;
+    var cols = freeCols(), key = cols ? cols.map(function (c) { return Math.round(c[0]) + "-" + Math.round(c[1]); }).join() : "";
+    stg.steer = cols;
+    if (key !== stg.cols) {
+      stg.cols = key;
+      if (cols) (stg.bits || []).forEach(function (p) {
+        var cx = (parseFloat(p.el.style.left) || 0) / 100 * stg.W + p.size / 2;
+        if (!cols.some(function (c) { return cx >= c[0] && cx <= c[1]; })) motifPlace(p, cols, true);
+      });
+      var wide = null;
+      (cols || []).forEach(function (c) { if (c[1] - c[0] >= stg.W * 0.25 && (!wide || c[1] - c[0] > wide[1] - wide[0])) wide = c; });
+      if ((wide ? wide.join() : "") !== (stg.beamCol ? stg.beamCol.join() : "")) {
+        stg.beamCol = wide;
+        (stg.beams || []).forEach(function (q) { relight(q.el); });   // they move to the new range: they fade in again there
+      }
+    }
+    return cols;
+  }
+  /* each motif climbs from below the bottom edge to above the top edge (the wrap happens off screen), swaying and turning;
+     each beam sweeps left to right at a steady pace */
   function motifPose(dt) {
     var bits = stg.bits || motifBits();
-    if (!bits || !bits.length) return;
-    var s = (stg.t += dt), span = stg.H + 2 * stg.pad;
+    if (!bits) return;
+    var s = (stg.t += dt), span = stg.H + 2 * stg.pad, cols = dt > 0 ? stageSteer(s) : null;
     for (var i = 0; i < bits.length; i++) {
-      var p = bits[i], y = (1 - ((p.y0 + s * p.v) % 1)) * span - stg.pad, dx = Math.sin(s * p.wv + p.ph) * p.amp;
+      var p = bits[i], c = p.y0 + s * p.v, k = Math.floor(c), y = (1 - (c - k)) * span - stg.pad, dx = Math.sin(s * p.wv + p.ph) * p.amp;
+      if (p.k !== null && k !== p.k && dt > 0) motifPlace(p, cols, false);   // it just wrapped below the bottom edge: the next climb takes a free column
+      p.k = k;
       p.el.style.transform = "translate3d(" + dx.toFixed(1) + "px," + y.toFixed(1) + "px,0) rotate(" + ((p.r0 + s * p.spin) % 360).toFixed(1) + "deg)";
+    }
+    var bs = stg.beams || [], L = stg.beamCol ? stg.beamCol[0] : 0, wid = stg.beamCol ? stg.beamCol[1] - stg.beamCol[0] : stg.W, gap = Math.max(0, +BEAM.gap || 0) * wid;
+    for (var j = 0; j < bs.length; j++) {
+      var q = bs[j], span = wid + q.fp + gap, cx = L + ((q.ph + s * q.v / span) % 1) * span - q.fp / 2;
+      q.el.style.transform = "translate3d(" + (cx - q.w / 2).toFixed(1) + "px,0,0) rotate(" + BEAM.deg + "deg)";
     }
   }
   function stage(game, opts) {
@@ -937,7 +1027,7 @@
     game = STAGE_GAMES.indexOf(game) >= 0 ? game : "party";
     if (!d.body) { d.addEventListener("DOMContentLoaded", function () { stage(game, opts); }); return null; }
     if (opts.theme !== false) root.setAttribute("data-game", game);
-    var el = stg.el && stg.el.parentNode ? stg.el : d.querySelector(".bg-ambient");
+    var el = stg.el && stg.el.parentNode ? stg.el : d.querySelector(".bg-ambient"), built = false;
     if (!el) { el = d.createElement("div"); el.className = "bg-ambient"; el.setAttribute("aria-hidden", "true"); d.body.insertBefore(el, d.body.firstChild); }
     stg.el = el; stg.game = game;
     el.setAttribute("data-game", game);
@@ -945,15 +1035,24 @@
     var orbs = el.querySelector(".bg-orbs"), pageOrbs = d.body.querySelector(":scope > .bg-orbs");
     if (opts.orbs === false || pageOrbs) { if (orbs) orbs.parentNode.removeChild(orbs); }
     else if (!orbs) el.insertAdjacentHTML("afterbegin", "<div class=\"bg-orbs bg-orbs--stage\"><i></i><i class=\"is-accent\"></i><i></i></div>");
+    /* the light beams, over the orbs and under the motifs: kept across game switches (the accent beam re-tints) */
+    var bm = el.querySelector(".bg-beams"), nb = opts.beams === false ? 0 : typeof opts.beams === "number" ? clamp(Math.round(opts.beams), 0, 6) : 3;
+    if (!nb) { if (bm) { bm.parentNode.removeChild(bm); built = true; } }
+    else if (!bm || bm.children.length !== nb) {
+      if (bm) bm.parentNode.removeChild(bm);
+      bm = d.createElement("div"); bm.className = "bg-beams"; bm.innerHTML = beamHTML(nb);
+      el.insertBefore(bm, el.querySelector(".bg-motifs"));
+      built = true;
+    }
     /* the motifs: rebuilt for a new game (they light up again) */
     var mot = el.querySelector(".bg-motifs");
-    if (opts.motifs === false) { if (mot) mot.parentNode.removeChild(mot); }
+    if (opts.motifs === false) { if (mot) { mot.parentNode.removeChild(mot); built = true; } }
     else if (!mot || mot.getAttribute("data-game") !== game) {
       if (mot) mot.parentNode.removeChild(mot);
       el.insertAdjacentHTML("beforeend", "<div class=\"bg-motifs\" data-game=\"" + game + "\">" + motifHTML(game) + "</div>");
-      stg.bits = null;
-      motifPose(0);   // the still pose: spread over the page (what "Reduce effects" and reduced motion show)
+      built = true;
     }
+    if (built) { stg.bits = null; motifPose(0); }   // the still pose: spread over the page (what "Reduce effects" and reduced motion show)
     if (opts.frames) $$(opts.frames).forEach(function (f) { f.classList.add("bg-frame"); });
     $$(".bg-emblem").forEach(function (e) { if (!e._bgGlint && !e._bgMounted) { e._bgGlint = true; mount.emblem(e); } });
     fxRefresh();
@@ -963,11 +1062,12 @@
   stage.current = function () { return stg.el && stg.el.parentNode ? stg.game : null; };
   stage.clear = function () {
     if (stg.el && stg.el.parentNode) stg.el.parentNode.removeChild(stg.el);
-    stg.el = null; stg.game = null; stg.bits = null;
+    stg.el = null; stg.game = null; stg.bits = null; stg.beams = null; stg.steer = null; stg.cols = ""; stg.beamCol = null;
     fxRefresh();
     emit("stage", { game: null, el: null });
     return true;
   };
+  stage.beam = BEAM;
 
   /* ---------------- focus: D-pad spatial navigation ---------------- */
   var focusOn = false, focusByTV = false, focusRoot = null, marked = null;
@@ -1373,7 +1473,7 @@
   };
 
   /* ---------------- export ---------------- */
-  BGUI.version = "2.1.1";
+  BGUI.version = "2.2.0";
   BGUI.reducedMotion = reducedMotion;
   BGUI.setReducedMotion = setReducedMotion;
   BGUI.haptic = haptic;

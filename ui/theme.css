@@ -729,7 +729,10 @@ html[data-tv] .bg-win__card { width: min(100%, 36rem); }
 .bg-win__medal { position: relative; width: 9rem; height: 7.65rem; margin: 0 auto .75rem; display: grid; place-items: center; color: var(--gold-200); }
 .bg-win__medal > svg { display: block; width: 100%; height: 100%; }
 .bg-win__medal > .bg-ico { width: 4rem; height: 4rem; stroke-width: 1.6; }
-.bg-win__card > .bg-eyebrow { color: var(--gold-100); }
+/* the small eyebrow ("Game over · 5 minutes") sits on a static dark plate: the turning rays pass right behind it, and their bright
+   spokes took the light gold text down to 2.6-3.3:1 (step 4 review). The plate is part of the card layer: nothing new is drawn per tick */
+.bg-win__card > .bg-eyebrow { width: fit-content; max-width: 100%; margin-left: auto; margin-right: auto; padding: .3rem calc(.875rem - var(--track-eyebrow)) .3rem .875rem;
+  border-radius: var(--r-pill); color: var(--gold-100); background: rgba(5, 6, 13, .8); box-shadow: inset 0 0 0 1px rgba(231, 202, 144, .2); }
 .bg-win__title { margin: .35rem 0 .25rem; font: 400 var(--fs-5xl)/1 var(--font-display); letter-spacing: -.015em; color: var(--gold-200); }
 @supports ((-webkit-background-clip: text) or (background-clip: text)) {
   .bg-win__title { background: var(--gold-text); -webkit-background-clip: text; background-clip: text; color: transparent; padding-bottom: .08em; }
@@ -813,9 +816,27 @@ html[data-tv] .bg-orbs > i:nth-child(2) { top: 14rem; }
 .bg-motifs > b { position: absolute; top: 0; display: block; width: 3rem; height: 3rem; color: var(--gold-200); opacity: .14; will-change: transform;
   animation: bg-motif-in 2.6s var(--ease-out) backwards; }
 .bg-motifs > b.is-accent { color: var(--accent-text); }
+/* a motif the board hid moves to a free column and lights up again there (the same one-shot fade; the two names restart it) */
+.bg-motifs > b.is-relit { animation-name: bg-motif-relit; }
+.bg-motifs > b.is-relit2 { animation-name: bg-motif-relit2; }
 .bg-motifs > b > svg { display: block; width: 100%; height: 100%; }
-.bg-motifs .bg-ico { stroke-width: 1.4; }
+.bg-motifs .bg-ico { stroke-width: 1.2; }
 @keyframes bg-motif-in { from { opacity: 0; } }
+@keyframes bg-motif-relit { from { opacity: 0; } }
+@keyframes bg-motif-relit2 { from { opacity: 0; } }
+/* --- Light beams (game stage): soft diagonal shafts of light in the house gold, the game's accent and violet that sweep slowly
+       across the stage, lighting whatever the board and its panels leave visible. A static gradient on a promoted layer each;
+       the effects ticker only moves them (transform), with the motifs. --bg-beam-w sets their width. --- */
+.bg-beams { position: absolute; inset: 0; }
+.bg-beams > i { position: absolute; left: 0; top: -9%; display: block; width: var(--bg-beam-w, 9.5rem); height: 118%; opacity: .17; will-change: transform; pointer-events: none;
+  background: linear-gradient(90deg, rgba(231, 202, 144, 0), var(--gold-200), rgba(231, 202, 144, 0));
+  animation: bg-orbs-in 2.6s var(--ease-out) backwards; }
+html[data-tv] .bg-beams > i { width: var(--bg-beam-w, 9rem); }
+.bg-beams > i.is-accent { background-image: linear-gradient(90deg, rgba(0, 0, 0, 0), var(--accent), rgba(0, 0, 0, 0)); }
+.bg-beams > i.is-violet { background-image: linear-gradient(90deg, rgba(154, 134, 255, 0), #9a86ff, rgba(154, 134, 255, 0)); }
+/* the beams move to the free column beside a board (or back to the whole stage): they fade in again there */
+.bg-beams > i.is-relit { animation-name: bg-motif-relit; }
+.bg-beams > i.is-relit2 { animation-name: bg-motif-relit2; }
 
 /* --- Board frame: a gold hairline, a dark moat and a soft static drop shadow (no filter). BGUI.stage(game, {frames}) adds it;
        skins.js gives the legacy boards the same frame. .bg-frame--round for a round board. --- */
@@ -855,7 +876,7 @@ html[data-tv] .bg-hero__body { padding: 2.5rem; }
        still); glows, light pools, the trophy, the still confetti, focus and crossfades stay. Reduced motion: nothing moves
        and there is no confetti. The ticker also stops while the page is hidden (BGUI sets html[data-hidden]) and the orbs
        rest under an open win (data-win). --- */
-html[data-hidden] .bg-orbs > i, html[data-hidden] .bg-motifs > b, html[data-hidden] .bg-win__rays, html[data-hidden] .bg-win__card { animation-play-state: paused; }
+html[data-hidden] .bg-orbs > i, html[data-hidden] .bg-motifs > b, html[data-hidden] .bg-beams > i, html[data-hidden] .bg-win__rays, html[data-hidden] .bg-win__card { animation-play-state: paused; }
 
 /* =====================================================================
    Sound button + sound settings panel. sound.js owns them (#bgSndBtn, #bgSoundPanel, their ids, keys and focus handling);
@@ -939,10 +960,10 @@ html[data-tv] .bg-sound__card { width: min(100%, 44rem); padding: 2rem 2.25rem 1
 /* ---------- Reduced motion (OS setting or html[data-motion="reduce"]): every duration to 0, nothing loops, no confetti ---------- */
 @media (prefers-reduced-motion: reduce) {
   :root { --dur-instant: 0ms; --dur-fast: 0ms; --dur-base: 0ms; --dur-slow: 0ms; --dur-move: 0ms; --dur-deal: 0ms; --dur-celebrate: 0ms; --dur-hero: 0ms; --dur-glint: 0ms; --dur-pulse: 0ms; }
-  .bg-orbs > i, .bg-motifs > b, .bg-emblem.is-glint::after, .bg-player.is-pulse .bg-token::after, .bg-win__rays, .bg-win__wheel, .bg-win__card, .bg-die.is-rolling { animation: none !important; }
+  .bg-orbs > i, .bg-motifs > b, .bg-beams > i, .bg-emblem.is-glint::after, .bg-player.is-pulse .bg-token::after, .bg-win__rays, .bg-win__wheel, .bg-win__card, .bg-die.is-rolling { animation: none !important; }
   .bg-win__confetti, .bg-celebrate { display: none !important; }
 }
 html[data-motion="reduce"] { --dur-instant: 0ms; --dur-fast: 0ms; --dur-base: 0ms; --dur-slow: 0ms; --dur-move: 0ms; --dur-deal: 0ms; --dur-celebrate: 0ms; --dur-hero: 0ms; --dur-glint: 0ms; --dur-pulse: 0ms; }
-html[data-motion="reduce"] .bg-orbs > i, html[data-motion="reduce"] .bg-motifs > b, html[data-motion="reduce"] .bg-emblem.is-glint::after, html[data-motion="reduce"] .bg-player.is-pulse .bg-token::after,
+html[data-motion="reduce"] .bg-orbs > i, html[data-motion="reduce"] .bg-motifs > b, html[data-motion="reduce"] .bg-beams > i, html[data-motion="reduce"] .bg-emblem.is-glint::after, html[data-motion="reduce"] .bg-player.is-pulse .bg-token::after,
 html[data-motion="reduce"] .bg-win__rays, html[data-motion="reduce"] .bg-win__wheel, html[data-motion="reduce"] .bg-win__card, html[data-motion="reduce"] .bg-die.is-rolling { animation: none !important; }
 html[data-motion="reduce"] .bg-win__confetti, html[data-motion="reduce"] .bg-celebrate { display: none !important; }

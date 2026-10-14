@@ -125,6 +125,12 @@
     box-shadow:inset 0 0 0 .1875rem var(--paper-50), inset 0 0 0 calc(.1875rem + 1px) var(--accent-paper), 0 0 0 2px var(--ink-1), 0 0 0 4px var(--seat)}
   .sr-mini.is-word{font-size:var(--fs-micro); letter-spacing:.01em}
   #moveSub{margin:0 0 1rem}   /* room for the first option's focus ring and TV lift (the best move leads the list and takes the focus) */
+  /* the move sheet keeps the board in view (step 4 review): a lighter scrim (the move sheet is this page's only sheet); on a phone
+     the board scrolls up under the top bar and the sheet takes the room below it (peek(), when the screen is tall enough); on TV
+     the sheet sits over the right-hand column, beside the board. The focused option's pawns get a heavy ring in the accent-on-paper
+     navy (it reads on the cream board, where an ivory or gold ring does not) */
+  body.bg-app{--scrim:rgba(3,4,10,.42)}
+  .peg.is-pick .ring{opacity:1; stroke:var(--accent-paper,#304d7f); stroke-width:5}
   .sr-optico{display:grid; place-items:center; width:2.25rem; height:2.25rem; border-radius:50%; color:var(--text-2); background:var(--ink-2); box-shadow:inset 0 0 0 1px var(--line-2)}
   .sr-optico .bg-ico{width:1.1rem; height:1.1rem}
   /* fallbacks when ui/ui.js is missing (the Luxe sheet and toasts take over when it is there) */
@@ -158,6 +164,10 @@
   html[data-tv] #deckSlot{width:7.5rem; height:10rem}
   html[data-tv] .sr-hints{grid-area:hints; justify-content:flex-start; margin-top:1.75rem}
   html[data-tv] #moveSub{margin-bottom:1.75rem}
+  /* TV: the move sheet over the right-hand column (centred on it: 50% + (board + gap) / 2), clear of the board; toasts in game sit in
+     that column too, under the hint bar, where BGUI.toast's free band at the bottom of the screen no longer meets the board */
+  html[data-tv] #moveSheet{left:calc(50% + (min(100vh - 8rem, 46vw) + 3rem) / 2 - 16rem); right:auto; width:32rem; margin:0; padding-left:1.75rem; padding-right:1.75rem}
+  html[data-tv] body:not(.sr-in-setup) .bg-toast{left:calc(50% + (min(100vh - 8rem, 46vw) + 3rem) / 2); max-width:30rem}
 </style>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
@@ -236,7 +246,7 @@
       </div>
       <button class="bg-btn bg-btn--ghost" id="skipBtn" type="button" style="visibility:hidden" hidden>Skip</button>
     </div>
-    <div class="bg-hintbar sr-hints"><span><span class="bg-key">OK</span> Draw a card, then pick a move</span><span><span class="bg-key">Back</span> Close a list</span></div>
+    <div class="bg-hintbar sr-hints"><span><span class="bg-key">OK</span> Draw a card, then pick a move</span><span><span class="bg-key">Back</span> Close a list, or the Menu</span></div>
   </main>
 
   <section class="bg-sheet" id="moveSheet" aria-labelledby="moveTitle">
@@ -581,6 +591,7 @@ function renderPawns(){
       const g=document.createElementNS("http://www.w3.org/2000/svg","g");
       const hot=highlightPawns.has(p);
       g.setAttribute("class","peg"+(hot?" movable":""));
+      g.setAttribute("data-pawn",c+p.id);   // which pawn (the move sheet marks the focused option's pawns, a tap through its scrim finds it)
       g.setAttribute("transform",`translate(${x.toFixed(1)},${y.toFixed(1)})`);
       g.innerHTML=`<circle class="ring" r="15" fill="none" stroke="#111" stroke-width="3"/>`+
         `<circle r="10.5" fill="${CSS[c]}" stroke="#0008" stroke-width="2"/>`+
@@ -616,7 +627,7 @@ function toast(m){
   toastEl.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>toastEl.classList.remove("show"),1500);
 }
 function setStatus(h){ statusEl.innerHTML=h; uiSync(); }
-function dot(c){ return `<span class="dot" style="background:${CSS[c]}"></span>`; }
+function dot(c){ return `<span class="dot" data-seat="${SEAT[c]}" style="background:var(--seat,${CSS[c]})"></span>`; }   // the seat colour of the strip and tokens (the old colour without theme.css)
 
 function showDeck(){
   const c=curColor();
@@ -833,7 +844,7 @@ const seatPreview=document.getElementById("seatPreview");
 const svToastEl=document.getElementById("svtoast");
 // winGen: the game whose end was handled; winShown: the game whose Victory screen opened; result: the Menu offers "See the result";
 // picking: the sheet is closing because a move was picked
-const ui={strip:"", turnKey:"", meta:{}, table:"", winGen:-1, winShown:-1, result:false, picking:false};
+const ui={strip:"", turnKey:"", meta:{}, table:"", winGen:-1, winShown:-1, result:false, picking:false, peek:false};
 function BG(){ return window.BGUI||null; }
 function onTV(){ return document.documentElement.hasAttribute("data-tv"); }
 function icon(n){ const B=BG(); return B&&B.icon?B.icon(n):""; }
@@ -985,9 +996,59 @@ function openMoveSheet(){
   const B=BG(); if(!B||!B.sheet||gameOver||setupShown()||!actionsEl.querySelector(".bg-sheet__option")) return;
   const el=actionsEl.querySelector(".bg-sheet__option.is-best")||actionsEl.querySelector(".bg-sheet__option");
   if(sheetIsOpen()){ if(el) el.focus(); return; }
+  peek(true);
   // closed without a pick (Back, the scrim, the close button): on TV "Choose a move" takes the focus, to open it again
-  B.sheet.open(moveSheet,{focus:el||undefined,onClose:()=>{ if(!ui.picking) focusTV(movesBtn); }});
+  B.sheet.open(moveSheet,{focus:el||undefined,onClose:()=>{ peek(false); markPick(null); if(!ui.picking) focusTV(movesBtn); }});
 }
+// a phone keeps the board in view while the sheet is open: the board scrolls up under the top bar (bottom room is added for the
+// scroll) and the sheet takes the room below it. Only when that leaves the sheet a useful height; else it opens over the board as before
+const gameEl=document.getElementById("game"), boardWrap=document.getElementById("boardWrap"), topBar=document.querySelector(".bg-topbar");
+function smoothScroll(){ const B=BG(); return B&&B.reducedMotion&&B.reducedMotion()?"auto":"smooth"; }
+function peek(on){
+  if(!on){
+    if(!ui.peek) return;
+    ui.peek=false; moveSheet.style.maxHeight=""; boardWrap.removeAttribute("data-toast-avoid");
+    window.scrollTo({top:0,behavior:smoothScroll()});
+    setTimeout(()=>{ if(!ui.peek) gameEl.style.paddingBottom=""; },700);   // after the scroll back, so the page does not jump
+    return;
+  }
+  if(onTV()||ui.peek) return;
+  const se=document.scrollingElement||document.documentElement, vh=innerHeight, F=21;   // F: the frame's clear band (sorry-10)
+  const bar=topBar?topBar.getBoundingClientRect().bottom:0, br=boardWrap.getBoundingClientRect();
+  const room=Math.floor(vh-bar-8-(br.height+2*F)-6);
+  if(br.height<1||room<Math.max(280,vh*0.36)) return;
+  const want=Math.max(0,Math.round(br.top+se.scrollTop-F-bar-8));
+  gameEl.style.paddingBottom="";
+  const extra=Math.ceil(want+vh-(gameEl.getBoundingClientRect().bottom+se.scrollTop));   // the board's content ends there (the body is a screen tall at least)
+  if(extra>0) gameEl.style.paddingBottom="calc(1.25rem + "+extra+"px)";
+  moveSheet.style.maxHeight=room+"px";
+  boardWrap.setAttribute("data-toast-avoid","");   // a toast waits for the sheet to close rather than cover the board
+  ui.peek=true;
+  window.scrollTo({top:want,behavior:smoothScroll()});
+}
+// the focused option's pawns (the mover, both split pawns, the rival it bumps or swaps with) get a heavy navy ring on the board
+function involves(a,key){ return !!a&&[a.p,a.A,a.B,a.target].some(q=>q&&q.color+q.id===key); }
+function markPick(a){
+  svg.querySelectorAll(".peg.is-pick").forEach(g=>g.classList.remove("is-pick"));
+  if(a) [a.p,a.A,a.B,a.target].forEach(q=>{ const g=q&&svg.querySelector('.peg[data-pawn="'+q.color+q.id+'"]'); if(g) g.classList.add("is-pick"); });
+}
+actionsEl.addEventListener("focusin",e=>{ const b=e.target.closest&&e.target.closest(".bg-sheet__option[data-i]"); markPick(b?currentActions[+b.getAttribute("data-i")]:null); });
+actionsEl.addEventListener("focusout",e=>{ if(!actionsEl.contains(e.relatedTarget)) markPick(null); });
+// a tap on a highlighted pawn lands on the sheet's scrim: it acts at once, as a pawn tap did before the sheet (tapPawn makes the
+// pawn's only simple move); a pawn with other choices brings its first option into view instead of closing the sheet
+document.addEventListener("click",e=>{
+  const t=e.target;
+  if(!t||!t.classList||!t.classList.contains("bg-scrim")||!sheetIsOpen()||busy||gameOver) return;
+  let g=null;
+  try{ g=(document.elementsFromPoint(e.clientX,e.clientY)||[]).map(n=>n.closest&&n.closest("#board .peg.movable")).find(Boolean)||null; }catch(err){ g=null; }
+  if(!g) return;
+  e.stopPropagation(); e.preventDefault();
+  const key=g.getAttribute("data-pawn"), n=actionsEl.childElementCount;
+  g.dispatchEvent(new MouseEvent("click",{bubbles:true}));
+  if(actionsEl.childElementCount!==n||!sheetIsOpen()) return;
+  const opt=[].find.call(actionsEl.querySelectorAll(".bg-sheet__option[data-i]"),b=>involves(currentActions[+b.getAttribute("data-i")],key));
+  if(opt){ opt.scrollIntoView({block:"nearest"}); try{ opt.focus({preventScroll:true}); }catch(err){ opt.focus(); } }
+},true);
 movesBtn.addEventListener("click",openMoveSheet);
 document.getElementById("moveClose").addEventListener("click",closeMoveSheet);
 actionsEl.addEventListener("click",e=>{
@@ -1036,6 +1097,7 @@ function showSetup(on){
     if(armed&&players.length&&!gameOver) setTurnChip(players[turn]);   // the board is back: the strip pulses whose turn it is
     if(armed&&gameOver&&ui.winShown!==gen) scheduleWin();              // the game ended while the Menu was up: its Victory screen now
     if(!focusDeck()&&!movesBtn.hidden) focusTV(movesBtn);
+    guardBack();                                                        // TV browsers: the remote's Back now stays on this page
   }
 }
 // the game ended while the Menu was up (a computer won behind it): Resume becomes "See the result" (the board, then the Victory
@@ -1138,13 +1200,51 @@ function loadGame(d){
 startBtn.addEventListener("click",()=>{ Sound.skip(); armed=true; startGame(humanCount, cpuCount); showSetup(false); });
 resumeBtn.addEventListener("click",()=>{ showSetup(false); });
 menuBtn.addEventListener("click",()=>{
-  // offer Resume only when a game is actually in progress
-  resumeBtn.style.display = (players.length>0 && !gameOver) ? "block" : "none";
+  // offer Resume only when a game is actually in progress, or "See the result" when the game has just ended and its Victory
+  // screen is still to come (the Menu was opened in the moment between the winning move and the Victory screen)
+  const B=BG(), result=gameOver&&armed&&players.length>0&&ui.winShown!==gen&&!!(B&&B.win);
+  resumeBtn.style.display = ((players.length>0 && !gameOver) || result) ? "block" : "none";
   ui.result=false; document.getElementById("resumeLabel").textContent="Resume";
   document.getElementById("resumeSub").textContent=gameOver?"":"Turn "+Math.max(1,stats.turns)+" · "+(NAME[players[turn]]||"");
   saveBar.refresh();
   showSetup(true);
+  if(result) menuResult();
   focusTV(resumeBtn.style.display==="block"?resumeBtn:startBtn);
+});
+
+// ---- the remote's Back (TV) ----
+// The Fire TV app calls window.__tvBack() on Back (MainActivity.onBackPressed closes the app when a page has none); a TV browser turns
+// Back into history.back() (a guard entry catches it once a game has started) and some send a Back key as well. Each Back closes the
+// top layer (the sound panel, the move sheet, the Victory screen), else opens the Menu from the board, else goes back to the game from
+// the Menu, else leaves for the hub.
+const homeBtn=document.getElementById("homeBtn");
+function isBackKey(e){ const k=e.key; return k==="Escape"||k==="Esc"||k==="GoBack"||k==="BrowserBack"||e.keyCode===27||e.keyCode===4||((k==="Backspace"||e.keyCode===8)&&!/^(INPUT|TEXTAREA|SELECT)$/.test((e.target&&e.target.tagName)||"")); }
+function backStep(){   // the page's own steps, once nothing is open on top
+  if(!setupShown()){ menuBtn.click(); return "menu"; }
+  if(resumeBtn.style.display!=="none"){ resumeBtn.click(); return "resume"; }
+  homeBtn.click(); return "hub";
+}
+function tvBack(){
+  if(window.Sound&&Sound.panelOpen&&Sound.panelOpen()){ Sound.closePanel(); return "panel"; }
+  const B=BG();
+  if(B&&B.sheet&&B.sheet.top&&B.sheet.top()){ B.sheet.close(B.sheet.top(),"back"); return "sheet"; }
+  if(B&&B.win&&B.win.isOpen()){ closeWin(); return "win"; }
+  return backStep();
+}
+window.__tvBack=tvBack;
+let backKeyAt=0;
+function guardBack(){ if(!onTV()||!armed) return; try{ if(!(history.state&&history.state.srBack)) history.pushState({srBack:1},""); }catch(e){} }
+try{ if(history.state&&history.state.srBack) history.replaceState(null,""); }catch(e){}   // reloaded on a guard entry: a game starting now pushes a fresh one
+window.addEventListener("keydown",e=>{ if(isBackKey(e)) backKeyAt=Date.now(); },true);
+// TV: a Back key that nothing on top took (the sheet, the panel and the Victory screen close themselves) is the page's next step
+document.addEventListener("keydown",e=>{
+  if(!onTV()||!armed||e.defaultPrevented||e.altKey||e.ctrlKey||e.metaKey||!isBackKey(e)) return;
+  e.preventDefault(); backStep();
+});
+window.addEventListener("popstate",()=>{
+  if(!onTV()||!armed) return;                              // before the first game Back leaves the page, as it always did
+  if(Date.now()-backKeyAt<700){ guardBack(); return; }     // the same press also came as a Back key, which already took the step
+  if(tvBack()!=="hub") guardBack();
 });
 
 function startGame(humans, cpus){
