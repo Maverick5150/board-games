@@ -377,7 +377,7 @@ document.addEventListener("DOMContentLoaded", function () {
   /* the game-page stage (BGUI.stage): it brings its own orbs, so the page orbs step aside while it is on */
   function stageOn(on) {
     var g = root.getAttribute("data-game") || "", own = document.querySelector("body > .bg-orbs");
-    if (on) { if (own) own.parentNode.removeChild(own); B.stage(g || "party", { theme: !!g }); }
+    if (on) { if (own) own.parentNode.removeChild(own); B.stage(g || "party", { theme: !!g, back: false }); }   /* a preview: Back stays the style guide's own */
     else { B.stage.clear(); B.mount.orbs(document.body); }
     fxState();
   }

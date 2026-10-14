@@ -703,6 +703,8 @@ html[data-tv] .bg-win { --bg-halo: 32rem; }
 /* the scrim is opaque, so the page under an open win is not drawn at all (nothing under it is re-composited on a tick);
    browsers without :has() just draw it as before */
 body:has(.bg-win.is-open) { visibility: hidden; }
+/* while it is open the page does not scroll and shows no scrollbar beside it (BGUI.win sets html[data-win]); the win scrolls itself */
+html[data-win], html[data-win] > body { overflow: hidden; }
 /* the scrim carries the static outer glow of the ray wheel (the angle-averaged light of the faint outer rays, centred on the
    trophy): only the bright inner rays turn */
 .bg-win__scrim { position: fixed; inset: 0; background-color: #05060d;
@@ -837,6 +839,22 @@ html[data-tv] .bg-beams > i { width: var(--bg-beam-w, 9rem); }
 /* the beams move to the free column beside a board (or back to the whole stage): they fade in again there */
 .bg-beams > i.is-relit { animation-name: bg-motif-relit; }
 .bg-beams > i.is-relit2 { animation-name: bg-motif-relit2; }
+/* a motif over text that sits right on the stage (the TV hint bar, [data-stage-text]) fades out, as it would behind a card, and
+   back in past it: a one-shot opacity transition on its own layer (BGUI.stage.hush) */
+.bg-motifs > b { transition: opacity .6s var(--ease-out); }
+.bg-motifs > b.is-hush { opacity: 0 !important; }
+/* --- The halo (Trouble): a ring of 32 tapered gold rays, a beaded bezel and four seat jewels round the round board, the Luxe heir
+       of the old skin's turning rainbow ring. ONE pre-rendered layer (inline SVG drawn once, gradients only) centred on the board;
+       the effects ticker turns it 2 degrees a second (transform only) and it rests with the stage. --bg-halo-k = the halo's
+       diameter over the board's. On TV its rays reach under the cards of the column beside the board and fade out before
+       the text there (the hint bar keeps >= 4.5:1 with a long ray aimed at it). --- */
+.bg-halo { position: absolute; inset: 0; --bg-halo-k: 1.85; }
+html[data-tv] .bg-halo { --bg-halo-k: 1.7; }
+.bg-halo > i { position: absolute; left: 0; top: 0; display: block; width: 10rem; height: 10rem; opacity: .5; will-change: transform; pointer-events: none;
+  animation: bg-orbs-in 2.6s var(--ease-out) backwards; }
+.bg-halo > i > svg { display: block; width: 100%; height: 100%; }
+.bg-halo > i.is-relit { animation-name: bg-motif-relit; }
+.bg-halo > i.is-relit2 { animation-name: bg-motif-relit2; }
 
 /* --- Board frame: a gold hairline, a dark moat and a soft static drop shadow (no filter). BGUI.stage(game, {frames}) adds it;
        skins.js gives the legacy boards the same frame. .bg-frame--round for a round board. --- */
@@ -876,7 +894,7 @@ html[data-tv] .bg-hero__body { padding: 2.5rem; }
        still); glows, light pools, the trophy, the still confetti, focus and crossfades stay. Reduced motion: nothing moves
        and there is no confetti. The ticker also stops while the page is hidden (BGUI sets html[data-hidden]) and the orbs
        rest under an open win (data-win). --- */
-html[data-hidden] .bg-orbs > i, html[data-hidden] .bg-motifs > b, html[data-hidden] .bg-beams > i, html[data-hidden] .bg-win__rays, html[data-hidden] .bg-win__card { animation-play-state: paused; }
+html[data-hidden] .bg-orbs > i, html[data-hidden] .bg-motifs > b, html[data-hidden] .bg-beams > i, html[data-hidden] .bg-halo > i, html[data-hidden] .bg-win__rays, html[data-hidden] .bg-win__card { animation-play-state: paused; }
 
 /* =====================================================================
    Sound button + sound settings panel. sound.js owns them (#bgSndBtn, #bgSoundPanel, their ids, keys and focus handling);
@@ -960,10 +978,12 @@ html[data-tv] .bg-sound__card { width: min(100%, 44rem); padding: 2rem 2.25rem 1
 /* ---------- Reduced motion (OS setting or html[data-motion="reduce"]): every duration to 0, nothing loops, no confetti ---------- */
 @media (prefers-reduced-motion: reduce) {
   :root { --dur-instant: 0ms; --dur-fast: 0ms; --dur-base: 0ms; --dur-slow: 0ms; --dur-move: 0ms; --dur-deal: 0ms; --dur-celebrate: 0ms; --dur-hero: 0ms; --dur-glint: 0ms; --dur-pulse: 0ms; }
-  .bg-orbs > i, .bg-motifs > b, .bg-beams > i, .bg-emblem.is-glint::after, .bg-player.is-pulse .bg-token::after, .bg-win__rays, .bg-win__wheel, .bg-win__card, .bg-die.is-rolling { animation: none !important; }
+  .bg-orbs > i, .bg-motifs > b, .bg-beams > i, .bg-halo > i, .bg-emblem.is-glint::after, .bg-player.is-pulse .bg-token::after, .bg-win__rays, .bg-win__wheel, .bg-win__card, .bg-die.is-rolling { animation: none !important; }
+  .bg-motifs > b { transition: none; }
   .bg-win__confetti, .bg-celebrate { display: none !important; }
 }
 html[data-motion="reduce"] { --dur-instant: 0ms; --dur-fast: 0ms; --dur-base: 0ms; --dur-slow: 0ms; --dur-move: 0ms; --dur-deal: 0ms; --dur-celebrate: 0ms; --dur-hero: 0ms; --dur-glint: 0ms; --dur-pulse: 0ms; }
-html[data-motion="reduce"] .bg-orbs > i, html[data-motion="reduce"] .bg-motifs > b, html[data-motion="reduce"] .bg-beams > i, html[data-motion="reduce"] .bg-emblem.is-glint::after, html[data-motion="reduce"] .bg-player.is-pulse .bg-token::after,
+html[data-motion="reduce"] .bg-motifs > b { transition: none; }
+html[data-motion="reduce"] .bg-orbs > i, html[data-motion="reduce"] .bg-motifs > b, html[data-motion="reduce"] .bg-beams > i, html[data-motion="reduce"] .bg-halo > i, html[data-motion="reduce"] .bg-emblem.is-glint::after, html[data-motion="reduce"] .bg-player.is-pulse .bg-token::after,
 html[data-motion="reduce"] .bg-win__rays, html[data-motion="reduce"] .bg-win__wheel, html[data-motion="reduce"] .bg-win__card, html[data-motion="reduce"] .bg-die.is-rolling { animation: none !important; }
 html[data-motion="reduce"] .bg-win__confetti, html[data-motion="reduce"] .bg-celebrate { display: none !important; }

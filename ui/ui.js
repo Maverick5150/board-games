@@ -25,9 +25,12 @@
                                      previous player's (running or queued) on the same strip, so it never waits behind it
    BGUI.stage(game, opts)            "this page is game X": html[data-game], the Luxe ambient layer (.bg-ambient: orbs in the house
                                      gold, the game's accent and violet, soft light beams that sweep across the stage + rising gold-line
-                                     game motifs that keep to the columns a board leaves free, all moved by the effects ticker),
-                                     the glint on every .bg-emblem, .bg-frame on opts.frames; call again to switch game.
-                                     Skins.apply(game) calls it on pages that load ui.js. .current() / .clear()
+                                     game motifs that keep to the columns a board leaves free and fade out over text on the
+                                     stage, Trouble's slow-turning gold halo round its board, all moved by the effects ticker),
+                                     the glint on every .bg-emblem, .bg-frame on opts.frames, the TV Back default (BGUI.back);
+                                     call again to switch game. Skins.apply(game) calls it on pages that load ui.js. .current() / .clear()
+   BGUI.back                         the remote's Back on a game page: window.__tvBack (Fire TV app), a history guard for TV
+                                     browsers and the Back key: closes the top layer, then the page's own step (.on(fn)), then the hub
    BGUI.focus                        D-pad spatial navigation (auto-enabled in TV mode); Enter = click; stays inside an open sheet/win;
                                      the top bar is its own zone and focus scrolls clear of it (Down never enters it; at the end of
                                      the page Down scrolls on only while the focused control stays clear of it); arrows never get
@@ -129,12 +132,13 @@
   var RAY_DEG_S = 6;                           // the mockup's ray wheel: one turn a minute
   var ORBS = [[9, 5, 46], [-8, -6, 58], [9, 5, 64]];   // drift: x rem, y rem, seconds per leg (eased there and back)
   var tick = { id: 0, hz: 0, last: 0, orbT: 0, orbAt: 0, winT: 0, win: null, bits: null, H: 0, rem: 16 };
-  var stg = { game: null, el: null, bits: null, beams: null, t: 0, H: 0, W: 0, pad: 0, chk: -9, cols: "" };   // the game stage (BGUI.stage)
+  var stg = { game: null, el: null, bits: null, beams: null, t: 0, H: 0, W: 0, pad: 0, chk: -9, cols: "", texts: null,   // the game stage (BGUI.stage)
+    halo: null, haloSel: null, haloA: 0, haloK: 0, haloD: 0, haloOn: false };                                           // its halo round a round board
   function fxWant() {
     if (d.hidden || reducedMotion() || fxLevel !== "full") return 0;
     var win = openWin();
     if (win) return win.querySelector(".bg-win__wheel, .bg-win__fall") ? Math.max(1, +RATE.win || 24) : 0;
-    if (stg.el && stg.el.parentNode && stg.el.querySelector(".bg-motifs > b, .bg-beams > i")) return Math.max(1, +RATE.stage || 8);   // motifs and beams 8 a second, orbs still 4
+    if (stg.el && stg.el.parentNode && stg.el.querySelector(".bg-motifs > b, .bg-beams > i, .bg-halo > i")) return Math.max(1, +RATE.stage || 8);   // motifs, beams and the halo 8 a second, orbs still 4
     return d.querySelector(".bg-orbs > i") ? Math.max(1, +RATE.orbs || 4) : 0;
   }
   /* the confetti pieces of an open win overlay with their flight data (data-f: y0, fall speed, sway rem, phase, spin) */
@@ -890,9 +894,12 @@
        where it is (the pieces stay spread over the page);
      - the logomark glint on every .bg-emblem on the page (through BGUI.ambient);
      - .bg-frame (gold hairline + soft static shadow, no filter) on the elements matched by opts.frames.
-     opts.beams: false = no beams, or how many. Skins.apply(game) in skins.js calls this on every page that loads ui.js (old pages
-     keep the old skins). BGUI.stage.beam = {deg, remS, gap}: the beams' tilt, sweep speed (rem a second) and how long each waits
-     off screen between sweeps (as a share of the width it sweeps). */
+     opts.beams: false = no beams, or how many. opts.halo: Trouble's halo (on by default there; a selector rings another board,
+     false = none): 32 gold rays, a beaded bezel and four seat jewels on one pre-rendered layer centred on the board, turned 2
+     degrees a second by the ticker. opts.back: false = no TV Back default. Skins.apply(game) in skins.js calls this on every page
+     that loads ui.js (old pages keep the old skins). BGUI.stage.beam = {deg, remS, gap}: the beams' tilt, sweep speed (rem a
+     second) and how long each waits off screen between sweeps (as a share of the width it sweeps). BGUI.stage.hush = {on, sel}:
+     the motifs fade out over text that sits on the stage (sel: the TV hint bar and [data-stage-text]). */
   var STAGE_GAMES = ["trouble", "sorry", "monopoly", "rummy500", "risk", "uno", "scatter", "party"];
   var MOTIF = {
     trouble: ["dome", "dice", "pawn", "star"], sorry: ["slide", "pawn", "cards", "star"], monopoly: ["deed", "home", "dice", "star"],
@@ -902,6 +909,13 @@
   /* the boards a motif keeps clear of: .bg-frame, [data-stage-solid] and the board elements skins.js frames on the game pages */
   var STAGE_SOLID = ".bg-frame, [data-stage-solid], #boardWrap, #rkframe, #rtable, .mboard";
   var BEAM = { deg: -20, remS: 0.6, gap: 0 };   // tilt; about 10 px a second on a phone, 14 on a 1080p TV; no wait off screen: the three keep coming
+  /* text that sits right on the stage (no card behind it): a motif fades out while it passes over it, as it does behind a card,
+     so a gold line never crosses a line of text. BGUI.stage.hush = {on, sel} */
+  var HUSH = { on: true, sel: ".bg-hintbar, [data-stage-text]" };
+  /* the halo: a slow-turning ring of gold light rays round a game's round board (Trouble: the Luxe heir of the old skin's turning
+     rainbow ring). opts.halo: a selector, true (the game's board below) or false */
+  var HALO = { trouble: "#boardWrap" };
+  var HALO_TURN = { degS: 2 };   // one turn in 3 minutes: 0.25 degrees a tick at the stage's 8 Hz (1-2.5 px at the rays' tips). BGUI.stage.halo
   function seedOf(s) { var h = 7; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 233280; return h; }
   /* the motifs of a game: spread over the width, golden-ratio spaced in height, far ones smaller, fainter and slower */
   function motifHTML(game) {
@@ -926,6 +940,26 @@
     var cls = ["", "is-accent", "is-violet"], h = "";
     for (var i = 0; i < n; i++) h += "<i" + (cls[i % 3] ? " class=\"" + cls[i % 3] + "\"" : "") + "></i>";
     return h;
+  }
+  /* the halo art, drawn once as inline SVG (gradients only: no filter, mask or <text>), in units of the halo's radius (100). k = the
+     halo's diameter over the board's, so the board's edge is at 100 / k: 32 tapered gold rays (long and short in turn) rise from
+     under the board's edge and fade out, with a beaded gold bezel just outside the board and four jewels in the seat colours */
+  function haloSVG(k) {
+    var u = "bghl" + (++uidN), rb = 100 / Math.max(1.05, k), r0 = rb * 0.94, rs = r0 + (100 - r0) * 0.62, rz = rb * 1.06, rays = "", gems = "";
+    function pt(r, a) { return f1(r * Math.cos(a)) + " " + f1(r * Math.sin(a)); }
+    for (var i = 0; i < 32; i++) {
+      var a = (i / 32) * 2 * Math.PI, lg = i % 2 === 0, hw = (lg ? 2.5 : 1.9) * Math.PI / 180, r1 = lg ? 100 : rs;
+      rays += "M" + pt(r0, a - hw) + "L" + pt(r1, a) + "L" + pt(r0, a + hw) + "Z";
+    }
+    for (var j = 0; j < 4; j++) {
+      var g = (j / 4 + 0.125) * 2 * Math.PI, c = [f1(rz * Math.cos(g)), f1(rz * Math.sin(g))], s = 2.2;
+      gems += "<path d=\"M" + c[0] + " " + f1(c[1] - s) + "L" + f1(c[0] + s) + " " + c[1] + "L" + c[0] + " " + f1(c[1] + s) + "L" + f1(c[0] - s) + " " + c[1] + "Z\" style=\"fill:var(--seat-" + (j + 1) + ")\"/>";
+    }
+    return "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-100 -100 200 200\" aria-hidden=\"true\" focusable=\"false\"><defs>" +
+      "<radialGradient id=\"" + u + "\" cx=\"0\" cy=\"0\" r=\"100\" gradientUnits=\"userSpaceOnUse\"><stop offset=\"" + f1(r0) / 100 + "\" stop-color=\"#fff3d6\" stop-opacity=\".95\"/>" +
+      "<stop offset=\"" + f1((r0 + 100) / 2) / 100 + "\" stop-color=\"#e9cd93\" stop-opacity=\".42\"/><stop offset=\"1\" stop-color=\"#e2c48a\" stop-opacity=\"0\"/></radialGradient></defs>" +
+      "<path d=\"" + rays + "\" fill=\"url(#" + u + ")\"/>" +
+      "<circle r=\"" + f1(rz) + "\" fill=\"none\" stroke=\"#f3dfae\" stroke-opacity=\".75\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-dasharray=\"0 3.4\"/>" + gems + "</svg>";
   }
   function motifBits() {
     var el = stg.el; if (!el) return null;
@@ -981,11 +1015,61 @@
     if (again) relight(p.el);   // it fades in again there (a one-shot animation)
   }
   function relight(el) { var on = el.classList.contains("is-relit"); el.classList.toggle("is-relit", !on); el.classList.toggle("is-relit2", on); }
+  /* text that sits right on the stage (HUSH.sel), as boxes [left, top, right, bottom] with a small margin; read every 1.5 s */
+  function hushTexts() {
+    if (!HUSH.on) return [];
+    var m = 6, out = [];
+    $$(HUSH.sel).forEach(function (t) {
+      if (!isVisible(t)) return;
+      var r = t.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1 || r.bottom <= 0 || r.top >= (stg.H || w.innerHeight)) return;
+      out.push([r.left - m, r.top - m, r.right + m, r.bottom + m]);
+    });
+    return out;
+  }
+  /* the halo follows its board: centred on it, sized from it (theme.css --bg-halo-k: the halo's diameter over the board's) and
+     hidden while the board is hidden (the setup page). The ticker turns it; scrolling, a resize or the board showing up place it
+     at once, so it stays with the board while the ticker is still ("Reduce effects", reduced motion) */
+  function haloBoard() { return stg.haloSel ? $(stg.haloSel) : null; }
+  function haloArt() {
+    var h = stg.halo;
+    if (!h) return;
+    var k = parseFloat(w.getComputedStyle(h).getPropertyValue("--bg-halo-k")) || 1.6;
+    stg.haloK = k;
+    if (h.getAttribute("data-k") !== String(k)) { h.setAttribute("data-k", String(k)); h.innerHTML = haloSVG(k); stg.haloD = 0; }
+  }
+  function haloPlace() {
+    var h = stg.halo;
+    if (!h || !h.parentNode) return;
+    var b = haloBoard(), r = b && isVisible(b) ? b.getBoundingClientRect() : null;
+    if (!r || r.width < 48 || r.height < 48) { if (stg.haloOn) { stg.haloOn = false; h.style.visibility = "hidden"; } return; }
+    if (!stg.haloK) haloArt();
+    var D = Math.round(Math.max(r.width, r.height) * stg.haloK);
+    if (D !== stg.haloD) { stg.haloD = D; h.style.width = D + "px"; h.style.height = D + "px"; }
+    h.style.transform = "translate3d(" + (r.left + r.width / 2 - D / 2).toFixed(1) + "px," + (r.top + r.height / 2 - D / 2).toFixed(1) + "px,0) rotate(" + (stg.haloA % 360).toFixed(2) + "deg)";
+    if (!stg.haloOn) { stg.haloOn = true; h.style.visibility = ""; relight(h); }   // the board just showed up: the halo lights up round it
+  }
+  function haloWatch() {
+    if (!stg.haloLn) {
+      stg.haloLn = true;
+      var again = function () { if (stg.halo) { stg.haloK = 0; haloArt(); haloPlace(); } };
+      w.addEventListener("scroll", function () { if (stg.halo) haloPlace(); }, { passive: true });
+      w.addEventListener("resize", again);
+      d.addEventListener("bgui:tv", again);
+    }
+    var b = haloBoard();
+    if (w.ResizeObserver && b && stg.haloObs !== b) {   // the board shows, hides or changes size: place the halo at once
+      if (!stg.haloRO) stg.haloRO = new w.ResizeObserver(function () { if (stg.halo) haloPlace(); });
+      if (stg.haloObs) stg.haloRO.unobserve(stg.haloObs);
+      stg.haloRO.observe(b); stg.haloObs = b;
+    }
+  }
   /* every 1.5 s of stage time: when a board appears, moves or goes, the motifs it hides take a free column (and light up there),
      and the beams sweep the widest free column when it is at least a quarter of the stage (else the whole stage) */
   function stageSteer(s) {
     if (s - stg.chk < 1.5) return stg.steer || null;
     stg.chk = s;
+    stg.texts = hushTexts();
     var cols = freeCols(), key = cols ? cols.map(function (c) { return Math.round(c[0]) + "-" + Math.round(c[1]); }).join() : "";
     stg.steer = cols;
     if (key !== stg.cols) {
@@ -1008,13 +1092,19 @@
   function motifPose(dt) {
     var bits = stg.bits || motifBits();
     if (!bits) return;
-    var s = (stg.t += dt), span = stg.H + 2 * stg.pad, cols = dt > 0 ? stageSteer(s) : null;
+    var s = (stg.t += dt), span = stg.H + 2 * stg.pad, cols = dt > 0 ? stageSteer(s) : null, texts = HUSH.on ? (stg.texts || []) : [];
     for (var i = 0; i < bits.length; i++) {
       var p = bits[i], c = p.y0 + s * p.v, k = Math.floor(c), y = (1 - (c - k)) * span - stg.pad, dx = Math.sin(s * p.wv + p.ph) * p.amp;
       if (p.k !== null && k !== p.k && dt > 0) motifPlace(p, cols, false);   // it just wrapped below the bottom edge: the next climb takes a free column
       p.k = k;
       p.el.style.transform = "translate3d(" + dx.toFixed(1) + "px," + y.toFixed(1) + "px,0) rotate(" + ((p.r0 + s * p.spin) % 360).toFixed(1) + "deg)";
+      /* over text that sits on the stage it fades out (a one-shot opacity transition), as it would behind a card: its box is
+         widened to cover it turned (up to 21 % a side) and the fade's lead, so it is gone before a gold line reaches the text */
+      var lx = (parseFloat(p.el.style.left) || 0) / 100 * stg.W + dx, e = p.size * 0.21 + 6, hit = false;
+      for (var t = 0; t < texts.length && !hit; t++) { var q = texts[t]; hit = lx - e < q[2] && lx + p.size + e > q[0] && y - e < q[3] && y + p.size + e > q[1]; }
+      if (hit !== !!p.hush) { p.hush = hit; p.el.classList.toggle("is-hush", hit); }
     }
+    if (stg.halo) { stg.haloA += dt * (+HALO_TURN.degS || 0); haloPlace(); }
     var bs = stg.beams || [], L = stg.beamCol ? stg.beamCol[0] : 0, wid = stg.beamCol ? stg.beamCol[1] - stg.beamCol[0] : stg.W, gap = Math.max(0, +BEAM.gap || 0) * wid;
     for (var j = 0; j < bs.length; j++) {
       var q = bs[j], span = wid + q.fp + gap, cx = L + ((q.ph + s * q.v / span) % 1) * span - q.fp / 2;
@@ -1052,9 +1142,24 @@
       el.insertAdjacentHTML("beforeend", "<div class=\"bg-motifs\" data-game=\"" + game + "\">" + motifHTML(game) + "</div>");
       built = true;
     }
-    if (built) { stg.bits = null; motifPose(0); }   // the still pose: spread over the page (what "Reduce effects" and reduced motion show)
+    /* the halo round a round board (opts.halo, else the game's own: Trouble), between the beams and the motifs */
+    var hsel = opts.halo === false ? null : typeof opts.halo === "string" ? opts.halo : (HALO[game] || (opts.halo === true ? ".bg-frame--round, #boardWrap" : null));
+    var hl = el.querySelector(".bg-halo");
+    if (!hsel) {
+      if (hl) hl.parentNode.removeChild(hl);
+      stg.halo = null; stg.haloSel = null; stg.haloOn = false;
+      if (stg.haloRO && stg.haloObs) { stg.haloRO.unobserve(stg.haloObs); stg.haloObs = null; }
+    }
+    else {
+      if (!hl) { hl = d.createElement("div"); hl.className = "bg-halo"; hl.innerHTML = "<i></i>"; el.insertBefore(hl, el.querySelector(".bg-motifs")); }
+      if (stg.halo !== hl.firstChild) { stg.halo = hl.firstChild; stg.haloOn = false; stg.haloA = stg.haloA || 0; stg.halo.style.visibility = "hidden"; }
+      stg.haloSel = hsel; stg.haloK = 0;
+      haloWatch(); haloArt(); haloPlace();
+    }
+    if (built) { stg.bits = null; stg.texts = hushTexts(); motifPose(0); }   // the still pose: spread over the page (what "Reduce effects" and reduced motion show)
     if (opts.frames) $$(opts.frames).forEach(function (f) { f.classList.add("bg-frame"); });
     $$(".bg-emblem").forEach(function (e) { if (!e._bgGlint && !e._bgMounted) { e._bgGlint = true; mount.emblem(e); } });
+    if (opts.back !== false && game !== "party") backInstall();   // the TV Back default (BGUI.back) for the seven game pages
     fxRefresh();
     emit("stage", { game: game, el: el });
     return { el: el, game: game };
@@ -1062,12 +1167,99 @@
   stage.current = function () { return stg.el && stg.el.parentNode ? stg.game : null; };
   stage.clear = function () {
     if (stg.el && stg.el.parentNode) stg.el.parentNode.removeChild(stg.el);
-    stg.el = null; stg.game = null; stg.bits = null; stg.beams = null; stg.steer = null; stg.cols = ""; stg.beamCol = null;
+    stg.el = null; stg.game = null; stg.bits = null; stg.beams = null; stg.steer = null; stg.cols = ""; stg.beamCol = null; stg.texts = null;
+    stg.halo = null; stg.haloSel = null; stg.haloOn = false;
+    if (stg.haloRO && stg.haloObs) { stg.haloRO.unobserve(stg.haloObs); stg.haloObs = null; }
     fxRefresh();
     emit("stage", { game: null, el: null });
     return true;
   };
   stage.beam = BEAM;
+  stage.hush = HUSH;
+  stage.halo = HALO_TURN;
+
+  /* ---------------- TV Back: ONE default for every adopted game page (BGUI.back) ----------------
+     The Fire TV app calls window.__tvBack() when the remote's Back is pressed (MainActivity.onBackPressed) and CLOSES THE APP when
+     the page has none; a TV browser turns Back into history.back(), and some also send a Back key. Each Back takes ONE step:
+       1. the top layer closes: the sound panel, else the top sheet (BGUI.sheet; one opened with dismissible: false is not closed,
+          and the step ends there: "held"), else the Victory screen (BGUI.win);
+       2. else the page takes its own step: hooks added with BGUI.back.on(fn), newest first. A hook returns the name of the step
+          it took ("menu", "resume") or false to pass it on (board -> Menu -> game);
+       3. else the page leaves for the hub: BGUI.back.hub() = "../index.html", keeping ?tv=1.
+     BGUI.stage(game) installs it on the seven game pages (Skins.apply calls BGUI.stage), unless opts.back === false; any page can
+     call BGUI.back.install({hub}). A page that defines its own window.__tvBack keeps it (the Party TV host), and the hub never gets
+     it (it calls no BGUI.stage(game)), so Back there still exits the app. Pages without ui.js are untouched.
+     TV browsers (html[data-tv] only): BGUI.back.arm(), called by the page once a game is on (Start, Continue, Load: inside the tap,
+     so the browser keeps the entry), keeps one guard entry in the history. Back then lands on the page: popstate takes the same
+     step and puts the guard back. A Back key that nothing on top took (sheets, the sound panel and a page's own win handler take
+     theirs) takes the step too, and a Back key followed by history.back() from the same press (within 0.7 s) counts once. Phones
+     get no guard entry: their Back works as before. */
+  var bk = { on: false, fn: null, hooks: [], armed: false, keyAt: 0, hub: null };
+  function backOwn() { return bk.on && w.__tvBack === bk.fn; }   // still ours: a page that sets its own later keeps it
+  function backHub() {
+    if (bk.hub) return bk.hub;
+    var tv = false;
+    try { tv = /[?&]tv=1(&|$)/.test(w.location.search); } catch (e) { }
+    return "../index.html" + (tv ? "?tv=1" : "");
+  }
+  function backStep(src) {
+    var S = w.Sound;
+    if (S && typeof S.panelOpen === "function" && S.panelOpen()) { try { S.closePanel(); } catch (e) { } return "panel"; }
+    if (stack.length) {
+      var top = stack[stack.length - 1];
+      if (top.opts.dismissible === false) return "held";   // a sheet that must be answered (pass the phone): Back waits for it
+      closeSheet(top.el, "back");
+      return "sheet";
+    }
+    if (openWin()) { closeWinEl(); return "win"; }
+    for (var i = bk.hooks.length - 1; i >= 0; i--) {
+      var r = false;
+      try { r = bk.hooks[i](src || "app"); } catch (err) { setTimeout(function () { throw err; }); }
+      if (r) return typeof r === "string" ? r : "page";
+    }
+    try { w.location.href = backHub(); } catch (e2) { }
+    return "hub";
+  }
+  function backGuard() {
+    if (!backOwn() || !bk.armed || !isTV()) return false;
+    try { if (!(w.history.state && w.history.state.bgBack)) w.history.pushState({ bgBack: 1 }, ""); return true; } catch (e) { return false; }
+  }
+  function backInstall(opts) {
+    opts = opts || {};
+    if (opts.hub) bk.hub = String(opts.hub);
+    if (bk.on) return backOwn();
+    if (typeof w.__tvBack === "function") return false;     // the page has its own Back (the Party TV host): it keeps it
+    bk.on = true;
+    bk.fn = function () { return backStep("app"); };
+    w.__tvBack = bk.fn;
+    try { if (w.history.state && w.history.state.bgBack) w.history.replaceState(null, ""); } catch (e) { }   // reloaded on a guard entry: arm() pushes a fresh one
+    w.addEventListener("keydown", function (e) { if (isBackKey(e)) bk.keyAt = now(); }, true);
+    d.addEventListener("keydown", function (e) {
+      if (!backOwn() || !bk.armed || !isTV() || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || !isBackKey(e)) return;
+      e.preventDefault();
+      backStep("key");
+    });
+    w.addEventListener("popstate", function () {
+      if (!backOwn() || !bk.armed || !isTV()) return;      // not armed yet (no game on): Back leaves the page, as it always did
+      if (now() - bk.keyAt < 700) { backGuard(); return; }  // the same press also came as a Back key, which already took the step
+      if (backStep("history") !== "hub") backGuard();
+    });
+    if (bk.armed) backGuard();
+    return true;
+  }
+  var back = {
+    install: backInstall,
+    installed: backOwn,
+    on: function (fn) {
+      if (typeof fn !== "function") return function () { };
+      bk.hooks.push(fn);
+      return function () { bk.hooks = bk.hooks.filter(function (f) { return f !== fn; }); };
+    },
+    arm: function () { bk.armed = true; return backGuard(); },
+    step: function (src) { return backStep(src || "app"); },
+    hub: backHub
+  };
+  Object.defineProperty(back, "armed", { get: function () { return bk.armed; } });
 
   /* ---------------- focus: D-pad spatial navigation ---------------- */
   var focusOn = false, focusByTV = false, focusRoot = null, marked = null;
@@ -1473,7 +1665,7 @@
   };
 
   /* ---------------- export ---------------- */
-  BGUI.version = "2.2.0";
+  BGUI.version = "2.3.0";
   BGUI.reducedMotion = reducedMotion;
   BGUI.setReducedMotion = setReducedMotion;
   BGUI.haptic = haptic;
@@ -1491,6 +1683,7 @@
   BGUI.ambient = ambient;
   BGUI.setTurn = setTurn;
   BGUI.stage = stage;
+  BGUI.back = back;
   BGUI.focus = focus;
   BGUI.dice = dice;
   BGUI.setTV = setTV;
