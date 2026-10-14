@@ -211,7 +211,7 @@
     <div class="tb-gdock" data-toast-avoid>
       <button class="bg-btn bg-btn--secondary" id="movesBtn" type="button" data-icon="pawn" hidden>Choose a move</button>
     </div>
-    <div class="bg-hintbar tb-hints"><span><span class="bg-key">OK</span> Pop the dome, then pick a move</span><span><span class="bg-key">Back</span> Close a list</span></div>
+    <div class="bg-hintbar tb-hints"><span><span class="bg-key">OK</span> Pop the dome, then pick a move</span><span><span class="bg-key">Back</span> Close a list, or the Menu</span></div>
     <div class="controls" hidden>
       <button class="pop" id="pop" type="button">POP</button>
       <button class="btn" id="passBtn" type="button">Pass</button>
@@ -858,7 +858,17 @@ function showSetup(on){
     if(armed&&players.length&&!gameOver) setTurnChip(players[turn]);   // the board is back: the strip pulses whose turn it is
     if(armed&&gameOver&&ui.winShown!==gen) scheduleWin();              // the game ended while the Menu was up: its Victory screen now
     focusTV(domeBtn);
+    const B=BG(); if(armed&&B&&B.back) B.back.arm();                    // TV browsers: the remote's Back now stays on this page
   }
+}
+// the remote's Back (TV). ui.js gives every game page the same default (BGUI.back: window.__tvBack for the Fire TV app, a history
+// guard for TV browsers, the Back key): it closes the sound panel, the move sheet or the Victory screen first, then takes this
+// page's step: from the board the Menu opens, from the Menu Resume goes back to the game (or "See the result"); on the New game
+// page it goes on to the hub
+function backStep(){
+  if(!setupShown()){ menuBtn.click(); return "menu"; }
+  if(resumeBtn.style.display!=="none"){ resumeBtn.click(); return "resume"; }
+  return false;
 }
 // the game ended while the Menu was up (a computer won behind it): Resume becomes "See the result" (the board, then the Victory
 // screen), Save game and Continue switch off, and the dock leads with Start again
@@ -1028,7 +1038,14 @@ try{ const mq=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: red
 // ui/ui.js is deferred: it arrives after this script. Then the icons go in, the strip gets its CPU badges and turn ring,
 // and the Luxe toasts take over from the fallbacks.
 document.addEventListener("DOMContentLoaded",()=>{
-  const B=BG(); if(!B||!B.effects) return;
+  const B=BG();
+  if(B&&B.back) B.back.on(backStep);
+  else window.__tvBack=()=>{   // no ui.js: the same steps, without the Luxe layers
+    if(window.Sound&&Sound.panelOpen&&Sound.panelOpen()){ Sound.closePanel(); return "panel"; }
+    const r=backStep(); if(r) return r;
+    document.getElementById("homeBtn").click(); return "hub";
+  };
+  if(!B||!B.effects) return;
   document.documentElement.classList.add("tb-luxe");
   if(B.icon) document.querySelectorAll("[data-icon]").forEach(el=>{ if(!el.querySelector("svg")) el.insertAdjacentHTML("afterbegin",B.icon(el.getAttribute("data-icon"))); });
   saveBar.refresh();
