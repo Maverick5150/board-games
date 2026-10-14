@@ -14,6 +14,11 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      APK: android-tv/app/build/outputs/apk/release/app-release.apk
+      # SHA-256 of the permanent "boardgamestv" signing certificate (no colons). Every published APK must match it,
+      # otherwise installed apps could not update in place.
+      TV_CERT_SHA256: EB707254D655EFE113666A6AB3D8A75B0728AD19FF54509C9279245A3EE8F37F
     steps:
       - uses: actions/checkout@v4
 
@@ -26,23 +31,60 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Build debug APK
+      - name: Signing key and version number
+        shell: bash
+        env:
+          TV_KEYSTORE_B64: ${{ secrets.TV_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$TV_KEYSTORE_B64" ]; then echo "::error::The TV_KEYSTORE_B64 secret is not set"; exit 1; fi
+          KS="$RUNNER_TEMP/boardgamestv.p12"
+          printf '%s' "$TV_KEYSTORE_B64" | tr -d ' \r\n' | base64 -d > "$KS"
+          echo "TV_KEYSTORE_FILE=$KS" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$((100 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+          echo "versionCode $((100 + GITHUB_RUN_NUMBER))"
+
+      - name: Build signed release APK
         working-directory: android-tv
-        run: gradle assembleDebug --no-daemon --stacktrace
+        env:
+          TV_KEYSTORE_PASSWORD: ${{ secrets.TV_KEYSTORE_PASSWORD }}
+          TV_KEY_ALIAS: ${{ secrets.TV_KEY_ALIAS }}
+        run: gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Verify the APK signature
+        shell: bash
+        run: |
+          test -f "$APK" || { echo "::error::No signed APK at $APK"; ls -R android-tv/app/build/outputs/apk || true; exit 1; }
+          SDK="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          BT="$(ls -d "$SDK"/build-tools/*/ | sort -V | tail -n 1)"
+          echo "apksigner from $BT"
+          "$BT/apksigner" verify --verbose --print-certs "$APK" > "$RUNNER_TEMP/apksigner.txt"
+          cat "$RUNNER_TEMP/apksigner.txt"
+          GOT="$(grep -m1 'certificate SHA-256 digest:' "$RUNNER_TEMP/apksigner.txt" | sed 's/.*digest: *//' | tr -d ' :\r' | tr 'a-f' 'A-F')"
+          if [ "$GOT" != "$TV_CERT_SHA256" ]; then
+            echo "::error::APK signed with certificate SHA-256 '$GOT', expected $TV_CERT_SHA256"
+            exit 1
+          fi
+          echo "Signature OK: certificate SHA-256 $GOT"
 
       - uses: actions/upload-artifact@v4
         with:
           name: BoardGamesTV
-          path: android-tv/app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ env.APK }}
 
-      - name: Publish APK to the website (short Downloader link)
+      - name: Publish APK + version.json to the website (main only)
+        if: github.ref == 'refs/heads/main'
+        shell: bash
         run: |
           mkdir -p tv
-          cp android-tv/app/build/outputs/apk/debug/app-debug.apk tv/BoardGamesTV.apk
+          cp "$APK" tv/BoardGamesTV.apk
+          SHA="$(sha256sum tv/BoardGamesTV.apk | cut -d' ' -f1)"
+          printf '{"versionCode":%s,"versionName":"1.%s","apk":"https://maverick5150.github.io/board-games/tv/BoardGamesTV.apk","sha256":"%s"}\n' \
+            "$VERSION_CODE" "$VERSION_CODE" "$SHA" > tv/version.json
           ls -l tv/BoardGamesTV.apk
+          cat tv/version.json
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
-          git add tv/BoardGamesTV.apk
-          git commit -m "Build Fire TV APK" || echo "nothing to commit"
+          git add tv/BoardGamesTV.apk tv/version.json
+          git commit -m "Build Fire TV APK 1.$VERSION_CODE" || echo "nothing to commit"
           git pull --rebase origin main
           git push origin HEAD:main

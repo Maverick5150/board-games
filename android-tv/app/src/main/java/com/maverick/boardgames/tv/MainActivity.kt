@@ -17,6 +17,7 @@ import android.webkit.WebViewClient
 class MainActivity : Activity() {
 
     private lateinit var web: WebView
+    private var updater: Updater? = null
     private val startUrl = "https://maverick5150.github.io/board-games/firestick/?tv=1"
 
     inner class Bridge {
@@ -68,6 +69,9 @@ class MainActivity : Activity() {
         web.isFocusable = true
         web.requestFocus()
         if (savedInstanceState == null) web.loadUrl(startUrl) else web.restoreState(savedInstanceState)
+
+        // self-update: asks once when a newer version is on the website, never blocks the games
+        updater = Updater(this, web).also { it.checkOnLaunch() }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -84,5 +88,11 @@ class MainActivity : Activity() {
     }
 
     override fun onPause() { super.onPause(); web.onPause() }
-    override fun onResume() { super.onResume(); web.onResume() }
+    override fun onResume() { super.onResume(); web.onResume(); updater?.onResume() }
+
+    override fun onDestroy() {
+        updater?.close()
+        updater = null
+        super.onDestroy()
+    }
 }
