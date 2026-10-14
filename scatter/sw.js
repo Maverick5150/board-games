@@ -15,6 +15,10 @@ self.addEventListener("activate", e => {
       .then(() => self.clients.claim())
   );
 });
+// Pages and scripts always ask the server whether they changed (a cheap "304 not modified" when not), so a published update
+// loads on the very next launch instead of up to 10 minutes later (GitHub Pages' HTTP cache time), and a new page never runs
+// with an older script left in the browser's HTTP cache. Old engines that can't copy a request this way just fetch it as before.
+const fresh = req => { try { return new Request(req, { cache: "no-cache" }); } catch (x) { return req; } };
 // Network-first for the page so updates always load fresh; cache-first for other assets.
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
@@ -22,7 +26,7 @@ self.addEventListener("fetch", e => {
   const isDoc = e.request.mode === "navigate" || url.pathname.endsWith("/") || url.pathname.endsWith(".html") || url.pathname.endsWith(".js");
   if (isDoc) {
     e.respondWith(
-      fetch(e.request).then(res => { const c = res.clone(); caches.open(VERSION).then(x => x.put(e.request, c)).catch(()=>{}); return res; })
+      fetch(fresh(e.request)).then(res => { const c = res.clone(); caches.open(VERSION).then(x => x.put(e.request, c)).catch(()=>{}); return res; })
         .catch(() => caches.match(e.request).then(h => h || caches.match("./index.html")))
     );
   } else {
