@@ -5,65 +5,148 @@
 (function(g){
 "use strict";
 var Uno=g.Uno=g.Uno||{}, E=Uno.Engine;
-var COL={R:"#d6322b",Y:"#f2bf24",G:"#2f9e44",B:"#2d63c8",P:"#e0509a",T:"#15a39d",O:"#f08a24",V:"#7b4bc9",W:"#16161a"};
-var INK={R:"#d6322b",Y:"#b8860b",G:"#2f9e44",B:"#2d63c8",P:"#e0509a",T:"#15a39d",O:"#f08a24",V:"#7b4bc9",W:"#16161a"};
+/* ---------------- the card faces (step 5): original Midnight Luxe artwork, all vector ----------------
+   One element per card, sized by --cw (any length: 64px, 4.4rem, 13vh): everything inside is in em of the card width, and the face is one
+   inline SVG (100 x 150 units) with no gradients, ids or filters. A lacquered colour field, an ivory rim with a gold hairline, an elongated
+   rounded diamond "inlay" carrying the big numeral or symbol, and an index plate in two corners (the second turned upside down). Dark-side
+   (Flip) faces carry a night rim and inlay with the colour in the numeral. No oval, no "UNO" lettering, no four-quarter wheel: a Wild is
+   a fan of four small cards. Numbers use DM Serif Display (ui/fonts) and fall back to Georgia. */
+var COL={R:"#e0443a",Y:"#f6c92e",G:"#2fa857",B:"#3b72dc",P:"#e9529c",T:"#1fbdb5",O:"#f5902f",V:"#8a5fe0",W:"#232850"};   // field mid-tones (the colour discs and the picker use these too)
+var F1={R:"#e9564a",Y:"#fbd43c",G:"#41b868",B:"#4f86ec",P:"#f46aa8",T:"#33cfc7",O:"#ffa549",V:"#9d73ea",W:"#2a3060"};   // field, lit corner
+var F2={R:"#a61f1b",Y:"#d9970a",G:"#17713a",B:"#1f4aa6",P:"#932461",T:"#0a756f",O:"#bf4f0a",V:"#52289a",W:"#0b0d1d"};   // field, shaded corner
+var INK={R:"#b3261e",Y:"#8a5a00",G:"#1d7a3c",B:"#2457b8",P:"#ff7ab8",T:"#3fe0d6",O:"#ffa347",V:"#c4a6ff",W:"#14172b"};   // numerals: >= 4.9:1 on the inlay (ivory on the light side, night on the dark side)
 var CN=E.CNAME;
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
+function faceName(f){ return f.c==="W"?(E.VNAME[f.v]||"Wild"):(CN[f.c]||"")+" "+((f.v.length===1)?f.v:(E.VNAME[f.v]||f.v)); }
 
-/* symbol drawings on a 100x100 canvas; col = the card colour used for strokes */
-function quarters(r,cols){ var o=''; var a=[[0,-r,r,0],[r,0,0,r],[0,r,-r,0],[-r,0,0,-r]]; cols.forEach(function(c,i){ var p=a[i]; o+='<path d="M0 0 L'+p[0]+' '+p[1]+' A'+r+' '+r+' 0 0 1 '+p[2]+' '+p[3]+' Z" fill="'+c+'"/>'; }); return o; }
-function sym(v,col,side){
-  var four=side?[COL.P,COL.T,COL.O,COL.V]:[COL.R,COL.Y,COL.G,COL.B];
-  function txt(t,sz,y){ return '<text x="50" y="'+(y||64)+'" text-anchor="middle" font-family="Arial Black,Arial,sans-serif" font-weight="900" font-size="'+sz+'" fill="'+col+'">'+t+'</text>'; }
-  var arrows='<g fill="none" stroke="'+col+'" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"><path d="M28 40 H66"/><path d="M56 28 L68 40 L56 52"/><path d="M72 62 H34"/><path d="M44 50 L32 62 L44 74"/></g>';
-  var skip='<g fill="none" stroke="'+col+'" stroke-width="10"><circle cx="50" cy="50" r="26"/><path d="M31 69 L69 31"/></g>';
+/* a polygon with rounded corners as an SVG path */
+function rpoly(pts,r){
+  var n=pts.length, d="";
+  function f(p){ return (Math.round(p[0]*10)/10)+" "+(Math.round(p[1]*10)/10); }
+  for(var i=0;i<n;i++){
+    var p0=pts[(i+n-1)%n], p1=pts[i], p2=pts[(i+1)%n];
+    function u(a){ var dx=a[0]-p1[0], dy=a[1]-p1[1], l=Math.sqrt(dx*dx+dy*dy); return [dx/l,dy/l]; }
+    var v1=u(p0), v2=u(p2), a=[p1[0]+v1[0]*r,p1[1]+v1[1]*r], b=[p1[0]+v2[0]*r,p1[1]+v2[1]*r];
+    d+=(i?"L":"M")+f(a)+"Q"+f(p1)+" "+f(b);
+  }
+  return d+"Z";
+}
+var MED=rpoly([[50,19],[88,75],[50,131],[12,75]],9), MEDIN=rpoly([[50,26],[81,75],[50,124],[19,75]],7);
+var FAN=["#e0443a","#f6c92e","#2fa857","#3b72dc"];
+var DARKFAN=["#e9529c","#1fbdb5","#f5902f","#8a5fe0"];
+/* the Wild mark: four small cards in a fan (original; pivot at 50,100) */
+function fan(cx,cy,s,dark){
+  var o='<g transform="translate('+cx+' '+cy+') scale('+s+') translate(-50 -80)">';
+  [-33,-11,11,33].forEach(function(a,i){ o+='<rect x="39" y="63" width="22" height="34" rx="3.5" transform="rotate('+a+' 50 100)" fill="'+(dark?DARKFAN:FAN)[i]+'" stroke="#14172b" stroke-width="1.5"/>'; });
+  return o+'</g>';
+}
+function pips(y,dark){ var o=""; [35.5,45.2,54.8,64.5].forEach(function(x,i){ o+='<path d="M'+x+' '+(y-4.2)+'L'+(x+3.4)+' '+y+'L'+x+' '+(y+4.2)+'L'+(x-3.4)+' '+y+'Z" fill="'+(dark?DARKFAN:FAN)[i]+'" stroke="#14172b" stroke-width="1"/>'; }); return o; }
+function st(w){ return 'fill="none" stroke="currentColor" stroke-width="'+w+'" stroke-linecap="round" stroke-linejoin="round"'; }
+var ARR_REV='<path d="M30 62H66M56 50L68 62L56 74" '+st(7)+'/><path d="M70 88H34M44 76L32 88L44 100" '+st(7)+'/>';
+var SKIP='<circle cx="50" cy="75" r="19" '+st(7)+'/><path d="M36.5 88.5L63.5 61.5" '+st(7)+'/>';
+var CIRC='<g transform="translate(50 80) scale(1.5) translate(-24 -24)"><path d="M38 24a14 14 0 1 1-4.1-9.9" '+st(4)+'/><path d="M36 6v9.5h-9.5" '+st(4)+'/></g>';
+var SKIPALL='<circle cx="33" cy="75" r="13" '+st(5.5)+'/><path d="M24 84L42 66" '+st(5.5)+'/><circle cx="67" cy="75" r="13" '+st(5.5)+'/><path d="M58 84L76 66" '+st(5.5)+'/>';
+var FLIPG='<path d="M36 92V58M26 68L36 56L46 68" '+st(7)+'/><path d="M64 58V92M54 82L64 94L74 82" '+st(7)+'/>';
+var XX='<path d="M35 52L65 82M65 52L35 82" '+st(8)+'/>';
+var MINI={skip:SKIP,wskip:SKIP,wskip2:SKIP,skipall:SKIPALL,rev:ARR_REV,wrev:ARR_REV,wswap:ARR_REV,flip:FLIPG,discardall:XX,roul:CIRC,wrd4:ARR_REV};
+function under(g,sc,cy){ return '<g transform="translate(50 '+cy+') scale('+sc+') translate(-50 -75)">'+g+'</g>'; }
+var MS={skipall:.215};
+function num(t,sz,y){ return '<text class="nm" x="50" y="'+y+'" text-anchor="middle" style="font-size:'+sz+'px">'+t+'</text>'; }
+/* the symbol drawn inside the inlay; everything in currentColor (the face's ink) except the Wild fan. Centre of the inlay: 50,75 */
+function sym(v,dark){
   switch(v){
-    case "skip": case "wskip": return skip;
-    case "skipall": return '<g transform="translate(-14,0) scale(.7)" transform-origin="50 50">'+skip+'</g><g transform="translate(26,0) scale(.7)">'+skip+'</g>';
-    case "rev": case "wrev": return arrows;
-    case "d1": return txt("+1",44); case "d2": case "wd2": case "wtd2": return txt("+2",44); case "d4": case "wd4": return txt("+4",44); case "d5": return txt("+5",44); case "wd6": return txt("+6",44); case "wd10": return txt("+10",36,62);
-    case "wrd4": return arrows.replace('stroke-width="9"','stroke-width="6"').replace(/<g /,'<g transform="translate(0,-8) scale(.78)" transform-origin="50 50" ')+txt("+4",30,86);
-    case "wdc": return '<g transform="translate(50,40)">'+quarters(22,four)+'</g>'+txt("+",36,88);
-    case "discardall": return '<g fill="none" stroke="'+col+'" stroke-width="9" stroke-linecap="round"><path d="M32 32 L68 68 M68 32 L32 68"/></g>'+txt("ALL",20,90);
-    case "flip": return '<g fill="none" stroke="'+col+'" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"><path d="M34 62 V30 M24 40 L34 28 L44 40"/><path d="M66 38 V70 M56 60 L66 72 L76 60"/></g>';
-    case "wswap": return '<g fill="none" stroke="'+col+'" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"><path d="M24 40 H74 M62 28 L76 40 L62 52"/><path d="M76 62 H26 M38 50 L24 62 L38 74"/></g>';
-    case "roul": return '<g transform="translate(50,50)">'+quarters(30,four)+'<circle r="9" fill="#fff"/></g>';
-    case "wild": return '<g transform="translate(50,50) rotate(-20)">'+quarters(30,four)+'</g>';
+    case "skip": return SKIP;
+    case "wskip": return pips(50,dark)+under(SKIP,.78,82);
+    case "wskip2": return pips(50,dark)+under(SKIP,.66,76)+num("x2",20,108);
+    case "skipall": return SKIPALL;
+    case "rev": return ARR_REV;
+    case "wrev": return pips(50,dark)+under(ARR_REV,.78,82);
+    case "wswap": return pips(50,dark)+under('<rect x="24" y="66" width="20" height="30" rx="3.5" '+st(3.5)+'/><rect x="56" y="66" width="20" height="30" rx="3.5" '+st(3.5)+'/><path d="M47 76H53M51 72.5L54 76L51 79.5M53 88H47M49 84.5L46 88L49 91.5" '+st(2.6)+'/>',.72,78);
+    case "flip": return FLIPG;
+    case "d1": return num("+1",46,91);
+    case "d2": case "wd2": case "wtd2": return v==="d2"?num("+2",46,91):fan(50,57,.6,dark)+num("+2",30,104);
+    case "d4": return num("+4",46,91);
+    case "wd4": return fan(50,57,.6,dark)+num("+4",30,104);
+    case "d5": return num("+5",46,91);
+    case "wd6": return fan(50,57,.6,dark)+num("+6",30,104);
+    case "wd10": return fan(50,56,.56,dark)+num("+10",22,103);
+    case "wdc": return fan(50,57,.6,dark)+num("+C",30,104);
+    case "wrd4": return '<g transform="translate(50 58) scale(.56) translate(-50 -75)">'+ARR_REV+'</g>'+num("+4",30,104);
+    case "discardall": return XX+num("ALL",16,104);
+    case "roul": return pips(50,dark)+'<g transform="translate(50 83) scale(.58) translate(-50 -80)">'+CIRC+'</g>';
+    case "wild": return fan(50,80,1.06,dark);
   }
   return "";
 }
-function cornerText(f){
-  var v=f.v; if(f.c!=="W"&&v.length===1) return v;
-  return {skip:"⊘",rev:"⇄",d1:"+1",d2:"+2",d4:"+4",d5:"+5",skipall:"⊘⊘",discardall:"✕",flip:"⇅",wild:"W",wd4:"+4",wd2:"+2",wdc:"+C",wrd4:"+4",roul:"R",wd6:"+6",wd10:"+10",wrev:"⇄",wskip:"⊘",wskip2:"⊘2",wtd2:"+2",wswap:"⇄"}[v]||"";
+/* the corner index: the value (or a small symbol) on a plate, centred at 15.5,21 */
+function indexMark(f,dark){
+  var v=f.v;
+  if(f.c!=="W"&&v.length===1) return '<text class="ix" x="16" y="28" text-anchor="middle" style="font-size:20px">'+v+'</text>'+((v==="6"||v==="9")?'<rect class="ink" x="12" y="30.2" width="8" height="1.7" rx=".8"/>':"");
+  var t={d1:"+1",d2:"+2",d4:"+4",d5:"+5",wd4:"+4",wd2:"+2",wtd2:"+2",wd6:"+6",wd10:"10",wdc:"+C",wild:"W"}[v];
+  if(t) return '<text class="ix" x="16" y="27.5" text-anchor="middle" style="font-size:'+(t==="W"?15:t==="+C"?13:t==="10"?14:15)+'px">'+t+'</text>';
+  return MINI[v]?'<g class="ink-s mini" transform="translate(16 21.5) scale('+(MS[v]||.27)+') translate(-50 -75)">'+MINI[v]+'</g>':"";
 }
 /* one card face as HTML. card={id,f:[..]}; side 0/1 */
 function cardHTML(card,side,o){
-  o=o||{}; var f=card.f[side||0], dark=!!side, wild=f.c==="W", base=wild?"#16161a":COL[f.c], ink=wild?"#16161a":INK[f.c];
-  var big=(f.c!=="W"&&f.v.length===1)?'<text x="50" y="68" text-anchor="middle" font-family="Georgia,serif" font-weight="900" font-size="58" fill="'+ink+'">'+f.v+'</text>':sym(f.v,ink,side);
-  var oval='<ellipse cx="50" cy="50" rx="43" ry="30" transform="rotate(-24 50 50)" fill="'+(dark&&!wild?"#14141a":"#fff")+'"/>';
-  var inner=(dark&&!wild&&f.c!=="W")?big.replace(new RegExp(ink,"g"),COL[f.c]):big;
-  var ct=cornerText(f);
-  var cls="uc"+(dark?" dk":"")+(o.cls?" "+o.cls:"")+(o.dim?" dim":"")+(o.glow?" glow":"");
-  return '<div class="'+cls+'" data-id="'+card.id+'"'+(o.attrs?" "+o.attrs:"")+' style="--bg:'+base+';'+(o.style||"")+'">'+
-    '<svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">'+oval+(wild&&f.v!=="wild"&&f.v!=="roul"&&f.v!=="wdc"?'<g transform="translate(50,50) rotate(-24) translate(-50,-50)" opacity=".95"><g transform="translate(50,50) scale(.6) translate(-50,-50)">'+sym("wild","#000",side)+'</g></g>'+'<g opacity=".95">'+sym(f.v,"#111",side).replace(/#16161a/g,"#111")+'</g>':inner)+'</svg>'+
-    '<i class="c1">'+esc(ct)+'</i><i class="c2">'+esc(ct)+'</i></div>';
+  o=o||{}; var f=card.f[side||0], dark=!!side, wild=f.c==="W", c=f.c, nm=faceName(f);
+  var plate='<rect class="pl" x="6.5" y="8" width="19" height="27" rx="4.5"/>'+indexMark(f,dark);
+  var big=(!wild&&f.v.length===1)?num(f.v,68,98)+((f.v==="6"||f.v==="9")?'<rect class="ink" x="38" y="104.5" width="24" height="4" rx="2"/>':""):'<g class="ink-s">'+sym(f.v,dark)+'</g>';
+  var cls="uc c"+c+(dark?" dk":"")+(wild?" wl":"")+(o.cls?" "+o.cls:"")+(o.dim?" dim":"")+(o.glow?" glow":"");
+  var at=o.attrs||"";
+  return '<div class="'+cls+'" data-id="'+card.id+'"'+(at.indexOf("aria-label")<0?' aria-label="'+esc(nm)+'"':"")+(at?" "+at:"")+(o.style||o.rot?' style="'+(o.rot?"--rot:"+o.rot+"deg;":"")+(o.style||"")+'"':"")+'>'+
+    '<svg viewBox="0 0 100 150" aria-hidden="true" focusable="false"><rect class="fr" x="5.2" y="5.2" width="89.6" height="139.6" rx="7"/><path class="md" d="'+MED+'"/><path class="mi" d="'+MEDIN+'"/>'+big+
+    '<g>'+plate+'</g><g transform="rotate(180 50 75)">'+plate+'</g></svg></div>';
 }
-function backHTML(o){ o=o||{}; return '<div class="uc back'+(o.cls?" "+o.cls:"")+'"'+(o.attrs?" "+o.attrs:"")+'><svg viewBox="0 0 100 100"><ellipse cx="50" cy="50" rx="40" ry="27" transform="rotate(-24 50 50)" fill="url(#ubg)" stroke="#fff" stroke-width="2.4"/><defs><linearGradient id="ubg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e53b2c"/><stop offset="1" stop-color="#f2bf24"/></linearGradient></defs><text x="50" y="62" text-anchor="middle" font-family="Georgia,serif" font-weight="900" font-size="38" fill="#fff" stroke="#16161a" stroke-width="1.4" transform="rotate(-24 50 50)">★</text></svg>'+(o.label?'<b class="bl">'+esc(o.label)+'</b>':"")+'</div>'; }
+/* the card back: night lacquer, gold lattice and frame, a gold star in a rounded diamond */
+var STAR=(function(){ var p=[]; for(var i=0;i<16;i++){ var a=Math.PI*i/8-Math.PI/2, r=i%2?6.2:19; p.push((50+r*Math.cos(a)).toFixed(1)+" "+(75+r*Math.sin(a)).toFixed(1)); } return "M"+p.join("L")+"Z"; })();
+function backHTML(o){
+  o=o||{};
+  return '<div class="uc back'+(o.cls?" "+o.cls:"")+'"'+(o.attrs?" "+o.attrs:"")+'><svg viewBox="0 0 100 150" aria-hidden="true" focusable="false"><rect class="fr" x="5.2" y="5.2" width="89.6" height="139.6" rx="7"/><rect class="fr2" x="9.5" y="9.5" width="81" height="131" rx="5"/>'+
+    '<path class="bm" d="'+MED+'"/><path class="mi" d="'+MEDIN+'"/><path class="bs" d="'+STAR+'"/><circle class="bc" cx="50" cy="75" r="3.4"/>'+
+    '<path d="M50 29.5l3.4 3.7-3.4 3.7-3.4-3.7z" fill="'+FAN[0]+'"/><path d="M50 113l3.4 3.7-3.4 3.7-3.4-3.7z" fill="'+FAN[2]+'"/><path d="M21.5 75l3.7-3.4 3.7 3.4-3.7 3.4z" fill="'+FAN[1]+'"/><path d="M71.1 75l3.7-3.4 3.7 3.4-3.7 3.4z" fill="'+FAN[3]+'"/></svg>'+
+    (o.label?'<b class="bl">'+esc(o.label)+'</b>':"")+'</div>';
+}
 
-var CSS=[
-".uc{position:relative;display:inline-block;flex:none;width:var(--cw,64px);height:calc(var(--cw,64px)*1.5);border-radius:calc(var(--cw,64px)*.12);background:var(--bg,#333);border:calc(var(--cw,64px)*.055) solid #fff;box-shadow:0 2px 6px #0009;font-family:Georgia,serif;user-select:none;-webkit-user-select:none;cursor:pointer;transition:transform .12s,box-shadow .12s;overflow:hidden}",
-".uc.dk{border-color:#0d0d11;box-shadow:0 2px 6px #000b,inset 0 0 0 calc(var(--cw,64px)*.02) #ffffff30}",
-".uc svg{position:absolute;inset:0;width:100%;height:100%}",
-".uc i{position:absolute;font-style:normal;font-weight:900;color:#fff;font-size:calc(var(--cw,64px)*.2);line-height:1;text-shadow:0 1px 2px #0008;font-family:'Arial Black',Arial,sans-serif}",
-".uc i.c1{left:calc(var(--cw,64px)*.07);top:calc(var(--cw,64px)*.05)}.uc i.c2{right:calc(var(--cw,64px)*.07);bottom:calc(var(--cw,64px)*.05);transform:rotate(180deg)}",
-".uc.back{background:#16161a;border-color:#fff}",
-".uc.back .bl{position:absolute;left:0;right:0;bottom:3%;text-align:center;color:#fff;font:800 calc(var(--cw,64px)*.2) system-ui;text-shadow:0 1px 3px #000}",
-".uc.dim{filter:brightness(.55) saturate(.7)}",
-".uc.glow{box-shadow:0 0 0 3px #7bf2a3,0 4px 12px #000b;transform:translateY(-8px)}",
-".uc.sel{transform:translateY(-12px)}",
-"@keyframes ucpop{from{transform:scale(.4) rotate(-12deg);opacity:0}to{transform:none;opacity:1}}.uc.pop{animation:ucpop .35s ease-out}",
-".uc.jmp{box-shadow:0 0 0 3px #ffd23f,0 0 14px #ffd23f}"
-].join("\n");
+/* colour classes: --f1/--f2 the lacquer, --ink the numeral, --med the inlay and plates, --rim the card edge */
+var CSS=(function(){
+  var rows=[], k;
+  ["R","Y","G","B","P","T","O","V","W"].forEach(function(c){
+    var dk=("PTOV".indexOf(c)>=0);
+    rows.push(".uc.c"+c+"{--f1:"+F1[c]+";--f2:"+F2[c]+";--ink:"+INK[c]+";--med:"+(dk?"#141833":c==="W"?"#fbf6e8":"#fbf6e8")+";--hair:"+(dk?"#e7ca90":F2[c])+"}");
+  });
+  return [
+".uc{--rim:#f5eedb;--pat:none;--ps:.16em .16em;position:relative;display:inline-block;flex:none;box-sizing:border-box;width:1em;height:1.5em;font-size:var(--cw,64px);border-radius:.12em;border:.04em solid var(--rim);",
+" background:linear-gradient(152deg,var(--f1,#444),var(--f2,#111));box-shadow:0 .03em .06em rgba(0,0,0,.5),0 .09em .2em rgba(0,0,0,.42),inset 0 .012em 0 rgba(255,255,255,.5);",
+" user-select:none;-webkit-user-select:none;cursor:pointer;overflow:hidden;transition:transform .12s,box-shadow .12s;line-height:1}",
+".uc::before{content:\"\";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background-image:var(--pat),radial-gradient(120% 80% at 28% 6%,rgba(255,255,255,.3),rgba(255,255,255,0) 58%);background-size:var(--ps),100% 100%}",
+".uc.cR,.uc.cP{--pat:linear-gradient(45deg,rgba(255,255,255,.09) 25%,transparent 25% 75%,rgba(255,255,255,.09) 75%)}",
+".uc.cY,.uc.cT{--pat:repeating-linear-gradient(0deg,rgba(255,255,255,.14) 0 .012em,transparent .012em .1em);--ps:100% 100%}",
+".uc.cG,.uc.cO{--pat:repeating-linear-gradient(90deg,rgba(255,255,255,.1) 0 .012em,transparent .012em .1em);--ps:100% 100%}",
+".uc.cB,.uc.cV{--pat:radial-gradient(circle,rgba(255,255,255,.16) 0 .018em,transparent .02em);--ps:.1em .1em}",
+".uc.cW{--pat:linear-gradient(45deg,rgba(231,202,144,.1) 25%,transparent 25% 75%,rgba(231,202,144,.1) 75%)}",
+".uc.dk{--rim:#161a36;box-shadow:0 .03em .06em rgba(0,0,0,.6),0 .09em .2em rgba(0,0,0,.5),inset 0 0 0 .012em rgba(231,202,144,.55)}",
+".uc svg{position:absolute;inset:0;width:100%;height:100%;display:block}",
+".uc .fr{fill:none;stroke:#e7ca90;stroke-width:.8;opacity:.6}.uc.back .fr2{fill:none;stroke:#e7ca90;stroke-width:.5;opacity:.5}",
+".uc .md{fill:var(--med,#fbf6e8);stroke:rgba(20,23,43,.55);stroke-width:1}.uc .mi{fill:none;stroke:var(--hair,#8a5a00);stroke-width:.9;opacity:.55}",
+".uc .pl{fill:var(--med,#fbf6e8);stroke:var(--hair,#8a5a00);stroke-width:.8}",
+".uc .nm{stroke:var(--ink,#14172b);stroke-width:1.5;stroke-linejoin:round}",
+".uc .nm,.uc .ix{fill:var(--ink,#14172b);font-family:var(--font-display,\"DM Serif Display\",\"Iowan Old Style\",Georgia,serif)}",
+".uc .ix{font-family:var(--font-ui,\"Manrope\",system-ui,sans-serif);font-weight:800}",
+".uc .ink{fill:var(--ink,#14172b)}.uc .ink-s{color:var(--ink,#14172b)}.uc .mini path,.uc .mini circle{stroke-width:11px}",
+".uc.dk.cW{--med:#141833;--ink:#f6efdb;--hair:#e7ca90}",
+".uc.back{--rim:#f5eedb;background:linear-gradient(152deg,#262b57,#0b0d1f);--pat:linear-gradient(45deg,rgba(231,202,144,.13) 25%,transparent 25% 75%,rgba(231,202,144,.13) 75%)}",
+".uc .bm{fill:#0e1128;stroke:#e7ca90;stroke-width:1.5}.uc.back .mi{stroke:#e7ca90;opacity:.7}.uc .bs{fill:#ecd29b}.uc .bc{fill:#0e1128}",
+".uc .bl{position:absolute;left:.1em;right:.1em;bottom:.07em;padding:.03em .02em;border-radius:.06em;text-align:center;font:800 .17em/1.15 var(--font-ui,system-ui,sans-serif);color:#f6efdb;background:rgba(8,10,21,.86)}",
+".uc.back.dead{opacity:.5}",
+".uc.dim::after{content:\"\";position:absolute;inset:-1px;border-radius:inherit;background:rgba(8,10,21,.52);pointer-events:none}",
+".uc.glow{transform:translateY(-.12em);box-shadow:0 0 0 .035em #e7ca90,0 0 .34em .05em rgba(231,202,144,.6),0 .1em .22em rgba(0,0,0,.5)}",
+".uc.sel{transform:translateY(-.18em)}",
+".uc.jmp{transform:translateY(-.12em);box-shadow:0 0 0 .035em #fff3d1,0 0 .4em .07em rgba(255,243,209,.85),0 .1em .22em rgba(0,0,0,.5)}",
+"@keyframes ucpop{from{transform:scale(.4) rotate(-12deg);opacity:0}to{transform:rotate(var(--rot,0deg));opacity:1}}.uc.pop{animation:ucpop .35s ease-out}",
+"html[data-effects=\"reduced\"] .uc.pop,html[data-motion=\"reduce\"] .uc.pop{animation:none}",
+"@media (prefers-reduced-motion:reduce){.uc.pop{animation:none}}"
+  ].concat(rows).join("\n");
+})();
 function injectCSS(){ if(typeof document==="undefined"||document.getElementById("unoCardCss")) return; var s=document.createElement("style"); s.id="unoCardCss"; s.textContent=CSS; document.head.appendChild(s); }
 
 /* ================= controller (reads a snapshot V, sends action objects) ================= */
@@ -101,7 +184,7 @@ var LCSS=[
 ".unoT.un-lux{width:100%;color:var(--text-1);font-family:var(--font-ui)}",
 ".un-lux .upl{padding-inline:0}",
 ".un-lux .utbl{position:relative;display:flex;align-items:center;justify-content:center;gap:1.25rem;min-height:13rem;margin:.5rem 0;padding:1.25rem .75rem 1rem}",
-".un-lux .utbl .pile{--cw:78px;position:relative;text-align:center;font:var(--fw-ui-strong) var(--fs-micro)/1.3 var(--font-ui);color:var(--text-2)}",
+".un-lux .utbl .pile{--cw:86px;position:relative;text-align:center;font:var(--fw-ui-strong) var(--fs-micro)/1.3 var(--font-ui);color:var(--text-2)}",
 ".un-lux .utbl .pile .uc{display:block;margin:0 auto .4rem}",
 ".un-lux .utbl .un-mid{display:grid;justify-items:center;align-content:center;gap:.5rem;min-width:4.5rem}",
 ".un-lux .udir{width:2.25rem;height:2.25rem;color:var(--gold-200)}.un-lux .udir svg{display:block;width:100%;height:100%}",
@@ -117,24 +200,26 @@ var LCSS=[
 ".un-lux .un-cbtn{gap:.5rem}",
 ".un-lux .un-sw,.un-sheet .un-sw{--c:#888;--hi:#ccc;flex:none;width:1.5rem;height:1.5rem;border-radius:50%;background:radial-gradient(circle at 35% 30%,var(--hi),var(--c) 62%);box-shadow:0 0 0 .125rem var(--ink-1),0 0 0 .1875rem rgba(255,255,255,.28)}",
 ".un-sheet .un-sw{width:1.75rem;height:1.75rem}",
-".un-lux .uhand{--cw:64px;display:flex;flex-wrap:wrap;gap:.5rem 0;justify-content:center;padding:.875rem 1.25rem .375rem .25rem;min-height:110px}.un-lux .uhand .uc{margin-right:-18px}",
+".un-lux .uhand{--cw:64px;display:flex;flex-wrap:wrap;gap:.5rem 0;justify-content:center;padding:.875rem 1.25rem .375rem .25rem;min-height:110px}.un-lux .uhand .uc{margin-right:-.28em}",
+".un-lux .utbl .pile .uc.back{margin-bottom:calc(.4rem + .14em);box-shadow:.025em .03em 0 #e8e0cc,.05em .06em 0 #232850,.075em .09em 0 #e8e0cc,.1em .12em 0 #232850,0 .2em .34em rgba(0,0,0,.6)}",
+".un-lux .dstack{position:relative;width:1em;height:1.5em;margin:0 auto calc(.4rem + .12em);font-size:var(--cw)}.un-lux .dstack .uc{position:absolute;left:0;top:0;margin:0;transform:rotate(var(--rot,0deg))}",
+".un-lux .dstack .uc.h1{transform:translate(.04em,.012em) rotate(9deg)}.un-lux .dstack .uc.h2{transform:translate(-.05em,.02em) rotate(-11deg)}",
 ".un-lux .uhand .un-empty{padding:1.5rem 0;font:var(--fw-body) var(--fs-sm)/1.3 var(--font-ui);color:var(--text-2)}",
 ".un-lux .uc.is-focus{box-shadow:var(--focus-ring) !important;z-index:7}.un-lux .uc{outline:none}",
 ".un-lux .ulog{min-height:2.5rem;margin:.25rem 0;font:var(--fw-body) var(--fs-micro)/1.45 var(--font-ui);color:var(--text-2);text-align:center}",
 ".un-sheet .un-shead{display:grid;gap:.25rem;margin-bottom:1rem}.un-sheet .un-shead .bg-sheet__sub{margin:0}",
 ".un-sheet .un-colors{grid-template-columns:repeat(2,minmax(0,1fr))}",
 ".un-sheet .un-sheetbtns{margin-top:1rem}",
-"@media(min-width:520px){.un-lux .uhand{--cw:74px}.un-lux .utbl .pile{--cw:92px}}",
+"@media(min-width:520px){.un-lux .uhand{--cw:74px}.un-lux .utbl .pile{--cw:100px}}",
 "html[data-tv] .un-lux .utbl{gap:2.5rem}",
-"html[data-tv] .un-lux .utbl .pile{--cw:9.5rem}",
-"html[data-tv] .un-lux .uhand{--cw:4.4rem;justify-content:flex-start;padding:1.25rem 1.5rem .5rem .5rem}",
-"html[data-tv] .un-lux .uhand .uc{margin-right:-1rem}",
+"html[data-tv] .un-lux .utbl .pile{--cw:11rem}",
+"html[data-tv] .un-lux .uhand{--cw:5.6rem;justify-content:flex-start;padding:1.25rem 1.5rem .5rem .5rem}",
+"html[data-tv] .un-lux .uhand[data-n=\"m\"]{--cw:4.6rem}html[data-tv] .un-lux .uhand[data-n=\"l\"]{--cw:3.8rem}",
 "html[data-tv] .un-lux .udir{width:3rem;height:3rem}html[data-tv] .un-lux .ucol{width:3.25rem;height:3.25rem}"
 ].join("\n");
 function injectLuxCss(){ if(typeof document==="undefined"||document.getElementById("unoLuxCss")) return; var s=document.createElement("style"); s.id="unoLuxCss"; s.textContent=LCSS; document.head.appendChild(s); }
 var DIR_CW='<svg viewBox="0 0 48 48" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M38 24a14 14 0 1 1-4.1-9.9"/><path d="M36 6v9.5h-9.5"/></svg>';
 var DIR_CCW='<svg viewBox="0 0 48 48" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" style="transform:scaleX(-1)"><path d="M38 24a14 14 0 1 1-4.1-9.9"/><path d="M36 6v9.5h-9.5"/></svg>';
-function faceName(f){ return f.c==="W"?(E.VNAME[f.v]||"Wild"):(CN[f.c]||"")+" "+((f.v.length===1)?f.v:(E.VNAME[f.v]||f.v)); }
 function initialsOf(name){ var m=/^(You|Player|CPU)\s*(\d*)$/.exec(String(name)); return m?(m[1]==="You"?"Y":m[1].charAt(0)+m[2]):String(name).charAt(0); }
 
 function create(cfg){
@@ -242,13 +327,14 @@ function create(cfg){
     // hand
     if(me>=0){
       var pl=V.playable||[], jmp=V.jump||[];
+      $("uhand").setAttribute("data-n",V.hand.length<=10?"s":V.hand.length<=18?"m":"l");
       $("uhand").innerHTML=V.hand.map(function(c){ var can=pl.indexOf(c.id)>=0, j=jmp.indexOf(c.id)>=0; return cardHTML(c,V.side,{dim:(myTurn||V.phase==="drawn")&&!can&&!j,glow:can&&myTurn,cls:j?"jmp":"",attrs:'data-h="1"'}); }).join("")||'<div style="opacity:.7;padding:30px 0">no cards</div>';
     } else $("uhand").innerHTML='<div style="opacity:.7;padding:30px 0;text-align:center">'+esc(tp.name)+' is playing…</div>';
     $("ulog").innerHTML=(V.log||[]).slice(-3).map(esc).join("<br>");
   }
 
   /* ---------------- the Luxe table (step 4) ---------------- */
-  var stripKey="", turnKey="", lastTop=-1, focusPhase="";
+  var stripKey="", turnKey="", lastTop=-1, lastTopCard=null, lastTopSide=0, hist=[], histKey="", focusPhase="";
   function strip(){
     var el=$("upl"), gk=cfg.gameKey?cfg.gameKey():"";
     var key=gk+"|"+V.players.map(function(p){ return p.name+(p.human?"H":"C"); }).join(",")+"|"+(V.o.teams?"T":"");
@@ -281,12 +367,15 @@ function create(cfg){
     var fk=tvOn()?tvKey(document.activeElement):null;
     strip();
     // table
-    var top=V.top, dark=V.side===1, newTop=top&&top.id!==lastTop; lastTop=top?top.id:-1;
+    var top=V.top, dark=V.side===1, newTop=top&&top.id!==lastTop, hk=(cfg.gameKey?cfg.gameKey():"")+":"+V.round;
+    if(hk!==histKey){ histKey=hk; hist=[]; lastTopCard=null; }
+    else if(newTop&&lastTopCard){ hist.unshift({card:lastTopCard,side:lastTopSide}); if(hist.length>2) hist.length=2; }
+    lastTop=top?top.id:-1; lastTopCard=top; lastTopSide=V.side;
     var dname=V.color?CN[V.color]:"Any colour";
     $("utbl").innerHTML='<div class="pile" id="udraw">'+backHTML({label:V.drawCount+" left",attrs:'data-pile="draw"'+(tv?' data-focus tabindex="-1" role="button" aria-label="Draw pile, '+V.drawCount+' cards left"':"")})+'<div class="pl">draw</div></div>'+
       '<div class="pile un-mid"><div class="udir" role="img" aria-label="'+(V.dir>0?"Play goes clockwise":"Play goes counter-clockwise")+'" title="'+(V.dir>0?"Clockwise":"Counter-clockwise")+'">'+(V.dir>0?DIR_CW:DIR_CCW)+'</div>'+(V.pen?'<div class="upen">+'+V.pen.n+'</div>':'')+
       (V.color?'<div class="ucol" style="'+swStyle(V.color)+'"></div>':'<div class="ucol any" aria-hidden="true"><i style="background:'+COL.R+'"></i><i style="background:'+COL.Y+'"></i><i style="background:'+COL.G+'"></i><i style="background:'+COL.B+'"></i></div>')+'<div class="ucname">'+esc(dname)+'</div></div>'+
-      '<div class="pile">'+(top?cardHTML(top,V.side,{cls:newTop?"pop":"",attrs:'data-pile="discard" aria-label="Top card: '+esc(faceName(top.f[V.side]))+'"'}):"")+'<div class="pl">'+(dark?"Dark side":V.o.edition==="flip"?"Light side":"discard")+'</div></div>';
+      '<div class="pile"><div class="dstack">'+hist.slice().reverse().map(function(h,i){ return cardHTML(h.card,h.side,{cls:"dim h"+(hist.length-i),attrs:'aria-hidden="true"'}); }).join("")+(top?cardHTML(top,V.side,{cls:newTop?"pop top":"top",rot:(top.id*47)%9-4,attrs:'data-pile="discard" role="img" aria-label="Top card: '+esc(faceName(top.f[V.side]))+'"'}):"")+'</div><div class="pl">'+(dark?"Dark side":V.o.edition==="flip"?"Light side":"discard")+'</div></div>';
     // status + actions
     var st="", acts="", ts=tapw();
     if(V.over||V.roundOver) st="Round over";
@@ -318,7 +407,7 @@ function create(cfg){
     if(me>=0){
       var pl=V.playable||[], jmp=V.jump||[];
       $("uhand").innerHTML=V.hand.map(function(c){ var can=pl.indexOf(c.id)>=0, j=jmp.indexOf(c.id)>=0;
-        return cardHTML(c,V.side,{dim:(myTurn||V.phase==="drawn")&&!can&&!j,glow:can&&myTurn,cls:j?"jmp":"",attrs:'data-h="1" aria-label="'+esc(faceName(c.f[V.side]))+(can&&myTurn?", playable":"")+'"'+(tv?' data-focus tabindex="-1"':"")}); }).join("")||'<div class="un-empty">no cards</div>';
+        return cardHTML(c,V.side,{dim:(myTurn||V.phase==="drawn")&&!can&&!j,glow:can&&myTurn,cls:j?"jmp":"",attrs:'data-h="1" role="button" aria-label="'+esc(faceName(c.f[V.side]))+(can&&myTurn?", playable":"")+'"'+(tv?' data-focus tabindex="-1"':"")}); }).join("")||'<div class="un-empty">no cards</div>';
     } else $("uhand").innerHTML='<div class="un-empty" data-stage-text>'+esc(tp.name)+' is playing…</div>';
     $("ulog").innerHTML=(V.log||[]).slice(-3).map(esc).join("<br>");
     if(tvOn()) tvKeep(fk);
@@ -377,6 +466,6 @@ function create(cfg){
   var self={update:function(v){ V=v; if(L) renderLux(); else render(); },destroy:function(){ if(modal.parentNode) modal.parentNode.removeChild(modal); },closeModal:closeModal,luxe:L,resetTurn:function(){ turnKey=""; focusPhase=""; }};
   return self;
 }
-Uno.Cards={cardHTML:cardHTML,backHTML:backHTML,injectCSS:injectCSS,COL:COL,CSS:CSS};
+Uno.Cards={cardHTML:cardHTML,backHTML:backHTML,injectCSS:injectCSS,faceName:faceName,COL:COL,CSS:CSS};
 Uno.Ctrl={create:create,CSS:CTCSS,COL:COL};
 })(typeof window!=="undefined"?window:globalThis);
