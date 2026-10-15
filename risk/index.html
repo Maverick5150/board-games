@@ -184,6 +184,7 @@
   .rk-asheet .rk-shead{margin-bottom:.75rem}
   .rk-asheet .bg-sheet__title{font-size:var(--fs-xl)}
   .rk-asheet .bg-sheet__options{gap:.5rem}
+  html[data-tv] #handoffSheet .bg-sheet__options{gap:1.5rem}   /* the defender question: the focus ring never touches the next option */
   .rk-asheet .bg-sheet__option{padding:.5rem .75rem; gap:.7rem}
   .rk-asheet .bg-sheet__label{font-size:var(--fs-lg)}
   .rk-asheet .rk-dice--sheet{margin:0 0 .75rem; padding:.4rem .6rem .45rem}
@@ -615,6 +616,7 @@ function showSetup(on,resume){
   b.classList.toggle("rk-in-setup",on); b.classList.toggle("bg-app--scene",on);
   $("menuBtn").hidden=on;
   if(on){ if(ctrl&&ctrl.closeSheets) ctrl.closeSheets(); closeHandoff(); closeWin(); syncStart(); }
+  else if(ui.defA&&G&&!G.over) setTimeout(()=>{ if(ui.defA&&!setupShown()) openDefend(ui.defA.a,ui.defA.dp); },0);   // the defender's question comes back after the Menu
   (document.scrollingElement||document.documentElement).scrollTop=0;
   if(!on&&G){
     ui.turnKey=""; ui.focusKey=""; refresh();   // the map is back: the strip pulses whose turn it is, the choice sheet comes back, the D-pad finds its control
@@ -628,7 +630,7 @@ function showSetup(on,resume){
 }
 function barTitle(){
   const e=$("barEyebrow"); if(!e) return;
-  const t=setupShown()?(liveGame()?"Game in progress":(ui.result?"Game over":"New game")):
+  const t=paused()?"Paused":setupShown()?(liveGame()?"Game in progress":(ui.result?"Game over":"New game")):
     (!G?"New game":G.over?"Game over":stats.turns?"Turn "+stats.turns:"Setting up");
   if(e.textContent!==t) e.textContent=t;
 }
@@ -636,7 +638,7 @@ function barTitle(){
 /* ---------------- saving ---------------- */
 function packG(){ if(!G) return null; const c=JSON.parse(JSON.stringify(G,(k,v)=>k==="log"?undefined:v)); c.log=G.log.slice(-40); return {G:c,cfg:JSON.parse(JSON.stringify(cfg)),stats:{ms:Math.round(playMs()),turns:stats.turns}}; }
 function loadSaved(d){
-  gen++; clearTimeout(aiTimer); clearTimeout(ui.winT); ui.winT=0;
+  gen++; clearTimeout(aiTimer); clearTimeout(ui.winT); ui.winT=0; ui.defA=null;
   G=d.G; G.rnd=Math.random; Object.assign(cfg,d.cfg||{}); handoffOk=null; setSpeedSeg();
   stats=readStats(d.stats); seenLog=G.log.length; ui.winShown=-1; ui.result=false; ui.strip=""; ui.hoKey=""; ui.focusKey="";
   $("setup").classList.remove("show"); $("winBox").classList.remove("show"); closeWin(); Sound.skip();
@@ -679,7 +681,7 @@ $("startBtn").addEventListener("click",()=>{ Sound.skip(); closeWin(); $("winBox
 
 /* ---------------- game ---------------- */
 function startGame(){
-  gen++; clearTimeout(aiTimer); clampSeats();
+  gen++; clearTimeout(aiTimer); clampSeats(); ui.defA=null;
   const total=cfg.humans+cfg.cpus, used=cfg.hcolors.slice();
   while(used.length<cfg.humans){ for(let i=0;i<PCOLS.length;i++) if(used.indexOf(i)<0){ used.push(i); break; } }
   const colors=used.slice(); for(let i=0;i<PCOLS.length&&colors.length<total;i++) if(colors.indexOf(i)<0) colors.push(i);
@@ -695,7 +697,7 @@ function startUI(){
     const L=luxe();
     board=R.Board.create($("rkboard"),{labels:"auto",tint:cfg.tint,focusable:L&&onTV(),pulseLayer:L});
     ctrl=R.Ctrl.create({root:$("rkpanel"),board:board,toast:toast,send:send,blitzDelay:cfg.speed==="slow"?700:420,
-      luxe:L,seatOf:seatOf,tv:onTV,onSheet:peek,held:setupShown});
+      luxe:L,seatOf:seatOf,tv:onTV,onSheet:peek,held:setupShown,paused:paused});
   } else if(ctrl.reset) ctrl.reset();   // a blitz or selection from the previous game must not carry over
   board.setTint(cfg.tint); board.fit();
   lastEv=G.log.length; refresh();
@@ -745,6 +747,7 @@ function legend(){
 function send(a){
   if(!G||G.over) return {ok:false,msg:"The game is over."};
   const humanActing=G.players[G.turn].human;
+  const dp=defenderAsk(a); if(dp){ openDefend(a,dp); return {ok:true,deferred:true}; }   // house rule: the human defender picks 1 or 2 dice first
   const r=E.applyAction(G,a);
   if(!r.ok) return r;
   (r.events||[]).forEach(e=>{ if(e.text) Sound.fromText(e.text); });
@@ -765,16 +768,52 @@ function drive(){
   }
   const base=SPEED[cfg.speed], ph=G.phase;
   const d=(ph==="claim"||ph==="deploy"||ph==="setup2p"||ph==="hq"||ph==="choose")?base*0.3:(ph==="reinforce"?base*0.55:(ph==="attack"?base:(ph==="occupy"?base*0.5:base*0.6)));
-  aiTimer=setTimeout(()=>{
-    if(my!==gen||!G||G.over) return;
-    const a=E.aiAction(G); if(!a){ return; }
-    const r=send(a);
-    if(!r.ok){ /* safety: never hang */ send({t:"endTurn"}); }
-  },Math.max(120,d));
+  aiTimer=setTimeout(()=>aiTick(my),Math.max(120,d));
+}
+// Step 5: the Menu (or a sheet the player opened while a computer plays) pauses the computers: the move waits, the eyebrow says Paused,
+// and the very same move is played a moment after Resume. Party Mode runs its own host and never pauses.
+function paused(){
+  if(!liveGame()) return false;
+  if(setupShown()) return true;
+  const p=G.players[G.turn];
+  return !p.human&&!!(ctrl&&ctrl.sheetsOpen&&ctrl.sheetsOpen());
+}
+function aiTick(my){
+  if(my!==gen||!G||G.over) return;
+  if(paused()){ barTitle(); aiTimer=setTimeout(()=>aiTick(my),250); return; }
+  barTitle();
+  const a=E.aiAction(G); if(!a){ return; }
+  const r=send(a);
+  if(!r.ok){ /* safety: never hang */ send({t:"endTurn"}); }
+}
+/* House rule "Defender chooses 1 or 2 dice" (default off, the page asks; the engine only takes attack.defDice and never rolls fewer than 1). A human defender holding 2+ armies
+   is asked before every roll, whoever attacks; computer defenders keep the usual best play (the most dice). The same sheet as the hot-seat hand-off. */
+function defenderAsk(a){
+  if(a.t!=="attack"||a.defDice!=null||!G.o.defChoose||G.phase!=="attack") return null;
+  const A=G.terr[a.from], D=G.terr[a.to]; if(!A||!D||A.o!==G.turn||D.o<0||D.o===G.turn||D.a<2||A.a<2) return null;
+  if(MP.adj&&MP.adj[a.from]&&MP.adj[a.from].indexOf(a.to)<0) return null;
+  const dp=G.players[D.o]; return dp&&dp.human&&!dp.neutral?dp:null;
+}
+function openDefend(a,dp){
+  ui.defA={a:a,dp:dp};
+  const at=G.players[G.turn], n=Math.max(1,Math.min(a.dice||3,3,G.terr[a.from].a-1)), tv=onTV(), sh=$("handoffSheet"), tn=MP.names[a.to], cur=G.terr[a.to].a;
+  const line=d=>{ const pairs=Math.min(n,d); return (d===2?"Your two best chances: ":"One die: ")+"you can lose up to "+pairs+(pairs===1?" army":" armies")+" and so can they. Ties go to you."; };
+  const opt=(d,label,best)=>`<button type="button" class="bg-sheet__option${best?" is-best":""}" data-def="${d}"${best?" data-autofocus":""}><span class="bg-sheet__text"><span class="bg-sheet__label">${label}${best?" (best)":""}</span><span class="bg-sheet__detail">${line(d)}</span></span></button>`;
+  sh.innerHTML=`<div class="bg-sheet__grip" aria-hidden="true"></div><div class="rk-ho"><span class="bg-eyebrow bg-eyebrow--accent">Defend</span>`+
+    `<h2 class="bg-sheet__title" id="hoTitle">${esc(dp.name)} defends ${esc(tn)}</h2>`+
+    `<p class="rk-ho__to"><span class="bg-token" data-seat="${seatOfP(dp,dp.id)}" aria-hidden="true">${esc(tokenOf(dp.name))}</span><span>${esc(at.name)} attacks with <b>${n} ${n===1?"die":"dice"}</b></span></p>`+
+    `<p class="bg-sheet__sub">${G.players.filter(x=>x.human).length>1?"Pass the "+(tv?"remote":"phone")+" to "+esc(dp.name)+". ":""}Roll 1 or 2 dice.</p></div>`+
+    `<div class="bg-sheet__options">${opt(2,"Roll 2 dice",true)}${opt(1,"Roll 1 die",false)}</div>`;
+  sh.querySelectorAll("[data-def]").forEach(b=>b.addEventListener("click",()=>{
+    const q=ui.defA; if(!q) return; ui.defA=null; closeHandoff();
+    send(Object.assign({},q.a,{defDice:+b.getAttribute("data-def")}));
+  }));
+  openHandoff('[data-def="2"]');   // the D-pad starts on the best option
+  if(tvOn()) setTimeout(()=>{ const f=ui.defA&&sh.querySelector('[data-def="2"]'); if(f&&f.isConnected&&document.activeElement!==f) BG().focus.set(f); },160);
 }
 function handoffDue(){ if(!G||G.over) return false; const p=G.players[G.turn], nh=G.players.filter(x=>x.human).length; return p.human&&nh>1&&handoffOk!==G.turn&&(G.phase==="hq"||G.phase==="reinforce"||G.phase==="choose"); }
 // pass the phone (hot seat): a sheet that must be answered; the cards stay hidden until the next player says it is them
-function openHandoff(){ const el=$("handoff"), B=BG(); el.classList.add("show"); if(luxe()&&!B.sheet.isOpen(el)) B.sheet.open(el,{dismissible:false,focus:"#hoBtn"}); }
+function openHandoff(focus){ const el=$("handoff"), B=BG(); el.classList.add("show"); if(luxe()&&!B.sheet.isOpen(el)) B.sheet.open(el,{dismissible:false,focus:focus||"#hoBtn"}); }
 function closeHandoff(){ const el=$("handoff"), B=BG(); el.classList.remove("show"); if(B&&B.sheet&&B.sheet.isOpen(el)) B.sheet.close(el); }
 function showHandoff(p){
   if(luxe()&&setupShown()) return;   // the Menu is up: the hand-off waits for Resume

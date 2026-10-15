@@ -22,6 +22,7 @@ function defaultOpts(){
     capArmies:0,             // 12 = "experts" cap on armies per territory (0 = none)
     randomSetup:false,       // convenience: finish the starting placement automatically
     occupyMin1:false,        // house rule: after a conquest you may move in as few as 1 army (published rules: at least as many as the dice you rolled)
+    defChoose:false,         // house rule: a human defender chooses to roll 1 or 2 dice (published rule; the default plays the usual best, the most dice). Asked on the device by the page: attack(.., defDice)
     occupyFree:true,         // house rule (on by default): after a conquest, shift armies back and forth between the two territories for the rest of the attack phase
     missionRules:"us",       // us | uk (old UK Secret Mission: kill the target yourself, else your mission becomes 24 territories; 14-card mission deck)
     maxPlayers:6
@@ -49,10 +50,11 @@ var HOUSE=[
   ["capArmies","Army cap per territory","choice",[[0,"None"],[12,"12 (experts)"]]],
   ["randomSetup","Place starting armies automatically","bool"],
   ["occupyMin1","Move in from 1 army after a conquest","bool"],
-  ["occupyFree","Shift armies back and forth after a conquest","bool"]
+  ["occupyFree","Shift armies back and forth after a conquest","bool"],
+  ["defChoose","Defender chooses 1 or 2 dice","bool",null,"hotseat"]   // [4]="hotseat": the question is asked on the shared device (not offered in Party Mode)
 ];
 /* 1 = published rule, 0 = house rule. occupyFree used to also lower the move-in minimum to 1; that part is now occupyMin1 (off), so old saved settings keep their meaning for the shift */
-var HOUSE_OFFICIAL={mode:1,setup:1,terrBonus:1,cardValues:1,wilds:1,fortify:1,reinforceOrAttack:1,cardOnElim:1,capArmies:1,randomSetup:0,occupyMin1:0,occupyFree:0};
+var HOUSE_OFFICIAL={mode:1,setup:1,terrBonus:1,cardValues:1,wilds:1,fortify:1,reinforceOrAttack:1,cardOnElim:1,capArmies:1,randomSetup:0,occupyMin1:0,occupyFree:0,defChoose:0};
 function versionOpts(id,extra){ var v=VERSIONS.filter(function(x){ return x.id===id; })[0]||VERSIONS[0]; var o={}; for(var k in v.opts) o[k]=v.opts[k]; for(var k2 in (extra||{})) o[k2]=extra[k2]; return mergeOpts(o); }
 
 /* ---------------- helpers ---------------- */
@@ -195,6 +197,28 @@ function skipDone(G){
 }
 function finishDeploy(G){ ev(G,"setup",{text:"All starting armies are placed."}); G.turn=G.deployStart!=null?G.deployStart:firstPlacer(G); beginSetupDone(G); }
 /* saves from before deployStart existed: whoever made the first claim/placement still in the log (else player 0) */
+/* Old setup saves (no deployStart): the log keeps only 40 entries, so find who started from the placement counts. Replay the round robin
+   from each seat with the same skipping of finished players and keep the seat whose replay ends on the saved counts and the saved turn. */
+function ensureDeployStart(G){
+  var np=G.players.length, real=[], i, sa=startArmiesOf(G), dealt=G.o.setup==="dealPlace";
+  for(i=0;i<np;i++) if(G.players[i].alive&&!G.players[i].neutral) real.push(i);
+  var need=[], got=[], total=0;
+  for(i=0;i<np;i++){ var own=owned(G,i).length; need[i]=dealt?sa-own:sa; got[i]=need[i]-(G.initLeft[i]||0); total+=got[i]; }
+  var cands=[];
+  for(var c=0;c<real.length;c++){
+    var s=real[c], left=need.slice(), t=s, k=0, sim=[]; for(i=0;i<np;i++) sim[i]=0;
+    while(k<total){ var g=0; while(left[t]<=0&&g++<np+1) t=nextAlive(G,t); if(left[t]<=0) break; left[t]--; sim[t]++; k++; t=nextAlive(G,t); }
+    if(k<total) continue;
+    var g2=0; if(G.phase==="deploy") while(left[t]<=0&&g2++<np+1&&!G.players[t].neutral) t=nextAlive(G,t);
+    var ok=sim.every(function(v,j){ return v===got[j]||G.players[j].neutral; });
+    if(ok&&t===G.turn) cands.push(s);
+  }
+  /* more than one seat can fit the same counts only in the last few placements of a dealt setup (finished players are skipped); then the log, if it still
+     shows the first placement, decides, else the earliest seat */
+  var fp=firstPlacer(G);
+  G.deployStart=cands.length?(cands.length>1&&cands.indexOf(fp)>=0?fp:cands[0]):fp;
+  return cands;
+}
 function firstPlacer(G){ for(var i=0;i<G.log.length;i++){ var e=G.log[i]; if((e.type==="claim"||e.type==="place")&&typeof e.p==="number"&&G.players[e.p]&&!G.players[e.p].neutral) return e.p; } return 0; }
 function deployOne(G,t){
   if(G.phase!=="deploy") return {ok:false,msg:"Not deploying right now."};
@@ -328,7 +352,7 @@ function anyAttack(G,p){ var MP=map(); for(var i=0;i<G.terr.length;i++){ if(G.te
 function targetsFrom(G,t){ var p=G.terr[t].o, r=[]; map().adj[t].forEach(function(u){ if(G.terr[u].o!==p) r.push(u); }); return r; }
 
 /* ---------------- combat ---------------- */
-function attack(G,from,to,dice){
+function attack(G,from,to,dice,defDice){
   if(G.phase!=="attack") return {ok:false,msg:"You can't attack right now."};
   var p=G.turn, A=G.terr[from], D=G.terr[to];
   if(A.o!==p) return {ok:false,msg:"Attack from one of your own territories."};
@@ -337,6 +361,7 @@ function attack(G,from,to,dice){
   if(A.a<2) return {ok:false,msg:"You need at least 2 armies to attack."};
   dice=Math.max(1,Math.min(dice||3,3,A.a-1));
   var dd=Math.min(2,D.a), ar=[],dr=[],i;
+  if(G.o.defChoose&&defDice&&defDice<dd) dd=Math.max(1,defDice|0);   // house rule: the defender asked for a single die (only ever fewer than the most it may roll)
   for(i=0;i<dice;i++) ar.push(rollDie(G)); for(i=0;i<dd;i++) dr.push(rollDie(G));
   var as=ar.slice().sort(function(a,b){ return b-a; }), ds=dr.slice().sort(function(a,b){ return b-a; });
   var al=0,dl=0; for(i=0;i<Math.min(as.length,ds.length);i++){ if(as[i]>ds[i]) dl++; else al++; }
@@ -638,6 +663,7 @@ function aiFortifyPlan(G){
   return null;
 }
 function applyAction(G,a){
+  if((G.phase==="claim"||G.phase==="deploy")&&G.deployStart==null) ensureDeployStart(G);   // saves made before deployStart existed
   switch(a.t){
     case "claim": return claimTerr(G,a.terr);
     case "deployOne": return deployOne(G,a.terr);
@@ -646,7 +672,7 @@ function applyAction(G,a){
     case "mode": return chooseMode(G,a.m);
     case "trade": return tradeCards(G,a.ids,a.bonusTerr);
     case "place": return place(G,a.terr,a.n);
-    case "attack": return attack(G,a.from,a.to,a.dice);
+    case "attack": return attack(G,a.from,a.to,a.dice,a.defDice);
     case "occupy": return occupy(G,a.n);
     case "endAttack": return endAttack(G);
     case "fortify": return fortify(G,a.from,a.to,a.n);
@@ -681,7 +707,7 @@ function snapshot(G,me){
 }
 function playerStats(G,p){ var t=owned(G,p), a=0; t.forEach(function(i){ a+=G.terr[i].a; }); return {terrs:t.length,armies:a,cards:G.players[p].cards.length}; }
 
-Risk.Engine={snapshot:snapshot,nextSetValue:nextSetValue,VERSIONS:VERSIONS,GAMEMODES:GAMEMODES,HOUSE:HOUSE,HOUSE_OFFICIAL:HOUSE_OFFICIAL,defaultOpts:defaultOpts,mergeOpts:mergeOpts,versionOpts:versionOpts,
+Risk.Engine={ensureDeployStart:ensureDeployStart,snapshot:snapshot,nextSetValue:nextSetValue,VERSIONS:VERSIONS,GAMEMODES:GAMEMODES,HOUSE:HOUSE,HOUSE_OFFICIAL:HOUSE_OFFICIAL,defaultOpts:defaultOpts,mergeOpts:mergeOpts,versionOpts:versionOpts,
   newGame:newGame,cur:cur,owned:owned,realPlayers:realPlayers,claimTerr:claimTerr,deployOne:deployOne,setup2p:setup2p,pickHq:pickHq,chooseMode:chooseMode,
   tradeCards:tradeCards,place:place,attack:attack,occupy:occupy,endAttack:endAttack,fortify:fortify,endTurn:endTurn,applyAction:applyAction,aiAction:aiAction,
   findSets:findSets,validSet:validSet,setValue:setValue,forcedNow:forcedNow,fortifyTargets:fortifyTargets,targetsFrom:targetsFrom,anyAttack:anyAttack,canFortifyAny:canFortifyAny,
