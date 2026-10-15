@@ -195,6 +195,8 @@ function create(cfg){
   function waitL(icon,title,sub,extra,face){
     return '<div class="scPad">'+headL(face||"letter",S.tieActive?"Tie-break round":(S.round>0?"Round "+S.round:"New game"),esc(sub||""),false)+'<div class="scBody bg-surface--paper"><div class="scWait">'+ic(icon)+'<b>'+title+'</b></div></div></div>'+(extra||"");
   }
+  // standing order for a round's points list: the best round first, ties in seat order (presentation only)
+  function rankedBy(res){ var t=(res&&res.totals)||{}; return S.players.map(function(p,i){ return {p:p,i:i}; }).sort(function(a,b){ return ((+t[b.p.id]||0)-(+t[a.p.id]||0))||(a.i-b.i); }).map(function(x){ return x.p; }); }
   function progressL(){ return '<ul class="bg-stats scTotals">'+S.players.map(function(p){ return '<li class="bg-stat"><b>'+p.filled+'/'+S.slots.length+'</b><span>'+esc(p.name)+'</span></li>'; }).join("")+'</ul>'; }
   function buildWriteL(){
     var o=S.o, kw=o.mode==="keyword", per=o.answersPer, n=S.slots.length;
@@ -231,7 +233,7 @@ function create(cfg){
       return '<li class="scSlot"><div class="scCat"><span class="n">'+(i+1)+'</span><span>'+(kw?'<b class="scKwL">'+esc(s.letter)+'</b> ':'')+esc(s.label)+'</span></div><div class="scChips">'+chips+'</div></li>';
     }).join("");
     return '<div class="scPad">'+headL("letter",scored?"Round "+S.round+" scored":"Scoring",rule,false)+'<div class="scBody bg-surface--paper"><ol class="scSlots">'+slots+'</ol></div></div>'+
-      '<ul class="bg-stats scTotals">'+S.players.map(function(p){ return '<li class="bg-stat"><b>+'+((res.totals||{})[p.id]||0)+'</b><span>'+esc(p.name)+'</span></li>'; }).join("")+'</ul>';
+      '<ul class="bg-stats scTotals">'+rankedBy(res).map(function(p){ return '<li class="bg-stat"><b>+'+((res.totals||{})[p.id]||0)+'</b><span>'+esc(p.name)+'</span></li>'; }).join("")+'</ul>';
   }
   function sheetL(eyebrow,title,big,sub,btns){
     return '<div class="bg-sheet__grip" aria-hidden="true"></div><div class="scShead"><span class="bg-eyebrow bg-eyebrow--accent">'+eyebrow+'</span><h2 class="bg-sheet__title" id="scTitle">'+title+'</h2></div><div class="scAnsBig">'+big+'</div><p class="bg-sheet__sub">'+sub+'</p><div class="scBtns2">'+btns+'</div>';
@@ -270,7 +272,7 @@ function create(cfg){
       }).join("")||'<span style="opacity:.6;font-size:12px">no answers</span>';
       return '<div class="scSlot"><div class="scCat"><span>'+(i+1)+'.</span>'+(S.o.mode==="keyword"?'<b style="color:#ffd23f">'+esc(s.letter)+'</b> — ':'')+esc(s.label)+'</div>'+chips+'</div>';
     }).join("");
-    h+='<div class="scTot">'+S.players.map(function(p){ return '<div>'+esc(p.name)+' <b>+'+((res.totals||{})[p.id]||0)+'</b></div>'; }).join("")+'</div>';
+    h+='<div class="scTot">'+rankedBy(res).map(function(p){ return '<div>'+esc(p.name)+' <b>+'+((res.totals||{})[p.id]||0)+'</b></div>'; }).join("")+'</div>';
     return h;
   }
   function scoreTable(){
