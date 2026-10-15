@@ -1,4 +1,7 @@
-/* UNO — original card artwork (no Mattel art) as HTML/SVG, plus the table + hand controller shared by the phone game and the Party phones. Needs engine.js. */
+/* UNO — original card artwork (no Mattel art) as HTML/SVG, plus the table + hand controller shared by the phone game and the Party phones. Needs engine.js.
+   Step 4 (Midnight Luxe): create({luxe:true, seatOf, tv, pulse, gameKey}) draws the table with the shared ui/ pieces (a bg-players strip with
+   BGUI.setTurn, the felt table, bg- buttons, colour / target choices as BGUI sheets, the D-pad on TV). Without ui/ui.js, or without luxe:true
+   (the Party Mode phones), the original panel is used, unchanged. */
 (function(g){
 "use strict";
 var Uno=g.Uno=g.Uno||{}, E=Uno.Engine;
@@ -92,25 +95,99 @@ var CTCSS=[
 ].join("\n");
 function injectCtCSS(){ if(typeof document==="undefined"||document.getElementById("unoCtCss")) return; var s=document.createElement("style"); s.id="unoCtCss"; s.textContent=CTCSS; document.head.appendChild(s); }
 
+/* ---- Luxe controller CSS (step 4): only added when the controller runs in luxe mode (needs ui/theme.css on the page) ---- */
+var HI={R:"#ff8a7e",Y:"#ffe58a",G:"#7fdc97",B:"#8fb4f7",P:"#ffa6d0",T:"#7ee6df",O:"#ffbc78",V:"#c2a8f4"};
+var LCSS=[
+".unoT.un-lux{width:100%;color:var(--text-1);font-family:var(--font-ui)}",
+".un-lux .upl{padding-inline:0}",
+".un-lux .utbl{position:relative;display:flex;align-items:center;justify-content:center;gap:1.25rem;min-height:13rem;margin:.5rem 0;padding:1.25rem .75rem 1rem}",
+".un-lux .utbl .pile{--cw:78px;position:relative;text-align:center;font:var(--fw-ui-strong) var(--fs-micro)/1.3 var(--font-ui);color:var(--text-2)}",
+".un-lux .utbl .pile .uc{display:block;margin:0 auto .4rem}",
+".un-lux .utbl .un-mid{display:grid;justify-items:center;align-content:center;gap:.5rem;min-width:4.5rem}",
+".un-lux .udir{width:2.25rem;height:2.25rem;color:var(--gold-200)}.un-lux .udir svg{display:block;width:100%;height:100%}",
+".un-lux .ucol{--c:#888;--hi:#ccc;width:2.5rem;height:2.5rem;margin:0;border:0;border-radius:50%;background:radial-gradient(circle at 35% 30%,var(--hi),var(--c) 62%);box-shadow:0 0 0 .1875rem var(--ink-1),0 0 0 .3125rem var(--focus-ivory)}",
+".un-lux .ucol.any{display:flex;align-items:center;justify-content:center;gap:.14rem;background:var(--ink-3)}.un-lux .ucol.any i{width:.46rem;height:.46rem;border-radius:.1rem;transform:rotate(45deg)}",
+".un-lux .ucname{font:var(--fw-ui-strong) var(--fs-sm)/1.2 var(--font-ui);color:var(--text-1)}",
+".un-lux .upen{margin:0;padding:.2rem .7rem;border-radius:var(--r-pill);font:var(--fw-caps) var(--fs-md)/1.2 var(--font-ui);color:var(--danger-ink);background:var(--danger)}",
+".un-lux .ustat{display:flex;align-items:center;justify-content:center;gap:.5rem;min-height:calc(1.3em + 1.25rem);margin:.5rem 0 .25rem;padding:.625rem .875rem;font:var(--fw-ui) var(--fs-md)/1.3 var(--font-ui);text-align:center;color:var(--text-1);border:0;border-radius:var(--r-lg)}",
+".un-lux .ustat[data-seat]{box-shadow:var(--panel-edge),inset 0 0 0 1.5px var(--seat-ring),var(--elev-2)}",
+".un-lux .ustat .dot{flex:none;width:.75rem;height:.75rem;border-radius:50%;background:var(--seat);box-shadow:0 0 0 2px var(--ink-1),0 0 0 3px rgba(255,255,255,.18)}",
+".un-lux .uacts{display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center;margin:.375rem 0;min-height:var(--tap)}",
+".un-lux .uacts .bg-btn{padding-inline:.9rem}",
+".un-lux .un-cbtn{gap:.5rem}",
+".un-lux .un-sw,.un-sheet .un-sw{--c:#888;--hi:#ccc;flex:none;width:1.5rem;height:1.5rem;border-radius:50%;background:radial-gradient(circle at 35% 30%,var(--hi),var(--c) 62%);box-shadow:0 0 0 .125rem var(--ink-1),0 0 0 .1875rem rgba(255,255,255,.28)}",
+".un-sheet .un-sw{width:1.75rem;height:1.75rem}",
+".un-lux .uhand{--cw:64px;display:flex;flex-wrap:wrap;gap:.5rem 0;justify-content:center;padding:.875rem 1.25rem .375rem .25rem;min-height:110px}.un-lux .uhand .uc{margin-right:-18px}",
+".un-lux .uhand .un-empty{padding:1.5rem 0;font:var(--fw-body) var(--fs-sm)/1.3 var(--font-ui);color:var(--text-2)}",
+".un-lux .uc.is-focus{box-shadow:var(--focus-ring) !important;z-index:7}.un-lux .uc{outline:none}",
+".un-lux .ulog{min-height:2.5rem;margin:.25rem 0;font:var(--fw-body) var(--fs-micro)/1.45 var(--font-ui);color:var(--text-2);text-align:center}",
+".un-sheet .un-shead{display:grid;gap:.25rem;margin-bottom:1rem}.un-sheet .un-shead .bg-sheet__sub{margin:0}",
+".un-sheet .un-colors{grid-template-columns:repeat(2,minmax(0,1fr))}",
+".un-sheet .un-sheetbtns{margin-top:1rem}",
+"@media(min-width:520px){.un-lux .uhand{--cw:74px}.un-lux .utbl .pile{--cw:92px}}",
+"html[data-tv] .un-lux .utbl{gap:2.5rem}",
+"html[data-tv] .un-lux .utbl .pile{--cw:9.5rem}",
+"html[data-tv] .un-lux .uhand{--cw:4.4rem;justify-content:flex-start;padding:1.25rem 1.5rem .5rem .5rem}",
+"html[data-tv] .un-lux .uhand .uc{margin-right:-1rem}",
+"html[data-tv] .un-lux .udir{width:3rem;height:3rem}html[data-tv] .un-lux .ucol{width:3.25rem;height:3.25rem}"
+].join("\n");
+function injectLuxCss(){ if(typeof document==="undefined"||document.getElementById("unoLuxCss")) return; var s=document.createElement("style"); s.id="unoLuxCss"; s.textContent=LCSS; document.head.appendChild(s); }
+var DIR_CW='<svg viewBox="0 0 48 48" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M38 24a14 14 0 1 1-4.1-9.9"/><path d="M36 6v9.5h-9.5"/></svg>';
+var DIR_CCW='<svg viewBox="0 0 48 48" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" style="transform:scaleX(-1)"><path d="M38 24a14 14 0 1 1-4.1-9.9"/><path d="M36 6v9.5h-9.5"/></svg>';
+function faceName(f){ return f.c==="W"?(E.VNAME[f.v]||"Wild"):(CN[f.c]||"")+" "+((f.v.length===1)?f.v:(E.VNAME[f.v]||f.v)); }
+function initialsOf(name){ var m=/^(You|Player|CPU)\s*(\d*)$/.exec(String(name)); return m?(m[1]==="You"?"Y":m[1].charAt(0)+m[2]):String(name).charAt(0); }
+
 function create(cfg){
-  injectCSS(); injectCtCSS();
+  var BG=g.BGUI, L=!!(cfg.luxe&&BG&&BG.sheet&&BG.icon);   // the Luxe table: only with ui/ui.js on the page
+  injectCSS(); if(L) injectLuxCss(); else injectCtCSS();
   var root=cfg.root, V=null, S={pend:null};
-  root.classList.add("unoT");
-  root.innerHTML='<div class="upl" id="upl"></div><div class="utbl" id="utbl"></div><div class="ustat" id="ustat"></div><div class="uacts" id="uacts"></div><div class="uhand" id="uhand"></div><div class="ulog" id="ulog"></div>';
-  var modal=document.createElement("div"); modal.className="umodal"; modal.innerHTML='<div class="sh" id="ush"></div>'; document.body.appendChild(modal);
+  root.classList.add("unoT"); if(L) root.classList.add("un-lux");
+  root.innerHTML=L?'<ul class="bg-players upl" id="upl" aria-label="Players"></ul><div class="utbl bg-surface--felt bg-frame" id="utbl" data-stage-solid></div><div class="bg-card ustat" id="ustat" aria-live="polite"></div><div class="uacts" id="uacts" data-toast-avoid></div><div class="uhand" id="uhand" data-toast-avoid></div><div class="ulog" id="ulog" data-stage-text></div>'
+    :'<div class="upl" id="upl"></div><div class="utbl" id="utbl"></div><div class="ustat" id="ustat"></div><div class="uacts" id="uacts"></div><div class="uhand" id="uhand"></div><div class="ulog" id="ulog"></div>';
+  var modal=document.createElement(L?"section":"div");
+  if(L){ modal.className="bg-sheet un-sheet"; modal.id="unSheet"; modal.setAttribute("aria-labelledby","unSheetTitle"); modal.innerHTML='<div id="ush"></div>'; }
+  else { modal.className="umodal"; modal.innerHTML='<div class="sh" id="ush"></div>'; }
+  document.body.appendChild(modal);
   var $=function(id){ return root.querySelector("#"+id); };
   function act(a){ var r=cfg.send(a); if(r&&r.ok===false&&cfg.toast) cfg.toast(r.msg||"Not allowed."); return r; }
-  function openModal(h){ modal.querySelector("#ush").innerHTML=h; modal.classList.add("show"); }
-  function closeModal(){ modal.classList.remove("show"); }
+  function onTV(){ return !!(L&&cfg.tv&&cfg.tv()); }
+  function tvOn(){ return !!(onTV()&&BG.focus&&BG.focus.enabled); }
+  function tapw(){ return onTV()?"press OK on":"tap"; }
+  function seatOf(i){ return V&&V.o&&V.o.teams?(i%2?2:1):(cfg.seatOf?cfg.seatOf(i):(i%10)+1); }
+  function ico(n){ return L?BG.icon(n):""; }
+  function swStyle(c){ return "--c:"+COL[c]+";--hi:"+HI[c]; }
+  function sheetHead(eyebrow,title,sub){ return '<div class="bg-sheet__grip" aria-hidden="true"></div><div class="un-shead"><span class="bg-eyebrow bg-eyebrow--accent">'+esc(eyebrow)+'</span><h2 class="bg-sheet__title" id="unSheetTitle">'+esc(title)+'</h2>'+(sub?'<p class="bg-sheet__sub">'+esc(sub)+'</p>':"")+'</div>'; }
+  function openModal(h,first){
+    modal.querySelector("#ush").innerHTML=h;
+    if(!L){ modal.classList.add("show"); return; }
+    modal.classList.add("show");
+    if(!BG.sheet.isOpen(modal)) BG.sheet.open(modal,{dismissible:true,focus:modal.querySelector(first||".bg-sheet__option.is-best, .bg-sheet__option")||undefined,onClose:function(){ modal.classList.remove("show"); }});
+  }
+  function closeModal(){ modal.classList.remove("show"); if(L&&BG.sheet.isOpen(modal)) BG.sheet.close(modal); }
   function pcolor(i){ return (V&&V.cols&&V.cols[i])||(cfg.seatColor&&cfg.seatColor(i))||"#ffffff"; }
-  function colorPicker(title,cb,only){
+  function colorPicker(title,cb){
     var cols=E.colorsNow({side:V.side});
-    openModal('<h3>'+esc(title)+'</h3><div class="ucp">'+cols.map(function(c){ return '<button data-c="'+c+'" style="background:'+COL[c]+'">'+CN[c]+'</button>'; }).join("")+'</div><div class="uacts"><button data-x="1">Cancel</button></div>');
+    if(!L){
+      openModal('<h3>'+esc(title)+'</h3><div class="ucp">'+cols.map(function(c){ return '<button data-c="'+c+'" style="background:'+COL[c]+'">'+CN[c]+'</button>'; }).join("")+'</div><div class="uacts"><button data-x="1">Cancel</button></div>');
+    } else {
+      var cnt={}, best=null, bn=0; V.hand.forEach(function(c){ var f=c.f[V.side]; if(f.c!=="W") cnt[f.c]=(cnt[f.c]||0)+1; });
+      cols.forEach(function(c){ if((cnt[c]||0)>bn){ bn=cnt[c]; best=c; } });
+      openModal(sheetHead("Wild card",title,"The next card must match the colour you name.")+'<div class="bg-sheet__options un-colors">'+cols.map(function(c){
+        var n=cnt[c]||0; return '<button type="button" class="bg-sheet__option'+(c===best?" is-best":"")+'" data-c="'+c+'"><i class="un-sw" style="'+swStyle(c)+'"></i><span class="bg-sheet__text"><span class="bg-sheet__label">'+CN[c]+'</span><span class="bg-sheet__detail">'+n+' in hand</span></span></button>'; }).join("")+
+        '</div><div class="un-sheetbtns"><button type="button" class="bg-btn bg-btn--secondary bg-btn--block" data-x="1">Cancel</button></div>');
+    }
     modal.querySelector("#ush").onclick=function(e){ var b=e.target.closest&&e.target.closest("button"); if(!b) return; if(b.dataset.c){ closeModal(); cb(b.dataset.c); } else if(b.dataset.x) closeModal(); };
   }
   function targetPicker(title,cb){
     var rows=V.players.filter(function(p){ return p.id!==V.me&&p.alive; });
-    openModal('<h3>'+esc(title)+'</h3><div class="utg">'+rows.map(function(p){ return '<button data-t="'+p.id+'" style="border-color:'+pcolor(p.id)+'">'+esc(p.name)+' — '+p.cards+' cards</button>'; }).join("")+'<button data-x="1">Cancel</button></div>');
+    if(!L){
+      openModal('<h3>'+esc(title)+'</h3><div class="utg">'+rows.map(function(p){ return '<button data-t="'+p.id+'" style="border-color:'+pcolor(p.id)+'">'+esc(p.name)+' — '+p.cards+' cards</button>'; }).join("")+'<button data-x="1">Cancel</button></div>');
+    } else {
+      var fewest=Math.min.apply(null,rows.map(function(p){ return p.cards; }));
+      openModal(sheetHead("Choose a player",title,"")+'<div class="bg-sheet__options">'+rows.map(function(p){
+        return '<button type="button" class="bg-sheet__option'+(p.cards===fewest?" is-best":"")+'" data-t="'+p.id+'"><span class="bg-token" data-seat="'+seatOf(p.id)+'" aria-hidden="true">'+esc(initialsOf(p.name))+'</span><span class="bg-sheet__text"><span class="bg-sheet__label">'+esc(p.name)+'</span>'+(p.cards===fewest?'<span class="bg-sheet__desc">The smallest hand</span>':"")+'<span class="bg-sheet__detail">'+p.cards+(p.cards===1?" card":" cards")+'</span></span>'+ico("chevron")+'</button>'; }).join("")+
+        '</div><div class="un-sheetbtns"><button type="button" class="bg-btn bg-btn--secondary bg-btn--block" data-x="1">Cancel</button></div>');
+    }
     modal.querySelector("#ush").onclick=function(e){ var b=e.target.closest&&e.target.closest("button"); if(!b) return; if(b.dataset.t!=null){ closeModal(); cb(+b.dataset.t); } else if(b.dataset.x) closeModal(); };
   }
   function cardById(id){ return V.hand.filter(function(c){ return c.id===id; })[0]; }
@@ -123,6 +200,8 @@ function create(cfg){
     else if(needT){ targetPicker(f.v==="wtd2"?"Who draws 2?":(f.v==="7"?"Swap hands with…":"Swap hands with…"),function(t){ go(null,t); }); }
     else go(null,null);
   }
+
+  /* ---------------- the original panel (Party Mode phones, and any page without ui/ui.js) ---------------- */
   function render(){
     if(!V) return;
     var me=V.me, myTurn=V.actor===me&&me>=0&&!V.over&&!V.roundOver;
@@ -167,6 +246,114 @@ function create(cfg){
     } else $("uhand").innerHTML='<div style="opacity:.7;padding:30px 0;text-align:center">'+esc(tp.name)+' is playing…</div>';
     $("ulog").innerHTML=(V.log||[]).slice(-3).map(esc).join("<br>");
   }
+
+  /* ---------------- the Luxe table (step 4) ---------------- */
+  var stripKey="", turnKey="", lastTop=-1, focusPhase="";
+  function strip(){
+    var el=$("upl"), gk=cfg.gameKey?cfg.gameKey():"";
+    var key=gk+"|"+V.players.map(function(p){ return p.name+(p.human?"H":"C"); }).join(",")+"|"+(V.o.teams?"T":"");
+    if(key!==stripKey||el.children.length!==V.players.length){
+      var old=[].slice.call(el.children);
+      el.className="bg-players upl"+(V.players.length>4?" bg-players--scroll":"");
+      el.innerHTML=V.players.map(function(p,i){ return '<li class="bg-player upc" data-seat="'+seatOf(i)+'" data-p="'+i+'"><span class="bg-token" aria-hidden="true">'+esc(initialsOf(p.name))+'</span>'+(p.human?"":'<span class="bg-player__cpu" aria-hidden="true">'+ico("cpu")+'</span>')+
+        '<span class="bg-player__txt"><span class="bg-player__name">'+esc(p.name)+'</span><span class="bg-player__meta"></span></span></li>'; }).join("");
+      // a turn pulse still running on a chip of the old strip ends with it
+      if(BG.ambient&&BG.ambient.remove) old.forEach(function(c){ BG.ambient.remove(c); });
+      stripKey=key; turnKey="";
+    }
+    V.players.forEach(function(p,i){
+      var c=el.children[i]; if(!c) return;
+      var m=p.cards+(p.cards===1?" card":" cards")+(V.o.target?" · "+p.score+" pts":"")+(p.team>=0?" · Team "+(p.team+1):"")+(p.alive?"":" · out");
+      var mt=c.querySelector(".bg-player__meta"); if(mt.textContent!==m) mt.textContent=m;
+      c.classList.toggle("is-out",!p.alive);
+    });
+    var over=V.over||V.roundOver, tk=over?"over":gk+":"+V.round+":"+V.actor+":"+V.turn;
+    if(tk===turnKey) return; turnKey=tk;
+    if(over){ [].forEach.call(el.querySelectorAll(".is-turn, .is-pulse"),function(c){ c.classList.remove("is-turn","is-pulse"); }); return; }
+    var c2=el.children[V.actor]; if(!c2) return;
+    // the turn pulse plays only while the table is on screen (never behind the Menu, where computer turns go on)
+    if(BG.setTurn) BG.setTurn(c2,{pulse:cfg.pulse?!!cfg.pulse():!document.hidden});
+  }
+  function lbtn(txt,a,o){ o=o||{}; return '<button type="button" class="bg-btn '+(o.accent?"bg-btn--accent":o.primary?"bg-btn--primary":"bg-btn--secondary")+(o.cls?" "+o.cls:"")+'" data-a="'+a+'">'+(o.icon?ico(o.icon):"")+(o.html||esc(txt))+'</button>'; }
+  function colorBtns(prefix){ return '<div class="un-colorrow" style="display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center">'+E.colorsNow({side:V.side}).map(function(c2){ return '<button type="button" class="bg-btn bg-btn--secondary un-cbtn" data-a="'+prefix+':'+c2+'"><i class="un-sw" style="'+swStyle(c2)+'"></i>'+CN[c2]+'</button>'; }).join("")+'</div>'; }
+  function renderLux(){
+    var me=V.me, myTurn=V.actor===me&&me>=0&&!V.over&&!V.roundOver, tp=V.players[V.turn], tv=onTV();
+    var fk=tvOn()?tvKey(document.activeElement):null;
+    strip();
+    // table
+    var top=V.top, dark=V.side===1, newTop=top&&top.id!==lastTop; lastTop=top?top.id:-1;
+    var dname=V.color?CN[V.color]:"Any colour";
+    $("utbl").innerHTML='<div class="pile" id="udraw">'+backHTML({label:V.drawCount+" left",attrs:'data-pile="draw"'+(tv?' data-focus tabindex="-1" role="button" aria-label="Draw pile, '+V.drawCount+' cards left"':"")})+'<div class="pl">draw</div></div>'+
+      '<div class="pile un-mid"><div class="udir" role="img" aria-label="'+(V.dir>0?"Play goes clockwise":"Play goes counter-clockwise")+'" title="'+(V.dir>0?"Clockwise":"Counter-clockwise")+'">'+(V.dir>0?DIR_CW:DIR_CCW)+'</div>'+(V.pen?'<div class="upen">+'+V.pen.n+'</div>':'')+
+      (V.color?'<div class="ucol" style="'+swStyle(V.color)+'"></div>':'<div class="ucol any" aria-hidden="true"><i style="background:'+COL.R+'"></i><i style="background:'+COL.Y+'"></i><i style="background:'+COL.G+'"></i><i style="background:'+COL.B+'"></i></div>')+'<div class="ucname">'+esc(dname)+'</div></div>'+
+      '<div class="pile">'+(top?cardHTML(top,V.side,{cls:newTop?"pop":"",attrs:'data-pile="discard" aria-label="Top card: '+esc(faceName(top.f[V.side]))+'"'}):"")+'<div class="pl">'+(dark?"Dark side":V.o.edition==="flip"?"Light side":"discard")+'</div></div>';
+    // status + actions
+    var st="", acts="", ts=tapw();
+    if(V.over||V.roundOver) st="Round over";
+    else if(V.needColor&&V.turn===me) st="<b>You start</b> — choose the starting colour.";
+    else if(V.phase==="challenge"){ var c=V.chal; st=V.actor===me?("<b>"+esc(V.players[c.by].name)+" played a "+esc(E.VNAME[c.v])+"</b> — accept the penalty or challenge it?"):(esc(V.players[V.actor].name)+" is deciding whether to challenge…"); }
+    else if(V.phase==="roulette") st=V.actor===me?"<b>Color Roulette</b> — pick a colour; you'll draw until one shows up.":esc(V.players[V.actor].name)+" is spinning the roulette…";
+    else if(V.phase==="drawn"&&V.turn===me) st="<b>You drew a playable card</b> — play it"+(V.canPass?" or keep it.":".");
+    else if(myTurn) st=V.pen?"<b>Stack a draw card</b> or take the "+V.pen.n+" cards.":(V.playable.length?"<b>Your turn</b> — "+ts+" a glowing card.":"<b>Your turn</b> — nothing to play, draw a card.");
+    else st="<b>"+esc(tp.name)+"</b> is playing…";
+    if(!V.over&&!V.roundOver){
+      if(V.needColor&&V.turn===me) acts+=colorBtns("scolor");
+      else if(V.phase==="challenge"&&V.actor===me) acts+=lbtn("Challenge!","chal:1",{primary:true,icon:"flag"})+lbtn("Accept "+(V.chal.v==="wdc"?"(draw until the colour)":V.chal.n+" cards"),"chal:0",{icon:"check"});
+      else if(V.phase==="roulette"&&V.actor===me) acts+=colorBtns("roul");
+      else if(myTurn){
+        if(V.phase==="drawn"){ if(V.canPass) acts+=lbtn("Keep it","pass",{icon:"check"}); }
+        else if(V.pen) acts+=lbtn("Take "+V.pen.n+" cards","draw",{primary:true,icon:"cards"});
+        else acts+=lbtn("Draw"+(V.o.drawRule==="untilPlay"?" until playable":""),"draw",{primary:true,icon:"cards"});
+      }
+      var mypl=me>=0?V.players[me]:null;
+      if(mypl&&mypl.alive&&(mypl.cards<=2||mypl.vuln)) acts+=lbtn(mypl.vuln?"Say UNO!":"UNO!","uno",{accent:true});
+      // catching a player who forgot to say UNO (the strip chips are labels: the catch is a real button here)
+      V.players.forEach(function(p,i){ if(p.vuln&&i!==me) acts+=lbtn("","catch:"+i,{accent:true,cls:"un-catch",html:"Catch "+esc(p.name)+"!"}); });
+    }
+    var s=$("ustat");
+    if(V.over||V.roundOver) s.removeAttribute("data-seat"); else s.setAttribute("data-seat",seatOf(V.actor));
+    s.innerHTML=(V.over||V.roundOver?"":'<span class="dot" aria-hidden="true"></span>')+'<span>'+st+'</span>';
+    $("uacts").innerHTML=acts;
+    // hand
+    if(me>=0){
+      var pl=V.playable||[], jmp=V.jump||[];
+      $("uhand").innerHTML=V.hand.map(function(c){ var can=pl.indexOf(c.id)>=0, j=jmp.indexOf(c.id)>=0;
+        return cardHTML(c,V.side,{dim:(myTurn||V.phase==="drawn")&&!can&&!j,glow:can&&myTurn,cls:j?"jmp":"",attrs:'data-h="1" aria-label="'+esc(faceName(c.f[V.side]))+(can&&myTurn?", playable":"")+'"'+(tv?' data-focus tabindex="-1"':"")}); }).join("")||'<div class="un-empty">no cards</div>';
+    } else $("uhand").innerHTML='<div class="un-empty" data-stage-text>'+esc(tp.name)+' is playing…</div>';
+    $("ulog").innerHTML=(V.log||[]).slice(-3).map(esc).join("<br>");
+    if(tvOn()) tvKeep(fk);
+  }
+
+  /* ---- TV: the D-pad focus survives every redraw. A new turn or phase gives the focus to its main control (a card you can play, else
+     Draw); otherwise the same card, pile or action keeps it. It never takes the focus from the top bar, the sound panel, a sheet or
+     the Victory screen ---- */
+  function tvKey(a){
+    if(!a||a===document.body||!a.closest) return null;
+    if(a.closest("#uhand")&&a.getAttribute("data-id")!==null) return "#uhand .uc[data-id=\""+a.getAttribute("data-id")+"\"]";
+    if(a.closest("#uacts")&&a.getAttribute("data-a")) return "#uacts [data-a=\""+a.getAttribute("data-a")+"\"]";
+    if(a.getAttribute("data-pile")==="draw") return "#udraw [data-pile=draw]";
+    return null;
+  }
+  function tvFind(k){ if(!k) return null; var el=root.querySelector(k); return el&&!el.disabled&&el.getClientRects().length?el:null; }
+  function tvMain(){
+    if(!V||V.over||V.roundOver||V.me<0||V.actor!==V.me) return null;
+    var a=$("uacts");
+    if(V.needColor||V.phase==="roulette"||V.phase==="challenge") return a.querySelector("button:not([disabled])");
+    return $("uhand").querySelector(".uc.glow")||a.querySelector(".bg-btn--primary:not([disabled])")||a.querySelector("button:not([disabled])");
+  }
+  function tvKeep(k){
+    if(!V||!$("utbl").getClientRects().length||(BG.sheet.top&&BG.sheet.top())||(BG.win&&BG.win.isOpen())) return;
+    var a=document.activeElement;
+    if(a&&a!==document.body&&a.isConnected&&a.closest&&a.closest(".bg-topbar, #bgSoundPanel")) return;
+    var phase=(cfg.gameKey?cfg.gameKey():"")+":"+V.round+":"+V.turn+":"+V.phase+":"+V.actor+":"+V.me+":"+(V.over||V.roundOver?"R":"");
+    var el=null;
+    if(phase!==focusPhase){ focusPhase=phase; el=tvMain(); }
+    if(!el) el=tvFind(k);
+    var lost=!a||a===document.body||a===document.documentElement||!a.isConnected||!a.getClientRects().length||!!(a.closest&&a.closest(".bg-sheet:not(.is-open), .bg-win:not(.is-open)"));
+    if(!el&&lost) el=tvMain()||$("uacts").querySelector("button:not([disabled])")||$("uhand").querySelector(".uc")||root.querySelector("[data-pile=draw]");
+    if(el&&el!==a) BG.focus.set(el);
+  }
+
   root.addEventListener("click",function(e){
     if(!V) return;
     var b=e.target.closest&&e.target.closest("button[data-a]");
@@ -179,13 +366,15 @@ function create(cfg){
       return; }
     var pile=e.target.closest&&e.target.closest("[data-pile=draw]");
     if(pile){ if(V.actor===V.me&&V.phase==="play"&&!V.pen) act({t:"draw"}); return; }
+    var dis=L&&e.target.closest&&e.target.closest("[data-pile=discard]");
+    if(dis){ if(cfg.toast&&V.top) cfg.toast("Top card: "+faceName(V.top.f[V.side])+(V.color?" · play "+CN[V.color]:"")); return; }
     var card=e.target.closest&&e.target.closest("#uhand .uc");
     if(card){ var id=+card.getAttribute("data-id"); var myTurn=V.actor===V.me&&(V.phase==="play"||V.phase==="drawn");
       if(myTurn&&(V.playable||[]).indexOf(id)>=0) playCard(id,false);
       else if((V.jump||[]).indexOf(id)>=0) playCard(id,true);
       else if(myTurn) { if(cfg.toast) cfg.toast(V.pen?"Stack a draw card or take the penalty.":"That card doesn't match."); } }
   });
-  var self={update:function(v){ V=v; render(); },destroy:function(){ if(modal.parentNode) modal.parentNode.removeChild(modal); },closeModal:closeModal};
+  var self={update:function(v){ V=v; if(L) renderLux(); else render(); },destroy:function(){ if(modal.parentNode) modal.parentNode.removeChild(modal); },closeModal:closeModal,luxe:L,resetTurn:function(){ turnKey=""; focusPhase=""; }};
   return self;
 }
 Uno.Cards={cardHTML:cardHTML,backHTML:backHTML,injectCSS:injectCSS,COL:COL,CSS:CSS};
