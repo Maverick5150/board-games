@@ -98,7 +98,7 @@
   #board .sr-title{font:400 42px/1 var(--font-display); letter-spacing:.03em; pointer-events:none}
   #srHint{pointer-events:none}
   /* a pawn glides to its new place (transform only); it stays put under Reduce effects / reduced motion */
-  .peg{transition:transform .2s ease-out}
+  .peg{transition:transform var(--sr-glide,.2s) ease-out}
   html[data-effects="reduced"] .peg, html[data-motion="reduce"] .peg{transition:none}
   @media (prefers-reduced-motion: reduce){ .peg{transition:none} }
   .peg.movable{cursor:pointer}
@@ -248,6 +248,12 @@
           </div>
           <div class="sr-field"><span class="bg-row__title">Computer players</span><span class="bg-row__desc">2 to 4 players in all. Two players sit on opposite sides.</span></div>
           <div class="bg-seg" id="cpuSeg" role="group" aria-label="Computer players"></div>
+          <div class="sr-field"><span class="bg-row__title">Game speed</span><span class="bg-row__desc">How fast the computers play and the pawns move. Changes at once.</span></div>
+          <div class="bg-seg" id="speedSeg" role="group" aria-label="Game speed">
+            <button type="button" data-speed="slow" aria-pressed="false">Slow</button>
+            <button type="button" data-speed="medium" class="on" aria-pressed="true">Medium</button>
+            <button type="button" data-speed="fast" aria-pressed="false">Fast</button>
+          </div>
           <div class="sr-seats" id="seatPreview"></div>
         </div>
       </section>
@@ -383,7 +389,17 @@ let gen=0;   // game generation: bumped by startGame/loadGame so an old game's t
 // every timer of the game goes through later(): while the Menu is up the computers wait ("Paused") and the timer re-arms itself,
 // so Resume continues exactly where the game was. A New game / Load bumps gen first, so it still cancels a held timer.
 function paused(){ return armed && players.length>0 && !gameOver && setupShown(); }
-function later(fn,ms){ const g=gen; return setTimeout(function tick(){ if(g!==gen) return; if(paused()){ barTitle(); setTimeout(tick,250); return; } fn(); },ms); }
+// Game speed (slow / medium / fast; medium is exactly the old timings): every computer-side delay (all of them go through later()),
+// the card flip, the pawn steps and the pawn glide are multiplied by speedFactor(). It is saved with the settings and the game, and
+// a change from the Menu applies at once (the next timer / animation uses the new factor).
+let gameSpeed="medium"; window.bgGameSpeed="medium";
+function speedFactor(){ return ({slow:1.75, fast:0.5})[window.bgGameSpeed] || 1 }
+function setSpeed(v){
+  gameSpeed=(v==="slow"||v==="fast")?v:"medium"; window.bgGameSpeed=gameSpeed;
+  document.documentElement.style.setProperty("--sr-glide",Math.max(120,Math.round(200*speedFactor()))+"ms");   // animations never under 120 ms
+  document.querySelectorAll("#speedSeg button").forEach(x=>{ const on=x.dataset.speed===gameSpeed; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); });
+}
+function later(fn,ms){ ms=Math.round(ms*speedFactor()); const g=gen; return setTimeout(function tick(){ if(g!==gen) return; if(paused()){ barTitle(); setTimeout(tick,250); return; } fn(); },ms); }
 // presentation-only game stats for the win screen: turns, bumps (pawns sent back to Start by a bump, a slide or a Sorry!) and
 // play time. Saved as an optional "stats" field: saves made before it existed load with fresh counters, and older code ignores it.
 let stats={turns:0,bumps:0,ms:0};
@@ -872,7 +888,7 @@ function drawCard(){
 let armed=false, lastSnap=null;
 function takeSnap(){
   if(!armed||gameOver) return;
-  lastSnap=JSON.parse(JSON.stringify({players:players,isHuman:isHuman,pawns:pawns,turn:turn,deck:deck,humanCount:humanCount,cpuCount:cpuCount,stats:{turns:stats.turns,bumps:stats.bumps,ms:playMs()}}));
+  lastSnap=JSON.parse(JSON.stringify({players:players,isHuman:isHuman,pawns:pawns,turn:turn,deck:deck,humanCount:humanCount,cpuCount:cpuCount,speed:gameSpeed,stats:{turns:stats.turns,bumps:stats.bumps,ms:playMs()}}));
   Saves.auto("sorry",lastSnap);
 }
 function beginTurn(){
@@ -1043,7 +1059,7 @@ function animateDraw(cb){ Sound.sfx("card");
   const iv=setInterval(()=>{
     if(g!==gen){ clearInterval(iv); return; }   // a new game was started / loaded: drop this old draw
     face.textContent=String(1+Math.floor(Math.random()*9)); if(++n>=5){ clearInterval(iv); later(cb,0); }   // later(): held while the Menu is up
-  },65);
+  },Math.round(65*speedFactor()));
 }
 
 // ================= Midnight Luxe presentation (player strip, table, move sheet, win screen, Menu) =================
@@ -1287,7 +1303,7 @@ actionsEl.addEventListener("click",e=>{
 // the win screen: Victory + the trophy, the ray wheel and confetti (BGUI.win + BGUI.celebrate) with this game's real numbers
 function fmtTime(ms){ const s=Math.max(0,Math.round(ms/1000)), h=Math.floor(s/3600), m=Math.floor(s/60)%60, x=s%60;
   return (h?h+":"+String(m).padStart(2,"0"):String(m))+":"+String(x).padStart(2,"0"); }
-function scheduleWin(){ const g=gen; setTimeout(()=>{ if(g===gen&&gameOver&&!setupShown()&&ui.winShown!==gen) openWin(); },1100); }
+function scheduleWin(){ const g=gen; setTimeout(()=>{ if(g===gen&&gameOver&&!setupShown()&&ui.winShown!==gen) openWin(); },Math.round(1100*speedFactor())); }
 function openWin(){
   const B=BG(); if(!B||!B.win) return;
   ui.winShown=gen;
@@ -1405,17 +1421,19 @@ function drawCpuSeg(){
   syncStart();
 }
 function setHumanSeg(){ document.querySelectorAll("#humanSeg button").forEach(x=>{ const on=+x.dataset.n===humanCount; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
+document.querySelectorAll("#speedSeg button").forEach(b=>b.addEventListener("click",()=>setSpeed(b.dataset.speed)));
 document.querySelectorAll("#humanSeg button").forEach(b=>b.addEventListener("click",()=>{ humanCount=+b.dataset.n; setHumanSeg(); drawCpuSeg(); }));
 drawCpuSeg();
 const saveBar=Saves.bar({game:"sorry",el:document.getElementById("svbar"),
-  getSettings:()=>({humans:humanCount,cpus:cpuCount}),
-  applySettings:s=>{ humanCount=s.humans||1; cpuCount=s.cpus!=null?s.cpus:1; setHumanSeg(); drawCpuSeg(); },
-  standard:()=>{ humanCount=1; cpuCount=1; setHumanSeg(); drawCpuSeg(); },
+  getSettings:()=>({humans:humanCount,cpus:cpuCount,speed:gameSpeed}),
+  applySettings:s=>{ humanCount=s.humans||1; cpuCount=s.cpus!=null?s.cpus:1; setSpeed(s.speed); setHumanSeg(); drawCpuSeg(); },
+  standard:()=>{ humanCount=1; cpuCount=1; setSpeed("medium"); setHumanSeg(); drawCpuSeg(); },
   getSnapshot:()=>(armed&&!gameOver)?lastSnap:null,
   loadSnapshot:d=>{ Sound.skip(); loadGame(d); showSetup(false); }});
 function loadGame(d){
   gen++;   // the previous game's pending timers must not act on the loaded one
   players=d.players; isHuman=d.isHuman; pawns=d.pawns; turn=d.turn; deck=d.deck; humanCount=d.humanCount||humanCount; cpuCount=d.cpuCount!=null?d.cpuCount:cpuCount;
+  setSpeed(d.speed);   // optional field: saves from before Game speed play at Medium
   card=null; gameOver=false; busy=false; armed=true;
   stats=readStats(d.stats); clockOn(); ui.result=false;   // saves from before the stats field start fresh counters
   setHumanSeg(); drawCpuSeg();                            // the New game pickers show the loaded game's player counts
@@ -1462,7 +1480,7 @@ function startGame(humans, cpus){
 }
 
 // test hook (read-mostly; the page never uses it)
-window.__sorry={get state(){ return {players:players,turn:turn,gameOver:gameOver,armed:armed,busy:busy,gen:gen,deck:deck.length,pawns:pawns}; },paused:paused};
+window.__sorry={speed:()=>gameSpeed,setSpeed:setSpeed,get state(){ return {players:players,turn:turn,gameOver:gameOver,armed:armed,busy:busy,gen:gen,deck:deck.length,pawns:pawns}; },paused:paused};
 // keep the play clock to the time the page is on screen
 document.addEventListener("visibilitychange",()=>{ if(document.hidden) clockOff(); else if(armed&&players.length&&!gameOver) clockOn(); });
 // ui/ui.js is deferred: it arrives after this script. Then the icons go in, the strip gets its CPU badges and turn ring, and the Luxe
