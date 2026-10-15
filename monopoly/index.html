@@ -833,7 +833,7 @@ function tokV(t,seat){ const M=MBd(); return M?M.tokenSVG(t.n,seat||0):t.e; }   
 function boardState(){
   const own=[], toks=[];
   for(let i=0;i<40;i++){ const o=G.owner[i]; own[i]=o>=0&&G.players[o]?seatOf(G.players[o]):0; }
-  G.players.forEach(p=>{ if(!p.bankrupt) toks.push({id:p.id,i:p.pos,seat:seatOf(p),tok:p.token.n,cur:!!(G.started&&p.id===G.cur),title:p.name}); });
+  G.players.forEach(p=>{ if(!p.bankrupt) toks.push({id:p.id,i:p.pos,seat:seatOf(p),tok:p.token.n,cur:!!(G.started&&p.id===G.cur),title:p.name,jail:!!p.jail}); });   // jail: drawn in the jail cell, not on the visitors' L
   const cp=G.started&&!G.over?G.players[G.cur]:null;
   return {own,houses:G.houses,mort:G.mort,toks,hl:cp&&!cp.bankrupt?cp.pos:-1,
     amt:{4:RULES.incomeTaxChoice?"PAY 10% OR $200":"PAY $200",38:"PAY $"+(RULES.luxury75?75:100)}};

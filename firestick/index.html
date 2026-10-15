@@ -74,7 +74,7 @@
   .mtradebox{background:#fff;border-radius:2vh;padding:2vh 2.4vh;width:46vh;max-width:90%;color:#111;box-shadow:0 .8vh 2.4vh #0007;text-align:left;font-size:2.3vh;line-height:1.3;}
   /* monopoly board */
   /* the board itself is monopoly/board.js (shared with the phone game): one static SVG, pieces and marks laid over it */
-  .mboard{width:min(84vh,96vw);aspect-ratio:1/1;border-radius:6px;box-shadow:0 0 0 .5vh #d4a017,0 0 0 .9vh #0a0f22,0 2.4vh 6vh rgba(0,0,0,.8);}
+  .mboard{width:min(80vh,96vw);aspect-ratio:1/1;border-radius:6px;box-shadow:0 0 0 .5vh #d4a017,0 0 0 .9vh #0a0f22,0 2.4vh 6vh rgba(0,0,0,.8);}
   .mcenter{display:flex;align-items:center;justify-content:center;width:100%;height:100%;}
   .mtk{display:inline-block;vertical-align:middle;}.mtk svg{display:block;width:3.4vh;height:3.4vh;}
   .toast{position:fixed;bottom:3vh;left:50%;transform:translateX(-50%);background:#000c;padding:1.4vh 2.6vh;border-radius:2vh;font-size:2.6vh;font-weight:700;opacity:0;transition:opacity .2s;}
@@ -977,13 +977,13 @@ function playMonopoly(){
   var MB=null, centerEl=null;
   function boardState(){
     var own=[],i; for(i=0;i<40;i++) own[i]=owner[i]!=null?(SEATN[owner[i]]||1):0;
-    var toks=active.filter(function(c){return !bankrupt[c];}).map(function(c){ return {id:c,i:pos[c],seat:SEATN[c]||1,tok:tokE[c],cur:active[turn]===c,title:nm(c)}; });
+    var toks=active.filter(function(c){return !bankrupt[c];}).map(function(c){ return {id:c,i:pos[c],seat:SEATN[c]||1,tok:tokE[c],cur:active[turn]===c,title:nm(c),jail:!!injail[c]}; });
     var cc=active[turn];
     return {own:own,houses:houses,mort:mort,toks:toks,hl:(cc&&!bankrupt[cc]&&!over)?pos[cc]:-1};
   }
   function renderBoard(){
     if(window.MonoBoard){
-      if(!MB||MB.host!==boardEl){ centerEl=document.createElement("div"); centerEl.className="mcenter"; MB=MonoBoard.mount(boardEl,{squares:BOARD,zoom:false,center:centerEl}); }
+      if(!MB||MB.host!==boardEl){ centerEl=document.createElement("div"); centerEl.className="mcenter"; MB=MonoBoard.mount(boardEl,{squares:BOARD,zoom:false,dpad:false,center:centerEl}); }
       MB.update(boardState());
     }
     centerRender(); renderScore(); snapSoon();

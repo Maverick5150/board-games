@@ -2,16 +2,20 @@
    Original art only: the Luxe plate, the icons and the eight pieces are drawn here as SVG (no emoji, no copied board art).
    - The board is one static SVG drawn once (every name in full, auto-fitted so a word is never broken); houses, owners and
      mortgages are small per-square groups redrawn only when that square changes; the pieces, the "you are here" mark and the
-     D-pad ring are HTML overlays that move by left/top (pieces glide). Nothing animates in the SVG.
+     D-pad ring are HTML overlays. A piece is placed by ONE translate (it glides on the compositor: transform only); jailed pieces
+     stand in the jail cell, visitors on the "Just visiting" L. Nothing animates in the SVG.
    - Phone zoom (pinch, double-tap, wheel, one-finger pan, "Fit") moves ONE transform on the stage; it is crisp at rest because the
      layer is re-rastered when the gesture ends.
    - TV: the board takes the D-pad (focus it, then the arrows walk the squares in order, OK opens the square).
-   API: var mb = MonoBoard.mount(host, {squares, center, zoom, onTap, onOpen, onFocus, start});  mb.update(state);  mb.fit();  mb.destroy()
-   state = {own:[seat|0 x40], houses:[0..5 x40], mort:[bool x40], toks:[{id,i,seat,tok,cur,title}], amt:{4:"PAY $200",38:"PAY $100"}, hl:i}
+   API: var mb = MonoBoard.mount(host, {squares, center, zoom, dpad, onTap, onOpen, onFocus, start});  mb.update(state);  mb.fit();  mb.destroy()
+   state = {own:[seat|0 x40], houses:[0..5 x40], mort:[bool x40], toks:[{id,i,seat,tok,cur,title,jail}], amt:{4:"PAY $200",38:"PAY $100"}, hl:i}
    Also: MonoBoard.tokenSVG(name, seat, px), .icon(name, px), .card(i, info), .SEATS, .NAMES, .GROUPS, .plateHTML() */
 (function (g) {
   "use strict";
-  var W = 100, D = 140, S = 2 * D + 9 * W, SX = 0.86, PAD = 7;   // a side square is W wide and D deep; the board is S units; names are set 14% condensed
+  // a side square is W wide and D deep; the board is S units. Names are condensed caps: set 20% narrow (SX) with a slightly tight
+  // track (LS, em), PAD units clear of each side line. STRIP = the price strip on the outer edge (the owner's colour when owned);
+  // RIM = the outer edge's dark rim and brass line, which nothing may touch (review: prices and "Just visiting" sat on the brass line)
+  var W = 100, D = 140, S = 2 * D + 9 * W, SX = 0.8, LS = -0.015, PAD = 5, STRIP = 31, RIM = 9;
   var INK = "#102a1c", LINE = "#2d6a46", PAPER = "#f6faf0", FIELD = "#cfe6d3", GOLD = "#c79a3b";
   var SEATS = {
     0: { c: "#e4e2da", hi: "#ffffff", lo: "#7a7f92", name: "silver" },   // the Luxe seat colours (ui/theme.css --seat-N, -hi, -lo, -ink): hex here so Party pages need no theme
@@ -82,7 +86,7 @@
     if (c) { c.font = weight + " 100px " + FONT; v = c.measureText(s).width; } else v = s.length * 70;   // no canvas (jsdom): a wide estimate
     return (wcache[k] = v);
   }
-  function tw(s, f, weight) { return w100(s, weight || 800) * f / 100 * SX * 1.02; }
+  function tw(s, f, weight) { return (w100(s, weight || 800) + LS * 100 * s.length) * f / 100 * SX * 1.02; }   // set width: condensed, tracked
   function splitWords(label) { return label.toUpperCase().split(" "); }
   function fits(words, f, availW, maxLines) {   // the fewest lines, then the most even ones, that all fit availW at size f; null if a word is too wide
     var n = words.length, best = null, mask, lines, j, cur, w, ok, maxW;
@@ -112,7 +116,7 @@
     var availW = W - 2 * PAD, raw = [99, 99, 99, 99], i, s, f;
     for (i = 0; i < 40; i++) {
       if (i % 10 === 0) continue;
-      s = RECTS[i].side; f = bestSize(NAMES[i], availW, isBand(i) ? 62 : 56, 17);
+      s = RECTS[i].side; f = bestSize(NAMES[i], availW, isBand(i) ? 62 : 56, 19);
       if (f < raw[s]) raw[s] = f;
     }
     var lo = Math.min(raw[0], raw[1], raw[2], raw[3]);
@@ -161,24 +165,31 @@
   }
 
   /* ---------------- the static board ---------------- */
-  function textLines(lines, f, x, y0, cls, fill) {   // condensed caps, centred on x, one <text> per line
+  var NB = [];   // per square: where its name block ends (units from the inner edge): the mortgage tag goes below it
+  function textLines(lines, f, x, y0, cls, fill) {   // condensed caps, centred on x, one <text> per line (y0 = the first line's cap top)
     var out = "", lh = f * 1.12, k;
-    for (k = 0; k < lines.length; k++) out += '<text class="' + cls + '" transform="translate(' + r2(x) + " " + r2(y0 + f * 0.74 + k * lh) + ") scale(" + SX + ' 1)" text-anchor="middle" font-size="' + r2(f) + '"' + (fill ? ' fill="' + fill + '"' : "") + ">" + esc(lines[k]) + "</text>";
+    for (k = 0; k < lines.length; k++) out += '<text class="' + cls + '" transform="translate(' + r2(x) + " " + r2(y0 + f * 0.74 + k * lh) + ") scale(" + SX + ' 1)" text-anchor="middle" font-size="' + r2(f) + '"' + (fill ? ' style="fill:' + fill + '"' : "") + ">" + esc(lines[k]) + "</text>";
     return out;
   }
+  function capText(txt, f, x, y, rot, fill) {   // one line of condensed caps whose caps are CENTRED on (x, y), turned rot degrees
+    return '<text class="mb-nm" transform="translate(' + r2(x) + " " + r2(y) + ")" + (rot ? " rotate(" + rot + ")" : "") + " translate(0 " + r2(f * 0.37) + ") scale(" + SX + ' 1)" text-anchor="middle" font-size="' + r2(f) + '"' + (fill ? ' style="fill:' + fill + '"' : "") + ">" + esc(txt) + "</text>";
+  }
+  function fitSize(txt, room, fmax) { return Math.min(fmax, Math.floor(room / tw(plain(txt), 1) * 4) / 4); }   // the largest size (in quarters) that fits room
   function nameBlock(i, f, y0) { var r = fits(splitWords(NAMES[i]), f, W - 2 * PAD, 4) || { lines: splitWords(NAMES[i]) }; return { svg: textLines(r.lines, f, W / 2, y0, "mb-nm"), h: r.lines.length * f * 1.12 }; }
   function iconAt(name, x, y, sz) { return '<g transform="translate(' + r2(x) + " " + r2(y) + ") scale(" + r2(sz / 64) + ')">' + ICONS[name] + "</g>"; }
-  function priceText(txt, size, y, fill) { return '<text class="mb-pr" x="' + W / 2 + '" y="' + y + '" text-anchor="middle" font-size="' + size + '" fill="' + fill + '">' + esc(txt) + "</text>"; }
+  function priceText(txt, size, y, fill) { return '<text class="mb-pr" x="' + W / 2 + '" y="' + r2(y) + '" text-anchor="middle" font-size="' + r2(size) + '" fill="' + fill + '">' + esc(txt) + "</text>"; }
   function cornerArt(i) {
-    var inner = "";
-    if (i === 0) {
-      inner += textLines(["COLLECT $200"], 14, D / 2, 11, "mb-nm") + textLines(["SALARY AS YOU PASS"], 10.5, D / 2, 28, "mb-nm");
-      inner += '<text class="mb-go" x="' + D / 2 + '" y="96" text-anchor="middle" font-size="62" fill="#c1272d">GO</text>';
+    var inner = "", f1, f2;
+    if (i === 0) {   // GO: the board's outer edges are its right and bottom sides (the rim), so the lines stay within 118 units
+      f1 = fitSize("COLLECT $200", 118, 17); f2 = fitSize("SALARY AS YOU PASS", 118, 13);
+      inner += capText("COLLECT $200", f1, D / 2, 11 + f1 * 0.37, 0) + capText("SALARY AS YOU PASS", f2, D / 2, 16 + f1 * 0.74 + f2 * 0.37, 0);
+      inner += '<text class="mb-go" x="' + D / 2 + '" y="98" text-anchor="middle" font-size="62" fill="#c1272d">GO</text>';
       inner += '<g transform="translate(24 107) scale(1.31 .4)">' + ICONS.arrow + '</g>';
-    } else if (i === 10) {
-      inner += '<rect x="46" y="8" width="86" height="86" rx="6" fill="#f08a2c" stroke="' + K + '" stroke-width="2.4"/>' + iconAt("jail", 52, 14, 74);
-      inner += textLines(["IN JAIL"], 15, 89, 98, "mb-nm");
-      inner += textLines(["JUST VISITING"], 14, 70, 122, "mb-nm");
+    } else if (i === 10) {   // as on the real board: the cell (In Jail) toward the middle, "Just" down the left strip and "Visiting" along the
+      // bottom one: the L where visitors stand (jailed pieces are drawn in the cell, visitors on the L)
+      inner += '<rect class="mb-cell" x="44" y="6" width="90" height="90" rx="6" fill="#f08a2c" stroke="' + K + '" stroke-width="2.4"/><rect x="47.5" y="9.5" width="83" height="83" rx="4" fill="none" stroke="#fff" stroke-opacity=".38" stroke-width="1.2"/>';
+      inner += capText("IN JAIL", 13.5, 89, 18.5, 0) + iconAt("jail", 59, 29, 60);
+      inner += capText("JUST", 15, 26.5, 52, 90) + capText("VISITING", 15, 87, 113.5, 0);
     } else if (i === 20) {
       inner += textLines(["FREE"], 21, D / 2, 10, "mb-nm") + iconAt("parking", 36, 32, 68) + textLines(["PARKING"], 21, D / 2, 108, "mb-nm");
     } else {
@@ -186,16 +197,23 @@
     }
     return inner;
   }
+  function deckSpot(x, y, rot, kind) {   // a card place in the middle as on the real board: a dashed tray with the deck's icon and name
+    var w = 196, h = 124, ch = kind === "chance";
+    return '<g class="mb-deck" transform="translate(' + x + " " + y + ") rotate(" + rot + ')"><rect x="' + (-w / 2) + '" y="' + (-h / 2) + '" width="' + w + '" height="' + h + '" rx="12" fill="' + (ch ? "#fde5cc" : "#dbe7fb") + '" fill-opacity=".72" stroke="' + INK + '" stroke-opacity=".42" stroke-width="2" stroke-dasharray="8 6"/>' +
+      iconAt(ch ? "chance" : "chest", -27, -41, 54) + capText(ch ? "CHANCE" : "COMMUNITY CHEST", 18, 0, 30, 0) + "</g>";
+  }
   function staticSVG(amt) {
     var sz = sizes(), out = "", i, r, f, pr, nb, y, nm;
     out += '<svg class="mb-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + S + " " + S + '" preserveAspectRatio="xMidYMid meet" text-rendering="geometricPrecision" role="img" aria-label="The Monopoly board">';
     out += '<defs><radialGradient id="mbFld" cx="50%" cy="46%" r="75%"><stop offset="0" stop-color="#e3f2e4"/><stop offset=".6" stop-color="' + FIELD + '"/><stop offset="1" stop-color="#b6d6bd"/></radialGradient>' +
       '<linearGradient id="mbSq" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".5" stop-color="' + PAPER + '"/><stop offset="1" stop-color="#e8f1e1"/></linearGradient>' +
       '<linearGradient id="mbSh" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".42"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".16"/></linearGradient>' +
-      '<pattern id="mbHatch" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="12" fill="#0b0e1a" opacity=".5"/></pattern></defs>';
+      '<pattern id="mbHatch" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3.2" height="10" fill="#0b0e1a" opacity=".26"/></pattern></defs>';
     out += '<rect width="' + S + '" height="' + S + '" fill="url(#mbFld)"/>';
     // the middle: fine gold guilloche rings and a soft glow behind the plate (the plate itself is HTML)
     for (i = 0; i < 6; i++) out += '<rect x="' + (D + 14 + i * 22) + '" y="' + (D + 14 + i * 22) + '" width="' + (9 * W - 28 - i * 44) + '" height="' + (9 * W - 28 - i * 44) + '" rx="' + (26 - i * 3) + '" fill="none" stroke="' + GOLD + '" stroke-width="1.4" opacity="' + r2(0.22 - i * 0.025) + '"/>';
+    // the two card places of the real board, turned to face their corners: Community Chest up-left, Chance down-right
+    out += deckSpot(275, 275, -45, "chest") + deckSpot(S - 275, S - 275, 135, "chance");
     for (i = 0; i < 40; i++) {
       r = RECTS[i]; out += '<g class="sp msp" data-i="' + i + '" transform="' + sqXf(i) + '">';
       if (r.corner) {
@@ -205,10 +223,11 @@
       f = sz[r.side];
       if (isBand(i)) {
         out += '<rect class="mb-band" data-band="' + i + '" width="' + W + '" height="30" fill="#888"/><rect width="' + W + '" height="30" fill="url(#mbSh)"/><path d="M0 30H' + W + '" stroke="' + K + '" stroke-opacity=".55" stroke-width="1.6"/>';
-        nb = nameBlock(i, f, 37); out += nb.svg;
+        nb = nameBlock(i, f, 37); out += nb.svg; NB[i] = 37 + nb.h;
       } else {
-        nb = nameBlock(i, f, 11); out += nb.svg;
-        var ic = iconFor(i), top = 11 + nb.h + 4, room = (i % 10 === 5 || i === 12 || i === 28 ? 108 : 112) - top, isz = Math.max(26, Math.min(56, room));
+        nb = nameBlock(i, f, 11); out += nb.svg; NB[i] = 11 + nb.h;
+        // the icon fills the room between the name and the price strip (tax squares keep room for a two-line amount, "PAY 10% / OR $200")
+        var ic = iconFor(i), top = 11 + nb.h + 4, room = (i % 10 === 5 || i === 12 || i === 28 ? 106 : i === 4 || i === 38 ? 103 : 110) - top, isz = Math.max(26, Math.min(56, room));
         if (ic) out += iconAt(ic, (W - isz) / 2, top + Math.max(0, (room - isz) / 2), isz);
       }
       out += "</g>";
@@ -219,23 +238,32 @@
     return out;
   }
 
-  /* per-square dynamic art: owner strip and frame, the price, houses, mortgage */
+  /* per-square dynamic art: the price strip (in the owner's seat colour when owned), the price or amount, houses, mortgage.
+     A mortgaged square takes a light hatch (its name still reads through it) and a "Mortgaged" tag in the free room under its name; the
+     colour band and the owner's strip stay clean (review: the old dark hatch and the tag on the band hid the name and the group) */
+  function amtSVG(txt, pf, fill) {   // a tax amount, on one line, or two when the house rule's long text needs it ("PAY 10% / OR $200")
+    var room = W - 2 * PAD - 4, one = Math.min(pf, 14, room / (w100(plain(txt), 800) / 100)), a, f2;
+    if (one >= 11 || txt.indexOf(" OR ") < 0) return priceText(txt, one, D - 12.5, fill);
+    a = txt.split(" OR "); f2 = Math.min(12, room / (Math.max(w100(a[0], 800), w100("OR " + a[1], 800)) / 100));
+    return priceText(a[0], f2, D - 12.5 - f2 * 1.12, fill) + priceText("OR " + a[1], f2, D - 12.5, fill);
+  }
   function dynSVG(i, st, amtTxt) {
-    var s = BUY[i], r = RECTS[i], own = st.own && st.own[i], sc = own ? (SEATS[own] || SEATS[1]) : null, h = st.houses ? st.houses[i] | 0 : 0, mo = st.mort && st.mort[i], out = "", k, x0, pr;
+    var s = BUY[i], r = RECTS[i], own = st.own && st.own[i], sc = own ? (SEATS[own] || SEATS[1]) : null, h = st.houses ? st.houses[i] | 0 : 0, mo = st.mort && st.mort[i], out = "", k, x0;
     if (r.corner) return "";
-    var f = sizes()[r.side], pf = Math.min(19, f * 1.45);
+    var f = sizes()[r.side], pf = Math.min(19, f * 1.45), top = D - STRIP, fill = sc ? "#0b0a12" : INK;
+    if (mo) out += '<rect class="mb-mort" width="' + W + '" height="' + top + '" fill="url(#mbHatch)"/>';
     if (s || amtTxt) {
-      if (sc) out += '<rect x="0" y="' + (D - 29) + '" width="' + W + '" height="29" fill="' + sc.c + '"/><path d="M0 ' + (D - 29) + 'H' + W + '" stroke="' + K + '" stroke-opacity=".5" stroke-width="1.4"/><rect class="mb-own" x="2.75" y="2.75" width="' + (W - 5.5) + '" height="' + (D - 5.5) + '" fill="none" stroke="' + sc.c + '" stroke-width="4.5"/><rect x="0.5" y="0.5" width="' + (W - 1) + '" height="' + (D - 1) + '" fill="none" stroke="' + K + '" stroke-opacity=".45" stroke-width="1"/>';
-      out += priceText(amtTxt || ("$" + s.price), amtTxt ? Math.min(pf, 14, (W - 14) / (w100(amtTxt, 800) / 100 * SX)) : pf, D - 9, sc ? "#0b0a12" : INK);
+      if (sc) out += '<rect class="mb-own" y="' + top + '" width="' + W + '" height="' + STRIP + '" fill="' + sc.c + '"/><path d="M0 ' + top + 'H' + W + '" stroke="' + K + '" stroke-opacity=".55" stroke-width="1.4"/>';
+      else if (mo) out += '<rect class="mb-mort" y="' + top + '" width="' + W + '" height="' + STRIP + '" fill="url(#mbHatch)"/>';
+      out += amtTxt ? amtSVG(amtTxt, pf, fill) : priceText("$" + s.price, pf, D - 12.5, fill);
     }
     if (isBand(i) && h > 0) {
       if (h === 5) out += '<g transform="translate(' + (W / 2 - 22) + " 4) scale(" + r2(44 / 64) + " " + r2(22 / 64) + ')">' + ICONS.hotel + "</g>";
       else { x0 = W / 2 - h * 11.5; for (k = 0; k < h; k++) out += '<g transform="translate(' + r2(x0 + k * 23) + " 5) scale(" + r2(21 / 64) + " " + r2(20 / 64) + ')">' + ICONS.house + "</g>"; }
     }
     if (mo) {
-      out += '<rect width="' + W + '" height="' + D + '" fill="url(#mbHatch)"/>';
-      var ty = isBand(i) ? 5 : 96;
-      out += '<rect x="7" y="' + ty + '" width="' + (W - 14) + '" height="22" rx="4" fill="#0b0e1a" opacity=".92"/><text class="mb-nm" transform="translate(' + W / 2 + " " + (ty + 15.5) + ') scale(' + SX + ' 1)" text-anchor="middle" font-size="12.5" style="fill:#f6f1e7">MORTGAGED</text>';
+      var nb = NB[i] || 60, cy = Math.max(nb + 11, Math.min(top - 11, (nb + top) / 2));
+      out += '<rect class="mb-mtag" x="8" y="' + r2(cy - 10) + '" width="' + (W - 16) + '" height="20" rx="4" fill="#0b0e1a" opacity=".9"/>' + capText("MORTGAGED", 12.5, W / 2, cy, 0, "#f6f1e7");
     }
     return out ? '<g transform="' + sqXf(i) + '">' + out + "</g>" : "";
   }
@@ -285,13 +313,15 @@
     ".mb-stage{position:absolute;left:0;top:0;width:100%;height:100%;transform-origin:0 0}.mb-stage.is-glide{transition:transform .2s cubic-bezier(.2,.7,.2,1)}" +
     "html[data-effects=reduced] .mb-stage.is-glide,html[data-motion=reduce] .mb-stage.is-glide{transition:none}" +
     ".mb-svg{position:absolute;left:0;top:0;width:100%;height:100%;display:block}" +
-    ".mb-nm{font-family:" + FONT + ";font-weight:800;fill:" + INK + "}.mb-pr{font-family:" + FONT + ";font-weight:800;font-variant-numeric:tabular-nums}.mb-go{font-family:'DM Serif Display',Georgia,serif;font-weight:400}" +
+    ".mb-nm{font-family:" + FONT + ";font-weight:800;letter-spacing:" + LS + "em;fill:" + INK + "}.mb-pr{font-family:" + FONT + ";font-weight:800;font-variant-numeric:tabular-nums}.mb-go{font-family:'DM Serif Display',Georgia,serif;font-weight:400}" +
     ".mb-center{position:absolute;left:" + (D / S * 100) + "%;top:" + (D / S * 100) + "%;width:" + (9 * W / S * 100) + "%;height:" + (9 * W / S * 100) + "%;display:grid;place-items:center;pointer-events:none}" +
     ".mb-center>.mb-plate,.mb-center>.mb-cw{pointer-events:none}" +
     ".mb-plate{display:grid;justify-items:center;gap:calc(var(--mb-u,4px)*1.678);padding:calc(var(--mb-u,4px)*4.119) calc(var(--mb-u,4px)*8.39) calc(var(--mb-u,4px)*4.576);border-radius:calc(var(--mb-u,4px)*4.958);background:radial-gradient(120% 95% at 50% 0%,#1d6b45 0%,var(--accent-deep,#06391f) 58%,#031b0e 100%);box-shadow:inset 0 0 0 1px rgba(230,201,143,.6),inset 0 0 0 calc(var(--mb-u,4px)*1.525) rgba(4,6,16,.22),inset 0 0 0 calc(calc(var(--mb-u,4px)*1.525) + 1px) rgba(230,201,143,.25),0 calc(var(--mb-u,4px)*3.051) calc(var(--mb-u,4px)*6.864) -calc(var(--mb-u,4px)*3.814) rgba(0,0,0,.65)}" +
     ".mb-plate .bg-emblem{width:calc(var(--mb-u,4px)*12.966);height:calc(var(--mb-u,4px)*12.966)}.bg-token .mb-tkv{width:78%;height:78%;display:block;overflow:visible}.mb-mark{width:calc(var(--mb-u,4px)*12.966);height:calc(var(--mb-u,4px)*12.966);display:block}.mb-word{font:400 calc(var(--mb-u,4px)*9.152)/1 var(--font-display,'DM Serif Display',Georgia,serif);letter-spacing:-.01em;color:var(--gold-100,#f4e3b8)}" +
     ".mb-toks,.mb-marks{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;contain:layout}" +
-    ".mb-pos{position:absolute;aspect-ratio:1;transform:translate(-50%,-50%);z-index:3}.mb-anim .mb-pos{transition:left .15s linear,top .15s linear,width .15s,height .15s}" +
+    // a piece: a box of its own size (set when its square's slots change), placed by its transform only, so a move glides on the
+    // compositor (no left/top: transform only); at rest the box is drawn 1:1, as the pulse's layer expects (no scale)
+    ".mb-pos{position:absolute;left:0;top:0;z-index:3}.mb-anim .mb-pos{transition:transform .15s linear}" +
     "html[data-effects=reduced] .mb-pos,html[data-motion=reduce] .mb-pos{transition:none !important}" +
     ".mb-pos .tkp,.mb-pos .tk{display:block;width:100%;height:100%}.mb-pos .tk{filter:drop-shadow(0 0 1px var(--pc,#000)) drop-shadow(0 .06em .08em #0009)}.mb-pos .mb-tkv{display:block;width:100%;height:100%;overflow:visible}" +
     ".mb-hl,.mb-fs{position:absolute;box-sizing:border-box;pointer-events:none;display:none}" +
@@ -317,6 +347,7 @@
 
   /* ---------------- mount ---------------- */
   function pct(v) { return r2(v / S * 100) + "%"; }
+  var VISIT = [[26.5, 113.5], [64, 113.5], [26.5, 76], [101.5, 113.5], [26.5, 38.5]];   // Just visiting: places on the L (the corner first), in the corner's frame
   function slots(n) {   // piece offsets (in the square's own frame, units from its middle) and the piece size
     if (n <= 1) return { sz: 40, p: [[0, 0]] };
     if (n === 2) return { sz: 36, p: [[-19, 0], [19, 0]] };
@@ -328,8 +359,9 @@
     o = o || {}; injectCSS();
     var sq = o.squares || [], zoomOn = o.zoom !== false, inst = {}, st = {}, amt = { 4: "PAY $200", 38: "PAY $100" }, last = [], tokEls = {}, selI = -1, zoom = 1, tx = 0, ty = 0, gestureT = 0, tapT = 0, lastTap = { t: 0, x: 0, y: 0 };
     BUY = {}; sq.forEach(function (s, i) { if (s && s.price) BUY[i] = s; });
-    host.classList.add("mb"); host.setAttribute("tabindex", "0"); host.setAttribute("role", "group");
-    host.setAttribute("aria-label", "Monopoly board. Press OK, then the arrow keys to move between the squares.");
+    var dpad = o.dpad !== false;   // dpad:false (Party Mode's TV host, where the board is only shown): not a focus stop
+    host.classList.add("mb");
+    if (dpad) { host.setAttribute("tabindex", "0"); host.setAttribute("role", "group"); host.setAttribute("aria-label", "Monopoly board. Press OK, then the arrow keys to move between the squares."); }
     var stage = document.createElement("div"); stage.className = "mb-stage";
     var live = document.createElement("div"); live.setAttribute("aria-live", "polite"); live.className = "bg-sr"; live.style.cssText = "position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)";
     host.innerHTML = ""; host.appendChild(stage); host.appendChild(live);
@@ -347,6 +379,7 @@
       sizes(); svgBox.innerHTML = staticSVG(); paintBands(svgBox, sq);
       inst.svg = svgBox.firstChild; inst.dyn = svgBox.querySelector("#mbDyn"); last = [];
       if (st.own || st.houses) paintDyn(true);
+      if (st.toks) setToks(st.toks);   // a redraw (the font arrived) can move the free room under a name: the pieces follow
     }
     function paintDyn(all) {
       var i, changed = false;
@@ -367,15 +400,25 @@
       document.fonts.load("800 20px Manrope", "ABC").then(again, function () { });
     }
 
-    function place(el, i, k, n, cur) {
-      var s = slots(n), r = RECTS[i], sc = r.corner ? 1.35 : 1, p = s.p[k], zy = r.corner ? 0 : 100 - D / 2, pt = toScreen(i, (r.corner ? D / 2 : W / 2) + p[0] * sc, (r.corner ? D / 2 + 6 : 100) + p[1] * sc);
-      el.style.left = pct(pt.x); el.style.top = pct(pt.y); el.style.width = pct(s.sz * sc);
+    // where a piece stands: its slot in the square (jv: "j" = in jail, drawn in the cell over the bars; "v" = visiting the jail corner,
+    // on the L of "Just visiting"); the place is ONE translate in board units (through --mb-u), the size the slot's
+    function place(el, i, k, n, cur, jv) {
+      var s = slots(n), r = RECTS[i], p = s.p[k], sz, pt, v, d, sc;
+      if (jv === "j") { sz = s.sz * 0.9; pt = toScreen(i, 89 + p[0] * 0.8, 59 + p[1] * 0.8); }
+      else if (jv === "v") { v = VISIT[k % 5]; d = Math.floor(k / 5) * 7; sz = n > 5 ? 28 : 32; pt = toScreen(i, v[0] + d, v[1] - d); }
+      else {   // a side square: in the free room between its name and the price strip, so the name and the price stay readable
+        sc = r.corner ? 1.35 : 1; sz = s.sz * sc;
+        pt = toScreen(i, (r.corner ? D / 2 : W / 2) + p[0] * sc, (r.corner ? D / 2 + 6 : NB[i] ? Math.max(76, Math.min(100, (NB[i] + D - STRIP) / 2)) : 100) + p[1] * sc);
+      }
+      el.style.width = el.style.height = pct(sz);   // the size steps with the slot (a layout change only when it changes, never per frame)
+      el.style.transform = "translate(calc(var(--mb-u,4px)*" + r2(pt.x / S * 100) + "),calc(var(--mb-u,4px)*" + r2(pt.y / S * 100) + ")) translate(-50%,-50%)";
     }
     function setToks(list) {
       var by = {}, n, k, seen = {}, first = !host.classList.contains("mb-anim");
-      (list || []).forEach(function (t) { (by[t.i] = by[t.i] || []).push(t); });
+      function key(t) { return t.i === 10 ? (t.jail ? "10j" : "10v") : t.i; }   // the jail corner holds two groups: in jail, visiting
+      (list || []).forEach(function (t) { var kk = key(t); (by[kk] = by[kk] || []).push(t); });
       (list || []).forEach(function (t) {
-        var grp = by[t.i], idx = grp.indexOf(t), el = tokEls[t.id];
+        var grp = by[key(t)], idx = grp.indexOf(t), el = tokEls[t.id];
         seen[t.id] = 1;
         if (!el) { el = tokEls[t.id] = document.createElement("div"); el.className = "mb-pos"; toks.appendChild(el); el._sig = ""; }
         var sig = t.tok + "|" + t.seat + "|" + (t.cur ? 1 : 0) + "|" + (t.title || "");
@@ -383,7 +426,7 @@
           var wasCur = el._cur; el._sig = sig; el._cur = !!t.cur;
           el.innerHTML = '<span class="tkp' + (t.cur ? " cur" : "") + '"><span class="tk" style="--pc:' + (SEATS[t.seat] || SEATS[1]).c + '"' + (t.title ? ' title="' + esc(t.title).replace(/"/g, "&quot;") + '"' : "") + ">" + tokenSVG(t.tok, t.seat) + "</span></span>";
         }
-        place(el, t.i, idx, grp.length, t.cur);
+        place(el, t.i, idx, grp.length, t.cur, t.i === 10 ? (t.jail ? "j" : "v") : "");
       });
       Object.keys(tokEls).forEach(function (id) { if (!seen[id]) { toks.removeChild(tokEls[id]); delete tokEls[id]; } });
       if (first && list && list.length) { void host.offsetWidth; host.classList.add("mb-anim"); }   // the first placement jumps, every later one glides
@@ -434,11 +477,23 @@
       ctlSync();
       var ptrs = {}, np = 0, gx = 0, gy = 0, moved = false, startD = 0, startZ = 1, t0 = 0, one = null;
       var local = function (e) { var b = host.getBoundingClientRect(); return { x: e.clientX - b.left, y: e.clientY - b.top }; };
+      // the board takes the whole touch (touch-action: none) so a pinch is never stolen by the browser; at Fit a one-finger swipe that
+      // starts on it therefore scrolls the page from here (with a short glide after a flick, none under reduced motion)
+      var scrolling = false, sEl = null, sY = 0, sT = 0, sV = 0, flingRAF = 0;
+      var scroller = function () { for (var el = host.parentElement; el && el !== document.body && el !== document.documentElement; el = el.parentElement) { var oy = getComputedStyle(el).overflowY; if ((oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight + 1) return el; } return null; };
+      var scrollPage = function (dy) { if (sEl) sEl.scrollTop -= dy; else g.scrollBy(0, -dy); };
+      var stopFling = function () { if (flingRAF) { cancelAnimationFrame(flingRAF); flingRAF = 0; } };
+      var fling = function (v) {
+        var de = document.documentElement; if (Math.abs(v) < 0.2 || de.getAttribute("data-motion") === "reduce" || (g.matchMedia && g.matchMedia("(prefers-reduced-motion: reduce)").matches)) return;
+        var last = 0, step = function (t) { var dt = last ? Math.min(40, t - last) : 16; last = t; v *= Math.pow(0.93, dt / 16); if (Math.abs(v) < 0.03) { flingRAF = 0; return; } scrollPage(v * dt); flingRAF = requestAnimationFrame(step); };
+        flingRAF = requestAnimationFrame(step);
+      };
       host.addEventListener("pointerdown", function (e) {
         if (e.button > 0 && e.pointerType === "mouse") return;
+        stopFling();
         var p = local(e); ptrs[e.pointerId] = p; np = Object.keys(ptrs).length;
-        if (np === 1) { moved = false; t0 = Date.now(); one = { x: p.x, y: p.y, cx: e.clientX, cy: e.clientY }; gx = p.x; gy = p.y; }
-        if (np === 2) { var k = Object.keys(ptrs), a = ptrs[k[0]], b = ptrs[k[1]]; startD = Math.hypot(a.x - b.x, a.y - b.y) || 1; startZ = zoom; moved = true; gestureOn(); try { host.setPointerCapture(e.pointerId); } catch (x) { } }
+        if (np === 1) { moved = false; scrolling = false; t0 = Date.now(); one = { x: p.x, y: p.y, cx: e.clientX, cy: e.clientY }; gx = p.x; gy = p.y; }
+        if (np === 2) { scrolling = false; var k = Object.keys(ptrs), a = ptrs[k[0]], b = ptrs[k[1]]; startD = Math.hypot(a.x - b.x, a.y - b.y) || 1; startZ = zoom; moved = true; gestureOn(); try { host.setPointerCapture(e.pointerId); } catch (x) { } }
       });
       host.addEventListener("pointermove", function (e) {
         if (!ptrs[e.pointerId]) return; var p = local(e), prev = ptrs[e.pointerId]; ptrs[e.pointerId] = p;
@@ -446,13 +501,19 @@
           var k = Object.keys(ptrs), a = ptrs[k[0]], b = ptrs[k[1]], d = Math.hypot(a.x - b.x, a.y - b.y) || 1, mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
           zoomAt(startZ * d / startD, mx, my, false); e.preventDefault(); return;
         }
-        if (one && !moved && Math.hypot(e.clientX - one.cx, e.clientY - one.cy) > 8) { moved = true; if (zoom > 1.02) { gestureOn(); try { host.setPointerCapture(e.pointerId); } catch (x) { } } }
+        if (one && !moved && Math.hypot(e.clientX - one.cx, e.clientY - one.cy) > 8) {
+          moved = true;
+          if (zoom > 1.02) { gestureOn(); try { host.setPointerCapture(e.pointerId); } catch (x) { } }
+          else if (e.pointerType !== "mouse") { scrolling = true; sEl = scroller(); sY = e.clientY; sT = e.timeStamp; sV = 0; }
+        }
+        if (scrolling) { var dy = e.clientY - sY, dt = Math.max(1, e.timeStamp - sT); if (dy) { scrollPage(dy); sV = sV * 0.5 + dy / dt * 0.5; } sY = e.clientY; sT = e.timeStamp; e.preventDefault(); return; }
         if (moved && zoom > 1.02) { tx += p.x - prev.x; ty += p.y - prev.y; apply(false); e.preventDefault(); }
       });
       var up = function (e) {
         if (!ptrs[e.pointerId]) return; var p = ptrs[e.pointerId]; delete ptrs[e.pointerId]; var was = np; np = Object.keys(ptrs).length;
         if (was >= 2) { if (zoom < 1.04) inst.fit(); gestureOff(); if (np === 1) { var k = Object.keys(ptrs); gx = ptrs[k[0]].x; gy = ptrs[k[0]].y; } return; }
         gestureOff();
+        if (scrolling) { scrolling = false; if (e.type === "pointerup" && e.timeStamp - sT < 90) fling(sV); return; }
         if (e.type !== "pointerup" || moved || Date.now() - t0 > 450) return;
         var now = Date.now();
         if (now - lastTap.t < 320 && Math.hypot(p.x - lastTap.x, p.y - lastTap.y) < 36) {   // double-tap: in, or back out
@@ -472,20 +533,22 @@
     }
 
     /* ---- the D-pad on TV: focus the board, then the arrows walk the squares, OK opens one ---- */
-    host.addEventListener("focus", function () { var vis = true; try { vis = host.matches(":focus-visible"); } catch (e) { } if (!vis && !document.documentElement.hasAttribute("data-tv")) return; if (selI < 0) { var c = o.start ? o.start() : 0; inst.select(c >= 0 && c != null ? c : 0); } else inst.select(selI); });
-    host.addEventListener("blur", function () { fs.style.display = "none"; if (o.onFocus) o.onFocus(-1); });
-    host.addEventListener("keydown", function (e) {
-      if (e.altKey || e.ctrlKey || e.metaKey) return;
-      var k = e.key, d = k === "ArrowLeft" || k === "Left" ? "left" : k === "ArrowRight" || k === "Right" ? "right" : k === "ArrowUp" || k === "Up" ? "up" : k === "ArrowDown" || k === "Down" ? "down" : null;
-      if (d) { var n = walk(selI < 0 ? 0 : selI, d); if (n >= 0) { e.preventDefault(); inst.select(n); } return; }
-      if ((k === "Enter" || k === " " || k === "Select" || e.keyCode === 13 || e.keyCode === 23) && selI >= 0 && o.onOpen) { e.preventDefault(); e.stopPropagation(); o.onOpen(selI); }
-    });
+    if (dpad) {
+      host.addEventListener("focus", function () { var vis = true; try { vis = host.matches(":focus-visible"); } catch (e) { } if (!vis && !document.documentElement.hasAttribute("data-tv")) return; if (selI < 0) { var c = o.start ? o.start() : 0; inst.select(c >= 0 && c != null ? c : 0); } else inst.select(selI); });
+      host.addEventListener("blur", function () { fs.style.display = "none"; if (o.onFocus) o.onFocus(-1); });
+      host.addEventListener("keydown", function (e) {
+        if (e.altKey || e.ctrlKey || e.metaKey) return;
+        var k = e.key, d = k === "ArrowLeft" || k === "Left" ? "left" : k === "ArrowRight" || k === "Right" ? "right" : k === "ArrowUp" || k === "Up" ? "up" : k === "ArrowDown" || k === "Down" ? "down" : null;
+        if (d) { var n = walk(selI < 0 ? 0 : selI, d); if (n >= 0) { e.preventDefault(); inst.select(n); } return; }
+        if ((k === "Enter" || k === " " || k === "Select" || e.keyCode === 13 || e.keyCode === 23) && selI >= 0 && o.onOpen) { e.preventDefault(); e.stopPropagation(); o.onOpen(selI); }
+      });
+    }
     inst.destroy = function () { host.classList.remove("mb", "is-zoomed", "is-gesture", "mb-anim"); host.innerHTML = ""; };
     inst.redraw = function () { drawStatic(); };
     inst.setSquares = function (s2) { sq = s2 || sq; BUY = {}; sq.forEach(function (s, i) { if (s && s.price) BUY[i] = s; }); paintBands(svgBox, sq); last = []; paintDyn(true); };
     return inst;
   }
 
-  g.MonoBoard = { mount: mount, tokenSVG: tokenSVG, icon: icon, card: card, plateHTML: plateHTML, SEATS: SEATS, NAMES: NAMES, GROUPS: GROUPS, TOKENS: TOKEN_NAMES, rects: RECTS, walk: walk, hit: hit, iconFor: iconFor, S: S,
+  g.MonoBoard = { mount: mount, tokenSVG: tokenSVG, icon: icon, card: card, plateHTML: plateHTML, SEATS: SEATS, NAMES: NAMES, GROUPS: GROUPS, TOKENS: TOKEN_NAMES, rects: RECTS, walk: walk, hit: hit, iconFor: iconFor, S: S, SX: SX, LS: LS, ROOM: W - 2 * PAD, RIM: RIM,
     measure: function () { return { sizes: sizes(), sigw: SIGW }; } };
 })(window);
