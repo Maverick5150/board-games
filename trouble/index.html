@@ -183,6 +183,7 @@
 <script src="../skins.js"></script>
 <script src="../saves.js"></script>
 <script src="../names.js"></script>
+<script src="brain.js"></script>
 <script>window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
 <script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
 </head>
@@ -238,6 +239,12 @@
             <button type="button" data-speed="slow" aria-pressed="false">Slow</button>
             <button type="button" data-speed="medium" class="on" aria-pressed="true">Medium</button>
             <button type="button" data-speed="fast" aria-pressed="false">Fast</button>
+          </div>
+          <div class="tb-field"><span class="bg-row__title" id="skillHead">Computer skill</span><span class="bg-row__desc">Easy is gentler, Hard is sharper. Changes at once.</span></div>
+          <div class="bg-seg" id="skillSeg" role="group" aria-labelledby="skillHead">
+            <button type="button" data-k="easy" aria-pressed="false">Easy</button>
+            <button type="button" data-k="normal" class="on" aria-pressed="true">Normal</button>
+            <button type="button" data-k="hard" aria-pressed="false">Hard</button>
           </div>
           <div class="tb-table" id="seatPreview"></div>
         </div>
@@ -795,7 +802,7 @@ function showTurn(){
 let armed=false, lastSnap=null;
 function takeSnap(){
   if(!armed||gameOver) return;
-  lastSnap=JSON.parse(JSON.stringify({players:players,isHuman:isHuman,cpuNames:cpuNames,pegs:pegs,turn:turn,sixStreak:sixStreak,ver:gameVer,rules:rules,humanCount:humanCount,cpuCount:cpuCount,speed:gameSpeed,stats:{turns:stats.turns,bumps:stats.bumps,ms:playMs()}}));
+  lastSnap=JSON.parse(JSON.stringify({players:players,isHuman:isHuman,cpuNames:cpuNames,pegs:pegs,turn:turn,sixStreak:sixStreak,ver:gameVer,rules:rules,humanCount:humanCount,cpuCount:cpuCount,speed:gameSpeed,skill:cpuSkill,stats:{turns:stats.turns,bumps:stats.bumps,ms:playMs()}}));
   Saves.auto("trouble",lastSnap);
 }
 function beginTurn(){
@@ -887,6 +894,7 @@ function humanMove(k){
 function finishMove(color){
   if(hasWon(color)){
     gameOver=true; Sound.sfx("win");
+    if(window.TroubleBrain) { try{ TroubleBrain.finish({brains:aiBrains,winner:color,skill:cpuSkill}); }catch(e){} }
     Saves.del("trouble","auto"); lastSnap=null;   // a finished game is not offered as "Continue last game"
     renderPegs();
     setStatus(`<span class="dot" style="background:${CSSCOL[color]}"></span> <b>${isHuman[color]?"You win!":pn(color)+" wins"}</b>`);
@@ -923,6 +931,25 @@ function aiRoll(){
   });
 }
 function aiPickMove(color,moves){
+  const best=pickComputerMove(color,moves);
+  applyMove(color,best);
+  renderPegs();
+  finishMove(color);
+}
+// the computer's choice (step 10): the brain (brain.js) decides; if it is missing, returns null or throws, the old scorer below decides
+let cpuSkill="normal", aiBrains={};   // skill: easy | normal | hard (missing = normal); one brain per computer, per game
+function normSkill(v){ return v==="easy"||v==="hard"?v:"normal"; }
+function pickComputerMove(color,moves,dry){
+  const TB=window.TroubleBrain;
+  if(TB&&TB.useFor&&TB.useFor[cpuSkill]){
+    try{
+      const mv=TB.choose({color:color,moves:moves,pegs:pegs,players:players,START:START,skill:cpuSkill,brains:aiBrains,rnd:Math.random,name:""},{dry:!!dry});
+      if(mv) return mv;
+    }catch(e){ /* the old scorer below takes over */ }
+  }
+  return oldPickMove(color,moves);
+}
+function oldPickMove(color,moves){
   // score each move
   let best=null, bestScore=-1e9;
   for(const mv of moves){
@@ -940,23 +967,10 @@ function aiPickMove(color,moves){
     sc+=mv.to*0.5;
     if(sc>bestScore){bestScore=sc; best=mv;}
   }
-  applyMove(color,best);
-  renderPegs();
-  finishMove(color);
-}
-// the move sheet marks the move the computer would pick (the same scores as aiPickMove; read-only)
-function bestMoveOf(color,moves){
-  let best=null, bestScore=-1e9;
-  for(const mv of moves){
-    let sc=0;
-    if(mv.to<=27){ const occ=occupantAt(color,mv.to); if(occ && occ.color!==color) sc+=100+(pegs[occ.color][occ.peg]); }
-    if(mv.to>=28) sc+=40+mv.to;
-    if(mv.from===null) sc+=30;
-    sc+=mv.to*0.5;
-    if(sc>bestScore){bestScore=sc; best=mv;}
-  }
   return best;
 }
+// the move sheet marks the move the computer would pick (the same brain, read-only)
+function bestMoveOf(color,moves){ return pickComputerMove(color,moves,true); }
 
 // ---- pop animation ----
 function animatePop(cb){ Sound.sfx("dice");
@@ -1218,6 +1232,10 @@ function drawCpuSeg(){
 }
 function setHumanSeg(){ document.querySelectorAll("#humanSeg button").forEach(x=>{ const on=+x.dataset.n===humanCount; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
 document.querySelectorAll("#speedSeg button").forEach(b=>b.addEventListener("click",()=>setSpeed(b.dataset.speed)));
+// Computer skill (easy / normal / hard; normal = the brain's default): saved with the settings and the game; a change applies at once
+function setSkill(v){ cpuSkill=normSkill(v); document.querySelectorAll("#skillSeg button").forEach(x=>{ const on=x.dataset.k===cpuSkill; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
+document.querySelectorAll("#skillSeg button").forEach(b=>b.addEventListener("click",()=>setSkill(b.dataset.k)));
+setSkill(cpuSkill);
 document.querySelectorAll("#humanSeg button").forEach(b=>{
   b.addEventListener("click",()=>{ humanCount=+b.dataset.n; setHumanSeg(); drawCpuSeg(); });
 });
@@ -1268,14 +1286,15 @@ function drawRuleRows(){
 drawCpuSeg();
 drawVersions();
 const saveBar=Saves.bar({game:"trouble",el:document.getElementById("svbar"),
-  getSettings:()=>({humans:humanCount,cpus:cpuCount,version:setup.version,over:setup.over,speed:gameSpeed}),
-  applySettings:s=>{ humanCount=s.humans||1; cpuCount=s.cpus!=null?s.cpus:1; setup={version:versionOf(s.version).id,over:(s.over&&typeof s.over==="object")?s.over:{}}; setSpeed(s.speed); setHumanSeg(); drawCpuSeg(); drawVersions(); },
-  standard:()=>{ humanCount=1; cpuCount=1; setup={version:"classic",over:{}}; setSpeed("medium"); setHumanSeg(); drawCpuSeg(); drawVersions(); },
+  getSettings:()=>({humans:humanCount,cpus:cpuCount,version:setup.version,over:setup.over,speed:gameSpeed,skill:cpuSkill}),
+  applySettings:s=>{ humanCount=s.humans||1; cpuCount=s.cpus!=null?s.cpus:1; setup={version:versionOf(s.version).id,over:(s.over&&typeof s.over==="object")?s.over:{}}; setSpeed(s.speed); setSkill(normSkill(s.skill)); setHumanSeg(); drawCpuSeg(); drawVersions(); },
+  standard:()=>{ humanCount=1; cpuCount=1; setup={version:"classic",over:{}}; setSpeed("medium"); setSkill("normal"); setHumanSeg(); drawCpuSeg(); drawVersions(); },
   getSnapshot:()=>(armed&&!gameOver)?lastSnap:null,
   loadSnapshot:d=>{ Sound.skip(); loadGame(d); showSetup(false); }});
 function loadGame(d){
   players=d.players; isHuman=d.isHuman; cpuNames=(d.cpuNames&&typeof d.cpuNames==="object")?d.cpuNames:{}; pegs=d.pegs; turn=d.turn; sixStreak=d.sixStreak||0; humanCount=d.humanCount||humanCount; cpuCount=d.cpuCount!=null?d.cpuCount:cpuCount;
   setSpeed(d.speed);   // optional field: saves from before Game speed play at Medium
+  setSkill(d.skill); aiBrains={};   // optional field: saves from before the brain are Normal; a loaded game starts its brains fresh
   gameVer=versionOf(d.ver).id; rules=rulesFor(gameVer,(d.rules&&typeof d.rules==="object")?d.rules:{});   // saves from before the Versions are Classic
   { const b=versionOf(gameVer).base; setup={version:gameVer,over:{}}; Object.keys(b).forEach(k=>{ if(rules[k]!==b[k]) setup.over[k]=rules[k]; }); drawVersions(); }
   die=0; gameOver=false; busy=false; awaitingMove=false; armed=true;
@@ -1326,6 +1345,7 @@ function startGame(humans, cpus, rollOff){
   players.forEach((c,i)=>{ isHuman[c]= i<humans; pegs[c]=[null,null,null,null]; });
   drawCpuNames();   // a fresh random name for each computer, at every new game and every Play again
   turn=0; die=0; gameOver=false; busy=false; awaitingMove=false; sixStreak=0;
+  aiBrains={};   // cpuSkill is the Menu's choice (kept across New game, like Game speed)
   gameVer=setup.version; rules=rulesFor(setup.version,setup.over);
   gen++;   // the previous game's pending timers must not act on this one
   stats=freshStats(); clockOn(); ui.result=false;
