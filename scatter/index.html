@@ -37,7 +37,7 @@
   /* ---------- setup page (also the in-game Menu) ---------- */
   .sc-setup{display:flex; flex-direction:column; width:min(100%,40rem); margin:0 auto; padding:0 var(--gutter)}
   .sc-col{display:contents}
-  .sc-hero{order:1} .sc-sec--version{order:2} .sc-sec--players{order:3} .sc-sec--rules{order:4} .sc-sec--save{order:5} .sc-back{order:6} .sc-dock{order:7}
+  .sc-hero{order:1} .sc-sec--version{order:2} .sc-sec--players{order:3} .sc-sec--speed{order:4} .sc-sec--rules{order:5} .sc-sec--save{order:6} .sc-back{order:7} .sc-dock{order:8}
   .sc-hero{min-height:0; margin:0 calc(-1 * var(--gutter)); padding-top:46%; border-radius:0; background:transparent}
   .sc-hero .bg-hero__layer{bottom:auto; height:auto; aspect-ratio:16/9; border-radius:0; background-color:transparent;
     background-image:url("../ui/art/hero-scatter-960.webp"); background-size:100% auto; background-position:100% 0;
@@ -150,7 +150,7 @@
   html[data-tv] .sc-col--b{display:flex; flex-direction:column}
   html[data-tv] .sc-sec--players{order:1} html[data-tv] .sc-sec--save{order:3} html[data-tv] .sc-back{order:4}
   html[data-tv] .sc-dock{order:2; position:static; gap:1.75rem; margin:0; padding:1.5rem 0 0; background:none}
-  html[data-tv] #humanSeg, html[data-tv] #cpuSeg{gap:1.5rem}
+  html[data-tv] #humanSeg, html[data-tv] #cpuSeg, html[data-tv] #speedSeg{gap:1.5rem}
   html[data-tv] .bg-topbar__end{gap:1.5rem}
   html[data-tv] #svbar button{grid-template-columns:minmax(0,1fr); justify-items:center; align-content:center; row-gap:.3rem; padding:.625rem .5rem}
   html[data-tv] #svbar button .bg-ico{width:1.25em; height:1.25em}
@@ -174,6 +174,7 @@
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
 <script src="../saves.js"></script>
+<script src="../names.js"></script>
 <script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
 </head>
 <body class="bg-app bg-app--scene sc-in-setup">
@@ -200,6 +201,10 @@
         <div class="bg-section"><h2 class="bg-eyebrow" id="versionHead" data-stage-text>Version</h2></div>
         <div class="bg-versions" id="versions" role="radiogroup" aria-labelledby="versionHead"></div>
         <p class="sc-vdesc" id="versionDesc" aria-live="polite"></p>
+      </section>
+      <section class="sc-sec sc-sec--speed" aria-labelledby="speedHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="speedHead" data-stage-text>Game speed</h2></div>
+        <div class="bg-seg bg-seg--text" id="speedSeg" role="group" aria-labelledby="speedHead"><button type="button" data-s="slow" aria-pressed="false">Slow</button><button type="button" data-s="medium" class="on" aria-pressed="true">Medium</button><button type="button" data-s="fast" aria-pressed="false">Fast</button></div>
       </section>
       <section class="sc-sec sc-sec--rules" aria-labelledby="rulesHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="rulesHead" data-stage-text>Rules</h2></div>
@@ -279,7 +284,12 @@ const $=id=>document.getElementById(id);
 const PCOL=Sc.UI.PCOL;
 const SHORT={classic:"Classic",modern:"Modern",refresh:"Refresh",junior:"Junior",keyword:"Key Word"};
 const SV_ICON={ss:"save",ls:"load",std:"reset",sg:"save",lg:"load",au:"resume"};
-let cfg={version:"classic",over:{},humans:1,cpus:3};
+/* step 10: Game speed (slow / medium / fast) scales the computer-side pacing (the letter roll); the round clock, the computers' STOP call and every other
+   rule timer are never scaled. names.js gives the computers random names at every new game. */
+function speedFactor(){ return ({slow:1.75, fast:0.5})[window.bgGameSpeed] || 1 }
+function normSpeed(v){ return v==="slow"||v==="fast"?v:"medium"; }
+function cpuNames(n,human){ let a=[]; try{ if(window.Names&&n>0) a=window.Names.pick(n,human)||[]; }catch(e){} while(a.length<n) a.push("CPU "+(a.length+1)); return a; }
+let cfg={version:"classic",over:{},humans:1,cpus:3,speed:"medium"};
 let G=null,ctrl=null,gen=0,writeQueue=[],curWriter=-1,reviewMe=0,voteMe=-1,roundStart=0,stopTimer=null,stopAt=0,stopGen=-1,stopLeft=-1,stopped=false,voteBusy=false;
 const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 function curOpts(){ return E.versionOpts(cfg.version,cfg.over); }
@@ -453,9 +463,12 @@ function barTitle(){
 }
 
 /* ---------------- saving ---------------- */
+function setSpeedSeg(){ cfg.speed=normSpeed(cfg.speed); window.bgGameSpeed=cfg.speed; $("speedSeg").querySelectorAll("button").forEach(x=>{ const on=x.dataset.s===cfg.speed; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
+$("speedSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.speed=b.dataset.s; setSpeedSeg(); if(G&&!G.over){ const pk=packG(); if(pk) Saves.auto("scatter",pk); } }));   // applies at once; the running game's save keeps it
+setSpeedSeg();
 function packG(){ if(!G) return null; return {G:E.serialize(G),cfg:JSON.parse(JSON.stringify(cfg)),stats:{ms:Math.round(playMs())}}; }
 function loadSaved(d){
-  gen++; clearStop(); G=E.restore(JSON.parse(JSON.stringify(d.G))); Object.assign(cfg,d.cfg||{});
+  gen++; clearStop(); G=E.restore(JSON.parse(JSON.stringify(d.G))); Object.assign(cfg,d.cfg||{}); setSpeedSeg();
   stats=readStats(d.stats); ui.winShown=-1; ui.result=false; closeWin(); closeRoll(); closeHandoff();
   Sound.skip(); startUI(); showSetup(false); resetView(); resumePhase(); drawSetup(); clockOn(); armBack();
 }
@@ -475,9 +488,9 @@ if(window.MutationObserver){
   new MutationObserver(()=>{ const B=BG(), m=$("svtoast").textContent; if(luxe()&&B.toast&&m) B.toast(m,{icon:"save",ms:2400}); }).observe($("svtoast"),{childList:true,characterData:true,subtree:true});
 }
 const saveBar=Saves.bar({game:"scatter",el:$("svbar"),snapNote:"this round (writing restarts)",saveToast:"Game saved",
-  getSettings:()=>({version:cfg.version,over:cfg.over,humans:cfg.humans,cpus:cfg.cpus}),
-  applySettings:s=>{ cfg.version=s.version||"classic"; cfg.over=s.over||{}; cfg.humans=s.humans||1; cfg.cpus=s.cpus!=null?s.cpus:3; drawSetup(); },
-  standard:()=>{ cfg={version:"classic",over:{},humans:1,cpus:3}; drawSetup(); },
+  getSettings:()=>({version:cfg.version,over:cfg.over,humans:cfg.humans,cpus:cfg.cpus,speed:cfg.speed}),
+  applySettings:s=>{ cfg.version=s.version||"classic"; cfg.over=s.over||{}; cfg.humans=s.humans||1; cfg.cpus=s.cpus!=null?s.cpus:3; cfg.speed=normSpeed(s.speed); setSpeedSeg(); drawSetup(); },
+  standard:()=>{ cfg={version:"classic",over:{},humans:1,cpus:3,speed:"medium"}; setSpeedSeg(); drawSetup(); },
   getSnapshot:()=>(G&&!G.over)?packG():null,loadSnapshot:loadSaved});
 $("menuBtn").addEventListener("click",()=>{
   // Resume only while a game is on, or "See the result" when it has just ended and its Victory screen is still to come
@@ -529,7 +542,9 @@ function legend(){
 function startGame(){
   gen++; clearStop(); clampSeats();
   const total=cfg.humans+cfg.cpus, names=[], humans=[];
-  for(let i=0;i<total;i++){ const h=i<cfg.humans; humans.push(h); names.push(h?(cfg.humans===1?"You":"Player "+(i+1)):"CPU "+(i+1-cfg.humans)); }
+  const hn=[]; for(let i=0;i<cfg.humans;i++) hn.push(cfg.humans===1?"You":"Player "+(i+1));
+  const cn=cpuNames(total-cfg.humans,hn);   // step 10: fresh random names for the computers at every new game; stored in G and its save
+  for(let i=0;i<total;i++){ const h=i<cfg.humans; humans.push(h); names.push(h?hn[i]:cn[i-cfg.humans]); }
   G=E.newGame({names,humans,opts:curOpts()}); stats={ms:0}; ui.winShown=-1; ui.result=false; closeWin(); startUI(); resetView(); clockOn(); newRound();
 }
 /* a new or loaded game starts clean: the old sheet's timer, vote window and hand-off must not act on it */
@@ -554,7 +569,7 @@ function newRound(){
     const iv=setInterval(()=>{ el.textContent=hasLetter?E.LETTERS[Math.floor(Math.random()*20)]:E.KEYWORDS[Math.floor(Math.random()*20)].toUpperCase(); if(++n>=9){ clearInterval(iv);
       if(hasLetter&&G.star) el.innerHTML=luxe()?icon("star"):"⭐"; else el.textContent=L;
       el.setAttribute("aria-label",(hasLetter?(G.star?"Star":"Letter "+G.letter):"Key word "+G.keyword));
-      setTimeout(()=>{ if(my!==gen) return; closeRoll(); if(G.star) starPick(); else beginWriting(); },900); } },90);
+      setTimeout(()=>{ if(my!==gen) return; closeRoll(); if(G.star) starPick(); else beginWriting(); },Math.round(900*speedFactor())); } },Math.round(90*speedFactor()));
   };
   showRoll();
 }
