@@ -185,6 +185,7 @@
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
 <script src="../saves.js"></script>
+<script src="../names.js"></script>
 <script>window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
 <script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
 </head>
@@ -215,7 +216,7 @@
       </section>
       <section class="un-sec un-sec--speed" aria-labelledby="speedHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="speedHead" data-stage-text>Game speed</h2></div>
-        <div class="bg-seg bg-seg--text" id="speedSeg" role="group" aria-labelledby="speedHead"><button type="button" data-s="slow" aria-pressed="false">Slow</button><button type="button" data-s="normal" class="on" aria-pressed="true">Normal</button><button type="button" data-s="fast" aria-pressed="false">Fast</button></div>
+        <div class="bg-seg bg-seg--text" id="speedSeg" role="group" aria-labelledby="speedHead"><button type="button" data-s="slow" aria-pressed="false">Slow</button><button type="button" data-s="medium" class="on" aria-pressed="true">Medium</button><button type="button" data-s="fast" aria-pressed="false">Fast</button></div>
       </section>
       <section class="un-sec un-sec--rules" aria-labelledby="rulesHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="rulesHead" data-stage-text>Rules</h2></div>
@@ -289,10 +290,14 @@
 const U=Uno, E=U.Engine;
 const $=id=>document.getElementById(id);
 const SEATC=["#e23b3b","#2b7be0","#27a758","#eec21b","#a65bd6","#19b5b0","#f08a24","#ec6aa8","#8a8f99","#9a6a3a"];
-const SPEED={slow:1500,normal:950,fast:420};
+/* step 10: Game speed (slow / medium / fast): the base computer delay is 950 ms (medium, as before) times speedFactor(); the saved key "normal" reads as medium.
+   The human's fair moments (catch UNO 1300-2000 ms, jump-in) are rules of fairness, not pace, and stay as they were. */
+function speedFactor(){ return ({slow:1.75, fast:0.5})[window.bgGameSpeed] || 1 }
+function normSpeed(v){ return v==="slow"||v==="fast"?v:"medium"; }
+function cpuNames(n,human){ let a=[]; try{ if(window.Names&&n>0) a=window.Names.pick(n,human)||[]; }catch(e){} while(a.length<n) a.push("CPU "+(a.length+1)); return a; }
 const SHORT={classic:"Classic",flip:"Flip",nomercy:"No Mercy",allwild:"All Wild"};
 const SV_ICON={ss:"save",ls:"load",std:"reset",sg:"save",lg:"load",au:"resume"};
-let cfg={version:"classic",over:{},humans:1,cpus:3,speed:"normal"};
+let cfg={version:"classic",over:{},humans:1,cpus:3,speed:"medium"};
 let G=null,V=null,gen=0,handoffOk=null,ctrl=null,timer=null,lastActor=-1;
 const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 function curOpts(){ return E.versionOpts(cfg.version,cfg.over); }
@@ -405,8 +410,9 @@ function syncRules(){
   $("rulesToggle").setAttribute("aria-expanded",String(open)); $("houseRules").hidden=!open; $("rulesLegend").hidden=!open;
 }
 $("rulesToggle").addEventListener("click",()=>{ ui.rulesOpen=!ui.rulesOpen; syncRules(); });
-function setSpeedSeg(){ $("speedSeg").querySelectorAll("button").forEach(x=>{ const on=x.dataset.s===cfg.speed; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
-$("speedSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.speed=b.dataset.s; setSpeedSeg(); }));
+function setSpeedSeg(){ cfg.speed=normSpeed(cfg.speed); window.bgGameSpeed=cfg.speed; $("speedSeg").querySelectorAll("button").forEach(x=>{ const on=x.dataset.s===cfg.speed; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
+$("speedSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.speed=b.dataset.s; setSpeedSeg(); if(G&&!G.over){ const pk=packG(); if(pk) Saves.auto("uno",pk); } }));   // applies at once; the running game's save keeps it
+setSpeedSeg();
 // the copy follows the device: "Players on this TV" and "the remote" on the TV, the phone wording elsewhere
 function deviceCopy(){
   const tv=onTV(), t=tv?"Players on this TV":"Players on this phone";
@@ -492,8 +498,8 @@ if(window.MutationObserver){
 }
 const saveBar=Saves.bar({game:"uno",el:$("svbar"),snapNote:"exactly as it is now",saveToast:"Game saved",
   getSettings:()=>({version:cfg.version,over:cfg.over,humans:cfg.humans,cpus:cfg.cpus,speed:cfg.speed}),
-  applySettings:s=>{ cfg.version=s.version||"classic"; cfg.over=s.over||{}; cfg.humans=s.humans||1; cfg.cpus=s.cpus!=null?s.cpus:3; cfg.speed=s.speed||"normal"; setSpeedSeg(); drawSetup(); },
-  standard:()=>{ cfg.version="classic"; cfg.over={}; cfg.humans=1; cfg.cpus=3; cfg.speed="normal"; setSpeedSeg(); drawSetup(); },
+  applySettings:s=>{ cfg.version=s.version||"classic"; cfg.over=s.over||{}; cfg.humans=s.humans||1; cfg.cpus=s.cpus!=null?s.cpus:3; cfg.speed=normSpeed(s.speed); setSpeedSeg(); drawSetup(); },
+  standard:()=>{ cfg.version="classic"; cfg.over={}; cfg.humans=1; cfg.cpus=3; cfg.speed="medium"; setSpeedSeg(); drawSetup(); },
   getSnapshot:()=>(G&&!G.over)?packG():null,loadSnapshot:loadSaved});
 
 /* ---- the round table and the hand-off share the sheet machinery ---- */
@@ -530,7 +536,9 @@ $("startBtn").addEventListener("click",()=>{ Sound.skip(); closeBox(); closeWin(
 function startGame(){
   gen++; clearTimeout(timer); clampSeats();
   const total=cfg.humans+cfg.cpus, names=[], humans=[];
-  for(let i=0;i<total;i++){ const h=i<cfg.humans; humans.push(h); names.push(h?(cfg.humans===1?"You":"Player "+(i+1)):"CPU "+(i+1-cfg.humans)); }
+  const hn=[]; for(let i=0;i<cfg.humans;i++) hn.push(cfg.humans===1?"You":"Player "+(i+1));
+  const cn=cpuNames(total-cfg.humans,hn);   // step 10: fresh random names for the computers at every new game; stored in G and its save
+  for(let i=0;i<total;i++){ const h=i<cfg.humans; humans.push(h); names.push(h?hn[i]:cn[i-cfg.humans]); }
   G=E.newGame({names,humans,opts:curOpts()}); E.startRound(G); handoffOk=null;
   stats={ms:0,played:0}; ui.winShown=-1; ui.result=false; closeHandoff();
   startUI(); clockOn(); drive();
@@ -578,7 +586,7 @@ function drive(){
     // computers may catch a human who forgot UNO
     scheduleCatch(); return;
   }
-  let delay=SPEED[cfg.speed]; if(G.phase==="challenge") delay*=0.9;
+  let delay=950*speedFactor(); if(G.phase==="challenge") delay*=0.9;
   const human=G.players.findIndex(x=>x.human);
   // give a human a fair moment to catch a forgetful computer or to jump in
   if(nh===1){ if(G.unoVuln!=null&&!G.players[G.unoVuln].human) delay=Math.max(delay,1700); if(G.o.jumpIn&&E.jumpIds(G,human).length) delay=Math.max(delay,1900); }
