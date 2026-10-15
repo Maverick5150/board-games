@@ -658,8 +658,10 @@ function sideHTML(n){ const p=String(n).split(" & "); return '<span class="rm-tn
 function showScores(){
   const hist=G.history||[], units=G.units, deals=G.o.deals>0, lead=Math.max(...G.scores), name=ui2=>units[ui2].map(i=>G.players[i].name).join(" & ");
   const head=`<thead><tr><th scope="col">Player</th>${hist.map(hr=>`<th scope="col">R${hr.round}</th>`).join("")}<th scope="col">Total</th></tr></thead>`;
-  const body=units.map((u,ui2)=>`<tr${hist.length&&G.scores[ui2]===lead?' class="is-lead"':""}><td><span class="bg-score__who" data-seat="${seatOf(u[0])}">${sideHTML(name(ui2))}</span></td>`+
-    hist.map(hr=>{ const r=hr.rows[ui2]||{t:0}; return `<td class="${r.t>=0?"pos":"neg"}">${r.t>0?"+":""}${r.t}</td>`; }).join("")+`<td class="bg-score__total">${G.scores[ui2]}</td></tr>`).join("");
+  // standing order: the leader on top (highest total), ties in seat order; the columns of each round follow their player
+  const order=units.map((u,i)=>i).sort((a,b)=>(G.scores[b]-G.scores[a])||(a-b));
+  const body=order.map(ui2=>{ const u=units[ui2]; return `<tr${hist.length&&G.scores[ui2]===lead?' class="is-lead"':""}><td><span class="bg-score__who" data-seat="${seatOf(u[0])}">${sideHTML(name(ui2))}</span></td>`+
+    hist.map(hr=>{ const r=hr.rows[ui2]||{t:0}; return `<td class="${r.t>=0?"pos":"neg"}">${r.t>0?"+":""}${r.t}</td>`; }).join("")+`<td class="bg-score__total">${G.scores[ui2]}</td></tr>`; }).join("");
   $("roundSheet").innerHTML=`<div class="bg-sheet__grip" aria-hidden="true"></div><div class="rm-shead"><span class="bg-eyebrow bg-eyebrow--accent">Round ${G.round}</span><h2 class="bg-sheet__title" id="roundTitle">Scoreboard</h2>`+
     `<p class="bg-sheet__sub">${deals?`<b>${G.o.deals} deals</b> (+${G.o.dealsBonus} to the leader)`:`Playing to <b>${G.o.target}</b>`} · round ${G.round}</p></div>`+
     `<div class="bg-scorepad rm-pad rm-pad--rounds"><table class="bg-score sc">${head}<tbody>${body}</tbody></table></div>`+
@@ -947,7 +949,8 @@ function showRound(){
   const ro=G.roundOver, sh=$("roundSheet"), B=BG();
   const why=ro.reason==="out"?`${esc(G.players[ro.out].name)} went out`:"The stock ran out";
   const f=n=>(n>0?"+":"")+n, top=Math.max(...ro.rows.map(r=>r.score));
-  const rows=ro.rows.map(r=>`<tr${r.score===top?' class="is-lead"':""}><td><span class="bg-score__who" data-seat="${seatOf(r.players[0])}">${sideHTML(r.name)}</span></td><td>${r.melded}</td><td>${r.dead?-r.dead:0}</td><td>${(r.bonus+r.oppHands)||0}</td><td class="${r.total>=0?"pos":"neg"}">${f(r.total)}</td><td class="bg-score__total">${r.score}</td></tr>`).join("");
+  const ranked=ro.rows.map((r,i)=>({r,i})).sort((a,b)=>(b.r.score-a.r.score)||(a.i-b.i)).map(x=>x.r);   // the leader on top, ties in seat order
+  const rows=ranked.map(r=>`<tr${r.score===top?' class="is-lead"':""}><td><span class="bg-score__who" data-seat="${seatOf(r.players[0])}">${sideHTML(r.name)}</span></td><td>${r.melded}</td><td>${r.dead?-r.dead:0}</td><td>${(r.bonus+r.oppHands)||0}</td><td class="${r.total>=0?"pos":"neg"}">${f(r.total)}</td><td class="bg-score__total">${r.score}</td></tr>`).join("");
   let h=`<div class="bg-sheet__grip" aria-hidden="true"></div><div class="rm-shead"><span class="bg-eyebrow bg-eyebrow--accent">${ro.over?"Final round":"Round "+G.round}</span>`+
     `<h2 class="bg-sheet__title" id="roundTitle">${ro.over?"Game over":"Round "+G.round+" complete"}</h2><p class="bg-sheet__sub">${why}</p></div>`+
     `<div class="bg-scorepad rm-pad"><table class="bg-score sc"><thead><tr><th scope="col">Player</th><th scope="col">Melds</th><th scope="col">Hand</th><th scope="col">Bonus</th><th scope="col">Round</th><th scope="col">Total</th></tr></thead><tbody>${rows}</tbody></table></div>`;
