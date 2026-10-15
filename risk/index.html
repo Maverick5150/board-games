@@ -305,6 +305,7 @@
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
 <script src="../saves.js"></script>
+<script src="../names.js"></script>
 <script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
 </head>
 <body class="bg-app bg-app--scene rk-in-setup">
@@ -336,7 +337,7 @@
       </section>
       <section class="rk-sec rk-sec--speed" aria-labelledby="speedHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="speedHead" data-stage-text>Speed and map</h2></div>
-        <div class="bg-seg bg-seg--text" id="speedSeg" role="group" aria-label="Game speed"><button type="button" data-s="slow" aria-pressed="false">Slow</button><button type="button" data-s="normal" class="on" aria-pressed="true">Normal</button><button type="button" data-s="fast" aria-pressed="false">Fast</button></div>
+        <div class="bg-seg bg-seg--text" id="speedSeg" role="group" aria-label="Game speed"><button type="button" data-s="slow" aria-pressed="false">Slow</button><button type="button" data-s="medium" class="on" aria-pressed="true">Medium</button><button type="button" data-s="fast" aria-pressed="false">Fast</button></div>
         <div class="bg-rows rk-tint"><label class="bg-row"><span class="bg-row__main"><span class="bg-row__title">Tint territories by owner</span><span class="bg-row__desc">Easier to read who holds what</span></span><input type="checkbox" class="bg-toggle" id="tintCb"></label></div>
       </section>
       <section class="rk-sec rk-sec--rules" aria-labelledby="rulesHead">
@@ -418,8 +419,11 @@
 "use strict";
 const R=Risk, E=R.Engine, MP=R.MAP, PCOLS=MP.PCOLORS;
 const $=id=>document.getElementById(id);
-const SPEED={slow:1100,normal:650,fast:260};
-let cfg={version:"1959",over:{},mode:"classic",humans:1,cpus:2,speed:"normal",tint:false,hcolors:[0]};
+/* step 10: Game speed (slow / medium / fast): the base computer delay is 650 ms (medium, as before) times speedFactor(); the saved key "normal" reads as medium */
+function speedFactor(){ return ({slow:1.75, fast:0.5})[window.bgGameSpeed] || 1 }
+function normSpeed(v){ return v==="slow"||v==="fast"?v:"medium"; }
+function cpuNames(n,human){ let a=[]; try{ if(window.Names&&n>0) a=window.Names.pick(n,human)||[]; }catch(e){} while(a.length<n) a.push("CPU "+(a.length+1)); return a; }
+let cfg={version:"1959",over:{},mode:"classic",humans:1,cpus:2,speed:"medium",tint:false,hcolors:[0]};
 let G=null,V=null,gen=0,handoffOk=null,board=null,ctrl=null,lastEv=0,aiTimer=null;
 const esc=R.Ctrl.esc;
 function curOpts(){ const o=E.versionOpts(cfg.version,cfg.over); if(cfg.over.mode===undefined) o.mode=cfg.mode||"classic"; return o; }
@@ -442,6 +446,7 @@ function tvOn(){ const B=BG(); return !!(B&&B.focus&&B.focus.enabled&&onTV()); }
 function icon(n){ const B=BG(); return B&&B.icon?B.icon(n):""; }
 function seatOfP(p,i){ return p.neutral?NEUTRAL_SEAT:(SEAT_OF_CI[(p.ci==null?i:p.ci)%PCOLS.length]||1); }
 function seatOf(i){ const P=(V&&V.players)||(G&&G.players)||[]; return P[i]?seatOfP(P[i],i):1; }
+function tokenOfP(p,i){ return p.neutral?tokenOf(p.name):tokenOf(PCOLS[(p.ci==null?i:p.ci)%PCOLS.length].name); }   // the colour's letter, so a computer named Marcus still shows its colour
 function tokenOf(name){ const n=String(name); return n==="Blue"?"Bl":n==="Black"?"Bk":n.charAt(0).toUpperCase(); }   // Blue and Black both start with B
 function hubHref(){ const B=BG(); return B&&B.back&&B.back.hub?B.back.hub():"../index.html"; }
 function setupShown(){ return $("setup").style.display!=="none"; }
@@ -569,8 +574,9 @@ function syncRules(){
   $("rulesToggle").setAttribute("aria-expanded",String(open)); $("houseRules").hidden=!open; $("rulesLegend").hidden=!open;
 }
 $("rulesToggle").addEventListener("click",()=>{ ui.rulesOpen=!ui.rulesOpen; syncRules(); });
-function setSpeedSeg(){ $("speedSeg").querySelectorAll("button").forEach(x=>{ const on=x.dataset.s===cfg.speed; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
-$("speedSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.speed=b.dataset.s; setSpeedSeg(); }));
+function setSpeedSeg(){ cfg.speed=normSpeed(cfg.speed); window.bgGameSpeed=cfg.speed; $("speedSeg").querySelectorAll("button").forEach(x=>{ const on=x.dataset.s===cfg.speed; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
+$("speedSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.speed=b.dataset.s; setSpeedSeg(); if(G&&!G.over){ const pk=packG(); if(pk) Saves.auto("risk",pk); } }));   // applies at once; the running game's save keeps it
+setSpeedSeg();
 $("tintCb").addEventListener("change",e=>{ cfg.tint=e.target.checked; if(board) board.setTint(cfg.tint); });
 // the copy follows the device: "Players on this TV" and "the remote" on the TV, the phone wording elsewhere
 function deviceCopy(){
@@ -639,7 +645,7 @@ function barTitle(){
 function packG(){ if(!G) return null; const c=JSON.parse(JSON.stringify(G,(k,v)=>k==="log"?undefined:v)); c.log=G.log.slice(-40); return {G:c,cfg:JSON.parse(JSON.stringify(cfg)),stats:{ms:Math.round(playMs()),turns:stats.turns}}; }
 function loadSaved(d){
   gen++; clearTimeout(aiTimer); clearTimeout(ui.winT); ui.winT=0; ui.defA=null;
-  G=d.G; G.rnd=Math.random; Object.assign(cfg,d.cfg||{}); handoffOk=null; setSpeedSeg();
+  G=d.G; G.rnd=Math.random; Object.assign(cfg,d.cfg||{}); handoffOk=null; setSpeedSeg();   // an old save's "normal" reads as medium
   stats=readStats(d.stats); seenLog=G.log.length; ui.winShown=-1; ui.result=false; ui.strip=""; ui.hoKey=""; ui.focusKey="";
   $("setup").classList.remove("show"); $("winBox").classList.remove("show"); closeWin(); Sound.skip();
   drawSetup();   // the New game page shows the loaded game's settings
@@ -662,8 +668,8 @@ if(window.MutationObserver){
 }
 const saveBar=Saves.bar({game:"risk",el:$("svbar"),snapNote:"exactly as it is now",saveToast:"Game saved",
   getSettings:()=>({version:cfg.version,over:cfg.over,mode:cfg.mode,humans:cfg.humans,cpus:cfg.cpus,speed:cfg.speed,tint:cfg.tint,hcolors:cfg.hcolors}),
-  applySettings:s=>{ cfg.version=s.version||"1959"; cfg.over=s.over||{}; cfg.mode=s.mode||"classic"; cfg.humans=s.humans||1; cfg.cpus=s.cpus!=null?s.cpus:2; cfg.speed=s.speed||"normal"; cfg.tint=!!s.tint; cfg.hcolors=s.hcolors||[0]; setSpeedSeg(); drawSetup(); },
-  standard:()=>{ cfg={version:"1959",over:{},mode:"classic",humans:1,cpus:2,speed:"normal",tint:false,hcolors:[0]}; setSpeedSeg(); drawSetup(); },
+  applySettings:s=>{ cfg.version=s.version||"1959"; cfg.over=s.over||{}; cfg.mode=s.mode||"classic"; cfg.humans=s.humans||1; cfg.cpus=s.cpus!=null?s.cpus:2; cfg.speed=normSpeed(s.speed); cfg.tint=!!s.tint; cfg.hcolors=s.hcolors||[0]; setSpeedSeg(); drawSetup(); },
+  standard:()=>{ cfg={version:"1959",over:{},mode:"classic",humans:1,cpus:2,speed:"medium",tint:false,hcolors:[0]}; setSpeedSeg(); drawSetup(); },
   getSnapshot:()=>(G&&!G.over)?packG():null,
   loadSnapshot:loadSaved});
 $("menuBtn").addEventListener("click",()=>{
@@ -685,8 +691,9 @@ function startGame(){
   const total=cfg.humans+cfg.cpus, used=cfg.hcolors.slice();
   while(used.length<cfg.humans){ for(let i=0;i<PCOLS.length;i++) if(used.indexOf(i)<0){ used.push(i); break; } }
   const colors=used.slice(); for(let i=0;i<PCOLS.length&&colors.length<total;i++) if(colors.indexOf(i)<0) colors.push(i);
-  const humans=[], names=[];
-  for(let i=0;i<total;i++){ humans.push(i<cfg.humans); names.push(PCOLS[colors[i]].name); }
+  const humans=[], names=[], hn=[]; for(let i=0;i<cfg.humans;i++) hn.push(PCOLS[colors[i]].name);
+  const cn=cpuNames(total-cfg.humans,hn);   // step 10: fresh random names for the computers, stored in the game (and its save)
+  for(let i=0;i<total;i++){ humans.push(i<cfg.humans); names.push(i<cfg.humans?hn[i]:cn[i-cfg.humans]); }
   G=E.newGame({names:names,humans:humans,colors:colors,opts:curOpts()});
   stats={ms:0,turns:0}; seenLog=0; clearTimeout(ui.winT); ui.winT=0; ui.winShown=-1; ui.result=false; ui.strip=""; ui.hoKey=""; ui.focusKey="";
   handoffOk=null; startUI(); clockOn(); drive();
@@ -696,7 +703,7 @@ function startUI(){
   if(!board){
     const L=luxe();
     board=R.Board.create($("rkboard"),{labels:"auto",tint:cfg.tint,focusable:L&&onTV(),pulseLayer:L});
-    ctrl=R.Ctrl.create({root:$("rkpanel"),board:board,toast:toast,send:send,blitzDelay:cfg.speed==="slow"?700:420,
+    ctrl=R.Ctrl.create({root:$("rkpanel"),board:board,toast:toast,send:send,blitzDelay:420,
       luxe:L,seatOf:seatOf,tv:onTV,onSheet:peek,held:setupShown,paused:paused});
   } else if(ctrl.reset) ctrl.reset();   // a blitz or selection from the previous game must not carry over
   board.setTint(cfg.tint); board.fit();
@@ -726,7 +733,7 @@ function legend(){
   const key=gen+"|"+V.players.map(p=>p.name+(p.human?"H":"C")+(p.neutral?"N":"")).join(",")+"|"+(icon("cpu")?"i":"");
   if(key!==ui.strip||el.children.length!==V.players.length){
     el.classList.toggle("bg-players--scroll",V.players.length>4);
-    el.innerHTML=V.players.map((p,i)=>`<li class="bg-player chip" data-seat="${seatOfP(p,i)}" data-p="${i}"><span class="bg-token" aria-hidden="true">${esc(tokenOf(p.name))}</span>`+
+    el.innerHTML=V.players.map((p,i)=>`<li class="bg-player chip" data-seat="${seatOfP(p,i)}" data-p="${i}"><span class="bg-token" aria-hidden="true">${esc(tokenOfP(p,i))}</span>`+
       (p.human||p.neutral?"":`<span class="bg-player__cpu" aria-hidden="true">${icon("cpu")}</span>`)+
       `<span class="bg-player__txt"><span class="bg-player__name">${esc(stripName(p))}</span><span class="bg-player__meta"></span></span></li>`).join("");
     ui.strip=key; ui.meta={}; ui.turnKey="";
@@ -766,7 +773,7 @@ function drive(){
     if(nh>1&&handoffOk!==G.turn){ handoffOk=G.turn; refresh(); }
     return;
   }
-  const base=SPEED[cfg.speed], ph=G.phase;
+  const base=650*speedFactor(), ph=G.phase;
   const d=(ph==="claim"||ph==="deploy"||ph==="setup2p"||ph==="hq"||ph==="choose")?base*0.3:(ph==="reinforce"?base*0.55:(ph==="attack"?base:(ph==="occupy"?base*0.5:base*0.6)));
   aiTimer=setTimeout(()=>aiTick(my),Math.max(120,d));
 }
@@ -801,7 +808,7 @@ function openDefend(a,dp){
   const opt=(d,label,best)=>`<button type="button" class="bg-sheet__option${best?" is-best":""}" data-def="${d}"${best?" data-autofocus":""}><span class="bg-sheet__text"><span class="bg-sheet__label">${label}${best?" (best)":""}</span><span class="bg-sheet__detail">${line(d)}</span></span></button>`;
   sh.innerHTML=`<div class="bg-sheet__grip" aria-hidden="true"></div><div class="rk-ho"><span class="bg-eyebrow bg-eyebrow--accent">Defend</span>`+
     `<h2 class="bg-sheet__title" id="hoTitle">${esc(dp.name)} defends ${esc(tn)}</h2>`+
-    `<p class="rk-ho__to"><span class="bg-token" data-seat="${seatOfP(dp,dp.id)}" aria-hidden="true">${esc(tokenOf(dp.name))}</span><span>${esc(at.name)} attacks with <b>${n} ${n===1?"die":"dice"}</b></span></p>`+
+    `<p class="rk-ho__to"><span class="bg-token" data-seat="${seatOfP(dp,dp.id)}" aria-hidden="true">${esc(tokenOfP(dp,dp.id))}</span><span>${esc(at.name)} attacks with <b>${n} ${n===1?"die":"dice"}</b></span></p>`+
     `<p class="bg-sheet__sub">${G.players.filter(x=>x.human).length>1?"Pass the "+(tv?"remote":"phone")+" to "+esc(dp.name)+". ":""}Roll 1 or 2 dice.</p></div>`+
     `<div class="bg-sheet__options">${opt(2,"Roll 2 dice",true)}${opt(1,"Roll 1 die",false)}</div>`;
   sh.querySelectorAll("[data-def]").forEach(b=>b.addEventListener("click",()=>{
@@ -823,7 +830,7 @@ function showHandoff(p){
   const sh=$("handoffSheet"), c=PCOLS[p.ci%PCOLS.length], tv=onTV();
   sh.innerHTML=luxe()?`<div class="bg-sheet__grip" aria-hidden="true"></div><div class="rk-ho"><span class="bg-eyebrow bg-eyebrow--accent">Hot seat</span>`+
     `<h2 class="bg-sheet__title" id="hoTitle">Pass the ${tv?"remote":"phone"}</h2>`+
-    `<p class="rk-ho__to"><span class="bg-token" data-seat="${seatOfP(p,p.id)}" aria-hidden="true">${esc(tokenOf(p.name))}</span><span>to <b>${esc(p.name)}</b></span></p>`+
+    `<p class="rk-ho__to"><span class="bg-token" data-seat="${seatOfP(p,p.id)}" aria-hidden="true">${esc(tokenOfP(p,p.id))}</span><span>to <b>${esc(p.name)}</b></span></p>`+
     `<button class="bg-btn bg-btn--primary bg-btn--lg bg-btn--block" id="hoBtn" type="button" data-autofocus>I'm ${esc(p.name)} — show my cards</button></div>`
     :`<h2 style="font-size:26px">Pass the phone</h2><p style="font-size:18px;margin:14px 0">to <b style="color:${c.l}">${esc(p.name)}</b></p><button class="btn primary" id="hoBtn" style="font-size:17px;padding:14px 22px">I'm ${esc(p.name)} — show my cards</button>`;
   openHandoff();

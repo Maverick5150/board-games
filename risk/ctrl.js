@@ -8,6 +8,8 @@
 "use strict";
 var Risk=g.Risk=g.Risk||{}, MP=Risk.MAP, E=Risk.Engine;
 var PC=MP.PCOLORS, NEUTRAL={c:"#9a9a9a",d:"#555",l:"#cfcfcf",name:"Neutral"};
+/* step 10: Game speed (the host/page sets window.bgGameSpeed) scales the blitz pacing */
+function speedFactor(){ return ({slow:1.75, fast:0.5})[g.bgGameSpeed] || 1; }
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
 function pcol(V,i){ var p=V.players[i]; return (!p||p.neutral)?NEUTRAL:PC[(p.ci==null?i:p.ci)%PC.length]; }
 
@@ -598,7 +600,7 @@ function create(cfg){
     V=v; render();
     if(V.missionConv&&V.me>=0&&!S.convSeen[V.me]){ S.convSeen[V.me]=1; if(L) toast("Another player eliminated your target. Your secret mission is now: "+V.mission,"flag"); else toast("🎯 Another player eliminated your target. Your secret mission is now: "+V.mission); }   // old UK rules
     else if(!V.missionConv&&V.me>=0) delete S.convSeen[V.me];
-    if(S.blitz&&V.lastAttack&&V.lastAttack.seq!==S.blitzSeq){ S.blitzSeq=V.lastAttack.seq; clearTimeout(S.blitzT); S.blitzT=setTimeout(blitzStep,cfg.blitzDelay||420); }
+    if(S.blitz&&V.lastAttack&&V.lastAttack.seq!==S.blitzSeq){ S.blitzSeq=V.lastAttack.seq; clearTimeout(S.blitzT); S.blitzT=setTimeout(blitzStep,Math.round((cfg.blitzDelay||420)*speedFactor())); }
   };
   self.openCards=openCards; self.openPlayers=openPlayers; self.openMission=openMission;
   // (Luxe) the page closes the sheets before the Menu shows; the turn's choice sheet comes back with the next redraw
