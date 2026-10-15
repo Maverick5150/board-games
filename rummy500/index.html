@@ -293,7 +293,7 @@
       </section>
       <section class="rm-sec rm-sec--speed" aria-labelledby="speedHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="speedHead" data-stage-text>Game speed</h2></div>
-        <div class="bg-seg bg-seg--text" id="speedSeg" role="group" aria-labelledby="speedHead"><button type="button" data-s="slow" aria-pressed="false">Slow</button><button type="button" data-s="normal" class="on" aria-pressed="true">Normal</button><button type="button" data-s="fast" aria-pressed="false">Fast</button></div>
+        <div class="bg-seg bg-seg--text" id="speedSeg" role="group" aria-labelledby="speedHead"><button type="button" data-s="slow" aria-pressed="false">Slow</button><button type="button" data-s="medium" class="on" aria-pressed="true">Medium</button><button type="button" data-s="fast" aria-pressed="false">Fast</button></div>
       </section>
       <section class="rm-sec rm-sec--rules" aria-labelledby="rulesHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="rulesHead" data-stage-text>Rules</h2></div>
@@ -376,9 +376,13 @@
 const R=Rummy, GM=Rummy.Game, UI=Rummy.UI;
 UI.injectCSS();
 const $=id=>document.getElementById(id);
-const SPEED={slow:1600,normal:1000,fast:450};
+// Game speed (slow / medium / fast; medium = the computer's old 1 s pause): the computers' pauses are multiplied by speedFactor().
+// Saved with the settings and the game ("normal", the old name of Medium, still loads); a change from the Menu applies at once.
+function speedFactor(){ return ({slow:1.75, fast:0.5})[window.bgGameSpeed] || 1 }
+function normSpeed(v){ return v==="slow"||v==="fast"?v:"medium"; }
 const OFFICIAL_NOT={minNat:1,addOppHands:1,mustGoOut:1,deals:1};
-let cfg={version:"standard",over:{},humans:1,cpus:1,speed:"normal"};
+let cfg={version:"standard",over:{},humans:1,cpus:1,speed:"medium"};
+window.bgGameSpeed="medium";
 let G=null,sel=new Set(),pileFrom=null,flashCards={},flashMeld=null,logLines=[],gen=0,handoffOk=null,lastTurn=-1,busy=false,drawnAt={},sortPrefs={};
 /* each seat keeps its own sort mode and drag order (hot-seat players don't share one arrangement) */
 function sortPref(p){ return sortPrefs[p.id]||(sortPrefs[p.id]={mode:"suit",order:[]}); }
@@ -516,7 +520,7 @@ function syncRules(){
   $("rulesToggle").setAttribute("aria-expanded",String(open)); $("houseRules").hidden=!open; $("rulesLegend").hidden=!open;
 }
 $("rulesToggle").addEventListener("click",()=>{ ui.rulesOpen=!ui.rulesOpen; syncRules(); });
-function setSpeedSeg(){ $("speedSeg").querySelectorAll("button").forEach(x=>{ const on=x.dataset.s===cfg.speed; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
+function setSpeedSeg(){ cfg.speed=normSpeed(cfg.speed); window.bgGameSpeed=cfg.speed; $("speedSeg").querySelectorAll("button").forEach(x=>{ const on=x.dataset.s===cfg.speed; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
 $("speedSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.speed=b.dataset.s; setSpeedSeg(); }));
 // the copy follows the device: "Players on this TV" and "the remote" on the TV, the phone wording elsewhere
 function deviceCopy(){
@@ -600,7 +604,7 @@ function loadSaved(d){
   if(!(d.between===true&&G.roundOver&&typeof G.roundOver==="object"&&Array.isArray(G.roundOver.rows)&&!G.over)) G.roundOver=null;   // a mid-round save; a between-rounds one keeps its summary
   /* saves from before the Persian deck fix hold 2 jokers: deal the published 4 from the next round on */
   if(G.o&&G.o.jokerMode==="group"&&G.o.jokers===2&&d.cfg&&d.cfg.version==="persian"&&!(d.cfg.over&&d.cfg.over.jokers!=null)) G.o.jokers=4;
-  Object.assign(cfg,d.cfg||{}); sel.clear(); pileFrom=null; flashCards={}; flashMeld=null; handoffOk=null; lastTurn=-1; drawnAt={}; busy=false;
+  Object.assign(cfg,d.cfg||{}); cfg.speed=normSpeed((d.cfg||{}).speed); sel.clear(); pileFrom=null; flashCards={}; flashMeld=null; handoffOk=null; lastTurn=-1; drawnAt={}; busy=false;
   stats=readStats(d.stats); ui.winShown=-1; ui.result=false; ui.strip=""; ui.hoKey="";
   logLines=[]; say("Saved game loaded — round "+G.round,true);
   closeBox(); closeHandoff(); closeWin(); showSetup(false); Sound.skip();
@@ -625,8 +629,8 @@ if(window.MutationObserver){
 }
 const saveBar=Saves.bar({game:"rummy500",el:$("svbar"),
   getSettings:()=>({version:cfg.version,over:cfg.over,humans:cfg.humans,cpus:cfg.cpus,speed:cfg.speed}),
-  applySettings:s=>{ cfg.version=s.version||"standard"; cfg.over=s.over||{}; cfg.humans=s.humans||1; cfg.cpus=s.cpus!=null?s.cpus:1; cfg.speed=s.speed||"normal"; clampSeats(); setSpeedSeg(); drawSetup(); },
-  standard:()=>{ cfg.version="standard"; cfg.over={}; cfg.humans=1; cfg.cpus=1; cfg.speed="normal"; setSpeedSeg(); drawSetup(); },
+  applySettings:s=>{ cfg.version=s.version||"standard"; cfg.over=s.over||{}; cfg.humans=s.humans||1; cfg.cpus=s.cpus!=null?s.cpus:1; cfg.speed=normSpeed(s.speed); clampSeats(); setSpeedSeg(); drawSetup(); },
+  standard:()=>{ cfg.version="standard"; cfg.over={}; cfg.humans=1; cfg.cpus=1; cfg.speed="medium"; setSpeedSeg(); drawSetup(); },
   getSnapshot:()=>(G&&!G.over&&lastSnap&&(!G.roundOver||lastSnap.between))?lastSnap:null,
   loadSnapshot:loadSaved});
 $("scoreBtn").addEventListener("click",()=>{ if(!G){ toast("Start a game first."); return; } showScores(); });
@@ -734,7 +738,7 @@ function loop(){
   if(G.roundOver){
     if(G.over){ Saves.del("rummy500","auto"); lastSnap=null; clockOff(); }   // a finished game is not offered as "Continue last game"
     else takeRoundSnap();
-    busy=true; render(); setTimeout(showRound,cur().human?500:900); return; }
+    busy=true; render(); setTimeout(showRound,Math.round((cur().human?500:900)*speedFactor())); return; }
   const p=cur();
   if(G.turn!==lastTurn){ lastTurn=G.turn; handoffOk=null; sel.clear(); pileFrom=null; if(!p.human) drawnAt={}; }
   busy=!p.human;
@@ -752,7 +756,7 @@ function loop(){
     const res=perform(a);
     if(!res.ok){ /* should not happen */ G.phase==="draw"?perform({t:"stock"}):perform({t:"discard",card:cur().hand[0].id}); }
     loop();
-  },SPEED[cfg.speed]);
+  },Math.round(1000*speedFactor()));
 }
 // pass the phone (hot seat): a sheet that must be answered; the hand stays hidden until the next player says it is them
 function showHandoff(p){
@@ -1066,7 +1070,7 @@ document.addEventListener("DOMContentLoaded",()=>{
 Skins.apply("rummy500"); Sound.mountButton(); Sound.music("rummy500");
 deviceCopy(); drawSetup(); saveBar.refresh(); showSetup(true);
 if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
-window.__rummy={get G(){ return G; },cfg:cfg,act:act,perform:perform,loop:loop,startGame:startGame,get sel(){ return sel; },render:render};
+window.__rummy={speed:()=>cfg.speed,get G(){ return G; },cfg:cfg,act:act,perform:perform,loop:loop,startGame:startGame,get sel(){ return sel; },render:render};
 })();
 </script>
 </body>
