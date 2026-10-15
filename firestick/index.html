@@ -73,21 +73,10 @@
   .mdice{display:flex;gap:2vh;align-items:center;}.mdie{width:11vh;height:11vh;border-radius:2vh;background:#fff;color:#111;font-size:8vh;font-weight:900;display:flex;align-items:center;justify-content:center;box-shadow:0 .6vh 1.6vh #0007;}
   .mtradebox{background:#fff;border-radius:2vh;padding:2vh 2.4vh;width:46vh;max-width:90%;color:#111;box-shadow:0 .8vh 2.4vh #0007;text-align:left;font-size:2.3vh;line-height:1.3;}
   /* monopoly board */
-  .mboard{width:min(90vh,96vw);aspect-ratio:1/1;display:grid;grid-template-columns:repeat(11,1fr);grid-template-rows:repeat(11,1fr);background:#cfe8d4;border:3px solid #0a0f22;border-radius:6px;overflow:hidden;}
-  .msp{position:relative;border:1px solid #2b6b42;background:#eef9f0;overflow:hidden;color:#09250f;}
-  .mspin{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;text-align:center;}
-  .mcbar{width:100%;height:24%;flex:0 0 auto;border-bottom:1px solid #00000040;}
-  .mnm{flex:0 1 auto;min-height:0;overflow:hidden;font-size:1.05vh;font-weight:800;line-height:1.02;padding:1px 1px 0;width:100%;word-break:break-word;letter-spacing:-.2px;}
-  .mic{flex:0 0 auto;font-size:1.9vh;line-height:1;margin-top:.3vh;}
-  .mpr{flex:0 0 auto;margin-top:auto;font-size:1vh;font-weight:700;opacity:.9;padding-bottom:.4vh;}
-  .movl{position:absolute;inset:0;pointer-events:none;}
-  .mcorner{display:flex;align-items:center;justify-content:center;text-align:center;font-weight:800;font-size:1.3vh;background:#dff0e3;color:#09250f;padding:2px;}
-  .mcenter{grid-column:2/11;grid-row:2/11;display:flex;align-items:center;justify-content:center;background:#cfe8d4;}
-  .mlogo{font-size:6vh;font-weight:900;color:#d7263d;transform:rotate(-14deg);letter-spacing:3px;text-shadow:1px 1px 0 #0002;}
-  .mtok{position:absolute;top:50%;left:0;right:0;transform:translateY(-50%);display:flex;flex-wrap:wrap;justify-content:center;gap:0;font-size:1.7vh;line-height:1;z-index:3;}
-  .mown{position:absolute;bottom:1px;right:1px;width:1.4vh;height:1.4vh;border-radius:50%;border:1px solid #0008;box-shadow:0 0 0 1px #fff8;}
-  .mhs{position:absolute;top:1px;left:1px;display:flex;gap:1px;}.mhs i{width:.9vh;height:.9vh;background:#1f9d54;border:.5px solid #0a3;display:block;}.mhs i.hotel{background:#d7263d;width:1.5vh;}
-  .mmort{position:absolute;inset:0;background:repeating-linear-gradient(45deg,#0000,#0000 4px,#0005 4px,#0005 7px);}
+  /* the board itself is monopoly/board.js (shared with the phone game): one static SVG, pieces and marks laid over it */
+  .mboard{width:min(84vh,96vw);aspect-ratio:1/1;border-radius:6px;box-shadow:0 0 0 .5vh #d4a017,0 0 0 .9vh #0a0f22,0 2.4vh 6vh rgba(0,0,0,.8);}
+  .mcenter{display:flex;align-items:center;justify-content:center;width:100%;height:100%;}
+  .mtk{display:inline-block;vertical-align:middle;}.mtk svg{display:block;width:3.4vh;height:3.4vh;}
   .toast{position:fixed;bottom:3vh;left:50%;transform:translateX(-50%);background:#000c;padding:1.4vh 2.6vh;border-radius:2vh;font-size:2.6vh;font-weight:700;opacity:0;transition:opacity .2s;}
   .toast.show{opacity:1;}
 </style>
@@ -102,6 +91,7 @@
 <script src="qr.js"></script>
 <script src="net.js"></script>
 <script src="monodata.js"></script>
+<script src="../monopoly/board.js"></script>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
 <script src="../saves.js"></script>
@@ -940,7 +930,9 @@ function playMonopoly(){
   var order=["red","blue","green","yellow"];
   var active=computeActive(order);
   var COLORVAR={brown:"#8b5a2b",light_blue:"#9fd0ef",pink:"#d93a96",orange:"#f08d1c",red:"#e23b3b",yellow:"#f3d41b",green:"#1f9d54",dark_blue:"#2b4fe0"};
-  var TOKS=["🎩","🏎️","🐕","🚢"];
+  var TOKS=["Top Hat","Race Car","Dog","Battleship"];   // the pieces are drawn by MonoBoard (board.js), by name
+  var SEATN={red:1,blue:2,green:3,yellow:4,purple:5,teal:6,orange:7,pink:8};   // player colour -> the Luxe seat colour of the pieces and owner marks
+  function tokH(c){ return '<span class="mtk">'+(window.MonoBoard?MonoBoard.tokenSVG(tokE[c],SEATN[c]||1):'')+'</span>'; }
   var BOARD=MONO_BOARD, CHANCE=MONO_CHANCE, CHEST=MONO_CHEST, RR_IDX=[5,15,25,35], UTIL_IDX=[12,28];
   var GROUPS={}; BOARD.forEach(function(s,i){ if(s.t==="prop"){ (GROUPS[s.g]=GROUPS[s.g]||[]).push(i); } });
 
@@ -954,7 +946,7 @@ function playMonopoly(){
   var R={}; for(var rk in monoRules) R[rk]=monoRules[rk];
   var fpPool=0, heldCh=0, heldCs=0, snapT=null;
   var centerGame="", centerView="";
-  function centerRender(){ var el=boardEl&&boardEl.querySelector(".mcenter"); if(!el) return; var h=centerView||centerGame; el.innerHTML = h?('<div class="mcw">'+h+'</div>'):'<div class="mlogo">MONOPOLY</div>'; }
+  function centerRender(){ var el=boardEl&&boardEl.querySelector(".mcenter"); if(!el) return; var h=centerView||centerGame; el.innerHTML = h?('<div class="mcw">'+h+'</div>'):(window.MonoBoard?MonoBoard.plateHTML():'MONOPOLY'); }
   function setGameCenter(h){ centerGame=h||""; centerRender(); }
   function deedBox(i,who){ return '<div class="mwho">'+who+'</div><div class="mdeed">'+window.monoDeedHTML(i)+'</div>'; }
   function cardBox(deckName,c,text){ var isCh=deckName==="chance", col=isCh?"#f08d1c":"#2b7be0"; return '<div class="mwho">'+esc(nm(c))+' draws…</div><div class="mcard" style="border-color:'+col+'"><h2 style="color:'+col+'">'+(isCh?"CHANCE":"COMMUNITY CHEST")+'</h2><p>'+esc(text)+'</p></div>'; }
@@ -981,36 +973,30 @@ function playMonopoly(){
 
   // ---------- rendering (HTML grid) ----------
   var boardEl;
-  function spGrid(i){ var r,c; if(i<=10){r=10;c=10-i;} else if(i<=20){c=0;r=20-i;} else if(i<=30){r=0;c=i-20;} else {c=10;r=i-30;} return [r,c]; }
-  function barSide(i){ if(i<=10)return"top"; if(i<=20)return"right"; if(i<=30)return"bottom"; return"left"; }
-  function toksAt(i){ var here=active.filter(function(c){return !bankrupt[c]&&pos[c]===i;}); if(!here.length)return""; return '<div class="mtok">'+here.map(function(c){return '<span style="filter:drop-shadow(0 0 1px '+PC(c)+')">'+tokE[c]+'</span>';}).join("")+'</div>'; }
   function PC(c){ return COL[c]; }
-  function spInner(i){ var s=BOARD[i];
-    if(i===0||i===10||i===20||i===30){ var lab={0:"GO →",10:"JAIL",20:"FREE PARKING",30:"GO TO JAIL"}[i]; return '<div class="mcorner" style="position:absolute;inset:0">'+lab+'</div>'+toksAt(i); }
-    var angle = i<=10?0 : i<=20?90 : i<=30?180 : 270;   // rotate names/price to face each side
-    var inner="";
-    if(s.t==="prop") inner+='<div class="mcbar" style="background:'+COLORVAR[s.g]+'"></div>';
-    inner+='<div class="mnm">'+s.n+'</div>';
-    var icon = s.t==="rr"?"🚂":s.t==="util"?(i===12?"💡":"🚰"):s.t==="chance"?"?":s.t==="cc"?"📦":s.tax==="income"?"💵":s.tax==="luxury"?"💎":"";
-    if(icon) inner+='<div class="mic">'+icon+'</div>';
-    if(s.price) inner+='<div class="mpr">$'+s.price+'</div>';
-    if(owner[i]!=null) inner+='<div class="mown" style="background:'+PC(owner[i])+'"></div>';
-    var h='<div class="mspin" style="transform:rotate('+angle+'deg)">'+inner+'</div><div class="movl">';
-    if(s.t==="prop"&&houses[i]>0) h+= houses[i]===5?'<div class="mhs"><i class="hotel"></i></div>':'<div class="mhs">'+Array(houses[i]+1).join("<i></i>")+'</div>';
-    if(mort[i]) h+='<div class="mmort"></div>';
-    h+='</div>'+toksAt(i);
-    return h;
+  var MB=null, centerEl=null;
+  function boardState(){
+    var own=[],i; for(i=0;i<40;i++) own[i]=owner[i]!=null?(SEATN[owner[i]]||1):0;
+    var toks=active.filter(function(c){return !bankrupt[c];}).map(function(c){ return {id:c,i:pos[c],seat:SEATN[c]||1,tok:tokE[c],cur:active[turn]===c,title:nm(c)}; });
+    var cc=active[turn];
+    return {own:own,houses:houses,mort:mort,toks:toks,hl:(cc&&!bankrupt[cc]&&!over)?pos[cc]:-1};
   }
-  function renderBoard(){ var html=""; for(var i=0;i<40;i++){ var rc=spGrid(i); html+='<div class="msp" style="grid-row:'+(rc[0]+1)+';grid-column:'+(rc[1]+1)+'">'+spInner(i)+'</div>'; } html+='<div class="mcenter"><div class="mlogo">MONOPOLY</div></div>'; boardEl.innerHTML=html; centerRender(); renderScore(); snapSoon(); }
+  function renderBoard(){
+    if(window.MonoBoard){
+      if(!MB||MB.host!==boardEl){ centerEl=document.createElement("div"); centerEl.className="mcenter"; MB=MonoBoard.mount(boardEl,{squares:BOARD,zoom:false,center:centerEl}); }
+      MB.update(boardState());
+    }
+    centerRender(); renderScore(); snapSoon();
+  }
   function renderScore(){ var el=$("mscore"); if(!el) return; var h='<div class="mshead">Players</div>';
     active.forEach(function(c){ var props=[]; for(var i=0;i<40;i++) if(owner[i]===c) props.push(i);
-      h+='<div class="msrow'+(bankrupt[c]?' out':'')+(active[turn]===c&&!bankrupt[c]?' cur':'')+'"><div class="msname"><span class="dot" style="background:'+PC(c)+'"></span>'+tokE[c]+' '+esc(nm(c))+'</div><div class="mscash">'+money(cash[c])+(injail[c]?' 🔒':'')+(jokers[c]?' 🎫'+jokers[c]:'')+(bankrupt[c]?' OUT':'')+'</div><div class="mschips">'+props.map(function(i){ var sp=BOARD[i]; var col=sp.t==="prop"?COLORVAR[sp.g]:"#555"; return '<i style="background:'+col+(mort[i]?';opacity:.35':'')+'" title="'+sp.n+'">'+(houses[i]>0?(houses[i]===5?'H':houses[i]):(sp.t==="rr"?'R':sp.t==="util"?'U':''))+'</i>'; }).join("")+'</div></div>'; });
+      h+='<div class="msrow'+(bankrupt[c]?' out':'')+(active[turn]===c&&!bankrupt[c]?' cur':'')+'"><div class="msname"><span class="dot" style="background:'+PC(c)+'"></span>'+tokH(c)+' '+esc(nm(c))+'</div><div class="mscash">'+money(cash[c])+(injail[c]?' 🔒':'')+(jokers[c]?' 🎫'+jokers[c]:'')+(bankrupt[c]?' OUT':'')+'</div><div class="mschips">'+props.map(function(i){ var sp=BOARD[i]; var col=sp.t==="prop"?COLORVAR[sp.g]:"#555"; return '<i style="background:'+col+(mort[i]?';opacity:.35':'')+'" title="'+sp.n+'">'+(houses[i]>0?(houses[i]===5?'H':houses[i]):(sp.t==="rr"?'R':sp.t==="util"?'U':''))+'</i>'; }).join("")+'</div></div>'; });
     if(R.fpJackpot) h+='<div class="msfp">🅿️ Free Parking: '+money(fpPool)+'</div>';
     el.innerHTML=h; }
   function snapNow(){ var pl=active.map(function(c){ var props=[]; for(var i=0;i<40;i++) if(owner[i]===c) props.push({i:i,h:houses[i],m:mort[i]}); return {color:c,pid:seat[c]||null,name:nm(c),cash:cash[c],net:netWorth(c),jail:injail[c],jokers:jokers[c],bankrupt:bankrupt[c],props:props}; }); send({t:"snap",players:pl,fp:R.fpJackpot?fpPool:0}); }
   function snapSoon(){ clearTimeout(snapT); snapT=setTimeout(function(){ if(live()) snapNow(); },400); }
   function tv(html){ setStatus(html); }
-  function turnBanner(c,extra){ tv('<span class="dot" style="background:'+PC(c)+'"></span> '+tokE[c]+' <b>'+nm(c)+'</b> · '+money(cash[c])+(R.fpJackpot&&fpPool>0?' · 🅿️ '+money(fpPool):'')+(extra?' · '+extra:'')); }
+  function turnBanner(c,extra){ tv('<span class="dot" style="background:'+PC(c)+'"></span> '+tokH(c)+' <b>'+nm(c)+'</b> · '+money(cash[c])+(R.fpJackpot&&fpPool>0?' · 🅿️ '+money(fpPool):'')+(extra?' · '+extra:'')); }
 
   // ---------- money / debt ----------
   async function payBank(c,amt){ cash[c]-=amt; if(R.fpJackpot) fpPool+=amt; if(cash[c]<0) await resolveDebt(c,null); }
@@ -1184,7 +1170,7 @@ function playMonopoly(){
   function sumTxt(items,amt,j){ var a=items.map(function(i){return BOARD[i].n+(mort[i]?" (mortgaged)":"");}); if(amt) a.push(money(amt)); if(j) a.push("a Get Out of Jail Free card"); return a.length?a.join(", "):"nothing"; }
   async function tradeFlow(c){
     var others=alive().filter(function(x){return x!==c;}); if(!others.length) return;
-    var popts=others.map(function(x){ return {id:x,label:tokE[x]+" "+nm(x)+" — "+money(cash[x]),color:x}; }); popts.push({id:"cancel",label:"Cancel",color:"blue"});
+    var popts=others.map(function(x){ return {id:x,label:nm(x)+" ("+tokE[x]+") — "+money(cash[x]),color:x}; }); popts.push({id:"cancel",label:"Cancel",color:"blue"});
     var pk=await ask(c,"Trade with who?","Pick a player",popts,{dflt:"cancel"});
     if(!pk.id||pk.id==="cancel"||others.indexOf(pk.id)<0) return; var p=pk.id;
     var tr=await ask(c,"Trade","",[{id:"cancel",label:"Cancel"}],{kind:"trade",partner:{name:nm(p),color:p},mine:tradeableOf(c),theirs:tradeableOf(p),myCash:cash[c],theirCash:cash[p],myJokers:jokers[c],theirJokers:jokers[p]});
