@@ -130,7 +130,8 @@
   /* a territory's name, owner and borders on a tap (or under the D-pad on TV) */
   html.rk-luxe .rkinfo{left:.5rem; bottom:.5rem; max-width:min(80%,32rem); padding:.45rem .7rem; border:0; border-radius:var(--r-md); z-index:6;
     background:rgba(11,13,27,.94); box-shadow:inset 0 0 0 1px var(--line-gold), var(--elev-2); font:var(--fw-ui) var(--fs-xs)/1.35 var(--font-ui); color:var(--text-1)}
-  html[data-tv] .rkinfo{max-width:min(46%,24rem)}
+  html[data-tv] .rkinfo{left:0; right:0; top:calc(100% + .5rem); bottom:auto; max-width:none; padding:.5rem 1rem; overflow:hidden}
+  html[data-tv] .rkinfo b{float:left; margin-right:1.5rem; white-space:nowrap}
   html.rk-luxe .rkinfo b{display:block; font:400 calc(var(--fs-lg) * 1.22)/1.15 var(--font-display); color:var(--gold-100)}
   html.rk-luxe .rkinfo span{display:block; color:var(--text-2)}
   .tg{outline:none}

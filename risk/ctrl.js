@@ -202,8 +202,8 @@ function create(cfg){
     var own=st.o>=0?nm(st.o)+", "+st.a+" "+(st.a===1?"army":"armies"):"unclaimed", brd=MP.adj[t].map(function(u){ return MP.names[u]; }).join(", ");
     var txt="<b>"+esc(MP.names[t])+"</b><span>"+esc(c.name)+" (+"+c.bonus+") · "+esc(own)+"</span><span>Borders: "+esc(brd)+"</span>";
     var el=board.root.parentNode.querySelector(".rkinfo"); if(!el){ el=document.createElement("div"); el.className="rkinfo"; board.root.parentNode.appendChild(el); }
-    var rt=MP.x[t]<500, tp=MP.y[t]>330;   // the card keeps off the territory it names: the opposite side, the other half
-    el.style.left=rt?"auto":""; el.style.right=rt?".5rem":""; el.style.top=tp?".5rem":""; el.style.bottom=tp?"auto":"";
+    var vp=board.viewPoint?board.viewPoint(t):[MP.x[t]/MP.W,MP.y[t]/MP.H], rt=vp[0]<.5, tp=vp[1]>.55;   // the card keeps off the territory it names: the opposite side, the other half
+    if(!L){ el.style.left=rt?"auto":""; el.style.right=rt?".5rem":""; el.style.top=tp?".5rem":""; el.style.bottom=tp?"auto":""; }   // TV: the card sits under the map (css), so it never hides a territory or a name
     el.innerHTML=txt; el.style.display="block"; clearTimeout(S.infoT); S.infoT=setTimeout(function(){ el.style.display="none"; },4200);
   }
   if(L){   // TV: the territory the D-pad is on names itself (the map's own labels only show when zoomed in)

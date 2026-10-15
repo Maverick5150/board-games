@@ -222,11 +222,13 @@ function create(container,opts){
   self.setTint=function(b){ tint=!!b; paintOwn(); };
   self.setLabels=function(m){ labelsMode=m; applyLabels(); };
   self.centerOf=function(t){ return [MP.x[t],MP.y[t]]; };
+  self.viewPoint=function(t){ var r=root.getBoundingClientRect(); return r.width?[(tx+MP.x[t]/MP.W*r.width*scale)/r.width,(ty+MP.y[t]/MP.H*r.height*scale)/r.height]:[MP.x[t]/MP.W,MP.y[t]/MP.H]; };   // where the badge is in the window now, as fractions of the map frame (zoom and pan included)
 
   /* ---- the D-pad focus ring: ONE group above every piece, moved to the focused territory (static strokes, no filter) ---- */
   function showRing(t){
     if(!ringLayer){ ringLayer=el("g",{class:"rkfring","aria-hidden":"true","pointer-events":"none"},svg); }
     if(svg.lastChild!==ringLayer) svg.appendChild(ringLayer);
+    if(S.names&&ringLayer.nextSibling!==S.names) svg.appendChild(S.names);   // the names stay readable above the ring and the outline
     ringLayer.innerHTML=useStr(t,{fill:"none",stroke:"#080a15","stroke-width":"4","stroke-linejoin":"round"})+useStr(t,{fill:"none",stroke:"#fff3d1","stroke-width":"2","stroke-linejoin":"round"})+
       '<g transform="translate('+MP.x[t]+','+MP.y[t]+')"><circle r="'+(BR+14)+'" fill="none" stroke="rgba(231,202,144,.45)" stroke-width="5"/><circle r="'+(BR+8.5)+'" fill="none" stroke="#080a15" stroke-width="2.6"/><circle r="'+(BR+11)+'" fill="none" stroke="#fff3d1" stroke-width="3.2"/></g>';
     ringLayer.style.display=""; ringT=t;
