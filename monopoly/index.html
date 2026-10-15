@@ -1599,7 +1599,9 @@ function openManage(){
 function colorChip(i){ const s=BOARD[i]; if(s.t==="prop") return `<span class="mn-chip" style="background:${COLORVAR[s.g]}" aria-hidden="true"></span>`; if(s.t==="rr") return `<span class="mn-chip mn-chip--rr" aria-hidden="true"></span>`; if(s.t==="util") return `<span class="mn-chip mn-chip--util" aria-hidden="true"></span>`; return ""; }
 function openPlayers(){
   let h=head("Players",`${tapWord()} a property to see its deed.`)+`<div class="mn-pcards">`;
-  for(const p of G.players){
+  // standing order: the richest (net worth) on top, the bankrupt last, ties in seat order (presentation only)
+  const ranked=G.players.map((p,i)=>({p,i,w:p.bankrupt?-1:netWorth(p)})).sort((a,b)=>(b.w-a.w)||(a.i-b.i)).map(x=>x.p);
+  for(const p of ranked){
     const props=[]; for(let i=0;i<40;i++) if(G.owner[i]===p.id) props.push(i);
     h+=`<div class="mn-pcard${p.bankrupt?" is-out":""}"><div class="mn-pcard__top"><span class="bg-token" data-seat="${seatOf(p)}" aria-hidden="true">${tokV(p.token)}</span>`;
     h+=`<span class="mn-pcard__name">${p.name}${p.human?'':' <span class="bg-tag bg-tag--house">CPU</span>'}${(p.id===G.cur&&!G.over&&!p.bankrupt)?' <span class="bg-tag bg-tag--ok">Turn</span>':''}${p.bankrupt?' <span class="bg-tag bg-tag--paper">Out</span>':''}</span>`;
@@ -1928,6 +1930,7 @@ setInterval(()=>{
 if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
 
 // expose a few for inline handlers already set via window.__*
+window.__mono={get G(){ return G; },netWorth:netWorth,openPlayers:openPlayers};   // read-only view for the test harnesses (like __uno, __risk, __sc)
 })();
 </script>
 </body>
