@@ -36,7 +36,7 @@ window.monoDeedHTML=function(i){
   var C=window.MONO_COLORS, light=(s.g==="yellow"||s.g==="light_blue"), band="", body="";
   var money=function(n){return "$"+n;};
   if(s.t==="prop"){
-    band='<div class="deed-band'+(light?" light":"")+'" style="background:'+C[s.g]+'"><div class="deed-title">TITLE DEED</div><div class="deed-name">'+s.n+'</div></div>';
+    band='<div class="deed-band'+(light?" light":"")+'" style="background:'+C[s.g]+'"><div class="deed-title">DEED</div><div class="deed-name">'+s.n+'</div></div>';
     var L=["Rent","Rent with 1 House","Rent with 2 Houses","Rent with 3 Houses","Rent with 4 Houses","Rent with HOTEL"];
     for(var k=0;k<6;k++) body+='<div class="dl"><span>'+L[k]+'</span><b>'+money(s.rent[k])+'</b></div>';
     body+='<div class="dl rule"><span>Mortgage Value</span><b>'+money(s.mort)+'</b></div>';
@@ -44,10 +44,10 @@ window.monoDeedHTML=function(i){
     body+='<div class="dl sub"><span>Hotels</span><b>'+money(s.house)+' + 4 houses</b></div>';
     body+='<div class="deed-note">If a player owns ALL the lots of this color group, the rent is doubled on unimproved lots.</div>';
   } else if(s.t==="rr"){
-    band='<div class="deed-band" style="background:#1e1e1e"><div class="deed-title">TITLE DEED</div><div class="deed-name">'+s.n+'</div></div>';
+    band='<div class="deed-band" style="background:#1e1e1e"><div class="deed-title">DEED</div><div class="deed-name">'+s.n+'</div></div>';
     body+='<div class="icon-band">🚂</div><div class="dl"><span>Rent</span><b>$25</b></div><div class="dl"><span>If 2 Railroads are owned</span><b>$50</b></div><div class="dl"><span>If 3 Railroads are owned</span><b>$100</b></div><div class="dl"><span>If 4 Railroads are owned</span><b>$200</b></div><div class="dl rule"><span>Mortgage Value</span><b>$100</b></div>';
   } else {
-    band='<div class="deed-band" style="background:#1e1e1e"><div class="deed-title">TITLE DEED</div><div class="deed-name">'+s.n+'</div></div>';
+    band='<div class="deed-band" style="background:#1e1e1e"><div class="deed-title">DEED</div><div class="deed-name">'+s.n+'</div></div>';
     body+='<div class="icon-band">'+(i===12?"💡":"🚰")+'</div><div class="deed-note" style="font-style:normal;font-size:13px;color:#15110a">If <b>one</b> Utility is owned, rent is <b>4×</b> the amount shown on the dice.<br>If <b>both</b> Utilities are owned, rent is <b>10×</b> the amount shown on the dice.</div><div class="dl rule"><span>Mortgage Value</span><b>$75</b></div>';
   }
   return '<div class="deed">'+band+'<div class="deed-body">'+body+'</div></div>';

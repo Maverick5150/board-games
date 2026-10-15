@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<link rel="icon" type="image/png" href="../icon.png">
 <meta name="theme-color" content="#0e1630">
 <title>Board Games — Controller</title>
 <style>
@@ -207,7 +208,7 @@ function showManage(o){
     return '<button class="prow2" data-i="'+p.i+'"><span class="chip" style="background:'+chipColor(p.i)+'"></span>'+esc(d.n)+'<small>'+esc(propTag(p).trim())+' ›</small></button>'; }).join("");
   var extra=(o.extra||[]).map(function(op,k){ return '<button class="opt sm" data-x="'+k+'" style="background:'+(op.color?(COL[op.color]||op.color):c)+'">'+esc(op.label)+'</button>'; }).join("");
   main.innerHTML='<div class="title" style="color:'+c+'">'+esc(o.title||"Properties")+'</div>'+(o.sub?'<div class="sub">'+esc(o.sub)+'</div>':'')+
-    (rows||'<div class="sub">You don’t own any properties yet.</div>')+'<div class="sub" style="font-size:12px">Tap a property to see its title deed</div>'+
+    (rows||'<div class="sub">You don’t own any properties yet.</div>')+'<div class="sub" style="font-size:12px">Tap a property to see its deed</div>'+
     '<div class="opts">'+extra+'</div>';
   Array.prototype.forEach.call(main.querySelectorAll(".prow2"), function(b){ b.onclick=function(){ showDeed(o,+b.dataset.i); }; });
   Array.prototype.forEach.call(main.querySelectorAll("button[data-x]"), function(b){ b.onclick=function(){ reopenIdx=null; sendPick(o,o.extra[+b.dataset.x].id); }; });

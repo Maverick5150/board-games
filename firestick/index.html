@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="../icon.png">
 <meta name="theme-color" content="#0e1630">
 <title>Board Games — TV / Party Mode</title>
 <style>
@@ -1053,7 +1054,7 @@ function playMonopoly(){
   function unMort(c,i){ var s=BOARD[i]; if(owner[i]!==c||!mort[i]) return; var cost=Math.ceil(s.mort*1.1); if(cash[c]<cost) return; cash[c]-=cost; mort[i]=false; }
   async function manage(c){
     while(true){
-      var pick=await ask(c,"Your properties — "+money(cash[c]),"Tap a property to see its title deed",[{id:"done",label:"◀ Done"}],{kind:"manage",props:propList(c,false),extra:[{id:"done",label:"◀ Done",color:"blue"}]});
+      var pick=await ask(c,"Your properties — "+money(cash[c]),"Tap a property to see its deed",[{id:"done",label:"◀ Done"}],{kind:"manage",props:propList(c,false),extra:[{id:"done",label:"◀ Done",color:"blue"}]});
       if(!pick.id||pick.id==="done") return;
       var op=pick.id[0], idx=parseInt(pick.id.slice(1),10);
       if(owner[idx]===c){ if(op==="b") buildHouse(c,idx); else if(op==="s") sellHouse(c,idx); else if(op==="m") doMort(c,idx); else if(op==="u") unMort(c,idx); }
