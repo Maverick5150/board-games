@@ -83,10 +83,7 @@
   .mn-game{display:flex; flex-direction:column; align-items:center; padding:.25rem 0 1.5rem}
   body.mn-in-setup .mn-game{display:none !important}
   #players{width:100%; max-width:40rem; padding:.875rem var(--gutter) .375rem}
-  /* a bankrupt player's chip: the shared is-out fades the whole chip (its "Bankrupt" line fell to 2.7:1); here the token fades and the
-     text keeps full contrast (text-3 on ink-2: 7.8:1) */
-  #players .bg-player.is-out{opacity:1; background:var(--ink-2)}
-  #players .bg-player.is-out .bg-token, #players .bg-player.is-out .bg-player__cpu{opacity:.45}
+  /* a bankrupt player's chip (.is-out): a dark chip, the token and the CPU badge faded, the text at full contrast: ui/theme.css since 4c */
   .mn-statuscard{display:flex; align-items:center; gap:.75rem; width:calc(100% - 2 * var(--gutter)); max-width:38rem; margin:.25rem 0 0; padding:.625rem .875rem; border-radius:var(--r-lg)}
   .mn-dice{display:flex; gap:.375rem; flex:none}
   .mn-die{width:2.25rem; height:2.25rem; font:var(--fw-caps) var(--fs-lg)/1 var(--font-ui)}
@@ -228,10 +225,9 @@
   .mn-tokmsg{min-height:1.35em; margin:.5rem 0 0; font:var(--fw-body) var(--fs-xs)/1.35 var(--font-ui); color:var(--text-1)}
   .mn-rules .bg-row__desc{color:var(--text-3)}
   .mn-rulenote{margin:.5rem 0 0; font:var(--fw-body) var(--fs-xs)/1.35 var(--font-ui); color:var(--text-1)}
-  /* every text right on the setup scene (marked data-stage-text: the hero, the section eyebrows, the captions, the way back) carries a
-     soft dark halo, painted once with the text (static, no filter, nothing animates): a light beam at its brightest behind a gold
-     section eyebrow or the hero pitch took them to 3.4:1 and 3.3:1 on the phone; with the halo every one keeps >= 4.5:1 (repair) */
-  body.bg-app--scene [data-stage-text]{text-shadow:0 0 .15em rgba(4,5,12,.95), 0 0 .45em rgba(4,5,12,.8), 0 0 1em rgba(4,5,12,.55)}
+  /* every text right on the setup scene (marked data-stage-text: the hero, the section eyebrows, the captions, the way back) carries the
+     shared soft dark halo (ui/theme.css since 4c; it began here): a light beam at its brightest behind a gold section eyebrow or the
+     hero pitch took them to 3.4:1 and 3.3:1 on the phone; with the halo every one keeps >= 4.5:1 (repair) */
   /* saves.js bars (setup #svbar, Menu #svbar2), dressed in Luxe (ids, data-a and behaviour unchanged) */
   #svbar.svbar, #svbar2.svbar{margin:0; padding:var(--sp-3); border:0; border-radius:var(--r-lg); background:var(--panel-fill); box-shadow:var(--panel-edge),var(--elev-1)}
   #svbar h4, #svbar2 h4{display:none}
@@ -276,12 +272,12 @@
   html[data-tv] #svbar button, html[data-tv] #svbar2 button{grid-template-columns:minmax(0,1fr); justify-items:center; align-content:center; row-gap:.3rem; padding:.625rem .5rem}
   html[data-tv] #svbar button .bg-ico, html[data-tv] #svbar2 button .bg-ico{width:1.25em; height:1.25em}
   /* TV: focusable neighbours stand at least 1.5rem apart, so the focused one's ivory ring (.4375rem, more with the 1.05 lift) never
-     touches the next control: the save bars (rows and columns), the player pickers, the token keypad, the Players sheet's property
-     chips and the top bar's sound and menu buttons (step 4 review: gaps of 5.7 to 10.3 px against an 11 px ring) */
+     touches the next control: the save bars (rows and columns) and the Players sheet's property chips here; the player pickers, the
+     token keypad (.bg-seg) and the top bar's sound and menu buttons get it from ui/theme.css since 4c (step 4 review: gaps of 5.7 to
+     10.3 px against an 11 px ring) */
   html[data-tv] #svbar .r, html[data-tv] #svbar2 .r{gap:1.5rem}
   html[data-tv] #svbar .r:not(:last-child), html[data-tv] #svbar2 .r:not(:last-child){margin-bottom:1.5rem}
-  html[data-tv] #segH, html[data-tv] #segC, html[data-tv] .mn-toks, html[data-tv] .mn-pchips{gap:1.5rem}
-  html[data-tv] .bg-topbar__end{gap:1.5rem}
+  html[data-tv] .mn-pchips{gap:1.5rem}
   /* in game: the board on the left, the players, the status, the actions and the log in a column beside it */
   /* the grid is exactly as tall as the board, so the log takes the room left in the column and scrolls inside it: a long game never
      makes the page taller than the screen (a scrolled page would slide the actions under the top bar) */
