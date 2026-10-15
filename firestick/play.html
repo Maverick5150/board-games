@@ -91,6 +91,145 @@
   .ph-effects{margin-top:.25rem;}
   .ph-link{display:inline-flex;}
 </style>
+<style id="rkLuxCss">
+/* the Risk phone in Midnight Luxe: the same panel, sheet and map-card rules the single-device page uses (risk/index.html, in game), so the Party phone looks the same. Text-align: the page default here is centred */
+.scph,.unph,.rkph{text-align:left}
+  /* ---------- in game: the stage with the framed world map ---------- */
+  .rk-game{display:flex; flex-direction:column; align-items:center; padding:0 var(--gutter) 1.25rem}
+  
+  #legend{width:min(100%,56rem); padding:.875rem 0 .5rem}
+  #legend .bg-token{font-size:var(--fs-micro)}
+  .rk-m{display:inline-flex; align-items:center; gap:.2rem; margin-right:.55rem}
+  .rk-m:last-child{margin-right:0}
+  .rk-m .bg-ico{width:.95em; height:.95em; color:var(--gold-200)}
+  .rk-m b{font-weight:var(--fw-ui-strong); color:inherit}
+  #rkframe{position:relative; width:min(100%,56rem); margin:.5rem 0 .375rem; border-radius:16px}
+  #rkboard{border-radius:12px}
+  /* the map's pulsing marks (the territory to attack from, the targets, the empty territories): the same rings and the same 1.1 s pulse
+     (opacity 1 to .35 and back), drawn on ONE overlay under the pieces (board.js pulseLayer) that pulses as a whole on its own layer, so
+     a beat never repaints the map (an opacity beat on the compositor). One finite beat at a time from the ONE effects ticker (pulseTick):
+     the page runs no endless CSS animation (README section 6); still and lit under Reduce effects and reduced motion. Without ui.js the
+     board's own CSS pulse runs in each territory, as before */
+  html.rk-luxe .rkpulse{animation:none}
+  html.rk-luxe .rkpulsel{will-change:opacity}
+  html.rk-luxe #rkboard.is-b1 .rkpulsel{animation:rk-b1 1.1s ease-in-out 1}
+  html.rk-luxe #rkboard.is-b2 .rkpulsel{animation:rk-b2 1.1s ease-in-out 1}
+  @keyframes rk-b1{50%{opacity:.35}}
+  @keyframes rk-b2{50%{opacity:.35}}
+  html[data-effects="reduced"] .rkflash, html[data-effects="reduced"] .rkfl, html[data-motion="reduce"] .rkflash, html[data-motion="reduce"] .rkfl{animation:none !important}
+  html[data-effects="reduced"] .rkpulse, html[data-motion="reduce"] .rkpulse, html[data-effects="reduced"] .rkpulsel, html[data-motion="reduce"] .rkpulsel{animation:none !important}
+  @media (prefers-reduced-motion: reduce){ .rkpulse, .rkpulsel, .rkflash, .rkfl{animation:none !important} }
+  /* a territory's name, owner and borders on a tap (or under the D-pad on TV) */
+  html.rk-luxe .rkinfo{left:.5rem; bottom:.5rem; max-width:min(80%,32rem); padding:.45rem .7rem; border:0; border-radius:var(--r-md); z-index:6;
+    background:rgba(11,13,27,.94); box-shadow:inset 0 0 0 1px var(--line-gold), var(--elev-2); font:var(--fw-ui) var(--fs-xs)/1.35 var(--font-ui); color:var(--text-1)}
+  html[data-tv] .rkinfo{left:0; right:0; top:calc(100% + .5rem); bottom:auto; max-width:none; padding:.5rem 1rem; overflow:hidden}
+  html[data-tv] .rkinfo b{float:left; margin-right:1.5rem; white-space:nowrap}
+  html[data-tv] .rkinfo span{overflow:hidden}   /* a long border list wraps in its own column, never under the name (review, step 5) */
+  html.rk-luxe .rkinfo b{display:block; font:400 calc(var(--fs-lg) * 1.22)/1.15 var(--font-display); color:var(--gold-100)}
+  html.rk-luxe .rkinfo span{display:block; color:var(--text-2)}
+  /* the phone (review, step 5): a compact card across the frame, on the edge away from the territory it names (ctrl.js sets .is-top), clear
+     of the Zoom / Fit button in the frame's corner; the name and its continent / owner on one line, its borders under them */
+  html.rk-luxe:not([data-tv]) .rkinfo{left:3.75rem; right:.5rem; top:auto; bottom:.5rem; max-width:none; padding:.375rem .7rem .45rem}
+  html.rk-luxe:not([data-tv]) .rkinfo.is-top{left:.5rem; top:.5rem; bottom:auto}
+  html.rk-luxe:not([data-tv]) .rkinfo b{display:inline; font-size:var(--fs-lg); margin-right:.45rem}
+  html.rk-luxe:not([data-tv]) .rkinfo b + span{display:inline}
+  .tg{outline:none}
+  /* the panel under the map (ctrl.js in its Luxe mode) */
+  .rk-panel{display:grid; gap:.5rem; width:min(100%,56rem)}
+  .rk-stat{display:flex; align-items:center; gap:.625rem; min-height:calc(1.35em + 1.25rem); padding:.625rem .875rem; border-radius:var(--r-lg);
+    background:var(--panel-fill); box-shadow:var(--panel-edge), var(--elev-2); font:var(--fw-ui) var(--fs-md)/1.35 var(--font-ui); color:var(--text-1)}
+  .rk-stat[data-seat]{box-shadow:var(--panel-edge), inset 0 0 0 1.5px var(--seat-ring), var(--elev-2)}
+  .rk-stat b{font-weight:var(--fw-ui-strong)}
+  .rk-stat > .bg-ico{flex:none; width:1.3rem; height:1.3rem; color:var(--gold-200)}
+  .rk-dot{flex:none; width:.75rem; height:.75rem; border-radius:50%; background:var(--seat); box-shadow:0 0 0 2px var(--ink-1), 0 0 0 3px rgba(255,255,255,.18)}
+  .rk-dice{padding:.5rem .75rem .6rem; border-radius:var(--r-lg); background:var(--ink-2); box-shadow:var(--well-edge); text-align:center}
+  .rk-dice:empty{display:none}
+  .rk-dicerow{display:flex; align-items:flex-end; justify-content:center; gap:1rem}
+  .rk-side{display:grid; justify-items:center; gap:.3rem; min-width:0}
+  .rk-side__who{max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:var(--fw-ui) var(--fs-xs)/1.2 var(--font-ui); color:var(--text-2)}
+  .rk-side__dice{display:flex; gap:.4rem}
+  .rk-dice .bg-die{width:2.5rem; height:2.5rem}
+  .rk-dice .bg-die.lost{opacity:.4}
+  .rk-vs{padding-bottom:.6rem; font:400 var(--fs-lg)/1 var(--font-display); color:var(--gold-200)}
+  .rk-res{margin:.45rem 0 0; font:var(--fw-body) var(--fs-sm)/1.35 var(--font-ui); color:var(--text-2)}
+  .rk-res b{color:var(--text-1)}
+  .rk-res .rk-cq{color:var(--gold-100)}
+  .rk-acts{display:flex; flex-wrap:wrap; gap:.5rem; justify-content:center}
+  .rk-acts:empty{display:none}
+  .rk-acts .bg-btn{padding:0 .875rem}
+  .rk-amt{display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:.4rem .75rem; width:100%}
+  .rk-amt__lbl{font:var(--fw-ui) var(--fs-sm)/1.2 var(--font-ui); color:var(--text-2)}
+  .rk-amt__seg{flex:0 1 15rem}
+  .rk-bar{display:flex; flex-wrap:wrap; gap:.5rem; justify-content:center}
+  .rk-bar .bg-btn--sm{padding:0 .75rem}
+  .rk-zoom{display:flex; gap:.5rem}
+  .rk-log{min-height:3rem; text-align:center; font:var(--fw-body) var(--fs-micro)/1.45 var(--font-ui); color:var(--text-2)}
+  html:not([data-tv]) .rk-hints{display:none}
+  .rk-hints{width:min(100%,56rem)}
+  /* the choice sheets keep the map in view: a lighter scrim in play (the map must stay readable above the sheet) */
+  body.bg-app:not(.rk-in-setup){--scrim:rgba(3,4,10,.42)}
+  .rk-shead{display:grid; gap:.25rem; margin-bottom:1rem}
+  .rk-shead .bg-sheet__sub{margin:0}
+  .rk-shead .bg-sheet__sub b{color:var(--text-1); font-weight:var(--fw-ui-strong)}
+  .rk-dice--sheet{margin:0 0 1rem}
+  /* the choice sheets are compact: on a phone the main choice, the dice and the step row fit in the room under the map */
+  .rk-asheet .rk-shead{margin-bottom:.75rem}
+  .rk-asheet .bg-sheet__title{font-size:var(--fs-xl)}
+  .rk-asheet .bg-sheet__options{gap:.5rem}
+  html[data-tv] #handoffSheet .bg-sheet__options{gap:1.5rem}   /* the defender question: the focus ring never touches the next option */
+  .rk-asheet .bg-sheet__option{padding:.5rem .75rem; gap:.7rem}
+  .rk-asheet .bg-sheet__label{font-size:var(--fs-lg)}
+  .rk-asheet .rk-dice--sheet{margin:0 0 .75rem; padding:.4rem .6rem .45rem}
+  .rk-asheet .rk-dice--sheet .bg-die{width:2.1rem; height:2.1rem}
+  .rk-asheet .rk-dice--sheet .rk-res{margin-top:.3rem; font-size:var(--fs-xs)}
+  .rk-pick{display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:.75rem; margin:0 calc(-1 * var(--focus-room)) .25rem; padding:var(--focus-room)}
+  .rk-step .bg-stepper__val{min-width:3rem; text-align:center}
+  .rk-sbtns{display:flex; flex-wrap:wrap; gap:.625rem; margin:.5rem calc(-1 * var(--focus-room)) 0; padding:var(--focus-room)}
+  .rk-sbtns .bg-btn{flex:1 1 0; min-width:0; white-space:normal}
+  .rk-sbtns--end{margin-top:.75rem}
+  .rk-note{margin:.75rem 0 0; font:var(--fw-body) var(--fs-sm)/1.45 var(--font-ui); color:var(--text-2)}
+  /* the territory cards (card art from ctrl.js, step 5 rebuilds it): bigger, the Luxe serif, readable names, a D-pad ring */
+  .rk-cards{gap:.5rem; margin:0 calc(-1 * var(--focus-room)) .25rem; padding:calc(var(--focus-room) + .5rem) var(--focus-room) var(--focus-room)}
+  .rk-cards .rkcard{width:6.2rem; height:9.5rem; padding:.2rem; border-radius:.6rem; border-top-width:.55rem; font-family:var(--font-display)}
+  .rk-cards .rkcard .cn{font:400 var(--fs-micro)/1.1 var(--font-display); min-height:2.5em; letter-spacing:0}
+  .rk-cards .rkcard .cs{height:3rem}
+  .rk-cards .rkcard .cs img{max-width:5.25rem; max-height:2.9rem}
+  .rk-cards .rkcard .cs.wide svg{width:5.25rem; height:1.75rem}
+  .rk-cards .rkcard .cf{font-size:var(--fs-micro)}
+  .rk-cards .rkcard .cf svg:not(.bg-ico){width:2.4rem; height:2.4rem}
+  .rk-cards .rkcard .own{right:.2rem; top:.05rem; color:#9a6a10}
+  .rk-cards .rkcard .own .bg-ico{width:1rem; height:1rem}
+  .rk-cards .rkcard.sel{transform:translateY(-.45rem); box-shadow:0 0 0 3px var(--gold-200), 0 6px 12px rgba(0,0,0,.65)}
+  .rk-cards .rkcard:focus{outline:none}
+  .rk-cards .rkcard.is-focus, .rk-cards .rkcard:focus-visible{box-shadow:var(--focus-ring) !important; z-index:2}
+  .rk-star{display:inline-flex; vertical-align:-.15em; color:var(--gold-200)}
+  .rk-star .bg-ico{width:1em; height:1em}
+  .rk-bonus{display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:.5rem .875rem; margin:.5rem 0 0; font:var(--fw-ui) var(--fs-sm)/1.3 var(--font-ui); color:var(--text-2)}
+  .rk-radio{display:inline-flex; align-items:center; gap:.4rem; min-height:var(--tap); color:var(--text-1)}
+  .rk-radio input{width:1.25rem; height:1.25rem; accent-color:var(--gold-200)}
+  .rk-mission{margin:0 0 .25rem; padding:1rem 1.125rem; border-radius:var(--r-md); text-align:center; color:var(--text-on-paper); font:400 var(--fs-xl)/1.3 var(--font-display);
+    background:radial-gradient(90% 75% at 50% 30%, #f3e4bf 0%, #e6d2a6 52%, #d0b37e 100%); box-shadow:inset 0 0 0 1px rgba(122,90,28,.55), var(--elev-1)}
+  .rk-pad .bg-score td:first-child{white-space:normal}
+  /* the phone's four columns sit closer, so "Territories" fits with no sideways scroll at 390 px */
+  html:not([data-tv]) .rk-pad .bg-score th{padding:.25rem .3rem .55rem; letter-spacing:.02em}
+  html:not([data-tv]) .rk-pad .bg-score td{padding:.6rem .3rem}
+  html:not([data-tv]) .rk-pad .bg-score th:first-child, html:not([data-tv]) .rk-pad .bg-score td:first-child{padding-left:.45rem}
+  html:not([data-tv]) .rk-pad .bg-score th:last-child, html:not([data-tv]) .rk-pad .bg-score td:last-child{padding-right:.45rem}
+  .rk-pn{display:inline-flex; flex-wrap:wrap; align-items:center; gap:.35rem}
+  .rk-holds{display:block; margin:.2rem 0 0 1.3rem; font:var(--fw-body) var(--fs-micro)/1.3 var(--font-ui); color:var(--text-2)}
+  .rk-conts{display:flex; flex-wrap:wrap; gap:.35rem .9rem; margin:.875rem 0 0; font:var(--fw-ui) var(--fs-xs)/1.3 var(--font-ui); color:var(--text-2)}
+  .rk-cont i{display:inline-block; width:.65rem; height:.65rem; margin-right:.35rem; border-radius:50%; vertical-align:.02em; box-shadow:0 0 0 1px rgba(0,0,0,.4)}
+  .rk-hqtab td:nth-child(2), .rk-hqtab td:nth-child(3){text-align:left}
+  .rk-hqtab th:nth-child(2), .rk-hqtab th:nth-child(3){text-align:left}
+  /* the hand-off (hot seat): a sheet that must be answered */
+  .rk-ho{display:grid; justify-items:center; gap:.75rem; padding:.25rem 0 .5rem; text-align:center}
+  .rk-ho__to{display:flex; align-items:center; gap:.625rem; margin:0; font:var(--fw-ui) var(--fs-xl)/1.3 var(--font-ui); color:var(--text-2)}
+  .rk-ho__to b{color:var(--text-1)}
+  .rk-ho .bg-token{width:2.75rem; height:2.75rem; font-size:var(--fs-sm)}
+  .rk-ho .bg-btn{margin-top:.5rem}
+  .rk-winhome{margin-top:.75rem}
+
+</style>
 </head>
 <body class="bg-app bg-app--scene">
   <header class="bg-topbar" id="topbar">
@@ -347,7 +486,8 @@ function closeOv(){ var ov=$("ov"), was=ov.classList.contains("on"); closeSheet(
 function showPlayers(){
   if(!lastSnap) return; ovMode="players"; mirror(null);
   var h='<h2 class="bg-sheet__title">Players &amp; holdings</h2>'+(lastSnap.fp?'<p class="sub">Free Parking pot: $'+lastSnap.fp+'</p>':'');
-  (lastSnap.players||[]).forEach(function(p){
+  /* standing order: the richest (net worth) first, the bankrupt last, ties in seat order (presentation only) */
+  (lastSnap.players||[]).map(function(p,i){ return {p:p,i:i,w:p.bankrupt?-1:(+p.net||0)}; }).sort(function(a,b){ return (b.w-a.w)||(a.i-b.i); }).map(function(x){ return x.p; }).forEach(function(p){
     var n=sn(p.color);
     h+='<div class="pcard bg-card'+(p.bankrupt?" is-out":"")+'"><div class="pcard__head"><b class="pcard__who" data-seat="'+n+'"><span class="dotc" aria-hidden="true"></span>'+esc(p.name)+(p.pid===myPid?" (you)":"")+(p.bankrupt?" — OUT":"")+'</b><span class="pcard__cash">$'+p.cash+'</span></div>'+
       '<div class="pcard__meta">Net worth $'+p.net+(p.jail?" · In Jail":"")+(p.jokers?" · "+p.jokers+" jail card"+(p.jokers>1?"s":""):"")+'</div>'+
@@ -416,10 +556,10 @@ function scShow(st,active,ask){
     if(sc&&sc.ctrl) sc.ctrl.destroy();
     main.className="big scroll"; main.style.justifyContent="flex-start";
     main.innerHTML='<div class="scph" style="width:100%;max-width:640px"><div id="scC"></div></div>';
-    var ctrl=Scatter.UI.create({root:$("scC"),toast:toast,send:scSend,readyLabel:"I'm done scoring",onProgress:function(ans){ if(net) net.send({t:"view",pid:myPid,sc:{t:"prog",answers:ans}}); }});
+    var ctrl=Scatter.UI.create({root:$("scC"),toast:toast,send:scSend,readyLabel:"Done scoring",luxe:!!(BG()&&BG().sheet&&BG().icon),tv:function(){ return false; },icon:function(n){ return BG()&&BG().icon?BG().icon(n):""; },seatOf:function(i){ var s=window.__scV&&window.__scV.seats; return (s&&s[i])||(i%8)+1; },onProgress:function(ans){ if(net) net.send({t:"view",pid:myPid,sc:{t:"prog",answers:ans}}); }});
     sc={el:main.firstChild,ctrl:ctrl};
   }
-  sc.ctrl.update(st); window.__scV=st; window.__sc2=sc;
+  window.__scV=st; sc.ctrl.update(st); window.__sc2=sc;
 }
 function afkHTML(id){ return '<div class="afk" role="status">The computer is playing for you <button type="button" class="bg-btn bg-btn--secondary bg-btn--sm" id="'+id+'">Take over</button></div>'; }
 var un=null, unAsk=null;
@@ -435,11 +575,25 @@ function unShow(st,active,ask){
     if(un&&un.ctrl) un.ctrl.destroy();
     main.className="big scroll"; main.style.justifyContent="flex-start";
     main.innerHTML='<div class="unph" style="width:100%;max-width:640px"><div id="unAfk"></div><div id="unC"></div></div>';
-    var ctrl=Uno.Ctrl.create({root:$("unC"),toast:toast,send:unSend});
+    var ctrl=Uno.Ctrl.create({root:$("unC"),toast:toast,send:unSend,luxe:true,tv:function(){ return false; },pulse:function(){ return !document.hidden; },gameKey:function(){ return room; },seatOf:function(i){ var s=window.__unV&&window.__unV.seats; return (s&&s[i])||(i%10)+1; }});
     un={el:main.firstChild,ctrl:ctrl};
   }
-  un.ctrl.update(st); window.__unV=st; window.__un=un;
+  window.__unV=st; un.ctrl.update(st); window.__un=un;
   var af=$("unAfk"); if(af){ if(st.afk){ af.innerHTML=afkHTML("unTake"); $("unTake").onclick=function(){ if(net) net.send({t:"view",pid:myPid,take:1}); }; } else af.innerHTML=""; }
+}
+/* the map's pulsing marks, one finite 1.1 s beat at a time from the effects ticker (a MutationObserver on one stage motif, as the Risk page does): no endless CSS animation */
+var PULSE={mo:null,m:null,at:0,b:0};
+function pulseTick(){
+  var bd=$("rkboard"); if(!bd||!bd.querySelector(".rkpulsel circle, .rkpulse")) return;
+  var t=performance.now(); if(t-PULSE.at<1080) return;
+  PULSE.at=t; PULSE.b=PULSE.b===1?2:1;
+  bd.classList.remove(PULSE.b===1?"is-b2":"is-b1"); bd.classList.add(PULSE.b===1?"is-b1":"is-b2");
+}
+function pulseWatch(){
+  var m=document.querySelector(".bg-ambient .bg-motifs > b");
+  if(!m||!window.MutationObserver||(PULSE.m===m&&m.isConnected)) return;
+  if(PULSE.mo) PULSE.mo.disconnect();
+  PULSE.m=m; PULSE.mo=new MutationObserver(pulseTick); PULSE.mo.observe(m,{attributes:true,attributeFilter:["style"]});
 }
 var rk=null, rkAsk=null;
 function rkSend(a){
@@ -453,12 +607,13 @@ function rkShow(st,active,ask){
   if(!rk||!main.contains(rk.el)){
     if(rk&&rk.ctrl) rk.ctrl.destroy();
     main.className="big scroll"; main.style.justifyContent="flex-start";
-    main.innerHTML='<div class="rkph" style="width:100%;max-width:680px"><div id="rkAfk"></div><div id="rkB"></div><div id="rkP"></div></div>';
-    var board=Risk.Board.create($("rkB"),{labels:"auto"});
-    var ctrl=Risk.Ctrl.create({root:$("rkP"),board:board,toast:toast,send:rkSend,blitzDelay:450});
+    main.innerHTML='<div class="rkph" style="width:100%;max-width:680px"><div id="rkAfk"></div><div id="rkB"><div id="rkframe"><div id="rkboard"></div></div></div><div id="rkP"></div></div>';
+    document.documentElement.classList.add("rk-luxe"); pulseWatch(); document.addEventListener("bgui:stage",pulseWatch);
+    var board=Risk.Board.create($("rkboard"),{labels:"auto",pulseLayer:true});
+    var ctrl=Risk.Ctrl.create({root:$("rkP"),board:board,toast:toast,send:rkSend,blitzDelay:450,luxe:true,tv:function(){ return false; },seatOf:function(i){ var P=(window.__rkV&&window.__rkV.players)||[], p=P[i]; if(!p) return 1; return p.neutral?10:([1,2,3,4,9,8][(p.ci==null?i:p.ci)%6]||1); }});
     rk={el:main.firstChild,board:board,ctrl:ctrl};
   }
-  rk.board.setView(Risk.Ctrl.boardView(st)); rk.ctrl.update(st); window.__rkV=st; window.__rk=rk;
+  rk.board.setView(Risk.Ctrl.boardView(st)); window.__rkV=st; rk.ctrl.update(st); window.__rk=rk;
   var af=$("rkAfk"); if(af){ if(st.afk){ af.innerHTML=afkHTML("rkTake"); $("rkTake").onclick=function(){ if(net) net.send({t:"view",pid:myPid,take:1}); }; } else af.innerHTML=""; }
 }
 /* the winner screen: the Victory screen (BGUI.win + celebrate, real numbers from the host) over a quiet "X wins" card that stays until the host sends "lobby" */
