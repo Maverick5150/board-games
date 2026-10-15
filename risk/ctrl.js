@@ -199,9 +199,12 @@ function create(cfg){
   function toast(m,icon){ if(cfg.toast){ if(L) cfg.toast(m,{icon:icon||"info"}); else cfg.toast(m); } }
   function info(t){
     var st=V.terr[t], c=MP.continents[MP.cont[t]];
-    var txt=MP.names[t]+" — "+c.name+" (+"+c.bonus+") · "+(st.o>=0?nm(st.o)+", "+st.a+" "+(st.a===1?"army":"armies"):"unclaimed")+" · borders: "+MP.adj[t].map(function(u){ return MP.names[u]; }).join(", ");
+    var own=st.o>=0?nm(st.o)+", "+st.a+" "+(st.a===1?"army":"armies"):"unclaimed", brd=MP.adj[t].map(function(u){ return MP.names[u]; }).join(", ");
+    var txt="<b>"+esc(MP.names[t])+"</b><span>"+esc(c.name)+" (+"+c.bonus+") · "+esc(own)+"</span><span>Borders: "+esc(brd)+"</span>";
     var el=board.root.parentNode.querySelector(".rkinfo"); if(!el){ el=document.createElement("div"); el.className="rkinfo"; board.root.parentNode.appendChild(el); }
-    el.textContent=txt; el.style.display="block"; clearTimeout(S.infoT); S.infoT=setTimeout(function(){ el.style.display="none"; },4200);
+    var rt=MP.x[t]<500, tp=MP.y[t]>330;   // the card keeps off the territory it names: the opposite side, the other half
+    el.style.left=rt?"auto":""; el.style.right=rt?".5rem":""; el.style.top=tp?".5rem":""; el.style.bottom=tp?"auto":"";
+    el.innerHTML=txt; el.style.display="block"; clearTimeout(S.infoT); S.infoT=setTimeout(function(){ el.style.display="none"; },4200);
   }
   if(L){   // TV: the territory the D-pad is on names itself (the map's own labels only show when zoomed in)
     board.root.addEventListener("focusin",function(e){ var tg=e.target&&e.target.closest&&e.target.closest(".tg"); if(tg&&V) info(+tg.getAttribute("data-t")); });
@@ -582,6 +585,7 @@ function create(cfg){
   root.addEventListener("click",onAct);
   if(actEl) actEl.addEventListener("click",onAct);
   board.onTap(tap);
+  if(board.onInspect) board.onInspect(function(t){ if(V) info(t); });   // a long press on the map reads any territory without acting on it (step 5)
   self.update=function(v){
     V=v; render();
     if(V.missionConv&&V.me>=0&&!S.convSeen[V.me]){ S.convSeen[V.me]=1; if(L) toast("Another player eliminated your target. Your secret mission is now: "+V.mission,"flag"); else toast("🎯 Another player eliminated your target. Your secret mission is now: "+V.mission); }   // old UK rules

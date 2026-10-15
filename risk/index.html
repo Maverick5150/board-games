@@ -21,7 +21,7 @@
 <script src="../ui/ui.js" defer></script>
 <style>
   /* Risk on the shared Midnight Luxe system (ui/theme.css). Page layout only (rk- prefix); every control is a bg- class. The world map
-     (board.js: the sea, the territories, the wooden pieces) is the game's own art, rebuilt on the parchment surface in step 5: here it
+     (board.js: a real map from Natural Earth data, public domain; the territories are in map.js) is the game's own art (step 5): here it
      only sits in the Luxe frame (skins.js / BGUI.stage frame #rkframe) on the stage. */
   *, *::before, *::after{box-sizing:border-box}
   [hidden]{display:none !important}
@@ -124,11 +124,15 @@
   html.rk-luxe #rkboard.is-b2 .rkpulsel{animation:rk-b2 1.1s ease-in-out 1}
   @keyframes rk-b1{50%{opacity:.35}}
   @keyframes rk-b2{50%{opacity:.35}}
+  html[data-effects="reduced"] .rkflash, html[data-effects="reduced"] .rkfl, html[data-motion="reduce"] .rkflash, html[data-motion="reduce"] .rkfl{animation:none !important}
   html[data-effects="reduced"] .rkpulse, html[data-motion="reduce"] .rkpulse, html[data-effects="reduced"] .rkpulsel, html[data-motion="reduce"] .rkpulsel{animation:none !important}
-  @media (prefers-reduced-motion: reduce){ .rkpulse, .rkpulsel{animation:none !important} }
+  @media (prefers-reduced-motion: reduce){ .rkpulse, .rkpulsel, .rkflash, .rkfl{animation:none !important} }
   /* a territory's name, owner and borders on a tap (or under the D-pad on TV) */
   html.rk-luxe .rkinfo{left:.5rem; bottom:.5rem; max-width:min(80%,32rem); padding:.45rem .7rem; border:0; border-radius:var(--r-md); z-index:6;
-    background:rgba(11,13,27,.94); box-shadow:inset 0 0 0 1px var(--line-gold), var(--elev-2); font:var(--fw-ui) var(--fs-micro)/1.35 var(--font-ui); color:var(--text-1)}
+    background:rgba(11,13,27,.94); box-shadow:inset 0 0 0 1px var(--line-gold), var(--elev-2); font:var(--fw-ui) var(--fs-xs)/1.35 var(--font-ui); color:var(--text-1)}
+  html[data-tv] .rkinfo{max-width:min(46%,24rem)}
+  html.rk-luxe .rkinfo b{display:block; font:400 calc(var(--fs-lg) * 1.22)/1.15 var(--font-display); color:var(--gold-100)}
+  html.rk-luxe .rkinfo span{display:block; color:var(--text-2)}
   .tg{outline:none}
   /* the panel under the map (ctrl.js in its Luxe mode) */
   .rk-panel{display:grid; gap:.5rem; width:min(100%,56rem)}
@@ -277,9 +281,6 @@
   html[data-tv] .rk-zoom{gap:1.5rem}
   html[data-tv] #rklog{grid-area:log; align-self:stretch; width:auto; min-height:0; overflow:hidden; margin-top:.5rem; text-align:left}
   html[data-tv] .rk-hints{grid-area:hints; align-self:end; justify-content:flex-start; width:auto; margin:0 0 .75rem}
-  /* the map at fit: the D-pad ring of an edge territory may reach over the frame (it is never cut); zoomed in, the map clips as before */
-  html.rk-luxe[data-tv] .rkroot.is-fit{overflow:visible}
-  html.rk-luxe[data-tv] .rkroot.is-fit .rksea, html.rk-luxe[data-tv] .rkroot.is-fit .rkland{border-radius:10px}
   /* TV choice sheets sit over the right-hand column, beside the map; the windows (cards, players) are wider */
   html[data-tv] #rkMove{top:5.25rem; left:auto; right:calc(var(--gutter) - .5rem); width:28rem; max-height:none; margin:0; padding-left:1.5rem; padding-right:1.5rem}   /* a full-height panel over the column */
   html[data-tv] #rkSheet{width:min(100%,52rem)}
@@ -338,6 +339,7 @@
           </button>
         </div>
         <div class="bg-rows rk-rules" id="houseRules" hidden></div>
+        <p class="rk-legend rk-credit" data-stage-text>The map is drawn from real coastlines and borders. Map data: Natural Earth (public domain).</p>
         <p class="rk-legend" id="rulesLegend" data-stage-text hidden><span class="bg-tag bg-tag--official">published</span> appears in a published Risk rulebook · <span class="bg-tag bg-tag--house">house</span> a common home rule or convenience</p>
       </section>
     </div>
@@ -877,7 +879,7 @@ function pulseWatch(){   // (again) follow the ticker through the stage's first 
    or the Victory screen ---- */
 function usableNow(a){ if(!a||a.disabled) return false; if(a.classList&&a.classList.contains("tg")) return a.hasAttribute("data-focus"); return true; }
 function tvMainBtn(){ return $("rkacts").querySelector(".bg-btn--primary:not([disabled])")||$("rkacts").querySelector("button:not([disabled])"); }
-function tvFirstTerr(){ return document.querySelector("#rkboard .tg[data-focus]"); }
+function tvFirstTerr(){ return document.querySelector("#rkboard .tg[data-act]"); }   // the D-pad stops nothing can be done on carry data-focus="look" (step 5): only the actionable ones are the turn's first stop
 function tvKeep(){
   if(!tvOn()||!G||setupShown()) return;
   const B=BG();
