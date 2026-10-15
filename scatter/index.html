@@ -9,6 +9,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <title>Scattergories</title>
 <link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon.png">
 <link rel="apple-touch-icon" href="icon.png">
 <style>
   :root{--ink:#fff;--muted:#c9dde4;--gold:#ffd23f;--panel:#12303c}
@@ -281,6 +282,15 @@ function autosave(){ if(G&&G.over){ Saves.del("scatter","auto"); return; } const
 Skins.apply("scatter"); Sound.mountButton(); Sound.music("scatter");
 drawSetup(); saveBar.refresh();
 if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
+// TV Back (step 10): in the Fire TV app Back calls window.__tvBack() and CLOSES THE APP when a page has none. Steps: sound panel,
+// then a game -> Menu, the Menu -> Resume (or the hub when there is no game to resume). A hand-off / answer sheet holds Back.
+window.__tvBack=function(){
+  if(window.Sound&&Sound.panelOpen&&Sound.panelOpen()){ Sound.closePanel(); return "panel"; }
+  const up=id=>{ const e=$(id); return !!(e&&e.classList.contains("show")); };
+  if(up("handoff")||up("rollBox")) return "held";
+  if(up("setup")){ const r=$("resumeBtn"); if(r&&r.style.display!=="none"){ r.click(); return "resume"; } const h=document.querySelector('#setup a[href="../index.html"]'); if(h) h.click(); return "hub"; }
+  const m=$("menuBtn"); if(m){ m.click(); return "menu"; } return "";
+};
 window.__sc={get G(){ return G; },cfg:cfg,get ctrl(){ return ctrl; },startGame:startGame};
 })();
 </script>
