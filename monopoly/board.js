@@ -321,7 +321,7 @@
     ".mb-toks,.mb-marks{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;contain:layout}" +
     // a piece: a box of its own size (set when its square's slots change), placed by its transform only, so a move glides on the
     // compositor (no left/top: transform only); at rest the box is drawn 1:1, as the pulse's layer expects (no scale)
-    ".mb-pos{position:absolute;left:0;top:0;z-index:3}.mb-anim .mb-pos{transition:transform .15s linear}" +
+    ".mb-pos{position:absolute;left:0;top:0;z-index:3}.mb-anim .mb-pos{transition:transform var(--mb-hop,.15s) linear}" +
     "html[data-effects=reduced] .mb-pos,html[data-motion=reduce] .mb-pos{transition:none !important}" +
     ".mb-pos .tkp,.mb-pos .tk{display:block;width:100%;height:100%}.mb-pos .tk{filter:drop-shadow(0 0 1px var(--pc,#000)) drop-shadow(0 .06em .08em #0009)}.mb-pos .mb-tkv{display:block;width:100%;height:100%;overflow:visible}" +
     ".mb-hl,.mb-fs{position:absolute;box-sizing:border-box;pointer-events:none;display:none}" +
