@@ -3,170 +3,288 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0e1630">
+<meta name="theme-color" content="#080a15">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
 <title>Board Games</title>
-<link rel="icon" href="icon.png" type="image/png">
+<link rel="icon" type="image/png" href="ui/art/icon-collection-192.png">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="icon.png">
+<link rel="apple-touch-icon" href="ui/art/apple-touch-icon-180.png">
+<script>/* before first paint: TV for ?tv=1 or the Fire TV bridge, and the stored effects level */
+(function (h) {
+  if (/[?&]tv=1(&|$)/.test(location.search) || window.AndroidTV) h.setAttribute("data-tv", "");
+  try { if (localStorage.getItem("bgui.effects") === "reduced") h.setAttribute("data-effects", "reduced"); } catch (e) { }
+})(document.documentElement);</script>
+<link rel="stylesheet" href="ui/theme.css">
+<script src="ui/icons.js" defer></script>
+<script src="ui/ui.js" defer></script>
+<script src="sound.js" defer></script>
 <style>
-  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  body{margin:0; min-height:100vh; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:#eef2ff;
-    background:radial-gradient(130% 100% at 50% -10%,#24346b 0%,#0e1630 55%,#080d1f 100%);
-    display:flex; flex-direction:column; align-items:center; padding:34px 16px 48px;}
-  h1{letter-spacing:.5px; margin:0 0 2px; font-size:30px; display:flex; align-items:center; gap:10px;}
-  .sub{color:#9fb0d8; margin:0 0 26px; font-size:14px;}
-  .grid{display:flex; flex-direction:column; gap:20px; width:100%; max-width:440px;}
-  a.tile{position:relative; display:block; height:190px; border-radius:22px; overflow:hidden; text-decoration:none;
-    box-shadow:0 14px 34px #0008, inset 0 1px 0 #ffffff22; transition:transform .12s;}
-  a.tile:active{transform:scale(.98);}
-  .tile .art{position:absolute; inset:0; width:100%; height:100%;}
-  .tile .scrim{position:absolute; inset:0; background:linear-gradient(90deg,#000000aa 0%,#0000006b 42%,transparent 70%);}
-  .tile .label{position:absolute; left:20px; bottom:16px; right:16px;}
-  .tile .label h2{margin:0; font-size:30px; font-weight:900; color:#fff; letter-spacing:.5px; text-shadow:0 2px 6px #0009;}
-  .tile .label p{margin:2px 0 0; font-size:13px; font-weight:600; color:#ffffffdd; text-shadow:0 1px 4px #0009;}
-  footer{color:#64749f; font-size:11px; margin-top:28px;}
+  /* The hub on the shared Midnight Luxe system (ui/theme.css). Page layout only (hb- prefix); every control is a bg- class. */
+  *, *::before, *::after{box-sizing:border-box}
+  [hidden]{display:none !important}
+  body.bg-app{overflow-x:hidden; touch-action:manipulation}
+  .hb-main{width:min(100%,72rem); margin:0 auto; padding:0 var(--gutter) 2.5rem}
+  .bg-topbar__name{margin:0}
+
+  /* ---------- hero (README section 10): phone = the art band above the text; wide = the poster with the text on the left ---------- */
+  .hb-hero{margin:0; padding-top:46%; min-height:0; border-radius:0; background-color:var(--ink-1)}
+  .hb-hero .bg-hero__layer{background-size:100% auto; background-position:100% 0; border-radius:0}
+  .hb-hero .bg-hero__shade{border-radius:0; background:linear-gradient(0deg, var(--ink-1) 0%, rgba(8,10,21,.55) 22%, rgba(8,10,21,0) 46%)}
+  .hb-hero .bg-hero__body{max-width:none; padding:.5rem var(--gutter) 1.25rem; gap:.4rem}
+  .hb-text{display:grid; gap:.4rem; transition:opacity .22s ease}
+  .hb-text.is-swap{opacity:0}
+  html[data-motion="reduce"] .hb-text{transition:none}
+  @media (prefers-reduced-motion: reduce){ .hb-text{transition:none} }
+  .hb-text .bg-eyebrow{margin:0}
+  .hb-hero .bg-hero__title{font-size:var(--fs-3xl)}
+  .hb-hero .bg-hero__pitch{max-width:34rem}
+  .hb-continue{margin-top:.5rem; justify-self:stretch}
+  .hb-continue .bg-btn__label, .hb-continue .bg-btn__sub{overflow-wrap:anywhere}
+  .hb-shelf-head{margin:1.25rem 0 .75rem}
+  .hb-tiles{margin-top:0}
+  .hb-foot{margin:1.5rem 0 0; text-align:center; font:var(--fw-ui) var(--fs-xs)/1.4 var(--font-ui); color:var(--text-3)}
+  .hb-hints{display:none}
+  @media (min-width:56em){
+    html:not([data-tv]) .bg-tiles{grid-template-columns:repeat(4, minmax(0,1fr)); gap:1rem}
+    html:not([data-tv]) .hb-hero{width:min(calc(100% - 2 * var(--gutter)), 72rem); padding-top:0; min-height:20rem; margin:.5rem auto 1rem; border-radius:var(--r-xl)}
+    html:not([data-tv]) .hb-hero .bg-hero__layer{background-size:cover; background-position:100% 30%; border-radius:var(--r-xl)}
+    html:not([data-tv]) .hb-hero .bg-hero__shade{border-radius:var(--r-xl); background:linear-gradient(90deg, var(--ink-1) 0%, rgba(8,10,21,.86) 34%, rgba(8,10,21,0) 68%), linear-gradient(0deg, var(--ink-1) 0%, rgba(8,10,21,0) 42%)}
+    html:not([data-tv]) .hb-hero .bg-hero__body{max-width:34rem; padding:2rem}
+    html:not([data-tv]) .hb-continue{justify-self:start}
+  }
+
+  /* ---------- TV (?tv=1 / Fire TV): the poster stays pinned under the bar while the shelf scrolls beneath it ---------- */
+  html[data-tv]{--hb-bar-h:5rem; --hb-hero-h:17rem; scroll-padding-top:calc(var(--hb-bar-h) + var(--hb-hero-h) + .25rem); scroll-padding-bottom:4.75rem}
+  html[data-tv]{scrollbar-width:none}
+  html[data-tv]::-webkit-scrollbar{display:none}
+  html[data-tv] .hb-main{width:min(100%,74rem); padding-bottom:7rem}
+  html[data-tv] .hb-hero{position:sticky; top:var(--hb-bar-h); z-index:5; min-height:16rem; padding-top:0; margin:0}
+  html[data-tv] .hb-hero .bg-hero__layer{background-size:cover; background-position:100% 25%}
+  html[data-tv] .hb-hero .bg-hero__shade{background:linear-gradient(90deg, var(--ink-1) 0%, rgba(8,10,21,.86) 34%, rgba(8,10,21,0) 68%), linear-gradient(0deg, var(--ink-1) 0%, rgba(8,10,21,0) 44%), linear-gradient(180deg, var(--ink-1) 0%, rgba(8,10,21,0) 16%)}
+  html[data-tv] .hb-hero .bg-hero__body{max-width:none; width:42rem; padding:1.25rem 2.5rem 1.5rem calc(50% - 37rem + var(--gutter)); box-sizing:content-box; gap:.5rem}
+  /* the shelf scrolls under the pinned poster: a short fade under its edge keeps a tile's cut-off bottom from showing as a hard sliver */
+  html[data-tv] .hb-hero::after{content:""; position:absolute; left:0; right:0; top:100%; height:1rem; pointer-events:none; background:linear-gradient(180deg, var(--ink-1), rgba(8,10,21,0))}
+  html[data-tv] .hb-continue{justify-self:start; margin-top:.5rem; min-width:20rem}
+  html[data-tv] .hb-shelf-head{display:none}
+  html[data-tv] .hb-tiles{padding-top:2rem}
+  html[data-tv] .bg-tiles{gap:1.5rem}      /* a focused tile's lift and ring reach about 21 px: the next tile stands 36 px away */
+  html[data-tv] .hb-foot{display:none}
+  html[data-tv] .hb-hints{display:flex; position:fixed; left:0; right:0; bottom:0; z-index:15; padding:.75rem var(--gutter) 1rem; background:linear-gradient(0deg, var(--ink-1) 72%, rgba(8,10,21,0))}
 </style>
 </head>
-<body>
-  <h1>🎲 Board Games</h1>
-  <p class="sub">Tap a game to play</p>
-  <div class="grid">
+<body class="bg-app">
+<div class="bg-orbs" aria-hidden="true"><i></i><i></i><i></i></div>
 
-    <a class="tile" href="trouble/index.html">
-      <svg class="art" viewBox="0 0 440 190" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="tbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3a2b86"/><stop offset="1" stop-color="#1c3f9e"/></linearGradient>
-          <radialGradient id="dome" cx="38%" cy="32%" r="70%"><stop offset="0" stop-color="#ffffff"/><stop offset="60%" stop-color="#dbe3f6"/><stop offset="100%" stop-color="#9fb0d8"/></radialGradient>
-        </defs>
-        <rect width="440" height="190" fill="url(#tbg)"/>
-        <g opacity=".25" fill="#fff">
-          <circle cx="60" cy="40" r="6"/><circle cx="110" cy="26" r="6"/><circle cx="380" cy="150" r="6"/><circle cx="420" cy="100" r="6"/><circle cx="30" cy="150" r="6"/>
-        </g>
-        <!-- pegs around the dome -->
-        <g stroke="#0004" stroke-width="2">
-          <g transform="translate(300,52)"><ellipse cx="0" cy="10" rx="13" ry="7" fill="#e23b3b"/><circle cx="0" cy="-4" r="11" fill="#e23b3b"/></g>
-          <g transform="translate(392,70)"><ellipse cx="0" cy="10" rx="13" ry="7" fill="#27a758"/><circle cx="0" cy="-4" r="11" fill="#27a758"/></g>
-          <g transform="translate(300,140)"><ellipse cx="0" cy="10" rx="13" ry="7" fill="#2b7be0"/><circle cx="0" cy="-4" r="11" fill="#2b7be0"/></g>
-          <g transform="translate(392,158)"><ellipse cx="0" cy="10" rx="13" ry="7" fill="#eec21b"/><circle cx="0" cy="-4" r="11" fill="#eec21b"/></g>
-        </g>
-        <!-- pop-o-matic dome with die -->
-        <circle cx="346" cy="100" r="54" fill="#0b1228" stroke="#2a3663" stroke-width="3"/>
-        <circle cx="346" cy="100" r="47" fill="url(#dome)"/>
-        <ellipse cx="330" cy="82" rx="16" ry="9" fill="#ffffff66"/>
-        <rect x="326" y="80" width="40" height="40" rx="8" fill="#fff" stroke="#0004" stroke-width="2"/>
-        <g fill="#1b2340"><circle cx="336" cy="90" r="3.6"/><circle cx="356" cy="90" r="3.6"/><circle cx="346" cy="100" r="3.6"/><circle cx="336" cy="110" r="3.6"/><circle cx="356" cy="110" r="3.6"/></g>
-      </svg>
-      <div class="scrim"></div>
-      <div class="label"><h2>Trouble</h2><p>Pop the die &amp; race your pegs home</p></div>
+<header class="bg-topbar" id="hbBar">
+  <div class="bg-topbar__start"><span class="bg-emblem" aria-hidden="true" data-bg-mount="emblem"></span></div>
+  <div class="bg-topbar__title"><span class="bg-eyebrow">Classic games</span><h1 class="bg-topbar__name">Board Games</h1></div>
+  <div class="bg-topbar__end"></div>
+</header>
+
+  <section class="bg-hero hb-hero" id="hbHero" data-game="trouble" aria-label="Featured game">
+    <div class="bg-hero__layer is-on" data-game="trouble" aria-hidden="true"></div><div class="bg-hero__layer" aria-hidden="true"></div>
+    <div class="bg-hero__shade" aria-hidden="true"></div>
+    <div class="bg-hero__body">
+      <div class="hb-text" id="hbText" aria-hidden="true">
+        <span class="bg-eyebrow" id="hbEyebrow">Pop · move · bump</span>
+        <h2 class="bg-hero__title" id="hbTitle">Trouble</h2>
+        <p class="bg-hero__pitch" id="hbPitch">Pop the die and race your pegs home.</p>
+      </div>
+      <a class="bg-btn bg-btn--primary bg-btn--cta hb-continue" id="hbContinue" href="#" hidden><span class="bg-btn__label" id="hbContinueLabel">Continue</span><span class="bg-btn__sub" id="hbContinueSub"></span></a>
+    </div>
+  </section>
+
+<main class="hb-main" id="main">
+  <div class="bg-section hb-shelf-head"><span class="bg-eyebrow">Pick a game</span></div>
+  <nav class="bg-tiles hb-tiles" id="hbTiles" aria-label="Games">
+
+    <a class="bg-tile" data-game="trouble" href="trouble/index.html" aria-label="Trouble, 2 to 4 players. Pop the die and race your pegs home.">
+      <span class="bg-tile__art"><picture><source media="(max-width: 30em)" srcset="ui/art/thumb-trouble-sm.svg"><img src="ui/art/thumb-trouble.svg" alt="" width="320" height="240" decoding="async"></picture><span class="bg-tile__badge" aria-hidden="true"><span data-hb-icon="user"></span>2-4</span></span>
+      <span class="bg-tile__label"><span class="bg-tile__seal" data-hb-seal="trouble" aria-hidden="true"></span><span class="bg-tile__name">Trouble</span><span class="bg-tile__meta">Pop the dome</span></span>
     </a>
-
-    <a class="tile" href="sorry/index.html">
-      <svg class="art" viewBox="0 0 440 190" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-        <defs><linearGradient id="sbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0f7a43"/><stop offset="1" stop-color="#b21f2b"/></linearGradient></defs>
-        <rect width="440" height="190" fill="url(#sbg)"/>
-        <!-- slide -->
-        <g opacity=".5"><line x1="40" y1="150" x2="150" y2="40" stroke="#fff" stroke-width="14" stroke-linecap="round"/>
-          <polygon points="150,40 140,58 160,54" fill="#fff"/><path d="M80,116 l16,-16 M98,126 l16,-16" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/></g>
-        <!-- pawns -->
-        <g stroke="#0004" stroke-width="2"><g transform="translate(60,150)"><ellipse cy="8" rx="11" ry="6" fill="#eec21b"/><circle cy="-4" r="9" fill="#eec21b"/></g>
-        <g transform="translate(150,44)"><ellipse cy="8" rx="11" ry="6" fill="#2b7be0"/><circle cy="-4" r="9" fill="#2b7be0"/></g></g>
-        <!-- fanned cards -->
-        <g stroke="#c62222" stroke-width="3">
-          <g transform="translate(300,104) rotate(-16)"><rect x="-42" y="-58" width="84" height="116" rx="12" fill="#fff"/><text x="0" y="12" text-anchor="middle" font-family="Arial Black,Arial" font-size="42" font-weight="900" fill="#c62222">12</text></g>
-          <g transform="translate(336,98) rotate(-2)"><rect x="-42" y="-58" width="84" height="116" rx="12" fill="#fff"/><text x="0" y="10" text-anchor="middle" font-family="Arial Black,Arial" font-size="22" font-weight="900" fill="#c62222">SORRY!</text></g>
-          <g transform="translate(378,104) rotate(14)"><rect x="-42" y="-58" width="84" height="116" rx="12" fill="#fff"/><text x="0" y="14" text-anchor="middle" font-family="Arial Black,Arial" font-size="42" font-weight="900" fill="#c62222">7</text></g>
-        </g>
-      </svg>
-      <div class="scrim"></div>
-      <div class="label"><h2>Sorry!</h2><p>Draw cards, slide &amp; bump home</p></div>
+    <a class="bg-tile" data-game="sorry" href="sorry/index.html" aria-label="Sorry!, 2 to 4 players. Draw cards, slide and bump home.">
+      <span class="bg-tile__art"><picture><source media="(max-width: 30em)" srcset="ui/art/thumb-sorry-sm.svg"><img src="ui/art/thumb-sorry.svg" alt="" width="320" height="240" decoding="async"></picture><span class="bg-tile__badge" aria-hidden="true"><span data-hb-icon="user"></span>2-4</span></span>
+      <span class="bg-tile__label"><span class="bg-tile__seal" data-hb-seal="sorry" aria-hidden="true"></span><span class="bg-tile__name">Sorry!</span><span class="bg-tile__meta">Slide and bump</span></span>
     </a>
-
-    <a class="tile" href="monopoly/index.html">
-      <svg class="art" viewBox="0 0 440 190" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-        <defs><linearGradient id="mbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#15663a"/><stop offset="1" stop-color="#0c3b22"/></linearGradient></defs>
-        <rect width="440" height="190" fill="url(#mbg)"/>
-        <g opacity=".12" fill="#fff"><text x="38" y="52" font-family="Georgia,serif" font-size="40" font-weight="900">$</text><text x="392" y="168" font-family="Georgia,serif" font-size="40" font-weight="900">$</text></g>
-        <!-- houses + hotel -->
-        <g transform="translate(252,120)" stroke="#0005" stroke-width="2">
-          <g transform="translate(0,0)"><rect x="-16" y="0" width="32" height="24" fill="#2ecc71"/><polygon points="-20,0 0,-16 20,0" fill="#27a758"/></g>
-          <g transform="translate(40,0)"><rect x="-16" y="0" width="32" height="24" fill="#2ecc71"/><polygon points="-20,0 0,-16 20,0" fill="#27a758"/></g>
-          <g transform="translate(92,-4)"><rect x="-26" y="0" width="52" height="30" fill="#e23b3b"/><polygon points="-30,0 0,-18 30,0" fill="#c0272d"/></g>
-        </g>
-        <!-- dice -->
-        <g transform="translate(96,96)">
-          <g transform="rotate(-12)"><rect x="-34" y="-34" width="56" height="56" rx="12" fill="#fff" stroke="#0004" stroke-width="2"/><g fill="#1b2340"><circle cx="-14" cy="-14" r="5"/><circle cx="6" cy="6" r="5"/></g></g>
-          <g transform="translate(34,30) rotate(10)"><rect x="-28" y="-28" width="48" height="48" rx="10" fill="#fff" stroke="#0004" stroke-width="2"/><g fill="#1b2340"><circle cx="-12" cy="-12" r="4.4"/><circle cx="0" cy="0" r="4.4"/><circle cx="12" cy="12" r="4.4"/></g></g>
-        </g>
-        <!-- gold coin -->
-        <g transform="translate(360,58)"><circle r="26" fill="#f4c542" stroke="#b8860b" stroke-width="3"/><circle r="20" fill="none" stroke="#d6a81e" stroke-width="2"/><text y="10" text-anchor="middle" font-family="Georgia,serif" font-size="28" font-weight="900" fill="#8a5a00">$</text></g>
-      </svg>
-      <div class="scrim"></div>
-      <div class="label"><h2>Monopoly</h2><p>Buy, build, bankrupt your rivals</p></div>
+    <a class="bg-tile" data-game="monopoly" href="monopoly/index.html" aria-label="Monopoly, 2 to 6 players. Buy, build, bankrupt your rivals.">
+      <span class="bg-tile__art"><picture><source media="(max-width: 30em)" srcset="ui/art/thumb-monopoly-sm.svg"><img src="ui/art/thumb-monopoly.svg" alt="" width="320" height="240" decoding="async"></picture><span class="bg-tile__badge" aria-hidden="true"><span data-hb-icon="user"></span>2-6</span></span>
+      <span class="bg-tile__label"><span class="bg-tile__seal" data-hb-seal="monopoly" aria-hidden="true"></span><span class="bg-tile__name">Monopoly</span><span class="bg-tile__meta">Buy the board</span></span>
     </a>
-
-    <a class="tile" href="rummy500/index.html">
-      <svg class="art" viewBox="0 0 440 190" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-        <defs><radialGradient id="rbg" cx="60%" cy="40%" r="90%"><stop offset="0" stop-color="#1e8a58"/><stop offset="1" stop-color="#0a3d26"/></radialGradient></defs>
-        <rect width="440" height="190" fill="url(#rbg)"/>
-        <g opacity=".13" fill="#fff" font-family="Georgia,serif" font-weight="900"><text x="30" y="60" font-size="54">♠</text><text x="380" y="170" font-size="54">♣</text><text x="210" y="40" font-size="40">♦</text></g>
-        <g font-family="Georgia,serif" font-weight="900" stroke="#8d97ae" stroke-width="2">
-          <g transform="translate(262,104) rotate(-20)"><rect x="-38" y="-54" width="76" height="108" rx="10" fill="#fff"/><text x="-30" y="-30" font-size="26" fill="#d02323" stroke="none">7</text><text x="-31" y="-8" font-size="22" fill="#d02323" stroke="none">♥</text><text x="4" y="40" font-size="40" fill="#d02323" stroke="none">♥</text></g>
-          <g transform="translate(312,98) rotate(-5)"><rect x="-38" y="-54" width="76" height="108" rx="10" fill="#fff"/><text x="-30" y="-30" font-size="26" fill="#d02323" stroke="none">8</text><text x="-31" y="-8" font-size="22" fill="#d02323" stroke="none">♥</text><text x="4" y="40" font-size="40" fill="#d02323" stroke="none">♥</text></g>
-          <g transform="translate(362,106) rotate(11)"><rect x="-38" y="-54" width="76" height="108" rx="10" fill="#fff"/><text x="-30" y="-30" font-size="26" fill="#d02323" stroke="none">9</text><text x="-31" y="-8" font-size="22" fill="#d02323" stroke="none">♥</text><text x="4" y="40" font-size="40" fill="#d02323" stroke="none">♥</text></g>
-          <g transform="translate(120,128) rotate(-8)"><rect x="-34" y="-48" width="68" height="96" rx="9" fill="#fff7d6"/><text x="-24" y="-24" font-size="22" fill="#7a2bd0" stroke="none">★</text><text x="0" y="20" font-size="14" fill="#7a2bd0" stroke="none" text-anchor="middle">JOKER</text></g>
-        </g>
-        <g transform="translate(86,66)"><circle r="34" fill="#ffd84a" stroke="#a87b00" stroke-width="3"/><text y="12" text-anchor="middle" font-family="Georgia,serif" font-size="32" font-weight="900" fill="#5a3a00">500</text></g>
-      </svg>
-      <div class="scrim"></div>
-      <div class="label"><h2>500 Rummy</h2><p>Meld, lay off &amp; go out · every version</p></div>
+    <a class="bg-tile" data-game="rummy500" href="rummy500/index.html" aria-label="500 Rummy, 2 to 8 players. Meld, lay off and go out, in every version.">
+      <span class="bg-tile__art"><picture><source media="(max-width: 30em)" srcset="ui/art/thumb-rummy500-sm.svg"><img src="ui/art/thumb-rummy500.svg" alt="" width="320" height="240" decoding="async"></picture><span class="bg-tile__badge" aria-hidden="true"><span data-hb-icon="user"></span>2-8</span></span>
+      <span class="bg-tile__label"><span class="bg-tile__seal" data-hb-seal="rummy500" aria-hidden="true"></span><span class="bg-tile__name">500 Rummy</span><span class="bg-tile__meta">Melds on felt</span></span>
     </a>
-
-    <a class="tile" href="risk/index.html">
-      <svg class="art" viewBox="0 0 440 190" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-        <defs><linearGradient id="rkbg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a7cde3"/><stop offset="1" stop-color="#6fa3c4"/></linearGradient></defs>
-        <rect width="440" height="190" fill="url(#rkbg)"/>
-        <g opacity=".22" stroke="#fff" fill="none" stroke-width="1"><path d="M0 40 Q110 28 220 40 T440 40"/><path d="M0 90 Q110 78 220 90 T440 90"/><path d="M0 140 Q110 128 220 140 T440 140"/></g>
-        <g stroke="#2a1d0a" stroke-width="2.2" stroke-linejoin="round">
-          <path d="M40 60 L100 36 L180 48 L196 100 L150 128 L84 126 L50 100Z" fill="#c9a449"/>
-          <path d="M214 40 L300 32 L350 62 L330 118 L260 112 L222 84Z" fill="#5b86c9"/>
-          <path d="M330 56 L408 44 L430 92 L404 138 L350 124Z" fill="#6fae52"/>
-          <path d="M196 124 L252 122 L270 164 L230 184 L204 160Z" fill="#e08d3d"/>
-        </g>
-        <g transform="translate(120,92) scale(1.9)" stroke="#0007" stroke-width=".8" stroke-linejoin="round"><polygon points="-7,-10.5 0,-7 0,0 -7,-3.5" fill="#d23a32"/><polygon points="7,-10.5 0,-7 0,0 7,-3.5" fill="#7c1712"/><polygon points="0,-14 7,-10.5 0,-7 -7,-10.5" fill="#f06a60"/></g><g transform="translate(146,100) scale(1.9)" stroke="#0007" stroke-width=".8" stroke-linejoin="round"><polygon points="-7,-10.5 0,-7 0,0 -7,-3.5" fill="#d23a32"/><polygon points="7,-10.5 0,-7 0,0 7,-3.5" fill="#7c1712"/><polygon points="0,-14 7,-10.5 0,-7 -7,-10.5" fill="#f06a60"/></g><g transform="translate(133,78) scale(1.15)" stroke="#0007" stroke-width=".8" stroke-linejoin="round"><polygon points="-7,-10.5 0,-7 0,0 -7,-3.5" fill="#d23a32"/><polygon points="7,-10.5 0,-7 0,0 7,-3.5" fill="#7c1712"/><polygon points="0,-14 7,-10.5 0,-7 -7,-10.5" fill="#f06a60"/></g><g transform="translate(290,76) scale(1.9)" stroke="#0007" stroke-width=".8" stroke-linejoin="round"><polygon points="-7,-10.5 0,-7 0,0 -7,-3.5" fill="#2f6fcd"/><polygon points="7,-10.5 0,-7 0,0 7,-3.5" fill="#12356f"/><polygon points="0,-14 7,-10.5 0,-7 -7,-10.5" fill="#6aa0ee"/></g><g transform="translate(318,84) scale(1.9)" stroke="#0007" stroke-width=".8" stroke-linejoin="round"><polygon points="-7,-10.5 0,-7 0,0 -7,-3.5" fill="#2f6fcd"/><polygon points="7,-10.5 0,-7 0,0 7,-3.5" fill="#12356f"/><polygon points="0,-14 7,-10.5 0,-7 -7,-10.5" fill="#6aa0ee"/></g><g transform="translate(304,62) scale(1.15)" stroke="#0007" stroke-width=".8" stroke-linejoin="round"><polygon points="-7,-10.5 0,-7 0,0 -7,-3.5" fill="#2f6fcd"/><polygon points="7,-10.5 0,-7 0,0 7,-3.5" fill="#12356f"/><polygon points="0,-14 7,-10.5 0,-7 -7,-10.5" fill="#6aa0ee"/></g><g transform="translate(220,150) scale(1.9)" stroke="#0007" stroke-width=".8" stroke-linejoin="round"><polygon points="-7,-10.5 0,-7 0,0 -7,-3.5" fill="#e9c322"/><polygon points="7,-10.5 0,-7 0,0 7,-3.5" fill="#8a6d00"/><polygon points="0,-14 7,-10.5 0,-7 -7,-10.5" fill="#fbe570"/></g><g transform="translate(246,156) scale(1.9)" stroke="#0007" stroke-width=".8" stroke-linejoin="round"><polygon points="-7,-10.5 0,-7 0,0 -7,-3.5" fill="#e9c322"/><polygon points="7,-10.5 0,-7 0,0 7,-3.5" fill="#8a6d00"/><polygon points="0,-14 7,-10.5 0,-7 -7,-10.5" fill="#fbe570"/></g><g transform="translate(372,128) scale(1.9)" stroke="#0007" stroke-width=".8" stroke-linejoin="round"><polygon points="-7,-10.5 0,-7 0,0 -7,-3.5" fill="#2e9a52"/><polygon points="7,-10.5 0,-7 0,0 7,-3.5" fill="#0f4a24"/><polygon points="0,-14 7,-10.5 0,-7 -7,-10.5" fill="#66cc88"/></g><g transform="translate(398,134) scale(1.9)" stroke="#0007" stroke-width=".8" stroke-linejoin="round"><polygon points="-7,-10.5 0,-7 0,0 -7,-3.5" fill="#2e9a52"/><polygon points="7,-10.5 0,-7 0,0 7,-3.5" fill="#0f4a24"/><polygon points="0,-14 7,-10.5 0,-7 -7,-10.5" fill="#66cc88"/></g><g transform="translate(385,112) scale(1.1)" stroke="#0007" stroke-width=".8" stroke-linejoin="round"><polygon points="-7,-10.5 0,-7 0,0 -7,-3.5" fill="#2e9a52"/><polygon points="7,-10.5 0,-7 0,0 7,-3.5" fill="#0f4a24"/><polygon points="0,-14 7,-10.5 0,-7 -7,-10.5" fill="#66cc88"/></g>
-        <text x="14" y="172" font-family="Georgia,serif" font-size="9" fill="#2a4a64" font-style="italic" opacity=".7">Pacific Ocean</text>
-      </svg>
-      <div class="scrim"></div>
-      <div class="label"><h2>Risk</h2><p>Wooden-cube armies · conquer the world</p></div>
+    <a class="bg-tile" data-game="risk" href="risk/index.html" aria-label="Risk, 2 to 6 players. Wooden-cube armies, conquer the world.">
+      <span class="bg-tile__art"><picture><source media="(max-width: 30em)" srcset="ui/art/thumb-risk-sm.svg"><img src="ui/art/thumb-risk.svg" alt="" width="320" height="240" decoding="async"></picture><span class="bg-tile__badge" aria-hidden="true"><span data-hb-icon="user"></span>2-6</span></span>
+      <span class="bg-tile__label"><span class="bg-tile__seal" data-hb-seal="risk" aria-hidden="true"></span><span class="bg-tile__name">Risk</span><span class="bg-tile__meta">Take the world</span></span>
     </a>
-
-    <a class="tile" href="uno/index.html">
-      <svg class="art" viewBox="0 0 440 190" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-        <defs><linearGradient id="ubg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3a2a78"/><stop offset="1" stop-color="#1b1230"/></linearGradient></defs>
-        <rect width="440" height="190" fill="url(#ubg2)"/>
-        <g opacity=".15" stroke="#fff" stroke-width="2"><path d="M0 30 L440 170 M0 90 L440 230 M0 -30 L440 110"/></g>
-        <g transform="translate(240,100) rotate(-24)"><rect x="-34" y="-50" width="68" height="100" rx="9" fill="#d6322b" stroke="#fff" stroke-width="4"/><ellipse cx="0" cy="2" rx="29" ry="20" transform="rotate(-24)" fill="#fff"/><text x="0" y="14" text-anchor="middle" font-family="Arial Black,Arial" font-size="40" font-weight="900" fill="#d6322b">7</text></g><g transform="translate(290,92) rotate(-8)"><rect x="-34" y="-50" width="68" height="100" rx="9" fill="#f2bf24" stroke="#fff" stroke-width="4"/><ellipse cx="0" cy="2" rx="29" ry="20" transform="rotate(-24)" fill="#fff"/><text x="0" y="14" text-anchor="middle" font-family="Arial Black,Arial" font-size="30" font-weight="900" fill="#b8860b">+2</text></g><g transform="translate(342,98) rotate(10)"><rect x="-34" y="-50" width="68" height="100" rx="9" fill="#2f9e44" stroke="#fff" stroke-width="4"/><ellipse cx="0" cy="2" rx="29" ry="20" transform="rotate(-24)" fill="#fff"/><text x="0" y="14" text-anchor="middle" font-family="Arial Black,Arial" font-size="40" font-weight="900" fill="#2f9e44">5</text></g><g transform="translate(390,112) rotate(26)"><rect x="-34" y="-50" width="68" height="100" rx="9" fill="#2d63c8" stroke="#fff" stroke-width="4"/><ellipse cx="0" cy="2" rx="29" ry="20" transform="rotate(-24)" fill="#fff"/><text x="0" y="14" text-anchor="middle" font-family="Arial Black,Arial" font-size="40" font-weight="900" fill="#2d63c8">9</text></g>
-        <text x="22" y="160" font-family="Arial Black,Arial" font-size="40" font-weight="900" font-style="italic" fill="#f2bf24" stroke="#d6322b" stroke-width="2.4" paint-order="stroke" opacity=".0">UNO</text>
-      </svg>
-      <div class="scrim"></div>
-      <div class="label"><h2>Uno</h2><p>Classic · Flip · No Mercy · All Wild</p></div>
+    <a class="bg-tile" data-game="uno" href="uno/index.html" aria-label="Uno, 2 to 10 players. Classic, Flip, No Mercy and All Wild.">
+      <span class="bg-tile__art"><picture><source media="(max-width: 30em)" srcset="ui/art/thumb-uno-sm.svg"><img src="ui/art/thumb-uno.svg" alt="" width="320" height="240" decoding="async"></picture><span class="bg-tile__badge" aria-hidden="true"><span data-hb-icon="user"></span>2-10</span></span>
+      <span class="bg-tile__label"><span class="bg-tile__seal" data-hb-seal="uno" aria-hidden="true"></span><span class="bg-tile__name">Uno</span><span class="bg-tile__meta">Match and dump</span></span>
     </a>
-
-    <a class="tile" href="scatter/index.html">
-      <svg class="art" viewBox="0 0 440 190" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-        <defs><linearGradient id="scbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1f6d85"/><stop offset="1" stop-color="#082430"/></linearGradient></defs>
-        <rect width="440" height="190" fill="url(#scbg)"/>
-        <g opacity=".12" stroke="#fff"><path d="M0 40H440M0 80H440M0 120H440M0 160H440"/></g>
-        <g transform="translate(250,70) rotate(-10)"><rect x="-30" y="-30" width="60" height="60" rx="10" fill="#7a3d00" transform="translate(0,5)"/><rect x="-30" y="-30" width="60" height="60" rx="10" fill="#ffd23f" stroke="#fff" stroke-width="3"/><text x="0" y="14" text-anchor="middle" font-family="Georgia,serif" font-size="42" font-weight="900" fill="#3a1d00">S</text></g><g transform="translate(310,96) rotate(6)"><rect x="-30" y="-30" width="60" height="60" rx="10" fill="#7a3d00" transform="translate(0,5)"/><rect x="-30" y="-30" width="60" height="60" rx="10" fill="#ffa33c" stroke="#fff" stroke-width="3"/><text x="0" y="14" text-anchor="middle" font-family="Georgia,serif" font-size="42" font-weight="900" fill="#3a1d00">C</text></g><g transform="translate(372,64) rotate(-5)"><rect x="-30" y="-30" width="60" height="60" rx="10" fill="#7a3d00" transform="translate(0,5)"/><rect x="-30" y="-30" width="60" height="60" rx="10" fill="#ffd23f" stroke="#fff" stroke-width="3"/><text x="0" y="14" text-anchor="middle" font-family="Georgia,serif" font-size="42" font-weight="900" fill="#3a1d00">A</text></g><g transform="translate(280,140) rotate(8)"><rect x="-30" y="-30" width="60" height="60" rx="10" fill="#7a3d00" transform="translate(0,5)"/><rect x="-30" y="-30" width="60" height="60" rx="10" fill="#ffa33c" stroke="#fff" stroke-width="3"/><text x="0" y="14" text-anchor="middle" font-family="Georgia,serif" font-size="42" font-weight="900" fill="#3a1d00">T</text></g><g transform="translate(344,148) rotate(-8)"><rect x="-30" y="-30" width="60" height="60" rx="10" fill="#7a3d00" transform="translate(0,5)"/><rect x="-30" y="-30" width="60" height="60" rx="10" fill="#ffd23f" stroke="#fff" stroke-width="3"/><text x="0" y="14" text-anchor="middle" font-family="Georgia,serif" font-size="42" font-weight="900" fill="#3a1d00">G</text></g>
-      </svg>
-      <div class="scrim"></div>
-      <div class="label"><h2>Scattergories</h2><p>Roll a letter · beat the clock · be unique</p></div>
+    <a class="bg-tile" data-game="scatter" href="scatter/index.html" aria-label="Scattergories, 2 to 8 players. Roll a letter, beat the clock, be unique.">
+      <span class="bg-tile__art"><picture><source media="(max-width: 30em)" srcset="ui/art/thumb-scatter-sm.svg"><img src="ui/art/thumb-scatter.svg" alt="" width="320" height="240" decoding="async"></picture><span class="bg-tile__badge" aria-hidden="true"><span data-hb-icon="user"></span>2-8</span></span>
+      <span class="bg-tile__label"><span class="bg-tile__seal" data-hb-seal="scatter" aria-hidden="true"></span><span class="bg-tile__name">Scattergories</span><span class="bg-tile__meta">Beat the clock</span></span>
     </a>
+    <a class="bg-tile bg-tile--party" data-game="party" href="firestick/index.html" id="hbParty" aria-label="Party Mode, 2 to 10 players. Host on the TV, everyone joins from a phone.">
+      <span class="bg-tile__art"><picture><source media="(max-width: 30em)" srcset="ui/art/thumb-party-sm.svg"><img src="ui/art/thumb-party.svg" alt="" width="320" height="240" decoding="async"></picture><span class="bg-tile__badge" aria-hidden="true"><span data-hb-icon="user"></span>2-10</span></span>
+      <span class="bg-tile__label"><span class="bg-tile__seal" data-hb-seal="party" aria-hidden="true"></span><span class="bg-tile__name">Party Mode</span><span class="bg-tile__meta" id="hbPartyMeta">TV + phones</span></span>
+    </a>
+  </nav>
 
-  </div>
-  <a href="firestick/index.html" style="display:flex;align-items:center;gap:12px;justify-content:center;width:100%;max-width:440px;margin-top:20px;padding:18px;border-radius:18px;text-decoration:none;color:#fff;background:linear-gradient(145deg,#6a2bd0,#2b7be0);box-shadow:0 10px 24px #0007;font-weight:800;font-size:18px">
-    📺 Party Mode <span style="font-weight:600;font-size:13px;opacity:.9">— TV board, phones as controllers</span>
-  </a>
-  <footer>Single games work offline · Party Mode needs internet &amp; a TV browser</footer>
-<script>if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }</script>
+  <p class="hb-foot">Single games work offline. Party Mode needs internet and a TV browser.</p>
+</main>
+
+<div class="bg-hintbar hb-hints" id="hbHints"><span><span class="bg-key" data-hb-icon="arrow"></span> Move</span><span><span class="bg-key">OK</span> Open a game</span><span><span class="bg-key">Back</span> Exit</span></div>
+
+<script>
+(function () {
+  "use strict";
+  var doc = document, root = doc.documentElement;
+  var $ = function (s, r) { return (r || doc).querySelector(s); }, $$ = function (s, r) { return Array.prototype.slice.call((r || doc).querySelectorAll(s)); };
+  var isTV = function () { return root.hasAttribute("data-tv"); };
+  var ORDER = ["trouble", "sorry", "monopoly", "rummy500", "risk", "uno", "scatter", "party"];
+  var NAME = { trouble: "Trouble", sorry: "Sorry!", monopoly: "Monopoly", rummy500: "500 Rummy", risk: "Risk", uno: "Uno", scatter: "Scattergories", party: "Party Mode" };
+  var INFO = {
+    trouble: ["Pop · move · bump", "Pop the die and race your pegs home."],
+    sorry: ["Slide · bump · sorry", "Draw cards, slide and bump home."],
+    monopoly: ["Buy · build · bargain", "Buy, build, bankrupt your rivals."],
+    rummy500: ["Meld · lay off · score", "Meld, lay off and go out, in every version."],
+    risk: ["Deploy · attack · fortify", "Wooden-cube armies, conquer the world."],
+    uno: ["Match · stack · call it", "Classic, Flip, No Mercy and All Wild."],
+    scatter: ["One letter · twelve lists", "Roll a letter, beat the clock, be unique."],
+    party: ["Play together", "Host on the TV, everyone joins from a phone."]
+  };
+  var INFO_TV = { party: ["Play together", "Host the table on this TV, everyone joins with a room code."] };
+  var cur = "", pinned = false, rotT = 0, heroSeen = true, REST = 7000;
+
+  function B() { return window.BGUI || null; }
+  function info(g) { return (isTV() && INFO_TV[g]) || INFO[g]; }
+  /* pre-rendered backdrops: 1920 on a 1080p TV, 960 everywhere else (phone, desktop, 960x540 TV WebView) */
+  function heroSrc(g) { return "ui/art/hero-" + g + "-" + (isTV() && innerWidth * (devicePixelRatio || 1) > 1280 ? 1920 : 960) + ".webp"; }
+  function setText(g) {
+    var t = info(g); $("#hbEyebrow").textContent = t[0]; $("#hbTitle").textContent = NAME[g]; $("#hbPitch").textContent = t[1];
+  }
+  function showHero(g, first) {
+    if (!g || g === cur) return;
+    cur = g;
+    var b = B(), box = $("#hbText");
+    if (first) { setText(g); }
+    else {
+      box.classList.add("is-swap");
+      setTimeout(function () { setText(cur); box.classList.remove("is-swap"); }, 160);
+    }
+    if (b && b.hero) b.hero.show("#hbHero", { game: g, src: heroSrc(g) });
+    else { root.setAttribute("data-game", g); }
+  }
+  function measure() {
+    var bar = $("#hbBar"), hero = $("#hbHero");
+    if (bar) root.style.setProperty("--hb-bar-h", Math.round(bar.getBoundingClientRect().height) + "px");
+    if (hero) root.style.setProperty("--hb-hero-h", Math.round(hero.getBoundingClientRect().height) + "px");
+  }
+
+  /* ---------- the hero follows the focused tile, and drifts through the games while nothing is focused (full effects only) ---------- */
+  function resting() { var a = doc.activeElement; return !(a && (a.closest && a.closest(".hb-tiles, .hb-hero"))); }
+  function canRotate() {
+    var b = B(); return !doc.hidden && heroSeen && resting() && !(window.Sound && Sound.panelOpen && Sound.panelOpen()) && b && b.effects && b.effects.motion && b.effects.motion() === "full";
+  }
+  function schedule() {
+    clearTimeout(rotT); rotT = 0;
+    if (!canRotate()) return;
+    rotT = setTimeout(function () {
+      rotT = 0;
+      if (canRotate()) { var i = ORDER.indexOf(cur); showHero(ORDER[(i + 1) % ORDER.length]); }
+      schedule();
+    }, REST);
+  }
+  function onTile(g) { showHero(g); clearTimeout(rotT); rotT = 0; }
+
+  function whenText(ts) { try { return new Date(ts).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }); } catch (e) { return ""; } }
+  /* the newest saved game across the seven (the games' own keys, read only) */
+  function lastSave() {
+    var best = null;
+    ORDER.forEach(function (g) {
+      if (g === "party") return;
+      ["auto", "save"].forEach(function (kind) {
+        try { var o = JSON.parse(localStorage.getItem("bg_" + kind + "_" + g)); if (o && o.data && o.ts && (!best || o.ts > best.ts)) best = { game: g, ts: o.ts }; } catch (e) { }
+      });
+    });
+    return best;
+  }
+
+  function links() {
+    var q = isTV() ? "?tv=1" : "";
+    $$("a.bg-tile, #hbContinue").forEach(function (a) {
+      var base = a.getAttribute("data-base") || (a.getAttribute("href") || "").split("?")[0];
+      if (base && base !== "#") { a.setAttribute("data-base", base); a.setAttribute("href", base + q); }
+    });
+    var pm = $("#hbPartyMeta"); if (pm) pm.textContent = isTV() ? "Host on this TV" : "TV + phones";
+    var par = $("#hbParty"); if (par) par.setAttribute("aria-label", isTV() ? "Party Mode, 2 to 10 players. Host the table on this TV, everyone joins with a room code." : "Party Mode, 2 to 10 players. Host on the TV, everyone joins from a phone.");
+    if (cur) setText(cur);
+  }
+
+  function boot() {
+    var b = B();
+    if (b && b.icon) {
+      $$("[data-hb-icon]").forEach(function (el) { el.innerHTML = b.icon(el.getAttribute("data-hb-icon")); });
+      $$("[data-hb-seal]").forEach(function (el) { el.innerHTML = b.icon(b.icon.seal(el.getAttribute("data-hb-seal"))); });
+    }
+    links();
+    var save = lastSave(), start = "trouble";
+    if (save) {
+      var c = $("#hbContinue"), base = save.game + "/index.html";
+      c.setAttribute("href", base); c.setAttribute("data-base", base);
+      $("#hbContinueLabel").textContent = "Continue " + NAME[save.game];
+      $("#hbContinueSub").textContent = "Last saved " + whenText(save.ts);
+      c.hidden = false; links(); start = save.game;
+    }
+    var hero = $("#hbHero"), layer = $(".bg-hero__layer.is-on", hero);
+    cur = start; setText(start);
+    hero.setAttribute("data-game", start); layer.setAttribute("data-game", start);
+    layer.style.backgroundImage = 'url("' + heroSrc(start) + '")';
+    measure();
+    addEventListener("resize", measure);
+
+    $$("a.bg-tile").forEach(function (a) {
+      var g = a.getAttribute("data-game");
+      a.addEventListener("focusin", function () { onTile(g); });
+      a.addEventListener("pointerenter", function (e) { if (e.pointerType === "mouse") onTile(g); });
+    });
+    var cn = $("#hbContinue"); if (cn) cn.addEventListener("focusin", function () { clearTimeout(rotT); rotT = 0; });
+    doc.addEventListener("focusout", function () { setTimeout(schedule, 60); });
+    doc.addEventListener("visibilitychange", schedule);
+    doc.addEventListener("bgui:effects", schedule);
+    doc.addEventListener("bgui:tv", function () { links(); measure(); schedule(); });
+    if ("IntersectionObserver" in window) {
+      new IntersectionObserver(function (es) { heroSeen = es[es.length - 1].isIntersecting; schedule(); }, { threshold: 0 }).observe(hero);
+    }
+    /* warm the other backdrops once the page is quiet, so a D-pad move shows the next poster at once */
+    var warm = function () { ORDER.forEach(function (g) { if (g !== start) (new Image()).src = heroSrc(g); }); };
+    if (window.requestIdleCallback) requestIdleCallback(warm, { timeout: 4000 }); else setTimeout(warm, 2500);
+    schedule();
+
+    /* sound and effects settings: the shared sound button (its panel carries "Reduce effects") docks in the bar */
+    if (window.Sound && Sound.mountButton) Sound.mountButton();
+    /* The hub has no Back step of its own: in the Fire TV app Back exits (no window.__tvBack). The one exception is the open sound
+       panel, which Back closes first: __tvBack exists only while the panel is on screen. */
+    function syncBack() {
+      var open = !!(window.Sound && Sound.panelOpen && Sound.panelOpen());
+      if (open) window.__tvBack = function () { try { Sound.closePanel(); } catch (e) { } };
+      else if (window.__tvBack) { try { delete window.__tvBack; } catch (e) { window.__tvBack = undefined; } }
+    }
+    new MutationObserver(syncBack).observe(doc.body, { childList: true });
+
+    if (isTV()) {
+      var first = (save && $("#hbContinue")) || $("a.bg-tile");
+      if (first) { if (b && b.focus && b.focus.set) b.focus.set(first); else first.focus(); }
+    }
+  }
+  /* ui.js, icons.js and sound.js are deferred: they have run by DOMContentLoaded */
+  if (doc.readyState === "loading") doc.addEventListener("DOMContentLoaded", boot); else boot();
+  if ("serviceWorker" in navigator) { navigator.serviceWorker.register("sw.js").catch(function () { }); }
+})();
+</script>
 </body>
 </html>
