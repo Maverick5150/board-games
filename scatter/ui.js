@@ -141,7 +141,7 @@ function mmss(t){ t=Math.max(0,Math.ceil(t)); return Math.floor(t/60)+":"+("0"+(
 function create(cfg){
   var L=!!cfg.luxe, ic=function(n){ return L&&cfg.icon?cfg.icon(n):""; }, BGu=function(){ return L&&typeof window!=="undefined"&&window.BGUI&&window.BGUI.sheet?window.BGUI:null; };
   injectCSS(L);
-  var root=cfg.root, S=null, built="", answers=null, deadline=0, tick=null, sent=false, shownVote={}, lastProg=0, ring=null;
+  var root=cfg.root, S=null, built="", answers=null, deadline=0, held=null, tick=null, sent=false, shownVote={}, lastProg=0, ring=null;
   root.classList.add("scT"); if(L) root.classList.add("is-lx");
   function seatOf(i){ return cfg.seatOf?cfg.seatOf(i):(i%8)+1; }
   /* the timer ring is BGUI.countdown (gold arc, 4 updates a second, no continuous animation). The deadline stays the one the old timer used
@@ -355,7 +355,10 @@ function create(cfg){
   }
   var self={update:function(s){ var prevPhase=S&&S.phase, prevRound=S&&S.round, prevMe=S&&S.me; S=s; if(S.phase==="write"&&(prevPhase!=="write"||prevRound!==S.round||prevMe!==S.me)){ sent=false; built=""; } render(); },
     destroy:function(){ halt(); if(modal.parentNode) modal.parentNode.removeChild(modal); },
-    readAnswers:readInputs,setDeadlineIn:function(sec){ deadline=Date.now()+sec*1000; if(L&&S&&S.phase==="write"&&!sent) startRing(sec); },submitNow:function(){ submit(); },closeModal:closeModal,isSent:function(){ return sent; }};
+    readAnswers:readInputs,holdClock:function(on){   // the page's Menu pauses the writing clock; Resume continues with the time that was left (Party never calls this)
+      if(on){ if(held==null&&S&&S.phase==="write"&&!sent&&deadline){ held=Math.max(0,(deadline-Date.now())/1000); deadline=Date.now()+1e10; stopRing(); } }
+      else if(held!=null){ var l=held; held=null; if(S&&S.phase==="write"&&!sent&&deadline>Date.now()+1e9){ deadline=Date.now()+l*1000; if(L) startRing(l); } }
+    },setDeadlineIn:function(sec){ deadline=Date.now()+sec*1000; if(L&&S&&S.phase==="write"&&!sent) startRing(sec); },submitNow:function(){ submit(); },closeModal:closeModal,isSent:function(){ return sent; }};
   return self;
 }
 Sc.UI={create:create,CSS:CSS,mmss:mmss,PCOL:PCOL};
