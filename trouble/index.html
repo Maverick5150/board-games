@@ -86,14 +86,34 @@
   .status b{font-weight:var(--fw-caps)}
   .status .dot{display:inline-block; width:.75rem; height:.75rem; margin-right:.2rem; border-radius:50%; vertical-align:-.04em; box-shadow:0 0 0 2px var(--ink-1),0 0 0 3px rgba(255,255,255,.18)}
   .tb-tie::before{content:" after a tie"}
-  #boardWrap{position:relative; width:min(94vw,520px); aspect-ratio:1/1}
+  /* the board: a molded square plate drawn once (SVG), framed in gold. The stage inside it takes the phone zoom (one transform) */
+  #boardWrap{position:relative; width:min(94vw,520px); aspect-ratio:1/1; border-radius:10.667%; box-shadow:var(--frame-shadow); overflow:hidden; background:var(--ink-2)}
+  html:not([data-tv]) #boardWrap{touch-action:none}
+  .tb-stage{position:absolute; left:0; top:0; width:100%; height:100%; transform-origin:0 0}
+  .tb-stage.is-glide{transition:transform .25s ease-out}
+  #boardWrap.is-gesture .tb-stage{will-change:transform}
   #board{display:block; width:100%; height:100%}
+  #board .tb-lbl{font:800 16px/1 var(--font-ui); letter-spacing:.11em; pointer-events:none}
+  #board .tb-pn{font:800 14px/1 var(--font-ui); fill:#0b0a12; pointer-events:none}
+  #board .tb-pop{font:800 26px/1 var(--font-ui); letter-spacing:.14em; fill:#f1e8d4; opacity:.92; pointer-events:none}
+  #tbHint{pointer-events:none}
+  #board .dome{transform-origin:300px 300px; transition:transform .14s ease-out}
+  #board .dome.is-press{transform:scale(.95)}
+  .bz-ctl{position:absolute; left:68.3%; top:68.3%; z-index:6; transform:translate(-50%,-50%); display:inline-flex; align-items:center; justify-content:center; gap:.4em; min-width:44px; min-height:44px; padding:0 1em; border:0; border-radius:999px; font:700 14px/1 var(--font-ui); color:#f6f1e7; background:rgba(8,10,21,.86); box-shadow:inset 0 0 0 1px rgba(231,202,144,.7),0 4px 12px rgba(0,0,0,.5); cursor:pointer; touch-action:manipulation}
+  .bz-ctl svg{width:1.25em; height:1.25em}
+  .is-zoomed > .bz-ctl{left:auto; top:auto; right:10px; bottom:10px; transform:none; background:#e7ca90; color:#1a1306; box-shadow:0 4px 12px rgba(0,0,0,.55)}
+  html[data-tv] .bz-ctl{display:none}
+  .tb-inspect{display:flex; align-items:flex-start; justify-content:space-between; gap:.75rem; width:min(100%,520px); margin-top:.75rem; padding:.75rem .875rem}
+  .tb-inspect[hidden]{display:none}
+  .tb-inspect__txt{display:grid; gap:.2rem; min-width:0; font:var(--fw-body) var(--fs-md)/1.4 var(--font-ui); color:var(--text-2)}
+  .tb-inspect__txt b{font:var(--fw-ui-strong) var(--fs-lg)/1.25 var(--font-display); color:var(--text-1)}
+  html[data-tv] .tb-inspect{display:none}
   /* the pop-o-matic dome: the D-pad / keyboard target (taps go through to the board art) and its pulsing turn ring. The ring's
      opacity is set on the effects ticker's frames (8 a second, see pulseTick); the compositor glides between them (a one-shot
      125 ms linear transition per update, opacity only on its own layer), so the breathe is smooth, as the old 60 fps ring was */
-  #boardWrap .tb-domebtn{position:absolute; left:33.974%; top:33.974%; width:32.051%; height:32.051%; z-index:1; margin:0; padding:0; border:0; border-radius:50%;
+  #boardWrap .tb-domebtn{position:absolute; left:33.333%; top:33.333%; width:33.333%; height:33.333%; z-index:1; margin:0; padding:0; border:0; border-radius:50%;
     background:transparent; pointer-events:none; cursor:pointer}
-  .tb-pulse{position:absolute; left:33.974%; top:33.974%; width:32.051%; height:32.051%; pointer-events:none; opacity:.9; will-change:opacity; color:#e23b3b;
+  .tb-pulse{position:absolute; left:33.333%; top:33.333%; width:33.333%; height:33.333%; pointer-events:none; opacity:.9; will-change:opacity; color:#e23b3b;
     transition:opacity 125ms linear}
   @media (prefers-reduced-motion: reduce){ .tb-pulse{transition:none} }
   html[data-motion="reduce"] .tb-pulse{transition:none}
@@ -102,9 +122,12 @@
   .tb-gdock{display:flex; justify-content:center; gap:.75rem; min-height:var(--tap); margin-top:1rem}
   #moveSub{margin:0 0 1rem}
   html:not([data-tv]) .tb-hints{display:none}
-  .peg{cursor:default; transition:transform .18s ease;}
+  /* a peg glides to its new place (transform only); it stays put under Reduce effects / reduced motion */
+  .peg{cursor:default; transition:transform .26s cubic-bezier(.3,.7,.2,1)}
+  html[data-effects="reduced"] .peg, html[data-motion="reduce"] .peg, html[data-effects="reduced"] #board .dome, html[data-motion="reduce"] #board .dome{transition:none}
+  @media (prefers-reduced-motion: reduce){ .peg, #board .dome{transition:none} }
   .peg.movable{cursor:pointer;}
-  .peg.movable .ring{opacity:1;}
+  .peg.movable .ring{opacity:1; pointer-events:all}
   .ring{opacity:0;}
   .dome{cursor:default;}
   /* fallbacks when ui/ui.js is missing (the Luxe toasts take over when it is there) */
@@ -212,10 +235,13 @@
     <div class="bg-players" id="legend" aria-label="Players"></div>
     <div class="bg-card tb-status"><span class="bg-die tb-die" id="statusDie" aria-hidden="true" hidden></span><div class="status" id="status" aria-live="polite">&nbsp;</div></div>
     <div id="boardWrap">
-      <svg id="board" viewBox="-12 -12 624 624"></svg>
-      <i class="tb-pulse" id="domePulse" aria-hidden="true" hidden><svg viewBox="0 0 200 200" focusable="false"><circle cx="100" cy="100" r="94" fill="none" stroke="currentColor" stroke-width="5"/></svg></i>
-      <button type="button" class="bg-focus tb-domebtn" id="domeBtn" aria-label="Pop the dome" data-focus-first></button>
+      <div class="tb-stage" id="stage">
+        <svg id="board" viewBox="0 0 600 600" role="img" aria-label="Trouble board: a square board with a ring of 28 spaces, four home trays, four finish lanes and the Pop-O-Matic dome in the middle"></svg>
+        <i class="tb-pulse" id="domePulse" aria-hidden="true" hidden><svg viewBox="0 0 200 200" focusable="false"><circle cx="100" cy="100" r="94" fill="none" stroke="currentColor" stroke-width="5"/></svg></i>
+        <button type="button" class="bg-focus tb-domebtn" id="domeBtn" aria-label="Pop the dome" data-focus-first></button>
+      </div>
     </div>
+    <div class="bg-card tb-inspect" id="inspect" role="status" aria-live="polite" hidden><div class="tb-inspect__txt"><b id="inspT"></b><span id="inspD"></span></div><button class="bg-btn bg-btn--icon" type="button" id="inspX" aria-label="Close" data-icon="close"></button></div>
     <div class="tb-gdock" data-toast-avoid>
       <button class="bg-btn bg-btn--secondary" id="movesBtn" type="button" data-icon="pawn" hidden>Choose a move</button>
     </div>
@@ -261,13 +287,14 @@
 "use strict";
 
 const COLORS = ["red","blue","green","yellow"];
-const CSSCOL = {red:"#e23b3b", blue:"#2b7be0", green:"#27a758", yellow:"#eec21b"};
+const CSSCOL = {red:"#ff5d73", blue:"#5f95ff", green:"#3fd391", yellow:"#ffcb4f"};   // the Luxe seat colours
 const NAME   = {red:"Red", blue:"Blue", green:"Green", yellow:"Yellow"};
 const SEAT   = {red:1, blue:2, green:3, yellow:4};   // ui/theme.css seat colours for the player strip and tokens
 const TRACK = 28;                     // spaces around the loop
 const START = {red:0, green:7, yellow:14, blue:21};  // entry space per color
 const MAXD = 31;                      // 0..27 track, 28..31 finish slots
 const cx=300, cy=300;
+const PADC={red:[70,70], green:[530,70], yellow:[530,530], blue:[70,530]}, PADW=110, PADH=112;   // each colour's home tray sits in a corner of the square board
 const trackR=228, homeR=272;
 
 // ---- geometry ----
@@ -281,14 +308,12 @@ function pegXY(c,d){
   if(d<=27) return trackXY(absSpace(c,d));
   const j=d-28;                          // finish slot 0..3 (kept clear of the center dome)
   const a=ang(START[c]);
-  const r=198-30*j;                      // 198,168,138,108 — innermost stays outside the dome
+  const r=198-29*j;                      // 198,169,140,111 — innermost stays outside the dome
   return [cx+r*Math.cos(a), cy+r*Math.sin(a)];
 }
 function homeSlotXY(c,k){
-  const a=ang(START[c]);
-  const bx=cx+homeR*Math.cos(a), by=cy+homeR*Math.sin(a);
-  const ox=(k%2?1:-1)*16, oy=(k<2?-1:1)*16;
-  return [bx+ox, by+oy];
+  const [px,py]=PADC[c];
+  return [px+(k%2?25:-25), py+(k<2?-8:30)];
 }
 
 // ---- state ----
@@ -349,34 +374,124 @@ function toast(msg){
   toastEl.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>toastEl.classList.remove("show"),1400);
 }
 
-// ---- center pop-o-matic dome ----
+// ---- zoom helper (phone) ----
+/* Board zoom for the phone (pinch, double-tap, Ctrl+wheel, one-finger pan while zoomed, a 44 px "Zoom" / "Fit" button inside the frame).
+   ONE transform on the stage; will-change only during a gesture, so the vector board is crisp at rest. A tap (no drag) calls
+   o.onTap(fx, fy, event) with the point as fractions of the board frame, unless o.skip(event) says the tap belongs to a control.
+   o.start() gives the point (fx, fy) the Zoom button zooms to. At Fit a one-finger swipe scrolls the page from here. */
+function BoardZoom(host, stage, o){
+  const inst={}; let zoom=1, tx=0, ty=0, gestureT=0, tapT=0, lastTap={t:0,x:0,y:0}, ctl=null, on=false, bound=false;
+  const size=()=>host.clientWidth||1;
+  const clamp=()=>{ const P=size(); tx=Math.min(0,Math.max(P-P*zoom,tx)); ty=Math.min(0,Math.max(P-P*zoom,ty)); };
+  const r2=v=>Math.round(v*100)/100;
+  function apply(glide){
+    clamp();
+    if(glide){ stage.classList.add("is-glide"); setTimeout(()=>stage.classList.remove("is-glide"),260); }
+    stage.style.transform=zoom===1&&!tx&&!ty?"":"translate3d("+r2(tx)+"px,"+r2(ty)+"px,0) scale("+Math.round(zoom*1000)/1000+")";
+    host.classList.toggle("is-zoomed",zoom>1.02); ctlSync();
+  }
+  const gestureOn=()=>{ host.classList.add("is-gesture"); clearTimeout(gestureT); };
+  const gestureOff=()=>{ clearTimeout(gestureT); gestureT=setTimeout(()=>host.classList.remove("is-gesture"),160); };
+  function zoomAt(z,px,py,glide,centre){
+    z=Math.max(1,Math.min(3,z)); const f=z/zoom, P=size();
+    if(centre){ tx=P/2-(px-tx)*f; ty=P/2-(py-ty)*f; } else { tx=px-(px-tx)*f; ty=py-(py-ty)*f; }
+    zoom=z; if(zoom<=1.001){ zoom=1; tx=0; ty=0; } apply(glide);
+  }
+  inst.fit=()=>{ zoom=1; tx=0; ty=0; apply(true); };
+  inst.zoomTo=(fx,fy,z)=>{ const P=size(); z=z||3; zoom=z; tx=P/2-fx*P*z; ty=P/2-fy*P*z; apply(true); };
+  inst.zoom=()=>zoom;
+  function ctlSync(){ if(!ctl) return; const z=zoom>1.02; ctl.setAttribute("aria-label",z?"Fit the whole board":"Zoom in"); ctl.lastChild.textContent=z?"Fit":"Zoom"; ctl.firstChild.style.display=z?"none":""; }
+  inst.enable=function(v){
+    on=!!v; if(!on){ if(zoom!==1) inst.fit(); if(ctl) ctl.hidden=true; return; }
+    if(ctl) ctl.hidden=false;
+    if(bound) return; bound=true;
+    ctl=document.createElement("button"); ctl.type="button"; ctl.className="bz-ctl";
+    ctl.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21M10.5 7.5v6M7.5 10.5h6"/></svg><span>Zoom</span>';
+    host.appendChild(ctl);
+    ctl.addEventListener("pointerdown",e=>e.stopPropagation());
+    ctl.addEventListener("click",e=>{ e.stopPropagation(); if(zoom>1.02) inst.fit(); else { const c=(o.start&&o.start())||[.5,.5]; inst.zoomTo(c[0],c[1],3); } });
+    ctlSync();
+    const ptrs={}; let np=0, moved=false, startD=0, startZ=1, t0=0, one=null;
+    const local=e=>{ const b=host.getBoundingClientRect(); return {x:e.clientX-b.left,y:e.clientY-b.top}; };
+    let scrolling=false, sEl=null, sY=0, sT=0, sV=0, flingRAF=0;
+    const scroller=()=>{ for(let el=host.parentElement; el&&el!==document.body&&el!==document.documentElement; el=el.parentElement){ const oy=getComputedStyle(el).overflowY; if((oy==="auto"||oy==="scroll")&&el.scrollHeight>el.clientHeight+1) return el; } return null; };
+    const scrollPage=dy=>{ if(sEl) sEl.scrollTop-=dy; else window.scrollBy(0,-dy); };
+    const stopFling=()=>{ if(flingRAF){ cancelAnimationFrame(flingRAF); flingRAF=0; } };
+    const fling=v=>{
+      const de=document.documentElement; if(Math.abs(v)<0.2||de.getAttribute("data-motion")==="reduce"||(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches)) return;
+      let last=0; const step=t=>{ const dt=last?Math.min(40,t-last):16; last=t; v*=Math.pow(0.93,dt/16); if(Math.abs(v)<0.03){ flingRAF=0; return; } scrollPage(v*dt); flingRAF=requestAnimationFrame(step); };
+      flingRAF=requestAnimationFrame(step);
+    };
+    host.addEventListener("pointerdown",e=>{
+      if(!on||(e.button>0&&e.pointerType==="mouse")) return;
+      stopFling(); const p=local(e); ptrs[e.pointerId]=p; np=Object.keys(ptrs).length;
+      if(np===1){ moved=false; scrolling=false; t0=Date.now(); one={x:p.x,y:p.y,cx:e.clientX,cy:e.clientY}; }
+      if(np===2){ scrolling=false; const k=Object.keys(ptrs), a=ptrs[k[0]], b=ptrs[k[1]]; startD=Math.hypot(a.x-b.x,a.y-b.y)||1; startZ=zoom; moved=true; gestureOn(); try{ host.setPointerCapture(e.pointerId); }catch(x){} }
+    });
+    host.addEventListener("pointermove",e=>{
+      if(!on||!ptrs[e.pointerId]) return; const p=local(e), prev=ptrs[e.pointerId]; ptrs[e.pointerId]=p;
+      if(np>=2){ const k=Object.keys(ptrs), a=ptrs[k[0]], b=ptrs[k[1]], d=Math.hypot(a.x-b.x,a.y-b.y)||1; zoomAt(startZ*d/startD,(a.x+b.x)/2,(a.y+b.y)/2,false); e.preventDefault(); return; }
+      if(one&&!moved&&Math.hypot(e.clientX-one.cx,e.clientY-one.cy)>8){
+        moved=true;
+        if(zoom>1.02){ gestureOn(); try{ host.setPointerCapture(e.pointerId); }catch(x){} }
+        else if(e.pointerType!=="mouse"){ scrolling=true; sEl=scroller(); sY=e.clientY; sT=e.timeStamp; sV=0; }
+      }
+      if(scrolling){ const dy=e.clientY-sY, dt=Math.max(1,e.timeStamp-sT); if(dy){ scrollPage(dy); sV=sV*0.5+dy/dt*0.5; } sY=e.clientY; sT=e.timeStamp; e.preventDefault(); return; }
+      if(moved&&zoom>1.02){ tx+=p.x-prev.x; ty+=p.y-prev.y; apply(false); e.preventDefault(); }
+    });
+    const up=e=>{
+      if(!on||!ptrs[e.pointerId]) return; const p=ptrs[e.pointerId]; delete ptrs[e.pointerId]; const was=np; np=Object.keys(ptrs).length;
+      if(was>=2){ if(zoom<1.04) inst.fit(); gestureOff(); return; }
+      gestureOff();
+      if(scrolling){ scrolling=false; if(e.type==="pointerup"&&e.timeStamp-sT<90) fling(sV); return; }
+      if(e.type!=="pointerup"||moved||Date.now()-t0>450) return;
+      if(o.skip&&o.skip(e)) return;
+      const now=Date.now();
+      if(now-lastTap.t<320&&Math.hypot(p.x-lastTap.x,p.y-lastTap.y)<36){ clearTimeout(tapT); lastTap.t=0; if(zoom>1.05) inst.fit(); else zoomAt(3,p.x,p.y,true,true); return; }
+      lastTap={t:now,x:p.x,y:p.y};
+      const P=size(), fx=((p.x-tx)/zoom)/P, fy=((p.y-ty)/zoom)/P;
+      clearTimeout(tapT); if(o.onTap) tapT=setTimeout(()=>o.onTap(fx,fy,e),260);
+    };
+    host.addEventListener("pointerup",up); host.addEventListener("pointercancel",up);
+    host.addEventListener("wheel",e=>{ if(!on||(!e.ctrlKey&&zoom<1.02)) return; const p=local(e); e.preventDefault(); zoomAt(zoom*(e.deltaY<0?1.18:1/1.18),p.x,p.y,false); },{passive:false});
+  };
+  return inst;
+}
+
+// ---- the board: one static art layer (drawn once), pegs and hints as light layers on top ----
 const svgns="http://www.w3.org/2000/svg";
-function dieFaceSVG(v,ox,oy,size){
+const f1=n=>Math.round(n*10)/10;
+const SEATC={ // the Luxe seat colours (ui/theme.css --seat-N, -hi, -lo, -tint)
+  red:{m:"#ff5d73",hi:"#ffa1ae",lo:"#802f3a",tint:"#44273d"}, blue:{m:"#5f95ff",hi:"#a2c2ff",lo:"#304b80",tint:"#243259"},
+  green:{m:"#3fd391",hi:"#90e5bf",lo:"#206a49",tint:"#1d3e43"}, yellow:{m:"#ffcb4f",hi:"#ffe199",lo:"#806628",tint:"#443d36"}};
+const SIDE={red:"top",green:"right",yellow:"bottom",blue:"left"};   // the side of the board each colour's start space is on
+let lastMv=null, inspectAt=null, tilt=0, jig=[0,0];
+const TILT=[-5,4,-3,6,-4,3];
+function dieFaceSVG(v,ox,oy,size,rot){
   if(!v) return '';
-  const h=size/2, o=size*0.26, pr=size*0.08;
-  let s=`<rect x="${ox-h}" y="${oy-h}" width="${size}" height="${size}" rx="11" fill="#fdfdfd" stroke="#0005" stroke-width="2"/>`;
+  const h=size/2, o=size*0.26, pr=size*0.085;
+  let s=`<g transform="rotate(${rot||0} ${ox} ${oy})"><ellipse cx="${ox+3}" cy="${oy+h+4}" rx="${h*0.95}" ry="${size*0.11}" fill="#000" opacity=".4"/>`+
+    `<rect x="${ox-h}" y="${oy-h}" width="${size}" height="${size}" rx="${size*0.18}" fill="url(#tbDie)" stroke="#2a2440" stroke-opacity=".55" stroke-width="2"/>`+
+    `<path d="M${ox-h+size*0.18} ${oy-h+2.5}H${ox+h-size*0.18}" stroke="#fff" stroke-opacity=".9" stroke-width="2.4" stroke-linecap="round"/>`;
   const P={TL:[-o,-o],TR:[o,-o],ML:[-o,0],MC:[0,0],MR:[o,0],BL:[-o,o],BR:[o,o]};
   const MAP={1:['MC'],2:['TL','BR'],3:['TL','MC','BR'],4:['TL','TR','BL','BR'],5:['TL','TR','MC','BL','BR'],6:['TL','TR','ML','MR','BL','BR']};
-  for(const key of MAP[v]){ const [dx,dy]=P[key]; s+=`<circle cx="${ox+dx}" cy="${oy+dy}" r="${pr}" fill="#1b2340"/>`; }
-  return s;
+  for(const key of MAP[v]){ const [dx,dy]=P[key]; s+=`<circle cx="${ox+dx}" cy="${oy+dy}" r="${pr}" fill="#1b2340"/><circle cx="${ox+dx-pr*0.3}" cy="${oy+dy-pr*0.35}" r="${pr*0.32}" fill="#fff" opacity=".35"/>`; }
+  return s+'</g>';
+}
+function dieRestSVG(ox,oy,size,rot){   // the die waiting in the dome (a path, not a rect: the dome only holds a rect while a number shows)
+  const h=size/2, r=size*0.18, x0=ox-h, y0=oy-h, x1=ox+h, y1=oy+h;
+  return `<g transform="rotate(${rot} ${ox} ${oy})" opacity=".42"><path d="M${x0+r} ${y0}H${x1-r}Q${x1} ${y0} ${x1} ${y0+r}V${y1-r}Q${x1} ${y1} ${x1-r} ${y1}H${x0+r}Q${x0} ${y1} ${x0} ${y1-r}V${y0+r}Q${x0} ${y0} ${x0+r} ${y0}Z" fill="url(#tbDie)" stroke="#2a2440" stroke-opacity=".5" stroke-width="2"/></g>`;
 }
 function renderDome(){
-  svg.querySelectorAll(".dome").forEach(e=>e.remove());
+  const g=svg.querySelector(".dome"); if(!g) return;
   const c=curColor();
   const canPop = !gameOver && !busy && !awaitingMove && die===0 && c && isHuman[c];
-  const g=document.createElementNS(svgns,"g");
-  g.setAttribute("class","dome");
-  let inner=`<circle cx="${cx}" cy="${cy}" r="94" fill="#0b1228" stroke="#2a3663" stroke-width="4"/>`;
-  inner+=`<circle cx="${cx}" cy="${cy}" r="86" fill="url(#domeGlass)"/>`;
-  inner+=`<ellipse cx="${cx-22}" cy="${cy-30}" rx="26" ry="16" fill="#ffffff55"/>`;  // glossy highlight
-  if(die>0) inner+=dieFaceSVG(die,cx,cy,64);
-  else inner+=`<text x="${cx}" y="${cy+7}" text-anchor="middle" font-size="26" font-weight="900" fill="#20305f" letter-spacing="1">POP</text>`;
-  // the current player's ring (whose turn it is, human or CPU); it pulses on its own layer (#domePulse, see pulseRefresh)
-  if(!gameOver && c) inner+=`<circle class="domeRing" cx="${cx}" cy="${cy}" r="94" fill="none" stroke="${CSSCOL[c]}" stroke-width="5"/>`;
-  g.innerHTML=inner;
-  g.addEventListener("click",doPop);   // always wired: doPop() itself checks that it's a human's turn to pop
-  if(canPop) g.style.cursor="pointer";
-  svg.appendChild(g);
+  const dg=g.querySelector("#domeDie");
+  dg.innerHTML = die>0 ? dieFaceSVG(die,cx+jig[0],cy+jig[1],62,tilt)
+    : dieRestSVG(cx,cy,62,-14)+`<text x="${cx}" y="${cy+9}" text-anchor="middle" class="tb-pop">POP</text>`;
+  const ring=g.querySelector(".domeRing");
+  if(!gameOver&&c){ ring.setAttribute("stroke",CSSCOL[c]); ring.style.display=""; } else ring.style.display="none";
+  g.style.cursor=canPop?"pointer":"";
   uiSync();
 }
 function doPop(){
@@ -386,90 +501,173 @@ function doPop(){
   animatePop(()=>{ doRoll(); if(die===6) sixStreak++; else sixStreak=0; afterRollResolve(c); });
 }
 
-// ---- board rendering ----
+// ---- board art ----
+const spaceR=15.5, holeR=13.5;
+function holeDeep(x,y,c,r){ return `<circle cx="${f1(x)}" cy="${f1(y)}" r="${r+1.6}" fill="#03040a" opacity=".6"/><circle cx="${f1(x)}" cy="${f1(y)}" r="${r}" fill="url(#tbDeep)" stroke="${SEATC[c].m}" stroke-width="2.4"/><path d="M${f1(x-r*0.62)} ${f1(y+r*0.62)}A${f1(r*0.88)} ${f1(r*0.88)} 0 0 0 ${f1(x+r*0.62)} ${f1(y+r*0.62)}" fill="none" stroke="#fff" stroke-opacity=".16" stroke-width="1.6" stroke-linecap="round"/>`; }
+function lbl(c,txt,pos,extra){ return `<text ${pos} class="tb-lbl${extra||""}" fill="${SEATC[c].hi}">${txt}</text>`; }
 function buildBoard(){
+  lastMv=null; inspectAt=null; inspEl.hidden=true; BZ.fit();
   let s=`<defs>
-    <radialGradient id="domeGlass" cx="40%" cy="35%" r="75%">
-      <stop offset="0%" stop-color="#ffffff"/><stop offset="55%" stop-color="#d6def4"/><stop offset="100%" stop-color="#9aa8cf"/>
-    </radialGradient>
-    <radialGradient id="plate" cx="50%" cy="42%" r="70%">
-      <stop offset="0%" stop-color="#1b2a55"/><stop offset="100%" stop-color="#0c1329"/>
-    </radialGradient>
+    <linearGradient id="tbPlate" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(--board-lite)"/><stop offset=".5" style="stop-color:var(--board)"/><stop offset="1" style="stop-color:var(--felt-deep)"/></linearGradient>
+    <radialGradient id="tbGlow" cx=".5" cy=".4" r=".7"><stop offset="0" stop-color="#fff" stop-opacity=".09"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+    <linearGradient id="tbGold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f9ebc6"/><stop offset=".5" stop-color="#d5af6d"/><stop offset="1" stop-color="#8a6633"/></linearGradient>
+    <radialGradient id="tbHole" cx=".4" cy=".34" r=".78"><stop offset="0" stop-color="#fbf6ea"/><stop offset=".62" stop-color="#e5d9bf"/><stop offset="1" stop-color="#b5a37a"/></radialGradient>
+    <radialGradient id="tbDeep" cx=".42" cy=".3" r=".85"><stop offset="0" stop-color="#262b4d"/><stop offset="1" stop-color="#06070f"/></radialGradient>
+    <radialGradient id="tbPeg" cx=".36" cy=".3" r=".85"><stop offset="0" stop-color="#fff" stop-opacity=".62"/><stop offset=".42" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".42"/></radialGradient>
+    <linearGradient id="tbDie" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d8d2e6"/></linearGradient>
+    <radialGradient id="tbBase" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#2a3566"/><stop offset=".7" stop-color="#121733"/><stop offset="1" stop-color="#070914"/></radialGradient>
+    <radialGradient id="tbPlat" cx=".4" cy=".32" r=".8"><stop offset="0" stop-color="#47528c"/><stop offset="1" stop-color="#171c3c"/></radialGradient>
+    <radialGradient id="tbGlass" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#cfe0ff" stop-opacity=".02"/><stop offset=".72" stop-color="#cfe0ff" stop-opacity=".1"/><stop offset="1" stop-color="#fff" stop-opacity=".36"/></radialGradient>
+    <linearGradient id="tbSpec" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".7"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
   </defs>`;
-  // outer plate
-  s+=`<circle cx="${cx}" cy="${cy}" r="294" fill="url(#plate)" stroke="#2a3663" stroke-width="4"/>`;
-  // each color's finish lane: a colored channel from near its start toward the center
+  s+=`<g id="tbArt">`;
+  // the molded plate: a rounded square with a gold bezel, a dark moat and a faint inner light
+  s+=`<rect width="600" height="600" rx="64" fill="url(#tbPlate)"/><rect width="600" height="600" rx="64" fill="url(#tbGlow)"/>`+
+     `<rect x="3" y="3" width="594" height="594" rx="61" fill="none" stroke="url(#tbGold)" stroke-width="3"/>`+
+     `<rect x="9" y="9" width="582" height="582" rx="55" fill="none" stroke="#000" stroke-opacity=".5" stroke-width="2"/>`+
+     `<rect x="11.5" y="11.5" width="577" height="577" rx="52.5" fill="none" stroke="#fff" stroke-opacity=".09" stroke-width="1"/>`;
+  // the track: a recessed band with gold edge lines
+  s+=`<circle cx="${cx}" cy="${cy}" r="${trackR}" fill="none" stroke="#04050d" stroke-opacity=".34" stroke-width="35"/>`+
+     `<circle cx="${cx}" cy="${cy}" r="${trackR+17.5}" fill="none" stroke="#e7ca90" stroke-opacity=".34" stroke-width="1.4"/>`+
+     `<circle cx="${cx}" cy="${cy}" r="${trackR-17.5}" fill="none" stroke="#e7ca90" stroke-opacity=".34" stroke-width="1.4"/>`+
+     `<circle cx="${cx}" cy="${cy}" r="104" fill="none" stroke="#e7ca90" stroke-opacity=".3" stroke-width="1.4"/>`;
+  // each colour's finish lane: a seat-colour channel from its start space in to the dome
   for(const c of COLORS){
-    const a=ang(START[c]);
-    const [x0,y0]=trackXY(START[c]);
-    const [x1,y1]=[cx+100*Math.cos(a), cy+100*Math.sin(a)];
-    s+=`<line x1="${x0.toFixed(1)}" y1="${y0.toFixed(1)}" x2="${x1.toFixed(1)}" y2="${y1.toFixed(1)}" stroke="${CSSCOL[c]}" stroke-width="30" stroke-linecap="round" opacity="0.18"/>`;
+    const a=ang(START[c]), [x0,y0]=trackXY(START[c]), x1=cx+112*Math.cos(a), y1=cy+112*Math.sin(a), K=SEATC[c];
+    s+=`<line x1="${f1(x0)}" y1="${f1(y0)}" x2="${f1(x1)}" y2="${f1(y1)}" stroke="${K.m}" stroke-opacity=".5" stroke-width="37" stroke-linecap="round"/>`+
+       `<line x1="${f1(x0)}" y1="${f1(y0)}" x2="${f1(x1)}" y2="${f1(y1)}" stroke="${K.tint}" stroke-width="33" stroke-linecap="round"/>`;
   }
-  // track spaces (clockwise loop)
+  // track spaces (clockwise loop); start spaces carry their seat colour and an arrow outside the loop
   for(let i=0;i<TRACK;i++){
     const [x,y]=trackXY(i);
-    s+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="15.5" fill="#f2f5ff" stroke="#9fb0d8" stroke-width="2"/>`;
+    const sc=COLORS.find(c=>START[c]===i);
+    if(sc){ const K=SEATC[sc], a=ang(i), ux=Math.cos(a), uy=Math.sin(a), tx=-uy, ty=ux, r1=trackR+29, bx=cx+r1*ux, by=cy+r1*uy;   // t = clockwise tangent
+      s+=`<circle cx="${f1(x)}" cy="${f1(y)}" r="${spaceR+2}" fill="${K.lo}"/><circle cx="${f1(x)}" cy="${f1(y)}" r="${spaceR}" fill="${K.m}"/><circle cx="${f1(x)}" cy="${f1(y)}" r="${spaceR}" fill="url(#tbPeg)"/><circle cx="${f1(x)}" cy="${f1(y)}" r="10.5" fill="none" stroke="#fff" stroke-opacity=".85" stroke-width="1.6"/>`;
+      s+=`<path d="M${f1(bx+tx*11)} ${f1(by+ty*11)}L${f1(bx-tx*6+ux*7)} ${f1(by-ty*6+uy*7)}L${f1(bx-tx*6-ux*7)} ${f1(by-ty*6-uy*7)}Z" fill="${K.hi}"/>`;
+    } else s+=`<circle cx="${f1(x)}" cy="${f1(y)}" r="${spaceR+1.8}" fill="#02030a" opacity=".5"/><circle cx="${f1(x)}" cy="${f1(y)}" r="${spaceR}" fill="url(#tbHole)" stroke="#8d7a52" stroke-width="1.2"/>`;
   }
-  // per color: start space, finish slots, home nest
+  // per colour: finish holes, home pad (a rounded tray with four peg holes), and its labels
   for(const c of COLORS){
-    const [sx,sy]=trackXY(START[c]);
-    s+=`<circle cx="${sx.toFixed(1)}" cy="${sy.toFixed(1)}" r="15.5" fill="${CSSCOL[c]}" stroke="#0005" stroke-width="2"/>`;
-    for(let j=0;j<4;j++){
-      const [fx,fy]=pegXY(c,28+j);
-      s+=`<circle cx="${fx.toFixed(1)}" cy="${fy.toFixed(1)}" r="14" fill="${CSSCOL[c]}" stroke="#0006" stroke-width="2" opacity="0.9"/>`;
-      s+=`<circle cx="${fx.toFixed(1)}" cy="${fy.toFixed(1)}" r="8" fill="#0003"/>`;
-    }
-    // home nest with 4 peg holes
-    const a=ang(START[c]);
-    const hx=cx+homeR*Math.cos(a), hy=cy+homeR*Math.sin(a);
-    s+=`<circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="36" fill="${CSSCOL[c]}" stroke="#0006" stroke-width="2" opacity="0.92"/>`;
-    for(let k=0;k<4;k++){ const [px,py]=homeSlotXY(c,k); s+=`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="9" fill="#0004"/>`; }
-    // (color name is drawn in renderPegs, on TOP of the pegs, so it's always visible)
+    const K=SEATC[c], a=ang(START[c]);
+    for(let j=0;j<4;j++){ const [fx,fy]=pegXY(c,28+j); s+=holeDeep(fx,fy,c,holeR); }
+    const [px,py]=PADC[c];
+    s+=`<rect x="${px-PADW/2-2.5}" y="${py-PADH/2-2.5}" width="${PADW+5}" height="${PADH+5}" rx="23" fill="#02030a" opacity=".45"/>`+
+       `<rect x="${px-PADW/2}" y="${py-PADH/2}" width="${PADW}" height="${PADH}" rx="21" fill="${K.tint}" stroke="${K.m}" stroke-width="2.4"/>`+
+       `<rect x="${px-PADW/2+4}" y="${py-PADH/2+4}" width="${PADW-8}" height="${PADH-8}" rx="17" fill="none" stroke="#fff" stroke-opacity=".1" stroke-width="1"/>`;
+    s+=lbl(c,"HOME",`x="${px}" y="${py-34}" text-anchor="middle"`);
+    for(let k=0;k<4;k++){ const [hx,hy]=homeSlotXY(c,k); s+=holeDeep(hx,hy,c,holeR); }
+    // START label on the plate beside the start space, and FINISH beside the lane
+    const side=SIDE[c], W=NAME[c].toUpperCase()+" START";
+    if(side==="top") s+=lbl(c,W,`x="300" y="37" text-anchor="middle"`);
+    else if(side==="bottom") s+=lbl(c,W,`x="300" y="577" text-anchor="middle"`);
+    else if(side==="right") s+=lbl(c,W,`transform="translate(570 300) rotate(90)" text-anchor="middle"`);
+    else s+=lbl(c,W,`transform="translate(30 300) rotate(-90)" text-anchor="middle"`);
+    const mx=cx+153*Math.cos(a), my=cy+153*Math.sin(a);
+    if(side==="top"||side==="bottom") s+=lbl(c,"FINISH",`x="${f1(mx+26)}" y="${f1(my+6)}"`,"");
+    else s+=lbl(c,"FINISH",`x="${f1(mx)}" y="${f1(my-26)}" text-anchor="middle"`,"");
   }
+  s+=`</g><g id="tbHint"></g><g id="tbPegs"></g>`;
+  // the Pop-O-Matic: a gold bezel, a dark base, the die on its pad, a clear glass bubble over it (the die changes, the glass stays)
+  s+=`<g class="dome"><circle cx="${cx}" cy="${cy}" r="96" fill="#02030a" opacity=".5"/><circle cx="${cx}" cy="${cy}" r="94" fill="url(#tbGold)"/>`+
+     `<circle cx="${cx}" cy="${cy}" r="89" fill="#0a0d1f"/><circle cx="${cx}" cy="${cy}" r="85" fill="url(#tbBase)"/>`+
+     `<circle cx="${cx}" cy="${cy}" r="62" fill="url(#tbPlat)" stroke="#e7ca90" stroke-opacity=".55" stroke-width="1.6"/>`+
+     `<circle cx="${cx}" cy="${cy}" r="52" fill="none" stroke="#fff" stroke-opacity=".08" stroke-width="1"/>`+
+     `<g id="domeDie"></g>`+
+     `<circle cx="${cx}" cy="${cy}" r="85" fill="url(#tbGlass)"/><circle cx="${cx}" cy="${cy}" r="84" fill="none" stroke="#fff" stroke-opacity=".42" stroke-width="1.6"/>`+
+     `<path d="M${cx-62} ${cy-34}A70 70 0 0 1 ${cx-8} ${cy-70}" fill="none" stroke="url(#tbSpec)" stroke-width="9" stroke-linecap="round"/>`+
+     `<ellipse cx="${cx-30}" cy="${cy-42}" rx="15" ry="8" transform="rotate(-38 ${cx-30} ${cy-42})" fill="#fff" opacity=".3"/>`+
+     `<path d="M${cx+52} ${cy+40}A68 68 0 0 1 ${cx+14} ${cy+70}" fill="none" stroke="#fff" stroke-opacity=".28" stroke-width="5" stroke-linecap="round"/>`+
+     `<circle class="domeRing" cx="${cx}" cy="${cy}" r="94" fill="none" stroke="#fff" stroke-width="5"/></g>`;
   svg.innerHTML=s;
+  pegEls={};
+  svg.querySelector(".dome").addEventListener("click",doPop);   // always wired: doPop() itself checks that it's a human's turn to pop
+  svg.querySelector("#tbPegs").addEventListener("click",e=>{ const p=e.target.closest&&e.target.closest(".peg.movable"); if(p) humanMove(+p.getAttribute("data-k")); });
   renderPegs();
 }
 
+// ---- pegs: one persistent glossy peg per (colour, number), glided to its place; hints + last move on their own light layer ----
+let pegEls={};
+function pegMarkup(c,k){
+  const K=SEATC[c];
+  return `<circle class="ring" r="21" fill="none" stroke="#fff3d1" stroke-width="3.6"/>`+
+    `<ellipse cx="1.5" cy="8.5" rx="11.5" ry="4.2" fill="#000" opacity=".5"/>`+
+    `<circle r="12" fill="${CSSCOL[c]}" stroke="${K.lo}" stroke-width="1.6"/>`+
+    `<circle r="12" fill="url(#tbPeg)"/>`+
+    `<ellipse cx="-4.2" cy="-5.6" rx="4.6" ry="2.9" transform="rotate(-34 -4.2 -5.6)" fill="#fff" opacity=".55"/>`+
+    `<text y="5.3" text-anchor="middle" class="tb-pn">${k+1}</text>`;
+}
 function renderPegs(){
-  // remove old pegs
-  svg.querySelectorAll(".peg").forEach(e=>e.remove());
+  const layer=svg.querySelector("#tbPegs"); if(!layer) return;
   const movable = (awaitingMove && !busy) ? legalMovesFor(players[turn], die) : [];
   const movSet = new Set(movable.map(m=>m.peg));
-  const cur = players[turn];
+  const cur = players[turn], human = !!(cur&&isHuman[cur]);
+  const keep=new Set();
   for(const c of players){
     for(let k=0;k<4;k++){
-      const d=pegs[c][k];
-      let xy;
-      if(d===null) xy=homeSlotXY(c,k); else xy=pegXY(c,d);
-      const [x,y]=xy;
-      const g=document.createElementNS("http://www.w3.org/2000/svg","g");
-      g.setAttribute("class","peg"+((c===cur && movSet.has(k))?" movable":""));
+      const key=c+k; keep.add(key);
+      let g=pegEls[key], fresh=false;
+      if(!g){ g=document.createElementNS(svgns,"g"); g.setAttribute("data-k",k); g.setAttribute("data-c",c); g.innerHTML=pegMarkup(c,k); pegEls[key]=g; layer.appendChild(g); g.style.transition="none"; fresh=true; }
+      const d=pegs[c][k], [x,y]=(d===null)?homeSlotXY(c,k):pegXY(c,d);
+      const mv=(c===cur && movSet.has(k));
+      g.setAttribute("class","peg"+(mv?" movable":""));
       g.setAttribute("transform",`translate(${x.toFixed(1)},${y.toFixed(1)})`);
-      g.innerHTML=
-        `<circle class="ring" r="20" fill="none" stroke="#fff" stroke-width="3"/>`+
-        `<circle r="12" fill="${CSSCOL[c]}" stroke="#00000055" stroke-width="2"/>`+
-        `<circle r="4" cx="-4" cy="-5" fill="#ffffff55"/>`+
-        `<text y="4.5" text-anchor="middle" font-size="13" font-weight="900" fill="#fff" stroke="#000b" stroke-width="2.6" paint-order="stroke" stroke-linejoin="round">${k+1}</text>`;
-      if(c===cur && movSet.has(k)){
-        g.addEventListener("click",()=>humanMove(k));
-      }
-      svg.appendChild(g);
+      g.style.transform=`translate(${x.toFixed(1)}px,${y.toFixed(1)}px)`;
+      if(fresh) requestAnimationFrame(()=>{ g.style.transition=""; });
     }
   }
-  // color names on TOP of pegs so every color (incl. RED) is always readable, uniform on each nest
-  for(const c of players){
-    const a=ang(START[c]); const hx=cx+homeR*Math.cos(a), hy=cy+homeR*Math.sin(a);
-    const t=document.createElementNS(svgns,"text");
-    t.setAttribute("x",hx.toFixed(1)); t.setAttribute("y",(hy+4).toFixed(1));
-    t.setAttribute("text-anchor","middle"); t.setAttribute("font-size","12"); t.setAttribute("font-weight","800");
-    t.setAttribute("fill","#ffffff"); t.setAttribute("stroke","#000a"); t.setAttribute("stroke-width","2.8");
-    t.setAttribute("paint-order","stroke"); t.setAttribute("stroke-linejoin","round"); t.setAttribute("pointer-events","none");
-    t.setAttribute("class","peg");
-    t.textContent=NAME[c].toUpperCase();
-    svg.appendChild(t);
+  for(const key of Object.keys(pegEls)) if(!keep.has(key)){ pegEls[key].remove(); delete pegEls[key]; }
+  // hints: where each legal move lands (a dashed ring), the last move (a gold ring on the space it left and the one it reached), the inspected space
+  let h="";
+  if(human) for(const m of movable){ const [x,y]=pegXY(cur,m.to); h+=`<circle cx="${f1(x)}" cy="${f1(y)}" r="19.5" fill="${SEATC[cur].m}" fill-opacity=".22" stroke="#fff3d1" stroke-width="2.6" stroke-dasharray="5 4"/>`; }
+  if(lastMv){
+    const q=(c,d,k)=>d===null?homeSlotXY(c,k):pegXY(c,d);
+    const [fx,fy]=q(lastMv.c,lastMv.from,lastMv.k), [tx,ty]=q(lastMv.c,lastMv.to,lastMv.k);
+    h+=`<circle cx="${f1(fx)}" cy="${f1(fy)}" r="18" fill="none" stroke="#e7ca90" stroke-opacity=".6" stroke-width="2.4"/><circle cx="${f1(tx)}" cy="${f1(ty)}" r="20" fill="none" stroke="#e7ca90" stroke-opacity=".95" stroke-width="2.4"/>`;
   }
+  if(inspectAt) h+=`<circle cx="${f1(inspectAt[0])}" cy="${f1(inspectAt[1])}" r="${inspectAt[2]||21}" fill="none" stroke="#fff3d1" stroke-width="3"/>`;
+  svg.querySelector("#tbHint").innerHTML=h;
   renderDome();
 }
+
+// ---- phone: pinch / double-tap zoom with a Fit button, and tap a space (or peg, pad, dome) to read it large ----
+const wrapEl=document.getElementById("boardWrap"), stageEl=document.getElementById("stage"), inspEl=document.getElementById("inspect");
+const inspT=document.getElementById("inspT"), inspD=document.getElementById("inspD");
+let inspTimer=0;
+function tripWord(d){ return d===null?"at home":d===0?"on its start space":d<=27?"on space "+d+" of its trip":"in finish slot "+(d-27)+" of 4"; }
+function trackNote(i){   // what space i of the loop is for each colour in the game
+  return players.map(c=>{ const d=(i-START[c]+TRACK)%TRACK; return d===0?NAME[c]+": its start space":NAME[c]+": space "+d; }).join(" · ");
+}
+function inspectSpot(ux,uy){   // the thing at board point (ux, uy), as {x, y, r, title, text}
+  const near=(x,y,r)=>Math.hypot(ux-x,uy-y)<=r;
+  for(const c of players) for(let k=0;k<4;k++){ const d=pegs[c][k], [x,y]=d===null?homeSlotXY(c,k):pegXY(c,d);
+    if(near(x,y,17)) return {x,y,r:21,title:NAME[c]+" peg "+(k+1),text:"Peg "+(k+1)+" is "+tripWord(d)+"."}; }
+  if(near(cx,cy,96)) return {x:cx,y:cy,r:98,title:"The Pop-O-Matic",text:"Press the dome to pop the die. A 6 sets a peg on its start space, and every 6 pops again."};
+  for(const c of COLORS){ const [px,py]=PADC[c];
+    if(Math.abs(ux-px)<=PADW/2&&Math.abs(uy-py)<=PADH/2){ const n=players.includes(c)?pegs[c].filter(d=>d===null).length:4;
+      return {x:px,y:py,r:60,title:NAME[c]+" home",text:n+(n===1?" peg waits":" pegs wait")+" here. Pop a 6 to set one on the "+NAME[c]+" start space."}; } }
+  for(const c of COLORS) for(let j=0;j<4;j++){ const [x,y]=pegXY(c,28+j);
+    if(near(x,y,16)) return {x,y,r:19,title:NAME[c]+" finish, slot "+(j+1)+" of 4",text:"Only "+NAME[c]+" pegs come in here, by an exact count. All four pegs in the finish win."}; }
+  for(let i=0;i<TRACK;i++){ const [x,y]=trackXY(i); if(near(x,y,18)){
+    const sc=COLORS.find(c=>START[c]===i), occ=[];
+    for(const c of players) pegs[c].forEach((d,k)=>{ if(d!==null&&d<=27&&absSpace(c,d)===i) occ.push(NAME[c]+" peg "+(k+1)); });
+    return {x,y,r:21,title:sc?NAME[sc]+" start space":"Track space",text:(sc?"A 6 brings a "+NAME[sc]+" peg here from home. ":"")+(occ.length?occ.join(" and ")+(occ.length>1?" are":" is")+" here. ":"Empty. ")+trackNote(i)+"."}; } }
+  return null;
+}
+function closeInspect(){ clearTimeout(inspTimer); inspEl.hidden=true; if(inspectAt){ inspectAt=null; if(players.length) renderPegs(); } }
+function showInspect(f){
+  const sp=inspectSpot(f[0]*600,f[1]*600);
+  if(!sp){ closeInspect(); return; }
+  inspT.textContent=sp.title; inspD.textContent=sp.text; inspEl.hidden=false;
+  inspectAt=[sp.x,sp.y,sp.r]; renderPegs();
+  clearTimeout(inspTimer); inspTimer=setTimeout(closeInspect,9000);
+}
+document.getElementById("inspX").addEventListener("click",closeInspect);
+const BZ=BoardZoom(wrapEl,stageEl,{
+  start:()=>{ const c=players[turn]; if(!c) return [.5,.5]; const [x,y]=trackXY(START[c]); return [x/600,y/600]; },
+  skip:e=>!!(e.target.closest&&e.target.closest(".peg.movable, .dome")),
+  onTap:(fx,fy)=>{ if(players.length&&fx>=0&&fx<=1&&fy>=0&&fy<=1) showInspect([fx,fy]); }});
+BZ.enable(!onTV());
+document.addEventListener("bgui:tv",()=>{ BZ.enable(!onTV()); closeInspect(); });
 
 // ---- rules ----
 function occupantAt(color,targetD){
@@ -509,7 +707,7 @@ function legalMovesFor(color,roll){
   return moves;
 }
 
-function applyMove(color,mv){ Sound.sfx("tick");
+function applyMove(color,mv){ Sound.sfx("tick"); lastMv={c:color,k:mv.peg,from:mv.from,to:mv.to};
   // capture?
   if(mv.to<=27){
     const occ=occupantAt(color,mv.to);
@@ -564,7 +762,7 @@ function nextTurn(){
 }
 
 function doRoll(){
-  die=1+Math.floor(Math.random()*6);
+  die=1+Math.floor(Math.random()*6); tilt=TILT[die-1]; jig=[0,0];
   return die;
 }
 
@@ -684,11 +882,12 @@ function bestMoveOf(color,moves){
 
 // ---- pop animation ----
 function animatePop(cb){ Sound.sfx("dice");
-  const g=gen; let n=0;
+  const g=gen; let n=0, dm=svg.querySelector(".dome");
+  if(dm){ dm.classList.add("is-press"); setTimeout(()=>dm.classList.remove("is-press"),150); }   // the press
   const iv=setInterval(()=>{
     if(g!==gen){ clearInterval(iv); return; }          // a new game was started / loaded: drop this old pop
-    die=1+Math.floor(Math.random()*6); renderDome();   // tumble the die in the dome
-    if(++n>=8){ clearInterval(iv); die=0; later(cb,150); }
+    die=1+Math.floor(Math.random()*6); tilt=(Math.random()-.5)*80; jig=[(Math.random()-.5)*14,(Math.random()-.5)*14]; renderDome();   // tumble the die in the dome
+    if(++n>=8){ clearInterval(iv); die=0; tilt=0; jig=[0,0]; later(cb,150); }
   },95);
 }
 
