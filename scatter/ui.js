@@ -39,16 +39,21 @@ var CSS=[
 ".scLet{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:8px 0}.scLet button{width:40px;height:40px;border-radius:10px;border:2px solid #ffffff55;background:#2a1f45;color:#fff;font:900 18px Georgia,serif}.scLet button[disabled]{opacity:.25}",
 "@media(min-width:520px){.scRow .ins{width:46%}}"
 ].join("\n");
-function injectCSS(){ if(typeof document==="undefined"||document.getElementById("scatCss")) return; var s=document.createElement("style"); s.id="scatCss"; s.textContent=CSS; document.head.appendChild(s); }
+/* luxe mode (cfg.luxe: the Scattergories page on ui/theme.css): the dialogs are bg-sheet and the buttons bg-btn, so those rules of the classic skin are left out */
+var CSS_LUXE=CSS.split("\n").filter(function(l){ return !/^\.scBtns button|^\.scModal/.test(l); }).join("\n");
+function injectCSS(luxe){ if(typeof document==="undefined"||document.getElementById("scatCss")) return; var s=document.createElement("style"); s.id="scatCss"; s.textContent=luxe?CSS_LUXE:CSS; document.head.appendChild(s); }
 function mmss(t){ t=Math.max(0,Math.ceil(t)); return Math.floor(t/60)+":"+("0"+(t%60)).slice(-2); }
 
 function create(cfg){
-  injectCSS();
+  var L=!!cfg.luxe, ic=function(n){ return L&&cfg.icon?cfg.icon(n):""; }, BGu=function(){ return L&&typeof window!=="undefined"&&window.BGUI&&window.BGUI.sheet?window.BGUI:null; };
+  injectCSS(L);
   var root=cfg.root, S=null, built="", answers=null, deadline=0, tick=null, sent=false, shownVote={}, lastProg=0;
   root.classList.add("scT");
-  var modal=document.createElement("div"); modal.className="scModal"; modal.innerHTML='<div class="sh" id="scsh"></div>'; document.body.appendChild(modal);
-  function openModal(h){ modal.querySelector("#scsh").innerHTML=h; modal.classList.add("show"); }
-  function closeModal(){ modal.classList.remove("show"); modal.dataset.vote=""; }
+  var modal=document.createElement("div"); modal.className=L?"bg-sheet scModal":"scModal"; if(L) modal.id="scModal"; modal.innerHTML='<div class="sh" id="scsh"></div>'; document.body.appendChild(modal);
+  /* a dialog: the classic overlay, or (luxe) a Luxe sheet. must: it has to be answered (a vote), so Back and the scrim leave it open */
+  var closing=false;
+  function openModal(h,must){ modal.querySelector("#scsh").innerHTML=h; modal.classList.add("show"); var B=BGu(); if(B&&!B.sheet.isOpen(modal)) B.sheet.open(modal,{dismissible:!must,onClose:function(){ if(!closing){ modal.classList.remove("show"); modal.dataset.vote=""; } }}); }
+  function closeModal(){ modal.classList.remove("show"); modal.dataset.vote=""; var B=BGu(); if(B&&B.sheet.isOpen(modal)){ closing=true; try{ B.sheet.close(modal); }finally{ closing=false; } } }
   function send(a){ var r=cfg.send(a); if(r&&r.ok===false&&cfg.toast) cfg.toast(r.msg||"Not allowed."); return r; }
   function readInputs(){ var out=[]; root.querySelectorAll(".scRow").forEach(function(row){ var arr=[]; row.querySelectorAll("input").forEach(function(i){ arr.push(i.value); }); out.push(arr); }); return out; }
   function submit(){ if(sent) return; sent=true; var a=readInputs(); send({t:"submit",answers:a}); render(); }
@@ -66,7 +71,7 @@ function create(cfg){
     h+='<div id="scForm">'+S.slots.map(function(s,i){
       var ins=""; for(var k=0;k<o.answersPer;k++) ins+='<input data-s="'+i+'" data-k="'+k+'" type="text" maxlength="60" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="'+(kw?esc(s.letter)+"…":esc(s.letter)+"…")+'" value="'+esc(((S.myAnswers||[])[i]||[])[k]||"")+'">';
       return '<div class="scRow"><span class="n">'+(i+1)+'</span><span class="lb">'+(kw?'<b style="font-size:20px;color:#ffd23f">'+esc(s.letter)+'</b>':esc(s.label))+'</span><span class="ins">'+ins+'</span></div>';
-    }).join("")+'</div><div class="scBtns"><button class="pri" id="scDone">✓ I\'m done</button></div>';
+    }).join("")+'</div><div class="scBtns"><button class="'+(L?"bg-btn bg-btn--primary bg-btn--lg":"pri")+'" id="scDone">'+(L?ic("check")+"I\'m done":"✓ I\'m done")+'</button></div>';
     root.innerHTML=h; sent=false;
     root.querySelectorAll("input").forEach(function(inp){
       inp.addEventListener("input",function(){ var v=inp.value.trim(), L=S.slots[+inp.dataset.s].letter; inp.classList.toggle("good",!!v&&E.startsWith(v,L)); inp.classList.toggle("bad",!!v&&S.o.startRule==="must"&&!E.startsWith(v,L)); });
@@ -95,6 +100,13 @@ function create(cfg){
   function scoreTable(){
     // long games (Key Word mode plays to 25 points) fold the oldest rounds into one "R1–n" column so Total stays on screen
     var n=S.round, from=n>7?n-6:0, i;
+    if(L){   // luxe: the Luxe score pad (the leader's row washed in gold, each player with a seat dot)
+      var top=-1; S.players.forEach(function(p){ if(p.score>top) top=p.score; });
+      var lrows=S.players.slice().sort(function(a,b){ return b.score-a.score; }).map(function(p){ var cells="", sum=0; if(from){ for(i=0;i<from;i++) sum+=(+p.rs[i]||0); cells+='<td>'+sum+'</td>'; } for(i=from;i<n;i++) cells+='<td>'+(p.rs[i]!=null?p.rs[i]:"—")+'</td>';
+        return '<tr'+(top>0&&p.score===top?' class="is-lead"':'')+'><td><span class="bg-score__who" data-seat="'+(cfg.seatOf?cfg.seatOf(p.id):p.id%8+1)+'">'+esc(p.name)+'</span></td>'+cells+'<td class="bg-score__total">'+p.score+'</td></tr>'; }).join("");
+      var lhead='<tr><th scope="col">Player</th>'+(from?'<th scope="col">R1–'+from+'</th>':''); for(i=from;i<n;i++) lhead+='<th scope="col">R'+(i+1)+'</th>'; lhead+='<th scope="col">Total</th></tr>';
+      return '<div class="bg-scorepad"><table class="bg-score"><thead>'+lhead+'</thead><tbody>'+lrows+'</tbody></table></div>';
+    }
     var rows=S.players.slice().sort(function(a,b){ return b.score-a.score; }).map(function(p){ var cells="", sum=0; if(from){ for(i=0;i<from;i++) sum+=(+p.rs[i]||0); cells+='<td>'+sum+'</td>'; } for(i=from;i<n;i++) cells+='<td>'+(p.rs[i]!=null?p.rs[i]:"—")+'</td>'; return '<tr><td>'+esc(p.name)+'</td>'+cells+'<td><b>'+p.score+'</b></td></tr>'; }).join("");
     var head='<tr><th>Player</th>'+(from?'<th>R1–'+from+'</th>':''); for(i=from;i<n;i++) head+='<th>R'+(i+1)+'</th>'; head+='<th>Total</th></tr>';
     return '<div style="overflow-x:auto"><table class="scTab">'+head+rows+'</table></div>';
@@ -105,7 +117,7 @@ function create(cfg){
     if(S.phase==="star"){   // the Junior star: the roller picks the round's letter before anyone writes
       clearInterval(tick); built=key;
       var mine=S.me>=0&&S.me===S.starBy, free=S.starFree||E.LETTERS;
-      root.innerHTML='<div class="scTop"><div class="scLetter">⭐</div></div><div class="scHint" style="font-size:15px;padding:6px 0">'+esc(playerName(S.starBy))+' rolled the star'+(mine?' — pick any unused letter for this round':' and is picking the letter…')+'</div>'+
+      root.innerHTML='<div class="scTop"><div class="scLetter">'+(L?ic("star"):"⭐")+'</div></div><div class="scHint" style="font-size:15px;padding:6px 0">'+esc(playerName(S.starBy))+' rolled the star'+(mine?' — pick any unused letter for this round':' and is picking the letter…')+'</div>'+
         (mine?'<div class="scLet">'+E.LETTERS.map(function(l){ return '<button data-l="'+l+'"'+(free.indexOf(l)<0?" disabled":"")+'>'+l+'</button>'; }).join("")+'</div>':'');
       var lt=root.querySelector(".scLet"); if(lt) lt.addEventListener("click",function(e){ var b=e.target.closest&&e.target.closest("button[data-l]"); if(!b||b.disabled) return; lt.querySelectorAll("button").forEach(function(x){ x.disabled=true; }); var r=send({t:"star",letter:b.dataset.l}); if(r&&r.ok===false) render(); });
       return;
@@ -113,34 +125,34 @@ function create(cfg){
     if(S.phase==="write"){
       if(S.me<0){ clearInterval(tick); root.innerHTML='<div class="scHint" style="padding:30px 0;font-size:16px">Waiting for the next player…</div>'; built=key; return; }
       if(S.tieActive&&S.tieActive.indexOf(S.me)<0){ clearInterval(tick); root.innerHTML='<div class="scHint" style="padding:30px 0;font-size:16px">Tie-break round: '+esc(S.tieActive.map(playerName).join(" vs "))+'.<br>You sit this one out — waiting for them…</div>'; built=key; return; }
-      if(sent){ clearInterval(tick); root.innerHTML='<div class="scTop"><div class="scLetter">'+(S.keyword?"✓":esc(S.letter))+'</div></div><div class="scHint" style="font-size:16px;padding:14px 0">Answers sent ✔<br>Waiting for the others…</div><div class="scTot">'+S.players.map(function(p){ return '<div>'+esc(p.name)+' <b>'+p.filled+'/'+S.slots.length+'</b></div>'; }).join("")+'</div>'; return; }
+      if(sent){ clearInterval(tick); root.innerHTML='<div class="scTop"><div class="scLetter">'+(S.keyword?(L?ic("check"):"✓"):esc(S.letter))+'</div></div><div class="scHint" style="font-size:16px;padding:14px 0">Answers sent'+(L?'':' ✔')+'<br>Waiting for the others…</div><div class="scTot">'+S.players.map(function(p){ return '<div>'+esc(p.name)+' <b>'+p.filled+'/'+S.slots.length+'</b></div>'; }).join("")+'</div>'; return; }
       if(built!==key){ built=key; buildWrite(); }
       else if(S.starChanged){ }
       return;
     }
     clearInterval(tick); built=key;
     if(S.phase==="review"){
-      root.innerHTML=reviewHTML(S.review,false)+'<div class="scBtns"><button class="pri" id="scReady">'+(cfg.readyLabel||"Done scoring ▶")+'</button></div>';
+      root.innerHTML=reviewHTML(S.review,false)+'<div class="scBtns"><button class="'+(L?"bg-btn bg-btn--primary bg-btn--lg":"pri")+'" id="scReady">'+(cfg.readyLabel||"Done scoring ▶")+'</button></div>';
       var rb=root.querySelector("#scReady"); if(rb) rb.addEventListener("click",function(){ send({t:"ready"}); });
       voteCheck(); return;
     }
     if(S.phase==="scored"||S.phase==="over"){
       var over=S.phase==="over";
       var h=reviewHTML(S.result,true)+scoreTable();
-      if(over){ h+='<div class="scTop" style="font-size:22px;font-weight:900;text-align:center">🏆 '+esc((S.winners||[]).map(playerName).join(" & "))+(S.winners&&S.winners.length>1?" tie!":" wins!")+'</div>'; }
+      if(over){ h+='<div class="scTop" style="font-size:22px;font-weight:900;text-align:center">'+(L?ic("trophy"):"🏆")+' '+esc((S.winners||[]).map(playerName).join(" & "))+(S.winners&&S.winners.length>1?" tie!":" wins!")+'</div>'; }
       else if(S.tiebreak) h+='<div class="scHint" style="font-size:14px">Tied for the lead — an extra round decides it!</div>';
-      h+='<div class="scBtns"><button class="pri" id="scNext">'+(over?"Play again":(S.tiebreak?"Tie-break round ▶":"Next round ▶"))+'</button></div>';
+      h+='<div class="scBtns"><button class="'+(L?"bg-btn bg-btn--primary bg-btn--lg":"pri")+'" id="scNext">'+(over?(L?"New game":"Play again"):(S.tiebreak?(L?"Tie-break round":"Tie-break round ▶"):(L?"Next round":"Next round ▶")))+'</button></div>';
       root.innerHTML=h; root.querySelector("#scNext").addEventListener("click",function(){ send({t:over?"again":"next"}); });
       return;
     }
-    root.innerHTML='<div class="scHint" style="padding:40px 0;font-size:18px">🎲 Rolling…<br>get ready!</div>';
+    root.innerHTML='<div class="scHint" style="padding:40px 0;font-size:18px">'+(L?ic("dice"):"🎲")+' Rolling…<br>get ready!</div>';
   }
   /* challenge + vote windows */
   root.addEventListener("click",function(e){
     if(!S||S.phase!=="review"||S.o.judge!=="vote") return;
     var chip=e.target.closest&&e.target.closest(".scAns.chal"); if(!chip||S.me<0) return;
     var slot=+chip.dataset.s, p=+chip.dataset.p, k=+chip.dataset.k, ent=S.review.entries.filter(function(x){ return x.slot===slot&&x.p===p&&x.k===k; })[0]; if(!ent) return;
-    openModal('<h3>Challenge this answer?</h3><div class="big">'+esc(ent.raw)+'</div><div style="opacity:.85;font-size:13px">'+esc(playerName(p))+' wrote it for “'+esc(S.slots[slot].label)+'” with the letter '+esc(S.slots[slot].letter)+'.<br>Everyone votes — majority wins.</div><div class="scBtns"><button class="pri b" data-c="1">⚖ Challenge it</button><button class="b" data-c="0">Never mind</button></div>');
+    openModal((L?'<div class="bg-sheet__grip" aria-hidden="true"></div>':'')+'<h3>Challenge this answer?</h3><div class="big">'+esc(ent.raw)+'</div><div style="opacity:.85;font-size:13px">'+esc(playerName(p))+' wrote it for “'+esc(S.slots[slot].label)+'” with the letter '+esc(S.slots[slot].letter)+'.<br>Everyone votes — majority wins.</div><div class="scBtns"><button class="'+(L?"bg-btn bg-btn--primary bg-btn--lg":"pri b")+'" data-c="1">'+(L?"":"⚖ ")+'Challenge it</button><button class="'+(L?"bg-btn bg-btn--secondary bg-btn--lg":"b")+'" data-c="0">Never mind</button></div>');
     modal.querySelector("#scsh").onclick=function(ev){ var b=ev.target.closest&&ev.target.closest("button[data-c]"); if(!b) return; closeModal(); if(b.dataset.c==="1") send({t:"challenge",slot:slot,p:p,k:k}); };
   });
   function voteCheck(){
@@ -149,7 +161,7 @@ function create(cfg){
     if(!open){ if(modal.classList.contains("show")&&modal.dataset.vote){ closeModal(); modal.dataset.vote=""; } return; }
     var id=open.slot+"/"+open.p+"/"+open.k; if(modal.dataset.vote===id) return; modal.dataset.vote=id;
     var ent=S.review.entries.filter(function(x){ return x.slot===open.slot&&x.p===open.p&&x.k===open.k; })[0]||{raw:"?"};
-    openModal('<h3>Vote: is this answer OK?</h3><div class="big">'+esc(ent.raw)+'</div><div style="font-size:13px;opacity:.9">for “'+esc(S.slots[open.slot].label)+'” starting with <b>'+esc(S.slots[open.slot].letter)+'</b><br><span style="opacity:.8">written by '+esc(playerName(open.p))+' · challenged by '+esc(playerName(open.by))+'</span></div><div class="scBtns"><button class="b pri" data-v="1">👍 Accept</button><button class="b" data-v="0">👎 Reject</button></div>');
+    openModal((L?'<div class="bg-sheet__grip" aria-hidden="true"></div>':'')+'<h3>Vote: is this answer OK?</h3><div class="big">'+esc(ent.raw)+'</div><div style="font-size:13px;opacity:.9">for “'+esc(S.slots[open.slot].label)+'” starting with <b>'+esc(S.slots[open.slot].letter)+'</b><br><span style="opacity:.8">written by '+esc(playerName(open.p))+' · challenged by '+esc(playerName(open.by))+'</span></div><div class="scBtns"><button class="'+(L?"bg-btn bg-btn--primary bg-btn--lg":"b pri")+'" data-v="1">'+(L?ic("check"):"👍 ")+'Accept</button><button class="'+(L?"bg-btn bg-btn--secondary bg-btn--lg":"b")+'" data-v="0">'+(L?ic("close"):"👎 ")+'Reject</button></div>',true);
     modal.querySelector("#scsh").onclick=function(ev){ var b=ev.target.closest&&ev.target.closest("button[data-v]"); if(!b) return; modal.dataset.vote=""; closeModal(); send({t:"vote",slot:open.slot,p:open.p,k:open.k,accept:b.dataset.v==="1"}); };
   }
   var self={update:function(s){ var prevPhase=S&&S.phase, prevRound=S&&S.round, prevMe=S&&S.me; S=s; if(S.phase==="write"&&(prevPhase!=="write"||prevRound!==S.round||prevMe!==S.me)){ sent=false; built=""; } render(); },

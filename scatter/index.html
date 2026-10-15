@@ -1,88 +1,273 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-game="scatter">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<meta name="theme-color" content="#0f3b4a">
+<meta name="theme-color" content="#080a15">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <title>Scattergories</title>
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" type="image/png" href="icon.png">
-<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" type="image/png" href="../ui/art/icon-scatter-192.png">
+<link rel="apple-touch-icon" href="../ui/art/icon-scatter-maskable-512.png">
+<script>/* before first paint: TV for ?tv=1 or the Fire TV bridge, and the stored effects level */
+(function (h) {
+  if (/[?&]tv=1(&|$)/.test(location.search) || window.AndroidTV) h.setAttribute("data-tv", "");
+  try { if (localStorage.getItem("bgui.effects") === "reduced") h.setAttribute("data-effects", "reduced"); } catch (e) { }
+})(document.documentElement);</script>
+<link rel="stylesheet" href="../ui/theme.css">
+<script src="../ui/icons.js" defer></script>
+<script src="../ui/ui.js" defer></script>
 <style>
-  :root{--ink:#fff;--muted:#c9dde4;--gold:#ffd23f;--panel:#12303c}
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;min-height:100%}
-  body{background:#0f3b4a;color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;padding:max(8px,env(safe-area-inset-top)) 8px max(14px,env(safe-area-inset-bottom));overflow-x:hidden;touch-action:manipulation}
-  h1{font:900 26px Georgia,'Times New Roman',serif;letter-spacing:2px;margin:2px 0;color:#ffd23f;text-shadow:2px 2px 0 #e8590c,4px 4px 0 #0007}
-  .wrap{width:min(100%,640px)}
-  #legend{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:4px 0}
-  .chip{display:flex;align-items:center;gap:6px;background:#00000055;border:2px solid #ffffff22;border-radius:999px;padding:4px 10px;font-size:12.5px;font-weight:700}
-  .chip .sw{width:13px;height:13px;border-radius:3px}.chip b{color:var(--gold)}
-  .menuRow{display:flex;justify-content:center;gap:8px;margin:4px 0}
-  .btn{background:#12303c;color:var(--ink);border:1px solid #ffffff55;border-radius:12px;padding:10px 14px;font-size:14px;font-weight:800;cursor:pointer}
-  .btn.primary{background:#e8590c;border-color:#ffa56a}.btn[disabled]{opacity:.38}
-  #sframe{border-radius:18px;padding:8px 10px 6px;background:radial-gradient(120% 100% at 50% 0,#1e6a82,#134a5e 60%,#0e3645);box-shadow:0 0 0 5px #ffd23f,0 0 0 9px #e8590c,0 20px 44px #000a;min-height:260px}
-  .overlay{position:fixed;inset:0;z-index:60;background:#07202aee;display:none;align-items:flex-start;justify-content:center;overflow-y:auto;padding:max(14px,env(safe-area-inset-top)) 12px 28px}
-  .overlay.show{display:flex}
-  .sheet{width:min(100%,600px);background:var(--panel);border:2px solid #ffffff44;border-radius:20px;padding:16px;box-shadow:0 20px 50px #000b}
-  .sheet h2{margin:0 0 2px;font:900 26px Georgia,serif;letter-spacing:2px;color:var(--gold)}
-  .sheet h3{margin:16px 0 6px;font-size:12.5px;color:var(--gold);letter-spacing:1px;text-transform:uppercase}
-  .vers{display:flex;flex-direction:column;gap:7px}
-  .ver{border:2px solid #2d6a80;border-radius:14px;padding:9px 12px;cursor:pointer;background:#0d2630}
-  .ver.on{border-color:var(--gold);background:#1b4a5c}
-  .ver b{font-size:15px}.ver i{font-style:normal;font-size:11px;color:var(--gold);margin-left:8px}
-  .ver p{margin:3px 0 0;font-size:12px;color:var(--muted);line-height:1.35}
-  .seg{display:flex;gap:6px;flex-wrap:wrap}
-  .seg button{background:#0d2630;color:var(--ink);border:2px solid #2d6a80;border-radius:10px;min-width:40px;padding:9px 11px;font-size:15px;font-weight:800;cursor:pointer}
-  .seg button.on{background:#e8590c;border-color:#ffa56a}.seg button[disabled]{opacity:.3}
-  .row{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:7px 0;border-bottom:1px solid #ffffff14;font-size:13.5px}
-  .row select{background:#0d2630;color:var(--ink);border:1px solid #ffffff66;border-radius:8px;padding:6px;font-size:13px;max-width:55%}
-  .row input[type=checkbox]{width:22px;height:22px}
-  .tag{font-size:10px;border-radius:6px;padding:1px 5px;margin-left:6px;font-weight:800}.tag.off{background:#2b7be0}.tag.house{background:#a65bd6}
-  details summary{cursor:pointer;font-weight:800;padding:8px 0;color:var(--gold)}
-  #toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 90px);transform:translateX(-50%);background:#000c;color:#fff;border-radius:12px;padding:10px 16px;font-size:14px;font-weight:700;z-index:90;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;text-align:center}
-  #toast.show{opacity:1}
-  #handoff,#rollBox{background:#07202a;z-index:80;align-items:center}
-  #rollBox .big{font:900 150px Georgia,serif;color:var(--gold);text-shadow:6px 6px 0 #e8590c,0 12px 30px #000}
-  #banner{position:fixed;left:50%;top:14%;transform:translateX(-50%);background:#b32b1f;color:#fff;border-radius:14px;padding:12px 20px;font:900 20px system-ui;z-index:95;opacity:0;pointer-events:none;transition:opacity .2s}#banner.show{opacity:1}
+  /* Scattergories on the shared Midnight Luxe system (ui/theme.css). Page layout only (sc- prefix); every control is a bg- class. The answer pad
+     (#sframe > #sctrl) is drawn by ui.js, the game's own module. */
+  *, *::before, *::after{box-sizing:border-box}
+  [hidden]{display:none !important}
+  html{scroll-padding-bottom:6.5rem}
+  html[data-tv]{scroll-padding-bottom:0}
+  body.bg-app{overflow-x:hidden; touch-action:manipulation}
+  .bg-topbar__title .bg-eyebrow{white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .bg-topbar__name{line-height:1.25}   /* the serif's descenders (the g of Scattergories) sit inside the clipped line box */
+  /* text that sits right on the stage (the scene, no card behind it) keeps its contrast while a light beam passes behind it; the motifs fade
+     out over it (BGUI.stage hush) */
+  body.bg-app--scene [data-stage-text]{text-shadow:0 0 .15em rgba(4,5,12,.95), 0 0 .45em rgba(4,5,12,.8), 0 0 1em rgba(4,5,12,.55)}
+  body.bg-app--scene .bg-section > [data-stage-text]{text-shadow:0 0 .1em rgba(4,5,12,1), 0 0 .3em rgba(4,5,12,.95), 0 0 .7em rgba(4,5,12,.8), 0 0 1.3em rgba(4,5,12,.5)}
+
+  /* ---------- setup page (also the in-game Menu) ---------- */
+  .sc-setup{display:flex; flex-direction:column; width:min(100%,40rem); margin:0 auto; padding:0 var(--gutter)}
+  .sc-col{display:contents}
+  .sc-hero{order:1} .sc-sec--version{order:2} .sc-sec--players{order:3} .sc-sec--rules{order:4} .sc-sec--save{order:5} .sc-back{order:6} .sc-dock{order:7}
+  .sc-hero{min-height:0; margin:0 calc(-1 * var(--gutter)); padding-top:46%; border-radius:0; background:transparent}
+  .sc-hero .bg-hero__layer{bottom:auto; height:auto; aspect-ratio:16/9; border-radius:0; background-color:transparent;
+    background-image:url("../ui/art/hero-scatter-960.webp"); background-size:100% auto; background-position:100% 0;
+    -webkit-mask-image:linear-gradient(180deg,#000 58%,rgba(0,0,0,0) 100%); mask-image:linear-gradient(180deg,#000 58%,rgba(0,0,0,0) 100%)}
+  .sc-hero .bg-hero__shade{display:none}
+  .sc-hero .bg-hero__body{max-width:none; padding:0 var(--gutter) .25rem}
+  .sc-hero .bg-hero__pitch{max-width:30rem}
+  .sc-sec{min-width:0}
+  #versions{grid-template-columns:minmax(0,1fr)}
+  #versions .bg-version{min-height:4.25rem; justify-content:center}
+  #versions .bg-version__title{font-size:var(--fs-lg)}
+  .sc-vdesc{margin:.875rem 0 0; padding:.75rem .875rem; border-radius:var(--r-md); background:var(--ink-2); box-shadow:var(--well-edge);
+    font:var(--fw-body) var(--fs-sm)/1.45 var(--font-ui); color:var(--text-2)}
+  .sc-vdesc b{color:var(--text-1); font-weight:var(--fw-ui-strong)}
+  .sc-card{display:grid; gap:.75rem}
+  .sc-field{display:grid; gap:.15rem}
+  .sc-field .bg-row__desc{margin-top:0}
+  .sc-seats{display:flex; flex-wrap:wrap; align-items:center; gap:.625rem .875rem; padding:.625rem .875rem; border-radius:var(--r-md); background:var(--ink-2); box-shadow:var(--well-edge)}
+  .sc-seats__tokens{display:flex; flex:none; padding-left:.4rem}
+  .sc-seats__tokens .bg-token{width:2rem; height:2rem; margin-left:-.4rem; font-size:var(--fs-micro)}
+  .sc-seats__txt{display:grid; gap:.1rem; flex:1 1 10rem; min-width:0; font:var(--fw-ui) var(--fs-xs)/1.3 var(--font-ui); color:var(--text-2)}
+  .sc-seats__txt b{font:var(--fw-ui-strong) var(--fs-sm)/1.25 var(--font-ui); color:var(--text-1)}
+  #seatNote{color:var(--text-3)}
+  .sc-disclose .sc-chev{display:inline-grid; place-items:center; flex:none; width:1.5rem; height:1.5rem; color:var(--gold-200); transition:transform var(--dur-fast) var(--ease-out)}
+  .sc-disclose[aria-expanded="true"] .sc-chev{transform:rotate(90deg)}
+  .sc-sec--rules .bg-rows{grid-template-columns:minmax(0,1fr)}
+  .sc-rules{margin-top:.75rem}
+  .sc-rules .bg-row--static{cursor:default; flex-wrap:wrap}
+  .sc-rules .bg-row--static .bg-row__main{flex:1 1 9rem}
+  .sc-rules .bg-select{flex:0 1 auto; max-width:100%}
+  .sc-legend{margin:.75rem 0 0; font:var(--fw-body) var(--fs-xs)/1.7 var(--font-ui); color:var(--text-2)}
+  /* saves.js bar, dressed in Luxe (ids, data-a and behaviour unchanged) */
+  #svbar.svbar{margin:0; padding:var(--sp-3); border:0; border-radius:var(--r-lg); background:var(--panel-fill); box-shadow:var(--panel-edge),var(--elev-1)}
+  #svbar h4{display:none}
+  #svbar .r{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,8.5rem),1fr)); gap:.5rem; margin:0 0 .5rem}
+  #svbar .r:last-child{margin-bottom:0}
+  #svbar button{display:grid; grid-template-columns:auto minmax(0,auto); align-items:center; justify-content:center; gap:.15rem .45rem; min-width:0; min-height:var(--tap); margin:0;
+    padding:.45rem .625rem; border:0; border-radius:var(--r-md); color:var(--text-1); background:var(--control-fill);
+    box-shadow:inset 0 0 0 1px var(--line-2), inset 0 1px 0 rgba(255,255,255,.08); font:var(--fw-ui-strong) var(--fs-sm)/1.15 var(--font-ui); white-space:normal; text-align:center}
+  #svbar button:active{background:var(--ink-5)}
+  #svbar button:focus{outline:none}
+  #svbar button[disabled]{opacity:.42}
+  #svbar button .bg-ico{width:1.1em; height:1.1em; color:var(--gold-200)}
+  #svbar button small{grid-column:1 / -1; margin:0; font:var(--fw-ui) var(--fs-micro)/1.2 var(--font-ui); color:var(--text-3); opacity:1}
+  .sc-back{margin-top:var(--sp-6)}
+  /* the Start dock: sticky at the bottom of the phone screen (toasts keep clear of it). In the mid-game Menu, Resume is the gold primary and
+     "New game" the secondary beside it (syncStart swaps the classes), so one stray tap or OK never ends the game */
+  .sc-dock{position:sticky; bottom:0; z-index:5; display:flex; gap:.625rem; margin:0 calc(-1 * var(--gutter)); padding:1rem var(--gutter) calc(env(safe-area-inset-bottom,0px) + .875rem);
+    background:linear-gradient(180deg,rgba(8,10,21,0),var(--ink-1) 32%)}
+  .sc-dock #startBtn{flex:1 1 0; min-width:0}
+  .sc-dock.has-resume #startBtn{padding-inline:.75rem}
+  .sc-resume{flex:1 1 0; min-width:0; padding:.5rem .75rem; border-radius:var(--r-lg)}
+  .sc-resume > span{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.2rem; min-height:2.75rem}
+  .sc-resume.bg-btn--secondary .bg-btn__sub, .sc-dock #startBtn.bg-btn--secondary .bg-btn__sub{color:var(--text-2)}
+  .sc-nw{white-space:nowrap}
+
+  /* ---------- in game: the strip, the pad (drawn by ui.js) ---------- */
+  .sc-game{display:flex; flex-direction:column; width:min(100%,40rem); margin:0 auto; padding:0 var(--gutter) 1.25rem}
+  body.sc-in-setup .sc-game{display:none !important}
+  #legend{padding-inline:0}
+  .sc-chips{display:flex; flex-wrap:wrap; gap:.4rem; justify-content:center; margin:.25rem 0 .5rem; padding:0; list-style:none}
+  .sc-chip{display:flex; align-items:center; gap:.4rem; padding:.2rem .7rem; border-radius:99px; background:var(--ink-3,#1b2040); font:700 var(--fs-xs)/1.3 var(--font-ui)}
+  .sc-chip .sw{width:.8rem; height:.8rem; border-radius:3px}
+  #sframe{position:relative; min-height:16rem}
+  html:not([data-tv]) .sc-hints{display:none}
+
+  /* ---------- sheets: the hand-off / challenger picker (#handoff), the roll (#rollBox) ---------- */
+  .sc-ho{display:grid; justify-items:center; gap:.75rem; padding:.25rem 0 .5rem; text-align:center}
+  .sc-ho__to{display:flex; align-items:center; gap:.625rem; margin:0; font:var(--fw-ui) var(--fs-xl)/1.3 var(--font-ui); color:var(--text-2)}
+  .sc-ho__to b{color:var(--text-1)}
+  .sc-ho .bg-token{width:2.75rem; height:2.75rem; font-size:var(--fs-sm)}
+  .sc-ho .bg-btn{margin-top:.5rem}
+  .sc-who{display:grid; gap:.625rem; width:100%; padding:var(--focus-room); margin:0 calc(-1 * var(--focus-room))}
+  .sc-who .bg-btn{margin:0; width:100%; justify-content:flex-start; gap:.75rem}
+  .sc-who .bg-token{width:2rem; height:2rem; font-size:var(--fs-micro)}
+  .sc-roll{display:grid; justify-items:center; gap:.5rem; padding:.25rem 0 1rem; text-align:center}
+  .sc-roll .bg-sheet__title{font-size:var(--fs-xl)}
+  .sc-die{width:7.5rem; height:7.5rem; margin:.5rem 0 0; border-radius:22%; font:400 4.5rem/1 var(--font-display); letter-spacing:0; color:var(--text-on-gold)}
+  .sc-die > svg{width:60%; height:60%}
+  .sc-die.is-kw{width:auto; min-width:7.5rem; max-width:100%; padding:0 1.25rem; height:5rem; font-size:2.25rem; letter-spacing:.12em; border-radius:1.1rem}
+  .sc-winhome{margin-top:.75rem}
+  /* fallbacks when ui/ui.js is missing (the Luxe sheets and toasts take over when it is there) */
+  .sc-toast{position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom,0px) + 90px); transform:translateX(-50%); max-width:90vw; padding:10px 16px; border-radius:12px; z-index:90;
+    background:#000c; color:#fff; font:700 14px system-ui,sans-serif; text-align:center; opacity:0; pointer-events:none; transition:opacity .2s}
+  .sc-toast.show{opacity:1}
+  .sc-svtoast{position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom,0px) + 7rem); transform:translateX(-50%); max-width:90vw; padding:10px 16px; border-radius:12px; z-index:100000;
+    background:#000d; color:#fff; font:700 14px system-ui,sans-serif; text-align:center; opacity:0; pointer-events:none; transition:opacity .2s}
+  .sc-svtoast.show{opacity:1}
+  #banner{position:fixed; left:50%; top:14%; transform:translateX(-50%); background:#b32b1f; color:#fff; border-radius:14px; padding:12px 20px; font:900 20px system-ui; z-index:95; opacity:0; pointer-events:none; transition:opacity .2s}
+  #banner.show{opacity:1}
+  html.sc-luxe .sc-toast, html.sc-luxe .sc-svtoast, html.sc-luxe #banner{display:none}
+  html:not(.sc-luxe) .bg-sheet.show{transform:none; visibility:visible; z-index:70}
+  html:not(.sc-luxe) #handoff.show, html:not(.sc-luxe) #rollBox.show{z-index:80}
+
+  /* ---------- TV (html[data-tv], 1rem = 24px at 1080p) ---------- */
+  html[data-tv] .sc-setup{display:grid; grid-template-columns:minmax(0,32rem) minmax(0,34rem); column-gap:3.5rem; justify-content:center; align-items:start; width:auto; padding:0 var(--gutter) 2rem}
+  html[data-tv] .sc-col{display:block; min-width:0}
+  html[data-tv] .sc-hero{margin:1.5rem 0 0; border-radius:var(--r-xl)}
+  html[data-tv] .sc-hero .bg-hero__layer{border-radius:var(--r-xl) var(--r-xl) 0 0; background-image:url("../ui/art/hero-scatter-1920.webp");
+    -webkit-mask-image:linear-gradient(90deg,rgba(0,0,0,0),#000 8%,#000 96%,rgba(0,0,0,0)),linear-gradient(180deg,rgba(0,0,0,0),#000 9%,#000 58%,rgba(0,0,0,0));
+    -webkit-mask-composite:source-in;
+    mask-image:linear-gradient(90deg,rgba(0,0,0,0),#000 8%,#000 96%,rgba(0,0,0,0)),linear-gradient(180deg,rgba(0,0,0,0),#000 9%,#000 58%,rgba(0,0,0,0));
+    mask-composite:intersect}
+  html[data-tv] .sc-hero .bg-hero__body{padding:0}
+  html[data-tv] .sc-hero{padding-top:34%}
+  html[data-tv] #versions{gap:1.5rem}
+  html[data-tv] .sc-rules .bg-row{min-height:0; padding:.5rem .875rem}
+  /* column B on TV: the players, then the Start dock (on screen at 1080p, straight under the setup it confirms), then save and load and the
+     way back; column A: the art, the versions and the rules. Focusable neighbours keep 1.5rem apart */
+  html[data-tv] .sc-col--b{display:flex; flex-direction:column}
+  html[data-tv] .sc-sec--players{order:1} html[data-tv] .sc-sec--save{order:3} html[data-tv] .sc-back{order:4}
+  html[data-tv] .sc-dock{order:2; position:static; gap:1.75rem; margin:0; padding:1.5rem 0 0; background:none}
+  html[data-tv] #humanSeg, html[data-tv] #cpuSeg{gap:1.5rem}
+  html[data-tv] .bg-topbar__end{gap:1.5rem}
+  html[data-tv] #svbar button{grid-template-columns:minmax(0,1fr); justify-items:center; align-content:center; row-gap:.3rem; padding:.625rem .5rem}
+  html[data-tv] #svbar button .bg-ico{width:1.25em; height:1.25em}
+  html[data-tv] #svbar .r{gap:1.5rem}
+  html[data-tv] #svbar .r:not(:last-child){margin-bottom:1.5rem}
+  html[data-tv] .sc-who{gap:1.5rem}
+  /* TV in game: the pad on the left, the players and the remote's keys in a column on the right */
+  html[data-tv] .sc-game{display:grid; grid-template-columns:minmax(0,1fr) 26rem; grid-template-rows:auto minmax(0,1fr) auto; grid-template-areas:"pad strip" "pad ." "pad hints";
+    column-gap:2.5rem; row-gap:0; align-items:start; width:auto; padding:1rem var(--gutter) .75rem}
+  html[data-tv] #legend{grid-area:strip; display:grid; grid-template-columns:1fr 1fr; width:auto; padding:.25rem 0 .5rem; overflow:visible}
+  html[data-tv] #legend.bg-players--scroll > .bg-player{width:auto; padding:.25rem .6rem .25rem .3rem}
+  html[data-tv] #legend.bg-players--scroll .bg-token{width:2rem; height:2rem}
+  html[data-tv] #legend.bg-players--scroll .bg-player__cpu{left:1.6rem}
+  html[data-tv] #legend.bg-players--scroll::after{content:none}
+  html[data-tv] #legend .bg-player__meta{white-space:normal}
+  html[data-tv] #sframe{grid-area:pad}
+  html[data-tv] .sc-hints{grid-area:hints; align-self:end; justify-content:flex-start; margin:1rem 0 0}
+  /* TV toasts in game sit in the right-hand column, never on the pad */
+  html[data-tv] body:not(.sc-in-setup) .bg-toast{left:calc(100vw - var(--gutter) - 14rem); max-width:26rem}
 </style>
-</head>
-<body>
-<h1>SCATTERGORIES</h1>
-<div class="wrap">
-  <div id="legend"></div>
-  <div class="menuRow"><button class="btn" id="menuBtn">☰ Menu</button></div>
-  <div id="sframe"><div id="sctrl"></div></div>
-</div>
-<div id="toast"></div><div id="banner"></div>
-
-<div class="overlay show" id="setup"><div class="sheet">
-  <h2>SCATTERGORIES</h2>
-  <div style="color:var(--muted);font-size:13px">Roll a letter, fill in the categories, and score for answers nobody else wrote. All categories are original.</div>
-  <h3>Version</h3><div class="vers" id="versions"></div>
-  <h3>Players</h3>
-  <div class="row"><span>Humans (take turns on this phone)</span><div class="seg" id="humanSeg"></div></div>
-  <div class="row"><span>Computer players</span><div class="seg" id="cpuSeg"></div></div>
-  <div id="seatNote" style="font-size:12px;color:var(--muted);padding-top:6px"></div>
-  <details style="margin-top:10px"><summary>Rules &amp; house rules (tap to customize)</summary><div id="houseRules"></div>
-    <div style="font-size:11px;color:var(--muted);margin-top:6px"><span class="tag off">published</span> in a Hasbro rulebook · <span class="tag house">house</span> a popular home rule / convenience</div></details>
-  <div id="svbar"></div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">
-    <button class="btn primary" id="startBtn" style="flex:1;font-size:16px">▶ Start new game</button>
-    <button class="btn" id="resumeBtn" style="display:none;flex:1">Resume game</button>
-  </div>
-  <div style="margin-top:10px"><a class="btn" href="../index.html" style="display:block;text-decoration:none;text-align:center">🏠 Back to all games</a></div>
-</div></div>
-<div class="overlay" id="handoff"><div class="sheet" style="text-align:center" id="handoffSheet"></div></div>
-<div class="overlay" id="rollBox"><div style="text-align:center"><div style="font-size:18px;color:var(--muted)" id="rollNote"></div><div class="big" id="rollLetter">?</div></div></div>
-
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
 <script src="../saves.js"></script>
 <script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
+</head>
+<body class="bg-app bg-app--scene sc-in-setup">
+  <header class="bg-topbar">
+    <div class="bg-topbar__start"><a class="bg-btn bg-btn--icon" id="homeBtn" href="../index.html" aria-label="All games" data-icon="back"></a></div>
+    <div class="bg-topbar__title"><span class="bg-eyebrow" id="barEyebrow">New game</span><span class="bg-topbar__name">Scattergories</span></div>
+    <div class="bg-topbar__end">
+      <button class="bg-btn bg-btn--icon" id="menuBtn" type="button" aria-label="Menu" data-icon="menu" hidden></button>
+    </div>
+  </header>
+
+  <main class="sc-setup show" id="setup" aria-label="New game">
+    <div class="sc-col sc-col--a">
+      <section class="bg-hero sc-hero" aria-labelledby="setupTitle">
+        <div class="bg-hero__layer is-on"></div>
+        <div class="bg-hero__shade"></div>
+        <div class="bg-hero__body">
+          <span class="bg-eyebrow bg-eyebrow--accent" data-stage-text="strong">Roll · write · compare</span>
+          <h1 class="bg-hero__title" id="setupTitle" data-stage-text>Scattergories</h1>
+          <p class="bg-hero__pitch" data-stage-text>Roll a letter, fill in the categories, and score for answers nobody else wrote. All categories are original.</p>
+        </div>
+      </section>
+      <section class="sc-sec sc-sec--version" aria-labelledby="versionHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="versionHead" data-stage-text>Version</h2></div>
+        <div class="bg-versions" id="versions" role="radiogroup" aria-labelledby="versionHead"></div>
+        <p class="sc-vdesc" id="versionDesc" aria-live="polite"></p>
+      </section>
+      <section class="sc-sec sc-sec--rules" aria-labelledby="rulesHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="rulesHead" data-stage-text>Rules</h2></div>
+        <div class="bg-rows">
+          <button class="bg-row sc-disclose" id="rulesToggle" type="button" aria-expanded="false" aria-controls="houseRules">
+            <span class="bg-row__main"><span class="bg-row__title">Rules and house rules</span><span class="bg-row__desc" id="rulesDesc"></span></span>
+            <span class="sc-chev" data-icon="chevron" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div class="bg-rows sc-rules" id="houseRules" hidden></div>
+        <p class="sc-legend" id="rulesLegend" data-stage-text hidden><span class="bg-tag bg-tag--official">official</span> in a Hasbro rulebook · <span class="bg-tag bg-tag--house">house</span> a popular home rule or convenience</p>
+      </section>
+    </div>
+    <div class="sc-col sc-col--b">
+      <section class="sc-sec sc-sec--players" aria-labelledby="playersHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="playersHead" data-stage-text>Players</h2></div>
+        <div class="bg-card sc-card">
+          <div class="sc-field"><span class="bg-row__title" id="humansTitle">Players on this phone</span><span class="bg-row__desc" id="humansDesc">Hot seat: pass the phone when it's your turn to write.</span></div>
+          <div class="bg-seg" id="humanSeg" role="group" aria-label="Players on this phone"></div>
+          <div class="sc-field"><span class="bg-row__title">Computer players</span><span class="bg-row__desc" id="cpuDesc">2 to 8 players in all.</span></div>
+          <div class="bg-seg bg-seg--grid5" id="cpuSeg" role="group" aria-label="Computer players"></div>
+          <div class="sc-seats" id="seatPreview"><span class="sc-seats__tokens" id="seatTokens"></span><span class="sc-seats__txt"><b id="seatHead"></b><span id="seatNote"></span></span></div>
+        </div>
+      </section>
+      <section class="sc-sec sc-sec--save" aria-labelledby="saveHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="saveHead" data-stage-text>Save and load</h2></div>
+        <div id="svbar"></div>
+      </section>
+      <a href="../index.html" class="bg-btn bg-btn--ghost bg-btn--block sc-back" id="backHub" data-icon="home" data-stage-text>Back to all games</a>
+      <div class="sc-dock" id="startDock" data-toast-avoid>
+        <button class="bg-btn bg-btn--secondary sc-resume" id="resumeBtn" type="button" style="display:none"><span><span class="bg-btn__label" id="resumeLabel">Resume</span><span class="bg-btn__sub" id="resumeSub">Back to the game</span></span></button>
+        <button class="bg-btn bg-btn--primary bg-btn--cta" id="startBtn" type="button"><span class="bg-btn__label" id="startLabel">Start Scattergories</span><span class="bg-btn__sub" id="startSub">4 players</span></button>
+      </div>
+    </div>
+  </main>
+
+  <main class="sc-game" id="game" aria-label="Scattergories table">
+    <ul id="legend" class="sc-chips"></ul>
+    <div id="sframe" data-stage-solid><div id="sctrl"></div></div>
+    <div class="bg-hintbar sc-hints" data-stage-text><span><span class="bg-key">OK</span> Write an answer</span><span><span class="bg-key">Back</span> Close a list, or the Menu</span></div>
+  </main>
+
+  <section class="bg-sheet" id="handoff" aria-labelledby="hoTitle"><div id="handoffSheet"></div></section>
+  <section class="bg-sheet" id="rollBox" aria-labelledby="rollNote">
+    <div class="bg-sheet__grip" aria-hidden="true"></div>
+    <div class="sc-roll"><span class="bg-eyebrow bg-eyebrow--accent" id="rollRound">Round 1</span><h2 class="bg-sheet__title" id="rollNote">The letter is</h2><div class="bg-die bg-die--gold sc-die" id="rollLetter" role="img" aria-label="Letter die">?</div></div>
+  </section>
+
+  <div class="bg-win" id="winBox" aria-labelledby="winTitle">
+    <div class="bg-win__scrim"></div>
+    <div class="bg-win__rays"></div>
+    <div class="bg-win__card">
+      <div class="bg-win__medal"></div>
+      <p class="bg-eyebrow" id="winEyebrow">Game over</p>
+      <h2 class="bg-win__title" id="winTitle">Victory</h2>
+      <p class="bg-win__sub" id="winSub"></p>
+      <ul class="bg-stats bg-win__stats" id="winStats"></ul>
+      <div class="bg-win__actions">
+        <button class="bg-btn bg-btn--secondary bg-btn--lg" type="button" id="winMenu">Menu</button>
+        <button class="bg-btn bg-btn--primary bg-btn--lg" type="button" id="winAgain" data-icon="play">Play again</button>
+      </div>
+      <a class="bg-btn bg-btn--ghost bg-btn--block sc-winhome" href="../index.html" id="winHome">All games</a>
+    </div>
+  </div>
+
+  <div class="sc-toast" id="toast" aria-hidden="true"></div><div id="banner" aria-hidden="true"></div>
+  <div class="sc-svtoast" id="svtoast" aria-hidden="true"></div>
+
 <script src="bank.js"></script>
 <script src="engine.js"></script>
 <script src="ui.js"></script>
@@ -92,94 +277,296 @@
 const Sc=Scatter, E=Sc.Engine;
 const $=id=>document.getElementById(id);
 const PCOL=Sc.UI.PCOL;
+const SHORT={classic:"Classic",modern:"Modern",refresh:"Refresh",junior:"Junior",keyword:"Key Word"};
+const SV_ICON={ss:"save",ls:"load",std:"reset",sg:"save",lg:"load",au:"resume"};
 let cfg={version:"classic",over:{},humans:1,cpus:3};
 let G=null,ctrl=null,gen=0,writeQueue=[],curWriter=-1,reviewMe=0,voteMe=-1,roundStart=0,stopTimer=null,stopped=false,voteBusy=false;
 const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 function curOpts(){ return E.versionOpts(cfg.version,cfg.over); }
-function toast(m){ const t=$("toast"); t.textContent=m; t.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove("show"),2200); }
-function banner(m){ const b=$("banner"); b.textContent=m; b.classList.add("show"); clearTimeout(banner._t); banner._t=setTimeout(()=>b.classList.remove("show"),2600); }
+
+/* ============== MIDNIGHT LUXE: presentation only (ui/theme.css + ui/ui.js, step 4) ==============
+   Nothing here changes a rule, the engine or the save format. It dresses the page in the shared Luxe pieces: the setup page (which is also
+   the Menu), the player strip, the roll, the hand-off and challenger sheets (BGUI.sheet), Luxe toasts, the Victory screen (BGUI.win +
+   BGUI.celebrate), the TV Back steps and the D-pad. Without ui/ui.js every piece falls back to a plain show/hide (the jsdom harnesses run that path). */
+// closing: the page itself is closing a sheet; winShown: the game (gen) whose Victory opened; result: the Menu offers "See the result"
+const ui={closing:false,winShown:-1,result:false,rulesOpen:false,stripKey:"",turn:-2,hoKey:""};
+function BG(){ return window.BGUI||null; }
+function luxe(){ const B=BG(); return !!(B&&B.sheet&&B.effects&&document.documentElement.classList.contains("sc-luxe")); }
+function onTV(){ return document.documentElement.hasAttribute("data-tv"); }
+function icon(n){ const B=BG(); return B&&B.icon?B.icon(n):""; }
+function seatIn(i){ return (i%8)+1; }   // the Luxe seats 1-8 are the old colours in the old order (red, blue, green, yellow, purple, teal, orange, pink)
+function initials(name){ const m=/^(You|Player|CPU)\s*(\d*)$/.exec(String(name)); return m?(m[1]==="You"?"Y":m[1].charAt(0)+m[2]):String(name).charAt(0); }
+function hubHref(){ const B=BG(); return B&&B.back&&B.back.hub?B.back.hub():"../index.html"; }
+function setupShown(){ return $("setup").style.display!=="none"; }
+function focusIn(el){ const B=BG(); if(!el) return; if(B&&B.focus&&B.focus.enabled) B.focus.set(el); else { try{ el.focus({preventScroll:true}); }catch(e){ el.focus(); } } }
+function focusTV(el){ const B=BG(); if(el&&B&&B.focus&&B.focus.enabled&&onTV()) setTimeout(()=>{ if(el.isConnected&&!el.hidden&&el.getClientRects().length) B.focus.set(el); },0); }
+function armBack(){ const B=BG(); if(B&&B.back&&B.back.arm) B.back.arm(); }   // TV browsers: the remote's Back now stays on this page
+// the play clock (the Victory's time). Saved as an optional "stats" field beside the snapshot: saves made before step 4 load with a fresh
+// clock, and older code ignores the field
+let stats={ms:0}, clock0=0;
+function readStats(s){ return {ms:(s&&typeof s==="object")?Math.max(0,+s.ms||0):0}; }
+function liveGame(){ return !!(G&&!G.over); }
+function clockOn(){ clock0=(liveGame()&&!document.hidden)?Date.now():0; }
+function clockOff(){ if(clock0){ stats.ms+=Math.max(0,Date.now()-clock0); clock0=0; } }
+function playMs(){ return stats.ms+(clock0?Math.max(0,Date.now()-clock0):0); }
+function fmtTime(ms){ const s=Math.max(0,Math.round(ms/1000)), h=Math.floor(s/3600), m=Math.floor(s/60)%60, x=s%60;
+  return (h?h+":"+String(m).padStart(2,"0"):String(m))+":"+String(x).padStart(2,"0"); }
+function winVerb(n){ return n.indexOf(" & ")>0||/^You$/.test(n)?"win":"wins"; }
+function winnersName(){ return (G&&G.winners||[]).map(i=>G.players[i].name).join(" & "); }
+function resultDue(){ const B=BG(); return !!(G&&G.over&&ui.winShown!==gen&&B&&B.win&&luxe()); }   // a win whose Victory screen has not opened yet
+
+// toasts: the Luxe toast (placed clear of the player strip, the top bar and the dock). The engine's own words stay in #toast too (the no-ui
+// fallback). banner() is the louder message (STOP, a challenge, the star): the same Luxe toast with an icon
+function toast(m){
+  const B=BG();
+  if(luxe()&&B.toast){ B.toast(m,{icon:"info",ms:2600}); return; }
+  const t=$("toast"); t.textContent=m; t.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove("show"),2200);
+}
+function banner(m,ico,em){
+  const B=BG();
+  if(luxe()&&B.toast){ B.toast(m,{icon:ico||"info",ms:3000}); return; }
+  const b=$("banner"); b.textContent=(em?em+" ":"")+m; b.classList.add("show"); clearTimeout(banner._t); banner._t=setTimeout(()=>b.classList.remove("show"),2600);
+}
 
 /* ---------------- setup ---------------- */
 function clampSeats(){ if(cfg.humans+cfg.cpus<2) cfg.cpus=2-cfg.humans; if(cfg.humans+cfg.cpus>8) cfg.cpus=8-cfg.humans; if(cfg.cpus<0) cfg.cpus=0; }
-function drawSetup(){
-  const o=curOpts();
-  $("versions").innerHTML=E.VERSIONS.map(v=>`<div class="ver${cfg.version===v.id?" on":""}" data-v="${v.id}"><b>${esc(v.name)}</b><i>${esc(v.tag)}</i><p>${esc(v.desc)}</p></div>`).join("");
-  $("versions").querySelectorAll(".ver").forEach(d=>d.addEventListener("click",()=>{ cfg.version=d.dataset.v; cfg.over={}; drawSetup(); }));
-  clampSeats();
-  $("humanSeg").innerHTML=[1,2,3,4].map(n=>`<button data-n="${n}" class="${cfg.humans===n?"on":""}">${n}</button>`).join("");
-  $("humanSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.humans=+b.dataset.n; clampSeats(); drawSetup(); }));
-  $("cpuSeg").innerHTML=[0,1,2,3,4,5,6,7].map(n=>{ const t=cfg.humans+n; return `<button data-n="${n}" class="${cfg.cpus===n?"on":""}"${(t>=2&&t<=8)?"":" disabled"}>${n}</button>`; }).join("");
-  $("cpuSeg").querySelectorAll("button:not([disabled])").forEach(b=>b.addEventListener("click",()=>{ cfg.cpus=+b.dataset.n; drawSetup(); }));
-  $("seatNote").textContent=(cfg.humans+cfg.cpus)+" players"+(cfg.humans>1?" · humans write one after another — pass the phone when asked":"")+(o.judge==="vote"&&cfg.humans<2?" · with one human, you can still challenge a computer's answer":"");
-  drawHouse();
+function keepFocus(box,attr,fn){   // redraw a picker without losing the keyboard / D-pad focus
+  const a=document.activeElement, k=(a&&a!==document.body&&box.contains(a))?a.getAttribute(attr):null;
+  fn();
+  if(k===null) return;
+  focusIn(box.querySelector("["+attr+'="'+k+'"]:not([disabled])')||box.querySelector("button.on:not([disabled])")||box.querySelector("button:not([disabled]), select, input"));
+}
+function drawVersions(){
+  const vs=$("versions");
+  if(!vs.querySelector(".ver")){
+    vs.innerHTML=E.VERSIONS.map(v=>`<button type="button" class="bg-version ver" role="radio" data-value="${v.id}" data-v="${v.id}" aria-checked="false"><span class="bg-version__title">${esc(v.name)}</span><span class="bg-version__meta">${esc(v.tag)}</span></button>`).join("");
+    vs.querySelectorAll(".ver").forEach(d=>d.addEventListener("click",()=>{ cfg.version=d.dataset.v; cfg.over={}; drawSetup(); }));
+  }
+  vs.querySelectorAll(".ver").forEach(d=>{ const on=cfg.version===d.dataset.v; d.classList.toggle("on",on); d.setAttribute("aria-checked",String(on)); });
+  const v=E.VERSIONS.filter(x=>x.id===cfg.version)[0]||E.VERSIONS[0];
+  $("versionDesc").innerHTML=`<b>${esc(v.name)}.</b> ${esc(v.desc)}`;
+}
+function drawSetup(){ clampSeats(); drawVersions(); drawSeats(); drawHouse(); }
+function seatNames(){ const names=[]; for(let i=0;i<cfg.humans+cfg.cpus;i++){ const h=i<cfg.humans; names.push(h?(cfg.humans===1?"You":"Player "+(i+1)):"CPU "+(i+1-cfg.humans)); } return names; }
+function drawSeats(){
+  const o=curOpts(), hs=$("humanSeg"), cs=$("cpuSeg");
+  keepFocus(hs,"data-n",()=>{
+    hs.innerHTML=[1,2,3,4].map(n=>`<button type="button" data-n="${n}" class="${cfg.humans===n?"on":""}" aria-pressed="${cfg.humans===n}">${n}</button>`).join("");
+    hs.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.humans=+b.dataset.n; clampSeats(); drawSetup(); }));
+  });
+  keepFocus(cs,"data-n",()=>{
+    cs.innerHTML=[0,1,2,3,4,5,6,7].map(n=>{ const t=cfg.humans+n; return `<button type="button" data-n="${n}" class="${cfg.cpus===n?"on":""}" aria-pressed="${cfg.cpus===n}"${(t>=2&&t<=8)?"":" disabled"}>${n}</button>`; }).join("");
+    cs.querySelectorAll("button:not([disabled])").forEach(b=>b.addEventListener("click",()=>{ cfg.cpus=+b.dataset.n; drawSetup(); }));
+  });
+  const tot=cfg.humans+cfg.cpus, names=seatNames();
+  $("seatNote").textContent=tot+" players"+(cfg.humans>1?" · humans write one after another — pass the "+(onTV()?"remote":"phone")+" when asked":"")+(o.judge==="vote"&&cfg.humans<2?" · with one human, you can still challenge a computer's answer":"");
+  $("seatTokens").innerHTML=names.map((n,i)=>`<span class="bg-token" data-seat="${seatIn(i)}" aria-hidden="true">${esc(initials(n))}</span>`).join("");
+  $("seatHead").textContent=tot+" at the table";
+  syncStart();
 }
 function drawHouse(){
-  const o=curOpts(), box=$("houseRules"); box.innerHTML="";
-  E.HOUSE.forEach(h=>{
-    if(h[5]&&h[5]!==o.mode) return;
-    const key=h[0], tag=h[4]?'<span class="tag off">published</span>':'<span class="tag house">house</span>';
-    const row=document.createElement("div"); row.className="row";
-    if(h[2]==="bool"){ row.innerHTML=`<span>${esc(h[1])}${tag}</span><input type="checkbox"${o[key]?" checked":""}>`; row.querySelector("input").addEventListener("change",e=>{ cfg.over[key]=e.target.checked; drawSetup(); }); }
-    else { row.innerHTML=`<span>${esc(h[1])}${tag}</span><select>${h[3].map(c=>`<option value="${esc(c[0])}"${String(o[key])===String(c[0])?" selected":""}>${esc(c[1])}</option>`).join("")}</select>`;
-      row.querySelector("select").addEventListener("change",e=>{ const m=h[3].filter(c=>String(c[0])===e.target.value)[0]; cfg.over[key]=m?m[0]:e.target.value; drawSetup(); }); }
-    box.appendChild(row);
+  const o=curOpts(), box=$("houseRules");
+  keepFocus(box,"data-k",()=>{
+    box.innerHTML="";
+    E.HOUSE.forEach(h=>{
+      if(h[5]&&h[5]!==o.mode) return;
+      const key=h[0], tag=h[4]?'<span class="bg-tag bg-tag--official">official</span>':'<span class="bg-tag bg-tag--house">house</span>';
+      let row;
+      if(h[2]==="bool"){
+        row=document.createElement("label"); row.className="bg-row row";
+        row.innerHTML=`<span class="bg-row__main"><span class="bg-row__title">${esc(h[1])} ${tag}</span></span><input type="checkbox" class="bg-toggle" data-k="${key}"${o[key]?" checked":""}>`;
+        row.querySelector("input").addEventListener("change",e=>{ cfg.over[key]=e.target.checked; drawSetup(); });
+      } else {
+        row=document.createElement("div"); row.className="bg-row bg-row--static row";
+        row.innerHTML=`<span class="bg-row__main"><span class="bg-row__title">${esc(h[1])} ${tag}</span></span><select class="bg-select" data-k="${key}" aria-label="${esc(h[1])}">${h[3].map(c=>`<option value="${esc(c[0])}"${String(o[key])===String(c[0])?" selected":""}>${esc(c[1])}</option>`).join("")}</select>`;
+        row.querySelector("select").addEventListener("change",e=>{ const m=h[3].filter(c=>String(c[0])===e.target.value)[0]; cfg.over[key]=m?m[0]:e.target.value; drawSetup(); });
+      }
+      box.appendChild(row);
+    });
   });
+  syncRules();
+}
+// the rules row: how many rules differ from the chosen version; it opens every rule
+function changedRules(){ const base=E.versionOpts(cfg.version,{}); return Object.keys(cfg.over||{}).filter(k=>String(cfg.over[k])!==String(base[k])).length; }
+function syncRules(){
+  const n=changedRules(), v=E.VERSIONS.filter(x=>x.id===cfg.version)[0]||E.VERSIONS[0], open=ui.rulesOpen;
+  $("rulesDesc").textContent=n?n+(n===1?" rule":" rules")+" changed from "+v.name:"As in "+v.name+". Open it to change any rule.";
+  $("rulesToggle").setAttribute("aria-expanded",String(open)); $("houseRules").hidden=!open; $("rulesLegend").hidden=!open;
+}
+$("rulesToggle").addEventListener("click",()=>{ ui.rulesOpen=!ui.rulesOpen; syncRules(); });
+// the copy follows the device: "Players on this TV" and "the remote" on the TV, the phone wording elsewhere
+function deviceCopy(){
+  const tv=onTV(), t=tv?"Players on this TV":"Players on this phone";
+  $("humansTitle").textContent=t; $("humanSeg").setAttribute("aria-label",t);
+  $("humansDesc").textContent="Hot seat: pass the "+(tv?"remote":"phone")+" when it's your turn to write.";
+  $("cpuDesc").textContent="2 to 8 players in all.";
+  drawSeats();
+}
+// the dock: a Start button that confirms the setup ("Start Scattergories / 4 players · Classic · 3 rounds"); mid-game Resume leads (gold) and
+// "New game" is the secondary beside it. The sub-label breaks only between its "·" parts; its text is unchanged
+function subParts(parts){ return parts.map((s,i)=>'<span class="sc-nw">'+esc(s)+(i<parts.length-1?" ·":"")+"</span>").join(" "); }
+function syncStart(){
+  const o=curOpts(), tot=cfg.humans+cfg.cpus, rb=$("resumeBtn"), sb=$("startBtn"), resumable=rb.style.display!=="none";
+  $("startLabel").textContent=resumable?"New game":"Start Scattergories";
+  const parts=[tot+" players",SHORT[cfg.version]||"Classic"];
+  if(!resumable){ parts.push(o.mode==="keyword"?"to "+o.target+" points":o.rounds+(o.rounds===1?" round":" rounds")); if(changedRules()) parts.push("custom rules"); }
+  $("startSub").innerHTML=subParts(parts);
+  $("startDock").classList.toggle("has-resume",resumable);
+  sb.classList.toggle("bg-btn--primary",!resumable); sb.classList.toggle("bg-btn--secondary",resumable);
+  rb.classList.toggle("bg-btn--primary",resumable); rb.classList.toggle("bg-btn--secondary",!resumable);
+}
+function resumeText(){
+  if(ui.result) return;
+  let s="Back to the game";
+  if(G&&!G.over){ s="Round "+G.round+(G.phase==="write"?" · writing":G.phase==="review"?" · scoring":""); }
+  $("resumeLabel").textContent="Resume"; $("resumeSub").textContent=s;
+}
+// the game ended while the Menu was up, or before its Victory screen opened: Resume becomes "See the result" (the Victory screen)
+function menuResult(){
+  if(!resultDue()) return;
+  ui.result=true; $("resumeBtn").style.display="block";
+  $("resumeLabel").textContent="See the result"; $("resumeSub").textContent=winnersName()+" "+(G.winners&&G.winners.length>1?"tie":"win");
+  saveBar.refresh(); syncStart(); barTitle();
+}
+// the setup page is also the in-game Menu: one page at a time (the pad is not drawn while it is up). .show is the old state class
+function showSetup(on,resume){
+  const s=$("setup"), b=document.body;
+  s.style.display=on?"":"none"; s.classList.toggle("show",on);
+  b.classList.toggle("sc-in-setup",on); b.classList.toggle("bg-app--scene",on);
+  $("menuBtn").hidden=on;
+  if(on){ closeWin(); syncStart(); }
+  (document.scrollingElement||document.documentElement).scrollTop=0;
+  if(!on&&G){
+    legend();
+    if(resume&&ui.result){ ui.result=false; setTimeout(()=>{ if(G&&G.over&&!setupShown()) openWin(); },250); }
+    armBack();
+  }
+  barTitle();
+  // the page changed under a showing toast (the Menu and the pad have different bars to keep clear of): place it again
+  const B=BG(); if(luxe()&&B.toast&&B.toast.place) B.toast.place();
+}
+function barTitle(){
+  const e=$("barEyebrow"); if(!e) return;
+  const t=setupShown()?(liveGame()?"Game in progress":(ui.result?"Game over":"New game")):(!G?"New game":G.over?"Game over":"Round "+G.round);
+  if(e.textContent!==t) e.textContent=t;
 }
 
 /* ---------------- saving ---------------- */
-function packG(){ if(!G) return null; return {G:E.serialize(G),cfg:JSON.parse(JSON.stringify(cfg))}; }
+function packG(){ if(!G) return null; return {G:E.serialize(G),cfg:JSON.parse(JSON.stringify(cfg)),stats:{ms:Math.round(playMs())}}; }
 function loadSaved(d){
   gen++; clearTimeout(stopTimer); G=E.restore(JSON.parse(JSON.stringify(d.G))); Object.assign(cfg,d.cfg||{});
-  $("setup").classList.remove("show"); Sound.skip(); startUI(); resetView(); resumePhase();
+  stats=readStats(d.stats); ui.winShown=-1; ui.result=false; closeWin(); closeRoll(); closeHandoff();
+  Sound.skip(); startUI(); showSetup(false); resetView(); resumePhase(); drawSetup(); clockOn(); armBack();
+}
+// saves.js bar in Luxe: its emoji labels become line icons (ids, data-a and every behaviour stay saves.js's own)
+function dressSaveBar(){
+  const B=BG();
+  document.querySelectorAll("#svbar button[data-a]").forEach(b=>{
+    if(b.getAttribute("data-lux")) return; b.setAttribute("data-lux","1");
+    const t=b.firstChild; if(t&&t.nodeType===3) t.nodeValue=t.nodeValue.replace(/^[^A-Za-z]+/,"");
+    b.classList.add("bg-btn","bg-btn--secondary");
+    if(B&&B.icon) b.insertAdjacentHTML("afterbegin",B.icon(SV_ICON[b.getAttribute("data-a")]||"save"));
+  });
+}
+if(window.MutationObserver){
+  new MutationObserver(dressSaveBar).observe($("svbar"),{childList:true});
+  // saves.js toasts ("Settings saved on this device") go through BGUI.toast, so they are placed clear of the dock
+  new MutationObserver(()=>{ const B=BG(), m=$("svtoast").textContent; if(luxe()&&B.toast&&m) B.toast(m,{icon:"save",ms:2400}); }).observe($("svtoast"),{childList:true,characterData:true,subtree:true});
 }
 const saveBar=Saves.bar({game:"scatter",el:$("svbar"),snapNote:"this round (writing restarts)",saveToast:"Game saved",
   getSettings:()=>({version:cfg.version,over:cfg.over,humans:cfg.humans,cpus:cfg.cpus}),
   applySettings:s=>{ cfg.version=s.version||"classic"; cfg.over=s.over||{}; cfg.humans=s.humans||1; cfg.cpus=s.cpus!=null?s.cpus:3; drawSetup(); },
   standard:()=>{ cfg={version:"classic",over:{},humans:1,cpus:3}; drawSetup(); },
   getSnapshot:()=>(G&&!G.over)?packG():null,loadSnapshot:loadSaved});
-$("menuBtn").addEventListener("click",()=>{ $("resumeBtn").style.display=(G&&!G.over)?"block":"none"; saveBar.refresh(); drawSetup(); $("setup").classList.add("show"); });
-$("resumeBtn").addEventListener("click",()=>$("setup").classList.remove("show"));
-$("startBtn").addEventListener("click",()=>{ Sound.skip(); $("setup").classList.remove("show"); startGame(); });
+$("menuBtn").addEventListener("click",()=>{
+  // Resume only while a game is on, or "See the result" when it has just ended and its Victory screen is still to come
+  const result=resultDue();
+  saveBar.refresh(); $("resumeBtn").style.display=((G&&!G.over)||result)?"block":"none";
+  ui.result=false; resumeText();
+  drawSetup(); showSetup(true);
+  if(result) menuResult();
+  focusTV($("resumeBtn").style.display!=="none"?$("resumeBtn"):$("startBtn"));
+});
+$("resumeBtn").addEventListener("click",()=>showSetup(false,true));
+// the new game is dealt before the pad comes back, so the pad never shows the old game for a moment
+$("startBtn").addEventListener("click",()=>{ Sound.skip(); closeWin(); startGame(); showSetup(false); armBack(); });
+
+/* ---------------- the sheets: the roll, the hand-off and the challenger picker ---------------- */
+function openRoll(){ const el=$("rollBox"), B=BG(); el.classList.add("show"); if(luxe()&&!B.sheet.isOpen(el)) B.sheet.open(el,{dismissible:false}); }
+function closeRoll(){ const el=$("rollBox"), B=BG(); el.classList.remove("show"); if(B&&B.sheet&&B.sheet.isOpen(el)){ ui.closing=true; try{ B.sheet.close(el); }finally{ ui.closing=false; } } }
+function openHandoff(opts){ const el=$("handoff"), B=BG(); el.classList.add("show"); if(luxe()&&!B.sheet.isOpen(el)) B.sheet.open(el,{dismissible:!!(opts&&opts.dismissible),focus:(opts&&opts.focus)||"#hoBtn",onClose:()=>{ if(!ui.closing) el.classList.remove("show"); }}); }
+function closeHandoff(){ const el=$("handoff"), B=BG(); el.classList.remove("show"); if(B&&B.sheet&&B.sheet.isOpen(el)){ ui.closing=true; try{ B.sheet.close(el); }finally{ ui.closing=false; } } }
+
+/* ---------------- the player strip ---------------- */
+function turnId(){ if(!G||G.over) return -1; if(G.phase==="write") return curWriter; if(G.phase==="review"&&voteMe>=0) return voteMe; return -1; }
+function legend(){
+  const el=$("legend"), B=BG();
+  if(!G){ el.innerHTML=""; return; }
+  if(!luxe()||!B.mount||!B.mount.players){
+    el.className="sc-chips";
+    el.innerHTML=G.players.map((p,i)=>`<li class="sc-chip"><span class="sw" style="background:${PCOL[i%PCOL.length]}"></span>${esc(p.name)}${p.human?"":" (CPU)"} <b>${p.score}</b></li>`).join("");
+    return;
+  }
+  const key=gen+":"+G.players.map(p=>p.name+(p.human?"":"*")).join("|");
+  if(ui.stripKey!==key||el.children.length!==G.players.length){
+    ui.stripKey=key; ui.turn=-2; el.className="";
+    B.mount.players(el,G.players.map((p,i)=>({name:p.name,meta:p.score+(p.score===1?" pt":" pts"),seat:seatIn(i),cpu:!p.human,token:initials(p.name)})),{scroll:G.players.length>4});
+  } else {
+    el.querySelectorAll(".bg-player").forEach((c,i)=>{ const m=c.querySelector(".bg-player__meta"), t=G.players[i].score+(G.players[i].score===1?" pt":" pts"); if(m&&m.textContent!==t) m.textContent=t; });
+  }
+  const t=turnId();
+  if(t!==ui.turn){
+    ui.turn=t;
+    const chips=el.querySelectorAll(".bg-player");
+    if(t>=0&&chips[t]) B.setTurn(chips[t],{pulse:!setupShown()&&!document.hidden});
+    else chips.forEach(c=>c.classList.remove("is-turn","is-pulse"));
+  }
+}
 
 /* ---------------- game flow ---------------- */
 function startGame(){
   gen++; clearTimeout(stopTimer); clampSeats();
   const total=cfg.humans+cfg.cpus, names=[], humans=[];
   for(let i=0;i<total;i++){ const h=i<cfg.humans; humans.push(h); names.push(h?(cfg.humans===1?"You":"Player "+(i+1)):"CPU "+(i+1-cfg.humans)); }
-  G=E.newGame({names,humans,opts:curOpts()}); startUI(); resetView(); newRound();
+  G=E.newGame({names,humans,opts:curOpts()}); stats={ms:0}; ui.winShown=-1; ui.result=false; closeWin(); startUI(); resetView(); clockOn(); newRound();
 }
 /* a new or loaded game starts clean: the old sheet's timer, vote window and hand-off must not act on it */
-function resetView(){ $("handoff").classList.remove("show"); $("rollBox").classList.remove("show"); voteMe=-1; ctrl.closeModal(); ctrl.update(snap(-1,{phase:"roll"})); }
+function resetView(){ closeHandoff(); closeRoll(); voteMe=-1; ctrl.closeModal(); ctrl.update(snap(-1,{phase:"roll"})); }
 function startUI(){
   Skins.apply("scatter"); Sound.music("scatter");
-  if(!ctrl) ctrl=Sc.UI.create({root:$("sctrl"),toast,send:onIntent,readyLabel:"Done scoring ▶"});
+  if(!ctrl) ctrl=Sc.UI.create({root:$("sctrl"),toast,send:onIntent,readyLabel:luxe()?"Done scoring":"Done scoring ▶",luxe:luxe(),tv:onTV,icon:icon,seatOf:seatIn});
   legend();
 }
-function legend(){ $("legend").innerHTML=G.players.map((p,i)=>`<div class="chip"><span class="sw" style="background:${PCOL[i%PCOL.length]}"></span>${esc(p.name)}${p.human?"":" 🤖"} <b>${p.score}</b></div>`).join(""); }
+function faceHTML(t,star){ return star?icon("star"):esc(t); }
 function newRound(){
   E.startRound(G); stopped=false; clearTimeout(stopTimer);
   const my=gen;
   const showRoll=()=>{
     const hasLetter=G.o.mode==="letter";
-    $("rollNote").textContent=hasLetter?"Round "+G.round+" — the letter is…":"Round "+G.round+" — the key word is…";
-    $("rollBox").classList.add("show"); Sound.sfx("dice");
-    const L=hasLetter?(G.star?"⭐":G.letter):G.keyword, el=$("rollLetter"); let n=0;
-    el.style.fontSize=hasLetter?"150px":"64px";
-    const iv=setInterval(()=>{ el.textContent=hasLetter?E.LETTERS[Math.floor(Math.random()*20)]:E.KEYWORDS[Math.floor(Math.random()*20)].toUpperCase(); if(++n>=9){ clearInterval(iv); el.textContent=L; setTimeout(()=>{ if(my!==gen) return; $("rollBox").classList.remove("show"); if(G.star) starPick(); else beginWriting(); },900); } },90);
+    $("rollRound").textContent="Round "+G.round;
+    $("rollNote").textContent=hasLetter?"The letter is…":"The key word is…";
+    openRoll(); Sound.sfx("dice");
+    const el=$("rollLetter"), L=hasLetter?(G.star?"":G.letter):G.keyword; let n=0;
+    el.classList.toggle("is-kw",!hasLetter); el.style.fontSize=luxe()?"":(hasLetter?"150px":"64px");
+    el.classList.remove("is-rolling"); void el.offsetWidth; el.classList.add("is-rolling");
+    const iv=setInterval(()=>{ el.textContent=hasLetter?E.LETTERS[Math.floor(Math.random()*20)]:E.KEYWORDS[Math.floor(Math.random()*20)].toUpperCase(); if(++n>=9){ clearInterval(iv);
+      if(hasLetter&&G.star) el.innerHTML=luxe()?icon("star"):"⭐"; else el.textContent=L;
+      el.setAttribute("aria-label",(hasLetter?(G.star?"Star":"Letter "+G.letter):"Key word "+G.keyword));
+      setTimeout(()=>{ if(my!==gen) return; closeRoll(); if(G.star) starPick(); else beginWriting(); },900); } },90);
   };
   showRoll();
 }
 /* star on the Junior die: the roller picks the letter before anyone writes (a computer roller keeps the rolled one) */
 function starPick(){
   const p=G.players[G.starBy];   // (no recorded roller: keep the rolled letter rather than wait for a picker nobody sees)
-  if(!p||!p.human){ G.star=false; if(p) banner("⭐ "+p.name+" rolled the star and picked "+G.letter); beginWriting(); return; }
+  if(!p||!p.human){ G.star=false; if(p) banner(p.name+" rolled the star and picked "+G.letter,"star","⭐"); beginWriting(); return; }
   ctrl.update(snap(p.id,{phase:"star"})); legend();
 }
 function beginWriting(){
   G.star=false;   // the letter is settled once writing starts
   // a tie-break round is written only by the tied leaders
   writeQueue=G.players.filter(p=>p.human&&E.inPlay(G,p.id)).map(p=>p.id); stopped=false;
-  if(G.tieActive) banner("Tie-break: "+G.tieActive.map(i=>G.players[i].name).join(" vs "));
+  if(G.tieActive) banner("Tie-break: "+G.tieActive.map(i=>G.players[i].name).join(" vs "),"flag");
   // computers decide their answers now so a stop call can be timed
   E.cpuFillAll(G); G._cpuStops=G.players.filter(p=>!p.human&&E.allFilled(G,p.id)).map(()=>G.o.timer*(0.55+Math.random()*0.3));
   nextWriter();
@@ -194,7 +581,7 @@ function openWrite(){
   ctrl.update(snap(curWriter,{secLeft:G.o.timer})); legend(); roundStart=Date.now();
   autosave();
   // a computer may shout STOP
-  if(G.o.stopRule&&G._cpuStops.length){ const t=Math.min.apply(null,G._cpuStops)*1000, my=gen; stopTimer=setTimeout(()=>{ if(my!==gen||G.phase!=="write") return; banner("🛑 STOP! A computer finished — 8 seconds left!"); Sound.sfx("bell"); ctrl.setDeadlineIn(8); },t); }
+  if(G.o.stopRule&&G._cpuStops.length){ const t=Math.min.apply(null,G._cpuStops)*1000, my=gen; stopTimer=setTimeout(()=>{ if(my!==gen||G.phase!=="write") return; banner("STOP! A computer finished — 8 seconds left!","hourglass","🛑"); Sound.sfx("bell"); ctrl.setDeadlineIn(8); },t); }
 }
 function onIntent(a){
   if(!G) return {ok:false};
@@ -209,12 +596,12 @@ function onIntent(a){
   if(a.t==="vote"){ return doVote(a); }
   if(a.t==="ready"){ finishRound(); return {ok:true}; }
   if(a.t==="next"){ newRound(); return {ok:true}; }
-  if(a.t==="again"){ $("resumeBtn").style.display="none"; saveBar.refresh(); drawSetup(); $("setup").classList.add("show"); return {ok:true}; }
+  if(a.t==="again"){ closeWin(); $("resumeBtn").style.display="none"; saveBar.refresh(); drawSetup(); showSetup(true); return {ok:true}; }
   return {ok:false};
 }
 function toReview(){
   E.beginReview(G); Sound.sfx("bell"); reviewMe=G.players.findIndex(p=>p.human); voteMe=-1;
-  if(Object.keys(G.challenges).length) banner("⚖ A computer challenged an answer — vote!");
+  if(Object.keys(G.challenges).length) banner("A computer challenged an answer — vote!","info","⚖");
   driveVotes(); autosave();
 }
 function showReview(){ ctrl.update(snap(voteMe>=0?voteMe:reviewMe)); legend(); }
@@ -226,16 +613,18 @@ function doChallenge(a){
 }
 function pickChallenger(ids,a){
   const my=gen, sh=$("handoffSheet");
-  sh.innerHTML=`<h2 style="font-size:24px">Who is challenging?</h2><div style="display:flex;flex-direction:column;gap:8px;margin:14px 0">${ids.map(i=>`<button class="btn primary" data-who="${i}" style="font-size:17px;padding:12px 18px">${esc(G.players[i].name)}</button>`).join("")}</div><button class="btn" data-who="-1">Never mind</button>`;
-  $("handoff").classList.add("show");
-  sh.querySelectorAll("button[data-who]").forEach(b=>b.addEventListener("click",()=>{ $("handoff").classList.remove("show"); const who=+b.dataset.who; if(my!==gen||who<0||G.phase!=="review") return; const r=openCh(a,who); if(r&&r.ok===false) toast(r.msg||"Not allowed."); }));
+  sh.innerHTML=`<div class="bg-sheet__grip" aria-hidden="true"></div><div class="sc-ho"><span class="bg-eyebrow bg-eyebrow--accent">Challenge</span><h2 class="bg-sheet__title" id="hoTitle">Who is challenging?</h2>`+
+    `<div class="sc-who">${ids.map(i=>`<button class="bg-btn bg-btn--primary bg-btn--lg" type="button" data-who="${i}"><span class="bg-token" data-seat="${seatIn(i)}" aria-hidden="true">${esc(initials(G.players[i].name))}</span>${esc(G.players[i].name)}</button>`).join("")}`+
+    `<button class="bg-btn bg-btn--secondary bg-btn--lg" type="button" data-who="-1">Never mind</button></div></div>`;
+  openHandoff({dismissible:true,focus:"[data-who]"});
+  sh.querySelectorAll("button[data-who]").forEach(b=>b.addEventListener("click",()=>{ closeHandoff(); const who=+b.dataset.who; if(my!==gen||who<0||G.phase!=="review") return; const r=openCh(a,who); if(r&&r.ok===false) toast(r.msg||"Not allowed."); }));
 }
 function openCh(a,by){
   const r=E.openChallenge(G,by,a.slot,a.p,a.k); if(!r.ok) return r;
   const ch=r.ch; // the challenger counts as voting "reject"; every other human (the author too) votes next
   if(G.players[by].human) ch.votes[by]=false;
   const res=E.resolveChallenge(G,ch,false);
-  if(!res.done) driveVotes(); else { toast(res.state==="accepted"?"Answer kept ✔":"Answer voted out ✖"); showReview(); }
+  if(!res.done) driveVotes(); else { toast(res.state==="accepted"?"Answer kept":"Answer voted out"); showReview(); }
   autosave(); return {ok:true};
 }
 function driveVotes(){
@@ -249,14 +638,15 @@ function driveVotes(){
 }
 function doVote(a){
   const r=E.castVote(G,voteMe>=0?voteMe:reviewMe,a.slot,a.p,a.k,a.accept); if(!r.ok) return r;
-  if(r.done){ Sound.sfx(r.state==="accepted"?"coin":"lose"); toast(r.state==="accepted"?"Answer kept ✔":"Answer voted out ✖"); }
+  if(r.done){ Sound.sfx(r.state==="accepted"?"coin":"lose"); toast(r.state==="accepted"?"Answer kept":"Answer voted out"); }
   const my=gen; setTimeout(()=>{ if(my===gen) driveVotes(); },50); return {ok:true};
 }
 function finishRound(){
   // settle any challenge still open (a human walked away) in favour of the answer
   Object.keys(G.challenges).forEach(s=>Object.keys(G.challenges[s]).forEach(k=>{ const c=G.challenges[s][k]; if(c.state==="open") E.resolveChallenge(G,c,true); }));
-  E.finishRound(G); legend(); voteMe=-1;
+  E.finishRound(G); voteMe=-1; legend();
   Sound.sfx("win"); ctrl.update(snap(reviewMe)); autosave();
+  if(G.over){ clockOff(); if(setupShown()) menuResult(); else setTimeout(()=>{ if(G&&G.over&&!setupShown()) openWin(); },700); }
 }
 function resumePhase(){
   // a loaded game: writing restarts for the humans; other phases continue
@@ -264,33 +654,111 @@ function resumePhase(){
     // the star stage resumes only for a save taken before anyone wrote (newer saves record the roller in starBy). A save from
     // the older version was taken after the computers had written and has no roller: keep the rolled letter, writing restarts
     if(G.starBy>=0&&G.players.every(p=>E.filledCount(G,p.id)===0)){ starPick(); return; }
-    G.star=false; banner("⭐ Star round — this round's letter is "+G.letter);
+    G.star=false; banner("Star round — this round's letter is "+G.letter,"star","⭐");
   }
   if(G.phase==="write"){ writeQueue=G.players.filter(p=>p.human&&E.inPlay(G,p.id)).map(p=>p.id); G._cpuStops=[]; E.cpuFillAll(G); nextWriter(); }
   else if(G.phase==="review"){ reviewMe=G.players.findIndex(p=>p.human); voteMe=-1; driveVotes(); }
   else if(G.phase==="scored"||G.phase==="over"){ reviewMe=G.players.findIndex(p=>p.human); ctrl.update(snap(reviewMe)); legend(); }
   else newRound();
 }
+// pass the phone (hot seat): a sheet that must be answered; the pad stays hidden until the next player says it is them
 function showHandoff(p,kind,go){
-  const sh=$("handoffSheet"), c=PCOL[p.id%PCOL.length];
-  sh.innerHTML=`<h2 style="font-size:24px">Pass the phone</h2><p style="font-size:18px;margin:14px 0">to <b style="color:${c}">${esc(p.name)}</b> ${kind==="vote"?"to vote on a challenge":"to write answers"}</p><button class="btn primary" id="hoBtn" style="font-size:17px;padding:14px 22px">I'm ${esc(p.name)} — go</button>`;
-  $("handoff").classList.add("show");
-  $("hoBtn").addEventListener("click",()=>{ $("handoff").classList.remove("show"); go(); });
+  const tv=onTV(), seat=seatIn(p.id);
+  $("handoffSheet").innerHTML=`<div class="bg-sheet__grip" aria-hidden="true"></div><div class="sc-ho"><span class="bg-eyebrow bg-eyebrow--accent">Round ${G.round} · hot seat</span>`+
+    `<h2 class="bg-sheet__title" id="hoTitle">Pass the ${tv?"remote":"phone"}</h2>`+
+    `<p class="sc-ho__to"><span class="bg-token" data-seat="${seat}" aria-hidden="true">${esc(initials(p.name))}</span><span>to <b>${esc(p.name)}</b> ${kind==="vote"?"to vote on a challenge":"to write answers"}</span></p>`+
+    `<button class="bg-btn bg-btn--primary bg-btn--lg bg-btn--block" id="hoBtn" type="button" data-autofocus>I'm ${esc(p.name)} — go</button></div>`;
+  openHandoff();
+  $("hoBtn").addEventListener("click",()=>{ closeHandoff(); go(); });
 }
 function autosave(){ if(G&&G.over){ Saves.del("scatter","auto"); return; } const pk=packG(); if(pk) Saves.auto("scatter",pk); }   // a finished game is not offered as "Continue last game"
 
+/* ---------------- the Victory screen: the trophy, the ray wheel and confetti (BGUI.win + BGUI.celebrate) with real numbers ---------------- */
+function openWin(){
+  const B=BG(); if(!B||!B.win||!G||!G.over||!luxe()) return;
+  ui.winShown=gen; ui.result=false; clockOff();
+  const name=winnersName(), ms=playMs(), min=Math.round(ms/60000), best=Math.max.apply(null,G.players.map(p=>p.score));
+  const mine=(G.winners||[]).filter(i=>G.players[i].human), solo=G.players.filter(p=>p.human).length===1;
+  $("winEyebrow").textContent="Game over · "+(min<1?"under a minute":min===1?"1 minute":min+" minutes");
+  $("winTitle").textContent=(solo&&mine.length)?"Victory":name+" "+(G.winners.length>1?"tie":winVerb(name));
+  $("winSub").innerHTML=`<b>${esc(name)}</b> ${G.winners.length>1?"tie for the win":winVerb(name)+" the game"} with ${best} ${best===1?"point":"points"}.`;
+  $("winStats").innerHTML=`<li class="bg-stat"><b>${G.round}</b><span>${G.round===1?"round":"rounds"}</span></li>`+
+    `<li class="bg-stat"><b>${best}</b><span>${best===1?"point":"points"}</span></li><li class="bg-stat"><b>${fmtTime(ms)}</b><span>time</span></li>`;
+  closeHandoff();
+  B.win.open($("winBox"),{focus:"#winAgain"});
+  if(B.celebrate) B.celebrate();
+  barTitle();
+}
+function closeWin(){ const B=BG(); if(B&&B.win&&B.win.isOpen()) B.win.close($("winBox")); }
+$("winAgain").addEventListener("click",()=>{ closeWin(); $("startBtn").click(); });
+$("winMenu").addEventListener("click",()=>{ closeWin(); $("menuBtn").click(); });
+
+/* ---------------- D-pad (TV): Down from the players picker always reaches the computer picker (past disabled counts); Up/Down inside the
+   computer keypad (0-4 over 5-7) move between its rows, and only Up from its first row goes back to the players picker; Down from the
+   save bar's first row lands on the nearest button of the second row. Registered before ui.js, so BGUI.focus sees these keys as handled ---------------- */
+function nearestIn(row,a){
+  const r0=a.getBoundingClientRect(), x0=r0.left+r0.width/2; let best=null, bd=Infinity;
+  row.querySelectorAll("button:not([disabled])").forEach(b=>{ const r=b.getBoundingClientRect(), dx=Math.abs(r.left+r.width/2-x0); if(r.width>0&&dx<bd){ bd=dx; best=b; } });
+  return best;
+}
+// the nearest count that is on in the keypad row right above/below a (the button straight there may be off); null in the first/last row
+function keypadStep(a,dir){
+  const r0=a.getBoundingClientRect(), x0=r0.left+r0.width/2; let best=null, bt=dir<0?-Infinity:Infinity, bd=Infinity;
+  $("cpuSeg").querySelectorAll("button:not([disabled])").forEach(b=>{
+    const r=b.getBoundingClientRect(); if(r.width<=0) return;
+    if(dir<0?r.bottom>r0.top+1:r.top<r0.bottom-1) return;   // rows above / below only
+    const dx=Math.abs(r.left+r.width/2-x0);
+    if(dir<0?r.top>bt+1:r.top<bt-1){ bt=r.top; bd=dx; best=b; } else if(Math.abs(r.top-bt)<=1&&dx<bd){ bd=dx; best=b; }
+  });
+  return best;
+}
+document.addEventListener("keydown",e=>{
+  const B=BG(); if(!B||!B.focus||!B.focus.enabled||e.defaultPrevented||e.altKey||e.ctrlKey||e.metaKey) return;
+  const down=e.key==="ArrowDown"||e.keyCode===40, up=e.key==="ArrowUp"||e.keyCode===38, a=document.activeElement;
+  if((!down&&!up)||!a||!a.closest) return;
+  const pick=sel=>document.querySelector(sel+" button.on:not([disabled])")||document.querySelector(sel+" button:not([disabled])");
+  const rows=document.querySelectorAll("#svbar .r"), row1=rows[0], row2=rows[1];
+  let to=null;
+  if(down&&a.closest("#humanSeg")) to=pick("#cpuSeg");
+  else if(a.closest("#cpuSeg")) to=up?(keypadStep(a,-1)||pick("#humanSeg")):keypadStep(a,1);
+  else if(down&&row1&&row2&&row1.contains(a)) to=nearestIn(row2,a);
+  if(to){ e.preventDefault(); B.focus.set(to); }
+});
+
+/* ---------------- the remote's Back (TV) ----------------
+   ui.js gives every game page the same default (BGUI.back: window.__tvBack for the Fire TV app, a history guard for TV browsers once a
+   game has started, the Back key; one press = one step): it closes the top layer (the sound panel, a challenge list, the Victory screen;
+   the hand-off, the roll and a vote must be answered, so Back waits there), then takes this page's step: from the pad the Menu opens,
+   from the Menu Resume goes back to the game (or "See the result"); on the New game page it goes on to the hub */
+function backStep(){
+  if(!setupShown()){ $("menuBtn").click(); return "menu"; }
+  if($("resumeBtn").style.display!=="none"){ $("resumeBtn").click(); return "resume"; }
+  return false;
+}
+// the play clock counts while the page is on screen
+document.addEventListener("visibilitychange",()=>{ if(document.hidden) clockOff(); else clockOn(); });
+// ui/ui.js is deferred: it arrives after this script. Then the icons go in, and the Luxe sheets, toasts and the Victory screen take over
+document.addEventListener("DOMContentLoaded",()=>{
+  const B=BG();
+  if(B&&B.back) B.back.on(backStep);
+  else window.__tvBack=()=>{   // no ui.js: the same steps, without the Luxe layers
+    if(window.Sound&&Sound.panelOpen&&Sound.panelOpen()){ Sound.closePanel(); return "panel"; }
+    const up=id=>{ const e=$(id); return !!(e&&e.classList.contains("show")); };
+    if(up("handoff")||up("rollBox")) return "held";
+    const r=backStep(); if(r) return r;
+    location.href=$("homeBtn").getAttribute("href"); return "hub";
+  };
+  if(!B||!B.effects) return;
+  document.documentElement.classList.add("sc-luxe");
+  if(B.icon) document.querySelectorAll("[data-icon]").forEach(el=>{ if(!el.querySelector("svg")) el.insertAdjacentHTML("afterbegin",B.icon(el.getAttribute("data-icon"))); });
+  const hub=hubHref(); ["homeBtn","backHub","winHome"].forEach(id=>{ const a=$(id); if(a) a.setAttribute("href",hub); });   // TV: keeps ?tv=1
+  saveBar.refresh(); deviceCopy();
+  document.addEventListener("bgui:tv",()=>{ deviceCopy(); syncStart(); });
+});
+
 Skins.apply("scatter"); Sound.mountButton(); Sound.music("scatter");
-drawSetup(); saveBar.refresh();
+deviceCopy(); drawSetup(); saveBar.refresh(); showSetup(true);
 if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
-// TV Back (step 10): in the Fire TV app Back calls window.__tvBack() and CLOSES THE APP when a page has none. Steps: sound panel,
-// then a game -> Menu, the Menu -> Resume (or the hub when there is no game to resume). A hand-off / answer sheet holds Back.
-window.__tvBack=function(){
-  if(window.Sound&&Sound.panelOpen&&Sound.panelOpen()){ Sound.closePanel(); return "panel"; }
-  const up=id=>{ const e=$(id); return !!(e&&e.classList.contains("show")); };
-  if(up("handoff")||up("rollBox")) return "held";
-  if(up("setup")){ const r=$("resumeBtn"); if(r&&r.style.display!=="none"){ r.click(); return "resume"; } const h=document.querySelector('#setup a[href="../index.html"]'); if(h) h.click(); return "hub"; }
-  const m=$("menuBtn"); if(m){ m.click(); return "menu"; } return "";
-};
 window.__sc={get G(){ return G; },cfg:cfg,get ctrl(){ return ctrl; },startGame:startGame};
 })();
 </script>
