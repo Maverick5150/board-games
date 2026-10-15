@@ -175,7 +175,7 @@ function endRound(G,reason,outP){
   }
   G.players.forEach(function(p){ p.score=G.scores[unitOf(G,p.id)]; });
   (G.history=G.history||[]).push({round:G.round,rows:rows.map(function(r){ return {t:r.total,s:r.score}; })});
-  if(winU!=null){ G.over=true; G.winner=winU; }
+  if(winU!=null){ G.over=true; G.winner=winU; if(g.Rummy.Brain){ try{ g.Rummy.Brain.finish(G); }catch(e){} } }
   G.roundOver={reason:reason,out:outP,rows:rows,over:G.over,winner:G.winner,winnerName:winU!=null?unitName(G,winU):null};
   return {ok:true,roundOver:G.roundOver,events:[ev(G,"roundOver",{reason:reason,out:outP})]};
 }
@@ -228,7 +228,8 @@ function aiDiscard(G,p){
   if(!best) best=p.hand[0];
   return {t:"discard",card:best.id};
 }
-function aiAction(G){
+/* the old decision code (kept as the fallback and as the tournament's yardstick) */
+function aiActionLegacy(G){
   if(G.over||G.roundOver) return null;
   var p=cur(G), o=G.o;
   if(G.phase==="draw") return aiDraw(G);
@@ -249,6 +250,13 @@ function aiAction(G){
   var plan=R.bestMelds(p.hand,o).list;
   for(var q=0;q<plan.length;q++){ if(!(o.goOutNeedsDiscard&&plan[q].ids.length>=p.hand.length)) return {t:"meld",ids:plan[q].ids}; }
   return aiDiscard(G,p);
+}
+/* the computer's move: the brain (brain.js, G.skill easy|normal|hard, missing = normal) decides; if it is missing or declines, the old code does */
+function aiAction(G){
+  if(G.over||G.roundOver) return null;
+  var B=g.Rummy.Brain, a=null;
+  if(B){ try{ a=B.decide(G,cur(G)); }catch(e){ a=null; } }
+  return a||aiActionLegacy(G);
 }
 function applyAction(G,a){
   if(a.t==="stock") return drawStock(G);
@@ -271,6 +279,10 @@ function hint(G){
 
 g.Rummy.Game={ newGame:newGame,startRound:startRound,cur:cur,unitOf:unitOf,unitName:unitName,drawStock:drawStock,takeDiscard:takeDiscard,takeFeasible:takeFeasible,mustUseRule:mustUseRule,
   mayLayOn:mayLayOn,layTarget:layTarget,
-  meld:meld,layOffCard:layOffCard,discardCard:discardCard,undo:undo,endRound:endRound,goalText:goalText,aiAction:aiAction,applyAction:applyAction,hint:hint,handValue:handValue,DEAL:DEAL };
+  meld:meld,layOffCard:layOffCard,discardCard:discardCard,undo:undo,endRound:endRound,goalText:goalText,aiAction:aiAction,aiActionLegacy:aiActionLegacy,applyAction:applyAction,hint:hint,handValue:handValue,DEAL:DEAL };
 if(typeof module!=="undefined"&&module.exports) module.exports=g.Rummy.Game;
+/* browsers: bring in the brain right after this file (the page and Party Mode both load game.js, so both get it); a failed load = the old code */
+if(typeof document!=="undefined"&&document.currentScript&&document.readyState==="loading"&&!g.Rummy.Brain){
+  try{ document.write('<script src="'+document.currentScript.src.replace(/game\.js(\?.*)?$/,"brain.js")+'"><\/script>'); }catch(e){}
+}
 })(typeof window!=="undefined"?window:globalThis);
