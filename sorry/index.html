@@ -155,6 +155,10 @@
   html[data-tv] .sr-dock{order:4; position:static; gap:1.75rem; margin:0; padding:1.5rem 0 0; background:none}
   html[data-tv] #svbar button{grid-template-columns:minmax(0,1fr); justify-items:center; align-content:center; row-gap:.3rem; padding:.625rem .5rem}
   html[data-tv] #svbar button .bg-ico{width:1.25em; height:1.25em}
+  /* TV: the save bar's buttons stand 1.5rem apart (rows and columns), so a focused one's ring and lift never touch the next (step 4
+     Monopoly review: .5rem, 12 px, against the 17 px a focused button's ring and 1.05 lift reach); the segs and the top bar get it from ui/theme.css */
+  html[data-tv] #svbar .r{gap:1.5rem}
+  html[data-tv] #svbar .r:not(:last-child){margin-bottom:1.5rem}
   html[data-tv] .sr-game{display:grid; grid-template-columns:auto minmax(0,30rem); grid-template-rows:auto auto auto auto 1fr;
     grid-template-areas:"board strip" "board status" "board table" "board hints" "board ."; column-gap:3rem; justify-content:center; align-items:start; padding:1.25rem var(--gutter)}
   html[data-tv] #legend{grid-area:strip; width:auto; grid-template-columns:1fr 1fr; padding:1rem 0 .25rem}
@@ -187,14 +191,14 @@
       <section class="bg-hero sr-hero" aria-labelledby="setupTitle">
         <div class="bg-hero__layer is-on"></div>
         <div class="bg-hero__shade"></div>
-        <div class="bg-hero__body">
+        <div class="bg-hero__body" data-stage-text>
           <span class="bg-eyebrow bg-eyebrow--accent">Draw · slide · bump</span>
           <h1 class="bg-hero__title" id="setupTitle">Sorry!</h1>
           <p class="bg-hero__pitch">Draw a card, ride the slides and bump rivals back to Start in the race to get all four pawns Home.</p>
         </div>
       </section>
       <section class="sr-sec sr-sec--rules" aria-labelledby="rulesHead">
-        <div class="bg-section"><h2 class="bg-eyebrow" id="rulesHead">Rules</h2></div>
+        <div class="bg-section"><h2 class="bg-eyebrow" id="rulesHead" data-stage-text>Rules</h2></div>
         <div class="bg-rows sr-rules">
           <div class="bg-row bg-row--static"><span class="bg-row__main"><span class="bg-row__title">Draw, then move <span class="bg-tag bg-tag--official">Official</span></span><span class="bg-row__desc">The card says how far. Land on a rival to bump it back to Start; never on your own pawn.</span></span></div>
           <div class="bg-row bg-row--static"><span class="bg-row__main"><span class="bg-row__title">A 1 or a 2 leaves Start <span class="bg-tag bg-tag--official">Official</span></span><span class="bg-row__desc">A 2 always draws again, even when it can't move.</span></span></div>
@@ -207,7 +211,7 @@
     </div>
     <div class="sr-col sr-col--b">
       <section class="sr-sec sr-sec--players" aria-labelledby="playersHead">
-        <div class="bg-section"><h2 class="bg-eyebrow" id="playersHead">Players</h2></div>
+        <div class="bg-section"><h2 class="bg-eyebrow" id="playersHead" data-stage-text>Players</h2></div>
         <div class="bg-card sr-card">
           <div class="sr-field"><span class="bg-row__title" id="humansTitle">Players on this phone</span><span class="bg-row__desc" id="humansDesc">You are Red. Pass the phone when it's your turn.</span></div>
           <div class="bg-seg" id="humanSeg" role="group" aria-label="Players on this phone">
@@ -222,10 +226,10 @@
         </div>
       </section>
       <section class="sr-sec sr-sec--save" aria-labelledby="saveHead">
-        <div class="bg-section"><h2 class="bg-eyebrow" id="saveHead">Save and load</h2></div>
+        <div class="bg-section"><h2 class="bg-eyebrow" id="saveHead" data-stage-text>Save and load</h2></div>
         <div id="svbar"></div>
       </section>
-      <a href="../index.html" class="bg-btn bg-btn--ghost bg-btn--block sr-back" id="backHub" data-icon="home">Back to all games</a>
+      <a href="../index.html" class="bg-btn bg-btn--ghost bg-btn--block sr-back" id="backHub" data-icon="home" data-stage-text>Back to all games</a>
       <div class="sr-dock" id="startDock" data-toast-avoid>
         <button class="bg-btn bg-btn--secondary sr-resume" id="resumeBtn" type="button" style="display:none"><span><span class="bg-btn__label" id="resumeLabel">Resume</span><span class="bg-btn__sub" id="resumeSub">Back to the game</span></span></button>
         <button class="bg-btn bg-btn--primary bg-btn--cta" id="startBtn" type="button"><span class="bg-btn__label" id="startLabel">Start Sorry!</span><span class="bg-btn__sub" id="startSub">2 players</span></button>
