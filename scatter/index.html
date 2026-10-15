@@ -280,7 +280,7 @@ const PCOL=Sc.UI.PCOL;
 const SHORT={classic:"Classic",modern:"Modern",refresh:"Refresh",junior:"Junior",keyword:"Key Word"};
 const SV_ICON={ss:"save",ls:"load",std:"reset",sg:"save",lg:"load",au:"resume"};
 let cfg={version:"classic",over:{},humans:1,cpus:3};
-let G=null,ctrl=null,gen=0,writeQueue=[],curWriter=-1,reviewMe=0,voteMe=-1,roundStart=0,stopTimer=null,stopped=false,voteBusy=false;
+let G=null,ctrl=null,gen=0,writeQueue=[],curWriter=-1,reviewMe=0,voteMe=-1,roundStart=0,stopTimer=null,stopAt=0,stopGen=-1,stopLeft=-1,stopped=false,voteBusy=false;
 const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 function curOpts(){ return E.versionOpts(cfg.version,cfg.over); }
 
@@ -435,6 +435,7 @@ function showSetup(on,resume){
   b.classList.toggle("sc-in-setup",on); b.classList.toggle("bg-app--scene",on);
   $("menuBtn").hidden=on;
   if(on){ closeWin(); syncStart(); }
+  holdGame(on);   // the Menu pauses the game: the computer's STOP call and the writing clock wait for Resume
   (document.scrollingElement||document.documentElement).scrollTop=0;
   if(!on&&G){
     legend();
@@ -447,14 +448,14 @@ function showSetup(on,resume){
 }
 function barTitle(){
   const e=$("barEyebrow"); if(!e) return;
-  const t=setupShown()?(liveGame()?"Game in progress":(ui.result?"Game over":"New game")):(!G?"New game":G.over?"Game over":"Round "+G.round);
+  const t=paused()?"Paused":setupShown()?(liveGame()?"Game in progress":(ui.result?"Game over":"New game")):(!G?"New game":G.over?"Game over":"Round "+G.round);
   if(e.textContent!==t) e.textContent=t;
 }
 
 /* ---------------- saving ---------------- */
 function packG(){ if(!G) return null; return {G:E.serialize(G),cfg:JSON.parse(JSON.stringify(cfg)),stats:{ms:Math.round(playMs())}}; }
 function loadSaved(d){
-  gen++; clearTimeout(stopTimer); G=E.restore(JSON.parse(JSON.stringify(d.G))); Object.assign(cfg,d.cfg||{});
+  gen++; clearStop(); G=E.restore(JSON.parse(JSON.stringify(d.G))); Object.assign(cfg,d.cfg||{});
   stats=readStats(d.stats); ui.winShown=-1; ui.result=false; closeWin(); closeRoll(); closeHandoff();
   Sound.skip(); startUI(); showSetup(false); resetView(); resumePhase(); drawSetup(); clockOn(); armBack();
 }
@@ -526,7 +527,7 @@ function legend(){
 
 /* ---------------- game flow ---------------- */
 function startGame(){
-  gen++; clearTimeout(stopTimer); clampSeats();
+  gen++; clearStop(); clampSeats();
   const total=cfg.humans+cfg.cpus, names=[], humans=[];
   for(let i=0;i<total;i++){ const h=i<cfg.humans; humans.push(h); names.push(h?(cfg.humans===1?"You":"Player "+(i+1)):"CPU "+(i+1-cfg.humans)); }
   G=E.newGame({names,humans,opts:curOpts()}); stats={ms:0}; ui.winShown=-1; ui.result=false; closeWin(); startUI(); resetView(); clockOn(); newRound();
@@ -540,7 +541,7 @@ function startUI(){
 }
 function faceHTML(t,star){ return star?icon("star"):esc(t); }
 function newRound(){
-  E.startRound(G); stopped=false; clearTimeout(stopTimer);
+  E.startRound(G); stopped=false; clearStop();
   const my=gen;
   const showRoll=()=>{
     const hasLetter=G.o.mode==="letter";
@@ -563,6 +564,16 @@ function starPick(){
   if(!p||!p.human){ G.star=false; if(p) banner(p.name+" rolled the star and picked "+G.letter,"star","⭐"); beginWriting(); return; }
   ctrl.update(snap(p.id,{phase:"star"})); legend();
 }
+// Step 5: while the Menu is up the computers wait (their STOP call) and so does the writing clock, so Resume continues with the time that was left.
+// Party Mode runs its own host and never pauses.
+function paused(){ return liveGame()&&setupShown(); }
+function clearStop(){ clearTimeout(stopTimer); stopAt=0; stopLeft=-1; }
+function armStop(my,ms){ clearTimeout(stopTimer); stopAt=Date.now()+ms; stopGen=my; stopLeft=-1; stopTimer=setTimeout(()=>{ stopAt=0; if(my!==gen||G.phase!=="write") return; banner("STOP! A computer finished — 8 seconds left!","hourglass","🛑"); Sound.sfx("bell"); ctrl.setDeadlineIn(8); },ms); }
+function holdGame(on){
+  if(on){ if(stopAt&&stopLeft<0&&stopGen===gen){ stopLeft=Math.max(0,stopAt-Date.now()); clearTimeout(stopTimer); } }
+  else if(stopLeft>=0){ const l=stopLeft; stopLeft=-1; if(stopGen===gen&&G&&G.phase==="write") armStop(gen,l); }
+  if(ctrl&&ctrl.holdClock) ctrl.holdClock(on);
+}
 function beginWriting(){
   G.star=false;   // the letter is settled once writing starts
   // a tie-break round is written only by the tied leaders
@@ -582,12 +593,12 @@ function openWrite(){
   ctrl.update(snap(curWriter,{secLeft:G.o.timer})); legend(); roundStart=Date.now();
   autosave();
   // a computer may shout STOP
-  if(G.o.stopRule&&G._cpuStops.length){ const t=Math.min.apply(null,G._cpuStops)*1000, my=gen; stopTimer=setTimeout(()=>{ if(my!==gen||G.phase!=="write") return; banner("STOP! A computer finished — 8 seconds left!","hourglass","🛑"); Sound.sfx("bell"); ctrl.setDeadlineIn(8); },t); }
+  if(G.o.stopRule&&G._cpuStops.length){ armStop(gen,Math.min.apply(null,G._cpuStops)*1000); }
 }
 function onIntent(a){
   if(!G) return {ok:false};
   if(a.t==="submit"){
-    clearTimeout(stopTimer);
+    clearStop();
     E.setAnswers(G,curWriter,a.answers);
     if(G.o.stopRule&&E.allFilled(G,curWriter)&&!stopped&&writeQueue.length===0){ stopped=true; }
     nextWriter(); return {ok:true};
