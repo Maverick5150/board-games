@@ -128,6 +128,10 @@
   /* the save bar on TV: one layout for all six buttons (icon above the label, the date under it, centred) */
   html[data-tv] #svbar button{grid-template-columns:minmax(0,1fr); justify-items:center; align-content:center; row-gap:.3rem; padding:.625rem .5rem}
   html[data-tv] #svbar button .bg-ico{width:1.25em; height:1.25em}
+  /* TV: the save bar's buttons stand 1.5rem apart (rows and columns), so a focused one's ring and lift never touch the next (step 4
+     Monopoly review: .5rem, 12 px, against the 17 px a focused button's ring and 1.05 lift reach); the segs and the top bar get it from ui/theme.css */
+  html[data-tv] #svbar .r{gap:1.5rem}
+  html[data-tv] #svbar .r:not(:last-child){margin-bottom:1.5rem}
   html[data-tv] .tb-game{display:grid; grid-template-columns:auto minmax(0,30rem); grid-template-rows:auto auto auto auto 1fr;
     grid-template-areas:"board strip" "board status" "board dock" "board hints" "board ."; column-gap:3rem; justify-content:center; align-items:start; padding:1.25rem var(--gutter)}
   html[data-tv] #legend{grid-area:strip; width:auto; grid-template-columns:1fr 1fr; padding:1rem 0 .25rem}
@@ -136,6 +140,9 @@
   html[data-tv] .tb-gdock{grid-area:dock; justify-content:flex-start; min-height:0; margin-top:1.25rem}
   html[data-tv] #moveSub{margin-bottom:1.75rem}
   html[data-tv] .tb-hints{grid-area:hints; justify-content:flex-start; margin-top:1.25rem}
+  /* TV: toasts in game sit in the right-hand column (centred on it: 50% + (board + gap) / 2), clear of the board, where BGUI.toast
+     finds the free band under the hint bar, as on Sorry!'s same layout (step 4 shared 4c: centred, a toast sat on the board's rim) */
+  html[data-tv] body:not(.tb-in-setup) .bg-toast{left:calc(50% + (min(100vh - 8rem, 46vw) + 3rem) / 2); max-width:30rem}
 </style>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
@@ -155,14 +162,14 @@
       <section class="bg-hero tb-hero" aria-labelledby="setupTitle">
         <div class="bg-hero__layer is-on"></div>
         <div class="bg-hero__shade"></div>
-        <div class="bg-hero__body">
+        <div class="bg-hero__body" data-stage-text>
           <span class="bg-eyebrow bg-eyebrow--accent">Pop · move · bump</span>
           <h1 class="bg-hero__title" id="setupTitle">Trouble</h1>
-          <p class="bg-hero__pitch">Pop the dome, roll a 6 to leave home and race all four pegs into your finish.</p>
+          <p class="bg-hero__pitch" data-stage-text="strong">Pop the dome, roll a 6 to leave home and race all four pegs into your finish.</p>
         </div>
       </section>
       <section class="tb-sec tb-sec--rules" aria-labelledby="rulesHead">
-        <div class="bg-section"><h2 class="bg-eyebrow" id="rulesHead">Rules</h2></div>
+        <div class="bg-section"><h2 class="bg-eyebrow" id="rulesHead" data-stage-text="strong">Rules</h2></div>
         <div class="bg-rows tb-rule">
           <div class="bg-row bg-row--static"><span class="bg-row__main"><span class="bg-row__title">Highest pop goes first <span class="bg-tag bg-tag--official">Official</span></span><span class="bg-row__desc">Everyone pops once. Ties pop again.</span></span></div>
           <div class="bg-row bg-row--static"><span class="bg-row__main"><span class="bg-row__title">Roll a 6 to leave home <span class="bg-tag bg-tag--official">Official</span></span><span class="bg-row__desc">A 6 moves a peg from home onto your start space.</span></span></div>
@@ -174,7 +181,7 @@
     </div>
     <div class="tb-col tb-col--b">
       <section class="tb-sec tb-sec--players" aria-labelledby="playersHead">
-        <div class="bg-section"><h2 class="bg-eyebrow" id="playersHead">Players</h2></div>
+        <div class="bg-section"><h2 class="bg-eyebrow" id="playersHead" data-stage-text="strong">Players</h2></div>
         <div class="bg-card tb-card">
           <div class="tb-field"><span class="bg-row__title" id="humansTitle">Players on this phone</span><span class="bg-row__desc" id="humansDesc">You are Red. Pass the phone when it's your turn.</span></div>
           <div class="bg-seg" id="humanSeg" role="group" aria-label="Players on this phone">
@@ -189,10 +196,10 @@
         </div>
       </section>
       <section class="tb-sec tb-sec--save" aria-labelledby="saveHead">
-        <div class="bg-section"><h2 class="bg-eyebrow" id="saveHead">Save and load</h2></div>
+        <div class="bg-section"><h2 class="bg-eyebrow" id="saveHead" data-stage-text="strong">Save and load</h2></div>
         <div id="svbar"></div>
       </section>
-      <a href="../index.html" class="bg-btn bg-btn--ghost bg-btn--block tb-back" id="backHub" data-icon="home">Back to all games</a>
+      <a href="../index.html" class="bg-btn bg-btn--ghost bg-btn--block tb-back" id="backHub" data-icon="home" data-stage-text>Back to all games</a>
       <div class="tb-dock" id="startDock" data-toast-avoid>
         <button class="bg-btn bg-btn--secondary tb-resume" id="resumeBtn" type="button" style="display:none"><span><span class="bg-btn__label" id="resumeLabel">Resume</span><span class="bg-btn__sub" id="resumeSub">Back to the game</span></span></button>
         <button class="bg-btn bg-btn--primary bg-btn--cta" id="startBtn" type="button"><span class="bg-btn__label" id="startLabel">Start Trouble</span><span class="bg-btn__sub" id="startSub">2 players</span></button>
