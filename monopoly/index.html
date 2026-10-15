@@ -666,7 +666,7 @@ function tvKeep(had){
 /* ---- the strip, the dice and the top bar ---- */
 function barTitle(){
   const e=$("barEyebrow"); if(!e) return;
-  const t=setupShown()?(liveGame()?"Game in progress":resultDue()?"Game over":"New game"):(G&&G.over?"Game over":(G&&G.started?"Turn "+Math.max(1,(G.stats&&G.stats.turns)||1):"New game"));
+  const t=paused()?"Paused":setupShown()?(liveGame()?"Game in progress":resultDue()?"Game over":"New game"):(G&&G.over?"Game over":(G&&G.started?"Turn "+Math.max(1,(G.stats&&G.stats.turns)||1):"New game"));
   if(e.textContent!==t) e.textContent=t;
 }
 function syncStrip(){
@@ -1005,7 +1005,7 @@ function openMenu(){
   else if(over) top=`<button type="button" class="bg-btn bg-btn--primary bg-btn--cta bg-btn--block" data-autofocus onclick="window.__mnew()"><span class="bg-btn__label">New Game</span><span class="bg-btn__sub">Choose the players and the rules</span></button>`+
     `<button type="button" class="bg-btn bg-btn--secondary bg-btn--block" onclick="window.__close()">Back to the board</button>`;
   else top=`<button type="button" class="bg-btn bg-btn--primary bg-btn--cta bg-btn--block" id="mnResume" data-autofocus onclick="window.__close()"><span class="bg-btn__label">Resume Game</span><span class="bg-btn__sub">${p?"Turn "+Math.max(1,G.stats?G.stats.turns:1)+" · "+p.name+(p.human?" to play":" is playing"):"Back to the board"}</span></button>`;
-  openModal(head("Menu",over?"The game is over.":"Game in progress.")+
+  openModal(head("Menu",over?"The game is over.":"Paused. The computers wait until you resume.")+
     `<div class="mn-acts">${top}<div class="mn-acts--2"><button type="button" class="bg-btn bg-btn--secondary" onclick="window.__mplayers()">${icon("user")}Players &amp; holdings</button>`+
     `<button type="button" class="bg-btn bg-btn--secondary" onclick="window.__mrules()">${icon("gear")}House Rules</button></div></div>`+
     `<div class="bg-section"><h3 class="bg-eyebrow">Save and load</h3></div><div id="svbar2"></div>`+
@@ -1042,7 +1042,11 @@ function takeSnap(){
 }
 // game generation: New Game / Load / Continue bump it, so timers left over from the old game do nothing
 let EPOCH=0;
-function later(fn,ms){ const e=EPOCH; return setTimeout(()=>{ if(e===EPOCH) fn(); },ms); }
+// Step 5: while the Menu (or a sheet the player opened: players, rules, manage, a deed, a trade, the setup page mid-game) is up, the
+// computers wait: every game timer holds here and runs once it closes, so Resume continues exactly where it was
+const PAUSE_KINDS={menu:1,players:1,rules:1,manage:1,deed:1,trade:1,setup:1};
+function paused(){ return !!(G&&G.started&&!G.over)&&overlayOn()&&!!PAUSE_KINDS[(ui.dlg||{}).kind]; }
+function later(fn,ms){ const e=EPOCH; const run=()=>{ if(e!==EPOCH) return; if(paused()){ G.phaseSince=Date.now(); setTimeout(run,250); return; } fn(); }; return setTimeout(run,ms); }
 function loadSavedGame(d){
   EPOCH++;
   G=JSON.parse(JSON.stringify(d.G)); Object.assign(RULES,DEFAULT_RULES,d.rules||{}); if(d.setup) SETUP=d.setup;
@@ -1749,7 +1753,7 @@ let MODAL_TAG="";   // game step that owns the open dialog ("cpu", "auction", "d
 // opt (presentation only): {page} the setup page; {dismiss: fn} Back / Escape / the scrim may close it, fn is its way out;
 // {peek} a choice that keeps the board in view on a phone; {kind} what it is (the Menu offers "See the result")
 function openModal(html,tag,opt){ const a=document.activeElement; ui.hadFocus=a&&$("overlay").contains(a)?focusKey(a):null;
-  $("modal").innerHTML=html; $("overlay").classList.add("on"); MODAL_TAG=tag||""; ui.dlg=opt||{}; dlgShow(); }
+  $("modal").innerHTML=html; $("overlay").classList.add("on"); MODAL_TAG=tag||""; ui.dlg=opt||{}; dlgShow(); barTitle(); }
 function overlayOn(){ return $("overlay").classList.contains("on"); }
 // close the dialog only if that game step opened it, so a Menu / Manage / trade the human has open stays put
 function closeIf(tag){ if(MODAL_TAG===tag && overlayOn()) closeModal(); }
@@ -1766,7 +1770,7 @@ function cpuShow(html,cb,ms,body){
     later(go, ms||1700);
   });
 }
-function closeModal(){ $("overlay").classList.remove("on"); MODAL_TAG=""; dlgHide(); }
+function closeModal(){ $("overlay").classList.remove("on"); MODAL_TAG=""; dlgHide(); barTitle(); }
 window.__close=closeModal;
 
 function openRules(){
