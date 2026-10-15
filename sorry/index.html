@@ -87,11 +87,35 @@
   .status .dot{display:inline-block; width:.75rem; height:.75rem; margin-right:.2rem; border-radius:50%; vertical-align:-.04em; box-shadow:0 0 0 2px var(--ink-1),0 0 0 3px rgba(255,255,255,.18)}
   /* the board keeps a clear 21px band all round: its gold frame (skins.js hands it the Luxe frame) and soft shadow sit in it, clear
      of the status line and the deck (sorry-10). On short screens it also gives way to the height */
-  #boardWrap{position:relative; width:min(calc(100vw - 58px),520px,max(18rem,calc(100vh - 21.5rem))); aspect-ratio:1/1; margin:21px 0}
+  #boardWrap{position:relative; width:min(calc(100vw - 58px),520px,max(18rem,calc(100vh - 21.5rem))); aspect-ratio:1/1; margin:21px 0; border-radius:3.667%; box-shadow:var(--frame-shadow); overflow:hidden; background:var(--ink-2); --bz-x:69%; --bz-y:69%}
+  html:not([data-tv]) #boardWrap{touch-action:none}
+  .sr-stage{position:absolute; left:0; top:0; width:100%; height:100%; transform-origin:0 0}
+  .sr-stage.is-glide{transition:transform .25s ease-out}
+  #boardWrap.is-gesture .sr-stage{will-change:transform}
   #board{display:block; width:100%; height:100%}
+  #board .sr-lbl{font:800 15px/1 var(--font-ui); letter-spacing:.1em; paint-order:stroke; stroke:#05060d; stroke-width:3.4px; stroke-linejoin:round; pointer-events:none}
+  #board .sr-pn{font:800 8.5px/1 var(--font-ui); fill:#0b0a12; pointer-events:none}
+  #board .sr-title{font:400 42px/1 var(--font-display); letter-spacing:.03em; pointer-events:none}
+  #srHint{pointer-events:none}
+  /* a pawn glides to its new place (transform only); it stays put under Reduce effects / reduced motion */
+  .peg{transition:transform .2s ease-out}
+  html[data-effects="reduced"] .peg, html[data-motion="reduce"] .peg{transition:none}
+  @media (prefers-reduced-motion: reduce){ .peg{transition:none} }
   .peg.movable{cursor:pointer}
-  .peg.movable .ring{opacity:1;}
+  .peg.movable .ring{pointer-events:all}
   .ring{opacity:0;}
+  .peg.movable .ring{opacity:1;}
+  .bz-ctl{position:absolute; left:var(--bz-x,66%); top:var(--bz-y,66%); z-index:6; transform:translate(-50%,-50%); display:inline-flex; align-items:center; justify-content:center; gap:.4em; width:44px; height:44px; padding:0; border:0; border-radius:999px; font:700 14px/1 var(--font-ui); color:#f6f1e7; background:rgba(8,10,21,.86); box-shadow:inset 0 0 0 1px rgba(231,202,144,.7),0 4px 12px rgba(0,0,0,.5); cursor:pointer; touch-action:manipulation}
+  .bz-ctl svg{width:22px; height:22px}
+  .bz-ctl span{display:none}
+  .is-zoomed > .bz-ctl{left:auto; top:auto; right:10px; bottom:10px; transform:none; width:auto; padding:0 1em; background:#e7ca90; color:#1a1306; box-shadow:0 4px 12px rgba(0,0,0,.55)}
+  .is-zoomed > .bz-ctl span{display:inline}
+  html[data-tv] .bz-ctl{display:none}
+  .sr-inspect{display:flex; align-items:flex-start; justify-content:space-between; gap:.75rem; width:min(100%,520px); margin:0 0 .75rem; padding:.75rem .875rem}
+  .sr-inspect[hidden]{display:none}
+  .sr-inspect__txt{display:grid; gap:.2rem; min-width:0; font:var(--fw-body) var(--fs-md)/1.4 var(--font-ui); color:var(--text-2)}
+  .sr-inspect__txt b{font:var(--fw-ui-strong) var(--fs-lg)/1.25 var(--font-display); color:var(--text-1)}
+  html[data-tv] .sr-inspect{display:none}
   /* the draw pile and the face-up card: a sapphire card back with a gold inlay, an ivory face with a serif numeral (like the
      Sorry! art); the outer ring in the seat colour shows whose draw it is */
   .sr-table{display:flex; align-items:center; gap:1rem; width:min(100%,520px)}
@@ -130,7 +154,9 @@
      the sheet sits over the right-hand column, beside the board. The focused option's pawns get a heavy ring in the accent-on-paper
      navy (it reads on the cream board, where an ivory or gold ring does not) */
   body.bg-app{--scrim:rgba(3,4,10,.42)}
-  .peg.is-pick .ring{opacity:1; stroke:var(--accent-paper,#304d7f); stroke-width:5}
+  .peg.is-pick .ring{opacity:1}
+  .peg.is-pick .ring:not(.ring-back){stroke:#ffc94a; stroke-width:5.2}
+  .peg.is-pick .ring-back{stroke-width:8.6}
   .sr-optico{display:grid; place-items:center; width:2.25rem; height:2.25rem; border-radius:50%; color:var(--text-2); background:var(--ink-2); box-shadow:inset 0 0 0 1px var(--line-2)}
   .sr-optico .bg-ico{width:1.1rem; height:1.1rem}
   /* fallbacks when ui/ui.js is missing (the Luxe sheet and toasts take over when it is there) */
@@ -240,7 +266,10 @@
   <main class="sr-game" id="game" aria-label="Sorry! board">
     <div class="bg-players" id="legend" aria-label="Players"></div>
     <div class="bg-card sr-status"><div class="status" id="status" aria-live="polite">&nbsp;</div></div>
-    <div id="boardWrap"><svg id="board" viewBox="0 0 600 600"></svg></div>
+    <div id="boardWrap">
+      <div class="sr-stage" id="stage"><svg id="board" viewBox="0 0 600 600" role="img" aria-label="Sorry! board: a square track of 60 spaces, four Start circles, four Safety zones of 5 spaces leading to the Home circles, and the slides in each colour"></svg></div>
+    </div>
+    <div class="bg-card sr-inspect" id="inspect" role="status" aria-live="polite" hidden><div class="sr-inspect__txt"><b id="inspT"></b><span id="inspD"></span></div><button class="bg-btn bg-btn--icon" type="button" id="inspX" aria-label="Close" data-icon="close"></button></div>
     <div class="sr-table" id="table" data-toast-avoid>
       <div id="deckSlot"></div>
       <div class="sr-tinfo" data-stage-text>
@@ -288,10 +317,8 @@
 "use strict";
 
 const COLORS=["red","blue","yellow","green"];
-const CSS={red:"#e23b3b",blue:"#2b7be0",yellow:"#eec21b",green:"#27a758"};
-const INK={red:"#ffdede",blue:"#dbe9ff",yellow:"#4a3c00",green:"#dcffe9"};
+const CSS={red:"#ff5d73",blue:"#5f95ff",yellow:"#ffcb4f",green:"#3fd391"};   // the Luxe seat colours
 const NAME={red:"Red",blue:"Blue",yellow:"Yellow",green:"Green"};
-const ROT={red:180,blue:270,yellow:0,green:90};   // label facing per side (top/right/bottom/left)
 
 // ---- board geometry: 16x16 grid, outer ring = 60-cell track ----
 const CELL=36, OFF=12, HALF=18, R=14;
@@ -500,7 +527,12 @@ function animateMove(pawn,path,onEnd){
   it();
 }
 // Slides: ANY move that ends on another colour's triangle slides (forward, backward, 11 switch, Sorry!)
+let onActionDone=null;   // set by the renderer (the last-move rings); stays null where the engine runs alone
 function applyActionAnimated(a,done){
+  const rec=onActionDone&&onActionDone(a);
+  applyActionAnimated0(a,()=>{ if(rec) rec(); done(); });
+}
+function applyActionAnimated0(a,done){
   if(a.k==='pass'){ done(); return; }
   const color=a.p?a.p.color:a.A.color;
   if(a.k==='out'){
@@ -528,85 +560,268 @@ function applyActionAnimated(a,done){
 
 function hasWon(color){ return pawns[color].every(p=>p.loc.t==='home'); }
 
+// ---- zoom helper (phone) ----
+/* Board zoom for the phone (pinch, double-tap, Ctrl+wheel, one-finger pan while zoomed, a 44 px "Zoom" / "Fit" button inside the frame).
+   ONE transform on the stage; will-change only during a gesture, so the vector board is crisp at rest. A tap (no drag) calls
+   o.onTap(fx, fy, event) with the point as fractions of the board frame, unless o.skip(event) says the tap belongs to a control.
+   o.start() gives the point (fx, fy) the Zoom button zooms to. At Fit a one-finger swipe scrolls the page from here. */
+function BoardZoom(host, stage, o){
+  const inst={}; let zoom=1, tx=0, ty=0, gestureT=0, tapT=0, lastTap={t:0,x:0,y:0}, ctl=null, on=false, bound=false;
+  const size=()=>host.clientWidth||1;
+  const clamp=()=>{ const P=size(); tx=Math.min(0,Math.max(P-P*zoom,tx)); ty=Math.min(0,Math.max(P-P*zoom,ty)); };
+  const r2=v=>Math.round(v*100)/100;
+  function apply(glide){
+    clamp();
+    if(glide){ stage.classList.add("is-glide"); setTimeout(()=>stage.classList.remove("is-glide"),260); }
+    stage.style.transform=zoom===1&&!tx&&!ty?"":"translate3d("+r2(tx)+"px,"+r2(ty)+"px,0) scale("+Math.round(zoom*1000)/1000+")";
+    host.classList.toggle("is-zoomed",zoom>1.02); ctlSync();
+  }
+  const gestureOn=()=>{ host.classList.add("is-gesture"); clearTimeout(gestureT); };
+  const gestureOff=()=>{ clearTimeout(gestureT); gestureT=setTimeout(()=>host.classList.remove("is-gesture"),160); };
+  function zoomAt(z,px,py,glide,centre){
+    z=Math.max(1,Math.min(3,z)); const f=z/zoom, P=size();
+    if(centre){ tx=P/2-(px-tx)*f; ty=P/2-(py-ty)*f; } else { tx=px-(px-tx)*f; ty=py-(py-ty)*f; }
+    zoom=z; if(zoom<=1.001){ zoom=1; tx=0; ty=0; } apply(glide);
+  }
+  inst.fit=()=>{ zoom=1; tx=0; ty=0; apply(true); };
+  inst.zoomTo=(fx,fy,z)=>{ const P=size(); z=z||3; zoom=z; tx=P/2-fx*P*z; ty=P/2-fy*P*z; apply(true); };
+  inst.zoom=()=>zoom;
+  function ctlSync(){ if(!ctl) return; const z=zoom>1.02; ctl.setAttribute("aria-label",z?"Fit the whole board":"Zoom in"); ctl.lastChild.textContent=z?"Fit":"Zoom"; ctl.firstChild.style.display=z?"none":""; }
+  inst.enable=function(v){
+    on=!!v; if(!on){ if(zoom!==1) inst.fit(); if(ctl) ctl.hidden=true; return; }
+    if(ctl) ctl.hidden=false;
+    if(bound) return; bound=true;
+    ctl=document.createElement("button"); ctl.type="button"; ctl.className="bz-ctl";
+    ctl.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21M10.5 7.5v6M7.5 10.5h6"/></svg><span>Zoom</span>';
+    host.appendChild(ctl);
+    ctl.addEventListener("pointerdown",e=>e.stopPropagation());
+    ctl.addEventListener("click",e=>{ e.stopPropagation(); if(zoom>1.02) inst.fit(); else { const c=(o.start&&o.start())||[.5,.5]; inst.zoomTo(c[0],c[1],3); } });
+    ctlSync();
+    const ptrs={}; let np=0, moved=false, startD=0, startZ=1, t0=0, one=null;
+    const local=e=>{ const b=host.getBoundingClientRect(); return {x:e.clientX-b.left,y:e.clientY-b.top}; };
+    let scrolling=false, sEl=null, sY=0, sT=0, sV=0, flingRAF=0;
+    const scroller=()=>{ for(let el=host.parentElement; el&&el!==document.body&&el!==document.documentElement; el=el.parentElement){ const oy=getComputedStyle(el).overflowY; if((oy==="auto"||oy==="scroll")&&el.scrollHeight>el.clientHeight+1) return el; } return null; };
+    const scrollPage=dy=>{ if(sEl) sEl.scrollTop-=dy; else window.scrollBy(0,-dy); };
+    const stopFling=()=>{ if(flingRAF){ cancelAnimationFrame(flingRAF); flingRAF=0; } };
+    const fling=v=>{
+      const de=document.documentElement; if(Math.abs(v)<0.2||de.getAttribute("data-motion")==="reduce"||(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches)) return;
+      let last=0; const step=t=>{ const dt=last?Math.min(40,t-last):16; last=t; v*=Math.pow(0.93,dt/16); if(Math.abs(v)<0.03){ flingRAF=0; return; } scrollPage(v*dt); flingRAF=requestAnimationFrame(step); };
+      flingRAF=requestAnimationFrame(step);
+    };
+    host.addEventListener("pointerdown",e=>{
+      if(!on||(e.button>0&&e.pointerType==="mouse")) return;
+      stopFling(); const p=local(e); ptrs[e.pointerId]=p; np=Object.keys(ptrs).length;
+      if(np===1){ moved=false; scrolling=false; t0=Date.now(); one={x:p.x,y:p.y,cx:e.clientX,cy:e.clientY}; }
+      if(np===2){ scrolling=false; const k=Object.keys(ptrs), a=ptrs[k[0]], b=ptrs[k[1]]; startD=Math.hypot(a.x-b.x,a.y-b.y)||1; startZ=zoom; moved=true; gestureOn(); try{ host.setPointerCapture(e.pointerId); }catch(x){} }
+    });
+    host.addEventListener("pointermove",e=>{
+      if(!on||!ptrs[e.pointerId]) return; const p=local(e), prev=ptrs[e.pointerId]; ptrs[e.pointerId]=p;
+      if(np>=2){ const k=Object.keys(ptrs), a=ptrs[k[0]], b=ptrs[k[1]], d=Math.hypot(a.x-b.x,a.y-b.y)||1; zoomAt(startZ*d/startD,(a.x+b.x)/2,(a.y+b.y)/2,false); e.preventDefault(); return; }
+      if(one&&!moved&&Math.hypot(e.clientX-one.cx,e.clientY-one.cy)>8){
+        moved=true;
+        if(zoom>1.02){ gestureOn(); try{ host.setPointerCapture(e.pointerId); }catch(x){} }
+        else if(e.pointerType!=="mouse"){ scrolling=true; sEl=scroller(); sY=e.clientY; sT=e.timeStamp; sV=0; }
+      }
+      if(scrolling){ const dy=e.clientY-sY, dt=Math.max(1,e.timeStamp-sT); if(dy){ scrollPage(dy); sV=sV*0.5+dy/dt*0.5; } sY=e.clientY; sT=e.timeStamp; e.preventDefault(); return; }
+      if(moved&&zoom>1.02){ tx+=p.x-prev.x; ty+=p.y-prev.y; apply(false); e.preventDefault(); }
+    });
+    const up=e=>{
+      if(!on||!ptrs[e.pointerId]) return; const p=ptrs[e.pointerId]; delete ptrs[e.pointerId]; const was=np; np=Object.keys(ptrs).length;
+      if(was>=2){ if(zoom<1.04) inst.fit(); gestureOff(); return; }
+      gestureOff();
+      if(scrolling){ scrolling=false; if(e.type==="pointerup"&&e.timeStamp-sT<90) fling(sV); return; }
+      if(e.type!=="pointerup"||moved||Date.now()-t0>450) return;
+      if(o.skip&&o.skip(e)) return;
+      const now=Date.now();
+      if(now-lastTap.t<320&&Math.hypot(p.x-lastTap.x,p.y-lastTap.y)<36){ clearTimeout(tapT); lastTap.t=0; if(zoom>1.05) inst.fit(); else zoomAt(3,p.x,p.y,true,true); return; }
+      lastTap={t:now,x:p.x,y:p.y};
+      const P=size(), fx=((p.x-tx)/zoom)/P, fy=((p.y-ty)/zoom)/P;
+      clearTimeout(tapT); if(o.onTap) tapT=setTimeout(()=>o.onTap(fx,fy,e),260);
+    };
+    host.addEventListener("pointerup",up); host.addEventListener("pointercancel",up);
+    host.addEventListener("wheel",e=>{ if(!on||(!e.ctrlKey&&zoom<1.02)) return; const p=local(e); e.preventDefault(); zoomAt(zoom*(e.deltaY<0?1.18:1/1.18),p.x,p.y,false); },{passive:false});
+  };
+  return inst;
+}
+
 // ---- rendering ----
 const svg=document.getElementById("board");
-function roundRect(x,y,w,h,r,fill,stroke,sw){ return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="${fill}"${stroke?` stroke="${stroke}" stroke-width="${sw||2}"`:''}/>`; }
-function cellRect(col,row,fill,stroke,sw){ const [x,y]=px(col,row); return roundRect(x-HALF+2,y-HALF+2,CELL-4,CELL-4,6,fill,stroke,sw); }
-
+// ---- the board: a molded plate drawn once (SVG); pawns, hints and the last move are light layers on top ----
+const svgns="http://www.w3.org/2000/svg";
+const f1=n=>Math.round(n*10)/10;
+const SEATC={ // the Luxe seat colours (ui/theme.css --seat-N, -hi, -lo, -tint)
+  red:{m:"#ff5d73",hi:"#ffa1ae",lo:"#802f3a",tint:"#44273d"}, blue:{m:"#5f95ff",hi:"#a2c2ff",lo:"#304b80",tint:"#243259"},
+  green:{m:"#3fd391",hi:"#90e5bf",lo:"#206a49",tint:"#1d3e43"}, yellow:{m:"#ffcb4f",hi:"#ffe199",lo:"#806628",tint:"#443d36"}};
+const SAFE_DIR=c=>{ const a=SAFE_CELLS[c][0], b=SAFE_CELLS[c][4]; return [Math.sign(b[0]-a[0]),Math.sign(b[1]-a[1])]; };   // the way a safety lane runs, toward Home
+const LBL_START={red:[210,146],blue:[498,254],yellow:[426,542],green:[102,470]};   // START under its circle
+const LBL_HOME={red:[136,260,"start"],blue:[340,148,"middle"],yellow:[462,340,"end"],green:[260,452,"middle"]};   // HOME on the inner side of its circle
+const LBL_SAFE={red:[134,138,-90],blue:[462,132,0],yellow:[470,428,-90],green:[138,533,0]};   // SAFETY beside its lane
+let lastMv=[], inspectAt=null, pickHint=[];
+function cellBox(x,y,fill,stroke,sw,extra){ return `<rect x="${f1(x-16)}" y="${f1(y-16)}" width="32" height="32" rx="6.5" fill="${fill}"${stroke?` stroke="${stroke}" stroke-width="${sw||1.2}"`:""}${extra||""}/>`; }
+function wellAt(x,y,c,r){ return `<circle cx="${f1(x)}" cy="${f1(y)}" r="${r+1.4}" fill="#03040a" opacity=".55"/><circle cx="${f1(x)}" cy="${f1(y)}" r="${r}" fill="url(#srWell)" stroke="${SEATC[c].m}" stroke-width="1.8"/>`; }
 function buildBoard(){
-  let s=roundRect(4,4,592,592,22,"#f3efe2","#c9c2ad",4);
-  // all ring cells (big even squares)
-  for(let i=0;i<60;i++){ const [c,r]=ringColRow(i); s+=cellRect(c,r,"#ffffff","#c9c2ad",2); }
-  // slides
+  lastMv=[]; inspectAt=null; pickHint=[]; inspEl.hidden=true; BZ.fit();
+  let s=`<defs>
+    <linearGradient id="srPlate" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(--board-lite)"/><stop offset=".5" style="stop-color:var(--board)"/><stop offset="1" style="stop-color:var(--felt-deep)"/></linearGradient>
+    <radialGradient id="srGlow" cx=".5" cy=".4" r=".7"><stop offset="0" stop-color="#fff" stop-opacity=".09"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+    <linearGradient id="srGold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f9ebc6"/><stop offset=".5" stop-color="#d5af6d"/><stop offset="1" stop-color="#8a6633"/></linearGradient>
+    <linearGradient id="srCell" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbf6ea"/><stop offset=".6" stop-color="#e9dec4"/><stop offset="1" stop-color="#c9b98f"/></linearGradient>
+    <radialGradient id="srWell" cx=".42" cy=".3" r=".85"><stop offset="0" stop-color="#262b4d"/><stop offset="1" stop-color="#06070f"/></radialGradient>
+    <radialGradient id="srGloss" cx=".36" cy=".3" r=".85"><stop offset="0" stop-color="#fff" stop-opacity=".6"/><stop offset=".42" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".4"/></radialGradient>
+    <radialGradient id="srMed" cx=".5" cy=".42" r=".6"><stop offset="0" stop-color="#2a3566"/><stop offset=".75" stop-color="#121733"/><stop offset="1" stop-color="#070914"/></radialGradient>
+  </defs><g id="srArt">`;
+  // the molded plate: a rounded square with a gold bezel, a dark moat, and the inlaid playing field inside the track
+  s+=`<rect width="600" height="600" rx="22" fill="url(#srPlate)"/><rect width="600" height="600" rx="22" fill="url(#srGlow)"/>`+
+     `<rect x="3" y="3" width="594" height="594" rx="19.5" fill="none" stroke="url(#srGold)" stroke-width="3"/>`+
+     `<rect x="8" y="8" width="584" height="584" rx="16" fill="none" stroke="#000" stroke-opacity=".5" stroke-width="2"/>`+
+     `<rect x="48" y="48" width="504" height="504" rx="14" fill="#080b22" opacity=".5"/><rect x="48" y="48" width="504" height="504" rx="14" fill="none" stroke="#e7ca90" stroke-opacity=".3" stroke-width="1.4"/>`;
+  // the 60-space track
+  for(let i=0;i<60;i++){ const [x,y]=ringPx(i); s+=cellBox(x+1.4,y+1.8,"#02030a",null,0,' opacity=".5"')+cellBox(x,y,"url(#srCell)","#8d7a52",1.2); }
+  // each colour's start exit space (where a pawn leaving Start lands)
+  for(const c of COLORS){ const [x,y]=ringPx(START_EXIT[c]), K=SEATC[c]; s+=cellBox(x,y,K.m,"#fff3d1",2)+cellBox(x,y,"url(#srGloss)"); }
+  // the slides: tinted spaces, a white line, a triangle at the start and a circle at the end, in the side's colour
   for(const sl of SLIDES){
-    const pts=sl.cells.map(ringPx);
-    const [x0,y0]=pts[0], [x1,y1]=pts[pts.length-1];
-    s+=`<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="${CSS[sl.color]}" stroke-width="12" stroke-linecap="round" opacity="0.55"/>`;
-    // triangle at start, pointing in the slide's travel direction
-    const ang=Math.atan2(y1-y0, x1-x0), dx=Math.cos(ang), dy=Math.sin(ang), nx=-dy, ny=dx;
-    s+=`<circle cx="${x0}" cy="${y0}" r="12" fill="${CSS[sl.color]}"/>`;
-    const tipX=(x0+8*dx).toFixed(1), tipY=(y0+8*dy).toFixed(1);
-    const b1X=(x0-5*dx+6*nx).toFixed(1), b1Y=(y0-5*dy+6*ny).toFixed(1);
-    const b2X=(x0-5*dx-6*nx).toFixed(1), b2Y=(y0-5*dy-6*ny).toFixed(1);
-    s+=`<path d="M ${tipX} ${tipY} L ${b1X} ${b1Y} L ${b2X} ${b2Y} Z" fill="#fff"/>`;
-    // small chevrons along the slide pointing the same way
-    for(let t=1;t<sl.cells.length;t++){ const [mx,my]=pts[t]; const cxp=(mx-3*dx).toFixed(1), cyp=(my-3*dy).toFixed(1);
-      s+=`<path d="M ${(mx+5*dx).toFixed(1)} ${(my+5*dy).toFixed(1)} L ${(mx-3*dx+5*nx).toFixed(1)} ${(my-3*dy+5*ny).toFixed(1)} M ${(mx+5*dx).toFixed(1)} ${(my+5*dy).toFixed(1)} L ${(mx-3*dx-5*nx).toFixed(1)} ${(my-3*dy-5*ny).toFixed(1)}" stroke="#ffffffcc" stroke-width="2" fill="none" stroke-linecap="round"/>`; }
-    // end dot
-    s+=`<circle cx="${x1}" cy="${y1}" r="7" fill="${CSS[sl.color]}"/>`;
+    const K=SEATC[sl.color], pts=sl.cells.map(ringPx), [x0,y0]=pts[0], [x1,y1]=pts[pts.length-1];
+    const ang=Math.atan2(y1-y0,x1-x0), dx=Math.cos(ang), dy=Math.sin(ang), nx=-dy, ny=dx;
+    sl.cells.forEach((ci,k)=>{ if(ci!==START_EXIT[sl.color]){ const [x,y]=pts[k]; s+=cellBox(x,y,K.m,null,0,k===0?' opacity=".9"':' opacity=".5"'); } });
+    s+=`<line x1="${f1(x0)}" y1="${f1(y0)}" x2="${f1(x1)}" y2="${f1(y1)}" stroke="#fff" stroke-opacity=".9" stroke-width="3.2" stroke-linecap="round"/>`;
+    s+=`<path d="M${f1(x0+13*dx)} ${f1(y0+13*dy)}L${f1(x0-9*dx+11*nx)} ${f1(y0-9*dy+11*ny)}L${f1(x0-9*dx-11*nx)} ${f1(y0-9*dy-11*ny)}Z" fill="${K.m}" stroke="#fff3d1" stroke-width="1.8" stroke-linejoin="round"/>`;
+    s+=`<circle cx="${f1(x1)}" cy="${f1(y1)}" r="8.5" fill="${K.m}" stroke="#fff" stroke-width="2.2"/>`;
   }
-  // per color: start-exit marker, safety lane, home, start circle
+  // per colour: safety zone (5 spaces), Home, Start circle, and the labels
   for(const c of COLORS){
-    const [ec,er]=ringColRow(START_EXIT[c]);
-    s+=cellRect(ec,er,CSS[c],"#0004",2);
-    for(const [cc,rr] of SAFE_CELLS[c]) s+=cellRect(cc,rr,CSS[c]+"cc","#0004",2);
-    const rot=ROT[c];
-    // home
+    const K=SEATC[c], [sx,sy]=SAFE_DIR(c);
+    for(const [cc,rr] of SAFE_CELLS[c]){ const [x,y]=px(cc,rr);
+      s+=cellBox(x+1.4,y+1.8,"#02030a",null,0,' opacity=".5"')+cellBox(x,y,K.tint,K.m,2)+
+         `<path d="M${f1(x-sx*4-sy*5)} ${f1(y-sy*4-sx*5)}L${f1(x+sx*4)} ${f1(y+sy*4)}L${f1(x-sx*4+sy*5)} ${f1(y-sy*4+sx*5)}" fill="none" stroke="${K.hi}" stroke-opacity=".7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`; }
     const [hc,hr]=HOME_CELL[c], [hx,hy]=px(hc,hr);
-    s+=roundRect(hx-26,hy-26,52,52,12,CSS[c],"#0006",3);
-    s+=`<text x="${hx}" y="${hy+4}" transform="rotate(${rot},${hx},${hy})" text-anchor="middle" font-size="12" font-weight="800" fill="${INK[c]}">HOME</text>`;
-    // start circle
-    const [sc,sr]=START_CELL[c], [sx,sy]=px(sc,sr);
-    s+=`<circle cx="${sx}" cy="${sy}" r="30" fill="${CSS[c]}33" stroke="${CSS[c]}" stroke-width="3"/>`;
-    // place START clearly on the OUTER side of the circle (clear of it) and face it like HOME — uniform for all
-    const sa=Math.atan2(sy-300, sx-300);
-    const lx=(sx+52*Math.cos(sa)).toFixed(1), ly=(sy+52*Math.sin(sa)).toFixed(1);
-    s+=`<text x="${lx}" y="${ly}" transform="rotate(${rot},${lx},${ly})" dominant-baseline="middle" text-anchor="middle" font-size="11" font-weight="800" fill="${CSS[c]}" stroke="#f3efe2" stroke-width="2.2" paint-order="stroke" stroke-linejoin="round">START</text>`;
+    s+=`<circle cx="${f1(hx)}" cy="${f1(hy)}" r="32" fill="#02030a" opacity=".5"/><circle cx="${f1(hx)}" cy="${f1(hy)}" r="30" fill="${K.m}" stroke="${K.lo}" stroke-width="2"/><circle cx="${f1(hx)}" cy="${f1(hy)}" r="30" fill="url(#srGloss)"/>`+
+       `<circle cx="${f1(hx)}" cy="${f1(hy)}" r="26" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="1.2"/>`;
+    for(let k=0;k<4;k++) s+=`<circle cx="${f1(hx-12+(k%2)*24)}" cy="${f1(hy-12+(k<2?0:24))}" r="10" fill="#0a0d22" opacity=".62"/>`;
+    const [tc,tr]=START_CELL[c], [tx,ty]=px(tc,tr);
+    s+=`<circle cx="${f1(tx)}" cy="${f1(ty)}" r="35" fill="#02030a" opacity=".5"/><circle cx="${f1(tx)}" cy="${f1(ty)}" r="33" fill="${K.tint}" stroke="${K.m}" stroke-width="3"/>`+
+       `<circle cx="${f1(tx)}" cy="${f1(ty)}" r="29" fill="none" stroke="#fff" stroke-opacity=".1" stroke-width="1"/>`;
+    for(let k=0;k<4;k++) s+=wellAt(tx-12+(k%2)*24,ty-12+(k<2?0:24),c,10);
+    const [lx,ly]=LBL_START[c], [mx,my,ma]=LBL_HOME[c], [qx,qy,qr]=LBL_SAFE[c];
+    s+=`<text x="${lx}" y="${ly+5}" text-anchor="middle" class="sr-lbl" fill="${K.hi}">START</text>`+
+       `<text x="${mx}" y="${my+5}" text-anchor="${ma}" class="sr-lbl" fill="${K.hi}">HOME</text>`+
+       `<text x="${qx}" y="${qy+5}" text-anchor="middle" class="sr-lbl" fill="${K.hi}"${qr?` transform="rotate(${qr} ${qx} ${qy})"`:""}>SAFETY</text>`;
   }
+  // the centre medallion: a gold ring, a night-blue disc, four gems in the seat colours and the name
+  s+=`<circle cx="300" cy="300" r="94" fill="#02030a" opacity=".5"/><circle cx="300" cy="300" r="92" fill="url(#srGold)"/><circle cx="300" cy="300" r="87" fill="#0a0d1f"/><circle cx="300" cy="300" r="83" fill="url(#srMed)"/>`+
+     `<circle cx="300" cy="300" r="70" fill="none" stroke="#e7ca90" stroke-opacity=".3" stroke-width="1.2"/>`;
+  [["red",-1,-1],["blue",1,-1],["yellow",1,1],["green",-1,1]].forEach(([c,ux,uy])=>{ const K=SEATC[c], x=300+ux*50, y=300+uy*50;
+    s+=`<path d="M${x} ${y-9}L${x+9} ${y}L${x} ${y+9}L${x-9} ${y}Z" fill="${K.m}" stroke="${K.lo}" stroke-width="1.4" stroke-linejoin="round"/><path d="M${x} ${y-9}L${x+9} ${y}L${x} ${y}Z" fill="#fff" opacity=".28"/>`; });
+  s+=`<text x="300" y="316" text-anchor="middle" class="sr-title" fill="url(#srGold)">SORRY!</text></g><g id="srHint"></g><g id="srPawns"></g>`;
   svg.innerHTML=s;
+  pegEls={};
+  svg.querySelector("#srPawns").addEventListener("click",e=>{ const g=e.target.closest&&e.target.closest(".peg.movable"); if(g&&pawns[g.getAttribute("data-c")]) tapPawn(pawns[g.getAttribute("data-c")][+g.getAttribute("data-id")]); });
   renderPawns();
 }
 
-function pawnXY(p){
-  const l=p.loc;
+// ---- pawns: one persistent pawn per (colour, number), glided to its place; hints and the last move on their own light layer ----
+function pawnXY(p,loc){
+  const l=loc||p.loc;
   if(l.t==='ring') return ringPx(l.i);
   if(l.t==='safe'){ const [c,r]=SAFE_CELLS[p.color][l.j]; return px(c,r); }
-  if(l.t==='home'){ const [hc,hr]=HOME_CELL[p.color]; const [bx,by]=px(hc,hr); return [bx-12+(p.id%2)*24, by-12+(p.id<2?0:24)]; }
-  // start cluster
-  const [sc,sr]=START_CELL[p.color]; const [bx,by]=px(sc,sr);
-  return [bx-11+(p.id%2)*22, by-11+(p.id<2?0:22)];
+  const [hc,hr]=(l.t==='home'?HOME_CELL:START_CELL)[p.color], [bx,by]=px(hc,hr);
+  return [bx-12+(p.id%2)*24, by-12+(p.id<2?0:24)];
 }
-let highlightPawns=new Set();
+let pegEls={}, highlightPawns=new Set();
+function pawnMarkup(c,id){
+  const K=SEATC[c];
+  return `<circle class="ring" r="21" cy="-2" fill="none" stroke="#fff3d1" stroke-width="3.2"/>`+   // circle[0]: the ring (the harnesses read circle[1] as the colour)
+    `<ellipse class="ring ring-back" rx="21" ry="21" cy="-2" fill="none" stroke="#06070f" stroke-opacity=".7" stroke-width="6.4"/>`+
+    `<ellipse cx="1.5" cy="10" rx="10" ry="3.4" fill="#000" opacity=".45"/>`+
+    `<ellipse cy="8.6" rx="9.2" ry="3.7" fill="${K.lo}"/>`+
+    `<path d="M-8 8.6C-6.2 8 -4.8 2.5 -3.3 -2.4L3.3 -2.4C4.8 2.5 6.2 8 8 8.6Z" fill="${K.m}" stroke="${K.lo}" stroke-width="1.1" stroke-linejoin="round"/>`+
+    `<circle cy="-8.6" r="5.9" fill="${CSS[c]}" stroke="${K.lo}" stroke-width="1.1"/>`+
+    `<path d="M-8 8.6C-6.2 8 -4.8 2.5 -3.3 -2.4L3.3 -2.4C4.8 2.5 6.2 8 8 8.6Z" fill="url(#srGloss)"/><circle cy="-8.6" r="5.9" fill="url(#srGloss)"/>`+
+    `<ellipse cx="-2" cy="-10.6" rx="2.3" ry="1.4" transform="rotate(-30 -2 -10.6)" fill="#fff" opacity=".6"/>`+
+    `<text y="6" text-anchor="middle" class="sr-pn">${id+1}</text>`;
+}
+function hintRing(x,y,r,color,dash){ return `<circle cx="${f1(x)}" cy="${f1(y)}" r="${r}" fill="none" stroke="#06070f" stroke-opacity=".6" stroke-width="6"/><circle cx="${f1(x)}" cy="${f1(y)}" r="${r}" fill="none" stroke="${color}" stroke-width="3"${dash?' stroke-dasharray="5 4"':""}/>`; }
+function renderHints(){
+  const layer=svg.querySelector("#srHint"); if(!layer) return;
+  let h="";
+  for(const m of lastMv){ h+=hintRing(m.f[0],m.f[1]-1,15,"#c9a35c")+hintRing(m.t[0],m.t[1]-1,18,"#ffd36b"); }
+  for(const q of pickHint) h+=hintRing(q[0],q[1],17,"#fff3d1",true);
+  if(inspectAt) h+=hintRing(inspectAt[0],inspectAt[1],inspectAt[2]||19,"#fff3d1");
+  layer.innerHTML=h;
+}
 function renderPawns(){
-  svg.querySelectorAll(".peg").forEach(e=>e.remove());
-  for(const c of players){
-    for(const p of pawns[c]){
-      const [x,y]=pawnXY(p);
-      const g=document.createElementNS("http://www.w3.org/2000/svg","g");
-      const hot=highlightPawns.has(p);
-      g.setAttribute("class","peg"+(hot?" movable":""));
-      g.setAttribute("data-pawn",c+p.id);   // which pawn (the move sheet marks the focused option's pawns, a tap through its scrim finds it)
-      g.setAttribute("transform",`translate(${x.toFixed(1)},${y.toFixed(1)})`);
-      g.innerHTML=`<circle class="ring" r="15" fill="none" stroke="#111" stroke-width="3"/>`+
-        `<circle r="10.5" fill="${CSS[c]}" stroke="#0008" stroke-width="2"/>`+
-        `<circle r="3.4" cx="-3" cy="-3" fill="#ffffff99"/>`+
-        `<text y="3.5" text-anchor="middle" font-size="10" font-weight="800" fill="${INK[c]}">${p.id+1}</text>`;
-      if(hot) g.addEventListener("click",()=>tapPawn(p));
-      svg.appendChild(g);
-    }
+  const layer=svg.querySelector("#srPawns"); if(!layer) return;
+  const keep=new Set();
+  for(const c of players) for(const p of pawns[c]){
+    const key=c+p.id; keep.add(key);
+    let g=pegEls[key], fresh=false;
+    if(!g){ g=document.createElementNS(svgns,"g"); g.setAttribute("data-c",c); g.setAttribute("data-id",p.id); g.setAttribute("data-pawn",key); g.innerHTML=pawnMarkup(c,p.id); pegEls[key]=g; layer.appendChild(g); g.style.transition="none"; fresh=true; }   // data-pawn: which pawn (the move sheet marks the focused option's pawns, a tap through its scrim finds it)
+    const [x,y]=pawnXY(p);
+    g.classList.add("peg"); g.classList.toggle("movable",highlightPawns.has(p));
+    const sc=(p.loc.t==='ring'||p.loc.t==='safe')?1.2:1;   // a pawn is a little larger on the track, and fits its well in Start and Home
+    g.setAttribute("transform",`translate(${x.toFixed(1)},${y.toFixed(1)}) scale(${sc})`);
+    g.style.transform=`translate(${x.toFixed(1)}px,${y.toFixed(1)}px) scale(${sc})`;
+    if(fresh) requestAnimationFrame(()=>{ g.style.transition=""; });
   }
+  for(const key of Object.keys(pegEls)) if(!keep.has(key)){ pegEls[key].remove(); delete pegEls[key]; }
+  renderHints();
   uiSync();
 }
+// the last move: a ring on the space each mover left and the one it reached
+function snapLocs(){ const m=new Map(); allPawns().forEach(p=>m.set(p,Object.assign({},p.loc))); return m; }
+function recordLast(a,before){
+  const movers=[a.p,a.A,a.B,a.target].filter(Boolean);
+  lastMv=movers.filter(p=>before.has(p)&&!sameCell(before.get(p),p.loc)).map(p=>({f:pawnXY(p,before.get(p)),t:pawnXY(p)}));
+  renderHints();
+}
+onActionDone=a=>{ const before=snapLocs(); return ()=>recordLast(a,before); };
+
+// ---- phone: pinch / double-tap zoom with a Fit button, and tap a space (or pawn, Home, Start) to read it large ----
+const wrapEl=document.getElementById("boardWrap"), stageEl=document.getElementById("stage"), inspEl=document.getElementById("inspect");
+const inspT=document.getElementById("inspT"), inspD=document.getElementById("inspD");
+let inspTimer=0;
+function locWords(p){ const l=p.loc; return l.t==='start'?"waits in Start":l.t==='home'?"is Home":l.t==='safe'?"is in its Safety zone (square "+(l.j+1)+" of 5)":"is on the track, space "+(((l.i-START_EXIT[p.color]+60)%60)+1)+" of 60 for "+NAME[p.color]; }
+function ringNote(i){   // what track space i is
+  const bits=[], ex=COLORS.find(c=>START_EXIT[c]===i), en=COLORS.find(c=>SAFE_ENTRY[c]===i), sl=SLIDES.find(s=>s.cells.indexOf(i)>=0);
+  if(sl){ const k=sl.cells.indexOf(i);
+    bits.push(k===0?NAME[sl.color]+" slide, "+sl.cells.length+" spaces. A pawn of another colour that lands on the triangle slides to the circle at the end and sends every pawn on the slide back to Start."
+      :k===sl.cells.length-1?"The end of "+NAME[sl.color]+"'s slide. A pawn that slides here sends every pawn on the slide back to Start."
+      :"On "+NAME[sl.color]+"'s slide."); }
+  if(ex) bits.push(NAME[ex]+" Start exit: a pawn leaving Start lands here.");
+  if(en) bits.push(NAME[en]+" Safety entrance: after a lap "+NAME[en]+" pawns turn into their Safety zone here.");
+  return bits.join(" ");
+}
+function inspectSpot(ux,uy){   // the thing at board point (ux, uy), as {x, y, r, title, text}
+  const near=(x,y,r)=>Math.hypot(ux-x,uy-y)<=r, inCell=(x,y)=>Math.abs(ux-x)<=18&&Math.abs(uy-y)<=18;
+  for(const c of players) for(const p of pawns[c]){ const [x,y]=pawnXY(p); if(near(x,y-1,15)) return {x,y:y-1,r:19,title:NAME[c]+" pawn "+(p.id+1),text:"Pawn "+(p.id+1)+" "+locWords(p)+"."}; }
+  for(const c of COLORS){
+    const [hc,hr]=HOME_CELL[c], [hx,hy]=px(hc,hr), [tc,tr]=START_CELL[c], [tx,ty]=px(tc,tr);
+    if(near(hx,hy,32)){ const n=players.includes(c)?pawns[c].filter(p=>p.loc.t==='home').length:0; return {x:hx,y:hy,r:33,title:NAME[c]+" Home",text:n+" of 4 pawns Home. A pawn goes in by an exact count along the Safety zone. All four Home wins."}; }
+    if(near(tx,ty,34)){ const n=players.includes(c)?pawns[c].filter(p=>p.loc.t==='start').length:4; return {x:tx,y:ty,r:35,title:NAME[c]+" Start",text:n+(n===1?" pawn waits":" pawns wait")+" here. A 1 or a 2 brings one out onto the "+NAME[c]+" Start exit space; a SORRY! card puts one on a rival's pawn."}; }
+  }
+  for(const c of COLORS) for(let j=0;j<5;j++){ const [x,y]=px(SAFE_CELLS[c][j][0],SAFE_CELLS[c][j][1]); if(inCell(x,y)) return {x,y,r:21,title:NAME[c]+" Safety zone, square "+(j+1)+" of 5",text:"Only "+NAME[c]+" pawns come in here, and no one can bump them. The last square leads Home."}; }
+  for(let i=0;i<60;i++){ const [x,y]=ringPx(i); if(inCell(x,y)){
+    const occ=[]; for(const c of players) for(const p of pawns[c]) if(p.loc.t==='ring'&&p.loc.i===i) occ.push(NAME[c]+" pawn "+(p.id+1));
+    const cur=curColor(), note=ringNote(i);
+    return {x,y,r:21,title:"Track space",text:(occ.length?occ.join(" and ")+(occ.length>1?" are":" is")+" here. ":"Empty. ")+(note?note+" ":"")+(cur&&players.length?"For "+NAME[cur]+" this is "+sq(cur,{t:'ring',i})+".":"")}; } }
+  if(near(300,300,92)) return {x:300,y:300,r:94,title:"Sorry!",text:"Draw a card each turn and move by it. The first player to get all four pawns Home wins."};
+  return null;
+}
+function closeInspect(){ clearTimeout(inspTimer); inspEl.hidden=true; if(inspectAt){ inspectAt=null; renderHints(); } }
+function showInspect(f){
+  const sp=inspectSpot(f[0]*600,f[1]*600);
+  if(!sp){ closeInspect(); return; }
+  inspT.textContent=sp.title; inspD.textContent=sp.text; inspEl.hidden=false;
+  inspectAt=[sp.x,sp.y,sp.r]; renderHints();
+  clearTimeout(inspTimer); inspTimer=setTimeout(closeInspect,9000);
+}
+document.getElementById("inspX").addEventListener("click",closeInspect);
+const BZ=BoardZoom(wrapEl,stageEl,{
+  start:()=>{ const c=players[turn]; if(!c) return [.5,.5]; const p=pawns[c].find(q=>q.loc.t==='ring'||q.loc.t==='safe')||pawns[c][0], [x,y]=pawnXY(p); return [x/600,y/600]; },
+  skip:e=>!!(e.target.closest&&e.target.closest(".peg.movable")),
+  onTap:(fx,fy)=>{ if(fx>=0&&fx<=1&&fy>=0&&fy<=1) showInspect([fx,fy]); }});
+BZ.enable(!onTV());
+document.addEventListener("bgui:tv",()=>{ BZ.enable(!onTV()); closeInspect(); });
 
 // ---- UI flow ----
 const statusEl=document.getElementById("status");
@@ -1030,11 +1245,14 @@ function peek(on){
   ui.peek=true;
   window.scrollTo({top:want,behavior:smoothScroll()});
 }
-// the focused option's pawns (the mover, both split pawns, the rival it bumps or swaps with) get a heavy navy ring on the board
+// the focused option's pawns (the mover, both split pawns, the rival it bumps or swaps with) get a heavy gold ring on the board, and its landing space a dashed one
 function involves(a,key){ return !!a&&[a.p,a.A,a.B,a.target].some(q=>q&&q.color+q.id===key); }
 function markPick(a){
   svg.querySelectorAll(".peg.is-pick").forEach(g=>g.classList.remove("is-pick"));
   if(a) [a.p,a.A,a.B,a.target].forEach(q=>{ const g=q&&svg.querySelector('.peg[data-pawn="'+q.color+q.id+'"]'); if(g) g.classList.add("is-pick"); });
+  pickHint=[];
+  if(a&&a.k!=='pass'){ const c=curColor(); (a.k==='split'?[a.A,a.B]:[a.p]).forEach(p=>{ const l=p&&landsOn(c,a,p); if(l) pickHint.push(pawnXY(p,l)); }); }
+  renderHints();
 }
 actionsEl.addEventListener("focusin",e=>{ const b=e.target.closest&&e.target.closest(".bg-sheet__option[data-i]"); markPick(b?currentActions[+b.getAttribute("data-i")]:null); });
 actionsEl.addEventListener("focusout",e=>{ if(!actionsEl.contains(e.relatedTarget)) markPick(null); });
