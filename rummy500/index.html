@@ -143,17 +143,24 @@
   @keyframes rm-fit{50%{opacity:1}}
   @media (prefers-reduced-motion: reduce){ #meldsArea .meld.fit:not(.flash)::after{animation:none; opacity:1} }
   html[data-motion="reduce"] #meldsArea .meld.fit:not(.flash)::after{animation:none; opacity:1}
+  /* "Reduce effects" (ui README section 6): the endless pulse stops and the glow stays lit, so the meld is still marked */
+  html[data-effects="reduced"] #meldsArea .meld.fit:not(.flash)::after{animation:none; opacity:1}
 
   /* ---------- sheets: the round summary and the score pad (#roundBox), the hand-off (#handoff) ---------- */
   .rm-shead{display:grid; gap:.25rem; margin-bottom:1rem}
   .rm-shead .bg-sheet__sub{margin:0}
   .rm-pad{margin:0 0 .75rem}
-  html:not([data-tv]) .rm-pad .bg-score th{padding:.25rem .3rem .55rem; letter-spacing:.02em}
-  html:not([data-tv]) .rm-pad .bg-score td{padding:.6rem .3rem}
-  html:not([data-tv]) .rm-pad .bg-score th:first-child, html:not([data-tv]) .rm-pad .bg-score td:first-child{padding-left:.5rem}
-  html:not([data-tv]) .rm-pad .bg-score th:last-child, html:not([data-tv]) .rm-pad .bg-score td:last-child{padding-right:.5rem}
+  /* the phone's six columns sit .4rem apart: a team's name needs the room for its two lines ("CPU 1 &" / "CPU 3", the hot seat's
+     "Player 1 &" / "CPU 1") with no sideways scroll at 390 px */
+  html:not([data-tv]) .rm-pad .bg-score th{padding:.25rem .2rem .55rem; letter-spacing:0}
+  html:not([data-tv]) .rm-pad .bg-score td{padding:.6rem .2rem}
+  html:not([data-tv]) .rm-pad .bg-score th:first-child, html:not([data-tv]) .rm-pad .bg-score td:first-child{padding-left:.4rem}
+  html:not([data-tv]) .rm-pad .bg-score th:last-child, html:not([data-tv]) .rm-pad .bg-score td:last-child{padding-right:.4rem}
   .rm-pad .bg-score__who{gap:.4rem}
   .rm-pad .bg-score__who::before{width:.625rem; height:.625rem}
+  /* a label part that never breaks inside: a team member's name ("CPU 1 &" / "CPU 3", never "CPU 1 / & CPU / 3" on a 390 px phone) and
+     each "·" part of the Start button's sub-label */
+  .rm-nw{white-space:nowrap}
   .rm-pad--rounds .bg-score th:first-child, .rm-pad--rounds .bg-score td:first-child, .rm-pad--rounds .bg-score th:last-child, .rm-pad--rounds .bg-score td:last-child{position:sticky; z-index:1; background:#181c33}
   .rm-pad--rounds .bg-score th:first-child, .rm-pad--rounds .bg-score td:first-child{left:0}
   .rm-pad--rounds .bg-score th:last-child, .rm-pad--rounds .bg-score td:last-child{right:0}
@@ -188,6 +195,14 @@
   html[data-tv] .rm-col{display:block; min-width:0}
   html[data-tv] .rm-hero{margin:1.5rem 0 0; border-radius:var(--r-xl)}
   html[data-tv] .rm-hero .bg-hero__layer{border-radius:var(--r-xl) var(--r-xl) 0 0}
+  /* TV: the band sits mid-screen in column A, so the art fades into the scene on every side (the bottom as on the phone): no hard edge
+     where its darker backdrop meets the scene, and the card fan melts away at the right instead of being cut there (step 4 review:
+     a seam at x 887). One static layer under a static mask: nothing on it moves */
+  html[data-tv] .rm-hero .bg-hero__layer{
+    -webkit-mask-image:linear-gradient(90deg,rgba(0,0,0,0),#000 8%,#000 96%,rgba(0,0,0,0)),linear-gradient(180deg,rgba(0,0,0,0),#000 9%,#000 58%,rgba(0,0,0,0));
+    -webkit-mask-composite:source-in;
+    mask-image:linear-gradient(90deg,rgba(0,0,0,0),#000 8%,#000 96%,rgba(0,0,0,0)),linear-gradient(180deg,rgba(0,0,0,0),#000 9%,#000 58%,rgba(0,0,0,0));
+    mask-composite:intersect}
   html[data-tv] .rm-hero .bg-hero__body{padding:0}
   html[data-tv] #versions{gap:1.5rem}
   html[data-tv] .rm-rules .bg-row{min-height:0; padding:.5rem .875rem}
@@ -218,16 +233,26 @@
   html[data-tv] #meldsArea .empty{font-size:var(--fs-sm)}
   html[data-tv] #pilesRow{flex:none; gap:1.5rem; margin-top:.5rem; padding:.75rem .5rem .5rem}
   html[data-tv] #stock{--cw:4rem}
-  html[data-tv] #discard{--cw:3.6rem; min-height:0; overflow:hidden; padding:1rem .75rem .375rem .375rem}
+  /* the pile clips its long fan (overflow), so it keeps room inside for the focus ring AND its soft glow: var(--focus-room) + .75rem
+     (+ .625rem at the bottom), all the free felt there is up to the row's line, the stock and the felt's edge, so the glow fades out
+     before the clip and draws no box. The negative margins keep the box where it was: neither the cards nor the row move (step 4
+     review: the ring was cut 1.5 px on the left and bottom, the glow cut into a rectangle) */
+  html[data-tv] #discard{--cw:3.6rem; --rm-room:calc(var(--focus-room) + .75rem); min-height:0; overflow:hidden;
+    padding:var(--rm-room) var(--rm-room) calc(var(--focus-room) + .625rem) var(--rm-room);
+    margin:calc(1rem - var(--rm-room)) calc(.75rem - var(--rm-room)) calc(-.25rem - var(--focus-room)) calc(.375rem - var(--rm-room))}
   html[data-tv] #discard .pc{margin-left:-1.9rem} html[data-tv] #discard .pc:first-child{margin-left:0}
   html[data-tv] #legend{grid-area:strip; display:grid; grid-template-columns:1fr 1fr; width:auto; padding:.25rem 0 .5rem; overflow:visible}
   html[data-tv] #legend.bg-players--scroll > .bg-player{width:auto; padding:.25rem .6rem .25rem .3rem}
   html[data-tv] #legend.bg-players--scroll .bg-token{width:2rem; height:2rem}
+  /* the CPU badge keeps the shared geometry against this smaller token (its right edge .35rem past the token's, .2rem clear of the
+     text), so it never covers the first glyph of the score (step 4 review: it covered 3.6 px of "0 pts" / the minus of "-5 pts") */
+  html[data-tv] #legend.bg-players--scroll .bg-player__cpu{left:1.6rem}
   html[data-tv] #legend.bg-players--scroll::after{content:none}
   html[data-tv] .rm-status{grid-area:status; width:auto; margin:.375rem 0 0; justify-content:flex-start; text-align:left}
   html[data-tv] .rm-actions{grid-area:actions; width:auto; justify-content:flex-start; gap:1.5rem; margin:1.25rem 0 0}
   html[data-tv] .rm-log{grid-area:log; align-self:stretch; width:auto; min-height:0; overflow:hidden; margin:1rem 0 0; text-align:left}
   html[data-tv] .rm-hints{grid-area:hints; align-self:end; justify-content:flex-start; margin:0 0 1rem}
+  html[data-tv] .rm-hints.is-held{visibility:hidden}   /* a sheet that must be answered is up: Back is held, so the bar promises nothing */
   html[data-tv] #hand{grid-area:hand; --cw:4.4rem; width:auto; min-height:0; justify-content:flex-start; padding:1.25rem 1.5rem .375rem .5rem}
   html[data-tv] #hand .pc{margin-right:-1rem}
   html[data-tv] .rm-tip{display:none}
@@ -316,7 +341,7 @@
     <div class="rm-actions" id="actions" data-toast-avoid></div>
     <div id="hand" data-toast-avoid></div>
     <p class="rm-tip bg-faint" id="tip" data-stage-text>Tap cards to select · drag a card to move it · tap a table meld to lay a card off · press &amp; hold to enlarge</p>
-    <div class="bg-hintbar rm-hints" data-stage-text><span><span class="bg-key">OK</span> Select a card or a pile</span><span><span class="bg-key">Back</span> Menu</span></div>
+    <div class="bg-hintbar rm-hints" data-stage-text><span><span class="bg-key">OK</span> Select a card or a pile</span><span><span class="bg-key">Back</span> Close a list, or the Menu</span></div>
   </main>
 
   <section class="bg-sheet" id="roundBox" aria-labelledby="roundTitle"><div id="roundSheet"></div></section>
@@ -453,7 +478,9 @@ function drawSeats(){
   const names=seatNames(), tm=teams&&tot===4;
   $("seatTokens").innerHTML=names.map((n,i)=>`<span class="bg-token" data-seat="${seatIn(tm,i)}" aria-hidden="true">${initials(n)}</span>`).join("");
   $("seatHead").textContent=tot+" at the table";
-  $("seatNames").textContent=tm?names[0]+" & "+names[2]+" vs "+names[1]+" & "+names[3]:names.join(", ");
+  // a team or a name never breaks inside ("You & CPU 2 vs" / "CPU 1 & CPU 3", not "... CPU 1 & CPU" / "3"); the text is unchanged
+  const nw=s=>'<span class="rm-nw">'+esc(s)+"</span>";
+  $("seatNames").innerHTML=tm?nw(names[0]+" & "+names[2])+" vs "+nw(names[1]+" & "+names[3]):names.map((n,i)=>nw(n+(i<names.length-1?",":""))).join(" ");
   $("cpuDesc").textContent=teams?"Four players in two teams: partners sit opposite.":"2 to 8 players in all.";
   syncStart();
 }
@@ -496,11 +523,15 @@ function deviceCopy(){
   $("humansDesc").textContent="Hot seat: pass the "+(tv?"remote":"phone")+" when it's your turn.";
 }
 // the dock: a Start button that confirms the setup ("Start 500 Rummy / 3 players · Standard 500 Rum · to 500"); mid-game Resume
-// leads (gold) and "New game" is the secondary beside it
+// leads (gold) and "New game" is the secondary beside it, at half the width, so its sub-label is the players and the version only.
+// The sub-label breaks only between its "·" parts (the phone had "custom / rules"); its text is unchanged
+function subParts(parts){ return parts.map((s,i)=>'<span class="rm-nw">'+esc(s)+(i<parts.length-1?" ·":"")+"</span>").join(" "); }
 function syncStart(){
   const o=curOpts(), tot=cfg.humans+cfg.cpus, v=R.VERSIONS.filter(x=>x.id===cfg.version)[0]||R.VERSIONS[0], rb=$("resumeBtn"), sb=$("startBtn"), resumable=rb.style.display!=="none";
   $("startLabel").textContent=resumable?"New game":"Start 500 Rummy";
-  $("startSub").textContent=tot+" players · "+v.name+" · "+(o.deals>0?o.deals+" deals":"to "+o.target)+(changedRules()?" · custom rules":"");
+  const parts=[tot+" players",v.name];
+  if(!resumable){ parts.push(o.deals>0?o.deals+" deals":"to "+o.target); if(changedRules()) parts.push("custom rules"); }
+  $("startSub").innerHTML=subParts(parts);
   $("startDock").classList.toggle("has-resume",resumable);
   sb.classList.toggle("bg-btn--primary",!resumable); sb.classList.toggle("bg-btn--secondary",resumable);
   rb.classList.toggle("bg-btn--primary",resumable); rb.classList.toggle("bg-btn--secondary",!resumable);
@@ -536,6 +567,9 @@ function showSetup(on,resume){
     armBack();
   }
   barTitle();
+  // the page changed under a showing toast (the Menu and the table have different bars to keep clear of): place it again, so a toast
+  // from the Menu ("Settings saved") never lands on the actions or the hand of the table that comes back
+  const B=BG(); if(luxe()&&B.toast&&B.toast.place) B.toast.place();
 }
 function barTitle(){
   const e=$("barEyebrow"); if(!e) return;
@@ -607,10 +641,13 @@ function boxClosed(){   // BGUI closed it by itself (Back, Escape, the scrim): o
 }
 function openHandoff(){ const el=$("handoff"), B=BG(); el.classList.add("show"); if(luxe()&&!B.sheet.isOpen(el)) B.sheet.open(el,{dismissible:false,focus:"#hoBtn"}); }
 function closeHandoff(){ const el=$("handoff"), B=BG(); el.classList.remove("show"); if(B&&B.sheet&&B.sheet.isOpen(el)) B.sheet.close(el); }
+// a side's name in the score tables: a team ("CPU 1 & CPU 3") breaks only after its "&", never inside a name (a 390 px phone showed
+// "CPU 1 / & CPU / 3"). One inline box (the cell's flex item), so its parts still wrap as text; the text itself is unchanged
+function sideHTML(n){ const p=String(n).split(" & "); return '<span class="rm-tn">'+p.map((s,i)=>'<span class="rm-nw">'+esc(s)+(i<p.length-1?" &amp;":"")+"</span>").join(" ")+"</span>"; }
 function showScores(){
   const hist=G.history||[], units=G.units, deals=G.o.deals>0, lead=Math.max(...G.scores), name=ui2=>units[ui2].map(i=>G.players[i].name).join(" & ");
   const head=`<thead><tr><th scope="col">Player</th>${hist.map(hr=>`<th scope="col">R${hr.round}</th>`).join("")}<th scope="col">Total</th></tr></thead>`;
-  const body=units.map((u,ui2)=>`<tr${hist.length&&G.scores[ui2]===lead?' class="is-lead"':""}><td><span class="bg-score__who" data-seat="${seatOf(u[0])}">${esc(name(ui2))}</span></td>`+
+  const body=units.map((u,ui2)=>`<tr${hist.length&&G.scores[ui2]===lead?' class="is-lead"':""}><td><span class="bg-score__who" data-seat="${seatOf(u[0])}">${sideHTML(name(ui2))}</span></td>`+
     hist.map(hr=>{ const r=hr.rows[ui2]||{t:0}; return `<td class="${r.t>=0?"pos":"neg"}">${r.t>0?"+":""}${r.t}</td>`; }).join("")+`<td class="bg-score__total">${G.scores[ui2]}</td></tr>`).join("");
   $("roundSheet").innerHTML=`<div class="bg-sheet__grip" aria-hidden="true"></div><div class="rm-shead"><span class="bg-eyebrow bg-eyebrow--accent">Round ${G.round}</span><h2 class="bg-sheet__title" id="roundTitle">Scoreboard</h2>`+
     `<p class="bg-sheet__sub">${deals?`<b>${G.o.deals} deals</b> (+${G.o.dealsBonus} to the leader)`:`Playing to <b>${G.o.target}</b>`} · round ${G.round}</p></div>`+
@@ -630,7 +667,9 @@ $("menuBtn").addEventListener("click",()=>{
   focusTV($("resumeBtn").style.display!=="none"?$("resumeBtn"):$("startBtn"));
 });
 $("resumeBtn").addEventListener("click",()=>showSetup(false,true));
-$("startBtn").addEventListener("click",()=>{ Sound.skip(); closeWin(); showSetup(false); startGame(); armBack(); });
+// the new game is dealt before the table comes back, so the table never shows the old game for a moment (it used to start a turn
+// pulse on the old strip, and the new game's pulse waited ~4 s behind it)
+$("startBtn").addEventListener("click",()=>{ Sound.skip(); closeWin(); startGame(); showSetup(false); armBack(); });
 
 /* ---------------- game ---------------- */
 function startGame(){
@@ -711,7 +750,9 @@ function showHandoff(p){
     `<p class="rm-ho__to"><span class="bg-token" data-seat="${seatOf(p.id)}" aria-hidden="true">${initials(p.name)}</span><span>to <b>${esc(p.name)}</b></span></p>`+
     `<button class="bg-btn bg-btn--primary bg-btn--lg bg-btn--block" id="hoBtn" type="button" data-autofocus>I'm ${esc(p.name)} — show my hand</button></div>`;
   openHandoff();
-  $("hoBtn").addEventListener("click",()=>{ handoffOk=G.turn; closeHandoff(); render(); });
+  // the hand shows now: the turn's main control ("Draw from stock") takes the D-pad focus (TV), even though the turn's first render
+  // (the hand still hidden) has already passed
+  $("hoBtn").addEventListener("click",()=>{ handoffOk=G.turn; ui.focusPhase=""; closeHandoff(); render(); });
 }
 
 /* ---------------- rendering ---------------- */
@@ -726,10 +767,14 @@ function renderStrip(){
   const el=$("legend"), B=BG();
   const key=gen+"|"+G.players.map(p=>p.name+(p.human?"H":"C")).join(",")+"|"+(G.o.teams?"T":"")+"|"+(icon("cpu")?"i":"");
   if(key!==ui.strip||el.children.length!==G.players.length){
+    const old=[].slice.call(el.children);
     el.classList.toggle("bg-players--scroll",G.players.length>4);
     el.innerHTML=G.players.map((p,i)=>`<li class="bg-player chip" data-seat="${seatOf(i)}" data-p="${i}"><span class="bg-token" aria-hidden="true">${initials(p.name)}</span>`+
       (p.human?"":`<span class="bg-player__cpu" aria-hidden="true">${icon("cpu")}</span>`)+
       `<span class="bg-player__txt"><span class="bg-player__name">${esc(p.name)}</span><span class="bg-player__meta"></span></span></li>`).join("");
+    // a turn pulse still running on a chip of the old strip ends with it (BGUI.setTurn only ends pulses inside the strip), so the new
+    // strip's pulse starts at once instead of queueing ~4 s behind it
+    if(B&&B.ambient&&B.ambient.remove) old.forEach(c=>B.ambient.remove(c));
     ui.strip=key; ui.meta={}; ui.turnKey="";
   }
   G.players.forEach((p,i)=>{ const n=p.hand.length, m=G.scores[GM.unitOf(G,i)]+" pts · "+n+(n===1?" card":" cards");
@@ -889,7 +934,7 @@ function showRound(){
   const ro=G.roundOver, sh=$("roundSheet"), B=BG();
   const why=ro.reason==="out"?`${esc(G.players[ro.out].name)} went out`:"The stock ran out";
   const f=n=>(n>0?"+":"")+n, top=Math.max(...ro.rows.map(r=>r.score));
-  const rows=ro.rows.map(r=>`<tr${r.score===top?' class="is-lead"':""}><td><span class="bg-score__who" data-seat="${seatOf(r.players[0])}">${esc(r.name)}</span></td><td>${r.melded}</td><td>${r.dead?-r.dead:0}</td><td>${(r.bonus+r.oppHands)||0}</td><td class="${r.total>=0?"pos":"neg"}">${f(r.total)}</td><td class="bg-score__total">${r.score}</td></tr>`).join("");
+  const rows=ro.rows.map(r=>`<tr${r.score===top?' class="is-lead"':""}><td><span class="bg-score__who" data-seat="${seatOf(r.players[0])}">${sideHTML(r.name)}</span></td><td>${r.melded}</td><td>${r.dead?-r.dead:0}</td><td>${(r.bonus+r.oppHands)||0}</td><td class="${r.total>=0?"pos":"neg"}">${f(r.total)}</td><td class="bg-score__total">${r.score}</td></tr>`).join("");
   let h=`<div class="bg-sheet__grip" aria-hidden="true"></div><div class="rm-shead"><span class="bg-eyebrow bg-eyebrow--accent">${ro.over?"Final round":"Round "+G.round}</span>`+
     `<h2 class="bg-sheet__title" id="roundTitle">${ro.over?"Game over":"Round "+G.round+" complete"}</h2><p class="bg-sheet__sub">${why}</p></div>`+
     `<div class="bg-scorepad rm-pad"><table class="bg-score sc"><thead><tr><th scope="col">Player</th><th scope="col">Melds</th><th scope="col">Hand</th><th scope="col">Bonus</th><th scope="col">Round</th><th scope="col">Total</th></tr></thead><tbody>${rows}</tbody></table></div>`;
@@ -934,12 +979,24 @@ document.addEventListener("keydown",e=>{
   if(e.key==="Escape"||e.key==="GoBack"||e.key==="BrowserBack"||e.keyCode===27||e.keyCode===4){ e.preventDefault(); closeWin(); }
 });
 
-/* ---------------- D-pad (TV): Down from the players picker always reaches the computer picker (past disabled counts) and Up comes
-   back; Down from the save bar's first row lands on the nearest button of the second row that is on. Registered before ui.js, so
-   BGUI.focus sees these keys as handled ---------------- */
+/* ---------------- D-pad (TV): Down from the players picker always reaches the computer picker (past disabled counts); Up inside the
+   computer keypad (0-3 over 4-7) goes to the row above, and only Up from its first row goes back to the players picker; Down from the
+   save bar's first row lands on the nearest button of the second row that is on. Registered before ui.js, so BGUI.focus sees these
+   keys as handled ---------------- */
 function nearestIn(row,a){
   const r0=a.getBoundingClientRect(), x0=r0.left+r0.width/2; let best=null, bd=Infinity;
   row.querySelectorAll("button:not([disabled])").forEach(b=>{ const r=b.getBoundingClientRect(), dx=Math.abs(r.left+r.width/2-x0); if(r.width>0&&dx<bd){ bd=dx; best=b; } });
+  return best;
+}
+// the nearest count that is on in the keypad row right above a (the button straight above may be off, e.g. 0 with one player here);
+// null in the first row (step 4 review: Up from 4-7 went to the players picker, so with 4-7 chosen the D-pad never reached 1-3)
+function keypadAbove(a){
+  const r0=a.getBoundingClientRect(), x0=r0.left+r0.width/2; let best=null, bt=-Infinity, bd=Infinity;
+  $("cpuSeg").querySelectorAll("button:not([disabled])").forEach(b=>{
+    const r=b.getBoundingClientRect(); if(r.width<=0||r.bottom>r0.top+1) return;   // rows above only
+    const dx=Math.abs(r.left+r.width/2-x0);
+    if(r.top>bt+1){ bt=r.top; bd=dx; best=b; } else if(r.top>=bt-1&&dx<bd){ bd=dx; best=b; }
+  });
   return best;
 }
 document.addEventListener("keydown",e=>{
@@ -948,7 +1005,7 @@ document.addEventListener("keydown",e=>{
   if((!down&&!up)||!a||!a.closest) return;
   const pick=sel=>document.querySelector(sel+" button.on:not([disabled])")||document.querySelector(sel+" button:not([disabled])");
   const rows=document.querySelectorAll("#svbar .r"), row1=rows[0], row2=rows[1];
-  const to=(down&&a.closest("#humanSeg"))?pick("#cpuSeg"):(up&&a.closest("#cpuSeg"))?pick("#humanSeg"):(down&&row1&&row2&&row1.contains(a))?nearestIn(row2,a):null;
+  const to=(down&&a.closest("#humanSeg"))?pick("#cpuSeg"):(up&&a.closest("#cpuSeg"))?(keypadAbove(a)||pick("#humanSeg")):(down&&row1&&row2&&row1.contains(a))?nearestIn(row2,a):null;
   if(to){ e.preventDefault(); B.focus.set(to); }
 });
 
@@ -962,6 +1019,13 @@ function backStep(){
   if($("resumeBtn").style.display!=="none"){ $("resumeBtn").click(); return "resume"; }
   return false;
 }
+// the TV hint bar promises only what Back does: it closes a list (the score pad, the sound panel) or opens the Menu; while a sheet that
+// must be answered is up (the round summary, the hand-off) Back is held, so the bar steps aside (step 4 review)
+function hintSync(){
+  const B=BG(), t=B&&B.sheet&&B.sheet.top?B.sheet.top():null, h=document.querySelector(".rm-hints");
+  if(h) h.classList.toggle("is-held",!!t&&(t.id==="handoff"||(t.id==="roundBox"&&t.getAttribute("data-kind")==="round")));
+}
+document.addEventListener("bgui:sheet",hintSync);
 // the play clock counts while the page is on screen
 document.addEventListener("visibilitychange",()=>{ if(document.hidden) clockOff(); else clockOn(); });
 // ui/ui.js is deferred: it arrives after this script. Then the icons go in, the strip gets its CPU badges and turn ring, and the
