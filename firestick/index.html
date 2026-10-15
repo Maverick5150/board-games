@@ -181,6 +181,7 @@
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
 <script src="../saves.js"></script>
+<script src="../names.js"></script>
 <script>window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
 <script src="../rummy500/engine.js"></script>
 <script src="../rummy500/game.js"></script>
@@ -259,8 +260,26 @@ var ORDERS=["red","blue","yellow","green"];   // Sorry! play order (clockwise ro
 var ORDERT=["red","green","yellow","blue"];   // Trouble play order - same idea, so the lobby and the game agree on which colours the computers get
 var runId=0, noWait=false, gameOver=false;
 function maxPlayers(){ return (chosenGame==="rummy500"||chosenGame==="scatter")?8:chosenGame==="risk"?6:chosenGame==="uno"?10:4; }
-var PACE=1.8;   // game-speed multiplier (every pause in every game is scaled by this)
+/* step 10: Game speed slow / medium / fast. PACE is the multiplier every Party pause is scaled by; medium is 1.8, exactly the old default (the old "Slow").
+   window.bgGameSpeed carries the same choice for the modules that run Party computers (speedFactor()). bgfs_pace stays the stored value, so old choices and harness overrides still work. */
+var PACE=1.8;
 try{ var _pp=parseFloat(localStorage.getItem("bgfs_pace")); if(_pp>0) PACE=_pp; }catch(e){}
+function modeOfPace(p){ return p<1.4?"fast":p<2.2?"medium":"slow"; }
+function hopMs(){ try{ document.documentElement.style.setProperty("--mb-hop",Math.max(120,Math.round(150*PACE/1.8))+"ms"); }catch(e){} }
+function setPace(p){ PACE=p; window.bgGameSpeed=modeOfPace(p); hopMs(); try{localStorage.setItem("bgfs_pace",String(p));}catch(e){} }
+function setSpeedMode(v){ setPace(Math.round(1.8*({slow:1.75,fast:0.5}[v]||1)*100)/100); }
+window.bgGameSpeed=modeOfPace(PACE);
+hopMs();
+/* step 10: the computers' names. startGame() draws a fresh set from names.js for the seats no phone holds (never a joined phone's name); every Party game reads cpuName(colour) */
+var CPUN={};
+function cpuName(c){ return CPUN[c]||CNAME[c]; }
+window.__fs={get PACE(){ return PACE; },get CPUN(){ return CPUN; },drawCpuNames:function(){ drawCpuNames(); return CPUN; }};   // read-only view for the harnesses
+function drawCpuNames(){
+  var humans=Object.keys(seat).map(function(c){ return players[seat[c]]&&players[seat[c]].name; }).filter(Boolean);
+  var cpus=computeActive(ORDER()).filter(function(c){ return !seat[c]; }), got=[];
+  try{ if(window.Names&&cpus.length) got=window.Names.pick(cpus.length,humans)||[]; }catch(e){}
+  CPUN={}; cpus.forEach(function(c,i){ if(got[i]) CPUN[c]=got[i]; });
+}
 var sleep=function(ms){return new Promise(function(r){setTimeout(r,Math.round(ms*PACE));});};
 (function(){ var st=document.createElement("style"); st.textContent=window.MONO_DEED_CSS||""; document.head.appendChild(st); })();
 
@@ -388,7 +407,8 @@ function onMsg(o){
     if(inLobby){ toast(pl.name+" left"); broadcastLobby(); renderLobby(); }
     else if(gameOver){ toast(pl.name+" left"); settlePending(o.pid); }   // the game is finished: nobody takes the seat over
     else {   // mid-game: a computer takes the seat; a prompt the phone was answering gets its safe default
-      toast(pl.name+" left — the computer plays "+CNAME[pl.color]);
+      if(!CPUN[pl.color]){ try{ var ex=Object.keys(CPUN).map(function(k){ return CPUN[k]; }).concat(Object.keys(players).map(function(p){ return players[p].name; }),[pl.name]), g1=window.Names&&window.Names.pick(1,ex); if(g1&&g1[0]) CPUN[pl.color]=g1[0]; }catch(e){} }   // the seat now belongs to a computer: it gets a random name too
+      toast(pl.name+" left — the computer plays "+cpuName(pl.color));
       if(leaveHandler) leaveHandler(pl.color);
       settlePending(o.pid);
     }
@@ -574,9 +594,9 @@ function screenLobby(){
   if(chosenGame==="scatter") renderScRules();
   var redrawRules=function(){ if(chosenGame==="scatter") renderScRules(); if(chosenGame==="monopoly") renderRules(); if(chosenGame==="rummy500") renderRvRules(); if(chosenGame==="risk") renderRkRules(); if(chosenGame==="uno") renderUnRules(); renderLobby(); };
   Saves.bar({game:"party-"+chosenGame,el:$("svbar"),
-    getSettings:function(){ return {cpu:cpuCount,pace:PACE,mono:chosenGame==="monopoly"?monoRules:null,rv:chosenGame==="rummy500"?rvCfg:null,rk:chosenGame==="risk"?rkCfg:null,un:chosenGame==="uno"?unCfg:null,sc:chosenGame==="scatter"?scCfg:null}; },
-    applySettings:function(s){ if(s.cpu!=null) cpuCount=s.cpu; if(s.pace>0){ PACE=s.pace; try{localStorage.setItem("bgfs_pace",String(PACE));}catch(e){} } if(s.mono&&chosenGame==="monopoly") monoRules=s.mono; if(s.rv&&chosenGame==="rummy500") rvCfg={version:s.rv.version||"standard",over:s.rv.over||{}}; if(s.rk&&chosenGame==="risk") rkCfg={version:s.rk.version||"1959",over:s.rk.over||{}}; if(s.un&&chosenGame==="uno") unCfg={version:s.un.version||"classic",over:s.un.over||{}}; if(s.sc&&chosenGame==="scatter") scCfg={version:s.sc.version||"classic",over:s.sc.over||{}}; redrawRules(); },
-    standard:function(){ cpuCount=3; PACE=1.8; try{localStorage.setItem("bgfs_pace","1.8");}catch(e){} monoRules=JSON.parse(MONO_DEFAULT); rvCfg={version:"standard",over:{}}; rkCfg={version:"1959",over:{}}; unCfg={version:"classic",over:{}}; scCfg={version:"classic",over:{}}; redrawRules(); }});
+    getSettings:function(){ return {cpu:cpuCount,pace:PACE,speed:modeOfPace(PACE),mono:chosenGame==="monopoly"?monoRules:null,rv:chosenGame==="rummy500"?rvCfg:null,rk:chosenGame==="risk"?rkCfg:null,un:chosenGame==="uno"?unCfg:null,sc:chosenGame==="scatter"?scCfg:null}; },
+    applySettings:function(s){ if(s.cpu!=null) cpuCount=s.cpu; if(s.speed==="slow"||s.speed==="medium"||s.speed==="fast") setSpeedMode(s.speed); else if(s.pace>0) setPace(s.pace); if(s.mono&&chosenGame==="monopoly") monoRules=s.mono; if(s.rv&&chosenGame==="rummy500") rvCfg={version:s.rv.version||"standard",over:s.rv.over||{}}; if(s.rk&&chosenGame==="risk") rkCfg={version:s.rk.version||"1959",over:s.rk.over||{}}; if(s.un&&chosenGame==="uno") unCfg={version:s.un.version||"classic",over:s.un.over||{}}; if(s.sc&&chosenGame==="scatter") scCfg={version:s.sc.version||"classic",over:s.sc.over||{}}; redrawRules(); },
+    standard:function(){ cpuCount=3; setSpeedMode("medium"); monoRules=JSON.parse(MONO_DEFAULT); rvCfg={version:"standard",over:{}}; rkCfg={version:"1959",over:{}}; unCfg={version:"classic",over:{}}; scCfg={version:"classic",over:{}}; redrawRules(); }});
   dressSaveBar();
   broadcastLobby();
   $("startBtn").onclick=startGame;
@@ -633,9 +653,9 @@ function renderLobby(){
   }
   var total=Math.min(order.length, seated+cpuCount);
   var pbx=$("paceBtns");
-  if(pbx){ var PO=[["Normal",1],["Slow",1.8],["Very slow",2.6]];
-    pbx.innerHTML=PO.map(function(p){ var on=Math.abs(PACE-p[1])<0.05; return '<button type="button" class="aibtn'+(on?" on":"")+'" aria-pressed="'+on+'" data-p="'+p[1]+'">'+p[0]+'</button>'; }).join("");
-    Array.prototype.forEach.call(pbx.querySelectorAll("button"),function(b){ b.onclick=function(){ PACE=parseFloat(b.dataset.p); try{localStorage.setItem("bgfs_pace",String(PACE));}catch(e){} renderLobby(); }; }); }
+  if(pbx){ var PO=[["Slow","slow"],["Medium","medium"],["Fast","fast"]];
+    pbx.innerHTML=PO.map(function(p){ var on=modeOfPace(PACE)===p[1]; return '<button type="button" class="aibtn'+(on?" on":"")+'" aria-pressed="'+on+'" data-p="'+p[1]+'">'+p[0]+'</button>'; }).join("");
+    Array.prototype.forEach.call(pbx.querySelectorAll("button"),function(b){ b.onclick=function(){ setSpeedMode(b.dataset.p); renderLobby(); }; }); }
   if(fsel){ var nf=document.querySelector(fsel); if(nf&&!nf.disabled) nf.focus(); }
   if(wasOff&&sb&&!sb.disabled&&!(document.activeElement&&document.activeElement.closest&&document.activeElement.closest(".rulebox,#svbar"))) sb.focus();
   lobbyFocus();
@@ -689,6 +709,7 @@ function rvOpts(){ return Rummy.versionOpts(rvCfg.version,rvCfg.over); }
 function renderRvRules(){ var R=Rummy; renderRuleBox("rvbox",rvCfg,R.VERSIONS,R.HOUSE,rvOpts,function(hr,o){ return !(R.houseApplies&&!R.houseApplies(hr[0],o)); },renderRvRules); }   // e.g. Target score in a two-deal game
 
 function startGame(){
+  drawCpuNames();   // step 10: fresh random names for this game's computers (also on "Play again")
   inLobby=false; gameOver=false; leaveHandler=null; Sound.skip(); winnerName=""; gameStartedAt=Date.now(); gamePhones=Object.keys(seat).length; gamePlayers=computeActive(ORDER()).length;   // each game sets its own leaveHandler
   send({t:"started"}, true);   // retained so a reconnecting phone knows the game is on (not the lobby)
   if(chosenGame==="trouble") playTrouble();
@@ -741,11 +762,11 @@ function playTrouble(){
     }
     return mv;
   }
-  function applyMove(color,mv){ if(mv.to<=27){ var occ=occupantAt(color,mv.to); if(occ&&occ.color!==color){ pegs[occ.color][occ.peg]=null; toast(CNAME[occ.color]+" sent home!"); waitPhone(occ.color, CNAME[occ.color]+" — bumped home!", color); } } pegs[color][mv.peg]=mv.to; }
+  function applyMove(color,mv){ if(mv.to<=27){ var occ=occupantAt(color,mv.to); if(occ&&occ.color!==color){ pegs[occ.color][occ.peg]=null; toast(nmOf(occ.color)+" sent home!"); waitPhone(occ.color, CNAME[occ.color]+" — bumped home!", color); } } pegs[color][mv.peg]=mv.to; }
   function hasWon(color){ return pegs[color].every(function(d){return d!==null&&d>=28;}); }
   function moveLabel(c,mv){
     var n=mv.peg+1, bump="";
-    if(mv.to<=27){ var occ=occupantAt(c,mv.to); if(occ&&occ.color!==c) bump=" — bump "+CNAME[occ.color]+"!"; }
+    if(mv.to<=27){ var occ=occupantAt(c,mv.to); if(occ&&occ.color!==c) bump=" — bump "+nmOf(occ.color)+"!"; }
     if(mv.from===null) return "Peg "+n+": leave HOME"+bump;
     if(mv.to>=28) return "Peg "+n+": into FINISH"+bump;
     return "Peg "+n+": move "+die+bump;
@@ -755,7 +776,7 @@ function playTrouble(){
   var svg, svgns="http://www.w3.org/2000/svg", spaceR=15.5, holeR=13.5, pegEls={}, lastMv=null, tilt=0, jig=[0,0], pulseEl=null;
   var SIDE={red:"top",green:"right",yellow:"bottom",blue:"left"};
   function f1(n){ return Math.round(n*10)/10; }
-  function nmOf(c){ return seat[c]?players[seat[c]].name:CNAME[c]; }
+  function nmOf(c){ return seat[c]?players[seat[c]].name:cpuName(c); }
   function dieFaceSVG(v,ox,oy,size,rot){
     if(!v) return "";
     var h=size/2, o=size*0.26, pr=size*0.085;
@@ -879,7 +900,7 @@ function playTrouble(){
     if(pulseEl){ pulseEl.hidden=over; if(!over) pulseEl.style.color=SEATC[active[turn]].m; }   // the turn ring: the current player's colour
   }
 
-  function tvTurn(){ var c=active[turn]; setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+(seat[c]?players[seat[c]].name:CNAME[c]+" (CPU)")+(human[c]?" — check your phone":"")); $("hint").textContent = human[c]? "Controller: pop the die on your phone" : ""; }
+  function tvTurn(){ var c=active[turn]; setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+(seat[c]?players[seat[c]].name:cpuName(c)+" (CPU)")+(human[c]?" — check your phone":"")); $("hint").textContent = human[c]? "Controller: pop the die on your phone" : ""; }
 
   async function rollAnim(){ Sound.sfx("dice"); for(var i=0;i<8;i++){ die=1+Math.floor(Math.random()*6); tilt=(Math.random()-.5)*80; jig=[(Math.random()-.5)*14,(Math.random()-.5)*14]; renderDome(); await sleep(70); } }   // the die tumbles in the dome
   function aiPick(moves){ var best=moves[0],bs=-1e9; moves.forEach(function(m){ var sc=0; if(m.to<=27){ var occ=occupantAt(active[turn],m.to); if(occ&&occ.color!==active[turn]) sc+=100+(pegs[occ.color][occ.peg]||0);} if(m.to>=28) sc+=40+m.to; if(m.from===null) sc+=30; sc+=m.to*0.5; if(sc>bs){bs=sc;best=m;} }); return best; }
@@ -905,7 +926,7 @@ function playTrouble(){
     startPulse(pulseEl,function(){ return live()&&!over; });
     if(active.length>1){
       var ro=rollOffFirst(active), last=ro.rounds[ro.rounds.length-1];
-      var nm=function(c){ return seat[c]?players[seat[c]].name:CNAME[c]; };
+      var nm=function(c){ return seat[c]?players[seat[c]].name:cpuName(c); };
       turn=active.indexOf(ro.first);
       die=last.filter(function(x){ return x[0]===ro.first; })[0][1]; renderDome(); Sound.sfx("dice");
       setStatus('<span class="dot" style="background:'+COL[ro.first]+'"></span> First pop: '+ro.rounds.map(function(r){ return r.map(function(x){ return esc(nm(x[0]))+" "+x[1]; }).join(", "); }).join(" · tie, pop again: ")+" — <b>"+esc(nm(ro.first))+" goes first</b>");
@@ -927,9 +948,9 @@ function playTrouble(){
           var opts=moves.map(function(m,i){ return {id:String(i), label:moveLabel(c,m), color:c}; });
           var pick=await ask(c, "Rolled a "+die, "Choose your move", opts);
           mv=moves[parseInt(pick.id,10)]||moves[0];
-        } else { setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+CNAME[c]+" rolled "+die+"…"); await sleep(1100); mv=aiPick(moves); }
+        } else { setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+cpuName(c)+" rolled "+die+"…"); await sleep(1100); mv=aiPick(moves); }
         await animateMove(c,mv);
-        if(hasWon(c)){ over=true; var wn=seat[c]?players[seat[c]].name:CNAME[c]; setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+wn+" wins!"); announceOver(wn); showPlayAgain(); return; }
+        if(hasWon(c)){ over=true; var wn=seat[c]?players[seat[c]].name:cpuName(c); setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+wn+" wins!"); announceOver(wn); showPlayAgain(); return; }
       } else {
         setStatus('<span class="dot" style="background:'+COL[c]+'"></span> Rolled '+die+" — no moves"); await sleep(1100);
       }
@@ -980,7 +1001,7 @@ function playSorry(){
   function toStart(p){ p.loc={t:"start"}; }
   function resolveLand(mover,dest,allowSlide){ if(!dest)return; if(dest.t!=="ring"){ mover.loc=dest; return; }
     if(allowSlide){ var sl=slideTri(dest.i); if(sl&&sl.color!==mover.color){ var set={}; sl.cells.forEach(function(x){set[x]=1;}); allP().forEach(function(p){ if(p!==mover&&p.loc.t==="ring"&&set[p.loc.i]) toStart(p); }); mover.loc={t:"ring",i:sl.cells[sl.cells.length-1]}; toast(CNAME[mover.color]+" slid!"); return; } }
-    occAtRing(dest.i,mover).forEach(function(p){ toStart(p); toast(CNAME[p.color]+" bumped!"); }); mover.loc=dest; }
+    occAtRing(dest.i,mover).forEach(function(p){ toStart(p); toast(nmOf(p.color)+" bumped!"); }); mover.loc=dest; }
   // dry runs on a copy of the board (Map pawn -> loc), same rules as resolveLand
   function boardNow(){ var m=new Map(); allP().forEach(function(p){ m.set(p,p.loc); }); return m; }
   function simLand(locs,mover,dest){ if(dest.t==="ring"){ var sl=slideTri(dest.i), slides=!!(sl&&sl.color!==mover.color), hit=slides?sl.cells:[dest.i]; locs.forEach(function(l,p){ if(p!==mover&&l.t==="ring"&&hit.indexOf(l.i)>=0) locs.set(p,{t:"start"}); }); if(slides) dest={t:"ring",i:sl.cells[sl.cells.length-1]}; } locs.set(mover,dest); }
@@ -1013,7 +1034,7 @@ function playSorry(){
   var LBL_HOME={red:[136,260,"start"],blue:[340,148,"middle"],yellow:[462,340,"end"],green:[260,452,"middle"]};   // HOME on the inner side of its circle
   var LBL_SAFE={red:[134,138,-90],blue:[462,132,0],yellow:[470,428,-90],green:[138,533,0]};   // SAFETY beside its lane
   function f1(n){ return Math.round(n*10)/10; }
-  function nmOf(c){ return seat[c]?players[seat[c]].name:CNAME[c]; }
+  function nmOf(c){ return seat[c]?players[seat[c]].name:cpuName(c); }
   function cellBox(x,y,fill,stroke,sw,extra){ return '<rect x="'+f1(x-16)+'" y="'+f1(y-16)+'" width="32" height="32" rx="6.5" fill="'+fill+'"'+(stroke?' stroke="'+stroke+'" stroke-width="'+(sw||1.2)+'"':"")+(extra||"")+'/>'; }
   function wellAt(x,y,c,r){ return '<circle cx="'+f1(x)+'" cy="'+f1(y)+'" r="'+(r+1.4)+'" fill="#03040a" opacity=".55"/><circle cx="'+f1(x)+'" cy="'+f1(y)+'" r="'+r+'" fill="url(#srWell)" stroke="'+SEATC[c].m+'" stroke-width="1.8"/>'; }
   function build(){
@@ -1116,7 +1137,7 @@ function playSorry(){
     else if(a.k==="fwd"){ await animMove(a.p,buildPath(color,a.p.loc,a.n,1)); resolveLand(a.p,a.p.loc,true); renderPawns(); }
     else if(a.k==="back"){ await animMove(a.p,buildPath(color,a.p.loc,a.n,-1)); resolveLand(a.p,a.p.loc,true); renderPawns(); }
     else if(a.k==="swap"){ var mi=a.p.loc.i,ti=a.target.loc.i; a.p.loc={t:"ring",i:ti}; a.target.loc={t:"ring",i:mi}; renderPawns(); await sleep(320); resolveLand(a.p,a.p.loc,true); if(a.target.loc.t==="ring") resolveLand(a.target,a.target.loc,true); renderPawns(); await sleep(320); }
-    else if(a.k==="sorry"){ var ti2=a.target.loc.i; toStart(a.target); a.p.loc={t:"ring",i:ti2}; toast(CNAME[a.target.color]+" — SORRY!"); renderPawns(); await sleep(320); resolveLand(a.p,a.p.loc,true); renderPawns(); await sleep(320); }
+    else if(a.k==="sorry"){ var ti2=a.target.loc.i; toStart(a.target); a.p.loc={t:"ring",i:ti2}; toast(nmOf(a.target.color)+" — SORRY!"); renderPawns(); await sleep(320); resolveLand(a.p,a.p.loc,true); renderPawns(); await sleep(320); }
     else if(a.k==="split"){ var fB=a.first==="B", X=fB?a.B:a.A, x=fB?a.b:a.a, Y=fB?a.A:a.B, y=fB?a.a:a.b;   // legal() picked an order that uses the full 7
       await animMove(X,buildPath(color,X.loc,x,1)); resolveLand(X,X.loc,true); renderPawns(); if(Y.loc.t!=="start"&&Y.loc.t!=="home"){ await animMove(Y,buildPath(color,Y.loc,y,1)); resolveLand(Y,Y.loc,true); renderPawns(); } }
   }
@@ -1166,24 +1187,24 @@ function playSorry(){
     var turn=0;
     while(!over && live()){
       var c=active[turn]; waitAllExcept(c,c);
-      setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+(seat[c]?players[seat[c]].name:CNAME[c]+" (CPU)")+" — "+(human[c]?"draw on your phone":"drawing…"));
-      centerCard(null,c,(seat[c]?players[seat[c]].name:CNAME[c]),true);
-      if(human[c]){ await ask(c,"Your turn","Draw a card",[{id:"draw",label:"🂠 DRAW A CARD"}],{card:{back:true,color:c,who:(seat[c]?players[seat[c]].name:CNAME[c])}}); }
+      setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+(seat[c]?players[seat[c]].name:cpuName(c)+" (CPU)")+" — "+(human[c]?"draw on your phone":"drawing…"));
+      centerCard(null,c,(seat[c]?players[seat[c]].name:cpuName(c)),true);
+      if(human[c]){ await ask(c,"Your turn","Draw a card",[{id:"draw",label:"🂠 DRAW A CARD"}],{card:{back:true,color:c,who:(seat[c]?players[seat[c]].name:cpuName(c))}}); }
       else { await sleep(1000); }
       if(deck.length===0) deck=shuffle(buildDeck());
       var v=deck.pop();
-      centerCard(v,c,(seat[c]?players[seat[c]].name:CNAME[c]),false);
-      active.forEach(function(x){ if(seat[x]) send({t:"wait",pid:seat[x],msg:(seat[c]?players[seat[c]].name:CNAME[c])+" drew a card",turn:c,card:{v:v,text:CARD_TEXT[v],color:c,who:(seat[c]?players[seat[c]].name:CNAME[c])}}); });
-      setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+(seat[c]?players[seat[c]].name:CNAME[c])+' drew <b style="font-size:4vh;color:#ffd86b">'+(v==="sorry"?"SORRY!":v)+'</b> — '+CARD_TEXT[v]);
+      centerCard(v,c,(seat[c]?players[seat[c]].name:cpuName(c)),false);
+      active.forEach(function(x){ if(seat[x]) send({t:"wait",pid:seat[x],msg:(seat[c]?players[seat[c]].name:cpuName(c))+" drew a card",turn:c,card:{v:v,text:CARD_TEXT[v],color:c,who:(seat[c]?players[seat[c]].name:cpuName(c))}}); });
+      setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+(seat[c]?players[seat[c]].name:cpuName(c))+' drew <b style="font-size:4vh;color:#ffd86b">'+(v==="sorry"?"SORRY!":v)+'</b> — '+CARD_TEXT[v]);
       await sleep(1200);
       var acts=legal(c,v), moved=false;
       if(acts.length){
         var act;
-        if(human[c]){ var opts=acts.map(function(a,i){ return {id:String(i),label:actLabel(a),color:c}; }); var pick=await ask(c,"You drew "+(v==="sorry"?"SORRY!":v),CARD_TEXT[v],opts,{card:{v:v,text:CARD_TEXT[v],color:c,who:(seat[c]?players[seat[c]].name:CNAME[c])}}); act=acts[parseInt(pick.id,10)]||acts[0]; }
+        if(human[c]){ var opts=acts.map(function(a,i){ return {id:String(i),label:actLabel(a),color:c}; }); var pick=await ask(c,"You drew "+(v==="sorry"?"SORRY!":v),CARD_TEXT[v],opts,{card:{v:v,text:CARD_TEXT[v],color:c,who:(seat[c]?players[seat[c]].name:cpuName(c))}}); act=acts[parseInt(pick.id,10)]||acts[0]; }
         else { var best=acts[0],bs=-1e9; acts.forEach(function(a){ var s=scoreA(a); if(s>bs){bs=s;best=a;} }); act=best; }
         await applyAnim(act); moved=true;
-        if(hasWon(c)){ over=true; var wn=seat[c]?players[seat[c]].name:CNAME[c]; setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+wn+" wins!"); announceOver(wn); showPlayAgain(); return; }
-      } else { setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+(seat[c]?players[seat[c]].name:CNAME[c])+" — no move"); await sleep(1100); }
+        if(hasWon(c)){ over=true; var wn=seat[c]?players[seat[c]].name:cpuName(c); setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+wn+" wins!"); announceOver(wn); showPlayAgain(); return; }
+      } else { setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+(seat[c]?players[seat[c]].name:cpuName(c))+" — no move"); await sleep(1100); }
       if(v===2){ /* official rules: a 2 always draws again (same player), even when it could not be played */ }
       else turn=(turn+1)%active.length;
       await sleep(300);
@@ -1227,7 +1248,7 @@ function playMonopoly(){
     centerRender(); };
   function rangeArr(n){ var a=[]; for(var i=0;i<n;i++)a.push(i); return a; }
   function shuf(a){ for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i];a[i]=a[j];a[j]=t; } return a; }
-  function nm(c){ return seat[c]?players[seat[c]].name:(CNAME[c]+" (CPU)"); }
+  function nm(c){ return seat[c]?players[seat[c]].name:(cpuName(c)+" (CPU)"); }
   function human(c){ return !!seat[c]; }
   function alive(){ return active.filter(function(c){return !bankrupt[c];}); }
   function money(n){ return (n<0?"-$":"$")+Math.abs(n); }
@@ -1557,7 +1578,7 @@ function playMonopoly(){
 function playRummy(){
   var myRun=++runId, R=window.Rummy, GM=R.Game, P=R.Party, UI=R.UI; noWait=true;
   var active=computeActive(ORDER8), opts=rvOpts();
-  var names=active.map(function(c){ return seat[c]?players[seat[c]].name:CNAME[c]+" CPU"; });
+  var names=active.map(function(c){ return seat[c]?players[seat[c]].name:cpuName(c)+" (CPU)"; });   // Party Rummy's TV rows (rummy500/party.js) have no robot badge yet: "(CPU)" keeps a computer obvious (FOLLOWUPS: For names-B)
   var humans=active.map(function(c){ return !!seat[c]; });
   var G=GM.newGame({names:names,humans:humans,opts:opts});
   leaveHandler=function(c){ var i=active.indexOf(c); if(i>=0) G.players[i].human=false; };   // a phone left: the computer plays that hand
@@ -1641,7 +1662,7 @@ function playRisk(){
   var myRun=++runId; noWait=true;
   var RK=window.Risk, E=RK.Engine, MPm=RK.MAP, PCOLS=MPm.PCOLORS, CT=RK.Ctrl;
   var active=computeActive(ORDER6), opts=rkOpts();
-  var names=active.map(function(c){ return seat[c]?players[seat[c]].name:CNAME[c]; });
+  var names=active.map(function(c){ return seat[c]?players[seat[c]].name:cpuName(c); });
   var humans=active.map(function(c){ return !!seat[c]; });
   var colors=active.map(function(c){ return ORDER6.indexOf(c); });
   var G=E.newGame({names:names,humans:humans,colors:colors,opts:opts});
@@ -1728,7 +1749,7 @@ function playUno(){
   var myRun=++runId; noWait=true;
   var UE=Uno.Engine, UC=Uno.Cards;
   var active=computeActive(ORDERU), opts=unOpts();
-  var names=active.map(function(c){ return seat[c]?players[seat[c]].name:CNAME[c]+" CPU"; });
+  var names=active.map(function(c){ return seat[c]?players[seat[c]].name:cpuName(c); });
   var humans=active.map(function(c){ return !!seat[c]; });
   var cols=active.map(function(c){ return COL[c]; });
   var G=UE.newGame({names:names,humans:humans,opts:opts});
@@ -1844,7 +1865,7 @@ function playScatter(){
   var myRun=++runId; noWait=true;
   var SE=Scatter.Engine, SU=Scatter.UI;
   var active=computeActive(ORDER8), opts=scOpts();
-  var names=active.map(function(c){ return seat[c]?players[seat[c]].name:CNAME[c]+" CPU"; });
+  var names=active.map(function(c){ return seat[c]?players[seat[c]].name:cpuName(c); });
   var humans=active.map(function(c){ return !!seat[c]; });
   var cols=active.map(function(c){ return COL[c]; });
   var G=SE.newGame({names:names,humans:humans,opts:opts});
