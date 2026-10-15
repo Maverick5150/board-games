@@ -651,7 +651,7 @@ function gameTitle(id){ return id==="trouble"?"Trouble":id==="sorry"?"Sorry!":id
 function ruleRows(HOUSE,o,show){
   return HOUSE.map(function(hr,k){
     if(show&&!show(hr,o)) return "";
-    var v=o[hr[0]], tag=hr[4]?"official":"house", tg='<span class="bg-tag bg-tag--'+tag+'">'+tag+'</span>';
+    var v=o[hr[0]], tag=(hr[4]&&hr[4]!=="hotseat")?"official":"house", tg='<span class="bg-tag bg-tag--'+tag+'">'+tag+'</span>';
     if(hr[2]==="bool") return '<div class="ps-rule">'+tg+'<button type="button" class="bg-row aibtn'+(v?" on":"")+'" role="switch" aria-checked="'+(!!v)+'" data-k="'+k+'"><span class="bg-row__main"><span class="bg-row__title">'+esc(hr[1])+'</span></span><span class="bg-sr">: '+(v?"ON":"off")+'</span><span class="bg-toggle" aria-hidden="true"></span></button></div>';
     var m=hr[3].filter(function(c){return String(c[0])===String(v);})[0];
     return '<div class="ps-rule">'+tg+'<button type="button" class="bg-row aibtn" data-k="'+k+'"><span class="bg-row__main"><span class="bg-row__title">'+esc(hr[1])+'</span></span><span class="bg-sr">: </span><span class="ps-val">'+esc(m?m[1]:v)+'</span><span class="bg-ico-slot" aria-hidden="true" data-icon="chevron"></span></button></div>';
@@ -682,8 +682,8 @@ var unCfg={version:"classic",over:{}};
 function unOpts(){ return Uno.Engine.versionOpts(unCfg.version,unCfg.over); }
 function renderUnRules(){ var E=Uno.Engine; renderRuleBox("unbox",unCfg,E.VERSIONS,E.HOUSE,unOpts,function(hr,o){ return !!E.houseFor(hr,o.edition); },renderUnRules); }   // e.g. the starting-card rule only exists in the Classic and Flip sheets
 var rkCfg={version:"1959",over:{}};
-function rkOpts(){ var o=Risk.Engine.versionOpts(rkCfg.version,rkCfg.over); return o; }
-function renderRkRules(){ var E=Risk.Engine; renderRuleBox("rkbox",rkCfg,E.VERSIONS,E.HOUSE,rkOpts,null,renderRkRules); }
+function rkOpts(){ var o=Risk.Engine.versionOpts(rkCfg.version,rkCfg.over); o.defChoose=false; return o; }   // Party attacks carry no defDice: the defender always rolls the most dice
+function renderRkRules(){ var E=Risk.Engine; renderRuleBox("rkbox",rkCfg,E.VERSIONS,E.HOUSE,rkOpts,function(hr){ return hr[4]!=="hotseat"; },renderRkRules); }   // rows tagged "hotseat" (Defender chooses dice) ask on the shared device: not offered in Party
 var rvCfg={version:"standard",over:{}};
 function rvOpts(){ return Rummy.versionOpts(rvCfg.version,rvCfg.over); }
 function renderRvRules(){ var R=Rummy; renderRuleBox("rvbox",rvCfg,R.VERSIONS,R.HOUSE,rvOpts,function(hr,o){ return !(R.houseApplies&&!R.houseApplies(hr[0],o)); },renderRvRules); }   // e.g. Target score in a two-deal game
@@ -1260,7 +1260,8 @@ function playMonopoly(){
     centerRender(); renderScore(); snapSoon();
   }
   function renderScore(){ var el=$("mscore"); if(!el) return; var h='<div class="mshead">Players</div><ul class="bg-players">';
-    active.forEach(function(c){ var props=[]; for(var i=0;i<40;i++) if(owner[i]===c) props.push(i);
+    // standing order: the richest (net worth) first, the bankrupt last, ties in seat order (presentation only)
+    active.map(function(c,k){ return {c:c,k:k,w:bankrupt[c]?-1:netWorth(c)}; }).sort(function(a,b){ return (b.w-a.w)||(a.k-b.k); }).map(function(x){ return x.c; }).forEach(function(c){ var props=[]; for(var i=0;i<40;i++) if(owner[i]===c) props.push(i);
       var meta=money(cash[c])+(injail[c]?" · in jail":"")+(jokers[c]?" · "+jokers[c]+" jail card"+(jokers[c]>1?"s":""):"")+(bankrupt[c]?" · OUT":"");
       var chips='<div class="mschips">'+props.map(function(i){ var sp=BOARD[i]; var col=sp.t==="prop"?COLORVAR[sp.g]:"#555"; return '<i style="background:'+col+(mort[i]?';opacity:.35':'')+'" title="'+sp.n+'">'+(houses[i]>0?(houses[i]===5?'H':houses[i]):(sp.t==="rr"?'R':sp.t==="util"?'U':''))+'</i>'; }).join("")+'</div>';
       h+=chipHTML({color:PC(c),name:nm(c),meta:meta,tokHTML:tokH(c),out:bankrupt[c],turn:active[turn]===c&&!bankrupt[c],cls:"msrow"+(bankrupt[c]?" out":"")+(active[turn]===c&&!bankrupt[c]?" cur":""),extra:chips});
@@ -1759,7 +1760,7 @@ function playUno(){
     var tn=G.players[G.turn].name, act=UE.actor(G);
     setStatus('<span class="dot" style="background:'+cols[act]+'"></span> '+esc(G.players[act].name)+(G.phase==="challenge"?" is deciding on a challenge":G.phase==="roulette"?" is spinning the roulette":" is playing")+(G.players[act].human&&seat[active[act]]?" (use your phone)":""));
   }
-  function snapFor(i){ var st=UE.snapshot(G,i); st.cols=cols; if(afk[i]) st.afk=true; return st; }
+  function snapFor(i){ var st=UE.snapshot(G,i); st.cols=cols; st.seats=active.map(seatNo); if(afk[i]) st.afk=true; return st; }
   function pushAll(skip){ G.players.forEach(function(p,i){ if(p.human&&seat[active[i]]&&i!==skip) send({t:"ups",pid:seat[active[i]],st:snapFor(i)}); }); }
   gameSnap=function(){ pushAll(askingIdx); };
   function interrupt(pid){ Object.keys(pending).forEach(function(k){ if(pending[k].pid===pid){ var pr=pending[k]; delete pending[k]; pr.resolve({id:"interrupt"}); } }); }
@@ -1815,7 +1816,9 @@ function playUno(){
     var ro=G.roundOver, el=$("unTable"); if(!el) return;
     $("unCtl").hidden=true; el.hidden=false;
     // Cards left = how many cards, Hand pts = what they are worth, knocked-out players are labelled
-    var rows=ro.rows.map(function(r){ return '<tr><td>'+esc(r.name)+(r.id===ro.winUnit?" — winner":"")+(r.out?' <small style="opacity:.7">knocked out</small>':'')+'</td><td>'+(r.out||r.cards==null?"—":r.cards)+'</td><td>'+(r.out?"—":r.left)+'</td><td>'+(r.points?"+"+r.points:"—")+'</td><td><b>'+G.uscore[r.id]+'</b></td></tr>'; }).join("");
+    var tally=G.o.scoring==="tally";   // standing order: the leader on top (lowest in the tally game), ties in seat order
+    var ranked=ro.rows.map(function(r,i){ return {r:r,i:i}; }).sort(function(a,b){ return (tally?G.uscore[a.r.id]-G.uscore[b.r.id]:G.uscore[b.r.id]-G.uscore[a.r.id])||a.i-b.i; }).map(function(x){ return x.r; });
+    var rows=ranked.map(function(r){ return '<tr><td>'+esc(r.name)+(r.id===ro.winUnit?" — winner":"")+(r.out?' <small style="opacity:.7">knocked out</small>':'')+'</td><td>'+(r.out||r.cards==null?"—":r.cards)+'</td><td>'+(r.out?"—":r.left)+'</td><td>'+(r.points?"+"+r.points:"—")+'</td><td><b>'+G.uscore[r.id]+'</b></td></tr>'; }).join("");
     var wr=ro.rows[ro.winUnit]||{};
     el.innerHTML='<div style="font-size:3vh;max-width:50vw"><div style="font-size:4.4vh;font-weight:900">'+(ro.over?"Game over":"Round "+G.round+" complete")+'</div><div style="opacity:.8">'+esc(G.players[ro.winner].name)+' went out first</div><table style="width:100%;margin:1vh 0"><tr style="opacity:.7"><td>Player</td><td>Cards left</td><td>Hand pts</td><td>Round</td><td>Total</td></tr>'+rows+'</table>'+(wr.bonus?'<div style="opacity:.8;font-size:2.4vh">The winner\'s round score includes '+wr.bonus+' bonus points: 250 for each player knocked out.</div>':'')+(ro.over?'<div style="font-size:4vh;text-align:center"><b style="color:#f2bf24">'+esc(ro.gameWinnerName)+'</b> wins the game!</div>':'')+'</div>';
     setStatus(ro.over?esc(ro.gameWinnerName)+" wins!":"Round "+G.round+" complete");
@@ -1872,7 +1875,7 @@ function playScatter(){
   };
   function idxOfPid(pid){ var r=-1; G.players.forEach(function(p,i){ if(seat[active[i]]===pid) r=i; }); return r; }
   function secLeft(){ return Math.max(0,(endAt-Date.now())/1000); }
-  function snapFor(i,x){ var st=SE.snapshot(G,i,x||{}); if(phase==="roll"||phase==="star"){ st.phase=phase; st.letter=null; st.keyword=null; st.slots=[]; } else if(G.phase==="write") st.secLeft=secLeft(); return st; }
+  function snapFor(i,x){ var st=SE.snapshot(G,i,x||{}); if(phase==="roll"||phase==="star"){ st.phase=phase; st.letter=null; st.keyword=null; st.slots=[]; } else if(G.phase==="write") st.secLeft=secLeft(); st.seats=active.map(seatNo); return st; }
   function pushAll(skip){ G.players.forEach(function(p,i){ if(p.human&&seat[active[i]]&&i!==skip) send({t:"scs",pid:seat[active[i]],st:snapFor(i)}); }); }
   gameSnap=function(){ pushAll(-1); };
   function interrupt(pid){ Object.keys(pending).forEach(function(k){ if(pending[k].pid===pid){ var pr=pending[k]; delete pending[k]; pr.resolve({id:"timeout"}); } }); }
@@ -1900,7 +1903,7 @@ function playScatter(){
         if(i>=shown) return '<div class="scCt ans pend"><span>'+(i+1)+'.</span>'+esc(s.label)+'</div>';
         var chips=ev.entries.filter(function(e){ return e.slot===i&&e.raw; }).map(function(e){ var c=e.status==="ok"?"ok":e.status==="dup"?"dup":"invalid"; return '<span class="ch '+c+'"><span class="w">'+esc(G.players[e.p].name)+'</span>'+esc(e.raw)+(e.pts?' <b>+'+e.pts+'</b>':'')+'</span>'; }).join("")||'<span style="opacity:.5">—</span>';
         return '<div class="scCt ans"><span>'+(i+1)+'.</span>'+(G.keyword?'<b class="scKL">'+esc(s.letter)+'</b> — ':'')+esc(s.label)+'<br>'+chips+'</div>'; }).join("")+'</div>'+
-      '<div class="scP">'+G.players.map(function(p,i){ return '<div style="border-color:'+cols[i]+'">'+esc(p.name)+' <b>+'+(tot[i]||0)+'</b></div>'; }).join("")+'</div>';
+      '<div class="scP">'+G.players.map(function(p,i){ return i; }).sort(function(a,b){ return ((tot[b]||0)-(tot[a]||0))||(a-b); }).map(function(i){ var p=G.players[i]; return '<div style="border-color:'+cols[i]+'">'+esc(p.name)+' <b>+'+(tot[i]||0)+'</b></div>'; }).join("")+'</div>';
   }
   function drawScored(){
     var el=$("scTv"); if(!el) return;

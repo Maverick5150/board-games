@@ -62,13 +62,14 @@ var TVCSS=[
 ".rvlog{font-size:2.3vh;color:#cfe9da;text-align:center;line-height:1.35;min-height:9vh;margin-top:.6vh}",
 ".rvsheet{background:#0c3322f2;border:.4vh solid #3d7a58;border-radius:2.4vh;padding:2vh 3vh;font-size:2.6vh;max-width:90vw}",
 ".rvsheet table{width:100%;border-collapse:collapse;margin:1vh 0}.rvsheet th,.rvsheet td{padding:.8vh 1.2vh;text-align:right;border-bottom:.2vh solid #ffffff22}.rvsheet th:first-child,.rvsheet td:first-child{text-align:left}",
-".rvsheet td.pos{color:#8ff0b0}.rvsheet td.neg{color:#ff9a9a}"
+".rvsheet td.pos{color:#8ff0b0}.rvsheet td.neg{color:#ff9a9a}",
+".rvsheet .bg-ico{width:1em;height:1em;vertical-align:-.12em;color:#ffd84a}"
 ].join("\n");
 function tvHTML(G,ctx){
   ctx=ctx||{};
-  var chips=G.units.map(function(u,ui){
-    var act=!G.roundOver&&GM.unitOf(G,G.turn)===ui, col=UI.colorOf(G,u[0]);
-    var nm=u.map(function(i){ var q=G.players[i]; return esc(q.name)+' <small>✋'+q.hand.length+'</small>'; }).join(" &amp; ");
+  var chips=rankIdx(G.scores,G.units.length).map(function(ui){
+    var u=G.units[ui], act=!G.roundOver&&GM.unitOf(G,G.turn)===ui, col=UI.colorOf(G,u[0]);
+    var nm=u.map(function(i){ var q=G.players[i]; return esc(q.name)+' <small>'+q.hand.length+(q.hand.length===1?' card':' cards')+'</small>'; }).join(" &amp; ");
     return '<div class="rvchip'+(act?" act":"")+'" style="--c:'+col+'"><span class="rd" style="background:'+col+'"></span>'+nm+' · <b>'+G.scores[ui]+'</b></div>';
   }).join("");
   var nm=G.melds.length, cw=nm>22?3.8:nm>14?4.8:nm>8?6:nm>4?7.2:8.6;
@@ -82,33 +83,49 @@ function tvHTML(G,ctx){
 function roundSheetHTML(G){
   var ro=G.roundOver; if(!ro) return "";
   var why=ro.reason==="out"?esc(G.players[ro.out].name)+" went out":"The stock ran out";
-  var rows=ro.rows.map(function(r){ return '<tr><td><span class="rd" style="display:inline-block;width:2.2vh;height:2.2vh;border-radius:50%;background:'+UI.colorOf(G,r.players[0])+'"></span> '+esc(r.name)+'</td><td>'+r.melded+'</td><td>'+(r.dead?-r.dead:0)+'</td><td>'+((r.bonus+r.oppHands)||0)+'</td><td class="'+(r.total>=0?"pos":"neg")+'">'+(r.total>0?"+":"")+r.total+'</td><td><b>'+r.score+'</b></td></tr>'; }).join("");
-  return '<div class="rvsheet"><div style="font-size:3.6vh;font-weight:900">'+(ro.over?"🏆 Game over":"Round "+G.round+" complete")+'</div><div style="opacity:.8">'+why+'</div>'+
+  var rows=rankRows(ro.rows).map(function(r){ return '<tr><td><span class="rd" style="display:inline-block;width:2.2vh;height:2.2vh;border-radius:50%;background:'+UI.colorOf(G,r.players[0])+'"></span> '+esc(r.name)+'</td><td>'+r.melded+'</td><td>'+(r.dead?-r.dead:0)+'</td><td>'+((r.bonus+r.oppHands)||0)+'</td><td class="'+(r.total>=0?"pos":"neg")+'">'+(r.total>0?"+":"")+r.total+'</td><td><b>'+r.score+'</b></td></tr>'; }).join("");
+  return '<div class="rvsheet"><div style="font-size:3.6vh;font-weight:900">'+(ro.over?ic("trophy")+" Game over":"Round "+G.round+" complete")+'</div><div style="opacity:.8">'+why+'</div>'+
     '<table><tr><th>Player</th><th>Melds</th><th>Hand</th><th>Bonus</th><th>Round</th><th>Total</th></tr>'+rows+'</table>'+
     (ro.over?'<div style="font-size:3.2vh;text-align:center"><b style="color:#ffd84a">'+esc(ro.winnerName)+'</b> win'+(/ & /.test(ro.winnerName)||ro.winnerName==="You"?"":"s")+' with '+G.scores[ro.winner]+' points!</div>':'<div style="opacity:.75;font-size:2.2vh">'+esc(GM.goalText(G))+'</div>')+'</div>';
 }
 
 /* ---------------- phone: private hand + controls ---------------- */
 var PCSS=[
-".rvp{width:100%;max-width:560px;margin:0 auto;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center}",
-".rvp .head{font-size:15px;font-weight:800;border:2px solid var(--c,#fff3);border-radius:14px;padding:8px 12px;width:100%;background:#00000050;box-shadow:0 0 12px var(--c,transparent)}",
-".rvp .head small{display:block;font-weight:600;font-size:12px;color:#c9e6d5;margin-top:2px}",
-".rvp .tbl{width:100%;border:3px solid #ffffff22;border-radius:16px;background:radial-gradient(120% 100% at 50% 20%,#1b7a4f,#0c4a2f);padding:4px}",
+/* the phone controller in Midnight Luxe: the felt table, tokens, buttons and sheets of ui/theme.css (text >= 12 px, targets >= 44 px, line icons) */
+".rvp{width:100%;max-width:560px;margin:0 auto;display:flex;flex-direction:column;align-items:center;gap:.5rem;text-align:center;font-family:var(--font-ui,system-ui,sans-serif)}",
+".rvp .head{width:100%;padding:.625rem .875rem;border-radius:var(--r-lg,14px);background:var(--panel-fill,rgba(0,0,0,.35));box-shadow:var(--panel-edge,inset 0 0 0 1px rgba(255,255,255,.2)),inset 0 0 0 2px var(--c,transparent);color:var(--text-1,#f3f7ee);font:var(--fw-ui-strong,800) var(--fs-md,16px)/1.25 var(--font-ui,system-ui)}",
+".rvp .head small{display:block;margin-top:.15rem;font:var(--fw-ui,600) var(--fs-sm,13px)/1.35 var(--font-ui,system-ui);color:var(--text-2,#c9e6d5)}",
+".rvp .head .bg-ico{width:1.2em;height:1.2em;vertical-align:-.2em;margin-right:.3rem;color:var(--gold-200,#ffd84a)}",
+".rvp .tbl{width:100%;border-radius:var(--r-lg,16px);padding:.375rem}",
 ".rvp .rm{max-height:30vh;overflow-y:auto;display:flex;flex-wrap:wrap;justify-content:center;min-height:50px}.rvp .rm .meld{--cw:34px;padding:4px 7px 4px 6px;margin:2px}.rvp .rm .meld .pc{margin-left:-14px}.rvp .rm .meld .pc:first-child{margin-left:0}",
-".rvp .rm .empty{color:#bfe3cc;font-size:12px;padding:12px}",
-".rvp .pl{display:flex;gap:8px;align-items:center;border-top:1px dashed #ffffff30;padding:6px 4px 2px}",
-".rvp .stk{--cw:50px;font-size:11px;font-weight:700;color:#d6efdf;flex:none}.rvp .stk .pc{display:block;margin:0 auto 2px}",
+".rvp .rm .empty{color:var(--text-2,#bfe3cc);font-size:var(--fs-micro,12px);padding:12px}",
+".rvp .pl{display:flex;gap:8px;align-items:center;border-top:1px dashed var(--line-2,rgba(255,255,255,.2));padding:6px 4px 2px}",
+".rvp .stk{--cw:50px;font:var(--fw-ui-strong,700) var(--fs-micro,12px)/1.3 var(--font-ui,system-ui);color:var(--text-1,#d6efdf);flex:none}.rvp .stk .pc{display:block;margin:0 auto 2px}",
 ".rvp .dp{--cw:44px;display:flex;align-items:flex-end;overflow-x:auto;padding:14px 6px 4px 2px;flex:1}.rvp .dp .pc{margin-left:-24px}.rvp .dp .pc:first-child{margin-left:0}",
-".rvp .acts{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;min-height:44px}",
-".rvp .acts button{background:#0b2d1e;color:#f3f7ee;border:1px solid #3d7a58;border-radius:12px;padding:11px 14px;font-size:15px;font-weight:800}",
-".rvp .acts button.pri{background:#d9a21b;border-color:#d9a21b;color:#2a1c00}.rvp .acts button:disabled{opacity:.35}",
+".rvp .dp .none{font-size:var(--fs-micro,12px);color:var(--text-2,#c9e6d5)}",
+".rvp .acts{display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center;min-height:var(--tap,44px);padding:var(--focus-room,.25rem)}",
+".rvp .acts .bg-btn,.rvp .rvsb{min-height:var(--tap,44px)}.rvp .acts .bg-btn{padding-inline:.9rem}",
+".rvp .acts .bg-btn .bg-ico{width:1.1em;height:1.1em}",
+".rvp .acts .wait{font:var(--fw-ui,600) var(--fs-sm,13px)/1.3 var(--font-ui,system-ui);color:var(--text-2,#cfe9da)}",
 ".rvp .hd{--cw:56px;display:flex;flex-wrap:wrap;justify-content:center;padding:18px 20px 6px 4px;gap:8px 0}.rvp .hd .pc{margin-right:-15px}",
-".rvp .lg{font-size:11.5px;color:#b5d8c3;min-height:30px}",
-".rvp .sc{display:flex;flex-wrap:wrap;gap:5px;justify-content:center;font-size:12px}.rvp .sc span{background:#00000055;border-radius:99px;padding:3px 9px;border:2px solid transparent}.rvp .sc span.me{border-color:#ffd84a}",
-".rvp .sheet table{width:100%;border-collapse:collapse;font-size:13px}.rvp .sheet th,.rvp .sheet td{padding:5px 3px;text-align:right;border-bottom:1px solid #ffffff22}.rvp .sheet th:first-child,.rvp .sheet td:first-child{text-align:left}"
+".rvp .lg{font:var(--fw-body,500) var(--fs-micro,12px)/1.45 var(--font-ui,system-ui);color:var(--text-2,#b5d8c3);min-height:2.5rem}",
+".rvp .sc{display:flex;flex-wrap:wrap;gap:.35rem;justify-content:center;font:var(--fw-ui,600) var(--fs-micro,12px)/1.2 var(--font-ui,system-ui)}.rvp .sc span.pl2{display:inline-flex;align-items:center;gap:.4rem;min-height:1.75rem;background:var(--ink-2,rgba(0,0,0,.35));border-radius:var(--r-pill,99px);padding:.2rem .7rem;box-shadow:inset 0 0 0 2px var(--cc,transparent);color:var(--text-1,#fff)}.rvp .sc span.pl2.me{box-shadow:inset 0 0 0 2px var(--gold-200,#ffd84a)}.rvp .sc span.pl2 b{color:var(--gold-100,#ffd84a)}",
+".rvp .sheet .bg-score td,.rvp .sheet .bg-score th{font-size:var(--fs-sm,13px)}",
+".rvp .sheet .bg-score td.pos{color:var(--ok-text,#8ff0b0)}.rvp .sheet .bg-score td.neg{color:var(--danger-text,#ff9a9a)}",
+".rvsb-ov{position:fixed;inset:0;z-index:99;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:1rem;background:rgba(8,10,21,.94)}",
+".rvsb-ov .rvsb-card{width:min(100%,520px);padding:1rem;color:var(--text-1,#f3f7ee);text-align:left}",
+".rvsb-ov h2{margin:0 0 .25rem;font:400 var(--fs-xl,24px)/1.15 var(--font-display,Georgia,serif)}",
+".rvsb-ov .rvsb-sub{margin:0 0 .5rem;font:var(--fw-ui,600) var(--fs-sm,13px)/1.4 var(--font-ui,system-ui);color:var(--text-2,#c9e6d5)}.rvsb-ov .rvsb-sub b{color:var(--gold-100,#ffd84a)}",
+".rvsb-ov .bg-score td.pos{color:var(--ok-text,#8ff0b0)}.rvsb-ov .bg-score td.neg{color:var(--danger-text,#ff9a9a)}",
+".rvsb-ov .bg-btn{margin-top:.75rem}"
 ].join("\n");
 var ui={sel:{},pf:null,sort:"suit",busy:false,peek:false,order:[],drawn:{},prev:null,round:-1};
 function esc(s){ return String(s==null?"":s).replace(/[&<>]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;"}[c];}); }
+/* standing order (presentation only): the leader first (highest total), ties in seat order. Scores, saves and the order of play never change */
+function rankIdx(scores,n){ var a=[]; for(var i=0;i<n;i++) a.push(i); return a.sort(function(x,y){ return ((scores[y]||0)-(scores[x]||0))||(x-y); }); }
+function rankRows(rows){ return rows.map(function(r,i){ return {r:r,i:i}; }).sort(function(a,b){ return ((b.r.score||0)-(a.r.score||0))||(a.i-b.i); }).map(function(x){ return x.r; }); }
+/* a line icon from the shared ui/ set (no emoji as icons); empty on a page without ui/icons.js */
+function ic(n){ var B=g.BGUI; return B&&B.icon?B.icon(n):""; }
 function selIds(){ return Object.keys(ui.sel).map(Number); }
 function phoneRender(root,st,ctx){
   UI.injectCSS(); if(!document.getElementById("rvPCss")){ var s=document.createElement("style"); s.id="rvPCss"; s.textContent=PCSS; document.head.appendChild(s); }
@@ -124,52 +141,56 @@ function phoneRender(root,st,ctx){
   var one=sel.length===1?sel[0]:null;
   // header
   var headTxt, sub="";
-  if(st.ro) headTxt=st.ro.over?"🏆 Game over":"Round complete";
+  if(st.ro) headTxt=st.ro.over?ic("trophy")+"Game over":"Round complete";
   else if(!act) { headTxt=esc(st.names[st.turn])+"’s turn"; sub="Waiting — your hand is below"; }
   else if(draw){ headTxt="Your turn — draw"; sub=st.stock?"Tap the stock, or tap a discard to take it":"Stock is empty — take from the pile or tap the stock to end the round";
     if(ui.pf!=null){ var f=GM.takeFeasible(G,ui.pf); sub=f?("Take "+(G.discard.length-ui.pf)+" card"+((G.discard.length-ui.pf)>1?"s":"")+" from the pile?"):"You can't use that card right away — pick another"; } }
   else { headTxt="Your turn"; sub=st.mustUse!=null?("Use the card you took from the pile ("+(st.mustNew?"in a new meld":"meld or lay off")+") then discard"):"Meld, lay off, then discard one card"; }
   var h='<div class="rvp"><div class="head" style="--c:'+tcol+'">'+headTxt+'<small>'+sub+'</small></div>';
-  h+='<div class="sc"><span id="rvScoreBtn" style="background:#d9a21b;color:#2a1c00;font-weight:900;cursor:pointer">📊 Scores</span></div>'+
-    '<div class="sc">'+G.units.map(function(u,ui2){ var isMe=u.indexOf(me)>=0; return '<span class="'+(isMe?"me":"")+'" style="border-color:'+(isMe?"#ffd84a":UI.colorOf(G,u[0]))+'">'+u.map(function(i){ return esc(st.names[i]); }).join(" &amp; ")+' · <b>'+st.scores[ui2]+'</b></span>'; }).join("")+'</div>';
+  var rk=rankIdx(st.scores,G.units.length);   // the chips list the standing: leader first, ties in seat order
+  h+='<div class="sc"><button type="button" id="rvScoreBtn" class="rvsb bg-btn bg-btn--secondary bg-btn--sm">'+ic("trophy")+'<span>Scores</span></button></div>'+
+    '<div class="sc">'+rk.map(function(ui2){ var u=G.units[ui2], isMe=u.indexOf(me)>=0; return '<span class="pl2'+(isMe?" me":"")+'" style="--cc:'+UI.colorOf(G,u[0])+'">'+u.map(function(i){ return esc(st.names[i]); }).join(" &amp; ")+' · <b>'+st.scores[ui2]+'</b></span>'; }).join("")+'</div>';
   // table
-  h+='<div class="tbl"><div class="rm" id="rvm">'+(G.melds.length?G.melds.map(function(m){
+  h+='<div class="tbl bg-surface--felt bg-frame" data-stage-solid><div class="rm" id="rvm">'+(G.melds.length?G.melds.map(function(m){
       var fit=play&&one&&GM.mayLayOn(G,m,me)&&R.layOff(m,one,G.o)&&!(st.mustNew&&st.mustUse===one.id);
       return UI.meldHTML(m,G,{cls:fit?"fit":""}); }).join(""):'<div class="empty">No melds yet</div>')+'</div>';
   h+='<div class="pl"><div class="stk" id="rvs">'+UI.backHTML({label:st.stock?"":"EMPTY"})+st.stock+' left</div><div class="dp" id="rvd">'+
-    (G.discard.length?G.discard.map(function(c,i){ return UI.cardHTML(c,{cls:(ui.pf!=null&&i>=ui.pf?"pf":""),attrs:'data-i="'+i+'"'}); }).join(""):'<span style="font-size:12px;opacity:.8">Discard pile is empty</span>')+'</div></div></div>';
+    (G.discard.length?G.discard.map(function(c,i){ return UI.cardHTML(c,{cls:(ui.pf!=null&&i>=ui.pf?"pf":""),attrs:'data-i="'+i+'"'}); }).join(""):'<span class="none">Discard pile is empty</span>')+'</div></div></div>';
   // actions
-  var btns="";
-  if(st.ro){ btns='<span style="font-size:13px;color:#cfe9da">Waiting for the host to continue…</span>'; }
+  var btns="", SORTB=function(){ return '<button type="button" class="bg-btn bg-btn--secondary" data-a="sort">'+ic("swap")+'<span>Sort: '+ui.sort+'</span></button>'; };
+  if(st.ro){ btns='<span class="wait">Waiting for the host to continue…</span>'; }
   else if(draw){
-    if(ui.pf!=null){ var tf=GM.takeFeasible(G,ui.pf); btns+='<button class="pri" data-a="take"'+(tf?"":" disabled")+'>Take '+(G.discard.length-ui.pf)+' from pile</button><button data-a="cancel">Cancel</button>'; }
-    else btns+='<button class="pri" data-a="stock">Draw from stock</button>';
-    btns+='<button data-a="sort">Sort: '+ui.sort+'</button>';
+    if(ui.pf!=null){ var tf=GM.takeFeasible(G,ui.pf); btns+='<button type="button" class="pri bg-btn bg-btn--primary" data-a="take"'+(tf?"":" disabled")+'>Take '+(G.discard.length-ui.pf)+' from pile</button><button type="button" class="bg-btn bg-btn--secondary" data-a="cancel">Cancel</button>'; }
+    else btns+='<button type="button" class="pri bg-btn bg-btn--primary" data-a="stock">Draw from stock</button>';
+    btns+=SORTB();
   } else if(play){
     var m=sel.length>=3?R.buildMeld(sel,G.o):null;
     var ts=one?G.melds.filter(function(x){ return GM.mayLayOn(G,x,me)&&R.layOff(x,one,G.o)&&!(st.mustNew&&st.mustUse===one.id); }):[];
-    btns+='<button class="'+(m?"pri":"")+'" data-a="meld"'+(m?"":" disabled")+'>Meld'+(m?" (+"+R.meldPoints(m,G.o)*(G.o.doubleFour&&sel.length===4?2:1)+")":"")+'</button>'+
-      '<button data-a="lay"'+(ts.length?"":" disabled")+'>Lay off</button>'+
-      '<button data-a="discard"'+(sel.length===1?"":" disabled")+'>Discard</button>'+
-      '<button data-a="undo"'+(st.canUndo?"":" disabled")+'>↶ Undo</button><button data-a="hint">💡 Hint</button><button data-a="sort">Sort: '+ui.sort+'</button>';
-  } else btns='<button data-a="sort">Sort: '+ui.sort+'</button>';
+    btns+='<button type="button" class="'+(m?"pri bg-btn bg-btn--primary":"bg-btn bg-btn--secondary")+'" data-a="meld"'+(m?"":" disabled")+'>Meld'+(m?" (+"+R.meldPoints(m,G.o)*(G.o.doubleFour&&sel.length===4?2:1)+")":"")+'</button>'+
+      '<button type="button" class="bg-btn bg-btn--secondary" data-a="lay"'+(ts.length?"":" disabled")+'>Lay off</button>'+
+      '<button type="button" class="bg-btn bg-btn--secondary" data-a="discard"'+(sel.length===1?"":" disabled")+'>Discard</button>'+
+      '<button type="button" class="bg-btn bg-btn--secondary" data-a="undo"'+(st.canUndo?"":" disabled")+'>'+ic("reset")+'<span>Undo</span></button><button type="button" class="bg-btn bg-btn--secondary" data-a="hint">'+ic("star")+'<span>Hint</span></button>'+SORTB();
+  } else btns=SORTB();
   h+='<div class="acts" id="rva">'+btns+'</div>';
   h+='<div class="hd" id="rvh">'+(st.ro?"":UI.sortHand(hand,ui.sort,ui.order).map(function(c){ return UI.cardHTML(c,{cls:ui.sel[c.id]?"sel":"",style:UI.drawnStyle(ui.drawn,c.id)}); }).join(""))+'</div>';
   h+='<div class="lg">'+(st.log||[]).map(esc).join("<br>")+'</div>';
   if(st.ro){
-    var rows=st.ro.rows.map(function(r){ return '<tr><td>'+esc(r.name)+'</td><td>'+r.melded+'</td><td>'+(r.dead?-r.dead:0)+'</td><td>'+((r.bonus+r.oppHands)||0)+'</td><td>'+(r.total>0?"+":"")+r.total+'</td><td><b>'+r.score+'</b></td></tr>'; }).join("");
-    h+='<div class="sheet" style="width:100%;background:#0c3322;border-radius:14px;padding:10px"><table><tr><th>Player</th><th>Melds</th><th>Hand</th><th>Bonus</th><th>Round</th><th>Total</th></tr>'+rows+'</table></div>';
+    var rows=rankRows(st.ro.rows).map(function(r){ return '<tr><td>'+esc(r.name)+'</td><td>'+r.melded+'</td><td>'+(r.dead?-r.dead:0)+'</td><td>'+((r.bonus+r.oppHands)||0)+'</td><td class="'+(r.total>=0?"pos":"neg")+'">'+(r.total>0?"+":"")+r.total+'</td><td class="bg-score__total">'+r.score+'</td></tr>'; }).join("");
+    h+='<div class="sheet bg-scorepad" style="width:100%"><table class="bg-score"><thead><tr><th scope="col">Player</th><th scope="col">Melds</th><th scope="col">Hand</th><th scope="col">Bonus</th><th scope="col">Round</th><th scope="col">Total</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
   }
   h+='</div>';
   root.innerHTML=h;
   var sb=root.querySelector("#rvScoreBtn");
   if(sb) sb.onclick=function(){
-    var ov=document.createElement("div"); ov.style.cssText="position:fixed;inset:0;z-index:99;background:#04180fee;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:16px";
-    var th=G.units.map(function(u){ return "<th>"+u.map(function(i){ return esc(st.names[i]); }).join(" &amp; ")+"</th>"; }).join("");
-    var rowsH=(st.hist||[]).map(function(rw,ri){ return "<tr><td>"+(ri+1)+"</td>"+rw.map(function(r){ return "<td style=\"color:"+(r[0]>=0?"#8ff0b0":"#ff9a9a")+"\">"+(r[0]>0?"+":"")+r[0]+"</td>"; }).join("")+"</tr>"; }).join("")||"<tr><td colspan=\""+(G.units.length+1)+"\" style=\"text-align:center;opacity:.7\">No rounds finished yet</td></tr>";
-    var tot=st.scores.map(function(s){ return "<td><b>"+s+"</b></td>"; }).join("");
-    ov.innerHTML="<div style=\"width:min(100%,520px);background:#0c3322;border:1px solid #3d7a58;border-radius:18px;padding:16px;color:#f3f7ee\"><h2 style=\"margin:0 0 4px\">📊 Scoreboard</h2><div style=\"opacity:.8;font-size:13px\">"+(st.o&&st.o.deals>0?"<b style=\"color:#ffd84a\">"+st.o.deals+" deals</b> (+"+st.o.dealsBonus+" to the leader)":"Playing to <b style=\"color:#ffd84a\">"+st.target+"</b>")+" · round "+st.round+"</div><table style=\"width:100%;border-collapse:collapse;margin:8px 0;font-size:14px;text-align:right\"><tr><th style=\"text-align:left\">Round</th>"+th+"</tr>"+rowsH+"<tr style=\"border-top:2px solid #ffffff55\"><td style=\"text-align:left\"><b>Total</b></td>"+tot+"</tr></table><button id=\"rvScX\" style=\"width:100%;padding:12px;border-radius:12px;border:0;background:#d9a21b;font-weight:900;font-size:16px\">Close</button></div>";
-    document.body.appendChild(ov); ov.querySelector("#rvScX").onclick=function(){ ov.remove(); };
+    var ov=document.createElement("div"); ov.className="rvsb-ov"; ov.setAttribute("role","dialog"); ov.setAttribute("aria-label","Scoreboard");
+    var ord=rankIdx(st.scores,G.units.length);   // the columns follow the standing: leader first
+    var th=ord.map(function(ui2){ return '<th scope="col">'+G.units[ui2].map(function(i){ return esc(st.names[i]); }).join(" &amp; ")+'</th>'; }).join("");
+    var rowsH=(st.hist||[]).map(function(rw,ri){ return '<tr><td>R'+(ri+1)+'</td>'+ord.map(function(ui2){ var r=rw[ui2]||[0,0]; return '<td class="'+(r[0]>=0?"pos":"neg")+'">'+(r[0]>0?"+":"")+r[0]+'</td>'; }).join("")+'</tr>'; }).join("")||'<tr><td colspan="'+(G.units.length+1)+'" style="text-align:center">No rounds finished yet</td></tr>';
+    var tot=ord.map(function(ui2){ return '<td class="bg-score__total">'+st.scores[ui2]+'</td>'; }).join("");
+    ov.innerHTML='<div class="rvsb-card bg-card"><h2>Scoreboard</h2><p class="rvsb-sub">'+(st.o&&st.o.deals>0?'<b>'+st.o.deals+' deals</b> (+'+st.o.dealsBonus+' to the leader)':'Playing to <b>'+st.target+'</b>')+' · round '+st.round+'</p>'+
+      '<div class="bg-scorepad"><table class="bg-score"><thead><tr><th scope="col">Round</th>'+th+'</tr></thead><tbody>'+rowsH+'<tr><td><b>Total</b></td>'+tot+'</tr></tbody></table></div>'+
+      '<button type="button" id="rvScX" class="bg-btn bg-btn--primary bg-btn--block">Close</button></div>';
+    document.body.appendChild(ov); var x=ov.querySelector("#rvScX"); x.onclick=function(){ ov.remove(); }; try{ x.focus({preventScroll:true}); }catch(e){}
   };
   var send=function(id,data){ if(ui.busy) return; ui.busy=true; ctx.act(id,data); };
   root.onclick=function(e){
