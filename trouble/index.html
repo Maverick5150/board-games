@@ -99,9 +99,11 @@
   #tbHint{pointer-events:none}
   #board .dome{transform-origin:300px 300px; transition:transform .14s ease-out}
   #board .dome.is-press{transform:scale(.95)}
-  .bz-ctl{position:absolute; left:68.3%; top:68.3%; z-index:6; transform:translate(-50%,-50%); display:inline-flex; align-items:center; justify-content:center; gap:.4em; min-width:44px; min-height:44px; padding:0 1em; border:0; border-radius:999px; font:700 14px/1 var(--font-ui); color:#f6f1e7; background:rgba(8,10,21,.86); box-shadow:inset 0 0 0 1px rgba(231,202,144,.7),0 4px 12px rgba(0,0,0,.5); cursor:pointer; touch-action:manipulation}
-  .bz-ctl svg{width:1.25em; height:1.25em}
-  .is-zoomed > .bz-ctl{left:auto; top:auto; right:10px; bottom:10px; transform:none; background:#e7ca90; color:#1a1306; box-shadow:0 4px 12px rgba(0,0,0,.55)}
+  .bz-ctl{position:absolute; left:var(--bz-x,66%); top:var(--bz-y,66%); z-index:6; transform:translate(-50%,-50%); display:inline-flex; align-items:center; justify-content:center; gap:.4em; width:44px; height:44px; padding:0; border:0; border-radius:999px; font:700 14px/1 var(--font-ui); color:#f6f1e7; background:rgba(8,10,21,.86); box-shadow:inset 0 0 0 1px rgba(231,202,144,.7),0 4px 12px rgba(0,0,0,.5); cursor:pointer; touch-action:manipulation}
+  .bz-ctl svg{width:22px; height:22px}
+  .bz-ctl span{display:none}
+  .is-zoomed > .bz-ctl{left:auto; top:auto; right:10px; bottom:10px; transform:none; width:auto; padding:0 1em; background:#e7ca90; color:#1a1306; box-shadow:0 4px 12px rgba(0,0,0,.55)}
+  .is-zoomed > .bz-ctl span{display:inline}
   html[data-tv] .bz-ctl{display:none}
   .tb-inspect{display:flex; align-items:flex-start; justify-content:space-between; gap:.75rem; width:min(100%,520px); margin-top:.75rem; padding:.75rem .875rem}
   .tb-inspect[hidden]{display:none}
@@ -541,9 +543,9 @@ function buildBoard(){
   for(let i=0;i<TRACK;i++){
     const [x,y]=trackXY(i);
     const sc=COLORS.find(c=>START[c]===i);
-    if(sc){ const K=SEATC[sc], a=ang(i), ux=Math.cos(a), uy=Math.sin(a), tx=-uy, ty=ux, r1=trackR+29, bx=cx+r1*ux, by=cy+r1*uy;   // t = clockwise tangent
+    if(sc){ const K=SEATC[sc], a=ang(i), ux=Math.cos(a), uy=Math.sin(a), tx=-uy, ty=ux, r1=trackR+25, bx=cx+r1*ux, by=cy+r1*uy;   // t = clockwise tangent
       s+=`<circle cx="${f1(x)}" cy="${f1(y)}" r="${spaceR+2}" fill="${K.lo}"/><circle cx="${f1(x)}" cy="${f1(y)}" r="${spaceR}" fill="${K.m}"/><circle cx="${f1(x)}" cy="${f1(y)}" r="${spaceR}" fill="url(#tbPeg)"/><circle cx="${f1(x)}" cy="${f1(y)}" r="10.5" fill="none" stroke="#fff" stroke-opacity=".85" stroke-width="1.6"/>`;
-      s+=`<path d="M${f1(bx+tx*11)} ${f1(by+ty*11)}L${f1(bx-tx*6+ux*7)} ${f1(by-ty*6+uy*7)}L${f1(bx-tx*6-ux*7)} ${f1(by-ty*6-uy*7)}Z" fill="${K.hi}"/>`;
+      s+=`<path d="M${f1(bx+tx*10)} ${f1(by+ty*10)}L${f1(bx-tx*5+ux*6)} ${f1(by-ty*5+uy*6)}L${f1(bx-tx*5-ux*6)} ${f1(by-ty*5-uy*6)}Z" fill="${K.hi}"/>`;
     } else s+=`<circle cx="${f1(x)}" cy="${f1(y)}" r="${spaceR+1.8}" fill="#02030a" opacity=".5"/><circle cx="${f1(x)}" cy="${f1(y)}" r="${spaceR}" fill="url(#tbHole)" stroke="#8d7a52" stroke-width="1.2"/>`;
   }
   // per colour: finish holes, home pad (a rounded tray with four peg holes), and its labels
@@ -558,8 +560,8 @@ function buildBoard(){
     for(let k=0;k<4;k++){ const [hx,hy]=homeSlotXY(c,k); s+=holeDeep(hx,hy,c,holeR); }
     // START label on the plate beside the start space, and FINISH beside the lane
     const side=SIDE[c], W=NAME[c].toUpperCase()+" START";
-    if(side==="top") s+=lbl(c,W,`x="300" y="37" text-anchor="middle"`);
-    else if(side==="bottom") s+=lbl(c,W,`x="300" y="577" text-anchor="middle"`);
+    if(side==="top") s+=lbl(c,W,`x="300" y="30" text-anchor="middle"`);
+    else if(side==="bottom") s+=lbl(c,W,`x="300" y="581.5" text-anchor="middle"`);
     else if(side==="right") s+=lbl(c,W,`transform="translate(570 300) rotate(90)" text-anchor="middle"`);
     else s+=lbl(c,W,`transform="translate(30 300) rotate(-90)" text-anchor="middle"`);
     const mx=cx+153*Math.cos(a), my=cy+153*Math.sin(a);
