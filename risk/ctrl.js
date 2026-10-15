@@ -545,6 +545,7 @@ function create(cfg){
   function stopBlitz(){ S.blitz=false; clearTimeout(S.blitzT); }
   function blitzStep(){
     if(!S.blitz||!V) return;
+    if(cfg.paused&&cfg.paused()){ clearTimeout(S.blitzT); S.blitzT=setTimeout(blitzStep,250); return; }   // the Menu is up: the blitz waits for Resume (the page sets cfg.paused; Party has none)
     if(V.phase!=="attack"||S.src==null||S.tgt==null){ stopBlitz(); render(); return; }
     var A=V.terr[S.src].a; if(A<2||V.terr[S.tgt].o===V.me){ stopBlitz(); S.tgt=null; render(); return; }
     S.blitzSeq=V.lastAttack?V.lastAttack.seq:-1;
@@ -599,6 +600,7 @@ function create(cfg){
   };
   self.openCards=openCards; self.openPlayers=openPlayers; self.openMission=openMission;
   // (Luxe) the page closes the sheets before the Menu shows; the turn's choice sheet comes back with the next redraw
+  self.sheetsOpen=function(){ return !modalClosed(); };   // a sheet the player opened (cards, headquarters, players): the page pauses the computers while it is up
   self.closeSheets=function(){ closeModal(); if(actEl&&BG.sheet.isOpen(actEl)) closeAct(); if(actEl) S.actKind=null; };
   self.destroy=function(){ stopBlitz(); if(L){ self.closeSheets(); if(actEl&&actEl.parentNode) actEl.parentNode.removeChild(actEl); } if(modal.parentNode) modal.parentNode.removeChild(modal); };
   self.reset=function(){ stopBlitz(); S.key=""; S.src=null; S.tgt=null; S.fSrc=null; S.fTgt=null; S.cardSel=[]; S.shiftOpen=false; S.lastSeq=-1; closeModal(); if(L) self.closeSheets(); };   // new game / load: nothing from the old game may act on the new one
