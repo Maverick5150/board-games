@@ -418,6 +418,8 @@ function dotHTML(i){ return `<span class="dot" data-seat="${seatOf(i)}" style="b
 let stats={ms:0}, clock0=0;
 function readStats(s){ return {ms:(s&&typeof s==="object")?Math.max(0,+s.ms||0):0}; }
 function liveGame(){ return !!(G&&!G.over); }
+// the Menu pauses the computers: while it is up their turns wait (the eyebrow says "Paused") and Resume carries on where the game was
+function paused(){ return liveGame() && setupShown(); }
 function clockOn(){ clock0=(liveGame()&&!document.hidden)?Date.now():0; }
 function clockOff(){ if(clock0){ stats.ms+=Math.max(0,Date.now()-clock0); clock0=0; } }
 function playMs(){ return stats.ms+(clock0?Math.max(0,Date.now()-clock0):0); }
@@ -573,7 +575,7 @@ function showSetup(on,resume){
 }
 function barTitle(){
   const e=$("barEyebrow"); if(!e) return;
-  const t=setupShown()?(liveGame()?"Game in progress":(ui.result?"Game over":"New game")):
+  const t=setupShown()?(liveGame()?"Paused":(ui.result?"Game over":"New game")):
     (!G?"New game":G.over?"Game over":"Round "+G.round+(G.o.deals>0&&G.round<=G.o.deals?" of "+G.o.deals:""));
   if(e.textContent!==t) e.textContent=t;
 }
@@ -585,8 +587,17 @@ function takeSnap(){
   lastSnap={G:c,cfg:JSON.parse(JSON.stringify(cfg)),stats:{ms:Math.round(playMs())}};
   Saves.auto("rummy500",lastSnap);
 }
+// the end of a round (not the game): the scores, dealer and round number are saved with the round summary still to show, so Continue
+// brings back the Next round box instead of the stale hand from before the round ended (saved as {between:true}; older code ignores it)
+function takeRoundSnap(){
+  if(!G||G.over||!G.roundOver) return;
+  const c=JSON.parse(JSON.stringify(G,(k,v)=>(k==="log"||k==="snap")?undefined:v));
+  lastSnap={G:c,cfg:JSON.parse(JSON.stringify(cfg)),stats:{ms:Math.round(playMs())},between:true};
+  Saves.auto("rummy500",lastSnap);
+}
 function loadSaved(d){
-  gen++; G=d.G; G.rnd=Math.random; G.log=[]; G.snap=null; G.roundOver=null;
+  gen++; G=d.G; G.rnd=Math.random; G.log=[]; G.snap=null;
+  if(!(d.between===true&&G.roundOver&&typeof G.roundOver==="object"&&Array.isArray(G.roundOver.rows)&&!G.over)) G.roundOver=null;   // a mid-round save; a between-rounds one keeps its summary
   /* saves from before the Persian deck fix hold 2 jokers: deal the published 4 from the next round on */
   if(G.o&&G.o.jokerMode==="group"&&G.o.jokers===2&&d.cfg&&d.cfg.version==="persian"&&!(d.cfg.over&&d.cfg.over.jokers!=null)) G.o.jokers=4;
   Object.assign(cfg,d.cfg||{}); sel.clear(); pileFrom=null; flashCards={}; flashMeld=null; handoffOk=null; lastTurn=-1; drawnAt={}; busy=false;
@@ -616,7 +627,7 @@ const saveBar=Saves.bar({game:"rummy500",el:$("svbar"),
   getSettings:()=>({version:cfg.version,over:cfg.over,humans:cfg.humans,cpus:cfg.cpus,speed:cfg.speed}),
   applySettings:s=>{ cfg.version=s.version||"standard"; cfg.over=s.over||{}; cfg.humans=s.humans||1; cfg.cpus=s.cpus!=null?s.cpus:1; cfg.speed=s.speed||"normal"; clampSeats(); setSpeedSeg(); drawSetup(); },
   standard:()=>{ cfg.version="standard"; cfg.over={}; cfg.humans=1; cfg.cpus=1; cfg.speed="normal"; setSpeedSeg(); drawSetup(); },
-  getSnapshot:()=>(G&&!G.over&&!G.roundOver)?lastSnap:null,
+  getSnapshot:()=>(G&&!G.over&&lastSnap&&(!G.roundOver||lastSnap.between))?lastSnap:null,
   loadSnapshot:loadSaved});
 $("scoreBtn").addEventListener("click",()=>{ if(!G){ toast("Start a game first."); return; } showScores(); });
 
@@ -720,6 +731,7 @@ function perform(a){
 function loop(){
   if(G.roundOver){
     if(G.over){ Saves.del("rummy500","auto"); lastSnap=null; clockOff(); }   // a finished game is not offered as "Continue last game"
+    else takeRoundSnap();
     busy=true; render(); setTimeout(showRound,cur().human?500:900); return; }
   const p=cur();
   if(G.turn!==lastTurn){ lastTurn=G.turn; handoffOk=null; sel.clear(); pileFrom=null; if(!p.human) drawnAt={}; }
@@ -731,8 +743,9 @@ function loop(){
     return;
   }
   const my=gen;
-  setTimeout(()=>{
+  setTimeout(function tick(){
     if(my!==gen||!G||G.roundOver) return;
+    if(paused()){ barTitle(); setTimeout(tick,250); return; }   // the Menu is up: the computer waits for Resume
     const a=GM.aiAction(G); if(!a){ return; }
     const res=perform(a);
     if(!res.ok){ /* should not happen */ G.phase==="draw"?perform({t:"stock"}):perform({t:"discard",card:cur().hand[0].id}); }
