@@ -463,7 +463,7 @@ function showSetup(on,resume){
 }
 function barTitle(){
   const e=$("barEyebrow"); if(!e) return;
-  const t=setupShown()?(liveGame()?"Game in progress":(ui.result?"Game over":"New game")):(!G?"New game":G.over?"Game over":"Round "+G.round);
+  const t=paused()?"Paused":setupShown()?(liveGame()?"Game in progress":(ui.result?"Game over":"New game")):(!G?"New game":G.over?"Game over":"Round "+G.round);
   if(e.textContent!==t) e.textContent=t;
 }
 
@@ -559,6 +559,16 @@ function send(a){
   if(G.roundOver) showRound(); else drive();
   return r;
 }
+// Step 5: the Menu pauses the computers (their move, a catch, a jump-in all wait; the eyebrow says Paused). Resume plays the same move a
+// moment later. Party Mode runs its own host and never pauses.
+function paused(){ return liveGame()&&setupShown(); }
+function later(my,fn,ms){
+  timer=setTimeout(function tick(){
+    if(my!==gen||!G||G.roundOver||G.over) return;
+    if(paused()){ barTitle(); timer=setTimeout(tick,250); return; }
+    barTitle(); fn();
+  },ms);
+}
 function drive(){
   clearTimeout(timer);
   if(!G||G.roundOver||G.over) return;
@@ -575,8 +585,7 @@ function drive(){
   // a human left on one card by their own Discard All could not call UNO beforehand: a fair moment to say it before the computers may catch
   const tf=G.discard.length?G.discard[G.discard.length-1].f[G.side]:null;
   if(G.unoVuln!=null&&G.players[G.unoVuln].human&&tf&&tf.v==="discardall") delay=Math.max(delay,2000);
-  timer=setTimeout(()=>{
-    if(my!==gen||!G||G.roundOver||G.over) return;
+  later(my,()=>{
     // other computers may jump in or catch first
     if(G.unoVuln!=null){ const t=G.unoVuln; if(G.players[t].human&&G.rnd()<0.7){ const by=pickOther(t); if(by>=0&&send2(by,{t:"catch",target:t}).ok) return; } else if(!G.players[t].human&&nh>1){ /* hot-seat: no catching AIs */ } }
     if(G.o.jumpIn&&G.phase==="play"&&!G.pen&&G.rnd()<0.18){ for(let q=0;q<G.players.length;q++){ if(!G.players[q].human&&q!==G.turn&&G.players[q].alive){ const ids=E.jumpIds(G,q); if(ids.length){ const c=G.players[q].hand.filter(x=>x.id===ids[0])[0], f=c.f[G.side]; const aa={t:"jump",card:ids[0]}; if(f.c==="W") aa.color=E.bestColor(G,q,ids[0]); if(E.needsTarget(G,f)) aa.target=swapTarget(q); if(send2(q,aa).ok) return; break; } } } }   // a refused jump-in falls through to the normal move, so the turn is never stranded
@@ -589,7 +598,7 @@ function pickOther(t){ const c=G.players.map((p,i)=>(!p.human&&p.alive&&i!==t)?i
 function swapTarget(q){ let best=-1,bs=-1e9; G.players.forEach((o,i)=>{ if(i===q||!o.alive) return; const s=-o.hand.length+G.rnd(); if(s>bs){ bs=s; best=i; } }); return best; }
 function scheduleCatch(){
   const t=G.unoVuln; if(t==null||!G.players[t].human) return; const my=gen;
-  timer=setTimeout(()=>{ if(my!==gen||!G||G.roundOver||G.unoVuln!==t) return; const by=pickOther(t); if(by>=0&&G.rnd()<0.75){ send2(by,{t:"catch",target:t}); } },1300);
+  later(my,()=>{ if(G.unoVuln!==t) return; const by=pickOther(t); if(by>=0&&G.rnd()<0.75){ send2(by,{t:"catch",target:t}); } },1300);
 }
 function send2(who,a){
   const r=E.applyAction(G,who,a); if(!r.ok) return r;

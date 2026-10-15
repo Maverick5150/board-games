@@ -128,16 +128,21 @@ function startRound(G){
     if(isNum(f)) break;
     if(o.startRule==="2022"||!startFx(o)){ G.draw.unshift(top); continue; }   // No Mercy sheet: "If this card is an Action Card, ignore it"
     if(f.v==="wd4"||f.v==="wd2"){ G.draw.unshift(top); continue; }     // Classic / Flip sheets: a Wild Draw card goes back, pick another
+    if(f.v==="flip"&&(top.f[1].v==="wdc"||top.f[1].v==="wd2")){ G.draw.unshift(top); continue; }   // a Flip starter turns the piles over: its Dark face must not be a Wild Draw card either
     break;
   }
   G.discard.push(top); var tf=top.f[0];
   G.color=tf.c==="W"?null:tf.c;
   ev(G,"deal",{text:nm(G,G.dealer)+" deals — round "+G.round+". Starting card: "+cardName(G,top)});
-  if(startFx(o)&&o.startRule==="2008"&&!isNum(tf)){   // a Flip card turned up has no starting effect in the Flip sheet
+  if(startFx(o)&&o.startRule==="2008"&&!isNum(tf)){   // Flip sheet (GDR44): a Flip card as the starting card turns the draw and discard piles over, so play starts on the Dark side
     if(tf.v==="skip"){ var sk=G.turn; G.turn=nextIdx(G,G.turn,1); ev(G,"start",{text:nm(G,sk)+" is skipped"}); }
     else if(tf.v==="rev"){ G.dir=-1; G.turn=G.dealer; ev(G,"start",{text:"Reverse — "+nm(G,G.dealer)+" plays first, then play goes the other way"}); }
     else if(tf.v==="d2"||tf.v==="d1"){ drawCards(G,G.turn,DRAWN[tf.v],VNAME[tf.v]+" as the starting card"); G.turn=nextIdx(G,G.turn,1); }
     else if(tf.v==="wild"){ G.color=null; G.needColor=true; ev(G,"start",{text:nm(G,G.turn)+" chooses the starting colour"}); }
+    else if(tf.v==="flip"&&o.edition==="flip"){
+      doFlip(G); ev(G,"start",{text:"Flip as the starting card — play starts on the Dark side, "+nm(G,G.turn)+" first"});
+      if(fc(G,G.discard[G.discard.length-1]).c==="W"){ G.color=null; G.needColor=true; ev(G,"start",{text:nm(G,G.turn)+" chooses the starting colour"}); }   // its Dark face is a plain Wild
+    }
   }
   return G;
 }
