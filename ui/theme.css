@@ -373,6 +373,8 @@ html[data-tv] .bg-btn:focus-visible, html[data-tv] .bg-tile:focus-visible, html[
 }
 .bg-topbar__start, .bg-topbar__end { display: flex; align-items: center; gap: var(--sp-2); }
 .bg-topbar__end { justify-content: flex-end; }
+/* TV: the bar's buttons (the sound button and the menu knob) stand 1.5rem apart, so a focused one's ring and lift never touch the next */
+html[data-tv] .bg-topbar__start, html[data-tv] .bg-topbar__end { gap: 1.5rem; }
 .bg-topbar__title { min-width: 0; text-align: center; }
 .bg-topbar__title .bg-eyebrow { display: block; margin-bottom: .2rem; }
 .bg-topbar__name { display: block; font: 400 var(--fs-xl)/1.1 var(--font-display); color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -396,6 +398,7 @@ html[data-tv] { scroll-padding-top: var(--bg-bar-h, 0px); }   /* BGUI.focus meas
    Version / option cards (radio group). Selected = aria-checked="true" or .is-on
    ===================================================================== */
 .bg-versions { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 10.5rem), 1fr)); gap: .625rem; padding: var(--focus-room); margin: calc(-1 * var(--focus-room)); }
+html[data-tv] .bg-versions { gap: 1.5rem; }   /* TV: a focused card's lift (1.05) and ring stay clear of the next card */
 .bg-version {
   position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: .25rem;
   width: 100%; min-height: 7.5rem; margin: 0; padding: .875rem 2.5rem .875rem .875rem; border: 0; border-radius: var(--r-lg);
@@ -444,6 +447,9 @@ html[data-tv] { scroll-padding-top: var(--bg-bar-h, 0px); }   /* BGUI.focus meas
 .bg-seg > button[aria-pressed="true"] small, .bg-seg > button.is-on small, .bg-seg > button.on small { color: var(--text-on-gold-muted); }
 .bg-seg > button[disabled] { opacity: .35; cursor: not-allowed; }
 .bg-seg--text > button { font-size: var(--fs-md); }
+/* TV: focusable neighbours stand at least 1.5rem apart, so the focused cell's ivory ring (.4375rem: 10.5 px at 1080p, 11 px with a
+   1.05 lift) never touches the next one: the .25rem / .375rem gaps above left 6-9 px against it (step 4 Monopoly review) */
+html[data-tv] .bg-seg, html[data-tv] .bg-seg--grid5 { gap: 1.5rem; }
 
 /* =====================================================================
    Stepper (computer players 0-9): [-] value [+] and a pip row (narrow phones; the 5x2 keypad is .bg-seg--grid5)
@@ -592,7 +598,10 @@ html[data-tv] .bg-players--scroll::after { content: none; }
   content: "Turn"; position: absolute; left: .65rem; top: -.6rem; z-index: 1; padding: .125rem .45rem; border-radius: var(--r-pill);
   font: var(--fw-caps) var(--fs-micro)/1 var(--font-ui); letter-spacing: .12em; text-transform: uppercase; color: var(--seat-ink); background: var(--seat);
 }
-.bg-player.is-out { opacity: .5; }
+/* an out player (bankrupt, knocked out): a dark chip whose piece and CPU badge fade, while the name and the meta line keep full contrast
+   (text-3 on ink-2: 7.8:1 phone, 9.7:1 TV). The whole chip at opacity .5 had put "Bankrupt" at 2.65:1 (step 4 Monopoly) */
+.bg-player.is-out { background: var(--ink-2); }
+.bg-player.is-out .bg-token, .bg-player.is-out .bg-player__cpu { opacity: .45; }
 .bg-player__cpu { position: absolute; left: 1.95rem; bottom: .1rem; width: 1.05rem; height: 1.05rem; border-radius: 50%; display: grid; place-items: center; color: var(--text-2); background: var(--ink-4); box-shadow: 0 0 0 2px var(--ink-3); }
 .bg-player__cpu .bg-ico { width: .7rem; height: .7rem; }
 /* game piece / avatar: lit seat-colour sphere carrying a dark label */
@@ -666,7 +675,7 @@ html[data-tv] .bg-players--scroll::after { content: none; }
   font: var(--fw-ui-strong) var(--fs-xs)/1.3 var(--font-ui); font-variant-numeric: tabular-nums; letter-spacing: .02em; color: var(--gold-100); background: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line-gold); }
 
 /* =====================================================================
-   Toast (BGUI.toast computes top/bottom from the layout: open sheets, the top bar, .bg-players, [data-toast-avoid])
+   Toast (BGUI.toast computes top/bottom from the layout: open sheets, the top bar, .bg-players, the TV hint bar, [data-toast-avoid])
    ===================================================================== */
 .bg-toast {
   position: fixed; left: 50%; z-index: var(--z-toast); bottom: calc(env(safe-area-inset-bottom, 0px) + 1.25rem);
@@ -843,6 +852,17 @@ html[data-tv] .bg-beams > i { width: var(--bg-beam-w, 9rem); }
    back in past it: a one-shot opacity transition on its own layer (BGUI.stage.hush) */
 .bg-motifs > b { transition: opacity .6s var(--ease-out); }
 .bg-motifs > b.is-hush { opacity: 0 !important; }
+/* text right on the setup scene or the felt (marked data-stage-text: no card behind it) carries a soft dark halo, painted once with the
+   text (a static text-shadow: no filter, nothing animates), so it keeps >= 4.5:1 while a light beam passes behind it at its brightest
+   (step 4 Monopoly repair: a gold section eyebrow 3.4:1 and a hero pitch 3.3:1 without it, 4.67 and 5.09 with it). Gold gradient
+   text (.bg-gold: the glyphs are its clipped background) keeps none, since a text-shadow would be painted over its glyphs */
+body.bg-app--scene [data-stage-text], body.bg-app--felt [data-stage-text] { text-shadow: 0 0 .15em rgba(4, 5, 12, .95), 0 0 .45em rgba(4, 5, 12, .8), 0 0 1em rgba(4, 5, 12, .55); }
+body.bg-app--scene [data-stage-text] .bg-gold, body.bg-app--scene .bg-gold[data-stage-text], body.bg-app--felt [data-stage-text] .bg-gold, body.bg-app--felt .bg-gold[data-stage-text] { text-shadow: none; }
+/* data-stage-text="strong": small text on a bright scene that the halo alone does not carry to 4.5:1 with a beam at its brightest
+   behind it (Trouble's khaki scene on a phone: the gold section eyebrows 3.9:1 and the hero pitch 4.0:1; Rummy's denser halo alone
+   4.3:1). A denser halo (Rummy's), and the text one step brighter: other text ivory, a gold eyebrow gold-100 */
+body.bg-app--scene [data-stage-text="strong"], body.bg-app--felt [data-stage-text="strong"] { color: var(--text-1); text-shadow: 0 0 .1em rgba(4, 5, 12, 1), 0 0 .3em rgba(4, 5, 12, .95), 0 0 .7em rgba(4, 5, 12, .8), 0 0 1.3em rgba(4, 5, 12, .5); }
+body.bg-app--scene .bg-eyebrow[data-stage-text="strong"], body.bg-app--felt .bg-eyebrow[data-stage-text="strong"] { color: var(--gold-100); }
 /* --- The halo (Trouble): a ring of 32 tapered gold rays, a beaded bezel and four seat jewels round the round board, the Luxe heir
        of the old skin's turning rainbow ring. ONE pre-rendered layer (inline SVG drawn once, gradients only) centred on the board;
        the effects ticker turns it 2 degrees a second (transform only) and it rests with the stage. --bg-halo-k = the halo's
@@ -925,6 +945,7 @@ html[data-tv] .bg-sound__card { width: min(100%, 44rem); padding: 2rem 2.25rem 1
 .bg-sound__slide > .bg-btn { font-size: var(--fs-xl); }
 .bg-sound__row { display: flex; flex-wrap: wrap; gap: .625rem; margin-top: 1.25rem; }
 .bg-sound__row > .bg-btn { flex: 1 1 8.5rem; }
+html[data-tv] .bg-sound__row { gap: 1.5rem; }   /* TV: a focused button's 1.05 lift + ring (about 16.6 px) cleared .625rem (15 px) by nothing */
 .bg-sound__row > .bg-btn[aria-pressed="false"] { color: var(--text-3); box-shadow: inset 0 0 0 1px var(--line-1); }
 .bg-sound__fx { margin-top: 1rem; }
 .bg-sound__done { margin-top: 1.25rem; }
@@ -966,6 +987,9 @@ html[data-tv] .bg-sound__card { width: min(100%, 44rem); padding: 2rem 2.25rem 1
 
 .bg-hintbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .75rem 1.75rem; font: var(--fw-ui) var(--fs-sm)/1.2 var(--font-ui); color: var(--text-2); }
 .bg-hintbar > span { display: inline-flex; align-items: center; gap: .5rem; }
+/* a sheet that must be answered is on top (opened with dismissible: false; BGUI sets html[data-back-held]): Back does nothing there,
+   so the remote legend steps aside instead of promising it (step 4 Rummy review). Toasts keep clear of the bar while it shows */
+html[data-back-held] .bg-hintbar { visibility: hidden; }
 .bg-key { display: inline-grid; place-items: center; min-width: 1.75rem; height: 1.75rem; padding: 0 .45rem; border-radius: .5rem;
   font: var(--fw-caps) var(--fs-micro)/1 var(--font-ui); color: var(--text-1); background: var(--ink-4); box-shadow: inset 0 0 0 1px var(--line-2), inset 0 -2px 0 rgba(0, 0, 0, .4); }
 .bg-key .bg-ico { width: .95em; height: .95em; stroke-width: 3; }

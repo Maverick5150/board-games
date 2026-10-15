@@ -57,6 +57,9 @@
   .sg-keys { display: grid; gap: .5rem; }
   html[data-tv] .sg-main { padding-top: var(--sp-6); }
   html[data-tv] .sg-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  /* TV: focusable neighbours stand 1.5rem apart here too (theme.css 2.4); the game picker takes two columns so every name fits */
+  html[data-tv] .sg-gamepick { grid-template-columns: repeat(2, 1fr); }
+  html[data-tv] .sg-hero-nav, html[data-tv] .sg-row { gap: 1.5rem; }
   /* hero backdrops are composed for a wide poster (art on the right ~55 %, text on the left): full width on TV;
      on a narrow phone hero the art gets its own band on top and the text sits below it (README section 10) */
   html[data-tv] .sg-block--hero { grid-column: 1 / -1; }

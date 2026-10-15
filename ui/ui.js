@@ -3,9 +3,12 @@
 
    BGUI.haptic(pattern)              guarded navigator.vibrate; pattern = name ("tap","select","turn","success","warn","error","roll") | ms | array
    BGUI.toast(msg, opts)             one shared toast; placed in the first free band (bottom up, then top down) clear of every
-                                     visible .bg-players strip, the top bar, an open sheet and [data-toast-avoid]; when an open
-                                     sheet leaves no free band it is held out of sight until the sheet closes (never over a strip)
-   BGUI.sheet.open(el, opts)/close() bottom sheet: focus trap, Back/Escape closes, restores focus; opts {onClose, dismissible, focus}
+                                     visible .bg-players strip, the top bar, the TV hint bar, an open sheet and [data-toast-avoid];
+                                     when an open sheet leaves no free band it is held out of sight until the sheet closes (never over
+                                     a strip)
+   BGUI.sheet.open(el, opts)/close() bottom sheet: focus trap, Back/Escape closes, restores focus; opts {onClose, dismissible, focus};
+                                     while the top sheet must be answered (dismissible: false) html[data-back-held] is set and the TV
+                                     hint bar steps aside
    BGUI.win.open(el)/close()         win overlay (.bg-win): modal (Tab + D-pad stay inside), restores focus to the opener on close
    BGUI.celebrate(opts)              one-shot canvas burst of gold confetti + a gold ray bloom; auto-removes its canvas; nothing under reduced motion
    BGUI.effects.get()/set(level)     "full" (default) | "reduced": persisted (localStorage "bgui.effects"), reflected as html[data-effects];
@@ -22,7 +25,8 @@
    BGUI.ambient                      ONE scheduler for rare one-shot beats (emblem glint, turn pulse): never two at once,
                                      paused while the page is hidden or motion is reduced (CSS animations on their own layers)
    BGUI.setTurn(playerEl)            moves the static turn ring and asks the scheduler for 3 pulses; the new turn's pulse replaces the
-                                     previous player's (running or queued) on the same strip, so it never waits behind it
+                                     previous player's (running or queued) on the same strip, or on a chip a rebuilt strip left
+                                     behind, so it never waits behind it
    BGUI.stage(game, opts)            "this page is game X": html[data-game], the Luxe ambient layer (.bg-ambient: orbs in the house
                                      gold, the game's accent and violet, soft light beams that sweep across the stage + rising gold-line
                                      game motifs that keep to the columns a board leaves free and fade out over text on the
@@ -232,10 +236,11 @@
     return toastEl;
   }
   /* every visible band the toast must not cover: the top bar, EACH .bg-players strip (wherever it sits: top, middle or
-     bottom), [data-toast-avoid] and an open sheet. Bands are treated as full width (the toast is centred). */
+     bottom), the TV hint bar (.bg-hintbar: a toast sat over its text, step 4 Monopoly review), [data-toast-avoid] and an open
+     sheet. Bands are treated as full width (the toast is centred). */
   function avoidBands(vh) {
     var out = [];
-    $$(".bg-topbar, .bg-players, [data-toast-avoid]").forEach(function (el) {
+    $$(".bg-topbar, .bg-players, .bg-hintbar, [data-toast-avoid]").forEach(function (el) {
       if (el.closest && el.closest(".bg-sheet, .bg-win")) return;
       if (!isVisible(el)) return;
       var r = el.getBoundingClientRect();
@@ -342,6 +347,10 @@
       if (stack.length) { s.style.zIndex = String(60 + 2 * (stack.length - 1)); s.classList.add("is-open"); }
       else { s.classList.remove("is-open"); s.style.zIndex = ""; }
     }
+    /* the top sheet must be answered (dismissible: false): Back is held there, so html[data-back-held] lets the TV hint bar step
+       aside instead of promising a Back that does nothing (theme.css; step 4 Rummy review) */
+    var top = stack.length ? stack[stack.length - 1] : null;
+    if (top && top.opts.dismissible === false) root.setAttribute("data-back-held", ""); else root.removeAttribute("data-back-held");
   }
   function openSheet(target, opts) {
     var el = $(target);
@@ -722,8 +731,19 @@
   /* ---------------- ambient: ONE scheduler for rare one-shot beats ---------------- */
   var amb = { every: 12000, items: [], queue: [], active: null, timer: 0, idx: 0, last: 0, paused: false };
   function ambRunnable() { return !d.hidden && !reducedMotion() && !amb.paused; }
+  /* still in the document: a page that rebuilds a strip or a board (innerHTML) detaches the old elements, and a beat on one of
+     them would play unseen while the next beat waits behind it */
+  function connected(el) { return !!el && (el.isConnected !== undefined ? el.isConnected : root.contains(el)); }
+  /* the running beat ends at once (its class off, its promise false) WITHOUT starting the next one: the caller does that */
+  function ambDrop() {
+    var b = amb.active;
+    if (!b) return;
+    clearTimeout(b.t); amb.active = null;
+    if (b.el) b.el.classList.remove(b.cls);
+    if (b.done) b.done(false);
+  }
   function ambBegin(b) {
-    if (!b.el || !b.el.parentNode) { if (b.done) b.done(false); return false; }
+    if (!connected(b.el)) { if (b.done) b.done(false); return false; }
     b.el.classList.remove(b.cls);
     void b.el.offsetWidth;
     b.el.classList.add(b.cls);
@@ -744,7 +764,7 @@
     clearTimeout(amb.timer); amb.timer = 0;
     if (amb.active || !ambRunnable()) return;           // resumes on visibilitychange / motion change / resume()
     while (amb.queue.length) { if (ambBegin(amb.queue.shift())) return; }
-    amb.items = amb.items.filter(function (it) { return it.el && it.el.parentNode; });
+    amb.items = amb.items.filter(function (it) { return connected(it.el); });
     if (!amb.items.length) return;                      // nothing registered: no timer at all
     var due = amb.last + amb.every * (fxLevel === "reduced" ? 2 : 1) - now();   // "Reduce effects": beats half as often
     if (due > 20) { amb.timer = setTimeout(ambTick, due); return; }
@@ -785,6 +805,7 @@
       opts = opts || {};
       if (!el || !ambRunnable()) return resolved(false);
       return promise(function (res) {
+        if (amb.active && !connected(amb.active.el)) ambDrop();   // a beat on an element that left the page never holds up a new one
         amb.queue = amb.queue.filter(function (b) { if (b.el === el && b.cls === (opts.cls || "is-beat")) { if (b.done) b.done(false); return false; } return true; });
         amb.queue.push({ el: el, cls: opts.cls || "is-beat", ms: opts.ms || 1600, done: res });
         if (!amb.active) ambTick();
@@ -853,17 +874,14 @@
     var strip = (el.closest && el.closest(".bg-players")) || el.parentNode;
     if (strip) $$(".bg-player.is-turn, .bg-player.is-pulse", strip).forEach(function (p) { if (p !== el) { p.classList.remove("is-turn"); p.classList.remove("is-pulse"); } });
     /* a turn pulse belongs to its turn: the previous player's pulse on this strip (running, or still queued) ends here, so the
-       new turn's pulse starts at once instead of waiting 4.9 s behind it (fast turns used to build a queue of stale pulses) */
+       new turn's pulse starts at once instead of waiting 4.9 s behind it (fast turns used to build a queue of stale pulses).
+       So does a pulse on a chip that is no longer in the page: a page that rebuilt its strip (a new game, a load) left it on a
+       detached chip, where it played unseen while the new strip's first pulse queued behind it (step 4 Rummy review) */
     var ended = false;
     if (strip && strip.contains) {
-      var stale = function (b) { return !!b && b.cls === "is-pulse" && b.el !== el && strip.contains(b.el); };
+      var stale = function (b) { return !!b && b.cls === "is-pulse" && b.el !== el && (strip.contains(b.el) || !connected(b.el)); };
       amb.queue = amb.queue.filter(function (b) { if (stale(b)) { if (b.done) b.done(false); return false; } return true; });
-      if (stale(amb.active)) {
-        var b = amb.active;
-        clearTimeout(b.t); amb.active = null; ended = true;
-        if (b.el) b.el.classList.remove(b.cls);
-        if (b.done) b.done(false);
-      }
+      if (stale(amb.active)) { ambDrop(); ended = true; }
     }
     el.classList.add("is-turn");
     if (strip && strip.classList && strip.classList.contains("bg-players--scroll")) {   // scroll the strip only (scrollIntoView would also scroll the page)
@@ -1668,7 +1686,7 @@
   };
 
   /* ---------------- export ---------------- */
-  BGUI.version = "2.3.1";
+  BGUI.version = "2.4.0";
   BGUI.reducedMotion = reducedMotion;
   BGUI.setReducedMotion = setReducedMotion;
   BGUI.haptic = haptic;
