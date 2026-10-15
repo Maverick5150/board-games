@@ -1,5 +1,5 @@
 // Offline cache for the hub page (bump VERSION to force update)
-const VERSION = "hub-v1";
+const VERSION = "hub-v2";
 const PREFIX = "hub-";   // every game shares this origin (one CacheStorage): only ever touch the hub's own caches
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.png"];
 // This worker's scope covers the game folders too, but it only answers for the hub's own files: games have their own
