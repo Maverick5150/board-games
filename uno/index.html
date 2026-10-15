@@ -1,85 +1,286 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-game="uno">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<meta name="theme-color" content="#1b1230">
+<meta name="theme-color" content="#080a15">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <title>Uno</title>
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" type="image/png" href="icon.png">
-<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" type="image/png" href="../ui/art/icon-uno-192.png">
+<link rel="apple-touch-icon" href="../ui/art/icon-uno-maskable-512.png">
+<script>/* before first paint: TV for ?tv=1 or the Fire TV bridge, and the stored effects level */
+(function (h) {
+  if (/[?&]tv=1(&|$)/.test(location.search) || window.AndroidTV) h.setAttribute("data-tv", "");
+  try { if (localStorage.getItem("bgui.effects") === "reduced") h.setAttribute("data-effects", "reduced"); } catch (e) { }
+})(document.documentElement);</script>
+<link rel="stylesheet" href="../ui/theme.css">
+<script src="../ui/icons.js" defer></script>
+<script src="../ui/ui.js" defer></script>
 <style>
-  :root{--ink:#fff;--muted:#cbbfe0;--gold:#f2bf24;--panel:#23183a}
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;min-height:100%}
-  body{background:#1b1230;color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;padding:max(8px,env(safe-area-inset-top)) 8px max(14px,env(safe-area-inset-bottom));overflow-x:hidden;touch-action:manipulation}
-  h1{font:900 30px 'Arial Black',Arial,sans-serif;letter-spacing:3px;margin:2px 0 2px;color:#f2bf24;text-shadow:2px 2px 0 #d6322b,4px 4px 0 #0007;font-style:italic}
-  .wrap{width:min(100%,640px)}
-  .menuRow{display:flex;justify-content:center;gap:8px;margin:4px 0}
-  .btn{background:#2a1f45;color:var(--ink);border:1px solid #ffffff55;border-radius:12px;padding:10px 14px;font-size:14px;font-weight:800;cursor:pointer}
-  .btn.primary{background:#e53b2c;border-color:#ff8a7a}
-  .btn[disabled]{opacity:.38}
-  #uframe{border-radius:18px;padding:4px 6px 2px;background:radial-gradient(120% 100% at 50% 0,#2e4d9c,#1d2f68 60%,#14204a);box-shadow:0 0 0 5px #f2bf24,0 0 0 9px #d6322b,0 20px 44px #000a}
-  .overlay{position:fixed;inset:0;z-index:60;background:#0d0818ee;display:none;align-items:flex-start;justify-content:center;overflow-y:auto;padding:max(14px,env(safe-area-inset-top)) 12px 28px}
-  .overlay.show{display:flex}
-  .sheet{width:min(100%,600px);background:var(--panel);border:2px solid #ffffff44;border-radius:20px;padding:16px;box-shadow:0 20px 50px #000b}
-  .sheet h2{margin:0 0 2px;font:900 26px 'Arial Black',Arial;letter-spacing:2px;color:var(--gold);font-style:italic}
-  .sheet h3{margin:16px 0 6px;font-size:12.5px;color:var(--gold);letter-spacing:1px;text-transform:uppercase}
-  .vers{display:flex;flex-direction:column;gap:7px}
-  .ver{border:2px solid #4a3a75;border-radius:14px;padding:9px 12px;cursor:pointer;background:#1a1230}
-  .ver.on{border-color:var(--gold);background:#3a2a66}
-  .ver b{font-size:15px}.ver i{font-style:normal;font-size:11px;color:var(--gold);margin-left:8px}
-  .ver p{margin:3px 0 0;font-size:12px;color:var(--muted);line-height:1.35}
-  .seg{display:flex;gap:6px;flex-wrap:wrap}
-  .seg button{background:#1a1230;color:var(--ink);border:2px solid #4a3a75;border-radius:10px;min-width:40px;padding:9px 11px;font-size:15px;font-weight:800;cursor:pointer}
-  .seg button.on{background:#e53b2c;border-color:#ff8a7a}.seg button[disabled]{opacity:.3}
-  .row{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:7px 0;border-bottom:1px solid #ffffff14;font-size:13.5px}
-  .row select{background:#1a1230;color:var(--ink);border:1px solid #ffffff66;border-radius:8px;padding:6px;font-size:13px;max-width:55%}
-  .row input[type=checkbox]{width:22px;height:22px}
-  .tag{font-size:10px;border-radius:6px;padding:1px 5px;margin-left:6px;font-weight:800}.tag.off{background:#2b7be0}.tag.house{background:#a65bd6}
-  details summary{cursor:pointer;font-weight:800;padding:8px 0;color:var(--gold)}
-  table.sc{width:100%;border-collapse:collapse;font-size:13.5px;margin:8px 0}table.sc th,table.sc td{padding:6px 4px;text-align:right;border-bottom:1px solid #ffffff22}table.sc th:first-child,table.sc td:first-child{text-align:left}
-  #toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 90px);transform:translateX(-50%);background:#000c;color:#fff;border-radius:12px;padding:10px 16px;font-size:14px;font-weight:700;z-index:90;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;text-align:center}
-  #toast.show{opacity:1}
-  #handoff{background:#0d0818;z-index:80;align-items:center}
+  /* Uno on the shared Midnight Luxe system (ui/theme.css). Page layout only (un- prefix); every control is a bg- class. The felt table,
+     the piles and the cards are the game's own art (cards.js): here they take the theme's felt and text colours. */
+  *, *::before, *::after{box-sizing:border-box}
+  [hidden]{display:none !important}
+  html{scroll-padding-bottom:6.5rem}
+  html[data-tv]{scroll-padding-bottom:0}
+  body.bg-app{overflow-x:hidden; touch-action:manipulation}
+  .bg-topbar__title .bg-eyebrow{white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  /* text that sits right on the stage (the scene or the felt, no card behind it) keeps its contrast while a light beam passes behind it;
+     the motifs fade out over it (BGUI.stage hush) */
+  body.bg-app--scene [data-stage-text], body.bg-app--felt [data-stage-text]{text-shadow:0 0 .15em rgba(4,5,12,.95), 0 0 .45em rgba(4,5,12,.8), 0 0 1em rgba(4,5,12,.55)}
+  body.bg-app--scene .bg-section > [data-stage-text]{text-shadow:0 0 .1em rgba(4,5,12,1), 0 0 .3em rgba(4,5,12,.95), 0 0 .7em rgba(4,5,12,.8), 0 0 1.3em rgba(4,5,12,.5)}
+
+  /* ---------- setup page (also the in-game Menu) ---------- */
+  .un-setup{display:flex; flex-direction:column; width:min(100%,40rem); margin:0 auto; padding:0 var(--gutter)}
+  .un-col{display:contents}
+  .un-hero{order:1} .un-sec--version{order:2} .un-sec--players{order:3} .un-sec--speed{order:4} .un-sec--rules{order:5} .un-sec--save{order:6} .un-back{order:7} .un-dock{order:8}
+  .un-hero{min-height:0; margin:0 calc(-1 * var(--gutter)); padding-top:46%; border-radius:0; background:transparent}
+  .un-hero .bg-hero__layer{bottom:auto; height:auto; aspect-ratio:16/9; border-radius:0; background-color:transparent;
+    background-image:url("../ui/art/hero-uno-960.webp"); background-size:100% auto; background-position:100% 0;
+    -webkit-mask-image:linear-gradient(180deg,#000 58%,rgba(0,0,0,0) 100%); mask-image:linear-gradient(180deg,#000 58%,rgba(0,0,0,0) 100%)}
+  .un-hero .bg-hero__shade{display:none}
+  .un-hero .bg-hero__body{max-width:none; padding:0 var(--gutter) .25rem}
+  .un-hero .bg-hero__pitch{max-width:30rem}
+  .un-sec{min-width:0}
+  #versions{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #versions .bg-version{min-height:4.75rem; justify-content:center}
+  #versions .bg-version__title{font-size:var(--fs-lg)}
+  .un-vdesc{margin:.875rem 0 0; padding:.75rem .875rem; border-radius:var(--r-md); background:var(--ink-2); box-shadow:var(--well-edge);
+    font:var(--fw-body) var(--fs-sm)/1.45 var(--font-ui); color:var(--text-2)}
+  .un-vdesc b{color:var(--text-1); font-weight:var(--fw-ui-strong)}
+  .un-card{display:grid; gap:.75rem}
+  .un-field{display:grid; gap:.15rem}
+  .un-field .bg-row__desc{margin-top:0}
+  .un-seats{display:flex; flex-wrap:wrap; align-items:center; gap:.625rem .875rem; padding:.625rem .875rem; border-radius:var(--r-md); background:var(--ink-2); box-shadow:var(--well-edge)}
+  .un-seats__tokens{display:flex; flex:none; padding-left:.4rem}
+  .un-seats__tokens .bg-token{width:2rem; height:2rem; margin-left:-.4rem; font-size:var(--fs-micro)}
+  .un-seats__txt{display:grid; gap:.1rem; flex:1 1 10rem; min-width:0; font:var(--fw-ui) var(--fs-xs)/1.3 var(--font-ui); color:var(--text-2)}
+  .un-seats__txt b{font:var(--fw-ui-strong) var(--fs-sm)/1.25 var(--font-ui); color:var(--text-1)}
+  #seatNote{color:var(--text-3)}
+  .un-disclose .un-chev{display:inline-grid; place-items:center; flex:none; width:1.5rem; height:1.5rem; color:var(--gold-200); transition:transform var(--dur-fast) var(--ease-out)}
+  .un-disclose[aria-expanded="true"] .un-chev{transform:rotate(90deg)}
+  .un-sec--rules .bg-rows{grid-template-columns:minmax(0,1fr)}
+  .un-rules{margin-top:.75rem}
+  .un-rules .bg-row--static{cursor:default; flex-wrap:wrap}
+  .un-rules .bg-row--static .bg-row__main{flex:1 1 9rem}
+  .un-rules .bg-select{flex:0 1 auto; max-width:100%}
+  .un-legend{margin:.75rem 0 0; font:var(--fw-body) var(--fs-xs)/1.7 var(--font-ui); color:var(--text-2)}
+  /* saves.js bar, dressed in Luxe (ids, data-a and behaviour unchanged) */
+  #svbar.svbar{margin:0; padding:var(--sp-3); border:0; border-radius:var(--r-lg); background:var(--panel-fill); box-shadow:var(--panel-edge),var(--elev-1)}
+  #svbar h4{display:none}
+  #svbar .r{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,8.5rem),1fr)); gap:.5rem; margin:0 0 .5rem}
+  #svbar .r:last-child{margin-bottom:0}
+  #svbar button{display:grid; grid-template-columns:auto minmax(0,auto); align-items:center; justify-content:center; gap:.15rem .45rem; min-width:0; min-height:var(--tap); margin:0;
+    padding:.45rem .625rem; border:0; border-radius:var(--r-md); color:var(--text-1); background:var(--control-fill);
+    box-shadow:inset 0 0 0 1px var(--line-2), inset 0 1px 0 rgba(255,255,255,.08); font:var(--fw-ui-strong) var(--fs-sm)/1.15 var(--font-ui); white-space:normal; text-align:center}
+  #svbar button:active{background:var(--ink-5)}
+  #svbar button:focus{outline:none}
+  #svbar button[disabled]{opacity:.42}
+  #svbar button .bg-ico{width:1.1em; height:1.1em; color:var(--gold-200)}
+  #svbar button small{grid-column:1 / -1; margin:0; font:var(--fw-ui) var(--fs-micro)/1.2 var(--font-ui); color:var(--text-3); opacity:1}
+  .un-back{margin-top:var(--sp-6)}
+  /* the Start dock: sticky at the bottom of the phone screen (toasts keep clear of it). In the mid-game Menu, Resume is the gold
+     primary and "New game" the secondary beside it (syncStart swaps the classes), so one stray tap or OK never ends the game */
+  .un-dock{position:sticky; bottom:0; z-index:5; display:flex; gap:.625rem; margin:0 calc(-1 * var(--gutter)); padding:1rem var(--gutter) calc(env(safe-area-inset-bottom,0px) + .875rem);
+    background:linear-gradient(180deg,rgba(8,10,21,0),var(--ink-1) 32%)}
+  .un-dock #startBtn{flex:1 1 0; min-width:0}
+  .un-dock.has-resume #startBtn{padding-inline:.75rem}
+  .un-resume{flex:1 1 0; min-width:0; padding:.5rem .75rem; border-radius:var(--r-lg)}
+  .un-resume > span{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.2rem; min-height:2.75rem}
+  .un-resume.bg-btn--secondary .bg-btn__sub, .un-dock #startBtn.bg-btn--secondary .bg-btn__sub{color:var(--text-2)}
+  .un-nw{white-space:nowrap}
+
+  /* ---------- in game: the spot-lit felt is the whole table (body.bg-app--felt); the table, strip, hand and actions are drawn by cards.js ---------- */
+  .un-game{display:flex; flex-direction:column; align-items:center; padding:0 var(--gutter) 1.25rem}
+  body.un-in-setup .un-game{display:none !important}
+  #uctrl{width:min(100%,600px)}
+  .un-tip{width:min(100%,600px); margin:.25rem 0 0; text-align:center; font:var(--fw-body) var(--fs-micro)/1.5 var(--font-ui)}
+  html:not([data-tv]) .un-hints{display:none}
+
+  /* ---------- sheets: the round table (#roundBox), the hand-off (#handoff) ---------- */
+  .un-shead{display:grid; gap:.25rem; margin-bottom:1rem}
+  .un-shead .bg-sheet__sub{margin:0}
+  .un-pad{margin:0 0 .75rem}
+  html:not([data-tv]) .un-pad .bg-score th{padding:.25rem .2rem .55rem; letter-spacing:0}
+  html:not([data-tv]) .un-pad .bg-score td{padding:.6rem .2rem}
+  html:not([data-tv]) .un-pad .bg-score th:first-child, html:not([data-tv]) .un-pad .bg-score td:first-child{padding-left:.4rem}
+  html:not([data-tv]) .un-pad .bg-score th:last-child, html:not([data-tv]) .un-pad .bg-score td:last-child{padding-right:.4rem}
+  .un-pad .bg-score__who{gap:.4rem}
+  .un-pad .bg-score__who::before{width:.625rem; height:.625rem}
+  .un-pad .bg-score td small{color:var(--text-3); font-weight:var(--fw-ui)}
+  .un-note{margin:.5rem 0; font:var(--fw-body) var(--fs-sm)/1.45 var(--font-ui); color:var(--text-2)}
+  .un-result{margin:.75rem 0; text-align:center; font:var(--fw-ui) var(--fs-lg)/1.35 var(--font-ui); color:var(--text-2)}
+  .un-result b{color:var(--gold-100); font-weight:var(--fw-caps)}
+  .un-sbtns{display:flex; flex-wrap:wrap; gap:.625rem; margin:1rem calc(-1 * var(--focus-room)) 0; padding:var(--focus-room)}
+  .un-sbtns .bg-btn{flex:1 1 0; min-width:0; white-space:normal}
+  .un-sbtns #rbResult{flex-basis:100%}
+  .un-ho{display:grid; justify-items:center; gap:.75rem; padding:.25rem 0 .5rem; text-align:center}
+  .un-ho__to{display:flex; align-items:center; gap:.625rem; margin:0; font:var(--fw-ui) var(--fs-xl)/1.3 var(--font-ui); color:var(--text-2)}
+  .un-ho__to b{color:var(--text-1)}
+  .un-ho .bg-token{width:2.75rem; height:2.75rem; font-size:var(--fs-sm)}
+  .un-ho .bg-btn{margin-top:.5rem}
+  .un-winhome{margin-top:.75rem}
+  /* fallbacks when ui/ui.js is missing (the Luxe sheets and toasts take over when it is there) */
+  .un-toast{position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom,0px) + 90px); transform:translateX(-50%); max-width:90vw; padding:10px 16px; border-radius:12px; z-index:90;
+    background:#000c; color:#fff; font:700 14px system-ui,sans-serif; text-align:center; opacity:0; pointer-events:none; transition:opacity .2s}
+  .un-toast.show{opacity:1}
+  .un-svtoast{position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom,0px) + 7rem); transform:translateX(-50%); max-width:90vw; padding:10px 16px; border-radius:12px; z-index:100000;
+    background:#000d; color:#fff; font:700 14px system-ui,sans-serif; text-align:center; opacity:0; pointer-events:none; transition:opacity .2s}
+  .un-svtoast.show{opacity:1}
+  html.un-luxe .un-toast, html.un-luxe .un-svtoast{display:none}
+  html:not(.un-luxe) .bg-sheet.show{transform:none; visibility:visible; z-index:70}
+  html:not(.un-luxe) #handoff.show{z-index:80}
+
+  /* ---------- TV (html[data-tv], 1rem = 24px at 1080p) ---------- */
+  html[data-tv] .un-setup{display:grid; grid-template-columns:minmax(0,32rem) minmax(0,34rem); column-gap:3.5rem; justify-content:center; align-items:start; width:auto; padding:0 var(--gutter) 2rem}
+  html[data-tv] .un-col{display:block; min-width:0}
+  html[data-tv] .un-hero{margin:1.5rem 0 0; border-radius:var(--r-xl)}
+  html[data-tv] .un-hero .bg-hero__layer{border-radius:var(--r-xl) var(--r-xl) 0 0;
+    -webkit-mask-image:linear-gradient(90deg,rgba(0,0,0,0),#000 8%,#000 96%,rgba(0,0,0,0)),linear-gradient(180deg,rgba(0,0,0,0),#000 9%,#000 58%,rgba(0,0,0,0));
+    -webkit-mask-composite:source-in;
+    mask-image:linear-gradient(90deg,rgba(0,0,0,0),#000 8%,#000 96%,rgba(0,0,0,0)),linear-gradient(180deg,rgba(0,0,0,0),#000 9%,#000 58%,rgba(0,0,0,0));
+    mask-composite:intersect}
+  html[data-tv] .un-hero .bg-hero__body{padding:0}
+  html[data-tv] .un-hero{padding-top:34%}
+  html[data-tv] #versions{gap:1.5rem}
+  html[data-tv] .un-rules .bg-row{min-height:0; padding:.5rem .875rem}
+  /* column B on TV: the players, then the Start dock (on screen at 1080p, straight under the setup it confirms), then save and load and
+     the way back; column A: the art, the versions, the speed and the rules. Focusable neighbours keep 1.5rem apart */
+  html[data-tv] .un-col--b{display:flex; flex-direction:column}
+  html[data-tv] .un-sec--players{order:1} html[data-tv] .un-sec--save{order:3} html[data-tv] .un-back{order:4}
+  html[data-tv] .un-dock{order:2; position:static; gap:1.75rem; margin:0; padding:1.5rem 0 0; background:none}
+  html[data-tv] #humanSeg, html[data-tv] #cpuSeg, html[data-tv] #speedSeg{gap:1.5rem}
+  html[data-tv] .bg-topbar__end{gap:1.5rem}
+  html[data-tv] #svbar button{grid-template-columns:minmax(0,1fr); justify-items:center; align-content:center; row-gap:.3rem; padding:.625rem .5rem}
+  html[data-tv] #svbar button .bg-ico{width:1.25em; height:1.25em}
+  html[data-tv] #svbar .r{gap:1.5rem}
+  html[data-tv] #svbar .r:not(:last-child){margin-bottom:1.5rem}
+  html[data-tv] .un-sbtns{gap:1.5rem}
+  /* TV in game: the felt table on the left with the hand under it, the players, the status, the actions, the log and the remote's keys in a
+     column on the right. Exactly one screen tall, so the page never scrolls; Up from the hand is the table, Right the actions */
+  html[data-tv] .un-game{display:grid; grid-template-columns:minmax(0,1fr) 28rem; grid-template-rows:auto auto auto minmax(0,1fr) auto;
+    grid-template-areas:"table strip" "table status" "table actions" "table log" "hand hints"; column-gap:2.5rem; row-gap:0; align-items:start;
+    height:calc(100vh - 4.75rem); padding:1rem var(--gutter) .25rem}
+  html[data-tv] #uctrl{display:contents}
+  html[data-tv] #utbl{grid-area:table; align-self:stretch; margin:0 0 1.5rem}
+  html[data-tv] #upl{grid-area:strip; display:grid; grid-template-columns:1fr 1fr; width:auto; padding:.25rem 0 .5rem; overflow:visible}
+  html[data-tv] #upl.bg-players--scroll > .bg-player{width:auto; padding:.25rem .6rem .25rem .3rem}
+  html[data-tv] #upl.bg-players--scroll .bg-token{width:2rem; height:2rem}
+  html[data-tv] #upl.bg-players--scroll .bg-player__cpu{left:1.6rem}
+  html[data-tv] #upl.bg-players--scroll::after{content:none}
+  html[data-tv] #upl .bg-player__meta{white-space:normal}
+  html[data-tv] #ustat{grid-area:status; width:auto; margin:.375rem 0 0; justify-content:flex-start; text-align:left}
+  html[data-tv] #uacts{grid-area:actions; width:auto; justify-content:flex-start; gap:1.5rem; margin:1.25rem 0 0}
+  html[data-tv] #ulog{grid-area:log; align-self:stretch; width:auto; min-height:0; overflow:hidden; margin:1rem 0 0; text-align:left}
+  html[data-tv] #uhand{grid-area:hand; width:auto; min-height:0}
+  html[data-tv] .un-hints{grid-area:hints; align-self:end; justify-content:flex-start; margin:0 0 1rem}
+  html[data-tv] .un-hints.is-held{visibility:hidden}   /* a sheet that must be answered is up: Back is held, so the bar promises nothing */
+  html[data-tv] .un-tip{display:none}
+  /* TV toasts in game sit in the right-hand column (over the log at worst), never on the table */
+  html[data-tv] body:not(.un-in-setup) .bg-toast{left:calc(100vw - var(--gutter) - 14rem); max-width:26rem}
 </style>
-</head>
-<body>
-<h1>UNO</h1>
-<div class="wrap">
-  <div class="menuRow"><button class="btn" id="menuBtn">☰ Menu</button></div>
-  <div id="uframe"><div id="uctrl"></div></div>
-</div>
-<div id="toast"></div>
-
-<div class="overlay show" id="setup"><div class="sheet">
-  <h2>UNO</h2>
-  <div style="color:var(--muted);font-size:13px">Match the colour, number or symbol — and shout UNO!</div>
-  <h3>Version</h3><div class="vers" id="versions"></div>
-  <h3>Players</h3>
-  <div class="row"><span>Humans (share this phone)</span><div class="seg" id="humanSeg"></div></div>
-  <div class="row"><span>Computer players</span><div class="seg" id="cpuSeg"></div></div>
-  <div id="seatNote" style="font-size:12px;color:var(--muted);padding-top:6px"></div>
-  <h3>Game speed</h3><div class="seg" id="speedSeg"><button data-s="slow">Slow</button><button data-s="normal" class="on">Normal</button><button data-s="fast">Fast</button></div>
-  <details style="margin-top:10px"><summary>Rules &amp; house rules (tap to customize)</summary><div id="houseRules"></div>
-    <div style="font-size:11px;color:var(--muted);margin-top:6px"><span class="tag off">published</span> appears in a Mattel rulebook · <span class="tag house">house</span> a popular home rule</div></details>
-  <div id="svbar"></div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">
-    <button class="btn primary" id="startBtn" style="flex:1;font-size:16px">▶ Start new game</button>
-    <button class="btn" id="resumeBtn" style="display:none;flex:1">Resume game</button>
-  </div>
-  <div style="margin-top:10px"><a class="btn" href="../index.html" style="display:block;text-decoration:none;text-align:center">🏠 Back to all games</a></div>
-</div></div>
-<div class="overlay" id="handoff"><div class="sheet" style="text-align:center" id="handoffSheet"></div></div>
-<div class="overlay" id="roundBox"><div class="sheet" id="roundSheet"></div></div>
-
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
 <script src="../saves.js"></script>
-<script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
+<script>window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
+<script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
+</head>
+<body class="bg-app bg-app--scene un-in-setup">
+  <header class="bg-topbar">
+    <div class="bg-topbar__start"><a class="bg-btn bg-btn--icon" id="homeBtn" href="../index.html" aria-label="All games" data-icon="back"></a></div>
+    <div class="bg-topbar__title"><span class="bg-eyebrow" id="barEyebrow">New game</span><span class="bg-topbar__name">Uno</span></div>
+    <div class="bg-topbar__end">
+      <button class="bg-btn bg-btn--icon" id="menuBtn" type="button" aria-label="Menu" data-icon="menu" hidden></button>
+    </div>
+  </header>
+
+  <main class="un-setup show" id="setup" aria-label="New game">
+    <div class="un-col un-col--a">
+      <section class="bg-hero un-hero" aria-labelledby="setupTitle">
+        <div class="bg-hero__layer is-on"></div>
+        <div class="bg-hero__shade"></div>
+        <div class="bg-hero__body">
+          <span class="bg-eyebrow bg-eyebrow--accent" data-stage-text="strong">Match · play · call it</span>
+          <h1 class="bg-hero__title" id="setupTitle" data-stage-text>Uno</h1>
+          <p class="bg-hero__pitch" data-stage-text>Match the colour, number or symbol, and be first out of cards.</p>
+        </div>
+      </section>
+      <section class="un-sec un-sec--version" aria-labelledby="versionHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="versionHead" data-stage-text>Version</h2></div>
+        <div class="bg-versions" id="versions" role="radiogroup" aria-labelledby="versionHead"></div>
+        <p class="un-vdesc" id="versionDesc" aria-live="polite"></p>
+      </section>
+      <section class="un-sec un-sec--speed" aria-labelledby="speedHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="speedHead" data-stage-text>Game speed</h2></div>
+        <div class="bg-seg bg-seg--text" id="speedSeg" role="group" aria-labelledby="speedHead"><button type="button" data-s="slow" aria-pressed="false">Slow</button><button type="button" data-s="normal" class="on" aria-pressed="true">Normal</button><button type="button" data-s="fast" aria-pressed="false">Fast</button></div>
+      </section>
+      <section class="un-sec un-sec--rules" aria-labelledby="rulesHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="rulesHead" data-stage-text>Rules</h2></div>
+        <div class="bg-rows">
+          <button class="bg-row un-disclose" id="rulesToggle" type="button" aria-expanded="false" aria-controls="houseRules">
+            <span class="bg-row__main"><span class="bg-row__title">Rules and house rules</span><span class="bg-row__desc" id="rulesDesc"></span></span>
+            <span class="un-chev" data-icon="chevron" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div class="bg-rows un-rules" id="houseRules" hidden></div>
+        <p class="un-legend" id="rulesLegend" data-stage-text hidden><span class="bg-tag bg-tag--official">official</span> in a published rulebook · <span class="bg-tag bg-tag--house">house</span> a popular home rule</p>
+      </section>
+    </div>
+    <div class="un-col un-col--b">
+      <section class="un-sec un-sec--players" aria-labelledby="playersHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="playersHead" data-stage-text>Players</h2></div>
+        <div class="bg-card un-card">
+          <div class="un-field"><span class="bg-row__title" id="humansTitle">Players on this phone</span><span class="bg-row__desc" id="humansDesc">Hot seat: pass the phone when it's your turn.</span></div>
+          <div class="bg-seg" id="humanSeg" role="group" aria-label="Players on this phone"></div>
+          <div class="un-field"><span class="bg-row__title">Computer players</span><span class="bg-row__desc" id="cpuDesc">2 to 10 players in all.</span></div>
+          <div class="bg-seg bg-seg--grid5" id="cpuSeg" role="group" aria-label="Computer players"></div>
+          <div class="un-seats" id="seatPreview"><span class="un-seats__tokens" id="seatTokens"></span><span class="un-seats__txt"><b id="seatHead"></b><span id="seatNote"></span></span></div>
+        </div>
+      </section>
+      <section class="un-sec un-sec--save" aria-labelledby="saveHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="saveHead" data-stage-text>Save and load</h2></div>
+        <div id="svbar"></div>
+      </section>
+      <a href="../index.html" class="bg-btn bg-btn--ghost bg-btn--block un-back" id="backHub" data-icon="home" data-stage-text>Back to all games</a>
+      <div class="un-dock" id="startDock" data-toast-avoid>
+        <button class="bg-btn bg-btn--secondary un-resume" id="resumeBtn" type="button" style="display:none"><span><span class="bg-btn__label" id="resumeLabel">Resume</span><span class="bg-btn__sub" id="resumeSub">Back to the game</span></span></button>
+        <button class="bg-btn bg-btn--primary bg-btn--cta" id="startBtn" type="button"><span class="bg-btn__label" id="startLabel">Start Uno</span><span class="bg-btn__sub" id="startSub">4 players</span></button>
+      </div>
+    </div>
+  </main>
+
+  <main class="un-game" id="game" aria-label="Uno table">
+    <div id="uctrl"></div>
+    <p class="un-tip bg-faint" id="tip" data-stage-text>Tap a glowing card to play it · tap the draw pile to draw</p>
+    <div class="bg-hintbar un-hints" data-stage-text><span><span class="bg-key">OK</span> Play a card, or draw</span><span><span class="bg-key">Back</span> Close a list, or the Menu</span></div>
+  </main>
+
+  <section class="bg-sheet" id="roundBox" aria-labelledby="roundTitle"><div id="roundSheet"></div></section>
+  <section class="bg-sheet" id="handoff" aria-labelledby="hoTitle"><div id="handoffSheet"></div></section>
+
+  <div class="bg-win" id="winBox" aria-labelledby="winTitle">
+    <div class="bg-win__scrim"></div>
+    <div class="bg-win__rays"></div>
+    <div class="bg-win__card">
+      <div class="bg-win__medal"></div>
+      <p class="bg-eyebrow" id="winEyebrow">Game over</p>
+      <h2 class="bg-win__title" id="winTitle">Victory</h2>
+      <p class="bg-win__sub" id="winSub"></p>
+      <ul class="bg-stats bg-win__stats" id="winStats"></ul>
+      <div class="bg-win__actions">
+        <button class="bg-btn bg-btn--secondary bg-btn--lg" type="button" id="winMenu">Menu</button>
+        <button class="bg-btn bg-btn--primary bg-btn--lg" type="button" id="winAgain" data-icon="play">Play again</button>
+      </div>
+      <a class="bg-btn bg-btn--ghost bg-btn--block un-winhome" href="../index.html" id="winHome">All games</a>
+    </div>
+  </div>
+
+  <div class="un-toast" id="toast" aria-hidden="true"></div>
+  <div class="un-svtoast" id="svtoast" aria-hidden="true"></div>
+
 <script src="engine.js"></script>
 <script src="cards.js"></script>
 <script>
@@ -89,68 +290,254 @@ const U=Uno, E=U.Engine;
 const $=id=>document.getElementById(id);
 const SEATC=["#e23b3b","#2b7be0","#27a758","#eec21b","#a65bd6","#19b5b0","#f08a24","#ec6aa8","#8a8f99","#9a6a3a"];
 const SPEED={slow:1500,normal:950,fast:420};
+const SHORT={classic:"Classic",flip:"Flip",nomercy:"No Mercy",allwild:"All Wild"};
+const SV_ICON={ss:"save",ls:"load",std:"reset",sg:"save",lg:"load",au:"resume"};
 let cfg={version:"classic",over:{},humans:1,cpus:3,speed:"normal"};
 let G=null,V=null,gen=0,handoffOk=null,ctrl=null,timer=null,lastActor=-1;
 const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 function curOpts(){ return E.versionOpts(cfg.version,cfg.over); }
-function toast(m){ const t=$("toast"); t.textContent=m; t.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove("show"),2200); }
+
+/* ============== MIDNIGHT LUXE: presentation only (ui/theme.css + ui/ui.js, step 4) ==============
+   Nothing here changes a rule, the engine or the save format. It dresses the page in the shared Luxe pieces: the setup page (which is also
+   the Menu), the table (cards.js luxe mode: strip, felt, actions, hand, colour and target sheets), the round table and the hand-off as
+   sheets (BGUI.sheet), Luxe toasts, the Victory screen (BGUI.win + BGUI.celebrate), the TV Back steps and the D-pad.
+   Without ui/ui.js every piece falls back to a plain show/hide (the jsdom harnesses run that path). */
+// boxDis: whether the open #roundBox sheet may be dismissed; closing: the page itself is closing a sheet; hoKey: the turn whose hand-off
+// is showing; winShown: the game (gen) whose Victory opened; result: the Menu offers "See the result"
+const ui={boxDis:null,closing:false,hoKey:"",winShown:-1,result:false,rulesOpen:false};
+function BG(){ return window.BGUI||null; }
+function luxe(){ const B=BG(); return !!(B&&B.sheet&&B.effects&&document.documentElement.classList.contains("un-luxe")); }
+function onTV(){ return document.documentElement.hasAttribute("data-tv"); }
+function icon(n){ const B=BG(); return B&&B.icon?B.icon(n):""; }
+function seatIn(teams,i){ return teams?(i%2?2:1):(i%10)+1; }   // the Luxe seats follow the game's own colours; partners share their team's seat colour
+function initials(name){ const m=/^(You|Player|CPU)\s*(\d*)$/.exec(String(name)); return m?(m[1]==="You"?"Y":m[1].charAt(0)+m[2]):String(name).charAt(0); }
+function hubHref(){ const B=BG(); return B&&B.back&&B.back.hub?B.back.hub():"../index.html"; }
+function setupShown(){ return $("setup").style.display!=="none"; }
+function focusIn(el){ const B=BG(); if(!el) return; if(B&&B.focus&&B.focus.enabled) B.focus.set(el); else { try{ el.focus({preventScroll:true}); }catch(e){ el.focus(); } } }
+function focusTV(el){ const B=BG(); if(el&&B&&B.focus&&B.focus.enabled&&onTV()) setTimeout(()=>{ if(el.isConnected&&!el.hidden&&el.getClientRects().length) B.focus.set(el); },0); }
+function armBack(){ const B=BG(); if(B&&B.back&&B.back.arm) B.back.arm(); }   // TV browsers: the remote's Back now stays on this page
+// the play clock and the cards played (the Victory's numbers). Saved as an optional "stats" field beside the snapshot: saves made before
+// step 4 load with a fresh clock, and older code ignores the field
+let stats={ms:0,played:0}, clock0=0;
+function readStats(s){ return {ms:(s&&typeof s==="object")?Math.max(0,+s.ms||0):0,played:(s&&typeof s==="object")?Math.max(0,+s.played||0):0}; }
+function liveGame(){ return !!(G&&!G.over); }
+function clockOn(){ clock0=(liveGame()&&!document.hidden)?Date.now():0; }
+function clockOff(){ if(clock0){ stats.ms+=Math.max(0,Date.now()-clock0); clock0=0; } }
+function playMs(){ return stats.ms+(clock0?Math.max(0,Date.now()-clock0):0); }
+function fmtTime(ms){ const s=Math.max(0,Math.round(ms/1000)), h=Math.floor(s/3600), m=Math.floor(s/60)%60, x=s%60;
+  return (h?h+":"+String(m).padStart(2,"0"):String(m))+":"+String(x).padStart(2,"0"); }
+function winVerb(n){ return n.indexOf(" & ")>0||/^You$/.test(n)?"win":"wins"; }
+function resultDue(){ const B=BG(); return !!(G&&G.over&&ui.winShown!==gen&&B&&B.win&&luxe()); }   // a win whose Victory screen has not opened yet
+
+// toasts: the Luxe toast (placed clear of the player strip, the top bar, the actions and the hand). The engine's own words stay in
+// #toast too (the no-ui fallback, and what the harnesses read)
+function toast(m){
+  const t=$("toast"); t.textContent=m;
+  const B=BG();
+  if(luxe()&&B.toast){ B.toast(m,{icon:"info",ms:2600}); return; }
+  t.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove("show"),2200);
+}
 
 /* ---------------- setup ---------------- */
 function clampSeats(){ const o=curOpts(); if(cfg.humans+cfg.cpus<2) cfg.cpus=2-cfg.humans; if(cfg.humans+cfg.cpus>10) cfg.cpus=10-cfg.humans; if(cfg.cpus<0) cfg.cpus=0; if(o.teams&&cfg.humans+cfg.cpus!==4){ cfg.cpus=Math.max(0,4-cfg.humans); } if(o.edition==="nomercy"&&cfg.humans+cfg.cpus>6&&false) cfg.cpus=6-cfg.humans; }
-function drawSetup(){
-  const o=curOpts();
-  $("versions").innerHTML=E.VERSIONS.map(v=>`<div class="ver${cfg.version===v.id?" on":""}" data-v="${v.id}"><b>${esc(v.name)}</b><i>${esc(v.tag)}</i><p>${esc(v.desc)}</p></div>`).join("");
-  $("versions").querySelectorAll(".ver").forEach(d=>d.addEventListener("click",()=>{ cfg.version=d.dataset.v; cfg.over={}; drawSetup(); }));
-  clampSeats();
-  $("humanSeg").innerHTML=[1,2,3,4].map(n=>`<button data-n="${n}" class="${cfg.humans===n?"on":""}">${n}</button>`).join("");
-  $("humanSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.humans=+b.dataset.n; clampSeats(); drawSetup(); }));
-  $("cpuSeg").innerHTML=[0,1,2,3,4,5,6,7,8,9].map(n=>{ const t=cfg.humans+n, okk=t>=2&&t<=10&&(!o.teams||t===4); return `<button data-n="${n}" class="${cfg.cpus===n?"on":""}"${okk?"":" disabled"}>${n}</button>`; }).join("");
-  $("cpuSeg").querySelectorAll("button:not([disabled])").forEach(b=>b.addEventListener("click",()=>{ cfg.cpus=+b.dataset.n; drawSetup(); }));
-  const tot=cfg.humans+cfg.cpus;
+function keepFocus(box,attr,fn){   // redraw a picker without losing the keyboard / D-pad focus
+  const a=document.activeElement, k=(a&&a!==document.body&&box.contains(a))?a.getAttribute(attr):null;
+  fn();
+  if(k===null) return;
+  focusIn(box.querySelector("["+attr+'="'+k+'"]:not([disabled])')||box.querySelector("button.on:not([disabled])")||box.querySelector("button:not([disabled]), select, input"));
+}
+function drawVersions(){
+  const vs=$("versions");
+  if(!vs.querySelector(".ver")){
+    vs.innerHTML=E.VERSIONS.map(v=>`<button type="button" class="bg-version ver" role="radio" data-value="${v.id}" data-v="${v.id}" aria-checked="false"><span class="bg-version__title">${esc(v.name)}</span><span class="bg-version__meta">${esc(v.tag)}</span></button>`).join("");
+    vs.querySelectorAll(".ver").forEach(d=>d.addEventListener("click",()=>{ cfg.version=d.dataset.v; cfg.over={}; drawSetup(); }));
+  }
+  vs.querySelectorAll(".ver").forEach(d=>{ const on=cfg.version===d.dataset.v; d.classList.toggle("on",on); d.setAttribute("aria-checked",String(on)); });
+  const v=E.VERSIONS.filter(x=>x.id===cfg.version)[0]||E.VERSIONS[0];
+  $("versionDesc").innerHTML=`<b>${esc(v.name)}.</b> ${esc(v.desc)}`;
+}
+function drawSetup(){ clampSeats(); drawVersions(); drawSeats(); drawHouse(); }
+function seatNames(){ const names=[]; for(let i=0;i<cfg.humans+cfg.cpus;i++){ const h=i<cfg.humans; names.push(h?(cfg.humans===1?"You":"Player "+(i+1)):"CPU "+(i+1-cfg.humans)); } return names; }
+function drawSeats(){
+  const o=curOpts(), hs=$("humanSeg"), cs=$("cpuSeg");
+  keepFocus(hs,"data-n",()=>{
+    hs.innerHTML=[1,2,3,4].map(n=>`<button type="button" data-n="${n}" class="${cfg.humans===n?"on":""}" aria-pressed="${cfg.humans===n}">${n}</button>`).join("");
+    hs.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.humans=+b.dataset.n; clampSeats(); drawSetup(); }));
+  });
+  keepFocus(cs,"data-n",()=>{
+    cs.innerHTML=[0,1,2,3,4,5,6,7,8,9].map(n=>{ const t=cfg.humans+n, okk=t>=2&&t<=10&&(!o.teams||t===4); return `<button type="button" data-n="${n}" class="${cfg.cpus===n?"on":""}" aria-pressed="${cfg.cpus===n}"${okk?"":" disabled"}>${n}</button>`; }).join("");
+    cs.querySelectorAll("button:not([disabled])").forEach(b=>b.addEventListener("click",()=>{ cfg.cpus=+b.dataset.n; drawSetup(); }));
+  });
+  const tot=cfg.humans+cfg.cpus, names=seatNames(), tm=!!o.teams&&tot===4;
   $("seatNote").textContent=tot+" players"+(o.teams?" · partners sit opposite (1 & 3 vs 2 & 4)":"")+(o.edition==="nomercy"&&tot>6?" · the box says 2–6 players, but more works":"");
-  drawHouse();
+  $("seatTokens").innerHTML=names.map((n,i)=>`<span class="bg-token" data-seat="${seatIn(tm,i)}" aria-hidden="true">${esc(initials(n))}</span>`).join("");
+  $("seatHead").textContent=tot+" at the table";
+  $("cpuDesc").textContent=o.teams?"Four players in two teams: partners sit opposite.":"2 to 10 players in all.";
+  syncStart();
 }
 function drawHouse(){
-  const o=curOpts(), box=$("houseRules"); box.innerHTML="";
-  E.HOUSE.forEach(h=>{
-    if(!E.houseFor(h,o.edition)) return;   // e.g. the starting-card rule only exists in the Classic and Flip sheets
-    const key=h[0], tag=h[4]?'<span class="tag off">published</span>':'<span class="tag house">house</span>';
-    const row=document.createElement("div"); row.className="row";
-    if(h[2]==="bool"){ row.innerHTML=`<span>${esc(h[1])}${tag}</span><input type="checkbox"${o[key]?" checked":""}>`; row.querySelector("input").addEventListener("change",e=>{ cfg.over[key]=e.target.checked; drawSetup(); }); }
-    else { row.innerHTML=`<span>${esc(h[1])}${tag}</span><select>${h[3].map(c=>`<option value="${esc(c[0])}"${String(o[key])===String(c[0])?" selected":""}>${esc(c[1])}</option>`).join("")}</select>`;
-      row.querySelector("select").addEventListener("change",e=>{ const m=h[3].filter(c=>String(c[0])===e.target.value)[0]; cfg.over[key]=m?m[0]:e.target.value; drawSetup(); }); }
-    box.appendChild(row);
+  const o=curOpts(), box=$("houseRules");
+  keepFocus(box,"data-k",()=>{
+    box.innerHTML="";
+    E.HOUSE.forEach(h=>{
+      if(!E.houseFor(h,o.edition)) return;   // e.g. the starting-card rule only exists in the Classic and Flip sheets
+      const key=h[0], tag=h[4]?'<span class="bg-tag bg-tag--official">official</span>':'<span class="bg-tag bg-tag--house">house</span>';
+      let row;
+      if(h[2]==="bool"){
+        row=document.createElement("label"); row.className="bg-row row";
+        row.innerHTML=`<span class="bg-row__main"><span class="bg-row__title">${esc(h[1])} ${tag}</span></span><input type="checkbox" class="bg-toggle" data-k="${key}"${o[key]?" checked":""}>`;
+        row.querySelector("input").addEventListener("change",e=>{ cfg.over[key]=e.target.checked; drawSetup(); });
+      } else {
+        row=document.createElement("div"); row.className="bg-row bg-row--static row";
+        row.innerHTML=`<span class="bg-row__main"><span class="bg-row__title">${esc(h[1])} ${tag}</span></span><select class="bg-select" data-k="${key}" aria-label="${esc(h[1])}">${h[3].map(c=>`<option value="${esc(c[0])}"${String(o[key])===String(c[0])?" selected":""}>${esc(c[1])}</option>`).join("")}</select>`;
+        row.querySelector("select").addEventListener("change",e=>{ const m=h[3].filter(c=>String(c[0])===e.target.value)[0]; cfg.over[key]=m?m[0]:e.target.value; drawSetup(); });
+      }
+      box.appendChild(row);
+    });
   });
+  syncRules();
 }
-function setSpeedSeg(){ $("speedSeg").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x.dataset.s===cfg.speed)); }
+// the rules row: how many rules differ from the chosen version; it opens every rule
+function changedRules(){ const base=E.versionOpts(cfg.version,{}); return Object.keys(cfg.over||{}).filter(k=>String(cfg.over[k])!==String(base[k])).length; }
+function syncRules(){
+  const n=changedRules(), v=E.VERSIONS.filter(x=>x.id===cfg.version)[0]||E.VERSIONS[0], open=ui.rulesOpen;
+  $("rulesDesc").textContent=n?n+(n===1?" rule":" rules")+" changed from "+v.name:"As in "+v.name+". Open it to change any rule.";
+  $("rulesToggle").setAttribute("aria-expanded",String(open)); $("houseRules").hidden=!open; $("rulesLegend").hidden=!open;
+}
+$("rulesToggle").addEventListener("click",()=>{ ui.rulesOpen=!ui.rulesOpen; syncRules(); });
+function setSpeedSeg(){ $("speedSeg").querySelectorAll("button").forEach(x=>{ const on=x.dataset.s===cfg.speed; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
 $("speedSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.speed=b.dataset.s; setSpeedSeg(); }));
+// the copy follows the device: "Players on this TV" and "the remote" on the TV, the phone wording elsewhere
+function deviceCopy(){
+  const tv=onTV(), t=tv?"Players on this TV":"Players on this phone";
+  $("humansTitle").textContent=t; $("humanSeg").setAttribute("aria-label",t);
+  $("humansDesc").textContent="Hot seat: pass the "+(tv?"remote":"phone")+" when it's your turn.";
+  const tip=$("tip"); if(tip) tip.textContent=tv?"Press OK on a glowing card to play it":"Tap a glowing card to play it · tap the draw pile to draw";
+}
+// the dock: a Start button that confirms the setup ("Start Uno / 4 players · Classic · to 500"); mid-game Resume leads (gold) and
+// "New game" is the secondary beside it. The sub-label breaks only between its "·" parts; its text is unchanged
+function subParts(parts){ return parts.map((s,i)=>'<span class="un-nw">'+esc(s)+(i<parts.length-1?" ·":"")+"</span>").join(" "); }
+function syncStart(){
+  const o=curOpts(), tot=cfg.humans+cfg.cpus, rb=$("resumeBtn"), sb=$("startBtn"), resumable=rb.style.display!=="none";
+  $("startLabel").textContent=resumable?"New game":"Start Uno";
+  const parts=[tot+" players",SHORT[cfg.version]||"Uno"];
+  if(!resumable){ parts.push(o.target>0?"to "+o.target:"one round"); if(changedRules()) parts.push("custom rules"); }
+  $("startSub").innerHTML=subParts(parts);
+  $("startDock").classList.toggle("has-resume",resumable);
+  sb.classList.toggle("bg-btn--primary",!resumable); sb.classList.toggle("bg-btn--secondary",resumable);
+  rb.classList.toggle("bg-btn--primary",resumable); rb.classList.toggle("bg-btn--secondary",!resumable);
+}
+function resumeText(){
+  if(ui.result) return;
+  let s="Back to the game";
+  if(G&&!G.over){ const a=E.actor(G), p=G.players[a]; s=G.roundOver?"Round "+G.round+" complete":"Round "+G.round+" · "+(p&&p.human&&cfg.humans===1?"Your turn":p?p.name+(p.human?"'s turn":" to play"):""); }
+  $("resumeLabel").textContent="Resume"; $("resumeSub").textContent=s;
+}
+// the game ended while the Menu was up, or before its Victory screen opened: Resume becomes "See the result" (the Victory screen)
+function menuResult(){
+  if(!resultDue()) return;
+  ui.result=true; $("resumeBtn").style.display="block";
+  $("resumeLabel").textContent="See the result"; $("resumeSub").textContent=G.roundOver&&G.roundOver.gameWinnerName?G.roundOver.gameWinnerName+" "+winVerb(G.roundOver.gameWinnerName):"Game over";
+  saveBar.refresh(); syncStart(); barTitle();
+}
+// the setup page is also the in-game Menu: one page at a time (the table is not drawn while it is up). .show is the old state class
+function showSetup(on,resume){
+  const s=$("setup"), b=document.body;
+  s.style.display=on?"":"none"; s.classList.toggle("show",on);
+  b.classList.toggle("un-in-setup",on); b.classList.toggle("bg-app--scene",on); b.classList.toggle("bg-app--felt",!on);
+  $("menuBtn").hidden=on;
+  if(on){ closeBox(); closeWin(); syncStart(); }
+  (document.scrollingElement||document.documentElement).scrollTop=0;
+  if(!on&&G){
+    if(ctrl&&V){ ctrl.resetTurn(); ctrl.update(V); }   // the table is back: the strip pulses whose turn it is, the D-pad focus finds its control
+    if(resume){
+      if(ui.result){ ui.result=false; setTimeout(()=>{ if(G&&G.over&&!setupShown()) openWin(); },250); }
+      else if(G.roundOver) showRound();
+      else if(G.players[E.actor(G)]&&G.players[E.actor(G)].human&&G.players.filter(p=>p.human).length>1&&handoffOk!==E.actor(G)) showHandoff(G.players[E.actor(G)]);
+    }
+    armBack();
+  }
+  barTitle();
+  // the page changed under a showing toast (the Menu and the table have different bars to keep clear of): place it again
+  const B=BG(); if(luxe()&&B.toast&&B.toast.place) B.toast.place();
+}
+function barTitle(){
+  const e=$("barEyebrow"); if(!e) return;
+  const t=setupShown()?(liveGame()?"Game in progress":(ui.result?"Game over":"New game")):(!G?"New game":G.over?"Game over":"Round "+G.round);
+  if(e.textContent!==t) e.textContent=t;
+}
 
 /* ---------------- saving ---------------- */
-function packG(){ if(!G) return null; const c=JSON.parse(JSON.stringify(G,(k,v)=>(k==="log"||k==="evq")?undefined:v)); c.log=G.log.slice(-30); c.evq=[]; return {G:c,cfg:JSON.parse(JSON.stringify(cfg))}; }
+function packG(){ if(!G) return null; const c=JSON.parse(JSON.stringify(G,(k,v)=>(k==="log"||k==="evq")?undefined:v)); c.log=G.log.slice(-30); c.evq=[]; return {G:c,cfg:JSON.parse(JSON.stringify(cfg)),stats:{ms:Math.round(playMs()),played:stats.played}}; }
 function loadSaved(d){
   gen++; clearTimeout(timer); G=d.G; G.rnd=Math.random; Object.assign(cfg,d.cfg||{}); handoffOk=null; setSpeedSeg();
-  $("setup").classList.remove("show"); $("roundBox").classList.remove("show"); Sound.skip(); startUI(); drive();
+  stats=readStats(d.stats); ui.winShown=-1; ui.result=false; closeBox(); closeHandoff(); closeWin();
+  Sound.skip(); startUI(); showSetup(false); drawSetup(); clockOn(); armBack(); drive();
   if(G.roundOver) showRound();   // saved at the end of a round (or by an older version at game over): show the table and its buttons
+}
+// saves.js bar in Luxe: its emoji labels become line icons (ids, data-a and every behaviour stay saves.js's own)
+function dressSaveBar(){
+  const B=BG();
+  document.querySelectorAll("#svbar button[data-a]").forEach(b=>{
+    if(b.getAttribute("data-lux")) return; b.setAttribute("data-lux","1");
+    const t=b.firstChild; if(t&&t.nodeType===3) t.nodeValue=t.nodeValue.replace(/^[^A-Za-z]+/,"");
+    b.classList.add("bg-btn","bg-btn--secondary");
+    if(B&&B.icon) b.insertAdjacentHTML("afterbegin",B.icon(SV_ICON[b.getAttribute("data-a")]||"save"));
+  });
+}
+if(window.MutationObserver){
+  new MutationObserver(dressSaveBar).observe($("svbar"),{childList:true});
+  // saves.js toasts ("Settings saved on this device") go through BGUI.toast, so they are placed clear of the dock
+  new MutationObserver(()=>{ const B=BG(), m=$("svtoast").textContent; if(luxe()&&B.toast&&m) B.toast(m,{icon:"save",ms:2400}); }).observe($("svtoast"),{childList:true,characterData:true,subtree:true});
 }
 const saveBar=Saves.bar({game:"uno",el:$("svbar"),snapNote:"exactly as it is now",saveToast:"Game saved",
   getSettings:()=>({version:cfg.version,over:cfg.over,humans:cfg.humans,cpus:cfg.cpus,speed:cfg.speed}),
   applySettings:s=>{ cfg.version=s.version||"classic"; cfg.over=s.over||{}; cfg.humans=s.humans||1; cfg.cpus=s.cpus!=null?s.cpus:3; cfg.speed=s.speed||"normal"; setSpeedSeg(); drawSetup(); },
-  standard:()=>{ cfg={version:"classic",over:{},humans:1,cpus:3,speed:"normal"}; setSpeedSeg(); drawSetup(); },
+  standard:()=>{ cfg.version="classic"; cfg.over={}; cfg.humans=1; cfg.cpus=3; cfg.speed="normal"; setSpeedSeg(); drawSetup(); },
   getSnapshot:()=>(G&&!G.over)?packG():null,loadSnapshot:loadSaved});
-$("menuBtn").addEventListener("click",()=>{ $("resumeBtn").style.display=(G&&!G.over)?"block":"none"; saveBar.refresh(); drawSetup(); $("setup").classList.add("show"); });
-$("resumeBtn").addEventListener("click",()=>$("setup").classList.remove("show"));
-$("startBtn").addEventListener("click",()=>{ Sound.skip(); $("setup").classList.remove("show"); $("roundBox").classList.remove("show"); startGame(); });
+
+/* ---- the round table and the hand-off share the sheet machinery ---- */
+function openBox(kind){   // "round": it must be answered
+  const el=$("roundBox"), B=BG();
+  el.classList.add("show"); el.setAttribute("data-kind",kind);
+  if(!luxe()) return;
+  el.scrollTop=0;
+  if(B.sheet.isOpen(el)){
+    if(ui.boxDis===false){ focusIn(el.querySelector("[data-autofocus]")||el.querySelector("button")); if(B.toast&&B.toast.place) B.toast.place(); return; }
+    ui.closing=true; try{ B.sheet.close(el); }finally{ ui.closing=false; }
+  }
+  ui.boxDis=false;
+  B.sheet.open(el,{dismissible:false,onClose:boxClosed});
+}
+function closeBox(){ const el=$("roundBox"), B=BG(); el.classList.remove("show"); if(B&&B.sheet&&B.sheet.isOpen(el)){ ui.closing=true; try{ B.sheet.close(el); }finally{ ui.closing=false; } } }
+function boxClosed(){ if(ui.closing) return; $("roundBox").classList.remove("show"); if(G&&G.roundOver&&!setupShown()) showRound(); }
+function openHandoff(){ const el=$("handoff"), B=BG(); el.classList.add("show"); if(luxe()&&!B.sheet.isOpen(el)) B.sheet.open(el,{dismissible:false,focus:"#hoBtn"}); }
+function closeHandoff(){ const el=$("handoff"), B=BG(); el.classList.remove("show"); if(B&&B.sheet&&B.sheet.isOpen(el)) B.sheet.close(el); }
+$("menuBtn").addEventListener("click",()=>{
+  // Resume only while a game is on, or "See the result" when it has just ended and its Victory screen is still to come
+  const result=resultDue();
+  saveBar.refresh(); $("resumeBtn").style.display=((G&&!G.over)||result)?"block":"none";
+  ui.result=false; resumeText();
+  drawSetup(); showSetup(true);
+  if(result) menuResult();
+  focusTV($("resumeBtn").style.display!=="none"?$("resumeBtn"):$("startBtn"));
+});
+$("resumeBtn").addEventListener("click",()=>showSetup(false,true));
+// the new game is dealt before the table comes back, so the table never shows the old game for a moment
+$("startBtn").addEventListener("click",()=>{ Sound.skip(); closeBox(); closeWin(); startGame(); showSetup(false); armBack(); });
 
 /* ---------------- game ---------------- */
 function startGame(){
   gen++; clearTimeout(timer); clampSeats();
   const total=cfg.humans+cfg.cpus, names=[], humans=[];
   for(let i=0;i<total;i++){ const h=i<cfg.humans; humans.push(h); names.push(h?(cfg.humans===1?"You":"Player "+(i+1)):"CPU "+(i+1-cfg.humans)); }
-  G=E.newGame({names,humans,opts:curOpts()}); E.startRound(G); handoffOk=null; startUI(); drive();
+  G=E.newGame({names,humans,opts:curOpts()}); E.startRound(G); handoffOk=null;
+  stats={ms:0,played:0}; ui.winShown=-1; ui.result=false; closeHandoff();
+  startUI(); clockOn(); drive();
 }
 function startUI(){
   Skins.apply("uno"); Sound.music("uno");
-  if(!ctrl) ctrl=U.Ctrl.create({root:$("uctrl"),toast,send,seatColor:i=>SEATC[i%SEATC.length]});
+  if(!ctrl) ctrl=U.Ctrl.create({root:$("uctrl"),toast,send,luxe:true,seatOf:i=>(i%10)+1,seatColor:i=>SEATC[i%SEATC.length],tv:onTV,pulse:()=>!setupShown()&&!document.hidden,gameKey:()=>gen});
   refresh();
 }
 function meIndex(){
@@ -159,6 +546,7 @@ function meIndex(){
   const a=E.actor(G); return (G.players[a]&&G.players[a].human&&handoffOk===a)?a:-1;
 }
 function refresh(){ V=E.snapshot(G,meIndex()); ctrl.update(V); if(G.over){ Saves.del("uno","auto"); return; } const pk=packG(); if(pk) Saves.auto("uno",pk); }   // a finished game is not offered as "Continue last game"
+function seen(r){ (r.events||[]).forEach(e=>{ if(e.text) Sound.fromText(e.text); if(e.type==="play") stats.played++; }); }
 function send(a){
   if(!G) return {ok:false};
   const hum=G.players.filter(p=>p.human); let who;
@@ -166,7 +554,7 @@ function send(a){
   if(a.t==="uno"&&G.players[who]) { /* ok */ }
   const r=E.applyAction(G,who,a);
   if(!r.ok) return r;
-  (r.events||[]).forEach(e=>{ if(e.text) Sound.fromText(e.text); });
+  seen(r);
   refresh();
   if(G.roundOver) showRound(); else drive();
   return r;
@@ -205,44 +593,146 @@ function scheduleCatch(){
 }
 function send2(who,a){
   const r=E.applyAction(G,who,a); if(!r.ok) return r;
-  (r.events||[]).forEach(e=>{ if(e.text) Sound.fromText(e.text); });
+  seen(r);
   refresh(); if(G.roundOver) showRound(); else drive(); return r;
 }
+// pass the phone (hot seat): a sheet that must be answered; the hand stays hidden until the next player says it is them
 function showHandoff(p){
-  const sh=$("handoffSheet"), c=SEATC[p.id%SEATC.length];
-  sh.innerHTML=`<h2 style="font-size:26px">Pass the phone</h2><p style="font-size:18px;margin:14px 0">to <b style="color:${c}">${esc(p.name)}</b></p><button class="btn primary" id="hoBtn" style="font-size:17px;padding:14px 22px">I'm ${esc(p.name)} — show my cards</button>`;
-  $("handoff").classList.add("show");
-  $("hoBtn").addEventListener("click",()=>{ handoffOk=E.actor(G); $("handoff").classList.remove("show"); refresh(); drive(); });
-}
-function showRound(){
-  const ro=G.roundOver; if(!ro) return; Sound.sfx("win");
-  const f=n=>(n>0?"+":"")+n, wr=ro.rows[ro.winUnit]||{};
-  // Cards left = how many cards (rows saved by older versions have no count: "—"); Hand pts = what those cards are worth
-  const rows=ro.rows.map(r=>`<tr><td>${esc(r.name)}${r.id===ro.winUnit?" 🏆":""}${r.out?' <small style="color:var(--muted)">knocked out</small>':""}</td><td>${r.out||r.cards==null?"—":r.cards}</td><td>${r.out?"—":r.left}</td><td>${r.points?f(r.points):"—"}</td><td><b>${G.uscore[r.id]}</b></td></tr>`).join("");
-  let h=`<h2>${ro.over?"🏆 Game over":"Round "+G.round+" complete"}</h2><div style="color:var(--muted);font-size:13px">${esc(G.players[ro.winner].name)} went out first.</div>
-    <table class="sc"><tr><th>Player</th><th>Cards left</th><th>Hand pts</th><th>Round</th><th>Total</th></tr>${rows}</table>`;
-  if(wr.bonus) h+=`<p style="font-size:12px;color:var(--muted)">The winner's round score includes ${wr.bonus} bonus points: 250 for each player knocked out.</p>`;
-  if(ro.over) h+=`<p style="font-size:18px;text-align:center"><b style="color:var(--gold)">${esc(ro.gameWinnerName)}</b> wins the game!</p>`;
-  else if(G.o.target) h+=`<p style="font-size:12px;color:var(--muted)">${G.o.scoring==="tally"?"Cards left count against you — lowest total wins once someone reaches "+G.o.target+".":"First to "+G.o.target+" wins."}</p>`;
-  h+=`<div style="display:flex;gap:8px;margin-top:8px">${ro.over?`<button class="btn primary" id="rbNew" style="flex:1">New game</button>`:`<button class="btn primary" id="rbNext" style="flex:1">Next round ▶</button>`}<button class="btn" id="rbMenu" style="flex:1">☰ Menu</button></div>`;
-  $("roundSheet").innerHTML=h; $("roundBox").classList.add("show");
-  const nx=$("rbNext"); if(nx) nx.addEventListener("click",()=>{ $("roundBox").classList.remove("show"); E.startRound(G); handoffOk=null; startUI(); drive(); });
-  const nw=$("rbNew"); if(nw) nw.addEventListener("click",()=>{ $("roundBox").classList.remove("show"); startGame(); });
-  $("rbMenu").addEventListener("click",()=>{ $("roundBox").classList.remove("show"); $("resumeBtn").style.display="none"; saveBar.refresh(); drawSetup(); $("setup").classList.add("show"); });
+  const key=gen+":"+G.round+":"+G.turn+":"+p.id;
+  if(ui.hoKey===key&&$("handoff").classList.contains("show")) return;
+  ui.hoKey=key;
+  const tv=onTV(), seat=seatIn(!!G.o.teams,p.id);
+  $("handoffSheet").innerHTML=`<div class="bg-sheet__grip" aria-hidden="true"></div><div class="un-ho"><span class="bg-eyebrow bg-eyebrow--accent">Round ${G.round} · hot seat</span>`+
+    `<h2 class="bg-sheet__title" id="hoTitle">Pass the ${tv?"remote":"phone"}</h2>`+
+    `<p class="un-ho__to"><span class="bg-token" data-seat="${seat}" aria-hidden="true">${esc(initials(p.name))}</span><span>to <b>${esc(p.name)}</b></span></p>`+
+    `<button class="bg-btn bg-btn--primary bg-btn--lg bg-btn--block" id="hoBtn" type="button" data-autofocus>I'm ${esc(p.name)} — show my cards</button></div>`;
+  openHandoff();
+  $("hoBtn").addEventListener("click",()=>{ handoffOk=E.actor(G); closeHandoff(); refresh(); drive(); });
 }
 
+/* ---------------- the round table (a score pad in a sheet that must be answered) ---------------- */
+function sideHTML(n){ const p=String(n).split(" & "); return p.map((s,i)=>'<span class="un-nw">'+esc(s)+(i<p.length-1?" &amp;":"")+"</span>").join(" "); }
+function showRound(){
+  const ro=G&&G.roundOver; if(!ro) return;
+  if(setupShown()){ if(G.over) menuResult(); else resumeText(); return; }   // the Menu is up: the table waits for Resume (or "See the result")
+  Sound.sfx("win");
+  const B=BG(), f=n=>(n>0?"+":"")+n, wr=ro.rows[ro.winUnit]||{};
+  // Cards left = how many cards (rows saved by older versions have no count: "—"); Hand pts = what those cards are worth
+  const rows=ro.rows.map(r=>`<tr${r.id===ro.winUnit?' class="is-lead"':""}><td><span class="bg-score__who" data-seat="${seatIn(!!G.o.teams,r.players[0])}">${sideHTML(r.name)}${r.id===ro.winUnit?" <small>out first</small>":""}${r.out?" <small>knocked out</small>":""}</span></td><td>${r.out||r.cards==null?"—":r.cards}</td><td>${r.out?"—":r.left}</td><td>${r.points?f(r.points):"—"}</td><td class="bg-score__total">${G.uscore[r.id]}</td></tr>`).join("");
+  let h=`<div class="bg-sheet__grip" aria-hidden="true"></div><div class="un-shead"><span class="bg-eyebrow bg-eyebrow--accent">${ro.over?"Final round":"Round "+G.round}</span><h2 class="bg-sheet__title" id="roundTitle">${ro.over?"Game over":"Round "+G.round+" complete"}</h2><p class="bg-sheet__sub">${esc(G.players[ro.winner].name)} went out first.</p></div>`+
+    `<div class="bg-scorepad un-pad"><table class="bg-score sc"><thead><tr><th scope="col">Player</th><th scope="col">Cards left</th><th scope="col">Hand pts</th><th scope="col">Round</th><th scope="col">Total</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  if(wr.bonus) h+=`<p class="un-note">The winner's round score includes ${wr.bonus} bonus points: 250 for each player knocked out.</p>`;
+  if(ro.over) h+=`<p class="un-result"><b>${esc(ro.gameWinnerName)}</b> ${winVerb(ro.gameWinnerName)} the game!</p>`;
+  else if(G.o.target) h+=`<p class="un-note">${G.o.scoring==="tally"?"Cards left count against you — lowest total wins once someone reaches "+G.o.target+".":"First to "+G.o.target+" wins."}</p>`;
+  const seeIt=ro.over&&luxe()&&!!(B&&B.win)&&ui.winShown!==gen;   // the Victory screen is one OK away
+  h+=`<div class="un-sbtns">`+(ro.over?(seeIt?`<button class="bg-btn bg-btn--primary bg-btn--lg" type="button" id="rbResult" data-autofocus>${icon("trophy")}See the result</button><button class="bg-btn bg-btn--secondary bg-btn--lg" type="button" id="rbNew">${icon("play")}New game</button>`
+      :`<button class="bg-btn bg-btn--primary bg-btn--lg" type="button" id="rbNew" data-autofocus>${icon("play")}New game</button>`)
+    :`<button class="bg-btn bg-btn--primary bg-btn--lg" type="button" id="rbNext" data-autofocus>${icon("play")}Next round</button>`)+
+    `<button class="bg-btn bg-btn--secondary bg-btn--lg" type="button" id="rbMenu">${icon("menu")}Menu</button></div>`;
+  $("roundSheet").innerHTML=h; openBox("round");
+  const nx=$("rbNext"); if(nx) nx.addEventListener("click",()=>{ closeBox(); E.startRound(G); handoffOk=null; startUI(); drive(); });
+  const nw=$("rbNew"); if(nw) nw.addEventListener("click",()=>{ closeBox(); startGame(); armBack(); });
+  const rs=$("rbResult"); if(rs) rs.addEventListener("click",()=>{ closeBox(); openWin(); });
+  // the Menu: between rounds Resume brings this table back; after the last round it offers "See the result" until the Victory has opened
+  $("rbMenu").addEventListener("click",()=>{ closeBox(); $("menuBtn").click(); });
+}
+
+/* ---------------- the Victory screen: the trophy, the ray wheel and confetti (BGUI.win + BGUI.celebrate) with real numbers ---------------- */
+function openWin(){
+  const B=BG(); if(!B||!B.win||!G||!G.over||!luxe()) return;
+  ui.winShown=gen; ui.result=false; clockOff();
+  const ro=G.roundOver||{}, wu=G.winner, team=G.units[wu]||[], human=team.some(i=>G.players[i]&&G.players[i].human);
+  const name=ro.gameWinnerName||"", ms=playMs(), min=Math.round(ms/60000);
+  $("winEyebrow").textContent="Game over · "+(min<1?"under a minute":min===1?"1 minute":min+" minutes");
+  $("winTitle").textContent=human?"Victory":name+" "+winVerb(name);
+  $("winSub").innerHTML=`<b>${esc(name)}</b> ${winVerb(name)} the game${G.o.target?" with "+G.uscore[wu]+" points":""}.`;
+  $("winStats").innerHTML=`<li class="bg-stat"><b>${G.round}</b><span>${G.round===1?"round":"rounds"}</span></li>`+
+    `<li class="bg-stat"><b>${stats.played}</b><span>cards played</span></li><li class="bg-stat"><b>${fmtTime(ms)}</b><span>time</span></li>`;
+  closeBox(); closeHandoff();
+  B.win.open($("winBox"),{focus:"#winAgain"});
+  if(B.celebrate) B.celebrate();
+  barTitle();
+}
+function closeWin(){ const B=BG(); if(B&&B.win&&B.win.isOpen()) B.win.close($("winBox")); }
+$("winAgain").addEventListener("click",()=>{ closeWin(); $("startBtn").click(); });
+$("winMenu").addEventListener("click",()=>{ closeWin(); $("menuBtn").click(); });
+document.addEventListener("keydown",e=>{
+  const B=BG(); if(!B||!B.win||!B.win.isOpen()) return;
+  if(e.key==="Escape"||e.key==="GoBack"||e.key==="BrowserBack"||e.keyCode===27||e.keyCode===4){ e.preventDefault(); closeWin(); }
+});
+
+/* ---------------- D-pad (TV): Down from the players picker always reaches the computer picker (past disabled counts); Up/Down inside the
+   computer keypad (0-4 over 5-9) move between its rows, and only Up from its first row goes back to the players picker; Down from the
+   save bar's first row lands on the nearest button of the second row. Registered before ui.js, so BGUI.focus sees these keys as handled ---------------- */
+function nearestIn(row,a){
+  const r0=a.getBoundingClientRect(), x0=r0.left+r0.width/2; let best=null, bd=Infinity;
+  row.querySelectorAll("button:not([disabled])").forEach(b=>{ const r=b.getBoundingClientRect(), dx=Math.abs(r.left+r.width/2-x0); if(r.width>0&&dx<bd){ bd=dx; best=b; } });
+  return best;
+}
+// the nearest count that is on in the keypad row right above/below a (the button straight there may be off, e.g. 0 with one player here);
+// null in the first/last row
+function keypadStep(a,dir){
+  const r0=a.getBoundingClientRect(), x0=r0.left+r0.width/2; let best=null, bt=dir<0?-Infinity:Infinity, bd=Infinity;
+  $("cpuSeg").querySelectorAll("button:not([disabled])").forEach(b=>{
+    const r=b.getBoundingClientRect(); if(r.width<=0) return;
+    if(dir<0?r.bottom>r0.top+1:r.top<r0.bottom-1) return;   // rows above / below only
+    const dx=Math.abs(r.left+r.width/2-x0);
+    if(dir<0?r.top>bt+1:r.top<bt-1){ bt=r.top; bd=dx; best=b; } else if(Math.abs(r.top-bt)<=1&&dx<bd){ bd=dx; best=b; }
+  });
+  return best;
+}
+document.addEventListener("keydown",e=>{
+  const B=BG(); if(!B||!B.focus||!B.focus.enabled||e.defaultPrevented||e.altKey||e.ctrlKey||e.metaKey) return;
+  const down=e.key==="ArrowDown"||e.keyCode===40, up=e.key==="ArrowUp"||e.keyCode===38, a=document.activeElement;
+  if((!down&&!up)||!a||!a.closest) return;
+  const pick=sel=>document.querySelector(sel+" button.on:not([disabled])")||document.querySelector(sel+" button:not([disabled])");
+  const rows=document.querySelectorAll("#svbar .r"), row1=rows[0], row2=rows[1];
+  let to=null;
+  if(down&&a.closest("#humanSeg")) to=pick("#cpuSeg");
+  else if(a.closest("#cpuSeg")) to=up?(keypadStep(a,-1)||pick("#humanSeg")):keypadStep(a,1);
+  else if(down&&row1&&row2&&row1.contains(a)) to=nearestIn(row2,a);
+  if(to){ e.preventDefault(); B.focus.set(to); }
+});
+
+/* ---------------- the remote's Back (TV) ----------------
+   ui.js gives every game page the same default (BGUI.back: window.__tvBack for the Fire TV app, a history guard for TV browsers once a
+   game has started, the Back key; one press = one step): it closes the top layer (the sound panel, a colour or player list, the Victory
+   screen; the round table and the hand-off must be answered, so Back waits there), then takes this page's step: from the table the Menu
+   opens, from the Menu Resume goes back to the game (or "See the result"); on the New game page it goes on to the hub */
+function backStep(){
+  if(!setupShown()){ $("menuBtn").click(); return "menu"; }
+  if($("resumeBtn").style.display!=="none"){ $("resumeBtn").click(); return "resume"; }
+  return false;
+}
+// the TV hint bar promises only what Back does: it closes a list or opens the Menu; while a sheet that must be answered is up Back is held,
+// so the bar steps aside
+function hintSync(){
+  const B=BG(), t=B&&B.sheet&&B.sheet.top?B.sheet.top():null, h=document.querySelector(".un-hints");
+  if(h) h.classList.toggle("is-held",!!t&&(t.id==="handoff"||t.id==="roundBox"));
+}
+document.addEventListener("bgui:sheet",hintSync);
+// the play clock counts while the page is on screen
+document.addEventListener("visibilitychange",()=>{ if(document.hidden) clockOff(); else clockOn(); });
+// ui/ui.js is deferred: it arrives after this script. Then the icons go in, and the Luxe sheets, toasts and the Victory screen take over
+document.addEventListener("DOMContentLoaded",()=>{
+  const B=BG();
+  if(B&&B.back) B.back.on(backStep);
+  else window.__tvBack=()=>{   // no ui.js: the same steps, without the Luxe layers
+    if(window.Sound&&Sound.panelOpen&&Sound.panelOpen()){ Sound.closePanel(); return "panel"; }
+    const r=backStep(); if(r) return r;
+    location.href=$("homeBtn").getAttribute("href"); return "hub";
+  };
+  if(!B||!B.effects) return;
+  document.documentElement.classList.add("un-luxe");
+  if(B.icon) document.querySelectorAll("[data-icon]").forEach(el=>{ if(!el.querySelector("svg")) el.insertAdjacentHTML("afterbegin",B.icon(el.getAttribute("data-icon"))); });
+  const hub=hubHref(); ["homeBtn","backHub","winHome"].forEach(id=>{ const a=$(id); if(a) a.setAttribute("href",hub); });   // TV: keeps ?tv=1
+  saveBar.refresh(); deviceCopy();
+  document.addEventListener("bgui:tv",()=>{ deviceCopy(); syncStart(); if(ctrl&&V){ ctrl.resetTurn(); ctrl.update(V); } });
+});
+
 Skins.apply("uno"); Sound.mountButton(); Sound.music("uno");
-drawSetup(); saveBar.refresh();
+deviceCopy(); drawSetup(); saveBar.refresh(); showSetup(true);
 if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
-// TV Back (step 10): in the Fire TV app Back calls window.__tvBack() and CLOSES THE APP when a page has none. Steps: sound panel,
-// then a game -> Menu, the Menu -> Resume (or the hub when there is no game to resume). A hand-off / answer sheet holds Back.
-window.__tvBack=function(){
-  if(window.Sound&&Sound.panelOpen&&Sound.panelOpen()){ Sound.closePanel(); return "panel"; }
-  const up=id=>{ const e=$(id); return !!(e&&e.classList.contains("show")); };
-  if(up("handoff")||up("roundBox")) return "held";
-  if(up("setup")){ const r=$("resumeBtn"); if(r&&r.style.display!=="none"){ r.click(); return "resume"; } const h=document.querySelector('#setup a[href="../index.html"]'); if(h) h.click(); return "hub"; }
-  const m=$("menuBtn"); if(m){ m.click(); return "menu"; } return "";
-};
 window.__uno={get G(){ return G; },get V(){ return V; },cfg:cfg,send:send,startGame:startGame,get ctrl(){ return ctrl; }};
 })();
 </script>
