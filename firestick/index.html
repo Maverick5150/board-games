@@ -17,6 +17,7 @@
 <style>
   *{box-sizing:border-box;}
   html,body{margin:0;}
+  html{scrollbar-width:none;}   /* the host is always the TV layout: no scrollbar down the right edge (the D-pad still scrolls) */
   body.bg-app{min-height:100vh;display:flex;flex-direction:column;overflow-x:hidden;overflow-y:auto;}
   [hidden]{display:none !important;}
   .muted{color:var(--text-2);}
@@ -78,7 +79,7 @@
   .players .prow .bg-seatcard__name{font-size:var(--fs-lg);}
   .players .empty .bg-seatcard__name{font:var(--fw-ui) var(--fs-xs)/1.25 var(--font-ui);white-space:normal;color:var(--text-3);}
   .players .cpuname{text-transform:capitalize;}
-  .ps-two{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:1.25rem;align-items:start;}
+  .ps-two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1.25rem;align-items:start;}
   .ps-two .bg-seg{width:100%;}
   #cpuBtns.bg-seg--grid5{grid-template-columns:repeat(5,minmax(0,1fr));grid-auto-flow:row;}
   #cpuBtns button, #paceBtns button{min-height:var(--tap);}
@@ -301,7 +302,7 @@ var leaveHandler=null;  // set by a game whose own state marks seats as human: c
 var reqSeq=1;
 var inLobby=true;
 
-function send(o,retain){ if(net) net.send(o,retain); }
+function send(o,retain){ if(net){ if(o&&o.game===undefined&&chosenGame) o.game=chosenGame; net.send(o,retain); } }   // every message says which game this room is, so a phone can theme itself (older phones ignore it)
 function startRoom(){
   closeRoom("The host opened a new game room. Scan the new QR code to join.");
   room=BGNet.roomCode();
@@ -404,7 +405,7 @@ function waitAllExcept(activeColor, turnColor){
 }
 function announceStart(){ send({t:"started"}); }
 var winnerName="", gameStartedAt=0, gamePlayers=0, gamePhones=0;
-function announceOver(name){ gameOver=true; winnerName=name; Sound.sfx("win"); send({t:"over", winner:name}, true); }
+function announceOver(name){ gameOver=true; winnerName=name; Sound.sfx("win"); send({t:"over", winner:name, n:gamePlayers, ms:gameStartedAt?Date.now()-gameStartedAt:0}, true); }
 
 /* ---------- toast ---------- */
 var toastT;
@@ -474,7 +475,7 @@ function setBack(label, show){
   backbtn.style.display= show?"":"none";
 }
 backbtn.onclick=function(){
-  if(screenState==="select"){ if(window.AndroidTV&&AndroidTV.exit){ AndroidTV.exit(); } else { location.href="../index.html"; } }
+  if(screenState==="select"){ if(window.AndroidTV&&AndroidTV.exit){ AndroidTV.exit(); } else { location.href="../index.html"+(/[?&]tv=1(&|$)/.test(location.search)||window.AndroidTV?"?tv=1":""); } }   /* the hub keeps the TV layout */
   else if(screenState==="lobby"){ screenSelect(); }
   else if(screenState==="game"){ // abandon current game -> back to game picker (needs a second press so a stray Back can't end the game)
     if(!gameOver&&!backbtn._armed){ backbtn._armed=true; toast("Press Back again to quit the game"); clearTimeout(backbtn._t); backbtn._t=setTimeout(function(){ backbtn._armed=false; },3000); return; }
@@ -1008,7 +1009,7 @@ function playMonopoly(){
   function cardBox(deckName,c,text){ var isCh=deckName==="chance", col=isCh?"#f08d1c":"#2b7be0"; return '<div class="mwho">'+esc(nm(c))+' draws…</div><div class="mcard" style="border-color:'+col+'"><h2 style="color:'+col+'">'+(isCh?"CHANCE":"COMMUNITY CHEST")+'</h2><p>'+esc(text)+'</p></div>'; }
   function colorOfPid(pid){ for(var k in seat) if(seat[k]===pid) return k; return null; }
   viewHandler=function(o){ var c=colorOfPid(o.pid); var sp=(o.i!=null)?BOARD[o.i]:null;
-    if(!c||!sp||!sp.price){ centerView=""; } else { centerView=deedBox(o.i,"👀 "+esc(nm(c))+" is looking at "+esc(sp.n)); }
+    if(!c||!sp||!sp.price){ centerView=""; } else { centerView=deedBox(o.i,esc(nm(c))+" is looking at "+esc(sp.n)); }
     centerRender(); };
   function rangeArr(n){ var a=[]; for(var i=0;i<n;i++)a.push(i); return a; }
   function shuf(a){ for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i];a[i]=a[j];a[j]=t; } return a; }
@@ -1056,7 +1057,7 @@ function playMonopoly(){
   function snapNow(){ var pl=active.map(function(c){ var props=[]; for(var i=0;i<40;i++) if(owner[i]===c) props.push({i:i,h:houses[i],m:mort[i]}); return {color:c,pid:seat[c]||null,name:nm(c),cash:cash[c],net:netWorth(c),jail:injail[c],jokers:jokers[c],bankrupt:bankrupt[c],props:props}; }); send({t:"snap",players:pl,fp:R.fpJackpot?fpPool:0}); }
   function snapSoon(){ clearTimeout(snapT); snapT=setTimeout(function(){ if(live()) snapNow(); },400); }
   function tv(html){ setStatus(html); }
-  function turnBanner(c,extra){ tv('<span class="dot" style="background:'+PC(c)+'"></span> '+tokH(c)+' <b>'+nm(c)+'</b> · '+money(cash[c])+(R.fpJackpot&&fpPool>0?' · 🅿️ '+money(fpPool):'')+(extra?' · '+extra:'')); }
+  function turnBanner(c,extra){ tv('<span class="dot" style="background:'+PC(c)+'"></span> '+tokH(c)+' <b>'+nm(c)+'</b> · '+money(cash[c])+(R.fpJackpot&&fpPool>0?' · Free Parking '+money(fpPool):'')+(extra?' · '+extra:'')); }
 
   // ---------- money / debt ----------
   async function payBank(c,amt){ cash[c]-=amt; if(R.fpJackpot) fpPool+=amt; if(cash[c]<0) await resolveDebt(c,null); }
@@ -1136,7 +1137,7 @@ function playMonopoly(){
     while(bidders.length>1 || (bidders.length===1 && high!==bidders[0])){
       var c=bidders[idx%bidders.length];
       var need=price+(price<20?5:10);
-      setGameCenter(deedBox(i,"🔨 Auction — "+(price?"high bid "+money(price)+" by "+esc(nm(high)):"no bids yet")+" · "+esc(nm(c))+" to bid"));
+      setGameCenter(deedBox(i,"Auction — "+(price?"high bid "+money(price)+" by "+esc(nm(high)):"no bids yet")+" · "+esc(nm(c))+" to bid"));
       var bid;
       if(human(c)){
         var opts=[{id:"bid",label:"Bid "+money(need),color:"green"},{id:"pass",label:"Pass",color:"red"}];
@@ -1192,7 +1193,7 @@ function playMonopoly(){
   }
   async function offerBuyInner(c,i){ var s=BOARD[i];
     if(human(c)){
-      var opts=[{id:"buy",label:"✅ Buy "+s.n+" for "+money(s.price),color:"green"},{id:"no",label:R.noAuction?"❌ Don’t buy":"❌ Decline → Auction",color:"red"}];
+      var opts=[{id:"buy",label:"✅ Buy "+s.n+" for "+money(s.price),color:"green"},{id:"no",label:R.noAuction?"❌ Don’t buy":"❌ Decline, then auction",color:"red"}];
       if(cash[c]<s.price) opts=[{id:"no",label:R.noAuction?"Can’t afford":"Can’t afford — to Auction",color:"red"}];
       var pk=await ask(c,"Buy property?",s.n+" — "+money(s.price)+" · you have "+money(cash[c]),opts,{dflt:"no"});
       if(pk.id==="buy"&&cash[c]>=s.price){ cash[c]-=s.price; owner[i]=c; toast(nm(c)+" buys "+s.n); renderBoard(); } else { await declineBuy(i); }
@@ -1248,7 +1249,7 @@ function playMonopoly(){
     if(cash[c]-cg+cr<fee(get)){ toast(nm(c)+" can’t cover the 10% interest on the mortgaged deed"); return; }
     if(cash[p]-cr+cg<fee(give)){ toast(nm(p)+" can’t cover the 10% interest on the mortgaged deed"); return; }
     toast(nm(c)+" offers a trade to "+nm(p));
-    setGameCenter('<div class="mtradebox"><b>🤝 Trade offer</b><div style="margin-top:1vh"><b>'+esc(nm(c))+' gives:</b> '+esc(sumTxt(give,cg,jg))+'</div><div style="margin-top:.8vh"><b>'+esc(nm(p))+' gives:</b> '+esc(sumTxt(get,cr,jr))+'</div><div style="margin-top:1vh;color:#555">'+esc(nm(p))+' is deciding…</div></div>');
+    setGameCenter('<div class="mtradebox"><b>Trade offer</b><div style="margin-top:1vh"><b>'+esc(nm(c))+' gives:</b> '+esc(sumTxt(give,cg,jg))+'</div><div style="margin-top:.8vh"><b>'+esc(nm(p))+' gives:</b> '+esc(sumTxt(get,cr,jr))+'</div><div style="margin-top:1vh;color:#555">'+esc(nm(p))+' is deciding…</div></div>');
     var accept;
     if(human(p)){ var ans=await ask(p,"Trade offer from "+nm(c),"You GET: "+sumTxt(give,cg,jg)+"   ·   You GIVE: "+sumTxt(get,cr,jr),[{id:"yes",label:"✅ Accept",color:"green"},{id:"no",label:"❌ Decline",color:"red"}],{dflt:"no"}); accept=(ans.id==="yes"); }
     else { await sleep(1200); accept=aiTradeOK(p,give,cg,jg,get,cr,jr); }
@@ -1327,9 +1328,9 @@ function playMonopoly(){
   async function rollDice(c){
     var face=function(){ return '<div class="mwho">'+esc(nm(c))+' rolls…</div><div class="mdice"><div class="mdie">'+dice[0]+'</div><div class="mdie">'+dice[1]+'</div></div>'; };
     Sound.sfx("dice");
-    for(var k=0;k<6;k++){ dice=[1+Math.floor(Math.random()*6),1+Math.floor(Math.random()*6)]; turnBanner(c,"🎲 "+dice[0]+" + "+dice[1]); setGameCenter(face()); await sleep(90); }
+    for(var k=0;k<6;k++){ dice=[1+Math.floor(Math.random()*6),1+Math.floor(Math.random()*6)]; turnBanner(c,"Dice "+dice[0]+" + "+dice[1]); setGameCenter(face()); await sleep(90); }
     dice=[1+Math.floor(Math.random()*6),1+Math.floor(Math.random()*6)];
-    turnBanner(c,"🎲 "+dice[0]+" + "+dice[1]+" = "+(dice[0]+dice[1]));
+    turnBanner(c,"Dice "+dice[0]+" + "+dice[1]+" = "+(dice[0]+dice[1]));
     setGameCenter(face()+'<div class="mwho" style="font-size:3.4vh">= '+(dice[0]+dice[1])+(dice[0]===dice[1]?" — doubles!":"")+'</div>');
     await sleep(1000); setGameCenter("");
   }
@@ -1402,7 +1403,7 @@ function playRummy(){
     el.innerHTML=P.roundSheetHTML(G);
     setStatus(G.over?esc(G.roundOver.winnerName)+(/ & /.test(G.roundOver.winnerName)?" win!":" wins!"):"Round "+G.round+" complete");
     if(G.over) return;
-    var b=document.createElement("button"); b.className="big"; b.textContent="Next round ▶"; b.style.marginTop="1vh"; el.appendChild(b); b.focus();
+    var b=document.createElement("button"); b.className="big bg-btn bg-btn--primary bg-btn--lg"; b.type="button"; b.textContent="Next round"; b.style.marginTop="1vh"; el.appendChild(b); b.focus();
     await new Promise(function(res){ var done=false,fin=function(){ if(!done){ done=true; res(); } }; b.onclick=fin; setTimeout(fin,25000); });
   }
   async function run(){
@@ -1600,7 +1601,7 @@ function playUno(){
     el.innerHTML='<div style="font-size:3vh;max-width:50vw"><div style="font-size:4.4vh;font-weight:900">'+(ro.over?"Game over":"Round "+G.round+" complete")+'</div><div style="opacity:.8">'+esc(G.players[ro.winner].name)+' went out first</div><table style="width:100%;margin:1vh 0"><tr style="opacity:.7"><td>Player</td><td>Cards left</td><td>Hand pts</td><td>Round</td><td>Total</td></tr>'+rows+'</table>'+(wr.bonus?'<div style="opacity:.8;font-size:2.4vh">The winner\'s round score includes '+wr.bonus+' bonus points: 250 for each player knocked out.</div>':'')+(ro.over?'<div style="font-size:4vh;text-align:center"><b style="color:#f2bf24">'+esc(ro.gameWinnerName)+'</b> wins the game!</div>':'')+'</div>';
     setStatus(ro.over?esc(ro.gameWinnerName)+" wins!":"Round "+G.round+" complete");
     if(ro.over) return;
-    var b=document.createElement("button"); b.className="big"; b.textContent="Next round ▶"; b.style.marginTop="1vh"; el.appendChild(b); b.focus();
+    var b=document.createElement("button"); b.className="big bg-btn bg-btn--primary bg-btn--lg"; b.type="button"; b.textContent="Next round"; b.style.marginTop="1vh"; el.appendChild(b); b.focus();
     await new Promise(function(res){ var done=false,fin=function(){ if(!done){ done=true; res(); } }; b.onclick=fin; setTimeout(fin,25000); });
   }
   async function run(){
@@ -1757,7 +1758,7 @@ function playScatter(){
     SE.finishRound(G); setPhase("scored"); nexts={}; drawScored(); pushAll(-1); Sound.sfx("win");
     setStatus(G.over?esc(G.winners.map(function(i){ return G.players[i].name; }).join(" & "))+(G.winners.length>1?" tie!":" wins!"):"Round "+G.round+" complete");
     if(G.over) return;
-    var el=$("scTv"), b=document.createElement("button"); b.className="big"; b.textContent=(G.tiebreak?"Tie-break round ▶":"Next round ▶"); el.appendChild(b); b.focus();
+    var el=$("scTv"), b=document.createElement("button"); b.className="big bg-btn bg-btn--primary bg-btn--lg"; b.type="button"; b.textContent=(G.tiebreak?"Tie-break round":"Next round"); el.appendChild(b); b.focus();
     await new Promise(function(res){ var done=false,fin=function(){ if(!done){ done=true; clearInterval(iv); res(); } }; b.onclick=fin; var t0=Date.now(); var iv=setInterval(function(){ var hs=seatedHumans(); if(!alive()||(hs.length&&hs.every(function(i){ return nexts[i]; }))||Date.now()-t0>30000) fin(); },400); });
   }
   async function run(){
