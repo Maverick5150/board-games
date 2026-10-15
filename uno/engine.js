@@ -252,7 +252,7 @@ function play(G,p,cardId,params,out){
   pl.hand.splice(idx,1); G.discard.push(card); G.drawnId=null; G.phase="play"; G.needColor=false;
   if(G.unoVuln!=null&&G.unoVuln!==p) G.unoVuln=null;
   G.color=f.c==="W"?(G.o.edition==="allwild"?null:color):f.c;
-  ev(G,"play",{p:p,card:card.id,text:nm(G,p)+" plays "+cardName(G,card)+(f.c==="W"&&color?" — chooses "+CNAME[color]:"")});
+  ev(G,"play",{p:p,card:card.id,c:f.c,v:f.v,col:G.color,text:nm(G,p)+" plays "+cardName(G,card)+(f.c==="W"&&color?" — chooses "+CNAME[color]:"")});
   // UNO bookkeeping
   unoCheck(G,p);
   pl.armed=false;
@@ -267,7 +267,7 @@ function play(G,p,cardId,params,out){
 /* down to one card: say UNO (called / armed / a computer that remembers) or stay catchable until the next player begins a turn */
 function unoCheck(G,p){
   var pl=G.players[p]; if(pl.hand.length!==1) return;
-  if(pl.called||pl.armed){ ev(G,"uno",{p:p,text:nm(G,p)+" says UNO!"}); pl.called=true; } else if(!pl.human&&G.rnd()>=G.o.aiForget){ ev(G,"uno",{p:p,text:nm(G,p)+" says UNO!"}); pl.called=true; } else G.unoVuln=p;
+  if(pl.called||pl.armed){ ev(G,"uno",{p:p,text:nm(G,p)+" says UNO!"}); pl.called=true; } else if(!pl.human&&G.rnd()>=(Uno.Brain&&Uno.Brain.forget?Uno.Brain.forget(G,pl):G.o.aiForget)){ ev(G,"uno",{p:p,text:nm(G,p)+" says UNO!"}); pl.called=true; } else G.unoVuln=p;
 }
 /* does playing this Wild face need a colour from the player? (All Wild: never; No Mercy Color Roulette: the NEXT player names it) */
 function namesColor(G,f){ return f.c==="W"&&G.o.edition!=="allwild"&&f.v!=="roul"; }
@@ -376,18 +376,18 @@ function drawAction(G,p){
     var n=G.pen.n; G.pen=null; drawCards(G,p,n,"stacked penalty"); G.turn=nextIdx(G,p,1); return finishAction(G);
   }
   if(G.o.drawRule==="untilPlay"){
-    var got=0, last=null, guard=0;
+    var got=0, last=null, guard=0, colNow=G.color;
     while(guard++<300){ var c=drawOne(G); if(!c) break; pl.hand.push(c); got++; last=c; if(canPlay(G,p,c)) break; }
-    ev(G,"draw",{p:p,n:got,text:nm(G,p)+" draws "+got+" card"+(got===1?"":"s")+" until one can be played"});
+    ev(G,"draw",{p:p,n:got,vol:1,col:colNow,text:nm(G,p)+" draws "+got+" card"+(got===1?"":"s")+" until one can be played"});
     checkMercy(G,p); unoGone(G,p); if(!pl.alive){ G.turn=nextIdx(G,p,1); return finishAction(G); }
     if(pl.hand.length>1) pl.called=false;
     if(last&&canPlay(G,p,last)){ G.phase="drawn"; G.drawnId=last.id; return {ok:true,events:G.evq.slice(),drawn:last.id}; }
     G.turn=nextIdx(G,p,1); return finishAction(G);
   }
-  var c1=drawOne(G);
+  var colBefore=G.color, c1=drawOne(G);
   if(!c1){ ev(G,"draw",{p:p,n:0,text:"No cards left to draw"}); G.turn=nextIdx(G,p,1); return finishAction(G); }
   pl.hand.push(c1); if(pl.hand.length>1) pl.called=false; unoGone(G,p);
-  ev(G,"draw",{p:p,n:1,text:nm(G,p)+" draws a card"});
+  ev(G,"draw",{p:p,n:1,vol:1,col:colBefore,text:nm(G,p)+" draws a card"});
   if(canPlay(G,p,c1)){ G.phase="drawn"; G.drawnId=c1.id; return {ok:true,events:G.evq.slice(),drawn:c1.id}; }
   G.turn=nextIdx(G,p,1); return finishAction(G);
 }
@@ -453,7 +453,7 @@ function finish(G,winner){
   if(o.target===0){ over=true; win=wu; }
   else if(o.scoring==="tally"){ var mx=Math.max.apply(null,G.uscore); if(mx>=o.target){ over=true; var mn=Math.min.apply(null,G.uscore); win=G.uscore.indexOf(mn); } }
   else { var best=Math.max.apply(null,G.uscore); if(best>=o.target){ var tops=G.uscore.map(function(s,i){ return s===best?i:-1; }).filter(function(i){ return i>=0; }); over=true; win=tops.indexOf(wu)>=0?wu:tops[0]; } }
-  if(over){ G.over=true; G.winner=win; }
+  if(over){ G.over=true; G.winner=win; if(Uno.Brain){ try{ Uno.Brain.finish(G); }catch(e){} } }
   G.roundOver={winner:winner,winUnit:wu,rows:rows,over:over,gameWinner:win,gameWinnerName:win!=null?G.units[win].map(function(i){ return nm(G,i); }).join(" & "):null};
   G.phase="roundover";
   ev(G,"roundOver",{p:winner,text:nm(G,winner)+" goes out and wins the round!"});
@@ -485,7 +485,8 @@ function cardScore(G,p,card){
   if(v==="flip") sc+=(hand.length>6?1:-1);
   return sc;
 }
-function aiAction(G,p){
+/* the old decision code (kept as the fallback and as the tournament's yardstick) */
+function aiActionLegacy(G,p){
   if(G.over||G.roundOver) return null;
   var pl=G.players[p];
   if(G.needColor&&p===G.turn) return {t:"startColor",color:bestColor(G,p)};
@@ -513,6 +514,13 @@ function aiAction(G,p){
     return playParams(G,p,best);
   }
   return null;
+}
+/* the computer's move: the brain (brain.js, G.skill easy|normal|hard, missing = normal) decides; if it is missing or declines, the old code does */
+function aiAction(G,p){
+  if(G.over||G.roundOver) return null;
+  var B=Uno.Brain, a=null;
+  if(B){ try{ a=B.decide(G,p); }catch(e){ a=null; } }
+  return a||aiActionLegacy(G,p);
 }
 function playParams(G,p,card){
   var f=fc(G,card), a={t:"play",card:card.id};
@@ -566,7 +574,11 @@ function snapshot(G,me){
 
 Uno.Engine={VERSIONS:VERSIONS,HOUSE:HOUSE,houseFor:houseFor,namesColor:namesColor,defaultOpts:defaultOpts,mergeOpts:mergeOpts,versionOpts:versionOpts,buildDeck:buildDeck,newGame:newGame,startRound:startRound,
   canPlay:canPlay,playableIds:playableIds,actor:actor,play:play,drawAction:drawAction,passAction:passAction,respondChallenge:respondChallenge,respondRoulette:respondRoulette,
-  chooseStartColor:chooseStartColor,callUno:callUno,catchUno:catchUno,jumpIn:jumpIn,jumpIds:jumpIds,aiAction:aiAction,applyAction:applyAction,aiCatchTarget:aiCatchTarget,
+  chooseStartColor:chooseStartColor,callUno:callUno,catchUno:catchUno,jumpIn:jumpIn,jumpIds:jumpIds,aiAction:aiAction,aiActionLegacy:aiActionLegacy,applyAction:applyAction,aiCatchTarget:aiCatchTarget,
   snapshot:snapshot,cardName:cardName,cardPoints:cardPoints,handPoints:handPoints,colorsNow:colorsNow,CNAME:CNAME,VNAME:VNAME,DRAWN:DRAWN,LIGHT:LIGHT,DARK:DARK,isNum:isNum,needsTarget:needsTarget,alive:alive,nextIdx:nextIdx,bestColor:bestColor};
 if(typeof module!=="undefined"&&module.exports) module.exports=Uno.Engine;
+/* browsers: bring in the brain right after this file (the page, the Party TV and the Party phones all load engine.js, so all get it); a failed load = the old code */
+if(typeof document!=="undefined"&&document.currentScript&&document.currentScript.src&&document.readyState==="loading"&&!Uno.Brain){
+  try{ document.write('<script src="'+document.currentScript.src.replace(/engine\.js(\?.*)?$/,"brain.js")+'"><\/script>'); }catch(e){}
+}
 })(typeof window!=="undefined"?window:globalThis);

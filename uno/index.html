@@ -45,6 +45,7 @@
   .un-hero .bg-hero__body{max-width:none; padding:0 var(--gutter) .25rem}
   .un-hero .bg-hero__pitch{max-width:30rem}
   .un-sec{min-width:0}
+  .un-skillhead{margin-top:1.25rem}
   #versions{grid-template-columns:repeat(2,minmax(0,1fr))}
   #versions .bg-version{min-height:4.75rem; justify-content:center}
   #versions .bg-version__title{font-size:var(--fs-lg)}
@@ -152,7 +153,7 @@
   html[data-tv] .un-col--b{display:flex; flex-direction:column}
   html[data-tv] .un-sec--players{order:1} html[data-tv] .un-sec--save{order:3} html[data-tv] .un-back{order:4}
   html[data-tv] .un-dock{order:2; position:static; gap:1.75rem; margin:0; padding:1.5rem 0 0; background:none}
-  html[data-tv] #humanSeg, html[data-tv] #cpuSeg, html[data-tv] #speedSeg{gap:1.5rem}
+  html[data-tv] #humanSeg, html[data-tv] #cpuSeg, html[data-tv] #speedSeg, html[data-tv] #skillSeg{gap:1.5rem}
   html[data-tv] .bg-topbar__end{gap:1.5rem}
   html[data-tv] #svbar button{grid-template-columns:minmax(0,1fr); justify-items:center; align-content:center; row-gap:.3rem; padding:.625rem .5rem}
   html[data-tv] #svbar button .bg-ico{width:1.25em; height:1.25em}
@@ -217,6 +218,8 @@
       <section class="un-sec un-sec--speed" aria-labelledby="speedHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="speedHead" data-stage-text>Game speed</h2></div>
         <div class="bg-seg bg-seg--text" id="speedSeg" role="group" aria-labelledby="speedHead"><button type="button" data-s="slow" aria-pressed="false">Slow</button><button type="button" data-s="medium" class="on" aria-pressed="true">Medium</button><button type="button" data-s="fast" aria-pressed="false">Fast</button></div>
+        <div class="bg-section un-skillhead"><h2 class="bg-eyebrow" id="skillHead" data-stage-text>Computer skill</h2></div>
+        <div class="bg-seg bg-seg--text" id="skillSeg" role="group" aria-labelledby="skillHead"><button type="button" data-k="easy" aria-pressed="false">Easy</button><button type="button" data-k="normal" class="on" aria-pressed="true">Normal</button><button type="button" data-k="hard" aria-pressed="false">Hard</button></div>
       </section>
       <section class="un-sec un-sec--rules" aria-labelledby="rulesHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="rulesHead" data-stage-text>Rules</h2></div>
@@ -297,7 +300,9 @@ function normSpeed(v){ return v==="slow"||v==="fast"?v:"medium"; }
 function cpuNames(n,human){ let a=[]; try{ if(window.Names&&n>0) a=window.Names.pick(n,human)||[]; }catch(e){} while(a.length<n) a.push("CPU "+(a.length+1)); return a; }
 const SHORT={classic:"Classic",flip:"Flip",nomercy:"No Mercy",allwild:"All Wild"};
 const SV_ICON={ss:"save",ls:"load",std:"reset",sg:"save",lg:"load",au:"resume"};
-let cfg={version:"classic",over:{},humans:1,cpus:3,speed:"medium"};
+// step 10: Computer skill (easy / normal / hard; normal = the new brain, uno/brain.js): saved with the settings and the game; a change from the Menu applies at once; old saves = normal
+function normSkill(v){ return v==="easy"||v==="hard"?v:"normal"; }
+let cfg={version:"classic",over:{},humans:1,cpus:3,speed:"medium",skill:"normal"};
 let G=null,V=null,gen=0,handoffOk=null,ctrl=null,timer=null,lastActor=-1;
 const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 function curOpts(){ return E.versionOpts(cfg.version,cfg.over); }
@@ -412,6 +417,8 @@ function syncRules(){
 $("rulesToggle").addEventListener("click",()=>{ ui.rulesOpen=!ui.rulesOpen; syncRules(); });
 function setSpeedSeg(){ cfg.speed=normSpeed(cfg.speed); window.bgGameSpeed=cfg.speed; $("speedSeg").querySelectorAll("button").forEach(x=>{ const on=x.dataset.s===cfg.speed; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
 $("speedSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.speed=b.dataset.s; setSpeedSeg(); if(G&&!G.over){ const pk=packG(); if(pk) Saves.auto("uno",pk); } }));   // applies at once; the running game's save keeps it
+function setSkillSeg(){ cfg.skill=normSkill(cfg.skill); if(G) G.skill=cfg.skill; $("skillSeg").querySelectorAll("button").forEach(x=>{ const on=x.dataset.k===cfg.skill; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
+$("skillSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.skill=b.dataset.k; setSkillSeg(); if(G&&!G.over){ const pk=packG(); if(pk) Saves.auto("uno",pk); } }));   // applies at once; the running game's save keeps it
 setSpeedSeg();
 // the copy follows the device: "Players on this TV" and "the remote" on the TV, the phone wording elsewhere
 function deviceCopy(){
@@ -477,6 +484,7 @@ function barTitle(){
 function packG(){ if(!G) return null; const c=JSON.parse(JSON.stringify(G,(k,v)=>(k==="log"||k==="evq")?undefined:v)); c.log=G.log.slice(-30); c.evq=[]; return {G:c,cfg:JSON.parse(JSON.stringify(cfg)),stats:{ms:Math.round(playMs()),played:stats.played}}; }
 function loadSaved(d){
   gen++; clearTimeout(timer); G=d.G; G.rnd=Math.random; Object.assign(cfg,d.cfg||{}); handoffOk=null; setSpeedSeg();
+  cfg.skill=normSkill((d.cfg||{}).skill||G.skill); G.skill=cfg.skill; if(U.Brain&&U.Brain.afterLoad) U.Brain.afterLoad(G); setSkillSeg();
   stats=readStats(d.stats); ui.winShown=-1; ui.result=false; closeBox(); closeHandoff(); closeWin();
   Sound.skip(); startUI(); showSetup(false); drawSetup(); clockOn(); armBack(); drive();
   if(G.roundOver) showRound();   // saved at the end of a round (or by an older version at game over): show the table and its buttons
@@ -497,9 +505,9 @@ if(window.MutationObserver){
   new MutationObserver(()=>{ const B=BG(), m=$("svtoast").textContent; if(luxe()&&B.toast&&m) B.toast(m,{icon:"save",ms:2400}); }).observe($("svtoast"),{childList:true,characterData:true,subtree:true});
 }
 const saveBar=Saves.bar({game:"uno",el:$("svbar"),snapNote:"exactly as it is now",saveToast:"Game saved",
-  getSettings:()=>({version:cfg.version,over:cfg.over,humans:cfg.humans,cpus:cfg.cpus,speed:cfg.speed}),
-  applySettings:s=>{ cfg.version=s.version||"classic"; cfg.over=s.over||{}; cfg.humans=s.humans||1; cfg.cpus=s.cpus!=null?s.cpus:3; cfg.speed=normSpeed(s.speed); setSpeedSeg(); drawSetup(); },
-  standard:()=>{ cfg.version="classic"; cfg.over={}; cfg.humans=1; cfg.cpus=3; cfg.speed="medium"; setSpeedSeg(); drawSetup(); },
+  getSettings:()=>({version:cfg.version,over:cfg.over,humans:cfg.humans,cpus:cfg.cpus,speed:cfg.speed,skill:cfg.skill}),
+  applySettings:s=>{ cfg.version=s.version||"classic"; cfg.over=s.over||{}; cfg.humans=s.humans||1; cfg.cpus=s.cpus!=null?s.cpus:3; cfg.speed=normSpeed(s.speed); cfg.skill=normSkill(s.skill); setSpeedSeg(); setSkillSeg(); drawSetup(); },
+  standard:()=>{ cfg.version="classic"; cfg.over={}; cfg.humans=1; cfg.cpus=3; cfg.speed="medium"; cfg.skill="normal"; setSpeedSeg(); setSkillSeg(); drawSetup(); },
   getSnapshot:()=>(G&&!G.over)?packG():null,loadSnapshot:loadSaved});
 
 /* ---- the round table and the hand-off share the sheet machinery ---- */
@@ -539,7 +547,7 @@ function startGame(){
   const hn=[]; for(let i=0;i<cfg.humans;i++) hn.push(cfg.humans===1?"You":"Player "+(i+1));
   const cn=cpuNames(total-cfg.humans,hn);   // step 10: fresh random names for the computers at every new game; stored in G and its save
   for(let i=0;i<total;i++){ const h=i<cfg.humans; humans.push(h); names.push(h?hn[i]:cn[i-cfg.humans]); }
-  G=E.newGame({names,humans,opts:curOpts()}); E.startRound(G); handoffOk=null;
+  G=E.newGame({names,humans,opts:curOpts()}); G.skill=normSkill(cfg.skill); E.startRound(G); handoffOk=null;
   stats={ms:0,played:0}; ui.winShown=-1; ui.result=false; closeHandoff();
   startUI(); clockOn(); drive();
 }
@@ -595,8 +603,10 @@ function drive(){
   if(G.unoVuln!=null&&G.players[G.unoVuln].human&&tf&&tf.v==="discardall") delay=Math.max(delay,2000);
   later(my,()=>{
     // other computers may jump in or catch first
-    if(G.unoVuln!=null){ const t=G.unoVuln; if(G.players[t].human&&G.rnd()<0.7){ const by=pickOther(t); if(by>=0&&send2(by,{t:"catch",target:t}).ok) return; } else if(!G.players[t].human&&nh>1){ /* hot-seat: no catching AIs */ } }
-    if(G.o.jumpIn&&G.phase==="play"&&!G.pen&&G.rnd()<0.18){ for(let q=0;q<G.players.length;q++){ if(!G.players[q].human&&q!==G.turn&&G.players[q].alive){ const ids=E.jumpIds(G,q); if(ids.length){ const c=G.players[q].hand.filter(x=>x.id===ids[0])[0], f=c.f[G.side]; const aa={t:"jump",card:ids[0]}; if(f.c==="W") aa.color=E.bestColor(G,q,ids[0]); if(E.needsTarget(G,f)) aa.target=swapTarget(q); if(send2(q,aa).ok) return; break; } } } }   // a refused jump-in falls through to the normal move, so the turn is never stranded
+    if(G.unoVuln!=null&&U.Brain&&U.Brain.catchPlan){ const cp=U.Brain.catchPlan(G); if(cp&&send2(cp.by,{t:"catch",target:cp.target}).ok) return; }
+    else if(G.unoVuln!=null){ const t=G.unoVuln; if(G.players[t].human&&G.rnd()<0.7){ const by=pickOther(t); if(by>=0&&send2(by,{t:"catch",target:t}).ok) return; } else if(!G.players[t].human&&nh>1){ /* hot-seat: no catching AIs */ } }
+    if(G.o.jumpIn&&G.phase==="play"&&!G.pen&&U.Brain&&U.Brain.jumpPlan){ const jp=U.Brain.jumpPlan(G); if(jp&&send2(jp.q,jp.a).ok) return; }
+    else if(G.o.jumpIn&&G.phase==="play"&&!G.pen&&G.rnd()<0.18){ for(let q=0;q<G.players.length;q++){ if(!G.players[q].human&&q!==G.turn&&G.players[q].alive){ const ids=E.jumpIds(G,q); if(ids.length){ const c=G.players[q].hand.filter(x=>x.id===ids[0])[0], f=c.f[G.side]; const aa={t:"jump",card:ids[0]}; if(f.c==="W") aa.color=E.bestColor(G,q,ids[0]); if(E.needsTarget(G,f)) aa.target=swapTarget(q); if(send2(q,aa).ok) return; break; } } } }   // a refused jump-in falls through to the normal move, so the turn is never stranded
     const act=E.actor(G), aa=E.aiAction(G,act); if(!aa) return;
     const r=send2(act,aa); if(!r.ok) send2(act,{t:"draw"});
   },Math.max(250,delay));
@@ -752,7 +762,7 @@ document.addEventListener("DOMContentLoaded",()=>{
 Skins.apply("uno"); Sound.mountButton(); Sound.music("uno");
 deviceCopy(); drawSetup(); saveBar.refresh(); showSetup(true);
 if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
-window.__uno={get G(){ return G; },get V(){ return V; },cfg:cfg,send:send,startGame:startGame,get ctrl(){ return ctrl; }};
+window.__uno={get G(){ return G; },get V(){ return V; },cfg:cfg,skill:()=>cfg.skill,send:send,startGame:startGame,get ctrl(){ return ctrl; }};
 })();
 </script>
 </body>
