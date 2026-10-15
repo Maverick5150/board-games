@@ -58,6 +58,8 @@
   .rm-vdesc b{color:var(--text-1); font-weight:var(--fw-ui-strong)}
   .rm-card{display:grid; gap:.75rem}
   .rm-field{display:grid; gap:.15rem}
+  .rm-pair{display:grid; gap:.75rem}
+  .rm-sub{display:grid; gap:.75rem; align-content:start}
   .rm-field .bg-row__desc{margin-top:0}
   #cpuSeg{grid-template-columns:repeat(4,minmax(0,1fr))}
   .rm-seats{display:flex; flex-wrap:wrap; align-items:center; gap:.625rem .875rem; padding:.625rem .875rem; border-radius:var(--r-md); background:var(--ink-2); box-shadow:var(--well-edge)}
@@ -213,11 +215,16 @@
   html[data-tv] .rm-sec--players{order:1} html[data-tv] .rm-sec--save{order:3} html[data-tv] .rm-back{order:4}
   html[data-tv] .rm-dock{order:2; position:static; gap:1.75rem; margin:0; padding:1.5rem 0 0; background:none}
   html[data-tv] .rm-hero{padding-top:34%}
-  html[data-tv] #humanSeg, html[data-tv] #cpuSeg, html[data-tv] #speedSeg{gap:1.5rem}
+  html[data-tv] #humanSeg, html[data-tv] #cpuSeg, html[data-tv] #speedSeg, html[data-tv] #skillSeg{gap:1.5rem}
   /* the Game speed row now lives in the Players card (as in Trouble and Sorry!): so the Start CTA stays on the first TV screenful, the
      computer keypad is one row of 0-7 (the 4 x 2 grid cost 108 px) and the speed row drops its explanatory line (Slow / Medium / Fast says it) */
   html[data-tv] #cpuSeg{grid-template-columns:repeat(8,minmax(0,1fr))}
-  html[data-tv] #speedHead + .bg-row__desc{display:none}
+  html[data-tv] #speedHead + .bg-row__desc, html[data-tv] #skillHead + .bg-row__desc{display:none}
+  /* Game speed and Computer skill sit side by side on TV (one row of height, so the Start CTA stays on the first screenful) */
+  html[data-tv] .rm-pair{grid-template-columns:repeat(2,minmax(0,1fr)); gap:1.5rem}
+  html[data-tv] #skillSeg{gap:1.5rem}
+  /* two three-button rows share the card's width: 21 px (the TV floor) with a slim padding keeps "Medium" and "Normal" whole (no ellipsis) */
+  html[data-tv] #speedSeg > button, html[data-tv] #skillSeg > button{font-size:21px; padding-inline:.25rem}
   html[data-tv] .bg-topbar__end{gap:1.5rem}
   html[data-tv] #svbar button{grid-template-columns:minmax(0,1fr); justify-items:center; align-content:center; row-gap:.3rem; padding:.625rem .5rem}
   html[data-tv] #svbar button .bg-ico{width:1.25em; height:1.25em}
@@ -316,8 +323,16 @@
           <div class="bg-seg" id="humanSeg" role="group" aria-label="Players on this phone"></div>
           <div class="rm-field"><span class="bg-row__title">Computer players</span><span class="bg-row__desc" id="cpuDesc">2 to 8 players in all.</span></div>
           <div class="bg-seg bg-seg--grid5" id="cpuSeg" role="group" aria-label="Computer players"></div>
-          <div class="rm-field"><span class="bg-row__title" id="speedHead">Game speed</span><span class="bg-row__desc">How fast the computers play and the cards move. Changes at once.</span></div>
-          <div class="bg-seg bg-seg--text" id="speedSeg" role="group" aria-labelledby="speedHead"><button type="button" data-s="slow" aria-pressed="false">Slow</button><button type="button" data-s="medium" class="on" aria-pressed="true">Medium</button><button type="button" data-s="fast" aria-pressed="false">Fast</button></div>
+          <div class="rm-pair">
+            <div class="rm-sub">
+            <div class="rm-field"><span class="bg-row__title" id="speedHead">Game speed</span><span class="bg-row__desc">How fast the computers play and the cards move. Changes at once.</span></div>
+            <div class="bg-seg bg-seg--text" id="speedSeg" role="group" aria-labelledby="speedHead"><button type="button" data-s="slow" aria-pressed="false">Slow</button><button type="button" data-s="medium" class="on" aria-pressed="true">Medium</button><button type="button" data-s="fast" aria-pressed="false">Fast</button></div>
+            </div>
+            <div class="rm-sub">
+              <div class="rm-field"><span class="bg-row__title" id="skillHead">Computer skill</span><span class="bg-row__desc">Easy is gentler, Hard is sharper. Changes at once.</span></div>
+              <div class="bg-seg bg-seg--text" id="skillSeg" role="group" aria-labelledby="skillHead"><button type="button" data-k="easy" aria-pressed="false">Easy</button><button type="button" data-k="normal" class="on" aria-pressed="true">Normal</button><button type="button" data-k="hard" aria-pressed="false">Hard</button></div>
+            </div>
+          </div>
           <div class="rm-seats" id="seatPreview"><span class="rm-seats__tokens" id="seatTokens"></span><span class="rm-seats__txt"><b id="seatHead"></b><span id="seatNames"></span><span id="seatNote"></span></span></div>
         </div>
       </section>
@@ -383,8 +398,10 @@ const $=id=>document.getElementById(id);
 // Saved with the settings and the game ("normal", the old name of Medium, still loads); a change from the Menu applies at once.
 function speedFactor(){ return ({slow:1.75, fast:0.5})[window.bgGameSpeed] || 1 }
 function normSpeed(v){ return v==="slow"||v==="fast"?v:"medium"; }
+// Computer skill (easy / normal / hard; normal = the new brain): saved with the settings and the game; a change from the Menu applies at once; old saves = normal
+function normSkill(v){ return v==="easy"||v==="hard"?v:"normal"; }
 const OFFICIAL_NOT={minNat:1,addOppHands:1,mustGoOut:1,deals:1};
-let cfg={version:"standard",over:{},humans:1,cpus:1,speed:"medium"};
+let cfg={version:"standard",over:{},humans:1,cpus:1,speed:"medium",skill:"normal"};
 window.bgGameSpeed="medium";
 let G=null,sel=new Set(),pileFrom=null,flashCards={},flashMeld=null,logLines=[],gen=0,handoffOk=null,lastTurn=-1,busy=false,drawnAt={},sortPrefs={};
 /* each seat keeps its own sort mode and drag order (hot-seat players don't share one arrangement) */
@@ -525,6 +542,12 @@ function syncRules(){
 $("rulesToggle").addEventListener("click",()=>{ ui.rulesOpen=!ui.rulesOpen; syncRules(); });
 function setSpeedSeg(){ cfg.speed=normSpeed(cfg.speed); window.bgGameSpeed=cfg.speed; $("speedSeg").querySelectorAll("button").forEach(x=>{ const on=x.dataset.s===cfg.speed; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
 $("speedSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.speed=b.dataset.s; setSpeedSeg(); }));
+function setSkillSeg(){ cfg.skill=normSkill(cfg.skill); if(G) G.skill=cfg.skill; $("skillSeg").querySelectorAll("button").forEach(x=>{ const on=x.dataset.k===cfg.skill; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
+$("skillSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{
+  cfg.skill=b.dataset.k; setSkillSeg();
+  // a change from the Menu mid-game also goes into the game's last save, so Continue / Save game bring the new level back
+  if(G&&!G.over&&lastSnap){ lastSnap.cfg.skill=cfg.skill; lastSnap.G.skill=cfg.skill; Saves.auto("rummy500",lastSnap); }
+}));
 // the copy follows the device: "Players on this TV" and "the remote" on the TV, the phone wording elsewhere
 function deviceCopy(){
   const tv=onTV(), t=tv?"Players on this TV":"Players on this phone";
@@ -607,11 +630,11 @@ function loadSaved(d){
   if(!(d.between===true&&G.roundOver&&typeof G.roundOver==="object"&&Array.isArray(G.roundOver.rows)&&!G.over)) G.roundOver=null;   // a mid-round save; a between-rounds one keeps its summary
   /* saves from before the Persian deck fix hold 2 jokers: deal the published 4 from the next round on */
   if(G.o&&G.o.jokerMode==="group"&&G.o.jokers===2&&d.cfg&&d.cfg.version==="persian"&&!(d.cfg.over&&d.cfg.over.jokers!=null)) G.o.jokers=4;
-  Object.assign(cfg,d.cfg||{}); cfg.speed=normSpeed((d.cfg||{}).speed); sel.clear(); pileFrom=null; flashCards={}; flashMeld=null; handoffOk=null; lastTurn=-1; drawnAt={}; busy=false;
+  Object.assign(cfg,d.cfg||{}); cfg.speed=normSpeed((d.cfg||{}).speed); cfg.skill=normSkill((d.cfg||{}).skill||d.G.skill); G.skill=cfg.skill; if(window.Rummy&&Rummy.Brain&&Rummy.Brain.afterLoad) Rummy.Brain.afterLoad(G); sel.clear(); pileFrom=null; flashCards={}; flashMeld=null; handoffOk=null; lastTurn=-1; drawnAt={}; busy=false;
   stats=readStats(d.stats); ui.winShown=-1; ui.result=false; ui.strip=""; ui.hoKey="";
   logLines=[]; say("Saved game loaded — round "+G.round,true);
   closeBox(); closeHandoff(); closeWin(); showSetup(false); Sound.skip();
-  setSpeedSeg(); drawSetup();   // the New game page shows the loaded game's settings
+  setSpeedSeg(); setSkillSeg(); drawSetup();   // the New game page shows the loaded game's settings
   clockOn(); armBack();
   loop();
 }
@@ -631,9 +654,9 @@ if(window.MutationObserver){
   new MutationObserver(()=>{ const B=BG(), m=$("svtoast").textContent; if(luxe()&&B.toast&&m) B.toast(m,{icon:"save",ms:2400}); }).observe($("svtoast"),{childList:true,characterData:true,subtree:true});
 }
 const saveBar=Saves.bar({game:"rummy500",el:$("svbar"),
-  getSettings:()=>({version:cfg.version,over:cfg.over,humans:cfg.humans,cpus:cfg.cpus,speed:cfg.speed}),
-  applySettings:s=>{ cfg.version=s.version||"standard"; cfg.over=s.over||{}; cfg.humans=s.humans||1; cfg.cpus=s.cpus!=null?s.cpus:1; cfg.speed=normSpeed(s.speed); clampSeats(); setSpeedSeg(); drawSetup(); },
-  standard:()=>{ cfg.version="standard"; cfg.over={}; cfg.humans=1; cfg.cpus=1; cfg.speed="medium"; setSpeedSeg(); drawSetup(); },
+  getSettings:()=>({version:cfg.version,over:cfg.over,humans:cfg.humans,cpus:cfg.cpus,speed:cfg.speed,skill:cfg.skill}),
+  applySettings:s=>{ cfg.version=s.version||"standard"; cfg.over=s.over||{}; cfg.humans=s.humans||1; cfg.cpus=s.cpus!=null?s.cpus:1; cfg.speed=normSpeed(s.speed); cfg.skill=normSkill(s.skill); clampSeats(); setSpeedSeg(); setSkillSeg(); drawSetup(); },
+  standard:()=>{ cfg.version="standard"; cfg.over={}; cfg.humans=1; cfg.cpus=1; cfg.speed="medium"; cfg.skill="normal"; setSpeedSeg(); setSkillSeg(); drawSetup(); },
   getSnapshot:()=>(G&&!G.over&&lastSnap&&(!G.roundOver||lastSnap.between))?lastSnap:null,
   loadSnapshot:loadSaved});
 $("scoreBtn").addEventListener("click",()=>{ if(!G){ toast("Start a game first."); return; } showScores(); });
@@ -700,7 +723,7 @@ function startGame(){
      save keeps them. Without names.js the setup names ("CPU 1") stay. */
   if(window.Names&&Names.pick&&cfg.cpus>0){ const got=Names.pick(cfg.cpus,names.slice(0,cfg.humans)); for(let i=cfg.humans;i<total;i++) names[i]=got[i-cfg.humans]||names[i]; }
   if(curOpts().teams){ /* seat humans so teammates alternate: seats 0..3 */ }
-  G=GM.newGame({names,humans,opts:curOpts()});
+  G=GM.newGame({names,humans,opts:curOpts()}); G.skill=normSkill(cfg.skill);
   stats={ms:0}; ui.winShown=-1; ui.result=false; ui.strip=""; ui.hoKey=""; closeBox(); closeHandoff();
   logLines=[]; startRound(true);
   clockOn();
@@ -1076,7 +1099,7 @@ document.addEventListener("DOMContentLoaded",()=>{
 Skins.apply("rummy500"); Sound.mountButton(); Sound.music("rummy500");
 deviceCopy(); drawSetup(); saveBar.refresh(); showSetup(true);
 if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
-window.__rummy={speed:()=>cfg.speed,get G(){ return G; },cfg:cfg,act:act,perform:perform,loop:loop,startGame:startGame,get sel(){ return sel; },render:render};
+window.__rummy={speed:()=>cfg.speed,skill:()=>cfg.skill,get G(){ return G; },cfg:cfg,act:act,perform:perform,loop:loop,startGame:startGame,get sel(){ return sel; },render:render};
 })();
 </script>
 </body>
