@@ -129,12 +129,21 @@ function create(container,opts){
   opts=opts||{};
   var self={opts:opts}, V=null, marks={sel:null,src:{},tgt:{},hot:{},mine:{}}, labelsMode=opts.labels||"auto";
   var scale=1,tx=0,ty=0, tint=!!opts.tint, tapFn=opts.onTap||null, flashT={};
+  /* opts.focusable (the single-device page on TV, step 4): the territories the player can act on (the marked ones) become D-pad
+     stops; OK on one taps it, one ring on a layer above every piece shows the focus. Off by default: Party Mode is unchanged */
+  var focusOn=!!opts.focusable, ringLayer=null, ringT=-1;
+  /* opts.pulseLayer (the single-device page, step 4): the pulsing marks (the territory to attack from, the targets, the empty territories
+     to claim) are drawn on ONE overlay under the pieces, which the page pulses as a whole by opacity (a compositor beat), so a pulse never
+     repaints the map. The rings and their place are the same; off by default (Party Mode draws them in each territory, as before) */
+  var pulseOn=!!opts.pulseLayer, psvg=null, pgroups=[];
   container.innerHTML="";
   var root=document.createElement("div"); root.className="rkroot";
   var view=document.createElement("div"); view.className="rkview";
   var seaC=document.createElement("canvas"), landC=document.createElement("canvas"); seaC.className="rksea"; landC.className="rkland";
   var svg=document.createElementNS(SVGNS,"svg"); svg.setAttribute("viewBox","0 0 "+MP.W+" "+MP.H); svg.setAttribute("class","rksvg"); svg.setAttribute("preserveAspectRatio","xMidYMid meet");
-  view.appendChild(seaC); view.appendChild(landC); view.appendChild(svg); root.appendChild(view); container.appendChild(root);
+  view.appendChild(seaC); view.appendChild(landC);
+  if(pulseOn){ psvg=document.createElementNS(SVGNS,"svg"); psvg.setAttribute("viewBox","0 0 "+MP.W+" "+MP.H); psvg.setAttribute("class","rksvg rkpulsel"); psvg.setAttribute("preserveAspectRatio","xMidYMid meet"); psvg.setAttribute("aria-hidden","true"); psvg.setAttribute("pointer-events","none"); view.appendChild(psvg); }
+  view.appendChild(svg); root.appendChild(view); container.appendChild(root);
   injectCSS();
   var canvasOK=hasCanvas(), G=null, base=[];
   // base territory colours
@@ -177,20 +186,35 @@ function create(container,opts){
     labelLayer.appendChild(tl); labelEls.push(tl);
     var po=POFF[MP.names[t]]||[0,0];
     var gg=document.createElementNS(SVGNS,"g"); gg.setAttribute("class","tg"); gg.setAttribute("data-t",t); gg.setAttribute("transform","translate("+(MP.x[t]+po[0])+","+(MP.y[t]+po[1])+")"); pieceLayer.appendChild(gg); groups.push(gg);
+    if(psvg){ var pg=document.createElementNS(SVGNS,"g"); pg.setAttribute("transform","translate("+(MP.x[t]+po[0])+","+(MP.y[t]+po[1])+")"); psvg.appendChild(pg); pgroups.push(pg); }
   }
   var keyCache=[];
+  function focusAttrs(t,gg,a){   // a D-pad stop only while the player can act on it (one of the marked territories)
+    var act=focusOn&&(marks.sel===t||!!marks.src[t]||!!marks.tgt[t]||!!marks.hot[t]||!!marks.mine[t]);
+    if(act){ gg.setAttribute("data-focus",""); gg.setAttribute("tabindex","-1"); gg.setAttribute("role","button"); gg.setAttribute("aria-label",MP.names[t]+(a>0?", "+a+" "+(a===1?"army":"armies"):"")); }
+    else if(gg.hasAttribute("data-focus")){ gg.removeAttribute("data-focus"); gg.removeAttribute("tabindex"); gg.removeAttribute("role"); gg.removeAttribute("aria-label"); }
+  }
   function drawGroup(t){
-    var st=V&&V.terr[t], gg=groups[t]; if(!st){ gg.innerHTML=""; return; }
+    var st=V&&V.terr[t], gg=groups[t]; if(!st){ gg.innerHTML=""; if(focusOn) focusAttrs(t,gg,0); return; }
     var o=st.o!==undefined?st.o:st[0], a=st.a!==undefined?st.a:st[1];
+    if(focusOn||gg.hasAttribute("data-focus")) focusAttrs(t,gg,a);
     var colHex=(o>=0&&V.colors[o])||"#888888";
     var pc=V.pcol&&V.pcol[o]||colorObj(colHex);
     var key=o+"/"+a+"/"+(marks.sel===t?1:0)+(marks.src[t]?"s":"")+(marks.tgt[t]?"t":"")+(marks.hot[t]?"h":"")+(marks.mine[t]?"m":"")+(flashT[t]?"f":"")+scaleBucket();
     if(keyCache[t]===key) return; keyCache[t]=key;
     var h='';
     if(marks.mine[t]) h+='<circle r="30" fill="'+pc.l+'" opacity=".30"/>';
+    if(pulseOn){   // the same rings on the pulse overlay (they pulse together, by the overlay's opacity)
+      var ph='';
+      if(marks.src[t]) ph+='<circle r="31" fill="none" stroke="#ffe27a" stroke-width="4"/>';
+      if(marks.tgt[t]) ph+='<circle r="31" fill="rgba(255,60,40,.22)" stroke="#ff3b2a" stroke-width="4" stroke-dasharray="7 4"/>';
+      if(marks.hot[t]) ph+='<circle r="31" fill="none" stroke="#fff" stroke-width="3.5"/>';
+      if(pgroups[t]&&pgroups[t].innerHTML!==ph) pgroups[t].innerHTML=ph;
+    } else {
     if(marks.src[t]) h+='<circle r="31" fill="none" stroke="#ffe27a" stroke-width="4" class="rkpulse"/>';
     if(marks.tgt[t]) h+='<circle r="31" fill="rgba(255,60,40,.22)" stroke="#ff3b2a" stroke-width="4" stroke-dasharray="7 4" class="rkpulse"/>';
     if(marks.hot[t]) h+='<circle r="31" fill="none" stroke="#fff" stroke-width="3.5" class="rkpulse"/>';
+    }
     if(marks.sel===t) h+='<circle r="33" fill="rgba(255,226,122,.25)" stroke="#ffd23f" stroke-width="4.5"/>';
     if(flashT[t]) h+='<circle r="34" fill="none" stroke="'+(flashT[t]==="lose"?"#ff5a4a":"#fff")+'" stroke-width="5" class="rkflash"/>';
     h+='<circle r="29" fill="transparent"/>';
@@ -203,7 +227,21 @@ function create(container,opts){
   }
   function colorObj(hex){ var r=hexRGB(hex); function mix(k){ return "rgb("+Math.round(r[0]*k)+","+Math.round(r[1]*k)+","+Math.round(r[2]*k)+")"; } return {c:hex,d:mix(.55),l:mix(1.25).replace(/(\d+)/g,function(m){ return Math.min(255,+m); })}; }
   function scaleBucket(){ return ""; }
-  function drawAll(){ for(var t=0;t<MP.n;t++) drawGroup(t); applyLabels(); }
+  function drawAll(){ for(var t=0;t<MP.n;t++) drawGroup(t); fitPulse(); applyLabels(); }
+  // the pulse overlay is only as big as its rings (the targets round an attack: a small layer to blend on each beat), and gone when
+  // nothing pulses. Same place on the map: its viewBox and its box are the rings' bounds, in map units and in % of the map
+  var pulseBox="";
+  function fitPulse(){
+    if(!psvg) return;
+    var x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+    for(var t=0;t<MP.n;t++){ if(!(marks.src[t]||marks.tgt[t]||marks.hot[t])) continue; var p=ringPos(t); x0=Math.min(x0,p[0]-36); y0=Math.min(y0,p[1]-36); x1=Math.max(x1,p[0]+36); y1=Math.max(y1,p[1]+36); }
+    var box=x1>x0?[x0,y0,x1-x0,y1-y0].map(function(v){ return Math.round(v); }).join(" "):"";
+    if(box===pulseBox) return; pulseBox=box;
+    if(!box){ psvg.style.display="none"; return; }
+    var b=box.split(" ").map(Number);
+    psvg.setAttribute("viewBox",box); psvg.style.display="";
+    psvg.style.left=(b[0]/MP.W*100)+"%"; psvg.style.top=(b[1]/MP.H*100)+"%"; psvg.style.width=(b[2]/MP.W*100)+"%"; psvg.style.height=(b[3]/MP.H*100)+"%";
+  }
   function applyLabels(){
     var show=labelsMode==="always"||(labelsMode==="auto"&&scale>=1.45);
     labelLayer.style.display=show?"":"none";
@@ -215,8 +253,33 @@ function create(container,opts){
   self.setLabels=function(m){ labelsMode=m; applyLabels(); };
   self.centerOf=function(t){ return [MP.x[t],MP.y[t]]; };
 
+  /* ---- the D-pad focus ring (opts.focusable): ONE ring group above every piece, moved to the focused territory. Static strokes, no
+     filter: a dark gap, the ivory ring and a soft gold glow, the shared focus ring's look ---- */
+  function ringPos(t){ var po=POFF[MP.names[t]]||[0,0]; return [MP.x[t]+po[0],MP.y[t]+po[1]]; }
+  function showRing(t){
+    if(!ringLayer){ ringLayer=document.createElementNS(SVGNS,"g"); ringLayer.setAttribute("class","rkfring"); ringLayer.setAttribute("aria-hidden","true"); ringLayer.setAttribute("pointer-events","none");
+      ringLayer.innerHTML='<circle r="42" fill="none" stroke="rgba(231,202,144,.45)" stroke-width="5"/><circle r="35.6" fill="none" stroke="#080a15" stroke-width="2.6"/><circle r="38.3" fill="none" stroke="#fff3d1" stroke-width="3.2"/>'; }
+    if(ringLayer.parentNode!==svg||svg.lastChild!==ringLayer) svg.appendChild(ringLayer);
+    var p=ringPos(t); ringLayer.setAttribute("transform","translate("+p[0]+","+p[1]+")"); ringLayer.style.display=""; ringT=t;
+  }
+  function hideRing(){ if(ringLayer) ringLayer.style.display="none"; ringT=-1; }
+  // zoomed in: a territory the D-pad lands on outside the visible part of the map is brought into view (the scale is kept)
+  function panTo(t){
+    if(scale<=1) return; var r=root.getBoundingClientRect(), p=ringPos(t), x=tx+p[0]/MP.W*r.width*scale, y=ty+p[1]/MP.H*r.height*scale, m=Math.min(r.width,r.height)*0.18;
+    if(x>=m&&x<=r.width-m&&y>=m&&y<=r.height-m) return;
+    tx=r.width/2-p[0]/MP.W*r.width*scale; ty=r.height/2-p[1]/MP.H*r.height*scale; clamp(); apply();
+  }
+  self.setFocusable=function(on){ on=!!on; if(on===focusOn) return; focusOn=on; keyCache=[]; drawAll(); if(!on) hideRing(); };
+  root.addEventListener("keydown",function(e){
+    if(!focusOn) return; var k=e.key, c=e.keyCode; if(!(k==="Enter"||k==="Select"||c===13||c===23)) return;
+    var tg=e.target&&e.target.closest&&e.target.closest(".tg"); if(!tg) return;
+    e.preventDefault(); if(tapFn) tapFn(+tg.getAttribute("data-t"),e);
+  });
+  root.addEventListener("focusin",function(e){ var tg=focusOn&&e.target&&e.target.closest&&e.target.closest(".tg"); if(!tg) return; var t=+tg.getAttribute("data-t"); showRing(t); panTo(t); });
+  root.addEventListener("focusout",function(e){ if(!e.relatedTarget||!root.contains(e.relatedTarget)) hideRing(); });
+
   /* ---- zoom / pan / tap ---- */
-  function apply(){ view.style.transform="translate("+tx+"px,"+ty+"px) scale("+scale+")"; applyLabels(); }
+  function apply(){ view.style.transform="translate("+tx+"px,"+ty+"px) scale("+scale+")"; root.classList.toggle("is-fit",scale<=1); applyLabels(); }
   function clamp(){ var r=root.getBoundingClientRect(), w=r.width, h=r.height; var minX=Math.min(0,w-w*scale), minY=Math.min(0,h-h*scale); tx=Math.max(minX,Math.min(0,tx)); ty=Math.max(minY,Math.min(0,ty)); }
   self.zoomAt=function(k,cx,cy){ var r=root.getBoundingClientRect(); cx=cx==null?r.width/2:cx; cy=cy==null?r.height/2:cy; var ns=Math.max(1,Math.min(4.5,scale*k)); var f=ns/scale; tx=cx-(cx-tx)*f; ty=cy-(cy-ty)*f; scale=ns; clamp(); apply(); };
   self.fit=function(){ scale=1; tx=0; ty=0; apply(); };
