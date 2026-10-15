@@ -39,7 +39,7 @@
   /* ---------- setup page (also the in-game Menu) ---------- */
   .rm-setup{display:flex; flex-direction:column; width:min(100%,40rem); margin:0 auto; padding:0 var(--gutter)}
   .rm-col{display:contents}
-  .rm-hero{order:1} .rm-sec--version{order:2} .rm-sec--players{order:3} .rm-sec--speed{order:4} .rm-sec--rules{order:5} .rm-sec--save{order:6} .rm-back{order:7} .rm-dock{order:8}
+  .rm-hero{order:1} .rm-sec--version{order:2} .rm-sec--players{order:3} .rm-sec--rules{order:4} .rm-sec--save{order:5} .rm-back{order:6} .rm-dock{order:7}
   /* the hero art band on top, the title under it (ui README section 10, narrow hero); the art fades into the scene */
   .rm-hero{min-height:0; margin:0 calc(-1 * var(--gutter)); padding-top:46%; border-radius:0; background:transparent}
   .rm-hero .bg-hero__layer{bottom:auto; height:auto; aspect-ratio:16/9; border-radius:0; background-color:transparent;
@@ -214,6 +214,10 @@
   html[data-tv] .rm-dock{order:2; position:static; gap:1.75rem; margin:0; padding:1.5rem 0 0; background:none}
   html[data-tv] .rm-hero{padding-top:34%}
   html[data-tv] #humanSeg, html[data-tv] #cpuSeg, html[data-tv] #speedSeg{gap:1.5rem}
+  /* the Game speed row now lives in the Players card (as in Trouble and Sorry!): so the Start CTA stays on the first TV screenful, the
+     computer keypad is one row of 0-7 (the 4 x 2 grid cost 108 px) and the speed row drops its explanatory line (Slow / Medium / Fast says it) */
+  html[data-tv] #cpuSeg{grid-template-columns:repeat(8,minmax(0,1fr))}
+  html[data-tv] #speedHead + .bg-row__desc{display:none}
   html[data-tv] .bg-topbar__end{gap:1.5rem}
   html[data-tv] #svbar button{grid-template-columns:minmax(0,1fr); justify-items:center; align-content:center; row-gap:.3rem; padding:.625rem .5rem}
   html[data-tv] #svbar button .bg-ico{width:1.25em; height:1.25em}
@@ -262,6 +266,7 @@
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
 <script src="../saves.js"></script>
+<script src="../names.js"></script>
 <script>window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
 <script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
 </head>
@@ -291,10 +296,6 @@
         <div class="bg-versions" id="versions" role="radiogroup" aria-labelledby="versionHead"></div>
         <p class="rm-vdesc" id="versionDesc" aria-live="polite"></p>
       </section>
-      <section class="rm-sec rm-sec--speed" aria-labelledby="speedHead">
-        <div class="bg-section"><h2 class="bg-eyebrow" id="speedHead" data-stage-text>Game speed</h2></div>
-        <div class="bg-seg bg-seg--text" id="speedSeg" role="group" aria-labelledby="speedHead"><button type="button" data-s="slow" aria-pressed="false">Slow</button><button type="button" data-s="medium" class="on" aria-pressed="true">Medium</button><button type="button" data-s="fast" aria-pressed="false">Fast</button></div>
-      </section>
       <section class="rm-sec rm-sec--rules" aria-labelledby="rulesHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="rulesHead" data-stage-text>Rules</h2></div>
         <div class="bg-rows">
@@ -315,6 +316,8 @@
           <div class="bg-seg" id="humanSeg" role="group" aria-label="Players on this phone"></div>
           <div class="rm-field"><span class="bg-row__title">Computer players</span><span class="bg-row__desc" id="cpuDesc">2 to 8 players in all.</span></div>
           <div class="bg-seg bg-seg--grid5" id="cpuSeg" role="group" aria-label="Computer players"></div>
+          <div class="rm-field"><span class="bg-row__title" id="speedHead">Game speed</span><span class="bg-row__desc">How fast the computers play and the cards move. Changes at once.</span></div>
+          <div class="bg-seg bg-seg--text" id="speedSeg" role="group" aria-labelledby="speedHead"><button type="button" data-s="slow" aria-pressed="false">Slow</button><button type="button" data-s="medium" class="on" aria-pressed="true">Medium</button><button type="button" data-s="fast" aria-pressed="false">Fast</button></div>
           <div class="rm-seats" id="seatPreview"><span class="rm-seats__tokens" id="seatTokens"></span><span class="rm-seats__txt"><b id="seatHead"></b><span id="seatNames"></span><span id="seatNote"></span></span></div>
         </div>
       </section>
@@ -693,6 +696,9 @@ function startGame(){
   gen++; clampSeats();
   const total=cfg.humans+cfg.cpus, names=seatNames(), humans=[];
   for(let i=0;i<total;i++) humans.push(i<cfg.humans);
+  /* the computers get fresh random American first names at every new game and every Play again (names.js); they live in G.players, so a
+     save keeps them. Without names.js the setup names ("CPU 1") stay. */
+  if(window.Names&&Names.pick&&cfg.cpus>0){ const got=Names.pick(cfg.cpus,names.slice(0,cfg.humans)); for(let i=cfg.humans;i<total;i++) names[i]=got[i-cfg.humans]||names[i]; }
   if(curOpts().teams){ /* seat humans so teammates alternate: seats 0..3 */ }
   G=GM.newGame({names,humans,opts:curOpts()});
   stats={ms:0}; ui.winShown=-1; ui.result=false; ui.strip=""; ui.hoKey=""; closeBox(); closeHandoff();
