@@ -33,8 +33,8 @@
                                      browsers and the Back key: closes the top layer, then the page's own step (.on(fn)), then the hub
    BGUI.focus                        D-pad spatial navigation (auto-enabled in TV mode); Enter = click; stays inside an open sheet/win;
                                      the top bar is its own zone and focus scrolls clear of it (Down never enters it; at the end of
-                                     the page Down scrolls on only while the focused control stays clear of it); arrows never get
-                                     stuck in select/text/radio
+                                     the page Down scrolls on only while the focused control stays clear of it); a switch is
+                                     revealed with its whole row (the ring's element); arrows never get stuck in select/text/radio
    BGUI.dice                         SVG pip faces + a cheap roll (transform tumble + a few face swaps)
    BGUI.setTV(on) / isTV()           html[data-tv]; auto for ?tv=1 and window.AndroidTV
    BGUI.mount.*                      seg, stepper, toggle, versions, players, emblem, orbs, effectsRow (the "Reduce effects" switch
@@ -1278,14 +1278,17 @@
     });
     return h;
   }
-  /* scroll a page control into view below the sticky top bar (scroll-padding via --bg-bar-h, then a manual check) */
+  /* scroll a page control into view below the sticky top bar (scroll-padding via --bg-bar-h, then a manual check). What is
+     revealed is the element that carries the ring (ringOf): a switch's whole row, not just its knob, so the row's ring (and its
+     scroll-margin room) is never cut by the bar, the screen edge or a sheet's edge (step 4 Monopoly review: 132 px rule rows
+     lost 16-17 px of their ring when only the 30 px switch was scrolled into view) */
   function reveal(el) {
     if (zoneOf(el)) return;   // the bar itself never scrolls
-    var inPage = !(el.closest && el.closest(".bg-sheet, .bg-win")), cover = inPage ? barCover() : 0;
+    var box = ringOf(el), inPage = !(el.closest && el.closest(".bg-sheet, .bg-win")), cover = inPage ? barCover() : 0;
     if (inPage) root.style.setProperty("--bg-bar-h", Math.round(cover) + "px");
-    try { el.scrollIntoView({ block: "nearest", inline: "nearest" }); } catch (e) { try { el.scrollIntoView(false); } catch (e2) { } }
+    try { box.scrollIntoView({ block: "nearest", inline: "nearest" }); } catch (e) { try { box.scrollIntoView(false); } catch (e2) { } }
     if (cover) {
-      var r = el.getBoundingClientRect(), want = cover + (parseFloat(w.getComputedStyle(el).scrollMarginTop) || 0);
+      var r = box.getBoundingClientRect(), want = cover + (parseFloat(w.getComputedStyle(box).scrollMarginTop) || 0);
       if (r.top < want - 1) { try { w.scrollBy(0, r.top - want); } catch (e3) { } }
     }
   }
@@ -1340,7 +1343,7 @@
       best = clear.length ? pick(a, clear, dir) : null;
     }
     if (best) return setFocus(best);
-    if (!z && dir === "down" && !sheetTop() && !openWin()) return pageEnd(a);
+    if (!z && dir === "down" && !sheetTop() && !openWin()) return pageEnd(ringOf(cur).getBoundingClientRect());   // the ring's element (a switch's row) stays clear of the bar
     return false;
   }
   /* Down with nothing below in the page: scroll on (there may be text to read) but only as far as the focused control stays
@@ -1665,7 +1668,7 @@
   };
 
   /* ---------------- export ---------------- */
-  BGUI.version = "2.3.0";
+  BGUI.version = "2.3.1";
   BGUI.reducedMotion = reducedMotion;
   BGUI.setReducedMotion = setReducedMotion;
   BGUI.haptic = haptic;

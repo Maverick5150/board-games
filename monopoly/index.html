@@ -55,11 +55,22 @@
   .toks{position:absolute; bottom:-.1em; left:0; right:0; display:flex; flex-wrap:wrap; justify-content:center; gap:0; line-height:1; z-index:3; pointer-events:none}
   .tk{display:inline-block; font-size:1.4em; line-height:1; margin:0 -.07em; filter:drop-shadow(0 0 1px var(--pc,#000)) drop-shadow(0 0 1.5px var(--pc,#000)) drop-shadow(0 1px 1px #0009)}
   .tkp{display:inline-block; line-height:1}
-  .tkp.cur{animation:pulse 1s infinite}
+  /* the current player's piece pulses, 1 to 1.3 and back every second, on a plain wrapper: its colour glow (the filter on .tk) is
+     painted once into the wrapper's layer and only the transform changes. With ui/ui.js every beat is ONE finite 1 s pulse (the same
+     keyframes and easing as before), started by the ONE effects ticker about once a second (pulseTick), so the page runs no endless
+     CSS animation (README section 6) and the compositor plays each beat as it played the old loop. Two names for the same beat, so
+     switching them starts the next one without a reflow. Without ui.js (no ticker) the old CSS pulse runs, as it always did */
+  .tkp.cur{transform:scale(1.15)}
+  html.mn-luxe .tkp.cur{will-change:transform}
+  html.mn-luxe .tkp.cur.is-b1, html.mn-luxe .tkp.cur.is-b2{transform:scale(1)}
+  html.mn-luxe .tkp.cur.is-b1{animation:pulse 1s 1}
+  html.mn-luxe .tkp.cur.is-b2{animation:pulse-b 1s 1}
+  html:not(.mn-luxe) .tkp.cur{animation:pulse 1s infinite}
   @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.3)}}
+  @keyframes pulse-b{0%,100%{transform:scale(1)}50%{transform:scale(1.3)}}
   /* the current token keeps its "whose turn" lift, still, under Reduce effects and reduced motion */
-  html[data-effects="reduced"] .tkp.cur, html[data-motion="reduce"] .tkp.cur{animation:none; transform:scale(1.15)}
-  @media (prefers-reduced-motion: reduce){ .tkp.cur{animation:none; transform:scale(1.15)} }
+  html[data-effects="reduced"] .tkp.cur, html[data-motion="reduce"] .tkp.cur{animation:none !important; transform:scale(1.15) !important}
+  @media (prefers-reduced-motion: reduce){ .tkp.cur{animation:none !important; transform:scale(1.15) !important} }
   /* the board's middle: an original Luxe plate (the gold logomark with its glint and the name in DM Serif) in place of a logo */
   .mn-center{position:absolute; inset:9.0909%; display:grid; place-items:center; pointer-events:none; font-size:calc(var(--mn-bw) / 39)}
   .mn-plate{display:grid; justify-items:center; gap:.5em; padding:1.3em 2.6em 1.45em; border-radius:1.6em;
@@ -176,6 +187,7 @@
   .mn-num{width:7rem; min-height:var(--tap); margin:0; padding:0 .75rem; border:0; border-radius:var(--r-sm); font:var(--fw-ui-strong) var(--fs-md)/1 var(--font-ui);
     color:var(--text-1); background:var(--ink-2); box-shadow:inset 0 0 0 1px var(--line-gold)}
   .mn-num:focus{outline:none; box-shadow:var(--focus-ring)}
+  .mn-num{scroll-margin:calc(var(--focus-room) + .5rem)}   /* the trade's cash fields: room for the ring when the D-pad scrolls them in (as every bg- control) */
   .mn-none{margin:0; padding:.75rem 1rem; font:var(--fw-body) var(--fs-sm)/1.3 var(--font-ui); color:var(--text-3)}
   .mn-trade .bg-row__title small, .mn-rules .bg-row__title small{font:var(--fw-body) var(--fs-xs)/1.2 var(--font-ui); color:var(--text-3)}
   .mn-offer{display:grid; gap:.5rem; margin:.25rem 0 0}
@@ -210,9 +222,16 @@
   .mn-toks .bg-token{width:2.5rem; height:2.5rem; font-size:1.35rem}
   .mn-toks .bg-token:not([data-seat]){background:radial-gradient(circle at 35% 30%, #3b4374 0%, #1d2240 60%, #12162c 100%)}
   .mn-toks .pb{font:var(--fw-caps) var(--fs-micro)/1 var(--font-ui); letter-spacing:.06em; color:var(--text-on-gold)}
-  .mn-tokmsg{min-height:1.35em; margin:.5rem 0 0; font:var(--fw-body) var(--fs-xs)/1.35 var(--font-ui); color:var(--text-3)}
+  /* captions right on the setup scene (no card behind them) are ivory: the scene's bright green band under the top bar took text-3
+     to 3.65:1 (step 4 review), and with a light beam at its brightest behind them even text-2 fell to 3.5:1 (repair, TV); ivory keeps
+     >= 4.5:1 there. Marked data-stage-text, so the stage's motifs fade out over them */
+  .mn-tokmsg{min-height:1.35em; margin:.5rem 0 0; font:var(--fw-body) var(--fs-xs)/1.35 var(--font-ui); color:var(--text-1)}
   .mn-rules .bg-row__desc{color:var(--text-3)}
-  .mn-rulenote{margin:.5rem 0 0; font:var(--fw-body) var(--fs-xs)/1.35 var(--font-ui); color:var(--text-3)}
+  .mn-rulenote{margin:.5rem 0 0; font:var(--fw-body) var(--fs-xs)/1.35 var(--font-ui); color:var(--text-1)}
+  /* every text right on the setup scene (marked data-stage-text: the hero, the section eyebrows, the captions, the way back) carries a
+     soft dark halo, painted once with the text (static, no filter, nothing animates): a light beam at its brightest behind a gold
+     section eyebrow or the hero pitch took them to 3.4:1 and 3.3:1 on the phone; with the halo every one keeps >= 4.5:1 (repair) */
+  body.bg-app--scene [data-stage-text]{text-shadow:0 0 .15em rgba(4,5,12,.95), 0 0 .45em rgba(4,5,12,.8), 0 0 1em rgba(4,5,12,.55)}
   /* saves.js bars (setup #svbar, Menu #svbar2), dressed in Luxe (ids, data-a and behaviour unchanged) */
   #svbar.svbar, #svbar2.svbar{margin:0; padding:var(--sp-3); border:0; border-radius:var(--r-lg); background:var(--panel-fill); box-shadow:var(--panel-edge),var(--elev-1)}
   #svbar h4, #svbar2 h4{display:none}
@@ -256,6 +275,13 @@
   html[data-tv] .mn-dock{order:3; position:static; gap:1.75rem; margin:0; padding:1.5rem 0 0; background:none}
   html[data-tv] #svbar button, html[data-tv] #svbar2 button{grid-template-columns:minmax(0,1fr); justify-items:center; align-content:center; row-gap:.3rem; padding:.625rem .5rem}
   html[data-tv] #svbar button .bg-ico, html[data-tv] #svbar2 button .bg-ico{width:1.25em; height:1.25em}
+  /* TV: focusable neighbours stand at least 1.5rem apart, so the focused one's ivory ring (.4375rem, more with the 1.05 lift) never
+     touches the next control: the save bars (rows and columns), the player pickers, the token keypad, the Players sheet's property
+     chips and the top bar's sound and menu buttons (step 4 review: gaps of 5.7 to 10.3 px against an 11 px ring) */
+  html[data-tv] #svbar .r, html[data-tv] #svbar2 .r{gap:1.5rem}
+  html[data-tv] #svbar .r:not(:last-child), html[data-tv] #svbar2 .r:not(:last-child){margin-bottom:1.5rem}
+  html[data-tv] #segH, html[data-tv] #segC, html[data-tv] .mn-toks, html[data-tv] .mn-pchips{gap:1.5rem}
+  html[data-tv] .bg-topbar__end{gap:1.5rem}
   /* in game: the board on the left, the players, the status, the actions and the log in a column beside it */
   /* the grid is exactly as tall as the board, so the log takes the room left in the column and scrolls inside it: a long game never
      makes the page taller than the screen (a scrolled page would slide the actions under the top bar) */
@@ -700,6 +726,31 @@ function syncDice(){
   });
 }
 
+/* ---- the turn token's pulse, beat by beat from the ONE effects ticker (the page runs no endless CSS animation: README section 6) ----
+   The current player's piece scales 1 to 1.3 and back every second, the old pulse's look: each beat is one finite 1 s CSS pulse
+   (.is-b1 / .is-b2, the same keyframes), and pulseTick() starts the next one about once a second. It runs in the frames the effects
+   ticker already draws for the stage: a MutationObserver on one stage motif's style, which the ticker writes on every tick (8 a
+   second), as Trouble's dome ring does. The ticker stops for "Reduce effects", reduced motion, a hidden page and the Victory screen,
+   so no new beat starts then (the CSS rests the piece at its still 1.15 lift). A redrawn board's new piece joins the running beat at
+   its phase (renderBoard calls pulseTick; a negative animation-delay), so a move or a buy never restarts the pulse. */
+const PULSE={mo:null,m:null,at:0,b:0};
+function pulseTick(){
+  const el=$("board").querySelector(".tkp.cur"); if(!el) return;
+  const t=performance.now();
+  if(t-PULSE.at>=930){ PULSE.at=t; PULSE.b=PULSE.b===1?2:1; }   // the next beat: a second after the last (to within one 125 ms tick)
+  const want=PULSE.b===1?"is-b1":"is-b2", other=PULSE.b===1?"is-b2":"is-b1";
+  if(el.classList.contains(want)) return;
+  const joins=!el.classList.contains(other);   // a new piece (redrawn board): it takes the beat where it is
+  el.classList.remove(other); el.classList.add(want);
+  el.style.animationDelay=joins?(-Math.round(t-PULSE.at))+"ms":"";
+}
+function pulseWatch(){   // (again) follow the ticker through the stage's first motif; the stage may be rebuilt (bgui:stage)
+  const m=document.querySelector(".bg-ambient .bg-motifs > b");
+  if(!m||!window.MutationObserver||(PULSE.m===m&&m.isConnected)) return;
+  if(PULSE.mo) PULSE.mo.disconnect();
+  PULSE.m=m; PULSE.mo=new MutationObserver(pulseTick); PULSE.mo.observe(m,{attributes:true,attributeFilter:["style"]});
+}
+
 /* ---- the Victory screen (BGUI.win + BGUI.celebrate) with this game's real numbers ---- */
 function showWin(w){
   const B=BG();
@@ -858,6 +909,7 @@ function renderBoard(){
   }
   html+=`<div class="center"></div>`;   // the middle's plate (.mn-center) sits over it, outside the board's redraws
   b.innerHTML=html;
+  if(PULSE.mo) pulseTick();   // the new current piece joins the running beat at its phase before it is first drawn: no restart, no jump
 }
 function spaceDesc(s){
   if(s.t==="go") return "Collect $200 salary as you pass.";
@@ -1134,8 +1186,8 @@ function goToJail(p){ p.pos=10; p.jail=true; p.jailTurns=0; G.doublesCount=0; }
 function doTax(p,s){
   if(s.tax==="income"){
     if(RULES.incomeTaxChoice && p.human){
-      const pct=Math.floor(taxWorth(p)*0.1), flatBest=pct>=200;   // the cheaper choice is marked
-      const opt=(amt,label,desc,best)=>`<button type="button" class="bg-sheet__option${best?" is-best":""}"${best?" data-autofocus":""} onclick="window.__tax(${amt})">${icon("check")}<span class="bg-sheet__text"><span class="bg-sheet__label">${label}</span><span class="bg-sheet__desc">${desc}</span><span class="bg-sheet__detail">Cash ${money(p.cash)} to ${money(p.cash-amt)}</span></span></button>`;
+      const pct=Math.floor(taxWorth(p)*0.1), flatBest=pct>=200;   // the cheaper choice is marked: gold edge and the check (the other: a plain minus)
+      const opt=(amt,label,desc,best)=>`<button type="button" class="bg-sheet__option${best?" is-best":""}"${best?" data-autofocus":""} onclick="window.__tax(${amt})">${icon(best?"check":"minus")}<span class="bg-sheet__text"><span class="bg-sheet__label">${label}</span><span class="bg-sheet__desc">${desc}</span><span class="bg-sheet__detail">Cash ${money(p.cash)} to ${money(p.cash-amt)}</span></span></button>`;
       openModal(head("Income Tax",`Pay $200, or 10% of your total worth: your cash, the printed price of every deed you own and your buildings, ${money(taxWorth(p))} in all.`)+
         `<div class="bg-sheet__options mn-opts">${opt(200,"Pay $200","The flat amount.",flatBest)}${opt(pct,`Pay 10% (${money(pct)})`,"10% of your total worth.",!flatBest)}</div>`,"",{peek:true,kind:"tax"});
       window.__tax=(amt)=>{ closeModal(); payBank(p,amt,true); log(`${p.name} pays Income Tax ${money(amt)}.`); endOrContinue(false); };
@@ -1770,11 +1822,11 @@ function openSetup(){
   const tv=onTV(), live=liveGame(), due=resultDue(), redraw=setupShown(), B=BG(), p=G&&G.started?cur():null;
   const fa=document.activeElement, had=redraw&&fa&&$("modal").contains(fa)?focusKey(fa):null;   // a redraw (Standard rules, Load settings) keeps the focus
   let h=`<div class="mn-setup"><div class="mn-col mn-col--a">`;
-  h+=`<section class="bg-hero mn-hero" aria-labelledby="setupTitle"><div class="bg-hero__layer is-on"></div><div class="bg-hero__shade"></div><div class="bg-hero__body">`+
-     `<span class="bg-eyebrow bg-eyebrow--accent">Roll · buy · build</span><h2 class="bg-hero__title" id="setupTitle">Monopoly</h2>`+
+  h+=`<section class="bg-hero mn-hero" aria-labelledby="setupTitle"><div class="bg-hero__layer is-on"></div><div class="bg-hero__shade"></div><div class="bg-hero__body" data-stage-text>`+
+     `<span class="bg-eyebrow">Roll · buy · build</span><h2 class="bg-hero__title" id="setupTitle">Monopoly</h2>`+
      `<p class="bg-hero__pitch">Roll round the board, buy streets, railroads and utilities, build houses and hotels, and be the last player standing.</p></div></section>`;
   h+=`<section class="mn-sec mn-sec--tokens"><div class="bg-section"><h3 class="bg-eyebrow" id="tokHdr">Pick your token</h3></div>`+
-     `<div class="bg-seg bg-seg--grid5 mn-toks" id="tokGrid" role="group" aria-labelledby="tokHdr"></div><p class="mn-tokmsg" id="tokMsg"></p></section>`;
+     `<div class="bg-seg bg-seg--grid5 mn-toks" id="tokGrid" role="group" aria-labelledby="tokHdr"></div><p class="mn-tokmsg" id="tokMsg" data-stage-text></p></section>`;
   h+=`<section class="mn-sec mn-sec--rules">${rulesHTML()}</section></div>`;
   h+=`<div class="mn-col mn-col--b"><section class="mn-sec mn-sec--players"><div class="bg-section"><h3 class="bg-eyebrow">Players</h3></div><div class="bg-card mn-card">`+
      `<div class="mn-field"><span class="bg-row__title" id="humTitle">${tv?"Players on this TV":"Players on this phone"}</span><span class="bg-row__desc">Pass the ${tv?"remote":"phone"} when it's a player's turn. 2 to 6 players in all.</span></div>`+
@@ -1789,6 +1841,8 @@ function openSetup(){
      `<button type="button" class="bg-btn bg-btn--primary bg-btn--cta" id="startBtn" onclick="window.__start()"><span class="bg-btn__label" id="startLabel">Start Game</span><span class="bg-btn__sub" id="startSub"></span></button></div>`;
   h+=`</div></div>`;
   openModal(h,"",{page:true,kind:"setup"});
+  // text that sits right on the setup scene (no card behind it): the stage's motifs fade out over it (BGUI.stage.hush)
+  $("modal").querySelectorAll(".mn-setup .bg-section > .bg-eyebrow, .mn-rulenote, #backHub").forEach(e=>e.setAttribute("data-stage-text",""));
   const drawTok=()=>{
     const hdr=$("tokHdr"), grid=$("tokGrid"), msg=$("tokMsg");
     hdr.textContent = SETUP.humans>1 ? "Pick tokens (Player 1 = You)" : "Pick your token";
@@ -1892,6 +1946,7 @@ document.addEventListener("DOMContentLoaded",()=>{
   };
   if(!B||!B.effects) return;
   document.documentElement.classList.add("mn-luxe");
+  pulseWatch(); document.addEventListener("bgui:stage",pulseWatch);   // the turn token's pulse rides the effects ticker
   if(B.icon) document.querySelectorAll("[data-icon]").forEach(el=>{ if(!el.querySelector("svg")) el.insertAdjacentHTML("afterbegin",B.icon(el.getAttribute("data-icon"))); });
   const hub=hubHref(); ["homeBtn","winHome"].forEach(id=>{ const a=$(id); if(a) a.setAttribute("href",hub); });   // TV: keeps ?tv=1
   ui.strip=""; renderStatus(); renderControls();
