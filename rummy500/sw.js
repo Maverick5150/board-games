@@ -1,7 +1,11 @@
 // Offline cache for 500 Rummy (bump VERSION to force update)
 const VERSION = "rummy500-v3";
 const PREFIX = VERSION.replace(/v[0-9]+$/, "");   // every game shares one origin (one CacheStorage): only ever delete THIS game's old caches
-const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.png", "../sound.js", "../skins.js", "../saves.js", "./engine.js", "./game.js", "./cards.js"];
+const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.png", "../sound.js", "../skins.js", "../saves.js", "./engine.js", "./game.js", "./cards.js",
+  "../ui/theme.css", "../ui/ui.js", "../ui/icons.js",
+  "../ui/fonts/dmserifdisplay-latin.woff2", "../ui/fonts/dmserifdisplay-italic-latin.woff2", "../ui/fonts/manrope-var-latin.woff2",
+  "../ui/tex/felt.webp", "../ui/tex/paper.webp", "../ui/tex/orb-gold.webp", "../ui/tex/orb-violet.webp", "../ui/tex/rays-core.webp",
+  "../ui/art/icon-rummy500-192.png", "../ui/art/icon-rummy500-512.png", "../ui/art/icon-rummy500-maskable-512.png", "../ui/art/hero-rummy500-960.webp"];
 
 // Updates: a new VERSION re-downloads every asset (cache "reload" skips the browser's HTTP cache, so cache-first icons are fresh too)
 // and takes over at once (skipWaiting + clients.claim). Pages and scripts are network-first, so a published update loads on the
