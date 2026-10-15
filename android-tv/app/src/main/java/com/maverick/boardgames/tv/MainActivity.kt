@@ -18,7 +18,7 @@ class MainActivity : Activity() {
 
     private lateinit var web: WebView
     private var updater: Updater? = null
-    private val startUrl = "https://maverick5150.github.io/board-games/firestick/?tv=1"
+    private val startUrl = "https://maverick5150.github.io/board-games/?tv=1"
 
     inner class Bridge {
         @JavascriptInterface
