@@ -202,6 +202,7 @@
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
 <script src="../saves.js"></script>
+<script src="../names.js"></script>
 <script>window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
 <script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
 </head>
@@ -324,7 +325,16 @@
 
 const COLORS=["red","blue","yellow","green"];
 const CSS={red:"#ff5d73",blue:"#5f95ff",yellow:"#ffcb4f",green:"#3fd391"};   // the Luxe seat colours
-const NAME={red:"Red",blue:"Blue",yellow:"Yellow",green:"Green"};
+const NAME={red:"Red",blue:"Blue",yellow:"Yellow",green:"Green"};   // the colours: board squares, slides, safety zones, pawns
+// a player's name: a computer draws a random American first name at every new game (names.js; saved with the game, so Continue keeps it);
+// a saved game from before the names has none stored and keeps its colour name. Humans keep their colour name.
+let cpuNames={};   // color -> the computer's name
+function pn(c){ return (!isHuman[c]&&cpuNames[c])||NAME[c]; }
+function pc(c){ return (!isHuman[c]&&cpuNames[c])?cpuNames[c]+" ("+NAME[c]+")":NAME[c]; }   // a name that also tells the colour, for a piece on the board
+function drawCpuNames(){
+  const cpus=players.filter(c=>!isHuman[c]), got=(window.Names&&Names.pick)?Names.pick(cpus.length,[]):[];
+  cpuNames={}; cpus.forEach((c,i)=>{ cpuNames[c]=got[i]||("CPU "+(i+1)); });
+}
 
 // ---- board geometry: 16x16 grid, outer ring = 60-cell track ----
 const CELL=36, OFF=12, HALF=18, R=14;
@@ -456,12 +466,12 @@ function resolveLanding(mover,dest,allowSlide){
       const set=new Set(sl.cells);
       for(const p of allPawns()){ if(p!==mover && p.loc.t==='ring' && set.has(p.loc.i)) sendToStart(p); }
       mover.loc={t:'ring',i:sl.cells[sl.cells.length-1]};
-      toast(NAME[mover.color]+" slid!");
+      toast(pn(mover.color)+" slid!",mover.color);
       return;
     }
   }
   const occ=occupantsAtRing(dest.i,mover);
-  for(const p of occ){ sendToStart(p); toast(NAME[p.color]+" bumped home!"); }
+  for(const p of occ){ sendToStart(p); toast(pn(p.color)+" bumped home!",p.color); }
   mover.loc=dest;
 }
 // dry run of resolveLanding on a copy of the board (Map pawn -> loc)
@@ -565,7 +575,7 @@ function applyActionAnimated0(a,done){
     const mi=a.p.loc.i, ti=a.target.loc.i; a.p.loc={t:'ring',i:ti}; a.target.loc={t:'ring',i:mi}; renderPawns();
     later(()=>{ resolveLanding(a.p,a.p.loc,true); if(a.target.loc.t==='ring') resolveLanding(a.target,a.target.loc,true); renderPawns(); later(done,320); },320);
   } else if(a.k==='sorry'){
-    const ti=a.target.loc.i; sendToStart(a.target); a.p.loc={t:'ring',i:ti}; toast(NAME[a.target.color]+" — SORRY!"); renderPawns();
+    const ti=a.target.loc.i; sendToStart(a.target); a.p.loc={t:'ring',i:ti}; toast(pn(a.target.color)+" — SORRY!",a.target.color); renderPawns();
     later(()=>{ resolveLanding(a.p,a.p.loc,true); renderPawns(); later(done,320); },320);
   } else if(a.k==='split'){
     const [X,x,Y,y]=a.first==='B'?[a.B,a.b,a.A,a.a]:[a.A,a.a,a.B,a.b];   // legalActions picked an order that uses the full 7
@@ -812,7 +822,7 @@ function ringNote(i){   // what track space i is
 }
 function inspectSpot(ux,uy){   // the thing at board point (ux, uy), as {x, y, r, title, text}
   const near=(x,y,r)=>Math.hypot(ux-x,uy-y)<=r, inCell=(x,y)=>Math.abs(ux-x)<=18&&Math.abs(uy-y)<=18;
-  for(const c of players) for(const p of pawns[c]){ const [x,y]=pawnXY(p); if(near(x,y-1,15)) return {x,y:y-1,r:19,title:NAME[c]+" pawn "+(p.id+1),text:"Pawn "+(p.id+1)+" "+locWords(p)+"."}; }
+  for(const c of players) for(const p of pawns[c]){ const [x,y]=pawnXY(p); if(near(x,y-1,15)) return {x,y:y-1,r:19,title:pc(c)+" pawn "+(p.id+1),text:"Pawn "+(p.id+1)+" "+locWords(p)+"."}; }
   for(const c of COLORS){
     const [hc,hr]=HOME_CELL[c], [hx,hy]=px(hc,hr), [tc,tr]=START_CELL[c], [tx,ty]=px(tc,tr);
     if(near(hx,hy,32)){ const n=players.includes(c)?pawns[c].filter(p=>p.loc.t==='home').length:0; return {x:hx,y:hy,r:33,title:NAME[c]+" Home",text:n+" of 4 pawns Home. A pawn goes in by an exact count along the Safety zone. All four Home wins."}; }
@@ -820,7 +830,7 @@ function inspectSpot(ux,uy){   // the thing at board point (ux, uy), as {x, y, r
   }
   for(const c of COLORS) for(let j=0;j<5;j++){ const [x,y]=px(SAFE_CELLS[c][j][0],SAFE_CELLS[c][j][1]); if(inCell(x,y)) return {x,y,r:21,title:NAME[c]+" Safety zone, square "+(j+1)+" of 5",text:"Only "+NAME[c]+" pawns come in here, and no one can bump them. The last square leads Home."}; }
   for(let i=0;i<60;i++){ const [x,y]=ringPx(i); if(inCell(x,y)){
-    const occ=[]; for(const c of players) for(const p of pawns[c]) if(p.loc.t==='ring'&&p.loc.i===i) occ.push(NAME[c]+" pawn "+(p.id+1));
+    const occ=[]; for(const c of players) for(const p of pawns[c]) if(p.loc.t==='ring'&&p.loc.i===i) occ.push(pc(c)+" pawn "+(p.id+1));
     const cur=curColor(), note=ringNote(i);
     return {x,y,r:21,title:"Track space",text:(occ.length?occ.join(" and ")+(occ.length>1?" are":" is")+" here. ":"Empty. ")+(note?note+" ":"")+(cur&&players.length?"For "+NAME[cur]+" this is "+sq(cur,{t:'ring',i})+".":"")}; } }
   if(near(300,300,92)) return {x:300,y:300,r:94,title:"Sorry!",text:"Draw a card each turn and move by it. The first player to get all four pawns Home wins."};
@@ -858,10 +868,10 @@ function toastWords(m){
   x=/^(\w+) — SORRY!$/.exec(m); if(x) return "Sorry, "+x[1]+"! Back to Start";
   return m;
 }
-function toast(m){
+function toast(m,col){
   Sound.fromText(m); toastEl.textContent=m;
-  const B=window.BGUI, who=/^(Red|Blue|Yellow|Green) /.exec(m);
-  if(B&&B.toast){ const c=who?who[1].toLowerCase():null; B.toast(toastWords(m), c?{seat:SEAT[c], token:NAME[c].charAt(0), ms:2000}:{icon:"info", ms:2000}); return; }
+  const B=window.BGUI;
+  if(B&&B.toast){ const c=col||null; B.toast(toastWords(m), c?{seat:SEAT[c], token:pn(c).charAt(0), ms:2000}:{icon:"info", ms:2000}); return; }
   toastEl.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>toastEl.classList.remove("show"),1500);
 }
 function setStatus(h){ statusEl.innerHTML=h; uiSync(); }
@@ -888,7 +898,7 @@ function drawCard(){
 let armed=false, lastSnap=null;
 function takeSnap(){
   if(!armed||gameOver) return;
-  lastSnap=JSON.parse(JSON.stringify({players:players,isHuman:isHuman,pawns:pawns,turn:turn,deck:deck,humanCount:humanCount,cpuCount:cpuCount,speed:gameSpeed,stats:{turns:stats.turns,bumps:stats.bumps,ms:playMs()}}));
+  lastSnap=JSON.parse(JSON.stringify({players:players,isHuman:isHuman,cpuNames:cpuNames,pawns:pawns,turn:turn,deck:deck,humanCount:humanCount,cpuCount:cpuCount,speed:gameSpeed,stats:{turns:stats.turns,bumps:stats.bumps,ms:playMs()}}));
   Saves.auto("sorry",lastSnap);
 }
 function beginTurn(){
@@ -898,7 +908,7 @@ function beginTurn(){
   card=null; currentActions=[]; actionsEl.innerHTML=""; highlightPawns=new Set();
   renderPawns();
   const c=curColor();
-  setStatus(`${dot(c)} ${isHuman[c]?"<b>Your turn</b> — draw a card":NAME[c]+" (CPU)…"}`);
+  setStatus(`${dot(c)} ${isHuman[c]?"<b>Your turn</b> — draw a card":pn(c)+" (CPU)…"}`);
   if(isHuman[c]){ showDeck(); }
   else { deckSlot.innerHTML=`<div class="cardFace small" data-seat="${SEAT[c]}"><div class="cv">…</div></div>`; uiSync(); busy=true; later(aiTurn,1050); }
 }
@@ -942,8 +952,8 @@ function actionLabel(a){
   if(a.k==='out') return `#${a.p.id+1} ▸ leave Start`;
   if(a.k==='fwd') return `#${a.p.id+1} ▸ fwd ${a.n}`;
   if(a.k==='back') return `#${a.p.id+1} ▸ back ${a.n}`;
-  if(a.k==='swap') return `#${a.p.id+1} ⇄ ${NAME[a.target.color]} #${a.target.id+1}`;
-  if(a.k==='sorry') return `SORRY! #${a.p.id+1} ▸ bump ${NAME[a.target.color]} #${a.target.id+1}`;
+  if(a.k==='swap') return `#${a.p.id+1} ⇄ ${pc(a.target.color)} #${a.target.id+1}`;
+  if(a.k==='sorry') return `SORRY! #${a.p.id+1} ▸ bump ${pc(a.target.color)} #${a.target.id+1}`;
   if(a.k==='split'){   // the pawn listed first moves first
     const pA=`#${a.A.id+1}+${a.a}`, pB=`#${a.B.id+1}+${a.b}`, [f,s]=a.first==='B'?[pB,pA]:[pA,pB];
     return a.order?`${f}, then ${s}`:`${f} & ${s}`;
@@ -969,7 +979,7 @@ function chooseAction(idx){
 function declareWinner(c){
   gameOver=true; Sound.sfx("win");
   Saves.del("sorry","auto"); lastSnap=null;   // a finished game is not offered as "Continue last game"
-  deckSlot.innerHTML=""; setStatus(`${dot(c)} <b>${isHuman[c]?"You win!":NAME[c]+" wins!"}</b>`);
+  deckSlot.innerHTML=""; setStatus(`${dot(c)} <b>${isHuman[c]?"You win!":pn(c)+" wins!"}</b>`);
 }
 function endTurnOrAgain(c,v,moved){
   if(v===2){   // official rules: a 2 always draws again, even when it could not be played
@@ -1035,13 +1045,13 @@ function aiTurn(){
     const v=drawCard(); showCard(v);
     const acts=legalActions(c,v);
     if(acts.length===0){
-      setStatus(`${dot(c)} ${NAME[c]} drew ${v==='sorry'?'SORRY!':v} — no move`);
+      setStatus(`${dot(c)} ${pn(c)} drew ${v==='sorry'?'SORRY!':v} — no move`);
       later(()=>{ busy=false; endTurnOrAgain(c,v,false); },1600);
       return;
     }
     let best=acts[0], bs=-1e9;
     for(const a of acts){ const s=scoreAction(a); if(s>bs){bs=s;best=a;} }
-    setStatus(`${dot(c)} ${NAME[c]} drew <b>${v==='sorry'?'SORRY!':v}</b>`);
+    setStatus(`${dot(c)} ${pn(c)} drew <b>${v==='sorry'?'SORRY!':v}</b>`);
     later(()=>{                // hold on the drawn card so you can read it before the CPU moves
       applyActionAnimated(best, ()=>{
         if(hasWon(c)){ declareWinner(c); return; }
@@ -1107,9 +1117,9 @@ function metaFor(c){
 function chipOf(c){ return legendEl.querySelector('[data-color="'+c+'"]'); }
 function buildStrip(){
   const cpu=icon("cpu");
-  legendEl.innerHTML=players.map(c=>`<span class="bg-player" data-seat="${SEAT[c]}" data-color="${c}"><span class="bg-token" aria-hidden="true">${NAME[c].charAt(0)}</span>`+
+  legendEl.innerHTML=players.map(c=>`<span class="bg-player" data-seat="${SEAT[c]}" data-color="${c}"><span class="bg-token" aria-hidden="true">${pn(c).charAt(0)}</span>`+
     (isHuman[c]?"":`<span class="bg-player__cpu" aria-hidden="true">${cpu}</span>`)+
-    `<span class="bg-player__txt"><span class="bg-player__name">${NAME[c]}${isHuman[c]?" (you)":" CPU"}</span><span class="bg-player__meta"></span></span></span>`).join("");
+    `<span class="bg-player__txt"><span class="bg-player__name">${pn(c)}${isHuman[c]?" (you)":`<span class="bg-sr"> CPU</span>`}</span><span class="bg-player__meta"></span></span></span>`).join("");
   ui.strip=players.map(c=>c+(isHuman[c]?"H":"C")).join(); ui.meta={}; ui.turnKey="";
 }
 function setTurnChip(c){
@@ -1145,7 +1155,7 @@ function syncTable(){
   let eb, txt;
   if(gameOver){ eb="Game over"; txt=""; }
   else if(card!==null&&face){ eb=card==='sorry'?"Sorry! card":"Card "+card; txt=CARD_TEXT[card]+"."; }
-  else if(drawable){ eb=(humanCount>1?NAME[curColor()]+" to draw":"Your draw"); txt=left+(left===1?" card":" cards")+" left. "+(onTV()?"Press OK on the deck to draw.":"Tap the deck to draw."); }
+  else if(drawable){ eb=(humanCount>1?pn(curColor())+" to draw":"Your draw"); txt=left+(left===1?" card":" cards")+" left. "+(onTV()?"Press OK on the deck to draw.":"Tap the deck to draw."); }
   else { eb="Deck"; txt=left+(left===1?" card":" cards")+" left."; }
   const key=eb+"|"+txt;
   if(key===ui.table) return;
@@ -1170,7 +1180,7 @@ function sq(c,loc){   // a square as player c sees it: space 1 is their start sq
   return "space "+((loc.i-START_EXIT[c]+60)%60+1);
 }
 function fromTo(c,a,b){ const x=sq(c,a), y=sq(c,b); return (/^space /.test(x)&&/^space /.test(y))?x+" to "+y.slice(6):x+" to "+y; }
-function pawnName(p,c){ return p.color===c?"Pawn "+(p.id+1):NAME[p.color]+" "+(p.id+1); }
+function pawnName(p,c){ return p.color===c?"Pawn "+(p.id+1):pc(p.color)+" "+(p.id+1); }
 function andList(xs){ return xs.length<3?xs.join(" and "):xs.slice(0,-1).join(", ")+" and "+xs[xs.length-1]; }
 function landsOn(c,a,p){   // where the moving pawn p lands, before any slide
   if(a.k==='out') return {t:'ring',i:START_EXIT[c]};
@@ -1218,7 +1228,7 @@ function bestIndex(acts){ let b=0, bs=-1e9; acts.forEach((a,i)=>{ const s=scoreA
 function fillMoveSheet(c,v,acts){
   const word=(v==='sorry'), best=acts.length>1?bestIndex(acts):-1, chev=icon("chevron");
   sheetCard.textContent=word?"Sorry!":String(v); sheetCard.classList.toggle("is-word",word); sheetCard.setAttribute("data-seat",SEAT[c]);
-  document.getElementById("moveEyebrow").textContent=(humanCount>1?NAME[c]:"You")+" drew "+(word?"a Sorry! card":(v===8||v===11?"an ":"a ")+v);
+  document.getElementById("moveEyebrow").textContent=(humanCount>1?pn(c):"You")+" drew "+(word?"a Sorry! card":(v===8||v===11?"an ":"a ")+v);
   document.getElementById("moveTitle").textContent=acts.length>1?"Choose your move":"Your move";
   document.getElementById("moveSub").textContent=CARD_TEXT[v]+"."+(best>=0?" The best move is marked.":"");
   const order=acts.map((a,i)=>i); if(best>0){ order.splice(best,1); order.unshift(best); }   // the marked best move leads the list (data-i keeps the pick)
@@ -1309,8 +1319,8 @@ function openWin(){
   ui.winShown=gen;
   const c=players[turn], human=!!isHuman[c], ms=playMs(), min=Math.round(ms/60000);
   document.getElementById("winEyebrow").textContent="Game over · "+(min<1?"under a minute":min===1?"1 minute":min+" minutes");
-  document.getElementById("winTitle").textContent=human?"Victory":NAME[c]+" wins";
-  document.getElementById("winSub").innerHTML=(human&&humanCount===1?"<b>You</b> got":"<b>"+NAME[c]+"</b> got")+" all four pawns Home first.";
+  document.getElementById("winTitle").textContent=human?"Victory":pn(c)+" wins";
+  document.getElementById("winSub").innerHTML=(human&&humanCount===1?"<b>You</b> got":"<b>"+pn(c)+"</b> got")+" all four pawns Home first.";
   document.getElementById("winStats").innerHTML=`<li class="bg-stat"><b>${stats.turns}</b><span>${stats.turns===1?"turn":"turns"}</span></li>`+
     `<li class="bg-stat"><b>${stats.bumps}</b><span>${stats.bumps===1?"bump":"bumps"}</span></li><li class="bg-stat"><b>${fmtTime(ms)}</b><span>time</span></li>`;
   closeMoveSheet();
@@ -1348,7 +1358,7 @@ function menuResult(){
   if(resumeBtn.style.display!=="none"){
     ui.result=true;
     document.getElementById("resumeLabel").textContent="See the result";
-    document.getElementById("resumeSub").textContent=(isHuman[c]&&humanCount===1)?"You win":NAME[c]+" wins";
+    document.getElementById("resumeSub").textContent=(isHuman[c]&&humanCount===1)?"You win":pn(c)+" wins";
   }
   saveBar.refresh(); syncStart(); barTitle();
 }
@@ -1432,7 +1442,7 @@ const saveBar=Saves.bar({game:"sorry",el:document.getElementById("svbar"),
   loadSnapshot:d=>{ Sound.skip(); loadGame(d); showSetup(false); }});
 function loadGame(d){
   gen++;   // the previous game's pending timers must not act on the loaded one
-  players=d.players; isHuman=d.isHuman; pawns=d.pawns; turn=d.turn; deck=d.deck; humanCount=d.humanCount||humanCount; cpuCount=d.cpuCount!=null?d.cpuCount:cpuCount;
+  players=d.players; isHuman=d.isHuman; cpuNames=(d.cpuNames&&typeof d.cpuNames==="object")?d.cpuNames:{}; pawns=d.pawns; turn=d.turn; deck=d.deck; humanCount=d.humanCount||humanCount; cpuCount=d.cpuCount!=null?d.cpuCount:cpuCount;
   setSpeed(d.speed);   // optional field: saves from before Game speed play at Medium
   card=null; gameOver=false; busy=false; armed=true;
   stats=readStats(d.stats); clockOn(); ui.result=false;   // saves from before the stats field start fresh counters
@@ -1448,7 +1458,7 @@ menuBtn.addEventListener("click",()=>{
   const B=BG(), result=gameOver&&armed&&players.length>0&&ui.winShown!==gen&&!!(B&&B.win);
   resumeBtn.style.display = ((players.length>0 && !gameOver) || result) ? "block" : "none";
   ui.result=false; document.getElementById("resumeLabel").textContent="Resume";
-  document.getElementById("resumeSub").textContent=gameOver?"":"Turn "+Math.max(1,stats.turns)+" · "+(NAME[players[turn]]||"");
+  document.getElementById("resumeSub").textContent=gameOver?"":"Turn "+Math.max(1,stats.turns)+" · "+(players[turn]?pn(players[turn]):"");
   saveBar.refresh();
   showSetup(true);
   if(result) menuResult();
@@ -1473,6 +1483,7 @@ function startGame(humans, cpus){
   let total=Math.min(4, Math.max(2, humans+(cpus||0)));
   players = total===2 ? ["red","yellow"] : all.slice(0, total);   // 2 players sit on opposite sides (side-by-side seats favour one colour)
   isHuman={}; players.forEach((c,i)=>isHuman[c]=i<humans);
+  drawCpuNames();   // a fresh random name for each computer, at every new game and every Play again
   newPawns(); turn=0; deck=shuffle(buildDeck()); card=null; gameOver=false; busy=false;
   stats=freshStats(); clockOn(); ui.result=false;
   buildStrip();
@@ -1480,7 +1491,7 @@ function startGame(humans, cpus){
 }
 
 // test hook (read-mostly; the page never uses it)
-window.__sorry={speed:()=>gameSpeed,setSpeed:setSpeed,get state(){ return {players:players,turn:turn,gameOver:gameOver,armed:armed,busy:busy,gen:gen,deck:deck.length,pawns:pawns}; },paused:paused};
+window.__sorry={cpuNames:()=>cpuNames,isHuman:c=>!!isHuman[c],lastSnap:()=>lastSnap,load:d=>loadGame(d),speed:()=>gameSpeed,setSpeed:setSpeed,get state(){ return {players:players,turn:turn,gameOver:gameOver,armed:armed,busy:busy,gen:gen,deck:deck.length,pawns:pawns}; },paused:paused};
 // keep the play clock to the time the page is on screen
 document.addEventListener("visibilitychange",()=>{ if(document.hidden) clockOff(); else if(armed&&players.length&&!gameOver) clockOn(); });
 // ui/ui.js is deferred: it arrives after this script. Then the icons go in, the strip gets its CPU badges and turn ring, and the Luxe
