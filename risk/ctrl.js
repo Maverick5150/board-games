@@ -202,10 +202,15 @@ function create(cfg){
     var own=st.o>=0?nm(st.o)+", "+st.a+" "+(st.a===1?"army":"armies"):"unclaimed", brd=MP.adj[t].map(function(u){ return MP.names[u]; }).join(", ");
     var txt="<b>"+esc(MP.names[t])+"</b><span>"+esc(c.name)+" (+"+c.bonus+") · "+esc(own)+"</span><span>Borders: "+esc(brd)+"</span>";
     var el=board.root.parentNode.querySelector(".rkinfo"); if(!el){ el=document.createElement("div"); el.className="rkinfo"; board.root.parentNode.appendChild(el); }
-    var vp=board.viewPoint?board.viewPoint(t):[MP.x[t]/MP.W,MP.y[t]/MP.H], rt=vp[0]<.5, tp=vp[1]>.55;   // the card keeps off the territory it names: the opposite side, the other half
-    if(!L){ el.style.left=rt?"auto":""; el.style.right=rt?".5rem":""; el.style.top=tp?".5rem":""; el.style.bottom=tp?"auto":""; }   // TV: the card sits under the map (css), so it never hides a territory or a name
-    el.innerHTML=txt; el.style.display="block"; clearTimeout(S.infoT); S.infoT=setTimeout(function(){ el.style.display="none"; },4200);
+    var tvL=L&&onTV(), vp=board.viewPoint?board.viewPoint(t):[MP.x[t]/MP.W,MP.y[t]/MP.H], rt=vp[0]<.5, tp=vp[1]>.5;   // the card keeps off the territory it names: the opposite side, the other half
+    if(!L){ el.style.left=rt?"auto":""; el.style.right=rt?".5rem":""; el.style.top=tp?".5rem":""; el.style.bottom=tp?"auto":""; }
+    else if(!tvL) el.classList.toggle("is-top",tp);   // the Luxe phone: a card across the frame on the edge away from the territory (review, step 5, css); TV: under the map (css)
+    el.innerHTML=txt; el.style.display="block"; if(!tvL&&board.setInspect) board.setInspect(t);   // the territory it names is outlined on the map
+    clearTimeout(S.infoT); S.infoT=setTimeout(hideInfo,4200);
   }
+  function hideInfo(){ var el=board.root.parentNode.querySelector(".rkinfo"); clearTimeout(S.infoT); if(el) el.style.display="none"; if(board.setInspect) board.setInspect(-1); }
+  // a new touch on the map (a tap, a long press, a pinch or a pan) or a zoom closes the card: the next tap opens the right one
+  board.root.addEventListener("pointerdown",function(e){ if(e.target&&e.target.closest&&e.target.closest(".rk-fitbtn")) return; if(!(L&&onTV())) hideInfo(); });
   if(L){   // TV: the territory the D-pad is on names itself (the map's own labels only show when zoomed in)
     board.root.addEventListener("focusin",function(e){ var tg=e.target&&e.target.closest&&e.target.closest(".tg"); if(tg&&V) info(+tg.getAttribute("data-t")); });
     board.root.addEventListener("focusout",function(e){ if(e.relatedTarget&&board.root.contains(e.relatedTarget)) return; var el=board.root.parentNode.querySelector(".rkinfo"); if(el){ clearTimeout(S.infoT); el.style.display="none"; } });
@@ -558,9 +563,9 @@ function create(cfg){
       case "mission": openMission(); break;
       case "hqinfo": openHq(); break;
       case "players": openPlayers(); break;
-      case "zoomin": board.zoomAt(1.4); break;
-      case "zoomout": board.zoomAt(1/1.4); break;
-      case "fit": board.fit(); break;
+      case "zoomin": if(!(L&&onTV())) hideInfo(); board.zoomAt(1.4); break;
+      case "zoomout": if(!(L&&onTV())) hideInfo(); board.zoomAt(1/1.4); break;
+      case "fit": if(!(L&&onTV())) hideInfo(); board.fit(); break;
       case "endReinforce": act({t:"endReinforce"}); break;
       case "atk": S.shiftOpen=false; act({t:"attack",from:S.src,to:S.tgt,dice:+p[1]}); break;
       case "blitz": S.blitz=true; render(); blitzStep(); break;

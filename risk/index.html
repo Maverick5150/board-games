@@ -132,8 +132,15 @@
     background:rgba(11,13,27,.94); box-shadow:inset 0 0 0 1px var(--line-gold), var(--elev-2); font:var(--fw-ui) var(--fs-xs)/1.35 var(--font-ui); color:var(--text-1)}
   html[data-tv] .rkinfo{left:0; right:0; top:calc(100% + .5rem); bottom:auto; max-width:none; padding:.5rem 1rem; overflow:hidden}
   html[data-tv] .rkinfo b{float:left; margin-right:1.5rem; white-space:nowrap}
+  html[data-tv] .rkinfo span{overflow:hidden}   /* a long border list wraps in its own column, never under the name (review, step 5) */
   html.rk-luxe .rkinfo b{display:block; font:400 calc(var(--fs-lg) * 1.22)/1.15 var(--font-display); color:var(--gold-100)}
   html.rk-luxe .rkinfo span{display:block; color:var(--text-2)}
+  /* the phone (review, step 5): a compact card across the frame, on the edge away from the territory it names (ctrl.js sets .is-top), clear
+     of the Zoom / Fit button in the frame's corner; the name and its continent / owner on one line, its borders under them */
+  html.rk-luxe:not([data-tv]) .rkinfo{left:3.75rem; right:.5rem; top:auto; bottom:.5rem; max-width:none; padding:.375rem .7rem .45rem}
+  html.rk-luxe:not([data-tv]) .rkinfo.is-top{left:.5rem; top:.5rem; bottom:auto}
+  html.rk-luxe:not([data-tv]) .rkinfo b{display:inline; font-size:var(--fs-lg); margin-right:.45rem}
+  html.rk-luxe:not([data-tv]) .rkinfo b + span{display:inline}
   .tg{outline:none}
   /* the panel under the map (ctrl.js in its Luxe mode) */
   .rk-panel{display:grid; gap:.5rem; width:min(100%,56rem)}

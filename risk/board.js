@@ -4,13 +4,17 @@
    north-south to the board's 5:3 frame) by the build scripts; each classic territory is a union of real countries and subdivisions
    (see BG_audit/step5/risk/TERRITORIES.md).
    - ONE static SVG, drawn once: the deep navy sea with a graticule, the 42 territories (one path each, continent colours), their borders,
-     the sea links (dashed gold; Alaska - Kamchatka leaves one edge and enters the other), the continent bonus medals and every name.
+     the sea links (dashed gold; Alaska - Kamchatka leaves one edge and enters the other), the continent bonus medals, the sea art (a whale,
+     a ship, dolphins in gold line art) and every name: inside its land when it fits, else beside it over the sea (touching its coast, or
+     with a cased leader ending in a dot on its land), each line at its natural width (map.js GEO.lab, laid out by the step-5 review).
+   - Names on a small board (the phone): once zoomed in, each name is drawn at least 12 px, growing away from its badge; a name that would
+     touch another name, a badge, a medal, the frame's edge or the Fit button waits for more zoom (worked out when a gesture ends).
      Owner tint / outline and the selected / source / target marks are small <use> elements that only change when a territory changes.
    - Army badges (the owner's Luxe seat colour) sit on the pole of inaccessibility of each territory, one group per territory.
    - Zoom: one transform on .rkview (pinch, wheel, double tap on the sea or a territory with nothing to do, one-finger pan, the Fit button
      in the frame); the layer is promoted only while a gesture runs, so it is re-rastered crisp at rest.
    - Touch: a tap hits the territory under the finger (a coarse grid of the map, plus a generous reach round small islands); a long press
-     inspects any territory without acting (opts.onInspect / board.onInspect).
+     inspects any territory without acting (opts.onInspect / board.onInspect); setInspect(t) outlines the territory a card is naming.
    API (unchanged): create(container,{labels,tint,focusable,pulseLayer,static,onTap}) -> setView, setMarks, flash, setTint, setLabels, centerOf,
    zoomAt, fit, focus, scale, terrAt, onTap, onInspect, simulateTap, setFocusable, root, svg. Also silhouette(t), piecesSVG, cubeSVG, oblongSVG. */
 (function(g){
@@ -106,17 +110,35 @@ function buildStatic(svg,P){
   G.oceans.forEach(function(o){ var t=el("text",{x:0,y:0,"text-anchor":"middle",class:"rkocn","font-size":o.fs,transform:"translate("+o.x+","+o.y+") rotate("+o.rot+")"},oc); t.textContent=o.t; });
   var cp=el("g",{transform:"translate("+G.compass.x+","+G.compass.y+")",stroke:"#e7ca90","stroke-opacity":".5",fill:"none","stroke-width":".9"},oc);
   el("circle",{r:20},cp); el("circle",{r:15,"stroke-opacity":".5"},cp); el("path",{d:"M0-27V27M-27 0H27",}, cp); el("path",{d:"M0-27L4-4L27 0L4 4L0 27L-4 4L-27 0L-4-4Z",fill:"#e7ca90","fill-opacity":".18"},cp); var nn=el("text",{y:-31,"text-anchor":"middle",class:"rkocn","font-size":8,fill:"#e7ca90","stroke":"none"},cp); nn.textContent="N";
+  // the sea art of the step-4 board (a whale, a three-masted ship, two dolphins), redrawn as gold line art like the compass: static, in open sea
+  var orn=el("g",{class:"rkorn",stroke:"#e7ca90","stroke-opacity":".42",fill:"#e7ca90","fill-opacity":".07","stroke-width":".9","stroke-linejoin":"round","stroke-linecap":"round"},oc), WAVES="q5 -3 10 0t10 0t10 0t10 0t10 0t10 0";
+  var wh=el("g",{transform:"translate(72,252)"},orn);
+  el("path",{d:"M-18 2C-16-9 2-13 14-6C19-3 21 1 20 4C12 9-6 10-18 2Z"},wh); el("path",{d:"M-18 2C-21 0-24-4-26-8C-27-4-26-1-24 1C-27 3-30 6-31 9C-26 8-22 5-18 3",fill:"none"},wh);
+  el("path",{d:"M-12 5C-2 7 8 6 17 3M13-8C12-13 9-15 6-18M13-8C14-13 17-15 20-18M13-8V-17",fill:"none"},wh); el("circle",{cx:14,cy:-1,r:".9","fill-opacity":".6"},wh); el("path",{d:"M-30 12"+WAVES,fill:"none"},wh);
+  var sh=el("g",{transform:"translate(650,556)"},orn), sail=function(x,a,b,w){ return "M"+(x-w)+" "+a+"Q"+x+" "+(a+3)+" "+(x+w)+" "+a+"L"+(x+w)+" "+b+"Q"+x+" "+(b+3)+" "+(x-w)+" "+b+"Z"; };
+  el("path",{d:"M-22 4L23 4L18 13L-17 13ZM-22 4V0H-13V4"},sh); el("path",{d:"M-9 4V-25M2 4V-29M12 4V-22M23 3L31-3",fill:"none"},sh);
+  el("path",{d:sail(-9,-21,-4,7)+sail(2,-25,-4,8)+sail(12,-18,-4,6)+"M30-2L13-19L20 1ZM2-29L10-27L2-25"},sh); el("path",{d:"M-30 17"+WAVES,fill:"none"},sh);
+  var dol=el("g",{transform:"translate(405,552)"},orn), dolphin=function(x,y,k){ var g3=el("g",{transform:"translate("+x+","+y+") scale("+k+")"},dol);
+    el("path",{d:"M-12 4C-9-7 5-10 13-2L14-1L12-1C6-5-4-3-9 5ZM0-7L3-11L4-6"},g3); el("path",{d:"M-12 4L-16 2M-12 4L-14 8",fill:"none"},g3); };
+  dolphin(-8,-2,1); dolphin(14,3,.8); el("path",{d:"M-30 10"+WAVES,fill:"none"},dol);
   var med=el("g",{class:"rkmedals"},svg);
   G.medals.forEach(function(m){ var c=CONT[m.c], gg=el("g",{transform:"translate("+m.x+","+m.y+")"},med); el("circle",{r:15,fill:"#080a15","fill-opacity":".55"},gg); el("circle",{r:13,fill:c.color,stroke:"#e7ca90","stroke-width":"2"},gg);
     var t=el("text",{y:5,"text-anchor":"middle",class:"rkmed","font-size":14},gg); t.textContent="+"+c.bonus; var ti=el("title",null,gg); ti.textContent=c.name+": +"+c.bonus+" armies for holding it all"; });
-  // names (halo, light text) and the leaders of the names that sit in the sea
-  var names=el("g",{class:"rklabels","pointer-events":"none"},svg);
+  // names (review, step 5): one group per territory (data-t), the capital-letter block centred on nx,ny (1.0 em line pitch), each line at
+  // its natural Manrope width (textLength = that width, so a fallback font is fitted, never squeezed); a name beside its land in the sea
+  // has a cased leader ending in a dot on that land
+  var names=el("g",{class:"rklabels","pointer-events":"none"},svg), labG=[];
   G.lab.forEach(function(l){
-    if(l.lead) el("path",{d:"M"+l.lead[0]+" "+l.lead[1]+"L"+l.lead[2]+" "+l.lead[3],stroke:"#fff3d1","stroke-width":".9","stroke-opacity":".85",fill:"none"},names);
-    var t=el("text",{class:"rkname","text-anchor":"middle","font-size":l.fs,"stroke-width":(l.fs*.2).toFixed(2)},names), h=l.fs*1.1, y0=l.ny-l.h/2;
-    l.lines.forEach(function(ln,k){ var ts=el("tspan",{x:l.nx,y:(y0+h*k+l.fs*.8).toFixed(1),textLength:l.lw[k],lengthAdjust:"spacingAndGlyphs"},t); ts.textContent=ln; });
+    var g2=el("g",{"data-t":l.t},names);
+    if(l.lead){ var d="M"+l.lead[0]+" "+l.lead[1]+"L"+l.lead[2]+" "+l.lead[3];
+      el("path",{d:d,stroke:"#060918","stroke-opacity":".8","stroke-width":"2.4","stroke-linecap":"round",fill:"none"},g2);
+      el("path",{d:d,stroke:"#fff3d1","stroke-width":"1",fill:"none"},g2);
+      el("circle",{cx:l.lead[2],cy:l.lead[3],r:"2.2",fill:"#fff3d1",stroke:"#060918","stroke-width":"1"},g2); }
+    var t=el("text",{class:"rkname","text-anchor":"middle","font-size":l.fs,"stroke-width":(l.fs*.2).toFixed(2)},g2), top=l.ny-l.h/2;
+    l.lines.forEach(function(ln,k){ var ts=el("tspan",{x:l.nx,y:(top+l.fs*.72+k*l.fs).toFixed(2),textLength:l.lw[k],lengthAdjust:"spacingAndGlyphs"},t); ts.textContent=ln; });
+    labG[l.t]=g2;
   });
-  return {fills:fills,own:ownU,marks:markG,names:names,P:P};
+  return {fills:fills,own:ownU,marks:markG,sea:sea,names:names,labG:labG,P:P};
 }
 
 /* ---- the board object ---- */
@@ -188,9 +210,11 @@ function create(container,opts){
   function useStr(t,a){ var s='<use href="#'+P+'p'+t+'"'; for(var k in a) s+=' '+k+'="'+a[k]+'"'; return s+'/>'; }
   function paintMarks(){
     var h="", ph="", t, pcls=pulseOn?"":' class="rkpulse"', sel=marks.sel;
-    for(t in marks.mine) if(marks.mine[t]&&+t!==sel) h+=useStr(+t,{fill:"#fff","fill-opacity":".13",stroke:"#fff3d1","stroke-opacity":".35","stroke-width":"1.1"});
+    for(t in marks.mine) if(marks.mine[t]&&+t!==sel){   // yours to pick: the territory lit, and the soft glow in your seat colour round its badge (as the step-4 board had)
+      var st=V&&V.terr[+t], ow=st?(st.o!==undefined?st.o:st[0]):-1;
+      h+=useStr(+t,{fill:"#fff","fill-opacity":".13",stroke:"#fff3d1","stroke-opacity":".35","stroke-width":"1.1"})+'<circle cx="'+MP.x[t]+'" cy="'+MP.y[t]+'" r="25" fill="'+(ow>=0?seatFor(ow).hi:"#fff3d1")+'" fill-opacity=".3"/>'; }
     var tg=Object.keys(marks.tgt).filter(function(k){ return marks.tgt[k]; }), sr=Object.keys(marks.src).filter(function(k){ return marks.src[k]; });
-    if(sel!=null){ h+=useStr(sel,{fill:"#ffd23f","fill-opacity":".28",stroke:"#ffd23f","stroke-width":"3"}); if(tg.length===1) h+=arrow(sel,+tg[0],"#ffd23f"); else if(!tg.length&&sr.length===1&&+sr[0]!==sel) h+=arrow(+sr[0],sel,"#ffe27a"); }
+    if(sel!=null){ h+=useStr(sel,{fill:"#fff3d1","fill-opacity":".24",stroke:"#ffd23f","stroke-width":"3"}); if(tg.length===1) h+=arrow(sel,+tg[0],"#ffd23f"); else if(!tg.length&&sr.length===1&&+sr[0]!==sel) h+=arrow(+sr[0],sel,"#ffe27a"); }
     for(t in marks.src) if(marks.src[t]) ph+=useStr(+t,{fill:"#ffe27a","fill-opacity":".12",stroke:"#ffe27a","stroke-width":"3"})+'<circle cx="'+MP.x[t]+'" cy="'+MP.y[t]+'" r="'+(BR+6)+'" fill="none" stroke="#ffe27a" stroke-width="3"/>';
     for(t in marks.tgt) if(marks.tgt[t]) ph+=useStr(+t,{fill:"#ff3b2a","fill-opacity":".30",stroke:"#ff3b2a","stroke-width":"3","stroke-dasharray":"6 3.5"})+'<circle cx="'+MP.x[t]+'" cy="'+MP.y[t]+'" r="'+(BR+6)+'" fill="rgba(255,60,40,.22)" stroke="#ff3b2a" stroke-width="3" stroke-dasharray="6 3.5"/>';
     for(t in marks.hot) if(marks.hot[t]) ph+=useStr(+t,{fill:"#fff","fill-opacity":".16",stroke:"#fff","stroke-width":"2.4"})+'<circle cx="'+MP.x[t]+'" cy="'+MP.y[t]+'" r="'+(BR+6)+'" fill="none" stroke="#fff" stroke-width="3"/>';
@@ -211,16 +235,49 @@ function create(container,opts){
     psvg.style.left=(b[0]/MP.W*100)+"%"; psvg.style.top=(b[1]/MP.H*100)+"%"; psvg.style.width=(b[2]/MP.W*100)+"%"; psvg.style.height=(b[3]/MP.H*100)+"%";
   }
   function drawAll(){ for(var t=0;t<MP.n;t++) drawGroup(t); paintOwn(); paintMarks(); applyLabels(); }
+  /* names on a small board (the phone, zoomed in): each name is drawn at least NAMEPX on screen, growing away from its own badge (or its
+     leader), and a name that would then touch a placed name, any badge, a medal or the map's edge waits until the zoom gives it room.
+     Worked out once per zoom level (never per frame of a gesture); the TV and the Party TV board show every name as laid out */
+  var NAMEPX=12, nameK=-1, nameBox=[], nameOn=[], BRIM=14.6;
+  function nameLayout(k){
+    if(Math.abs(k-nameK)<1e-4) return; nameK=k;
+    var G=GEO, order=G.lab.map(function(l){ return l.t; }).sort(function(a,b){ return G.lab[b].fs-G.lab[a].fs||a-b; }), done=[], i, u;
+    var fixed=(focusOn||opts.static||labelsMode!=="auto");
+    order.forEach(function(t){
+      var l=G.lab[t], pad=l.fs*.12+.4, top=l.ny-l.h/2, b=[l.nx-l.w/2-pad,top-pad,l.nx+l.w/2+pad,top+l.h+pad], f=fixed?1:Math.max(1,Math.min(3.4,NAMEPX/(l.fs*k)));
+      var ax=l.lead?l.lead[0]:Math.max(b[0],Math.min(b[2],MP.x[t])), ay=l.lead?l.lead[1]:Math.max(b[1],Math.min(b[3],MP.y[t]));
+      var sb=[ax+(b[0]-ax)*f,ay+(b[1]-ay)*f,ax+(b[2]-ax)*f,ay+(b[3]-ay)*f], on=true;
+      if(f>1){
+        if(sb[0]<0||sb[1]<0||sb[2]>MP.W||sb[3]>MP.H) on=false;
+        for(i=0;on&&i<done.length;i++){ var o=done[i]; if(sb[0]<o[2]+1&&sb[2]>o[0]-1&&sb[1]<o[3]+1&&sb[3]>o[1]-1) on=false; }
+        for(u=0;on&&u<MP.n;u++){ var dx=Math.max(sb[0]-MP.x[u],0,MP.x[u]-sb[2]), dy=Math.max(sb[1]-MP.y[u],0,MP.y[u]-sb[3]); if(dx*dx+dy*dy<BRIM*BRIM) on=false; }
+        for(u=0;on&&u<G.medals.length;u++){ var m=G.medals[u], ex=Math.max(sb[0]-m.x,0,m.x-sb[2]), ey=Math.max(sb[1]-m.y,0,m.y-sb[3]); if(ex*ex+ey*ey<17*17) on=false; }
+      }
+      if(on) done.push(sb); nameBox[t]=on?sb:null;
+      var g2=S.labG[t], tr=f>1?"translate("+ax.toFixed(1)+","+ay.toFixed(1)+") scale("+f.toFixed(3)+") translate("+(-ax).toFixed(1)+","+(-ay).toFixed(1)+")":"";
+      if((g2.getAttribute("transform")||"")!==tr){ if(tr) g2.setAttribute("transform",tr); else g2.removeAttribute("transform"); }
+    });
+  }
+  /* zoomed in, a name shows only when it is whole in the frame and clear of the Zoom / Fit button: never a name cut by the frame's edge
+     (worked out when a pan or a zoom ends) */
+  function nameView(){
+    var w=root.clientWidth||600, h=root.clientHeight||w*.6, k=w*scale/MP.W, u0=-tx/k, v0=-ty/k, u1=(w-tx)/k, v1=(h-ty)/k, fb=null, t;
+    if(scale>1.001&&fitBtn&&fitBtn.style.display!=="none"){ var rr=root.getBoundingClientRect(), br=fitBtn.getBoundingClientRect(); if(br.width) fb=[(br.left-rr.left-tx)/k-1.5,(br.top-rr.top-ty)/k-1.5,(br.right-rr.left-tx)/k+1.5,(br.bottom-rr.top-ty)/k+1.5]; }
+    for(t=0;t<MP.n;t++){ var b=nameBox[t], on=!!b;
+      if(on&&scale>1.001){ if(b[0]<u0||b[1]<v0||b[2]>u1||b[3]>v1) on=false; else if(fb&&b[0]<fb[2]&&b[2]>fb[0]&&b[1]<fb[3]&&b[3]>fb[1]) on=false; }
+      nameOn[t]=on; var g2=S.labG[t], disp=on?"":"none"; if(g2.style.display!==disp) g2.style.display=disp; }
+  }
   function applyLabels(){
-    var w=root.clientWidth||600, show=labelsMode==="always"||(labelsMode==="auto"&&w*scale/MP.W>=0.6);   // names are drawn at 7-15 units: shown once they are at least about 5 px
+    var w=root.clientWidth||600, k=w*scale/MP.W, show=labelsMode==="always"||(labelsMode==="auto"&&k>=0.6);   // names show once the map is at least 0.6 px a unit
     S.names.style.display=show?"":"none"; root.classList.toggle("is-names",show);
+    if(show&&!root.classList.contains("is-gesture")){ nameLayout(k); nameView(); }
   }
   if(typeof window!=="undefined") window.addEventListener("resize",function(){ if(root.isConnected) applyLabels(); });
   self.setView=function(v){ V=v; keyCache=[]; drawAll(); };
   self.setMarks=function(m){ marks={sel:m.sel==null?null:m.sel,src:m.src||{},tgt:m.tgt||{},hot:m.hot||{},mine:m.mine||{}}; keyCache=[]; drawAll(); };
   self.flash=function(t,kind,ms){ flashT[t]=kind||"win"; keyCache[t]=null; drawGroup(t); paintMarks(); setTimeout(function(){ delete flashT[t]; keyCache[t]=null; drawGroup(t); paintMarks(); },ms||900); };
   self.setTint=function(b){ tint=!!b; paintOwn(); };
-  self.setLabels=function(m){ labelsMode=m; applyLabels(); };
+  self.setLabels=function(m){ labelsMode=m; nameK=-1; applyLabels(); };
   self.centerOf=function(t){ return [MP.x[t],MP.y[t]]; };
   self.viewPoint=function(t){ var r=root.getBoundingClientRect(); return r.width?[(tx+MP.x[t]/MP.W*r.width*scale)/r.width,(ty+MP.y[t]/MP.H*r.height*scale)/r.height]:[MP.x[t]/MP.W,MP.y[t]/MP.H]; };   // where the badge is in the window now, as fractions of the map frame (zoom and pan included)
 
@@ -234,12 +291,18 @@ function create(container,opts){
     ringLayer.style.display=""; ringT=t;
   }
   function hideRing(){ if(ringLayer) ringLayer.style.display="none"; ringT=-1; }
+  /* the territory a card is describing (a tap or long press on the phone): its outline in ivory over the map, under the names and routes */
+  var inspG=null;
+  self.setInspect=function(t){
+    if(!inspG){ inspG=el("g",{class:"rkinsp","pointer-events":"none","stroke-linejoin":"round"}); map.insertBefore(inspG,S.sea); }
+    inspG.innerHTML=(t==null||t<0)?"":useStr(t,{fill:"#fff3d1","fill-opacity":".14",stroke:"#060918","stroke-opacity":".85","stroke-width":"4.2"})+useStr(t,{fill:"none",stroke:"#fff3d1","stroke-width":"2.2"});
+  };
   function panTo(t){
     if(scale<=1) return; var r=root.getBoundingClientRect(), p=ringPos(t), x=tx+p[0]/MP.W*r.width*scale, y=ty+p[1]/MP.H*r.height*scale, m=Math.min(r.width,r.height)*0.18;
     if(x>=m&&x<=r.width-m&&y>=m&&y<=r.height-m) return;
     tx=r.width/2-p[0]/MP.W*r.width*scale; ty=r.height/2-p[1]/MP.H*r.height*scale; clamp(); apply();
   }
-  self.setFocusable=function(on){ on=!!on; if(on===focusOn) return; focusOn=on; keyCache=[]; drawAll(); if(!on) hideRing(); if(fitBtn) fitBtn.style.display=on?"none":""; };
+  self.setFocusable=function(on){ on=!!on; if(on===focusOn) return; focusOn=on; keyCache=[]; nameK=-1; drawAll(); if(!on) hideRing(); if(fitBtn) fitBtn.style.display=on?"none":""; };
   var nav=null, DIRS={up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]};
   function buildNav(){
     nav=[]; var t,u,d;
@@ -269,7 +332,7 @@ function create(container,opts){
   /* ---- zoom / pan / tap ---- */
   var gestureT=0;
   function gestureOn(){ clearTimeout(gestureT); root.classList.add("is-gesture"); }
-  function gestureOff(){ clearTimeout(gestureT); gestureT=setTimeout(function(){ root.classList.remove("is-gesture"); },180); }
+  function gestureOff(){ clearTimeout(gestureT); gestureT=setTimeout(function(){ root.classList.remove("is-gesture"); applyLabels(); },180); }
   var fitBtn=null;
   function syncFit(){ if(!fitBtn) return; var on=scale>1.02; fitBtn.setAttribute("aria-label",on?"Fit the whole map":"Zoom in"); fitBtn.lastChild.textContent=on?"Fit":"Zoom"; fitBtn.firstChild.style.display=on?"none":""; fitBtn.classList.toggle("is-icon",!on); }
   function apply(){ view.style.transform=(scale===1&&!tx&&!ty)?"":"translate("+(Math.round(tx*100)/100)+"px,"+(Math.round(ty*100)/100)+"px) scale("+(Math.round(scale*1000)/1000)+")"; root.classList.toggle("is-fit",scale<=1); applyLabels(); syncFit(); }
@@ -280,8 +343,13 @@ function create(container,opts){
   self.focus=function(t,k){ var r=root.getBoundingClientRect(); var ns=Math.max(1,Math.min(MAXZ,k||2.4)); scale=ns; tx=r.width/2-(MP.x[t]/MP.W*r.width)*ns; ty=r.height/2-(MP.y[t]/MP.H*r.height)*ns; clamp(); apply(); };
   self.scale=function(){ return scale; };
   function pointOf(e){ var r=map.getBoundingClientRect(); return [(e.clientX-r.left)/r.width*MP.W,(e.clientY-r.top)/r.height*MP.H]; }
-  function terrAtEvent(e){ var tg=e.target&&e.target.closest&&e.target.closest(".tg"); if(tg) return +tg.getAttribute("data-t"); var p=pointOf(e); return terrAtPoint(p[0],p[1],12); }
-  self.terrAt=function(ux,uy){ return terrAtPoint(ux,uy,12); };
+  function terrAtEvent(e){ var tg=e.target&&e.target.closest&&e.target.closest(".tg"); if(tg) return +tg.getAttribute("data-t"); var p=pointOf(e); return nameAt(p[0],p[1]); }
+  function nameAt(ux,uy){   // the land under the point, else a name over the sea (shown, and not inside its own land), else the nearest coast within reach
+    var v=terrAtPoint(ux,uy,0); if(v!=null) return v;
+    if(S.names.style.display!=="none") for(var t=0;t<MP.n;t++){ var b=nameBox[t], l=GEO.lab[t]; if(b&&nameOn[t]&&l.k!=="in"&&ux>=b[0]&&ux<=b[2]&&uy>=b[1]&&uy<=b[3]) return t; }
+    return terrAtPoint(ux,uy,12);
+  }
+  self.terrAt=function(ux,uy){ return nameAt(ux,uy); };
   var ptrs={}, startPt=null, moved=false, pinch=null, lpT=0, lpDone=false, lastTap={t:0,x:0,y:0};
   function clearLP(){ clearTimeout(lpT); lpT=0; }
   root.addEventListener("pointerdown",function(e){
