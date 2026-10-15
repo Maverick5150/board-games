@@ -32,7 +32,7 @@
   /* ---------- setup page (also the in-game Menu) ---------- */
   .tb-setup{display:flex; flex-direction:column; width:min(100%,40rem); margin:0 auto; padding:0 var(--gutter)}
   .tb-col{display:contents}
-  .tb-hero{order:1} .tb-sec--players{order:3} .tb-sec--rules{order:4} .tb-sec--save{order:5} .tb-back{order:6} .tb-dock{order:7}
+  .tb-hero{order:1} .tb-sec--version{order:2} .tb-sec--players{order:3} .tb-sec--rules{order:4} .tb-sec--save{order:5} .tb-back{order:6} .tb-dock{order:7}
   /* hero art band on top, the title under it (README section 10, narrow hero); the art fades into the scene */
   .tb-hero{min-height:0; margin:0 calc(-1 * var(--gutter)); padding-top:46%; border-radius:0; background:transparent}
   .tb-hero .bg-hero__layer{bottom:auto; height:auto; aspect-ratio:16/9; border-radius:0; background-color:transparent;
@@ -51,6 +51,13 @@
   .tb-table__txt{min-width:0; font:var(--fw-ui) var(--fs-xs)/1.3 var(--font-ui); color:var(--text-2)}
   .tb-table__txt b{display:block; font:var(--fw-ui-strong) var(--fs-sm)/1.25 var(--font-ui); color:var(--text-1)}
   .tb-rule .bg-row{cursor:default}
+  .tb-rule label.bg-row{cursor:pointer}
+  #versions{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #versions .bg-version{min-height:4.75rem; justify-content:center}
+  #versions .bg-version__title{font-size:var(--fs-lg)}
+  .tb-vdesc{margin:.875rem 0 0; padding:.75rem .875rem; border-radius:var(--r-md); background:var(--ink-2); box-shadow:var(--well-edge); font:var(--fw-body) var(--fs-sm)/1.45 var(--font-ui); color:var(--text-2)}
+  .tb-vdesc b{color:var(--text-1); font-weight:var(--fw-ui-strong)}
+  .tb-sw{margin-top:var(--sp-3)}
   /* saves.js bar, dressed in Luxe (ids, data-a and behaviour unchanged) */
   #svbar.svbar{margin:0; padding:var(--sp-3); border:0; border-radius:var(--r-lg); background:var(--panel-fill); box-shadow:var(--panel-edge),var(--elev-1)}
   #svbar h4{display:none}
@@ -147,6 +154,8 @@
   html[data-tv] .tb-hero .bg-hero__layer{border-radius:var(--r-xl) var(--r-xl) 0 0}
   html[data-tv] .tb-hero .bg-hero__body{padding:0}
   html[data-tv] .tb-sec--rules .bg-row{min-height:0; padding:.625rem .875rem}
+  html[data-tv] #versions{gap:1.5rem}
+  html[data-tv] .tb-sw{margin-top:1.5rem}
   /* column B on TV: the players, then the Start dock (on screen at 1080p, straight under the setup it confirms), then save and
      load and the way back. The dock's gap keeps the focused button's ring and lift clear of its neighbour */
   html[data-tv] .tb-col--b{display:flex; flex-direction:column}
@@ -194,15 +203,20 @@
           <p class="bg-hero__pitch" data-stage-text="strong">Pop the dome, roll a 6 to leave home and race all four pegs into your finish.</p>
         </div>
       </section>
+      <section class="tb-sec tb-sec--version" aria-labelledby="versionHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="versionHead" data-stage-text="strong">Version</h2></div>
+        <div class="bg-versions" id="versions" role="radiogroup" aria-labelledby="versionHead"></div>
+        <p class="tb-vdesc" id="versionDesc" aria-live="polite"></p>
+      </section>
       <section class="tb-sec tb-sec--rules" aria-labelledby="rulesHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="rulesHead" data-stage-text="strong">Rules</h2></div>
         <div class="bg-rows tb-rule">
-          <div class="bg-row bg-row--static"><span class="bg-row__main"><span class="bg-row__title">Highest pop goes first <span class="bg-tag bg-tag--official">Official</span></span><span class="bg-row__desc">Everyone pops once. Ties pop again.</span></span></div>
           <div class="bg-row bg-row--static"><span class="bg-row__main"><span class="bg-row__title">Roll a 6 to leave home <span class="bg-tag bg-tag--official">Official</span></span><span class="bg-row__desc">A 6 moves a peg from home onto your start space.</span></span></div>
-          <div class="bg-row bg-row--static"><span class="bg-row__main"><span class="bg-row__title">Every 6 pops again <span class="bg-tag bg-tag--official">Official</span></span><span class="bg-row__desc">There is no limit on sixes in a row.</span></span></div>
           <div class="bg-row bg-row--static"><span class="bg-row__main"><span class="bg-row__title">Land on a peg to bump it <span class="bg-tag bg-tag--official">Official</span></span><span class="bg-row__desc">The bumped peg goes back to its home.</span></span></div>
           <div class="bg-row bg-row--static"><span class="bg-row__main"><span class="bg-row__title">Exact count into the finish <span class="bg-tag bg-tag--official">Official</span></span><span class="bg-row__desc">A pop that overshoots can't move that peg.</span></span></div>
         </div>
+        <div class="bg-rows tb-rule tb-sw" id="tbSwitches"></div>
+        <p class="tb-vdesc" id="rulesLegend" data-stage-text><span class="bg-tag bg-tag--official">Official</span> as in the chosen Version · <span class="bg-tag bg-tag--house">House</span> a rule you changed</p>
       </section>
     </div>
     <div class="tb-col tb-col--b">
@@ -330,7 +344,24 @@ let sixStreak=0;
 let gameOver=false;
 let busy=false;
 let gen=0;             // game generation: bumped by startGame/loadGame so an old game's timers can't act on a new one
-function later(fn,ms){ const g=gen; return setTimeout(()=>{ if(g===gen) fn(); },ms); }
+// every timer of the game goes through later(): while the Menu is up the computers wait ("Paused") and the timer re-arms itself, so
+// Resume continues exactly where the game was. A New game / Load bumps gen first, so it still cancels a held timer.
+function paused(){ return armed && players.length>0 && !gameOver && setupShown(); }
+function later(fn,ms){ const g=gen; return setTimeout(function tick(){ if(g!==gen) return; if(paused()){ barTitle(); setTimeout(tick,250); return; } fn(); },ms); }
+// the rules of the running game (a Version plus the changes made on the setup page); saved with the game, optional so old saves load as Classic
+const VERSIONS=[
+  {id:"classic",name:"Classic",tag:"The long-time rules",desc:"The Trouble most of us grew up with: everyone pops once and the highest pop goes first, and every 6 pops again with no limit.",base:{first:"highest",oneExtra:false,roll1:false}},
+  {id:"hasbro2022",name:"Hasbro 2022",tag:"Rules sheet F8254",desc:"The current Hasbro sheet: the youngest player goes first, a 6 earns only one extra pop per turn, and a 1 lets every other player bring a peg out.",base:{first:"youngest",oneExtra:true,roll1:true}}
+];
+const RULEROWS=[
+  {k:"first",title:"Youngest player goes first",on:"The youngest player sits in Red and goes first; no first pop.",off:"Everyone pops once and the highest pop goes first. Ties pop again.",get:o=>o.first==="youngest",set:(o,v)=>{ o.first=v?"youngest":"highest"; }},
+  {k:"oneExtra",title:"One extra pop per turn",on:"A 6 pops again once; a 6 on that extra pop ends the turn after its move.",off:"Every 6 pops again. There is no limit on sixes in a row.",get:o=>o.oneExtra,set:(o,v)=>{ o.oneExtra=v; }},
+  {k:"roll1",title:"A 1 helps the others",on:"A 1 cannot move. Every other player brings a peg from home onto their start space.",off:"A 1 moves a peg one space like any other pop.",get:o=>o.roll1,set:(o,v)=>{ o.roll1=v; }}
+];
+function versionOf(id){ return VERSIONS.filter(v=>v.id===id)[0]||VERSIONS[0]; }
+function rulesFor(id,over){ const o=Object.assign({},versionOf(id).base); Object.keys(over||{}).forEach(k=>{ if(k in o) o[k]=over[k]; }); return o; }
+let setup={version:"classic",over:{}};   // the setup page's choice
+let rules=rulesFor("classic",{}), gameVer="classic";   // the running game's
 // presentation-only game stats for the win screen (turns, bumps, play time). Saved as an optional "stats" field: saves made
 // before it existed load with fresh counters, and older code ignores it.
 let stats={turns:0,bumps:0,ms:0}, clock0=0;
@@ -737,7 +768,7 @@ function showTurn(){
 let armed=false, lastSnap=null;
 function takeSnap(){
   if(!armed||gameOver) return;
-  lastSnap=JSON.parse(JSON.stringify({players:players,isHuman:isHuman,pegs:pegs,turn:turn,sixStreak:sixStreak,humanCount:humanCount,cpuCount:cpuCount,stats:{turns:stats.turns,bumps:stats.bumps,ms:playMs()}}));
+  lastSnap=JSON.parse(JSON.stringify({players:players,isHuman:isHuman,pegs:pegs,turn:turn,sixStreak:sixStreak,ver:gameVer,rules:rules,humanCount:humanCount,cpuCount:cpuCount,stats:{turns:stats.turns,bumps:stats.bumps,ms:playMs()}}));
   Saves.auto("trouble",lastSnap);
 }
 function beginTurn(){
@@ -768,13 +799,31 @@ function doRoll(){
   return die;
 }
 
+// does this 6 earn another pop? (Hasbro 2022: only one extra pop per turn, so the 6 popped as the extra one does not)
+function sixAgain(){ return die===6 && !(rules.oneExtra && sixStreak>1); }
+// Hasbro 2022: a 1 cannot move; every other player brings a peg from home onto their start space (a peg sitting there is bumped)
+function resolveOne(color){
+  const out=[];
+  for(const c of players){
+    if(c===color) continue;
+    const k=pegs[c].indexOf(null); if(k<0) continue;
+    const occ=occupantAt(c,0); if(occ && occ.color===c) continue;
+    if(occ){ pegs[occ.color][occ.peg]=null; stats.bumps++; }
+    pegs[c][k]=0; out.push(NAME[c]);
+  }
+  Sound.sfx("tick");
+  setStatus(`<span class="dot" style="background:${CSSCOL[color]}"></span> Rolled <b>1</b> — no move`+(out.length?"; "+out.join(", ")+(out.length===1?" brings":" bring")+" a peg out":"; nobody can bring a peg out"));
+  awaitingMove=false; renderPegs();
+  later(()=>{ busy=false; nextTurn(); }, 1900);
+}
 function afterRollResolve(color){
+  if(rules.roll1 && die===1){ resolveOne(color); return; }
   const moves=legalMovesFor(color,die);
   if(moves.length===0){
     setStatus(`<span class="dot" style="background:${CSSCOL[color]}"></span> Rolled <b>${die}</b> — no moves`);
     awaitingMove=false;
     renderPegs();
-    const again=(die===6);   // official rules: a 6 earns another pop even when no peg can move
+    const again=sixAgain();   // a 6 earns another pop even when no peg can move
     later(()=>{ if(again) rollAgain(color); else { busy=false; nextTurn(); } }, isHuman[color]?900:1500);
     return;
   }
@@ -817,7 +866,7 @@ function finishMove(color){
     popBtn.disabled=true;
     return;
   }
-  const rolledSix = (die===6);   // official rules: every 6 earns another pop (no limit)
+  const rolledSix = sixAgain();   // every 6 earns another pop (Hasbro 2022: one extra pop per turn)
   later(()=>{
     if(rolledSix) rollAgain(color);
     else { busy=false; nextTurn(); }
@@ -942,7 +991,7 @@ function uiSync(){
   pulseRefresh(); barTitle();
 }
 function barTitle(){
-  const t=setupShown()?(ui.result?"Game over":(armed&&players.length&&!gameOver)?"Game paused":"New game"):(gameOver?"Game over":"Turn "+Math.max(1,stats.turns));
+  const t=setupShown()?(ui.result?"Game over":(armed&&players.length&&!gameOver)?"Paused":"New game"):(gameOver?"Game over":"Turn "+Math.max(1,stats.turns));
   if(barEyebrow.textContent!==t) barEyebrow.textContent=t;
 }
 
@@ -986,7 +1035,7 @@ function fillMoveSheet(){
   if(B&&B.dice) B.dice.render("#sheetDie",die);
   document.getElementById("moveEyebrow").textContent=(humanCount>1?NAME[c]+" popped a ":"You popped a ")+die;
   document.getElementById("moveTitle").textContent=moves.length>1?"Choose your move":"Your move";
-  document.getElementById("moveSub").textContent=(best?"The best move is marked. ":"")+(die===6?"A 6 pops again after this move.":onTV()?"Pick a move and press OK.":"You can also tap a highlighted peg on the board.");
+  document.getElementById("moveSub").textContent=(best?"The best move is marked. ":"")+(sixAgain()?"A 6 pops again after this move.":die===6?"That was your extra pop: the turn ends after this move.":onTV()?"Pick a move and press OK.":"You can also tap a highlighted peg on the board.");
   const chev=B&&B.icon?B.icon("chevron"):"";
   moveOpts.innerHTML=moves.map(mv=>{ const t=moveText(c,mv);
     return `<button type="button" class="bg-sheet__option${mv===best?" is-best":""}" data-peg="${mv.peg}"><span class="bg-token" data-seat="${SEAT[c]}" aria-hidden="true">${mv.peg+1}</span>`+
@@ -1106,7 +1155,7 @@ function syncStart(){
   dockEl.classList.toggle("has-resume",resumeBtn.style.display!=="none");   // two buttons side by side: equal widths
   startBtn.classList.toggle("bg-btn--primary",!resumable); startBtn.classList.toggle("bg-btn--secondary",resumable);
   resumeBtn.classList.toggle("bg-btn--primary",resumable); resumeBtn.classList.toggle("bg-btn--secondary",!resumable);
-  startSub.textContent=total+" players · "+(humanCount===1?"you":humanCount+(tv?" on this TV":" on this phone"))+(cpuCount?" + "+cpuCount+(cpuCount===1?" computer":" computers"):"");
+  startSub.textContent=(setup.version==="classic"?"":versionOf(setup.version).name+" · ")+total+" players · "+(humanCount===1?"you":humanCount+(tv?" on this TV":" on this phone"))+(cpuCount?" + "+cpuCount+(cpuCount===1?" computer":" computers"):"");
   seatPreview.innerHTML=`<span class="tb-table__tokens">`+cols.map(c=>`<span class="bg-token" data-seat="${SEAT[c]}" aria-hidden="true">${NAME[c].charAt(0)}</span>`).join("")+`</span>`+
     `<span class="tb-table__txt"><b>${total} at the table</b>`+cols.map((c,i)=>NAME[c]+(i<humanCount?(humanCount===1?" (you)":tv?" (player)":" (phone)"):" (CPU)")).join(", ")+`</span>`;
 }
@@ -1163,15 +1212,43 @@ document.addEventListener("keydown",e=>{
   const to=(down&&a.closest("#humanSeg"))?pick("#cpuSeg"):(up&&a.closest("#cpuSeg"))?pick("#humanSeg"):(down&&row1&&row2&&row1.contains(a))?nearestIn(row2,a):null;
   if(to){ e.preventDefault(); B.focus.set(to); }
 });
+// ---- Version picker and the three rules a Version sets (each can be changed: the changed rule is tagged House) ----
+function escH(t){ return String(t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function changedRules(){ const b=versionOf(setup.version).base, o=rulesFor(setup.version,setup.over); return RULEROWS.filter(r=>o[r.k]!==b[r.k]).length; }
+function drawVersions(){
+  const vs=document.getElementById("versions");
+  if(!vs.children.length){
+    vs.innerHTML=VERSIONS.map(v=>`<button type="button" class="bg-version" role="radio" data-value="${v.id}" data-v="${v.id}" aria-checked="false"><span class="bg-version__title">${escH(v.name)}</span><span class="bg-version__meta">${escH(v.tag)}</span></button>`).join("");
+    vs.querySelectorAll(".bg-version").forEach(d=>d.addEventListener("click",()=>{ setup.version=d.dataset.v; setup.over={}; drawVersions(); }));
+  }
+  vs.querySelectorAll(".bg-version").forEach(d=>{ const on=setup.version===d.dataset.v; d.classList.toggle("on",on); d.setAttribute("aria-checked",String(on)); });
+  const v=versionOf(setup.version);
+  document.getElementById("versionDesc").innerHTML=`<b>${escH(v.name)}.</b> ${escH(v.desc)}`;
+  drawRuleRows(); syncStart();
+}
+function drawRuleRows(){
+  const box=document.getElementById("tbSwitches"), o=rulesFor(setup.version,setup.over), b=versionOf(setup.version).base;
+  const had=box.contains(document.activeElement)?document.activeElement.getAttribute("data-k"):null;
+  box.innerHTML=RULEROWS.map(r=>{ const changed=o[r.k]!==b[r.k], on=r.get(o);
+    return `<label class="bg-row"><span class="bg-row__main"><span class="bg-row__title">${escH(r.title)} <span class="bg-tag ${changed?"bg-tag--house":"bg-tag--official"}">${changed?"House":"Official"}</span></span><span class="bg-row__desc">${escH(on?r.on:r.off)}</span></span><input type="checkbox" class="bg-toggle" data-k="${r.k}"${on?" checked":""}></label>`; }).join("");
+  box.querySelectorAll("input").forEach(i=>i.addEventListener("change",()=>{
+    const r=RULEROWS.filter(x=>x.k===i.dataset.k)[0], cur=rulesFor(setup.version,setup.over); r.set(cur,i.checked);
+    setup.over={}; RULEROWS.forEach(x=>{ if(cur[x.k]!==b[x.k]) setup.over[x.k]=cur[x.k]; });
+    drawRuleRows(); syncStart(); }));
+  if(had){ const ni=box.querySelector('input[data-k="'+had+'"]'), B=BG(); if(ni){ if(B&&B.focus&&B.focus.enabled) B.focus.set(ni); else ni.focus(); } }
+}
 drawCpuSeg();
+drawVersions();
 const saveBar=Saves.bar({game:"trouble",el:document.getElementById("svbar"),
-  getSettings:()=>({humans:humanCount,cpus:cpuCount}),
-  applySettings:s=>{ humanCount=s.humans||1; cpuCount=s.cpus!=null?s.cpus:1; setHumanSeg(); drawCpuSeg(); },
-  standard:()=>{ humanCount=1; cpuCount=1; setHumanSeg(); drawCpuSeg(); },
+  getSettings:()=>({humans:humanCount,cpus:cpuCount,version:setup.version,over:setup.over}),
+  applySettings:s=>{ humanCount=s.humans||1; cpuCount=s.cpus!=null?s.cpus:1; setup={version:versionOf(s.version).id,over:(s.over&&typeof s.over==="object")?s.over:{}}; setHumanSeg(); drawCpuSeg(); drawVersions(); },
+  standard:()=>{ humanCount=1; cpuCount=1; setup={version:"classic",over:{}}; setHumanSeg(); drawCpuSeg(); drawVersions(); },
   getSnapshot:()=>(armed&&!gameOver)?lastSnap:null,
   loadSnapshot:d=>{ Sound.skip(); loadGame(d); showSetup(false); }});
 function loadGame(d){
   players=d.players; isHuman=d.isHuman; pegs=d.pegs; turn=d.turn; sixStreak=d.sixStreak||0; humanCount=d.humanCount||humanCount; cpuCount=d.cpuCount!=null?d.cpuCount:cpuCount;
+  gameVer=versionOf(d.ver).id; rules=rulesFor(gameVer,(d.rules&&typeof d.rules==="object")?d.rules:{});   // saves from before the Versions are Classic
+  { const b=versionOf(gameVer).base; setup={version:gameVer,over:{}}; Object.keys(b).forEach(k=>{ if(rules[k]!==b[k]) setup.over[k]=rules[k]; }); drawVersions(); }
   die=0; gameOver=false; busy=false; awaitingMove=false; armed=true;
   gen++;                          // the previous game's pending timers must not act on the loaded one
   stats=readStats(d.stats); clockOn(); ui.result=false;   // saves from before the stats field start fresh counters
@@ -1219,10 +1296,19 @@ function startGame(humans, cpus, rollOff){
   isHuman={}; pegs={};
   players.forEach((c,i)=>{ isHuman[c]= i<humans; pegs[c]=[null,null,null,null]; });
   turn=0; die=0; gameOver=false; busy=false; awaitingMove=false; sixStreak=0;
+  gameVer=setup.version; rules=rulesFor(setup.version,setup.over);
   gen++;   // the previous game's pending timers must not act on this one
   stats=freshStats(); clockOn(); ui.result=false;
   // player strip
   buildStrip();
+  if(rollOff && rules.first==="youngest"){
+    // Hasbro 2022: the youngest player goes first (Red, the first seat); nobody pops for it
+    buildBoard(); takeSnap();
+    setStatus(`<span class="dot" style="background:${CSSCOL[players[0]]}"></span> <b>${NAME[players[0]]} goes first</b> — the youngest player`);
+    rollOffChips({rounds:[]});
+    later(beginTurn, 1200);
+    return;
+  }
   if(rollOff){
     // a new game: pop for first player (Continue / Load keep the saved turn)
     const ro=rollOffFirst(players), last=ro.rounds[ro.rounds.length-1];
@@ -1241,6 +1327,8 @@ function startGame(humans, cpus, rollOff){
   beginTurn();
 }
 
+// test hook (read-mostly; the page never uses it)
+window.__tb={get state(){ return {players:players,pegs:pegs,turn:turn,die:die,gameOver:gameOver,armed:armed,rules:rules,ver:gameVer,gen:gen,busy:busy,awaiting:awaitingMove,sixStreak:sixStreak}; },setup:()=>setup,paused:paused,sixAgain:sixAgain,isHuman:c=>!!isHuman[c],lastSnap:()=>lastSnap,load:d=>loadGame(d),startGame:startGame,afterRollResolve:afterRollResolve,setDie:v=>{ die=v; },setSix:v=>{ sixStreak=v; },rulesFor:rulesFor};
 // keep the play clock to the time the page is on screen; the dome pulse stops while it is hidden
 document.addEventListener("visibilitychange",()=>{ if(document.hidden) clockOff(); else if(armed&&players.length&&!gameOver) clockOn(); pulseRefresh(); });
 try{ const mq=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)"); if(mq&&mq.addEventListener) mq.addEventListener("change",pulseRefresh); }catch(e){}
