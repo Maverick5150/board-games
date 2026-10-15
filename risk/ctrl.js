@@ -480,9 +480,11 @@ function create(cfg){
   }
   function openMission(){ if(L){ openMissionL(); return; } openModal('<h2>🎯 Your secret mission</h2><div class="rkmission">'+esc(V.mission||"No mission.")+'</div><p style="font-size:12px;opacity:.8">Keep it secret! The first player to complete their mission wins. If you are dealt a mission to destroy your own colour, it becomes “Occupy 24 territories”.</p><div class="rkacts"><button data-m="close">Close</button></div>'); }
   function openHq(){ if(L){ openHqL(); return; } var t=V.myHq; var rows=V.players.filter(function(p){ return !p.neutral; }).map(function(p){ return '<div class="rkplayer"><span class="sw" style="background:'+pcol(V,p.id).c+'"></span><span class="nm">'+esc(p.name)+'<small>HQ: '+(p.hq!=null?esc(MP.names[p.hq])+(V.terr[p.hq].o===p.id?" (held)":" — captured by "+esc(nm(V.terr[p.hq].o))):"secret")+'</small></span></div>'; }).join(""); openModal('<h2>🏰 Headquarters</h2><div style="font-size:12.5px;opacity:.85">Capture the other players\' headquarters while holding your own to win. Losing your HQ does not eliminate you.</div>'+rows+'<div class="rkacts"><button data-m="close">Close</button></div>'); }
+  // standing order for the Players lists: most territories first, the eliminated last, ties in seat order (presentation only)
+  function standing(){ return V.players.map(function(p,i){ return i; }).sort(function(a,b){ var pa=V.players[a], pb=V.players[b]; return ((pb.alive?1:0)-(pa.alive?1:0))||(pb.terrs-pa.terrs)||(a-b); }); }
   function openPlayers(){
     if(L){ openPlayersL(); return; }
-    var rows=V.players.map(function(p,i){
+    var rows=standing().map(function(i){ var p=V.players[i];
       var conts=MP.continents.filter(function(c){ return c.terrs.every(function(t){ return V.terr[t].o===i; }); }).map(function(c){ return c.name; });
       var st=V.terr.reduce(function(a,t){ return t.o===i?a+t.a:a; },0);
       return '<div class="rkplayer'+(i===V.turn&&!V.over?" cur":"")+(p.alive?"":" dead")+'"><span class="sw" style="background:'+pcol(V,i).c+'"></span><span class="nm">'+esc(p.name)+(p.neutral?" (neutral)":"")+(p.alive?"":" — out")+'<small>'+p.terrs+' territories · '+p.armies+' armies'+(p.neutral?"":' · '+p.cards+' cards')+(conts.length?' · holds '+conts.map(esc).join(", "):"")+'</small></span></div>';
@@ -518,7 +520,7 @@ function create(cfg){
   }
   function openPlayersL(){
     var lead=-1, best=-1; V.players.forEach(function(p,i){ if(!p.neutral&&p.alive&&p.terrs>best){ best=p.terrs; lead=i; } });
-    var rows=V.players.map(function(p,i){
+    var rows=standing().map(function(i){ var p=V.players[i];
       var conts=MP.continents.filter(function(c){ return c.terrs.every(function(t){ return V.terr[t].o===i; }); }).map(function(c){ return c.name; });
       return '<tr'+(i===lead?' class="is-lead"':'')+'><td><span class="bg-score__who" data-seat="'+seatOf(i)+'"><span class="rk-pn">'+esc(p.name)+(p.neutral?" (neutral)":"")+(i===V.turn&&!V.over?' <span class="bg-tag bg-tag--accent">Turn</span>':'')+(p.alive?"":' <span class="bg-tag bg-tag--paper">Out</span>')+'</span></span>'+
         (conts.length?'<span class="rk-holds">Holds '+conts.map(esc).join(", ")+'</span>':'')+'</td><td>'+p.terrs+'</td><td class="bg-score__total">'+p.armies+'</td><td>'+(p.neutral?"–":p.cards)+'</td></tr>';
