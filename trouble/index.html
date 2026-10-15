@@ -104,7 +104,7 @@
   #board .tb-pn{font:800 14px/1 var(--font-ui); fill:#0b0a12; pointer-events:none}
   #board .tb-pop{font:800 26px/1 var(--font-ui); letter-spacing:.14em; fill:#f1e8d4; opacity:.92; pointer-events:none}
   #tbHint{pointer-events:none}
-  #board .dome{transform-origin:300px 300px; transition:transform .14s ease-out}
+  #board .dome{transform-origin:300px 300px; transition:transform var(--tb-dome,.14s) ease-out}
   #board .dome.is-press{transform:scale(.95)}
   .bz-ctl{position:absolute; left:var(--bz-x,66%); top:var(--bz-y,66%); z-index:6; transform:translate(-50%,-50%); display:inline-flex; align-items:center; justify-content:center; gap:.4em; width:44px; height:44px; padding:0; border:0; border-radius:999px; font:700 14px/1 var(--font-ui); color:#f6f1e7; background:rgba(8,10,21,.86); box-shadow:inset 0 0 0 1px rgba(231,202,144,.7),0 4px 12px rgba(0,0,0,.5); cursor:pointer; touch-action:manipulation}
   .bz-ctl svg{width:22px; height:22px}
@@ -132,7 +132,7 @@
   #moveSub{margin:0 0 1rem}
   html:not([data-tv]) .tb-hints{display:none}
   /* a peg glides to its new place (transform only); it stays put under Reduce effects / reduced motion */
-  .peg{cursor:default; transition:transform .26s cubic-bezier(.3,.7,.2,1)}
+  .peg{cursor:default; transition:transform var(--tb-glide,.26s) cubic-bezier(.3,.7,.2,1)}
   html[data-effects="reduced"] .peg, html[data-motion="reduce"] .peg, html[data-effects="reduced"] #board .dome, html[data-motion="reduce"] #board .dome{transition:none}
   @media (prefers-reduced-motion: reduce){ .peg, #board .dome{transition:none} }
   .peg.movable{cursor:pointer;}
@@ -232,6 +232,12 @@
           </div>
           <div class="tb-field"><span class="bg-row__title">Computer players</span><span class="bg-row__desc">2 to 4 players in all.</span></div>
           <div class="bg-seg" id="cpuSeg" role="group" aria-label="Computer players"></div>
+          <div class="tb-field"><span class="bg-row__title">Game speed</span><span class="bg-row__desc">How fast the computers play and the pegs move. Changes at once.</span></div>
+          <div class="bg-seg" id="speedSeg" role="group" aria-label="Game speed">
+            <button type="button" data-speed="slow" aria-pressed="false">Slow</button>
+            <button type="button" data-speed="medium" class="on" aria-pressed="true">Medium</button>
+            <button type="button" data-speed="fast" aria-pressed="false">Fast</button>
+          </div>
           <div class="tb-table" id="seatPreview"></div>
         </div>
       </section>
@@ -347,7 +353,18 @@ let gen=0;             // game generation: bumped by startGame/loadGame so an ol
 // every timer of the game goes through later(): while the Menu is up the computers wait ("Paused") and the timer re-arms itself, so
 // Resume continues exactly where the game was. A New game / Load bumps gen first, so it still cancels a held timer.
 function paused(){ return armed && players.length>0 && !gameOver && setupShown(); }
-function later(fn,ms){ const g=gen; return setTimeout(function tick(){ if(g!==gen) return; if(paused()){ barTitle(); setTimeout(tick,250); return; } fn(); },ms); }
+// Game speed (slow / medium / fast; medium is exactly the old timings): every computer-side delay (all of them go through later()),
+// the die tumble in the dome and the peg glide are multiplied by speedFactor(). It is saved with the settings and the game, and a
+// change from the Menu applies at once (the next timer / animation uses the new factor).
+let gameSpeed="medium"; window.bgGameSpeed="medium";
+function speedFactor(){ return ({slow:1.75, fast:0.5})[window.bgGameSpeed] || 1 }
+function setSpeed(v){
+  gameSpeed=(v==="slow"||v==="fast")?v:"medium"; window.bgGameSpeed=gameSpeed;
+  const f=speedFactor(), st=document.documentElement.style;
+  st.setProperty("--tb-glide",Math.max(120,Math.round(260*f))+"ms"); st.setProperty("--tb-dome",Math.max(120,Math.round(140*f))+"ms");   // animations never under 120 ms
+  document.querySelectorAll("#speedSeg button").forEach(x=>{ const on=x.dataset.speed===gameSpeed; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); });
+}
+function later(fn,ms){ ms=Math.round(ms*speedFactor()); const g=gen; return setTimeout(function tick(){ if(g!==gen) return; if(paused()){ barTitle(); setTimeout(tick,250); return; } fn(); },ms); }
 // the rules of the running game (a Version plus the changes made on the setup page); saved with the game, optional so old saves load as Classic
 const VERSIONS=[
   {id:"classic",name:"Classic",tag:"The long-time rules",desc:"The Trouble most of us grew up with: everyone pops once and the highest pop goes first, and every 6 pops again with no limit.",base:{first:"highest",oneExtra:false,roll1:false}},
@@ -768,7 +785,7 @@ function showTurn(){
 let armed=false, lastSnap=null;
 function takeSnap(){
   if(!armed||gameOver) return;
-  lastSnap=JSON.parse(JSON.stringify({players:players,isHuman:isHuman,pegs:pegs,turn:turn,sixStreak:sixStreak,ver:gameVer,rules:rules,humanCount:humanCount,cpuCount:cpuCount,stats:{turns:stats.turns,bumps:stats.bumps,ms:playMs()}}));
+  lastSnap=JSON.parse(JSON.stringify({players:players,isHuman:isHuman,pegs:pegs,turn:turn,sixStreak:sixStreak,ver:gameVer,rules:rules,humanCount:humanCount,cpuCount:cpuCount,speed:gameSpeed,stats:{turns:stats.turns,bumps:stats.bumps,ms:playMs()}}));
   Saves.auto("trouble",lastSnap);
 }
 function beginTurn(){
@@ -934,12 +951,12 @@ function bestMoveOf(color,moves){
 // ---- pop animation ----
 function animatePop(cb){ Sound.sfx("dice");
   const g=gen; let n=0, dm=svg.querySelector(".dome");
-  if(dm){ dm.classList.add("is-press"); setTimeout(()=>dm.classList.remove("is-press"),150); }   // the press
+  if(dm){ dm.classList.add("is-press"); setTimeout(()=>dm.classList.remove("is-press"),Math.max(120,Math.round(150*speedFactor()))); }   // the press
   const iv=setInterval(()=>{
     if(g!==gen){ clearInterval(iv); return; }          // a new game was started / loaded: drop this old pop
     die=1+Math.floor(Math.random()*6); tilt=(Math.random()-.5)*80; jig=[(Math.random()-.5)*14,(Math.random()-.5)*14]; renderDome();   // tumble the die in the dome
     if(++n>=8){ clearInterval(iv); die=0; tilt=0; jig=[0,0]; later(cb,150); }
-  },95);
+  },Math.round(95*speedFactor()));
 }
 
 // ================= Midnight Luxe presentation (player strip, status die, dome pulse, move sheet, win screen) =================
@@ -1079,7 +1096,7 @@ moveOpts.addEventListener("click",e=>{
 // the win screen: Victory + the trophy, the ray wheel and confetti (BGUI.win + BGUI.celebrate) with this game's real numbers
 function fmtTime(ms){ const s=Math.max(0,Math.round(ms/1000)), h=Math.floor(s/3600), m=Math.floor(s/60)%60, x=s%60;
   return (h?h+":"+String(m).padStart(2,"0"):String(m))+":"+String(x).padStart(2,"0"); }
-function scheduleWin(){ const g=gen; setTimeout(()=>{ if(g===gen&&gameOver&&!setupShown()&&ui.winShown!==gen) openWin(); },1100); }
+function scheduleWin(){ const g=gen; setTimeout(()=>{ if(g===gen&&gameOver&&!setupShown()&&ui.winShown!==gen) openWin(); },Math.round(1100*speedFactor())); }
 function openWin(){
   const B=BG(); if(!B||!B.win) return;
   ui.winShown=gen;
@@ -1190,6 +1207,7 @@ function drawCpuSeg(){
   syncStart();
 }
 function setHumanSeg(){ document.querySelectorAll("#humanSeg button").forEach(x=>{ const on=+x.dataset.n===humanCount; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
+document.querySelectorAll("#speedSeg button").forEach(b=>b.addEventListener("click",()=>setSpeed(b.dataset.speed)));
 document.querySelectorAll("#humanSeg button").forEach(b=>{
   b.addEventListener("click",()=>{ humanCount=+b.dataset.n; setHumanSeg(); drawCpuSeg(); });
 });
@@ -1240,13 +1258,14 @@ function drawRuleRows(){
 drawCpuSeg();
 drawVersions();
 const saveBar=Saves.bar({game:"trouble",el:document.getElementById("svbar"),
-  getSettings:()=>({humans:humanCount,cpus:cpuCount,version:setup.version,over:setup.over}),
-  applySettings:s=>{ humanCount=s.humans||1; cpuCount=s.cpus!=null?s.cpus:1; setup={version:versionOf(s.version).id,over:(s.over&&typeof s.over==="object")?s.over:{}}; setHumanSeg(); drawCpuSeg(); drawVersions(); },
-  standard:()=>{ humanCount=1; cpuCount=1; setup={version:"classic",over:{}}; setHumanSeg(); drawCpuSeg(); drawVersions(); },
+  getSettings:()=>({humans:humanCount,cpus:cpuCount,version:setup.version,over:setup.over,speed:gameSpeed}),
+  applySettings:s=>{ humanCount=s.humans||1; cpuCount=s.cpus!=null?s.cpus:1; setup={version:versionOf(s.version).id,over:(s.over&&typeof s.over==="object")?s.over:{}}; setSpeed(s.speed); setHumanSeg(); drawCpuSeg(); drawVersions(); },
+  standard:()=>{ humanCount=1; cpuCount=1; setup={version:"classic",over:{}}; setSpeed("medium"); setHumanSeg(); drawCpuSeg(); drawVersions(); },
   getSnapshot:()=>(armed&&!gameOver)?lastSnap:null,
   loadSnapshot:d=>{ Sound.skip(); loadGame(d); showSetup(false); }});
 function loadGame(d){
   players=d.players; isHuman=d.isHuman; pegs=d.pegs; turn=d.turn; sixStreak=d.sixStreak||0; humanCount=d.humanCount||humanCount; cpuCount=d.cpuCount!=null?d.cpuCount:cpuCount;
+  setSpeed(d.speed);   // optional field: saves from before Game speed play at Medium
   gameVer=versionOf(d.ver).id; rules=rulesFor(gameVer,(d.rules&&typeof d.rules==="object")?d.rules:{});   // saves from before the Versions are Classic
   { const b=versionOf(gameVer).base; setup={version:gameVer,over:{}}; Object.keys(b).forEach(k=>{ if(rules[k]!==b[k]) setup.over[k]=rules[k]; }); drawVersions(); }
   die=0; gameOver=false; busy=false; awaitingMove=false; armed=true;
@@ -1328,7 +1347,7 @@ function startGame(humans, cpus, rollOff){
 }
 
 // test hook (read-mostly; the page never uses it)
-window.__tb={get state(){ return {players:players,pegs:pegs,turn:turn,die:die,gameOver:gameOver,armed:armed,rules:rules,ver:gameVer,gen:gen,busy:busy,awaiting:awaitingMove,sixStreak:sixStreak}; },setup:()=>setup,paused:paused,sixAgain:sixAgain,isHuman:c=>!!isHuman[c],lastSnap:()=>lastSnap,load:d=>loadGame(d),startGame:startGame,afterRollResolve:afterRollResolve,setDie:v=>{ die=v; },setSix:v=>{ sixStreak=v; },rulesFor:rulesFor};
+window.__tb={speed:()=>gameSpeed,setSpeed:setSpeed,get state(){ return {players:players,pegs:pegs,turn:turn,die:die,gameOver:gameOver,armed:armed,rules:rules,ver:gameVer,gen:gen,busy:busy,awaiting:awaitingMove,sixStreak:sixStreak}; },setup:()=>setup,paused:paused,sixAgain:sixAgain,isHuman:c=>!!isHuman[c],lastSnap:()=>lastSnap,load:d=>loadGame(d),startGame:startGame,afterRollResolve:afterRollResolve,setDie:v=>{ die=v; },setSix:v=>{ sixStreak=v; },rulesFor:rulesFor};
 // keep the play clock to the time the page is on screen; the dome pulse stops while it is hidden
 document.addEventListener("visibilitychange",()=>{ if(document.hidden) clockOff(); else if(armed&&players.length&&!gameOver) clockOn(); pulseRefresh(); });
 try{ const mq=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)"); if(mq&&mq.addEventListener) mq.addEventListener("change",pulseRefresh); }catch(e){}
