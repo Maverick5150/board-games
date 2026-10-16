@@ -60,7 +60,8 @@ function defaultOpts(){
     prisoners:false,    // House: Prisoners of War
     paid:false,         // House: Paid battle, the loser also pays one card
     colourDeal:false,   // House: red vs black (4 players: a suit each)
-    onlyTied:false,     // House (3-4 players): only the tied players fight a war (Pagat: everyone does)
+    onlyTied:true,      // the CEO's rule (2026-10-16), Card Games For Dummies: only the players tied for the highest card fight a war, and
+                        // its winner takes every card on the table. Off (House) = everyone joins the war (Pagat). Applies from 3 players
     arrange:false,      // House: the winner arranges the won cards (War of Kingdoms)
     progressive:false,  // House: Progressive War, 5 down in the first war, one more in each later war
     guerilla:false,     // House: a joker always starts a war
@@ -99,7 +100,7 @@ var HOUSE=[
   ["prisoners","Prisoners of War","bool",null,1,WARV],
   ["paid","Paid battle: the loser pays one more card","bool",null,1],
   ["colourDeal","Deal by colour (red vs black; 4 players: a suit each)","bool",null,1],
-  ["onlyTied","Only the tied players fight a war","bool",null,1,WARV,3],
+  ["onlyTied","Only the players tied for the top card go to war","bool",null,1,WARV,3],
   ["arrange","Winner arranges the won cards","bool",null,1],
   ["progressive","Progressive War: 5 down, one more each war","bool",null,1,WARV],
   ["guerilla","Guerilla Joker: a joker always starts a war","bool",null,1,WARV],
