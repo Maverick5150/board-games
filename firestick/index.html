@@ -86,8 +86,9 @@
   .ps-two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1.25rem;align-items:start;}
   .ps-two .bg-seg{width:100%;}
   #cpuBtns.bg-seg--grid5{grid-template-columns:repeat(5,minmax(0,1fr));grid-auto-flow:row;}
-  #cpuBtns button, #paceBtns button{min-height:var(--tap);}
-  #paceBtns button{padding-inline:.4rem;}
+  #cpuBtns button, #paceBtns button, #skillBtns button{min-height:var(--tap);}
+  #paceBtns button, #skillBtns button{padding-inline:.4rem;}
+  .ps-stack{display:grid;gap:1.25rem;min-width:0;}
   .ps-rule .bg-ico-slot{flex:none;display:grid;place-items:center;width:1.5rem;color:var(--gold-200);}
   .ps-rule .bg-ico-slot .bg-ico{width:1.25rem;height:1.25rem;}
   .rulebox{display:grid;gap:1.25rem;}
@@ -128,6 +129,9 @@
   .mscore .bg-player .bg-player__meta{color:var(--text-1);}
   .mscore .mschips{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:.2rem;margin:0;}
   .mschips i{min-width:1.2rem;height:1.2rem;border-radius:.3rem;border:1px solid #fff5;font-style:normal;font:var(--fw-caps) var(--fs-micro)/1 var(--font-ui);color:#fff;display:inline-flex;align-items:center;justify-content:center;text-shadow:0 0 2px #000;}
+  .mscore.is-many{width:min(84vh,calc(96vw - 82vh));}
+  .mscore.is-many .bg-players{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem;align-items:start;}
+  .mscore.is-many .bg-player.is-turn{margin-top:0;}
   .msfp{font:var(--fw-ui-strong) var(--fs-md)/1.3 var(--font-ui);color:var(--gold-100);}
   .rulebox{text-align:left;}
   .mcw{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.2vh;width:100%;height:100%;padding:1vh;}
@@ -200,6 +204,10 @@
 <script src="../scatter/bank.js"></script>
 <script src="../scatter/engine.js"></script>
 <script src="../scatter/ui.js"></script>
+<script src="../scatter/brain.js"></script><!-- step 10: the Party computers' brains (each missing / failing brain = the old code) -->
+<script src="../trouble/brain.js"></script>
+<script src="../sorry/brain.js"></script>
+<script src="../monopoly/brain.js"></script>
 <script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
 <script>
 (function(){
@@ -258,12 +266,12 @@ var COL={red:"#e23b3b",blue:"#2b7be0",green:"#27a758",yellow:"#eec21b",orange:"#
 var CNAME={brown:"Brown",black:"Black",red:"Red",blue:"Blue",green:"Green",yellow:"Yellow",orange:"Orange",purple:"Purple",teal:"Teal",pink:"Pink"};
 var ORDER6=["red","blue","green","yellow","black","pink"];
 var ORDERU=["red","blue","green","yellow","orange","purple","teal","pink","black","brown"];
-function ORDER(){ return (chosenGame==="rummy500"||chosenGame==="scatter")?ORDER8:chosenGame==="risk"?ORDER6:chosenGame==="uno"?ORDERU:chosenGame==="sorry"?ORDERS:chosenGame==="trouble"?ORDERT:ORDER4; }
+function ORDER(){ return (chosenGame==="rummy500"||chosenGame==="scatter"||chosenGame==="monopoly")?ORDER8:chosenGame==="risk"?ORDER6:chosenGame==="uno"?ORDERU:chosenGame==="sorry"?ORDERS:chosenGame==="trouble"?ORDERT:ORDER4; }
 var ORDER4=["red","blue","green","yellow"], ORDER8=["red","blue","green","yellow","orange","purple","teal","pink"];
 var ORDERS=["red","blue","yellow","green"];   // Sorry! play order (clockwise round the board) - the lobby seats and shows computers in this order too
 var ORDERT=["red","green","yellow","blue"];   // Trouble play order - same idea, so the lobby and the game agree on which colours the computers get
 var runId=0, noWait=false, gameOver=false;
-function maxPlayers(){ return (chosenGame==="rummy500"||chosenGame==="scatter")?8:chosenGame==="risk"?6:chosenGame==="uno"?10:4; }
+function maxPlayers(){ return (chosenGame==="rummy500"||chosenGame==="scatter"||chosenGame==="monopoly")?8:chosenGame==="risk"?6:chosenGame==="uno"?10:4; }
 /* step 10: Game speed slow / medium / fast. PACE is the multiplier every Party pause is scaled by; medium is 1.8, exactly the old default (the old "Slow").
    window.bgGameSpeed carries the same choice for the modules that run Party computers (speedFactor()). bgfs_pace stays the stored value, so old choices and harness overrides still work. */
 var PACE=1.8;
@@ -274,10 +282,17 @@ function setPace(p){ PACE=p; window.bgGameSpeed=modeOfPace(p); hopMs(); try{loca
 function setSpeedMode(v){ setPace(Math.round(1.8*({slow:1.75,fast:0.5}[v]||1)*100)/100); }
 window.bgGameSpeed=modeOfPace(PACE);
 hopMs();
+/* step 10 (party AI): the Computer skill row - easy / normal / hard for the computers of every Party game (missing = normal). Each game hands it
+   to its brain (Trouble / Sorry! / Monopoly below; Rummy, Risk, Uno G.skill; Scattergories opts.cpuSkill). Stored as bgfs_skill (new, optional). */
+var CPU_SKILL="normal";
+function normCpuSkill(v){ return v==="easy"||v==="hard"?v:"normal"; }
+try{ CPU_SKILL=normCpuSkill(localStorage.getItem("bgfs_skill")); }catch(e){}
+function setCpuSkill(v){ CPU_SKILL=normCpuSkill(v); try{ localStorage.setItem("bgfs_skill",CPU_SKILL); }catch(e){} }
+var AISTAT={trouble:0,sorry:0,mono:0,fallback:0,errors:0};   // how often a Party brain decided (read by the harnesses; presentation-free)
 /* step 10: the computers' names. startGame() draws a fresh set from names.js for the seats no phone holds (never a joined phone's name); every Party game reads cpuName(colour) */
 var CPUN={};
 function cpuName(c){ return CPUN[c]||CNAME[c]; }
-window.__fs={get PACE(){ return PACE; },get CPUN(){ return CPUN; },drawCpuNames:function(){ drawCpuNames(); return CPUN; }};   // read-only view for the harnesses
+window.__fs={get PACE(){ return PACE; },get CPUN(){ return CPUN; },get SKILL(){ return CPU_SKILL; },get AI(){ return AISTAT; },drawCpuNames:function(){ drawCpuNames(); return CPUN; }};   // read-only view for the harnesses
 function drawCpuNames(){
   var humans=Object.keys(seat).map(function(c){ return players[seat[c]]&&players[seat[c]].name; }).filter(Boolean);
   var cpus=computeActive(ORDER()).filter(function(c){ return !seat[c]; }), got=[];
@@ -508,7 +523,7 @@ function screenSelect(){
   var games=[
     {id:"trouble", title:"Trouble", n:"2-4", meta:"Pop the dome", on:true},
     {id:"sorry", title:"Sorry!", n:"2-4", meta:"Slide and bump", on:true},
-    {id:"monopoly", title:"Monopoly", n:"2-4", meta:"Buy the board", on:true},
+    {id:"monopoly", title:"Monopoly", n:"2-8", meta:"Buy the board", on:true},
     {id:"rummy500", title:"500 Rummy", n:"2-8", meta:"Melds on felt", on:true},
     {id:"risk", title:"Risk", n:"2-6", meta:"Take the world", on:true},
     {id:"uno", title:"Uno", n:"2-10", meta:"Match and dump", on:true},
@@ -600,7 +615,8 @@ function screenLobby(){
     '</div><div class="rcol">'+
     '<section class="ps-sec"><div class="bg-section"><h2 class="bg-eyebrow" data-stage-text>At the table</h2></div><div class="players" id="players"></div><p class="ps-line" id="lobhint" role="status"></p></section>'+
     '<div class="ps-two"><section class="ps-sec"><div class="bg-section"><h2 class="bg-eyebrow" data-stage-text>Computer players</h2></div><div class="bg-seg bg-seg--grid5" id="cpuBtns" role="group" aria-label="Computer players"></div></section>'+
-    '<section class="ps-sec"><div class="bg-section"><h2 class="bg-eyebrow" data-stage-text>Game speed</h2></div><div class="bg-seg bg-seg--text" id="paceBtns" role="group" aria-label="Game speed"></div></section></div>'+
+    '<div class="ps-stack"><section class="ps-sec"><div class="bg-section"><h2 class="bg-eyebrow" data-stage-text>Game speed</h2></div><div class="bg-seg bg-seg--text" id="paceBtns" role="group" aria-label="Game speed"></div></section>'+
+    '<section class="ps-sec"><div class="bg-section"><h2 class="bg-eyebrow" data-stage-text>Computer skill</h2></div><div class="bg-seg bg-seg--text" id="skillBtns" role="group" aria-label="Computer skill"></div></section></div></div>'+
     (chosenGame==="monopoly"?'<div class="rulebox"><section class="ps-sec"><div class="bg-section"><h2 class="bg-eyebrow" data-stage-text>House rules</h2></div><div class="ps-rules" id="ruleBtns"></div><p class="ps-legend" data-stage-text><span class="bg-tag bg-tag--official">official</span> in the rulebook, on at the start · <span class="bg-tag bg-tag--house">house</span> a popular home rule, off at the start</p></section></div>':'')+
     (chosenGame==="rummy500"?rule("rvbox"):"")+
     (chosenGame==="risk"?rule("rkbox"):"")+
@@ -616,9 +632,9 @@ function screenLobby(){
   if(chosenGame==="scatter") renderScRules();
   var redrawRules=function(){ if(chosenGame==="scatter") renderScRules(); if(chosenGame==="monopoly") renderRules(); if(chosenGame==="rummy500") renderRvRules(); if(chosenGame==="risk") renderRkRules(); if(chosenGame==="uno") renderUnRules(); renderLobby(); };
   Saves.bar({game:"party-"+chosenGame,el:$("svbar"),
-    getSettings:function(){ return {cpu:cpuCount,pace:PACE,speed:modeOfPace(PACE),mono:chosenGame==="monopoly"?monoRules:null,rv:chosenGame==="rummy500"?rvCfg:null,rk:chosenGame==="risk"?rkCfg:null,un:chosenGame==="uno"?unCfg:null,sc:chosenGame==="scatter"?scCfg:null}; },
-    applySettings:function(s){ if(s.cpu!=null) cpuCount=s.cpu; if(s.speed==="slow"||s.speed==="medium"||s.speed==="fast") setSpeedMode(s.speed); else if(s.pace>0) setPace(s.pace); if(s.mono&&chosenGame==="monopoly") monoRules=s.mono; if(s.rv&&chosenGame==="rummy500") rvCfg={version:s.rv.version||"standard",over:s.rv.over||{}}; if(s.rk&&chosenGame==="risk") rkCfg={version:s.rk.version||"1959",over:s.rk.over||{}}; if(s.un&&chosenGame==="uno") unCfg={version:s.un.version||"classic",over:s.un.over||{}}; if(s.sc&&chosenGame==="scatter") scCfg={version:s.sc.version||"classic",over:s.sc.over||{}}; redrawRules(); },
-    standard:function(){ cpuCount=3; setSpeedMode("medium"); monoRules=JSON.parse(MONO_DEFAULT); rvCfg={version:"standard",over:{}}; rkCfg={version:"1959",over:{}}; unCfg={version:"classic",over:{}}; scCfg={version:"classic",over:{}}; redrawRules(); }});
+    getSettings:function(){ return {cpu:cpuCount,pace:PACE,speed:modeOfPace(PACE),skill:CPU_SKILL,mono:chosenGame==="monopoly"?monoRules:null,rv:chosenGame==="rummy500"?rvCfg:null,rk:chosenGame==="risk"?rkCfg:null,un:chosenGame==="uno"?unCfg:null,sc:chosenGame==="scatter"?scCfg:null}; },
+    applySettings:function(s){ if(s.cpu!=null) cpuCount=s.cpu; setCpuSkill(s.skill); if(s.speed==="slow"||s.speed==="medium"||s.speed==="fast") setSpeedMode(s.speed); else if(s.pace>0) setPace(s.pace); if(s.mono&&chosenGame==="monopoly") monoRules=s.mono; if(s.rv&&chosenGame==="rummy500") rvCfg={version:s.rv.version||"standard",over:s.rv.over||{}}; if(s.rk&&chosenGame==="risk") rkCfg={version:s.rk.version||"1959",over:s.rk.over||{}}; if(s.un&&chosenGame==="uno") unCfg={version:s.un.version||"classic",over:s.un.over||{}}; if(s.sc&&chosenGame==="scatter") scCfg={version:s.sc.version||"classic",over:s.sc.over||{}}; redrawRules(); },
+    standard:function(){ cpuCount=3; setSpeedMode("medium"); setCpuSkill("normal"); monoRules=JSON.parse(MONO_DEFAULT); rvCfg={version:"standard",over:{}}; rkCfg={version:"1959",over:{}}; unCfg={version:"classic",over:{}}; scCfg={version:"classic",over:{}}; redrawRules(); }});
   dressSaveBar();
   broadcastLobby();
   $("startBtn").onclick=startGame;
@@ -654,7 +670,7 @@ function versionName(){
 function renderLobby(){
   var el=$("players"); if(!el) return;
   var fa=document.activeElement, fd=fa&&fa.dataset||{}, fpar=fa&&fa.parentNode&&fa.parentNode.id, wasOff=!$("startBtn")||$("startBtn").disabled;
-  var fsel=fpar&&(fd.n!=null||fd.p!=null)?"#"+fpar+" button["+(fd.n!=null?'data-n="'+fd.n+'"':'data-p="'+fd.p+'"')+"]":null;
+  var fsel=fpar&&(fd.n!=null||fd.p!=null||fd.s!=null)?"#"+fpar+" button["+(fd.n!=null?'data-n="'+fd.n+'"':fd.p!=null?'data-p="'+fd.p+'"':'data-s="'+fd.s+'"')+"]":null;
   var isRv=chosenGame==="rummy500"||chosenGame==="risk"||chosenGame==="uno"||chosenGame==="scatter", order=ORDER(), teams=chosenGame==="rummy500"&&isRv&&Rummy.versionOpts(rvCfg.version,rvCfg.over).teams;
   var seated=Object.keys(seat).length;
   if(teams) cpuCount=Math.max(0,4-seated);
@@ -678,6 +694,10 @@ function renderLobby(){
   if(pbx){ var PO=[["Slow","slow"],["Medium","medium"],["Fast","fast"]];
     pbx.innerHTML=PO.map(function(p){ var on=modeOfPace(PACE)===p[1]; return '<button type="button" class="aibtn'+(on?" on":"")+'" aria-pressed="'+on+'" data-p="'+p[1]+'">'+p[0]+'</button>'; }).join("");
     Array.prototype.forEach.call(pbx.querySelectorAll("button"),function(b){ b.onclick=function(){ setSpeedMode(b.dataset.p); renderLobby(); }; }); }
+  var skx=$("skillBtns");   // step 10: Computer skill, every Party game
+  if(skx){ var SO=[["Easy","easy"],["Normal","normal"],["Hard","hard"]];
+    skx.innerHTML=SO.map(function(p){ var on=CPU_SKILL===p[1]; return '<button type="button" class="aibtn'+(on?" on":"")+'" aria-pressed="'+on+'" data-s="'+p[1]+'">'+p[0]+'</button>'; }).join("");
+    Array.prototype.forEach.call(skx.querySelectorAll("button"),function(b){ b.onclick=function(){ setCpuSkill(b.dataset.s); renderLobby(); }; }); }
   if(fsel){ var nf=document.querySelector(fsel); if(nf&&!nf.disabled) nf.focus(); }
   if(wasOff&&sb&&!sb.disabled&&!(document.activeElement&&document.activeElement.closest&&document.activeElement.closest(".rulebox,#svbar"))) sb.focus();
   lobbyFocus();
@@ -925,6 +945,17 @@ function playTrouble(){
   function tvTurn(){ var c=active[turn]; setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+(seat[c]?players[seat[c]].name:cpuName(c)+" (CPU)")+(human[c]?" — check your phone":"")); $("hint").textContent = human[c]? "Controller: pop the die on your phone" : ""; }
 
   async function rollAnim(){ Sound.sfx("dice"); for(var i=0;i<8;i++){ die=1+Math.floor(Math.random()*6); tilt=(Math.random()-.5)*80; jig=[(Math.random()-.5)*14,(Math.random()-.5)*14]; renderDome(); await sleep(70); } }   // the die tumbles in the dome
+  // step 10: the computer's move comes from trouble/brain.js (the same brain as the single-device game, at the Party skill); the old scorer
+  // (aiPick, unchanged) decides when the brain is missing, declines that skill, returns nothing legal or throws. One brain per computer, per game.
+  var aiBrains={};
+  function cpuMove(c,moves){
+    var TB=window.TroubleBrain;
+    if(TB&&TB.useFor&&TB.useFor[CPU_SKILL]){
+      try{ var mv=TB.choose({color:c,moves:moves,pegs:pegs,players:active,START:START,skill:CPU_SKILL,brains:aiBrains,rnd:Math.random,name:cpuName(c),rules:{},die:die,sixStreak:sixStreak});
+        if(mv&&moves.indexOf(mv)>=0){ AISTAT.trouble++; return mv; } }catch(e){ AISTAT.errors++; }
+    }
+    AISTAT.fallback++; return aiPick(moves);
+  }
   function aiPick(moves){ var best=moves[0],bs=-1e9; moves.forEach(function(m){ var sc=0; if(m.to<=27){ var occ=occupantAt(active[turn],m.to); if(occ&&occ.color!==active[turn]) sc+=100+(pegs[occ.color][occ.peg]||0);} if(m.to>=28) sc+=40+m.to; if(m.from===null) sc+=30; sc+=m.to*0.5; if(sc>bs){bs=sc;best=m;} }); return best; }
 
   async function animateMove(c,mv){
@@ -970,9 +1001,9 @@ function playTrouble(){
           var opts=moves.map(function(m,i){ return {id:String(i), label:moveLabel(c,m), color:c}; });
           var pick=await ask(c, "Rolled a "+die, "Choose your move", opts);
           mv=moves[parseInt(pick.id,10)]||moves[0];
-        } else { setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+cpuName(c)+" rolled "+die+"…"); await sleep(1100); mv=aiPick(moves); }
+        } else { setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+cpuName(c)+" rolled "+die+"…"); await sleep(1100); mv=cpuMove(c,moves); }
         await animateMove(c,mv);
-        if(hasWon(c)){ over=true; var wn=seat[c]?players[seat[c]].name:cpuName(c); setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+wn+" wins!"); announceOver(wn); showPlayAgain(); return; }
+        if(hasWon(c)){ over=true; if(window.TroubleBrain){ try{ TroubleBrain.finish({brains:aiBrains,winner:c,skill:CPU_SKILL}); }catch(e){} } var wn=seat[c]?players[seat[c]].name:cpuName(c); setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+wn+" wins!"); announceOver(wn); showPlayAgain(); return; }
       } else {
         setStatus('<span class="dot" style="background:'+COL[c]+'"></span> Rolled '+die+" — no moves"); await sleep(1100);
       }
@@ -1170,6 +1201,20 @@ function playSorry(){
     if(a.k==="swap"){ locs.set(a.target,a.p.loc); simLand(locs,a.p,tl); var t=locs.get(a.target); if(t.t==="ring") simLand(locs,a.target,t); }
     else { locs.set(a.target,{t:"start"}); simLand(locs,a.p,tl); }
     return locs; }
+  // step 10: the computer's choice comes from sorry/brain.js (as sorry/index.html brainCtx / pickComputerMove): each legal action with the board
+  // after it (this page's own dry runs). The old scorer (scoreA, unchanged) decides when the brain is missing, declines or throws.
+  var sBrains={};
+  function landsOn(c,a,p){ if(a.k==="out") return {t:"ring",i:START_EXIT[c]}; if(a.k==="fwd") return travel(c,p.loc,a.n,1); if(a.k==="back") return travel(c,p.loc,a.n,-1); return p.loc; }
+  function outcome(a){ if(a.k==="swap"||a.k==="sorry"||a.k==="split") return simAfter(a); var L=boardNow(); if(a.k!=="pass"){ var d=landsOn(a.p.color,a,a.p); if(d) simLand(L,a.p,d); } return L; }
+  function cpuAct(c,acts){
+    var SB=window.SorryBrain;
+    if(SB&&SB.useFor&&SB.useFor[CPU_SKILL]){
+      try{ var a=SB.choose({color:c,skill:CPU_SKILL,name:cpuName(c),brains:sBrains,rnd:Math.random,players:active.slice(),pawns:allP(),
+          moves:acts.map(function(x){ return {a:x,after:outcome(x)}; }),geo:{START_EXIT:START_EXIT,SAFE_ENTRY:SAFE_ENTRY,SLIDES:SLIDES}});
+        if(a&&acts.indexOf(a)>=0){ AISTAT.sorry++; return a; } }catch(e){ AISTAT.errors++; }
+    }
+    AISTAT.fallback++; var best=acts[0],bs=-1e9; acts.forEach(function(x){ var v=scoreA(x); if(v>bs){bs=v;best=x;} }); return best;
+  }
   function sweepSc(color,locs,skip){ var s=0; locs.forEach(function(l,p){ if(p!==skip&&l.t==="start"&&p.loc.t!=="start") s+=p.color===color?-60:20; }); return s; }   // sent to Start: rivals +20, own -60
   function scoreA(a){ if(a.k==="pass") return 20; var color=a.p?a.p.color:a.A.color; var ev=function(p,dest){ var sc=0; if(!dest)return -999; if(dest.t==="home")sc+=200; else if(dest.t==="safe")sc+=60+dest.j*4; else if(dest.t==="ring"){ var sl=slideTri(dest.i); if(sl&&sl.color!==color){sc+=70+sl.cells.length*4; sc+=occAtRing(dest.i,p).length*20;} else sc+=occAtRing(dest.i,p).filter(function(o){return o.color!==color;}).length*55; sc+=prog(color,dest)*0.6; } return sc; };
     if(a.k==="out")return 55+occAtRing(START_EXIT[color]).filter(function(o){return o.color!==color;}).length*55;
@@ -1223,9 +1268,9 @@ function playSorry(){
       if(acts.length){
         var act;
         if(human[c]){ var opts=acts.map(function(a,i){ return {id:String(i),label:actLabel(a),color:c}; }); var pick=await ask(c,"You drew "+(v==="sorry"?"SORRY!":v),CARD_TEXT[v],opts,{card:{v:v,text:CARD_TEXT[v],color:c,who:(seat[c]?players[seat[c]].name:cpuName(c))}}); act=acts[parseInt(pick.id,10)]||acts[0]; }
-        else { var best=acts[0],bs=-1e9; acts.forEach(function(a){ var s=scoreA(a); if(s>bs){bs=s;best=a;} }); act=best; }
+        else { act=cpuAct(c,acts); }
         await applyAnim(act); moved=true;
-        if(hasWon(c)){ over=true; var wn=seat[c]?players[seat[c]].name:cpuName(c); setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+wn+" wins!"); announceOver(wn); showPlayAgain(); return; }
+        if(hasWon(c)){ over=true; if(window.SorryBrain){ try{ SorryBrain.finish({brains:sBrains,winner:c,skill:CPU_SKILL}); }catch(e){} } var wn=seat[c]?players[seat[c]].name:cpuName(c); setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+wn+" wins!"); announceOver(wn); showPlayAgain(); return; }
       } else { setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+(seat[c]?players[seat[c]].name:cpuName(c))+" — no move"); await sleep(1100); }
       if(v===2){ /* official rules: a 2 always draws again (same player), even when it could not be played */ }
       else turn=(turn+1)%active.length;
@@ -1241,18 +1286,19 @@ function playSorry(){
    ============================================================ */
 function playMonopoly(){
   var RG=runGate(++runId), live=RG.live, sleep=RG.sleep, ask=RG.ask;   // a quit game stops at its next await
-  var order=["red","blue","green","yellow"];
+  var order=ORDER8;   // official rules: 2-8 players (the first four seats are the old four; the lobby seats the same order)
   var active=computeActive(order);
   var COLORVAR={brown:"#8b5a2b",light_blue:"#9fd0ef",pink:"#d93a96",orange:"#f08d1c",red:"#e23b3b",yellow:"#f3d41b",green:"#1f9d54",dark_blue:"#2b4fe0"};
-  var TOKS=["Top Hat","Race Car","Dog","Battleship"];   // the pieces are drawn by MonoBoard (board.js), by name
+  var TOKS=["Top Hat","Race Car","Dog","Battleship","Boot","Thimble","Wheelbarrow","Horse & Rider"];   // the pieces are drawn by MonoBoard (board.js), by name
   var SEATN={red:1,blue:2,green:3,yellow:4,purple:5,teal:6,orange:7,pink:8};   // player colour -> the Luxe seat colour of the pieces and owner marks
   function tokH(c){ return '<span class="mtk">'+(window.MonoBoard?MonoBoard.tokenSVG(tokE[c],SEATN[c]||1):'')+'</span>'; }
   var BOARD=MONO_BOARD, CHANCE=MONO_CHANCE, CHEST=MONO_CHEST, RR_IDX=[5,15,25,35], UTIL_IDX=[12,28];
   var GROUPS={}; BOARD.forEach(function(s,i){ if(s.t==="prop"){ (GROUPS[s.g]=GROUPS[s.g]||[]).push(i); } });
+  try{ if(window.MonoBrain) MonoBrain.init({BOARD:BOARD,GROUPS:GROUPS,RR_IDX:RR_IDX,UTIL_IDX:UTIL_IDX}); }catch(e){}   // step 10: the computers' brain reads this board
 
   // per-player state keyed by color
   var cash={}, pos={}, injail={}, jailT={}, jokers={}, bankrupt={}, tokE={};
-  active.forEach(function(c,i){ cash[c]=1500; pos[c]=0; injail[c]=false; jailT[c]=0; jokers[c]=0; bankrupt[c]=false; tokE[c]=TOKS[i%4]; });
+  active.forEach(function(c,i){ cash[c]=1500; pos[c]=0; injail[c]=false; jailT[c]=0; jokers[c]=0; bankrupt[c]=false; tokE[c]=TOKS[i%TOKS.length]; });
   var owner=[], houses=[], mort=[]; for(var i=0;i<40;i++){ owner[i]=null; houses[i]=0; mort[i]=false; }
   var housesLeft=32, hotelsLeft=12;
   var chanceDeck=shuf(rangeArr(16)), chanceDisc=[], chestDeck=shuf(rangeArr(16)), chestDisc=[];
@@ -1295,10 +1341,41 @@ function playMonopoly(){
     var cc=active[turn];
     return {own:own,houses:houses,mort:mort,toks:toks,hl:(cc&&!bankrupt[cc]&&!over)?pos[cc]:-1};
   }
+  /* 8 players (step 10): board.js (shared) lays out at most 6 pieces on one square. When 7-8 share a square (all on GO at the start,
+     a full Jail) board.js places the first 6 - their spots give that square's axes and piece size - and the host lays the whole
+     square out as 4 x 2, drawing the 7th and 8th pieces itself in board.js's own token layer (same markup, same glide). */
+  var xEls={};
+  function stackKey(t){ return t.i===10?(t.jail?"10j":"10v"):String(t.i); }   // as board.js: Just visiting has its own layout for any number
+  function splitStacks(toks){ var by={}, show=[], extra=[];
+    (toks||[]).forEach(function(t){ var k=stackKey(t); by[k]=(by[k]||0)+1; if(k!=="10v"&&by[k]>6) extra.push(t); else show.push(t); });
+    return {show:show,extra:extra}; }
+  function fixStacks(show,extra){
+    var keep={};
+    if(extra.length&&MB&&MB.toks&&window.MonoBoard){
+      var groups={}; show.concat(extra).forEach(function(t){ var k=stackKey(t); (groups[k]=groups[k]||[]).push(t); });
+      var els={}; Array.prototype.forEach.call(MB.toks.children,function(el){ if(el.getAttribute("data-x")) return; var tk=el.querySelector(".tk"); if(tk) els[tk.getAttribute("title")]=el; });
+      Object.keys(groups).forEach(function(k){ var g=groups[k]; if(g.length<=6) return;
+        var P=g.slice(0,6).map(function(t){ var el=els[t.title], m=el&&/\*([-\d.]+)\),calc\([^)]*\)\*([-\d.]+)\)/.exec(el.style.transform); return m?[+m[1],+m[2]]:null; });
+        if(P.some(function(p){ return !p; })) return;
+        var u=[(P[2][0]-P[0][0])/62,(P[2][1]-P[0][1])/62], v=[(P[3][0]-P[0][0])/28,(P[3][1]-P[0][1])/28], C=[(P[1][0]+P[4][0])/2,(P[1][1]+P[4][1])/2];   // board.js's 6 spots: x -31/0/31, y -14/14
+        var w=Math.round(parseFloat(els[g[0].title].style.width)*22/28*100)/100;   // a size step smaller, as board.js does for bigger groups
+        g.forEach(function(t,j){ var ox=(j%4-1.5)*23, oy=(j<4?-.5:.5)*28, x=C[0]+u[0]*ox+v[0]*oy, y=C[1]+u[1]*ox+v[1]*oy, el=els[t.title];
+          if(j>=6){ el=xEls[t.id];
+            if(!el){ el=xEls[t.id]=document.createElement("div"); el.className="mb-pos"; el.setAttribute("data-x","1"); MB.toks.appendChild(el); }
+            var sig=t.tok+"|"+t.seat+"|"+(t.cur?1:0)+"|"+t.title;
+            if(el._sig!==sig){ el._sig=sig; el.innerHTML='<span class="tkp'+(t.cur?" cur":"")+'"><span class="tk" style="--pc:'+(MonoBoard.SEATS[t.seat]||MonoBoard.SEATS[1]).c+'" title="'+attr(t.title)+'">'+MonoBoard.tokenSVG(t.tok,t.seat)+'</span></span>'; }
+            keep[t.id]=1; }
+          if(!el) return;
+          el.style.width=el.style.height=w+"%";
+          el.style.transform="translate(calc(var(--mb-u,4px)*"+(Math.round(x*100)/100)+"),calc(var(--mb-u,4px)*"+(Math.round(y*100)/100)+")) translate(-50%,-50%)"; });
+      });
+    }
+    Object.keys(xEls).forEach(function(id){ if(!keep[id]){ var el=xEls[id]; if(el.parentNode) el.parentNode.removeChild(el); delete xEls[id]; } });
+  }
   function renderBoard(){
     if(window.MonoBoard){
       if(!MB||MB.host!==boardEl){ centerEl=document.createElement("div"); centerEl.className="mcenter"; MB=MonoBoard.mount(boardEl,{squares:BOARD,zoom:false,dpad:false,center:centerEl}); }
-      MB.update(boardState());
+      var st=boardState(), sp=splitStacks(st.toks); st.toks=sp.show; MB.update(st); fixStacks(sp.show,sp.extra);
     }
     centerRender(); renderScore(); snapSoon();
   }
@@ -1311,6 +1388,7 @@ function playMonopoly(){
     });
     h+='</ul>';
     if(R.fpJackpot) h+='<div class="msfp">Free Parking: '+money(fpPool)+'</div>';
+    el.classList.toggle("is-many",active.length>4);   // 5-8 players: the strip takes two columns beside the board
     el.innerHTML=h; markTurn(el,"t"+turn); }
   function snapNow(){ var pl=active.map(function(c){ var props=[]; for(var i=0;i<40;i++) if(owner[i]===c) props.push({i:i,h:houses[i],m:mort[i]}); return {color:c,pid:seat[c]||null,name:nm(c),cash:cash[c],net:netWorth(c),jail:injail[c],jokers:jokers[c],bankrupt:bankrupt[c],props:props}; }); send({t:"snap",players:pl,fp:R.fpJackpot?fpPool:0}); }
   function snapSoon(){ clearTimeout(snapT); snapT=setTimeout(function(){ if(live()) snapNow(); },400); }
@@ -1321,7 +1399,7 @@ function playMonopoly(){
   async function payBank(c,amt){ cash[c]-=amt; if(R.fpJackpot) fpPool+=amt; if(cash[c]<0) await resolveDebt(c,null); }
   async function payTo(c,to,amt){ cash[c]-=amt; cash[to]+=amt; if(cash[c]<0) await resolveDebt(c,to); }
   function liquidatable(c){ var v=cash[c]; for(var i=0;i<40;i++) if(owner[i]===c){ var s=BOARD[i]; if(s.t==="prop"&&houses[i]>0) v+=Math.floor(houses[i]*s.house/2); if(!mort[i]) v+=Math.floor((s.price||0)/2); } return v; }
-  function aiRaise(c){ var guard=200; while(cash[c]<0 && guard-->0){ var best=-1,bh=0; for(var i=0;i<40;i++) if(owner[i]===c&&BOARD[i].t==="prop"&&houses[i]>bh){bh=houses[i];best=i;} if(best>=0){ sellHouse(c,best); continue; } var did=false; for(var j=0;j<40;j++) if(owner[j]===c&&!mort[j]&&groupBare(j)){ doMort(c,j); did=true; break; } if(!did) break; } }
+  function aiRaiseOld(c){ var guard=200; while(cash[c]<0 && guard-->0){ var best=-1,bh=0; for(var i=0;i<40;i++) if(owner[i]===c&&BOARD[i].t==="prop"&&houses[i]>bh){bh=houses[i];best=i;} if(best>=0){ sellHouse(c,best); continue; } var did=false; for(var j=0;j<40;j++) if(owner[j]===c&&!mort[j]&&groupBare(j)){ doMort(c,j); did=true; break; } if(!did) break; } }
   function sellLabel(i){ return (hotelShort(i)?"Sell hotel — bank has only "+Math.max(0,housesLeft)+" house"+(Math.max(0,housesLeft)===1?"":"s"):"Sell a building")+" (+"+money(sellGain(i))+")"; }
   function propActions(c,i,debt){ var s=BOARD[i], a=[];
     if(debt){ if(s.t==="prop"&&houses[i]>0){ if(canSell(c,i)) a.push({id:"s"+i,label:sellLabel(i)}); } else if(!mort[i]&&groupBare(i)) a.push({id:"m"+i,label:"Mortgage (+"+money(s.mort)+")",color:"red"}); return a; }
@@ -1381,6 +1459,65 @@ function playMonopoly(){
   }
   function aiBuild(c){ var guard=40,imp=true; while(imp&&guard-->0){ imp=false; for(var g in GROUPS){ if(!ownsGroup(c,g))continue; var lots=GROUPS[g].slice().sort(function(a,b){return houses[a]-houses[b];}); for(var k=0;k<lots.length;k++){ var i=lots[k]; if(cash[c]>BOARD[i].house+250 && canBuild(c,i)){ buildHouse(c,i); imp=true; break; } } } } }
 
+  // ---------- step 10: the computers' brain (monopoly/brain.js, as monopoly/index.html brainOn / brainTry) ----------
+  // The brain reads a view of this game in its own shape (players by seat index, owner -1 = the bank). MG is kept for the whole game so its
+  // G.ai (one brain per computer: plain data, nothing saved) lives on; every call refreshes the view first. The old code below each call
+  // is the fallback: no brain.js, a person, a throw, or an answer that fails this page's own checks.
+  var MG={players:[],owner:[],houses:houses,mort:mort,housesLeft:32,stats:{turns:0},skill:CPU_SKILL}, mTurns=0, brainDone=false;
+  function mg(){ MG.players=active.map(function(c,k){ return {id:k,name:nm(c),cash:cash[c],pos:pos[c],jail:!!injail[c],jailTurns:jailT[c],jokers:jokers[c],bankrupt:!!bankrupt[c],human:human(c)}; });
+    for(var i=0;i<40;i++) MG.owner[i]=owner[i]==null?-1:active.indexOf(owner[i]);
+    MG.houses=houses; MG.mort=mort; MG.housesLeft=R.unlimited?99:housesLeft; MG.stats.turns=mTurns; MG.skill=CPU_SKILL; return MG; }
+  function mb(c,what){ try{ if(!(window.MonoBrain&&MonoBrain.ready)) return null; var p=mg().players[active.indexOf(c)]; return p&&MonoBrain.on(MG,p,what)?p:null; }catch(e){ return null; } }
+  function brainTry(fn){ try{ return fn(); }catch(e){ AISTAT.errors++; return undefined; } }
+  function aiBuy(c,i){ var p=mb(c,"buy"); if(p){ var r=brainTry(function(){ return MonoBrain.buy(MG,p,i); }); if(r===true||r===false){ AISTAT.mono++; return r&&cash[c]>=BOARD[i].price; } } AISTAT.fallback++; return aiWantsBuy(c,i); }
+  function aiBid(c,i,price,high){ var p=mb(c,"bid"); if(p){ var v=brainTry(function(){ return MonoBrain.bidMax(MG,p,i,{price:price,high:high==null?-1:active.indexOf(high)}); }); if(typeof v==="number"&&isFinite(v)){ AISTAT.mono++; return Math.max(0,Math.min(Math.floor(v),cash[c])); } } return aiAuctionVal(c,i); }
+  function aiJail(c){ var p=mb(c,"jail"); if(p){ var jd=brainTry(function(){ return MonoBrain.jail(MG,p); }); if(jd==="card"&&jokers[c]>0||jd==="pay"&&cash[c]>=50||jd==="roll"){ AISTAT.mono++; return jd; } } return jokers[c]>0?"card":(cash[c]>300&&jailT[c]>=1?"pay":"roll"); }
+  function aiRaise(c){
+    if(mb(c,"mortgage")){   // the cheapest way first (lone deeds before houses); anything still owed: the old order
+      for(var k=0;k<200&&cash[c]<0;k++){ var p=mb(c,"mortgage"); if(!p) break;
+        var a=brainTry(function(){ return MonoBrain.nextRaise(MG,p,function(i){ return canSell(c,i); }); }); if(!a||!(a.i>=0&&a.i<40)) break;
+        var c0=cash[c]; if(a.t==="sell"&&canSell(c,a.i)) sellHouse(c,a.i); else if(a.t==="mort"&&owner[a.i]===c&&!mort[a.i]&&groupBare(a.i)) doMort(c,a.i);
+        if(cash[c]===c0) break; AISTAT.mono++; }
+    }
+    aiRaiseOld(c);
+  }
+  // a deal a computer judges (a person's offer, or another computer's): the brain's value from its side, accepted at >= -10 (as the page)
+  function aiAccept(p,inc,inCash,inJ,out,outCash,outJ,from){ var q=mb(p,"trade"); if(q){ var v=brainTry(function(){ return MonoBrain.tradeValue(MG,q,active.indexOf(from),inc,inCash,inJ,out,outCash,outJ); }); if(typeof v==="number"&&!isNaN(v)){ AISTAT.mono++; return v>=-10; } } return aiTradeOK(p,inc,inCash,inJ,out,outCash,outJ); }
+  function aiDealOK(c,q,t){   // owners, no buildings in the deeds' colour sets, the cash on both sides and the 10 % on mortgaged deeds
+    var give=Array.isArray(t.give)?t.give:[], get=Array.isArray(t.get)?t.get:[], cg=t.cashGive|0, cr=t.cashGet|0;
+    if((!give.length&&!get.length)||cg<0||cr<0) return false;
+    if(give.some(function(i){ return !(i>=0&&i<40)||owner[i]!==c; })||get.some(function(i){ return !(i>=0&&i<40)||owner[i]!==q; })) return false;
+    if(give.concat(get).some(function(i){ return !groupBare(i); })) return false;
+    var fee=function(list){ return list.filter(function(i){ return mort[i]; }).reduce(function(a,i){ return a+Math.ceil(BOARD[i].mort*0.1); },0); };
+    return cg<=cash[c]&&cr<=cash[q]&&cash[c]-cg+cr>=fee(get)&&cash[q]-cr+cg>=fee(give); }
+  // its own turn: offers to the other computers only (a person has no offer sheet in Party); the first yes is carried out
+  function aiTrades(c){
+    if(over||alive().length<2) return; var p=mb(c,"trade"); if(!p) return;
+    var offers=brainTry(function(){ return MonoBrain.propose(MG,p); }); if(!offers) return;
+    var list=(Array.isArray(offers)?offers:[offers]).slice(0,6);
+    for(var k=0;k<list.length;k++){ var t=list[k], q=t&&active[t.to];
+      if(!q||q===c||human(q)||bankrupt[q]||!aiDealOK(c,q,t)) continue;
+      var yes=aiAccept(q,t.give||[],t.cashGive|0,0,t.get||[],t.cashGet|0,0,c);
+      if(MonoBrain.heard) brainTry(function(){ MonoBrain.heard(mg(),MG.players[active.indexOf(c)],t,yes); });
+      if(yes){ var give=t.give||[], get=t.get||[], cg=t.cashGive|0, cr=t.cashGet|0;
+        give.forEach(function(i){ owner[i]=q; if(mort[i]) cash[q]-=Math.ceil(BOARD[i].mort*0.1); });
+        get.forEach(function(i){ owner[i]=c; if(mort[i]) cash[c]-=Math.ceil(BOARD[i].mort*0.1); });
+        cash[c]+=cr-cg; cash[q]+=cg-cr;
+        toast("Trade done: "+nm(c)+" and "+nm(q)); renderBoard(); return; }
+    }
+  }
+  function aiManage(c){   // before the roll, one checked step at a time: lift a mortgage, mortgage a lone deed to fund houses, build
+    for(var k=0;k<80;k++){ var p=mb(c,"build"); if(!p) break;
+      var a=brainTry(function(){ return MonoBrain.nextManage(MG,p,{canBuild:function(i){ return canBuild(c,i); }}); }); if(!a||!(a.i>=0&&a.i<40)) break;
+      var i=a.i, c0=cash[c], h0=houses[i], m0=mort[i];
+      if(a.t==="build"&&canBuild(c,i)&&cash[c]>=BOARD[i].house) buildHouse(c,i);
+      else if(a.t==="unmort"&&owner[i]===c&&mort[i]&&cash[c]>=Math.ceil(BOARD[i].mort*1.1)) unMort(c,i);
+      else if(a.t==="mort"&&owner[i]===c&&!mort[i]&&groupBare(i)) doMort(c,i);
+      if(cash[c]===c0&&houses[i]===h0&&mort[i]===m0) break;   // nothing changed: stop
+      AISTAT.mono++; }
+  }
+  function brainGameOver(){ if(brainDone) return; brainDone=true; try{ if(window.MonoBrain&&MonoBrain.ready) MonoBrain.gameOver(mg()); }catch(e){} }
+
   // ---------- movement ----------
   function passGo(c){ cash[c]+=200; toast(nm(c)+" passes GO +$200"); }
   async function stepTo(c,steps){ for(var s=0;s<steps;s++){ pos[c]=(pos[c]+1)%40; Sound.sfx("tick"); if(pos[c]===0) passGo(c); renderBoard(); await sleep(150); } }
@@ -1403,7 +1540,7 @@ function playMonopoly(){
         turnBanner(c,"Auction "+BOARD[i].n+" — high "+(price?money(price):"none"));
         var pk=await ask(c,"Auction: "+BOARD[i].n,"High bid "+(price?money(price)+" by "+nm(high):"none"),opts,{dflt:"pass"});
         bid = pk.id==="bid";
-      } else { await sleep(500); var val=aiAuctionVal(c,i); bid = (need<=val && cash[c]>=need); }
+      } else { await sleep(500); var val=aiBid(c,i,price,high); bid = (need<=val && cash[c]>=need); }
       if(bid){ price=need; high=c; idx++; } else { var at=idx%bidders.length; bidders.splice(at,1); idx=bidders.length?at%bidders.length:0; }   // the next bidder moves up into this seat
     }
     if(high!=null){ cash[high]-=price; owner[i]=high; toast(nm(high)+" wins "+BOARD[i].n+" for "+money(price)); }
@@ -1456,7 +1593,7 @@ function playMonopoly(){
       var pk=await ask(c,"Buy property?",s.n+" — "+money(s.price)+" · you have "+money(cash[c]),opts,{dflt:"no"});
       if(pk.id==="buy"&&cash[c]>=s.price){ cash[c]-=s.price; owner[i]=c; toast(nm(c)+" buys "+s.n); renderBoard(); } else { await declineBuy(i); }
     } else {
-      if(aiWantsBuy(c,i)){ cash[c]-=s.price; owner[i]=c; toast(nm(c)+" buys "+s.n); renderBoard(); } else { await declineBuy(i); }
+      if(aiBuy(c,i)){ cash[c]-=s.price; owner[i]=c; toast(nm(c)+" buys "+s.n); renderBoard(); } else { await declineBuy(i); }
     }
   }
   function aiWantsBuy(c,i){ var s=BOARD[i]; if(cash[c]<s.price+50) return false; var score=0.5; if(s.t==="prop"){ var owned=GROUPS[s.g].filter(function(x){return owner[x]===c;}).length; score+=owned*0.25; } if(s.t==="rr")score+=0.3; if(cash[c]>s.price*2.5)score+=0.3; return Math.random()<score; }
@@ -1510,7 +1647,7 @@ function playMonopoly(){
     setGameCenter('<div class="mtradebox"><b>Trade offer</b><div style="margin-top:1vh"><b>'+esc(nm(c))+' gives:</b> '+esc(sumTxt(give,cg,jg))+'</div><div style="margin-top:.8vh"><b>'+esc(nm(p))+' gives:</b> '+esc(sumTxt(get,cr,jr))+'</div><div style="margin-top:1vh;color:#555">'+esc(nm(p))+' is deciding…</div></div>');
     var accept;
     if(human(p)){ var ans=await ask(p,"Trade offer from "+nm(c),"You GET: "+sumTxt(give,cg,jg)+"   ·   You GIVE: "+sumTxt(get,cr,jr),[{id:"yes",label:"✅ Accept",color:"green"},{id:"no",label:"❌ Decline",color:"red"}],{dflt:"no"}); accept=(ans.id==="yes"); }
-    else { await sleep(1200); accept=aiTradeOK(p,give,cg,jg,get,cr,jr); }
+    else { await sleep(1200); accept=aiAccept(p,give,cg,jg,get,cr,jr,c); }
     setGameCenter(""); if(!accept){ toast(nm(p)+" declined the trade"); return; }
     give.forEach(function(i){ owner[i]=p; if(mort[i]) cash[p]-=Math.ceil(BOARD[i].mort*0.1); });
     get.forEach(function(i){ owner[i]=c; if(mort[i]) cash[c]-=Math.ceil(BOARD[i].mort*0.1); });
@@ -1522,12 +1659,12 @@ function playMonopoly(){
   }
 
   // ---------- turn loop ----------
-  function aiPreRoll(c){ aiBuild(c); }
+  function aiPreRoll(c){ if(mb(c,"build")){ aiTrades(c); aiManage(c); renderBoard(); return; } aiBuild(c); }
   async function run(){
     monoFrame(); boardEl=$("mboard"); gameSnap=snapNow; renderBoard(); snapNow();
     while(alive().length>1 && live()){
       var c=active[turn]; if(bankrupt[c]){ turn=(turn+1)%active.length; continue; }
-      doublesCount=0;
+      doublesCount=0; mTurns++;
       // play this player's turn (may repeat on doubles)
       var endTurn=false;
       while(!endTurn && !over && !bankrupt[c] && alive().length>1 && live()){
@@ -1538,7 +1675,8 @@ function playMonopoly(){
           var jopts=[{id:"roll",label:"🎲 Roll for doubles",color:"blue"}];
           if(cash[c]>=50) jopts.push({id:"pay",label:"Pay $50 to get out",color:"green"});
           if(jokers[c]>0) jopts.push({id:"card",label:"Use Get Out of Jail Free"});
-          var jp = human(c)? await ask(c,"You’re in Jail","Turn "+(jailT[c]+1)+" of 3",jopts) : {id: (jokers[c]>0?"card": (cash[c]>300&&jailT[c]>=1?"pay":"roll"))};
+          var jp = human(c)? await ask(c,"You’re in Jail","Turn "+(jailT[c]+1)+" of 3",jopts) : {id:aiJail(c)};
+          if(!human(c)&&jp.id==="roll"&&mb(c,"build")) aiPreRoll(c);   // step 10: the brain trades and builds from Jail too
           if(jp.id==="card"){ jokers[c]--; returnJoker(); injail[c]=false; jailT[c]=0; toast(nm(c)+" uses Jail card"); }
           else if(jp.id==="pay"){ await payBank(c,50); injail[c]=false; jailT[c]=0; }
           else { // roll for doubles
@@ -1581,6 +1719,7 @@ function playMonopoly(){
       turn=(turn+1)%active.length;
       await sleep(250);
     }
+    if(live()&&alive().length<=1) brainGameOver();
     var w=alive()[0]; over=true; tv('<span class="dot" style="background:'+(w?PC(w):"#fff")+'"></span> '+(w?nm(w):"?")+" wins!"); announceOver(w?nm(w):"?"); showPlayAgain();
   }
   async function rollDice(c){
@@ -1602,7 +1741,7 @@ function playRummy(){
   var active=computeActive(ORDER8), opts=rvOpts();
   var names=active.map(function(c){ return seat[c]?players[seat[c]].name:cpuName(c)+" (CPU)"; });   // Party Rummy's TV rows (rummy500/party.js) have no robot badge yet: "(CPU)" keeps a computer obvious (FOLLOWUPS: For names-B)
   var humans=active.map(function(c){ return !!seat[c]; });
-  var G=GM.newGame({names:names,humans:humans,opts:opts});
+  var G=GM.newGame({names:names,humans:humans,opts:opts}); G.skill=CPU_SKILL;   // step 10: the Computer skill row (rummy500/brain.js reads G.skill)
   leaveHandler=function(c){ var i=active.indexOf(c); if(i>=0) G.players[i].human=false; };   // a phone left: the computer plays that hand
   if(G.o.teams){ var c0=COL[active[0]], c1=COL[active[1]]; G.colors=[c0,c1,c0,c1]; } else G.colors=active.map(function(c){ return COL[c]; });
   G.logText=[];
@@ -1687,7 +1826,7 @@ function playRisk(){
   var names=active.map(function(c){ return seat[c]?players[seat[c]].name:cpuName(c); });
   var humans=active.map(function(c){ return !!seat[c]; });
   var colors=active.map(function(c){ return ORDER6.indexOf(c); });
-  var G=E.newGame({names:names,humans:humans,colors:colors,opts:opts});
+  var G=E.newGame({names:names,humans:humans,colors:colors,opts:opts,skill:CPU_SKILL});   // step 10: skill known before a random setup (risk/brain.js)
   var afk={}, askingIdx=-1, shown=0;
   enterGame(); Skins.apply("risk");
   var st0=document.createElement("style"); st0.textContent=CT.CSS+
@@ -1774,7 +1913,7 @@ function playUno(){
   var names=active.map(function(c){ return seat[c]?players[seat[c]].name:cpuName(c); });
   var humans=active.map(function(c){ return !!seat[c]; });
   var cols=active.map(function(c){ return COL[c]; });
-  var G=UE.newGame({names:names,humans:humans,opts:opts});
+  var G=UE.newGame({names:names,humans:humans,opts:opts}); G.skill=CPU_SKILL;   // step 10: uno/brain.js reads G.skill
   var afk={}, askingIdx=-1;
   enterGame(); Skins.apply("uno");
   if(window.__unCtl){ try{ window.__unCtl.destroy(); }catch(e){} window.__unCtl=null; }   // the Luxe controller's sheet of an earlier game
@@ -1886,7 +2025,7 @@ function playUno(){
 function playScatter(){
   var myRun=++runId; noWait=true;
   var SE=Scatter.Engine, SU=Scatter.UI;
-  var active=computeActive(ORDER8), opts=scOpts();
+  var active=computeActive(ORDER8), opts=scOpts(); opts.cpuSkill=CPU_SKILL;   // step 10: scatter/brain.js reads G.o.cpuSkill
   var names=active.map(function(c){ return seat[c]?players[seat[c]].name:cpuName(c); });
   var humans=active.map(function(c){ return !!seat[c]; });
   var cols=active.map(function(c){ return COL[c]; });
@@ -1914,7 +2053,7 @@ function playScatter(){
   function seatedHumans(){ return G.players.map(function(p,i){ return (p.human&&seat[active[i]])?i:-1; }).filter(function(i){ return i>=0; }); }   // re-read each time: a phone can Leave mid-round
   leaveHandler=function(c){   // a phone left: the computer plays that seat from now on (it fills the sheet now if the round is being written)
     var i=active.indexOf(c); if(i<0) return; G.players[i].human=false;
-    if(phase==="write"&&G.phase==="write"&&SE.inPlay(G,i)) SE.setAnswers(G,i,SE.cpuAnswers(G,i));
+    if(phase==="write"&&G.phase==="write"&&SE.inPlay(G,i)){ var B=window.Scatter&&Scatter.Brain, a=null; if(B&&B.decide){ try{ a=B.decide(G,G.players[i]); }catch(e){ a=null; } } SE.setAnswers(G,i,a||SE.cpuAnswers(G,i)); }   // step 10: the brain fills the sheet (the old code if it declines)
   };
   function idxOfPid(pid){ var r=-1; G.players.forEach(function(p,i){ if(seat[active[i]]===pid) r=i; }); return r; }
   function secLeft(){ return Math.max(0,(endAt-Date.now())/1000); }
