@@ -153,6 +153,10 @@ function rateHand(G,s,b,sk,opts){
      fights with blind cards from the stack, so it is a lottery for the whole pot (my card goes in, and I have a 1-in-F chance at all of it).
      The two-to-four player model (a tie I'm not in = my card is lost) undervalues a cheap card there; the tournament showed it (16 seats). */
   var big=opps.length>3&&o.tie==="war"&&!o.onlyTied, F=opps.length+1;
+  /* a big table where only the tied players fight (the CEO's rule, the default since 2026-10-16): a tie at the top that I'm in is a war
+     between the k tied players for the whole table, so it is worth about 1/k of it, less the card I risk (k-1 times in k); a tie I'm not
+     in loses my card as usual. The fixed tie value alone undervalued a strong card that ties with a big pot on the table. */
+  var bigTied=opps.length>3&&o.tie==="war"&&o.onlyTied;
   for(var n=0;n<N;n++){
     var oc=[], ov=0;
     for(var i=0;i<models.length;i++){ var x=sampleCard(G,models[i],b); if(x>=0){ oc.push(x); ov+=cardV(G,x); } }
@@ -162,7 +166,7 @@ function rateHand(G,s,b,sk,opts){
       ids[0]=mc; var wi=E.winnersOf(G,ids);
       if(wi.length===1&&wi[0]===0){ r.w++; r.g+=ov+carryV+(o.paid?oc.length:0); }
       else if(big&&wi.length>1){ var mine=wi.indexOf(0)>=0; if(mine) r.t++; r.g+=(ov+carryV-cardV(G,mc)*(F-1))/F+(mine?tieV:0); }
-      else if(wi.indexOf(0)>=0){ r.t++; r.g+=tieV; }
+      else if(wi.indexOf(0)>=0){ r.t++; r.g+=bigTied?(ov+carryV-cardV(G,mc)*(wi.length-1))/wi.length+tieV:tieV; }
       else { r.l++; r.g-=cardV(G,mc)*(1+b.k.save*P.save*Math.max(0,-B)*str(G,mc))+(o.paid?1:0)+(r.pr?1:0); }
     });
   }

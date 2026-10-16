@@ -211,7 +211,7 @@ var HDESC={
   prisoners:"Win a battle and keep one beaten card face up (after a war, a face-down one too). Play it later instead of your top card; if it loses, you also pay the card you would have played.",
   paid:"The loser of each battle also pays one card from their stack.",
   colourDeal:"Every player gets a whole colour or suit: an even share of Aces, Kings and every rank.",
-  onlyTied:"Only the tied players fight a war (Card Games For Dummies); officially everyone joins (Pagat).",
+  onlyTied:"On (the usual way at this table): only the players tied for the highest card go to war, and the winner takes every card on the table (Card Games For Dummies). Off: everyone joins the war (Pagat).",
   arrange:"Choose the order your won cards go under your stack (otherwise they are shuffled).",
   progressive:"The first war lays 5 cards down, each later war one more.",
   guerilla:"A joker turned up always starts a war (the jokers are added).",
