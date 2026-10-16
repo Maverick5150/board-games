@@ -2,7 +2,9 @@
    Rules: BG_audit/games/war/RULES.md (Bicycle + Pagat decide; Wikipedia, Card Games For Dummies and French Wikipedia give the versions and
    house rules). Every Version and house rule is an option; the defaults are the official rules.
    Cards are integers: 0..51 = suit*13 + (rank-2), suits S H D C, ranks 2..14 (Ace = 14, as in rummy500/cards.js); 52 = red joker, 53 = black
-   joker (rank 15, above the Aces). A packet's index 0 is its TOP card; won cards go to the end (the bottom), in a random order (no rule fixes
+   joker (rank 15, above the Aces). With more than one deck (2 to 16 players: 1 deck for 2-4, 2 for 5-8, 3 for 9-12, 4 for 13-16) the card of
+   deck k is k*54 + that id, so base(id) = id % 54 gives the face and deck 1 keeps the ids 0..53 (one-deck games and old saves are unchanged).
+   A packet's index 0 is its TOP card; won cards go to the end (the bottom), in a random order (no rule fixes
    the order, and a random order is what keeps the game finite: Lakshtanov & Roshchina) unless the "winner arranges" house rule is on.
    State G is plain JSON (saves + Party); G.v is the save-shape version; the RNG state is G.rs (seedable, so tests replay exactly).
    Play is simultaneous (no first player: Bicycle "at the same time"): every seat in G.need acts (flip / pick / claim); when the last one has
@@ -18,13 +20,17 @@ var SNAME={S:"Spades",H:"Hearts",D:"Diamonds",C:"Clubs"}, RNAME={11:"Jack",12:"Q
 var K_UNKNOWN=-1, K_TABLE=-2, K_WON=-3, K_PRISON=-4;
 
 /* ---------------- cards ---------------- */
-function rank(id){ return id>=52?15:2+id%13; }
-function suit(id){ return id>=52?"J":SUITS[(id/13)|0]; }
-function isRed(id){ if(id>=52) return id===52; var s=(id/13)|0; return s===1||s===2; }
+var MINP=2, MAXP=16, MAXD=4;
+function base(id){ return id%54; }
+function copyOf(id){ return (id/54)|0; }
+function isJoker(id){ return id%54>=52; }
+function rank(id){ id%=54; return id>=52?15:2+id%13; }
+function suit(id){ id%=54; return id>=52?"J":SUITS[(id/13)|0]; }
+function isRed(id){ id%=54; if(id>=52) return id===52; var s=(id/13)|0; return s===1||s===2; }
 function rankLabel(r){ return r===15?"Joker":r===14?"A":r===13?"K":r===12?"Q":r===11?"J":String(r); }
-function cardName(id){ if(id>=52) return id===52?"Red Joker":"Black Joker"; var r=rank(id); return (RNAME[r]||String(r))+" of "+SNAME[suit(id)]; }
-function shortName(id){ return id>=52?"Joker":rankLabel(rank(id))+SYM[suit(id)]; }
-function card(id){ return {id:id,r:rank(id),s:suit(id),red:isRed(id),joker:id>=52,label:rankLabel(rank(id)),name:cardName(id)}; }
+function cardName(id){ if(isJoker(id)) return isRed(id)?"Red Joker":"Black Joker"; var r=rank(id); return (RNAME[r]||String(r))+" of "+SNAME[suit(id)]; }
+function shortName(id){ return isJoker(id)?"Joker":rankLabel(rank(id))+SYM[suit(id)]; }
+function card(id,G){ return {id:id,base:base(id),deck:copyOf(id),r:rank(id),s:suit(id),red:isRed(id),joker:isJoker(id),label:rankLabel(rank(id)),name:cardName(id),wild:G?isWild(G,id):false}; }
 function plural(r){ return r===15?"Jokers":r===6?"6s":(RNAME[r]?RNAME[r]+"s":r+"s"); }
 
 /* ---------------- RNG (mulberry32, state in G.rs) ---------------- */
@@ -60,6 +66,11 @@ function defaultOpts(){
     guerilla:false,     // House: a joker always starts a war
     twoBeatsAce:false,  // House (low-documented): a 2 beats an Ace
     leftover:"war",     // cards that don't divide evenly: war (Dummies: they go to the first war's winner) | remove
+    decks:0,            // House: 0 = by the player count (1 deck for 2-4, 2 for 5-8, 3 for 9-12, 4 for 13-16) | 1..4 set by hand
+    nd:1,               // the deck count in play (normalize() works it out from decks and the player count)
+    deucesWild:false,   // House: every 2 is wild (only decks that have 2s)
+    jokersWild:false,   // House: the jokers are wild (2 jokers are added to every deck in play)
+    wildAs:"top",       // what a wild card is: top (it beats every card that isn't wild; two wilds tie = a war) | ace (it counts as an Ace)
     cap:5000            // safety cap on battles (then the most cards wins)
   };
 }
@@ -94,6 +105,35 @@ var HOUSE=[
   ["guerilla","Guerilla Joker: a joker always starts a war","bool",null,1,WARV],
   ["twoBeatsAce","2 beats Ace (low-documented)","bool",null,1,["classic","three","hand","razboi"]]
 ];
+/* rows added with 2-16 players (same shape; [7] = "wild": show only while a wild rule is on). houseRows(version, n, o) = HOUSE + these,
+   filtered for the version, the player count and the deck count (it also drops the choices that can't apply). HDESC_MORE = their one-liners. */
+var HOUSE_MORE=[
+  ["decks","Decks","choice",[[0,"By the player count"],[1,"1 deck"],[2,"2 decks"],[3,"3 decks"],[4,"4 decks"]],1],
+  ["deucesWild","Deuces are wild","bool",null,1,["classic","three","peace","hand","razboi"]],
+  ["jokersWild","Jokers are wild","bool",null,1],
+  ["wildAs","Wild cards count as","choice",[["top","Higher than every card"],["ace","An Ace"]],1,null,0,"wild"]
+];
+var HDESC_MORE={
+  decks:"Official: one deck for 2-4 players, two for 5-8, three for 9-12, four for 13-16. Pick 1 to 4 decks for a longer or shorter game.",
+  deucesWild:"Every 2 is wild: it beats any card that isn't wild. Two wild cards tie, and that is a war.",
+  jokersWild:"Two jokers join every deck, and they are wild: a joker beats any card that isn't wild. Two wild cards tie, and that is a war.",
+  wildAs:"Higher than every card: only another wild card ties it. An Ace: a wild card counts as an Ace, so it ties an Ace and a war follows."
+};
+function houseRows(version,n,o){
+  var nd=o?ndOf(o):autoDecks(n), wild=!!(o&&(o.deucesWild||o.jokersWild)), out=[];
+  HOUSE.concat(HOUSE_MORE).forEach(function(h){
+    if(!houseFor(h,version,n)) return;
+    var k=h[0];
+    if(k==="deck"&&versionOf(version)&&(versionOf(version).lock||[]).indexOf("deck")>=0) return;
+    if(k==="jokerSteal"&&(n!==2||nd!==1)) return;
+    if(k==="colourDeal"&&!colourOk(n,nd)) return;
+    if(k==="deucesWild"&&o&&+o.deck===32) return;
+    if(h[7]==="wild"&&!wild) return;
+    if(k==="jokers"&&(n!==2||nd!==1)) h=h.slice(0,3).concat([h[3].filter(function(c){ return c[0]!=="each"; })],h.slice(4));
+    out.push(h);
+  });
+  return out;
+}
 var LENGTHS=[
   {id:"end",name:"Play to the end",desc:"Official: until one player has every card."},
   {id:"time",name:"Time limit",limits:[5,10,15],unit:"min",desc:"At the bell the current battle finishes; the most cards wins."},
@@ -112,6 +152,7 @@ function normalize(o,n){
   var v=versionOf(o.version); if(!v){ o.version="classic"; v=VERSIONS[0]; }
   (v.lock||[]).forEach(function(k){ o[k]=v.opts[k]; });
   o.deck=+o.deck; if(o.deck!==36&&o.deck!==32) o.deck=52;
+  var nd=Math.floor(+o.decks); if(nd>=1&&nd<=MAXD) o.decks=nd; else { o.decks=0; nd=autoDecks(n); } o.nd=nd;
   if(o.version==="drunkard") o.deck=36;
   if(o.version!=="drunkard"&&o.deck===36) o.deck=52;
   o.hand=o.version==="hand"?(+o.hand>=5?5:3):0;
@@ -122,14 +163,19 @@ function normalize(o,n){
   if(o.length==="battles"&&o.limit<1) o.limit=100;
   if(o.length==="time"&&o.limit<1) o.limit=10;
   o.shortTie=o.shortTie==="draw"?"draw":"sudden";
-  ["outLoses","jokerSteal","noDown","twos","underdog","prisoners","paid","colourDeal","onlyTied","arrange","progressive","guerilla","twoBeatsAce","low"].forEach(function(k){ o[k]=!!o[k]; });
+  ["outLoses","jokerSteal","noDown","twos","underdog","prisoners","paid","colourDeal","onlyTied","arrange","progressive","guerilla","twoBeatsAce","low","deucesWild","jokersWild"].forEach(function(k){ o[k]=!!o[k]; });
   if(o.jokers!=="in"&&o.jokers!=="each") o.jokers="off";
+  /* wild cards (House): the short decks have no 2s; wild jokers bring the jokers in and replace Guerilla Joker; a wild 2 replaces the two 2 rules */
+  if(o.deck!==52) o.deucesWild=false;
+  if(o.jokersWild){ if(o.jokers==="off") o.jokers="in"; o.guerilla=false; }
+  if(o.deucesWild){ o.twos=false; o.twoBeatsAce=false; }
+  o.wildAs=o.wildAs==="ace"?"ace":"top";
   if(o.tie==="carry"){ ["outLoses","jokerSteal","noDown","twos","underdog","prisoners","onlyTied","progressive","guerilla"].forEach(function(k){ o[k]=false; }); }
-  if(o.jokerSteal){ if(n===2) o.jokers="each"; else o.jokerSteal=false; }
-  if(o.jokers==="each"&&n!==2) o.jokers="in";
+  if(o.jokerSteal){ if(n===2&&nd===1) o.jokers="each"; else o.jokerSteal=false; }   // one joker each: 2 players and one deck
+  if(o.jokers==="each"&&(n!==2||nd!==1)) o.jokers="in";
   if(o.guerilla&&o.jokers==="off") o.jokers="in";
   if(n<3) o.onlyTied=false;
-  if(n===3) o.colourDeal=false;   // red vs black (2) or a suit each (4): there is no fair colour split for 3
+  if(n&&!colourOk(n,nd)) o.colourDeal=false;   // red vs black (2), a suit each (4), or whole suits (the 4 x decks suits shared evenly); 3 players with one deck have no fair split
   if(o.low) o.twoBeatsAce=false;
   o.special=o.version==="drunkard"?6:(o.twoBeatsAce&&o.deck===52?2:0);
   o.leftover=(o.leftover==="remove"||o.tie==="carry")?"remove":"war";   // no wars in Tod und Leben: a left-over card is set aside
@@ -138,29 +184,57 @@ function normalize(o,n){
 }
 
 /* ---------------- the deck and comparing cards ---------------- */
+function ndOf(o){ var k=o&&+o.nd; return k>=1&&k<=MAXD?k|0:1; }   // old saves have no nd: one deck
+function autoDecks(n){ return n>=2?Math.min(MAXD,Math.max(1,Math.ceil(n/4))):1; }
+function colourOk(n,nd){ return n===2||n===4||(4*nd)%n===0; }
 function buildDeck(o){
-  var lo=o.deck===32?7:o.deck===36?6:2, d=[], s, r;
-  for(s=0;s<4;s++) for(r=lo;r<=14;r++) d.push(s*13+r-2);
-  if(o.jokers&&o.jokers!=="off"){ d.push(52); d.push(53); }
+  var lo=o.deck===32?7:o.deck===36?6:2, d=[], s, r, k, nd=ndOf(o);
+  for(k=0;k<nd;k++){
+    for(s=0;s<4;s++) for(r=lo;r<=14;r++) d.push(k*54+s*13+r-2);
+    if(o.jokers&&o.jokers!=="off"){ d.push(k*54+52); d.push(k*54+53); }   // jokers: 2 for every deck in play
+  }
   return d;
 }
-function val(G,id){ var r=rank(id); return G.o.low?-r:r; }
+/* the deck line for setup: "2 decks · 104 cards", the share each and the cards left over */
+function deckInfo(o,n){
+  var nd=ndOf(o), d=buildDeck(o), cards=d.length, jk=d.filter(isJoker).length, each=o.jokers==="each"&&n===2, deal=each?cards-jk:cards;
+  var per=n>=2?Math.floor(deal/n):deal, left=n>=2?deal-per*n:0;
+  return {nd:nd,auto:!(+o.decks>=1),cards:cards,jokers:jk,per:per,left:left,jokerEach:each,
+    text:nd+(nd===1?" deck":" decks")+" · "+cards+" cards"+(jk?" ("+jk+" jokers)":"")};
+}
+/* wild cards (House rules "Deuces are wild", "Jokers are wild") */
+function isWild(G,id){ var o=G.o||G; if(!o.deucesWild&&!o.jokersWild) return false; var b=id%54; return b>=52?!!o.jokersWild:(!!o.deucesWild&&b%13===0); }
+function lowRank(o){ return o.deck===32?7:o.deck===36?6:2; }
+/* the rank a card plays at: a wild read "as an Ace" counts as the best natural card (an Ace; in Peace the lowest card) */
+function playRank(G,id){ var o=G.o; if(o.wildAs==="ace"&&isWild(G,id)) return o.low?lowRank(o):14; return rank(id); }
+function val(G,id){ var r=playRank(G,id); return G.o.low?-r:r; }
 /* indices of the winning cards (more than one = a tie). Suits never break a tie. A "special" rank (P'yanitsa 6, house 2) beats an Ace only. */
 function winnersOf(G,ids){
   var o=G.o, i, w=[], best=-1e9;
+  if((o.deucesWild||o.jokersWild)&&o.wildAs!=="ace"){   // "top": a wild beats every card that isn't wild; wilds tie with each other
+    for(i=0;i<ids.length;i++) if(isWild(G,ids[i])) w.push(i);
+    if(w.length) return w;
+  }
   if(o.special&&!o.low){
-    var top=0; for(i=0;i<ids.length;i++) if(rank(ids[i])>top) top=rank(ids[i]);
-    if(top===14){ for(i=0;i<ids.length;i++) if(rank(ids[i])===o.special) w.push(i); if(w.length) return w; }
+    var top=0; for(i=0;i<ids.length;i++) if(playRank(G,ids[i])>top) top=playRank(G,ids[i]);
+    if(top===14){ for(i=0;i<ids.length;i++) if(rank(ids[i])===o.special&&!isWild(G,ids[i])) w.push(i); if(w.length) return w; }
   }
   for(i=0;i<ids.length;i++){ var v=val(G,ids[i]); if(v>best){ best=v; w=[i]; } else if(v===best) w.push(i); }
   return w;
 }
 function beats(G,a,b){ var w=winnersOf(G,[a,b]); return w.length===2?0:w[0]===0?1:-1; }
 /* how strong a card is: the share of the other cards in this game's deck it beats (ties count half) */
-function strength(G,c){
-  var key=G.o.deck+"|"+G.o.jokers+"|"+G.o.low+"|"+G.o.special, m=strength.m||(strength.m={}), t=m[key];
-  if(!t){ t=m[key]={}; var d=buildDeck(G.o); d.forEach(function(a){ var s=0; d.forEach(function(b){ if(a!==b){ var x=beats(G,a,b); s+=x>0?1:x===0?.5:0; } }); t[a]=s/(d.length-1); }); }
-  return t[c]!=null?t[c]:.5;
+function strength(G,c){ var t=strengthTable(G); return t[c]!=null?t[c]:.5; }
+/* the whole table for this game's rules (cached per rule set): the brain fetches it once per decision */
+function strengthTable(G){
+  var o=G.o, key=o.deck+"|"+o.jokers+"|"+o.low+"|"+o.special+"|"+ndOf(o)+"|"+(o.deucesWild?1:0)+(o.jokersWild?1:0)+o.wildAs, m=strength.m||(strength.m={}), t=m[key];
+  if(!t){   // the copies of a card (more decks) are identical: score each face once against the count of every face (a copy ties)
+    t=m[key]={}; var d=buildDeck(o), cnt={}, faces=[];
+    d.forEach(function(x){ var b=base(x); if(!cnt[b]){ cnt[b]=0; faces.push(b); } cnt[b]++; });
+    var sb={}; faces.forEach(function(a){ var s=0; faces.forEach(function(b){ var k=a===b?cnt[b]-1:cnt[b]; if(k){ var x=beats(G,a,b); s+=k*(x>0?1:x===0?.5:0); } }); sb[a]=s/(d.length-1); });
+    d.forEach(function(x){ t[x]=sb[base(x)]; });
+  }
+  return t;
 }
 
 /* ---------------- holdings ---------------- */
@@ -175,7 +249,7 @@ function names(G,arr){ var a=arr.map(function(s){ return nm(G,s); }); return a.l
 
 /* ---------------- a new game ---------------- */
 function newGame(opts,players,seed){
-  var n=(players||[]).length; if(n<2||n>4) throw new Error("War is for 2 to 4 players.");
+  var n=(players||[]).length; if(n<MINP||n>MAXP) throw new Error("War is for 2 to 16 players.");
   var o=normalize(mergeOpts(opts),n);
   var G={v:VER,id:"war",o:o,n:n,rs:(seed==null?Math.floor(Math.random()*4294967296):seed)>>>0,
     players:players.map(function(p,i){ return {name:String((p&&p.name)||("Player "+(i+1))),human:!!(p&&p.human),skill:(p&&p.skill)||null,pk:[],hand:[],won:[],pr:[],out:false,outAt:-1}; }),
@@ -183,23 +257,27 @@ function newGame(opts,players,seed){
     kn:[],kt:[],kc:0,battle:0,wars:0,bell:false,sudden:false,suddenAt:0,phase:"flip",over:false,winner:-1,draw:null,why:"",last:null,
     stats:{wars:0,chain:0,pot:0,aces:[],won:[],lead:0,leader:-1,peak:[]},log:[]};
   for(var i=0;i<n;i++){ G.stats.aces.push(0); G.stats.won.push(0); G.stats.peak.push(0); }
-  for(i=0;i<54;i++){ G.kn.push(K_UNKNOWN); G.kt.push(0); }
+  for(i=0;i<54*o.nd;i++){ G.kn.push(K_UNKNOWN); G.kt.push(0); }
   G.dealer=rint(G,n);
   deal(G); refill(G); trackLead(G);
-  log(G,nm(G,G.dealer)+" deals "+buildDeck(o).length+" cards, one at a time.","deal");
+  log(G,nm(G,G.dealer)+" deals "+buildDeck(o).length+" cards"+(o.nd>1?" ("+o.nd+" decks shuffled together)":"")+", one at a time.","deal");
   if(G.kitty.length) log(G,G.kitty.length===1?"One card is left over: it goes to the winner of the first war.":G.kitty.length+" cards are left over: they go to the winner of the first war.","deal");
   if(G.aside.length) log(G,G.aside.length+" left-over card"+(G.aside.length>1?"s are":" is")+" set aside.","deal");
   startBattle(G);
+  strengthTable(G);   // build the card-strength table now (a few ms for 4 decks), not in the first computer decision
   return G;
 }
 function deal(G){
   var o=G.o, n=G.n, P=G.players, deck=buildDeck(o), seq=G.dealSeq=[], jk=[], i, s;
-  if(o.jokers==="each"){ jk=deck.filter(function(id){ return id>=52; }); deck=deck.filter(function(id){ return id<52; }); }
-  if(o.colourDeal&&(n===2||n===4)){
-    var piles=[], perm=[]; for(i=0;i<n;i++){ piles.push([]); perm.push(i); } shuffle(G,perm);
+  if(o.jokers==="each"){ jk=deck.filter(isJoker); deck=deck.filter(function(id){ return !isJoker(id); }); }
+  if(o.colourDeal&&colourOk(n,ndOf(o))){
+    var piles=[], perm=[], nd=ndOf(o), units=[], per=0;
+    if(n===2||n===4){ for(i=0;i<n;i++){ piles.push([]); perm.push(i); } shuffle(G,perm); }
+    else { for(i=0;i<n;i++) piles.push([]); for(i=0;i<4*nd;i++) units.push(i); shuffle(G,units); per=4*nd/n; }   // whole suits: each player gets 4*decks/n of them
     deck.forEach(function(id){
-      var g2=n===2?(isRed(id)?0:1):(id>=52?(id===52?1:0):((id/13)|0));   // 4 players: a suit each (the red joker joins Hearts, the black one Spades)
-      piles[perm[g2]].push(id);
+      var b=base(id), su=b>=52?(b===52?1:0):((b/13)|0);   // a joker joins its deck's Hearts (red) or Spades (black)
+      if(n===2||n===4) piles[perm[n===2?(isRed(id)?0:1):su]].push(id);   // 2: red vs black; 4: a suit each
+      else piles[Math.floor(units.indexOf(copyOf(id)*4+su)/per)].push(id);
     });
     piles.forEach(function(p){ shuffle(G,p); });
     for(var k=0,more=true;more;k++){ more=false; for(var j=1;j<=n;j++){ s=(G.dealer+j)%n; if(piles[s].length>k){ P[s].pk.push(piles[s][k]); seq.push(s); more=true; } } }
@@ -287,12 +365,12 @@ function reveal(G,ev){
 }
 function settle(G,ev){
   var o=G.o, part=G.part, ids=part.map(function(s){ return G.cur[s]; }), best=winnersOf(G,ids).map(function(i){ return part[i]; });
-  var forced=o.tie==="war"&&ids.some(function(c){ return (o.twos&&rank(c)===2)||(o.guerilla&&c>=52); });
+  var forced=o.tie==="war"&&ids.some(function(c){ return (o.twos&&rank(c)===2)||(o.guerilla&&isJoker(c)); });
   if(best.length===1&&!forced) return win(G,best[0],ev);
   if(o.tie==="carry"){
     G.tb.forEach(function(e){ G.carry.push(e.c); });
     ev.push({e:"carry",seats:best,n:G.carry.length});
-    log(G,names(G,best)+" tie with "+plural(rank(G.cur[best[0]]))+": the "+G.carry.length+" cards go to the next battle's winner.","tie");
+    log(G,names(G,best)+" tie with "+tieWord(G,best)+": the "+G.carry.length+" cards go to the next battle's winner.","tie");
     G.last={b:G.battle+1,w:-1,cards:[],from:[],first:G.first.slice(),war:0,how:"carry",pr:null};
     G.tb=[]; return endBattle(G,-1,ev);
   }
@@ -303,6 +381,13 @@ function settle(G,ev){
   }
   startWar(G,fighters,best,forced&&best.length===1,ev);
 }
+/* what the tied cards were, for the log: "Kings", "wild cards", "Aces and a wild card" */
+function tieWord(G,best){
+  var nat=best.filter(function(s){ return !isWild(G,G.cur[s]); }), wl=best.length-nat.length;
+  if(!nat.length) return "wild cards";
+  return plural(rank(G.cur[nat[0]]))+(wl?" and "+(wl>1?wl+" wild cards":"a wild card"):"");
+}
+function sn(G,id){ return shortName(id)+(isWild(G,id)?" (wild)":""); }
 function downCount(G,fighters,tiedRank){
   var o=G.o;
   if(o.progressive) return 4+G.wars;                     // Pagat: 5 in the first war of the game, one more in every later war
@@ -316,7 +401,7 @@ function downCount(G,fighters,tiedRank){
 }
 function startWar(G,fighters,best,forced,ev){
   var o=G.o; G.warN++; G.wars++; G.stats.wars++;
-  var k=downCount(G,fighters,rank(G.cur[best[0]]));
+  var c0=G.cur[best[0]], k=downCount(G,fighters,isWild(G,c0)?14:rank(c0));   // Război: a wild tie lays as many as an Ace
   if(o.outLoses){
     var shortS=fighters.filter(function(s){ return avail(G,s)<k+1; });
     if(shortS.length){
@@ -341,7 +426,7 @@ function startWar(G,fighters,best,forced,ev){
   G.need=fighters.filter(function(s){ return avail(G,s)>0; });
   ev.push({e:"war",n:G.warN,seats:fighters,tied:best,down:k,forced:!!forced});
   var twoUp=o.twos&&fighters.some(function(s){ return rank(G.cur[s])===2; });
-  var why=forced?(twoUp?"A 2 declares war":"A joker declares war"):names(G,best)+" tie with "+plural(rank(G.cur[best[0]]));
+  var why=forced?(twoUp?"A 2 declares war":"A joker declares war"):names(G,best)+" tie with "+tieWord(G,best);
   log(G,(G.warN>1?"Double war! ":"I declare war! ")+why+": "+(k?k+" face down, then one up.":"the next cards decide."),"war");
 }
 function warFlip(G,ev){
@@ -399,12 +484,12 @@ function win(G,w,ev){
      the face-down cards may be captured too */
   var prOk=o.prisoners?G.tb.filter(function(e){ return e.s!==w&&(e.up||war); }).map(function(e){ return e.c; }):[];
   var steal=false;
-  if(o.jokerSteal&&war&&G.jok) pot.forEach(function(c){ if(c>=52&&G.jok[c]!=null&&G.jok[c]!==w) steal=true; });
+  if(o.jokerSteal&&war&&G.jok) pot.forEach(function(c){ if(isJoker(c)&&G.jok[c]!=null&&G.jok[c]!==w) steal=true; });
   G.pend={w:w,pot:pot,from:from,war:G.warN,prOk:prOk,how:how,steal:steal,paid:paid};
   ev.push({e:"win",s:w,n:pot.length,war:G.warN,how:how});
   var wc=G.cur[w];
-  if(!war&&G.bpart.length===2){ var lo=G.bpart[0]===w?G.bpart[1]:G.bpart[0]; log(G,nm(G,w)+"'s "+shortName(wc)+" beats "+nm(G,lo)+"'s "+shortName(G.cur[lo])+".","win"); }
-  else log(G,nm(G,w)+(war?" wins the war":" wins")+(wc!=null&&how!=="underdog"?" with "+shortName(wc):"")+" and takes "+pot.length+" cards"+(paid?" ("+paid+" paid)":"")+".","win");
+  if(!war&&G.bpart.length===2){ var lo=G.bpart[0]===w?G.bpart[1]:G.bpart[0]; log(G,nm(G,w)+"'s "+sn(G,wc)+" beats "+nm(G,lo)+"'s "+sn(G,G.cur[lo])+".","win"); }
+  else log(G,nm(G,w)+(war?" wins the war":" wins")+(wc!=null&&how!=="underdog"?" with "+sn(G,wc):"")+" and takes "+pot.length+" cards"+(paid?" ("+paid+" paid)":"")+".","win");
   if((o.arrange&&pot.length>1)||prOk.length){ G.phase="claim"; G.need=[w]; ev.push({e:"claim",s:w,prOk:prOk.slice(),arrange:o.arrange}); return; }
   collect(G,null,null,ev);
 }
@@ -521,10 +606,10 @@ function standings(G){
 /* ---------------- snapshot for one seat (Party phones; -1 = the public TV view) ---------------- */
 function snapshot(G,seat){
   var me=seat>=0?G.players[seat]:null;
-  var s={v:G.v,id:"war",o:G.o,n:G.n,me:seat,phase:G.phase,battle:G.battle,wars:G.wars,dealer:G.dealer,
+  var s={v:G.v,id:"war",o:G.o,n:G.n,nd:ndOf(G.o),me:seat,phase:G.phase,battle:G.battle,wars:G.wars,dealer:G.dealer,
     need:needList(G),acted:Object.keys(G.pick).map(Number),
-    players:G.players.map(function(p,i){ return {s:i,name:p.name,human:p.human,out:p.out,count:total(G,i),packet:p.pk.length,hand:p.hand.length,won:p.won.length,pr:p.pr.slice(),cur:G.cur[i]!=null?G.cur[i]:null}; }),
-    table:G.tb.map(function(e){ return {s:e.s,w:e.w,up:e.up,c:e.up?e.c:null}; }),
+    players:G.players.map(function(p,i){ return {s:i,name:p.name,human:p.human,out:p.out,count:total(G,i),packet:p.pk.length,hand:p.hand.length,won:p.won.length,pr:p.pr.slice(),cur:G.cur[i]!=null?G.cur[i]:null,wild:G.cur[i]!=null&&isWild(G,G.cur[i])}; }),
+    table:G.tb.map(function(e){ return {s:e.s,w:e.w,up:e.up,c:e.up?e.c:null,wild:e.up&&isWild(G,e.c)}; }),
     warN:G.warN,down:G.down,kitty:G.kitty.length,aside:G.aside.length,carry:G.carry.slice(),
     pend:G.pend?{w:G.pend.w,n:G.pend.pot.length,war:G.pend.war,how:G.pend.how}:null,
     last:G.last,stats:G.stats,standings:standings(G),over:G.over,winner:G.winner,draw:G.draw,why:G.why,bell:G.bell,sudden:G.sudden,
@@ -536,8 +621,8 @@ function snapshot(G,seat){
 
 /* ---------------- invariants (tests, fuzz): [] = fine ---------------- */
 function check(G){
-  var err=[], seen={}, deck=buildDeck(G.o), s;
-  function put(c,where){ if(typeof c!=="number"||!(c>=0&&c<54)) err.push("bad card "+c+" in "+where); else if(seen[c]) err.push("card "+c+" twice ("+seen[c]+", "+where+")"); else seen[c]=where; }
+  var err=[], seen={}, deck=buildDeck(G.o), s, top=54*ndOf(G.o);
+  function put(c,where){ if(typeof c!=="number"||!(c>=0&&c<top)) err.push("bad card "+c+" in "+where); else if(seen[c]) err.push("card "+c+" twice ("+seen[c]+", "+where+")"); else seen[c]=where; }
   G.players.forEach(function(p,i){ p.pk.forEach(function(c){ put(c,"pk"+i); }); p.hand.forEach(function(c){ put(c,"hand"+i); }); p.won.forEach(function(c){ put(c,"won"+i); }); p.pr.forEach(function(c){ put(c,"pr"+i); });
     if(p.out&&G.o.length!=="onepass"&&total(G,i)>0) err.push("player "+i+" is out but holds cards");
     if(G.o.hand&&!p.out&&p.hand.length>G.o.hand) err.push("hand too big "+i);
@@ -556,13 +641,15 @@ function check(G){
     if(G.phase!=="claim"&&G.tb.length&&G.phase==="flip") err.push("table not cleared");
     for(s=0;s<G.n;s++) if(G.phase==="flip"&&canPlay(G,s)&&G.need.indexOf(s)<0) err.push("seat "+s+" left out");
   }
+  if(G.kn.length!==top||G.kt.length!==top) err.push("card tables sized "+G.kn.length+" for "+top);
   if(G.v!==VER) err.push("save version");
   return err;
 }
 
-W.Engine={VER:VER,VERSIONS:VERSIONS,HOUSE:HOUSE,LENGTHS:LENGTHS,WARV:WARV,houseFor:houseFor,defaultOpts:defaultOpts,mergeOpts:mergeOpts,versionOpts:versionOpts,normalize:normalize,
+W.Engine={VER:VER,MINP:MINP,MAXP:MAXP,MAXD:MAXD,HOUSE_MORE:HOUSE_MORE,HDESC_MORE:HDESC_MORE,houseRows:houseRows,autoDecks:autoDecks,ndOf:ndOf,deckInfo:deckInfo,colourOk:colourOk,
+  isWild:isWild,isJoker:isJoker,base:base,copyOf:copyOf,playRank:playRank,VERSIONS:VERSIONS,HOUSE:HOUSE,LENGTHS:LENGTHS,WARV:WARV,houseFor:houseFor,defaultOpts:defaultOpts,mergeOpts:mergeOpts,versionOpts:versionOpts,normalize:normalize,
   buildDeck:buildDeck,newGame:newGame,legal:legal,apply:apply,need:needList,defaultMove:defaultMove,ringBell:ringBell,firstPlayer:firstPlayer,standings:standings,snapshot:snapshot,check:check,
-  total:total,avail:avail,canPlay:canPlay,winnersOf:winnersOf,beats:beats,strength:strength,rank:rank,suit:suit,isRed:isRed,card:card,cardName:cardName,shortName:shortName,rankLabel:rankLabel,
+  total:total,avail:avail,canPlay:canPlay,winnersOf:winnersOf,beats:beats,strength:strength,strengthTable:strengthTable,rank:rank,suit:suit,isRed:isRed,card:card,cardName:cardName,shortName:shortName,rankLabel:rankLabel,
   K_UNKNOWN:K_UNKNOWN,K_TABLE:K_TABLE,K_WON:K_WON,K_PRISON:K_PRISON,_rnd:rnd};
 if(typeof module!=="undefined"&&module.exports) module.exports=W.Engine;
 /* browsers: bring in the brain right after this file (the page and the Party pages all load engine.js); a failed load = computers just flip */
