@@ -530,7 +530,7 @@ function standRows(){
   // mid-animation the order follows the movers on the board (disp), not the state the card has already reached
   var rows=G.players.map(function(p,s){ var done=disp[s]===E.END; return {s:s,name:p.name,pos:disp[s],done:done,at:p.at,table:!done}; });
   rows.sort(function(a,b){ if(a.done!==b.done) return a.done?-1:1; if(b.pos!==a.pos) return b.pos-a.pos; return a.s-b.s; });
-  rows.forEach(function(r,i){ var pv=rows[i-1]; r.place=pv&&!pv.done&&!r.done&&pv.pos===r.pos?pv.place:i+1; });
+  rows.forEach(function(r,i){ r.place=i+1; });   // unique places 1..N (the CEO's rule), ties in the order above
   return rows;
 }
 function standMeta(s,pos,done){

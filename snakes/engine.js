@@ -549,7 +549,7 @@ function hint(G,s){
   return {s:s,pos:p.pos,left:left,outs:outs,pFinish:pFin,ahead:ahead,near:near,exact:gm.play==="va72"||gm.play==="leela"||o.finish==="stay",goal:gm.goal};
 }
 
-/* ---------------- standings: leader first ----------------
+/* ---------------- standings: leader first, every player on their own place 1..N (the CEO, 2026-10-16) ----------------
    Finished players by finishing order (official). The rest by their square (higher first; a tie goes to whoever reached it first): that
    is a table position, not an official placing (no source ranks them), so those rows carry table:true. With "Play on for places" the last
    player left is officially last. */
@@ -562,10 +562,7 @@ function standings(G){
     if(a.at!==b.at) return a.at-b.at;
     return a.s-b.s;
   });
-  rows.forEach(function(r,i){
-    var prev=rows[i-1];
-    r.place=(prev&&!prev.done&&!r.done&&prev.pos===r.pos&&prev.at===r.at)?prev.place:i+1;
-  });
+  rows.forEach(function(r,i){ r.place=i+1; });   // the CEO (2026-10-16): every player has their own place, 1 to N, never a shared place
   if(G.over&&G.o.places) rows.forEach(function(r){ r.table=false; });
   return rows;
 }

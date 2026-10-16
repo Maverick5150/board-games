@@ -634,7 +634,7 @@ function standRows(){
   // mid-animation the order follows the tokens on the board (disp), not the state the roll has already reached
   var gl=goalSq(), rows=G.players.map(function(p,s){ var done=disp[s]===gl; return {s:s,name:p.name,pos:disp[s],done:done,fin:done?(G.fin.indexOf(s)<0?99:G.fin.indexOf(s)):-1,at:p.at,table:!done}; });
   rows.sort(function(a,b){ if(a.done!==b.done) return a.done?-1:1; if(a.done) return a.fin-b.fin; if(b.pos!==a.pos) return b.pos-a.pos; return a.s-b.s; });
-  rows.forEach(function(r,i){ var pv=rows[i-1]; r.place=pv&&!pv.done&&!r.done&&pv.pos===r.pos?pv.place:i+1; });
+  rows.forEach(function(r,i){ r.place=i+1; });   // unique places 1..N (the CEO's rule), ties in the order above
   return rows;
 }
 function renderStand(){
