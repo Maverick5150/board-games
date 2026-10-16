@@ -40,7 +40,7 @@
   /* ---------- setup page (also the in-game Menu) ---------- */
   .sc-setup{display:flex; flex-direction:column; width:min(100%,40rem); margin:0 auto; padding:0 var(--gutter)}
   .sc-col{display:contents}
-  .sc-hero{order:1} .sc-sec--version{order:2} .sc-sec--players{order:3} .sc-sec--speed{order:4} .sc-sec--rules{order:5} .sc-sec--save{order:6} .sc-back{order:7} .sc-dock{order:8}
+  .sc-hero{order:1} .sc-sec--version{order:2} .sc-sec--players{order:3} .sc-sec--names{order:4} .sc-sec--speed{order:5} .sc-sec--rules{order:6} .sc-sec--save{order:7} .sc-back{order:8} .sc-dock{order:9}
   .sc-hero{min-height:0; margin:0 calc(-1 * var(--gutter)); padding-top:46%; border-radius:0; background:transparent}
   .sc-hero .bg-hero__layer{bottom:auto; height:auto; aspect-ratio:16/9; border-radius:0; background-color:transparent;
     background-image:url("../ui/art/hero-scatter-960.webp"); background-size:100% auto; background-position:100% 0;
@@ -211,6 +211,10 @@
         <div class="sc-field"><span class="bg-row__title" id="skillHead">Computer skill</span><span class="bg-row__desc">Easy leaves more blanks, Hard picks sharper. Changes at once.</span></div>
         <div class="bg-seg bg-seg--text" id="skillSeg" role="group" aria-labelledby="skillHead"><button type="button" data-k="easy" aria-pressed="false">Easy</button><button type="button" data-k="normal" class="on" aria-pressed="true">Normal</button><button type="button" data-k="hard" aria-pressed="false">Hard</button></div>
       </section>
+      <section class="sc-sec sc-sec--names" aria-labelledby="namesHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="namesHead" data-stage-text>Names</h2></div>
+        <div class="bg-card sc-namecard" id="nameCard"><p class="bg-names-note">Your name is kept on this device for every game. The computers get their own names.</p></div>
+      </section>
       <section class="sc-sec sc-sec--rules" aria-labelledby="rulesHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="rulesHead" data-stage-text>Rules</h2></div>
         <div class="bg-rows">
@@ -295,7 +299,13 @@ const SV_ICON={ss:"save",ls:"load",std:"reset",sg:"save",lg:"load",au:"resume"};
 function speedFactor(){ return ({slow:1.75, fast:0.5})[window.bgGameSpeed] || 1 }
 function normSpeed(v){ return v==="slow"||v==="fast"?v:"medium"; }
 function normSkill(v){ return v==="easy"||v==="hard"?v:"normal"; }   // step 10: the computer skill (saved with the settings and the game; old saves = normal)
-function cpuNames(n,human){ let a=[]; try{ if(window.Names&&n>0) a=window.Names.pick(n,human)||[]; }catch(e){} while(a.length<n) a.push("CPU "+(a.length+1)); return a; }
+function cpuNames(n,human){ let a=[]; try{ if(window.Names&&n>0) a=window.Names.pick(n,(human||[]).concat(["You"]))||[]; }catch(e){} while(a.length<n) a.push("CPU "+(a.length+1)); return a; }
+// step 10: the players' own names (BGUI.names: one device-wide name for every game, one field per human); without ui.js "You" / "Player n" as before
+let nameUI=null;
+function humanNames(n){ const B=BG(); return nameUI&&B&&B.names?B.names.list(n,nameUI.values()):null; }
+function mountNames(){ const B=BG(); if(!B||!B.names||nameUI) return; nameUI=B.names.mount("#nameCard",{count:cfg.humans,seat:i=>seatIn(i),onChange:()=>{ drawSeats(); }}); }
+// the roller of the round (round 1 = the first roller the die landed on, then round the table); a tie-break or a save from before has none
+function rollerName(){ return G&&G.first!=null&&!G.tieActive&&G.players.length?G.players[(G.round-1+G.first)%G.players.length].name:""; }
 let cfg={version:"classic",over:{},humans:1,cpus:3,speed:"medium",skill:"normal"};
 let G=null,ctrl=null,gen=0,writeQueue=[],curWriter=-1,reviewMe=0,voteMe=-1,roundStart=0,stopTimer=null,stopAt=0,stopGen=-1,stopLeft=-1,stopped=false,voteBusy=false;
 const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
@@ -364,7 +374,7 @@ function drawVersions(){
   $("versionDesc").innerHTML=`<b>${esc(v.name)}.</b> ${esc(v.desc)}`;
 }
 function drawSetup(){ clampSeats(); drawVersions(); drawSeats(); drawHouse(); }
-function seatNames(){ const names=[]; for(let i=0;i<cfg.humans+cfg.cpus;i++){ const h=i<cfg.humans; names.push(h?(cfg.humans===1?"You":"Player "+(i+1)):"CPU "+(i+1-cfg.humans)); } return names; }
+function seatNames(){ const hn=humanNames(cfg.humans), names=[]; for(let i=0;i<cfg.humans+cfg.cpus;i++){ const h=i<cfg.humans; names.push(h?(hn?hn[i]:cfg.humans===1?"You":"Player "+(i+1)):"CPU "+(i+1-cfg.humans)); } return names; }
 function drawSeats(){
   const o=curOpts(), hs=$("humanSeg"), cs=$("cpuSeg");
   keepFocus(hs,"data-n",()=>{
@@ -375,6 +385,7 @@ function drawSeats(){
     cs.innerHTML=[0,1,2,3,4,5,6,7].map(n=>{ const t=cfg.humans+n; return `<button type="button" data-n="${n}" class="${cfg.cpus===n?"on":""}" aria-pressed="${cfg.cpus===n}"${(t>=2&&t<=8)?"":" disabled"}>${n}</button>`; }).join("");
     cs.querySelectorAll("button:not([disabled])").forEach(b=>b.addEventListener("click",()=>{ cfg.cpus=+b.dataset.n; drawSetup(); }));
   });
+  if(nameUI) nameUI.count(cfg.humans);
   const tot=cfg.humans+cfg.cpus, names=seatNames();
   $("seatNote").textContent=tot+" players"+(cfg.humans>1?" · humans write one after another — pass the "+(onTV()?"remote":"phone")+" when asked":"")+(o.judge==="vote"&&cfg.humans<2?" · with one human, you can still challenge a computer's answer":"");
   $("seatTokens").innerHTML=names.map((n,i)=>`<span class="bg-token" data-seat="${seatIn(i)}" aria-hidden="true">${esc(initials(n))}</span>`).join("");
@@ -435,7 +446,7 @@ function syncStart(){
 function resumeText(){
   if(ui.result) return;
   let s="Back to the game";
-  if(G&&!G.over){ s="Round "+G.round+(G.phase==="write"?" · writing":G.phase==="review"?" · scoring":""); }
+  if(G&&!G.over){ s="Round "+Math.max(1,G.round)+(G.phase==="write"?" · writing":G.phase==="review"?" · scoring":""); }
   $("resumeLabel").textContent="Resume"; $("resumeSub").textContent=s;
 }
 // the game ended while the Menu was up, or before its Victory screen opened: Resume becomes "See the result" (the Victory screen)
@@ -465,7 +476,7 @@ function showSetup(on,resume){
 }
 function barTitle(){
   const e=$("barEyebrow"); if(!e) return;
-  const t=paused()?"Paused":setupShown()?(liveGame()?"Game in progress":(ui.result?"Game over":"New game")):(!G?"New game":G.over?"Game over":"Round "+G.round);
+  const t=paused()?"Paused":setupShown()?(liveGame()?"Game in progress":(ui.result?"Game over":"New game")):(!G?"New game":G.over?"Game over":"Round "+Math.max(1,G.round));   // Round 1 while the first roller is chosen
   if(e.textContent!==t) e.textContent=t;
 }
 
@@ -553,10 +564,20 @@ function legend(){
 function startGame(){
   gen++; clearStop(); clampSeats();
   const total=cfg.humans+cfg.cpus, names=[], humans=[];
-  const hn=[]; for(let i=0;i<cfg.humans;i++) hn.push(cfg.humans===1?"You":"Player "+(i+1));
+  const hn=humanNames(cfg.humans)||[]; for(let i=hn.length;i<cfg.humans;i++) hn.push(cfg.humans===1?"You":"Player "+(i+1));
   const cn=cpuNames(total-cfg.humans,hn);   // step 10: fresh random names for the computers at every new game; stored in G and its save
   for(let i=0;i<total;i++){ const h=i<cfg.humans; humans.push(h); names.push(h?hn[i]:cn[i-cfg.humans]); }
-  G=E.newGame({names,humans,opts:curOpts()}); stats={ms:0}; ui.winShown=-1; ui.result=false; closeWin(); startUI(); resetView(); clockOn(); newRound();
+  // step 10, who rolls first: the letter die spins round the table and lands on the first roller (then the roll goes round the table).
+  // The show is BGUI.firstPlayer; without ui.js the first seat rolls first, as before
+  const B=BG(), fp=B&&B.firstPlayer, first=fp?Math.floor(Math.random()*total):null;
+  G=E.newGame(Object.assign({names,humans,opts:curOpts()},fp?{first}:{})); stats={ms:0}; ui.winShown=-1; ui.result=false; closeWin(); startUI(); resetView(); clockOn();
+  if(!fp){ newRound(); return; }
+  const g=gen;
+  setTimeout(()=>{ if(g!==gen) return;   // after showSetup(false): the table is on screen under the show
+    fp({mode:"spin",title:"Spin for the first roll",winner:first,players:G.players.map((pl,i)=>({name:pl.name,seat:seatIn(i)})),
+      result:w=>({title:G.players[w].name+" rolls first",sub:"Then the die goes round the table, one roller each round."})
+    }).then(()=>{ if(g===gen&&G&&!G.over) newRound(); });
+  },0);
 }
 /* a new or loaded game starts clean: the old sheet's timer, vote window and hand-off must not act on it */
 function resetView(){ closeHandoff(); closeRoll(); voteMe=-1; ctrl.closeModal(); ctrl.update(snap(-1,{phase:"roll"})); }
@@ -572,7 +593,8 @@ function newRound(){
   const showRoll=()=>{
     const hasLetter=G.o.mode==="letter";
     $("rollRound").textContent="Round "+G.round;
-    $("rollNote").textContent=hasLetter?"The letter is…":"The key word is…";
+    const rn=rollerName();
+    $("rollNote").textContent=(rn?rn+" rolls. ":"")+(hasLetter?"The letter is…":"The key word is…");
     openRoll(); Sound.sfx("dice");
     const el=$("rollLetter"), L=hasLetter?(G.star?"":G.letter):G.keyword; let n=0;
     el.classList.toggle("is-kw",!hasLetter); el.style.fontSize=luxe()?"":(hasLetter?"150px":"64px");
@@ -777,6 +799,7 @@ function backStep(){
 document.addEventListener("visibilitychange",()=>{ if(document.hidden) clockOff(); else clockOn(); });
 // ui/ui.js is deferred: it arrives after this script. Then the icons go in, and the Luxe sheets, toasts and the Victory screen take over
 document.addEventListener("DOMContentLoaded",()=>{
+  mountNames(); drawSeats();
   const B=BG();
   if(B&&B.back) B.back.on(backStep);
   else window.__tvBack=()=>{   // no ui.js: the same steps, without the Luxe layers

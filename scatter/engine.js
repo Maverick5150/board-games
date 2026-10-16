@@ -92,6 +92,7 @@ function newGame(cfg){
   var o=mergeOpts(cfg.opts), rnd=cfg.rnd||Math.random;
   var G={o:o,rnd:rnd,round:0,over:false,log:[],usedLetters:[],usedCats:[],usedWords:[],roundsDone:0,
     players:cfg.names.map(function(n,i){ return {id:i,name:n,human:!!(cfg.humans&&cfg.humans[i]),score:0,roundScores:[]}; }),phase:"idle",tiebreak:false};
+  if(cfg.first!=null&&cfg.first>=0&&cfg.first<G.players.length) G.first=cfg.first;   // step 10: who rolls first (the page's who-goes-first show); then the roll goes round the table
   return G;
 }
 function pickRandom(a,rnd){ return a[Math.floor(rnd()*a.length)]; }
@@ -123,7 +124,7 @@ function startRound(G,opts){
     if(o.listMode==="same"&&G.listCats&&!opts.newList) cats=G.listCats; else { cats=pickCats(G,o.cats); cats.forEach(function(c){ G.usedCats.push(c.id); }); G.listCats=cats; }
     var r=rollLetter(G); G.star=r.star; G.starFree=r.free; G.letter=r.letter; G.usedLetters.push(r.letter);
     // players take turns rolling: the roller of a star picks the letter before anyone writes (in a tie-break only the tied leaders roll)
-    G.starBy=!r.star?-1:G.tieActive?G.tieActive[((G.tieRounds||1)-1)%G.tieActive.length]:(G.round-1)%G.players.length;
+    G.starBy=!r.star?-1:G.tieActive?G.tieActive[((G.tieRounds||1)-1)%G.tieActive.length]:(G.round-1+(G.first||0))%G.players.length;
     cats.forEach(function(c,i){ slots.push({label:c.text,letter:r.letter,bank:c,idx:i}); });
   }
   G.slots=slots;
