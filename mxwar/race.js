@@ -1,6 +1,6 @@
 /* MOTOCROSS WAR — one race = one game of War (pure, no DOM). Node: module.exports = MXWar.Race; browser: window.MXWar.Race.
    The CEO (2026-10-16): "each game of war should represent each race"; a heat / semi / LCQ is a set number of battles, the Main Event a long
-   race with about a 200-battle cap, then whoever has the most cards; the holeshot = the winner of the first battle; a starting gate.
+   race (first about 200 battles; the CEO's ~16:55 update: Main 40 by default, round.js LEN), then whoever has the most cards; the holeshot = the winner of the first battle; a starting gate.
    War's rules are PORTED from war/engine.js (read-only; the War builder's commit "war: three down, the fourth decides; aces wild (the CEO's
    rules)"), the parts that make sense in a race: Three-card War by default (3 face down, the 4th up decides; Classic = 1 down), only the
    riders tied for the top card go to war (the CEO's rule; House row off = everyone joins, Pagat), a tie on the deciding card is a double war

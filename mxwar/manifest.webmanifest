@@ -1,0 +1,16 @@
+{
+  "name": "Motocross War",
+  "short_name": "MX War",
+  "description": "Motocross War: race a real AMA Supercross or Pro Motocross season (1972 to 2026) against the pros of that year. Every heat, LCQ, Main and moto is a game of War.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#080a15",
+  "theme_color": "#080a15",
+  "icons": [
+    { "src": "../ui/art/icon-mxwar-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "../ui/art/icon-mxwar-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "../ui/art/icon-mxwar-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

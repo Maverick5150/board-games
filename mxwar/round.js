@@ -19,7 +19,10 @@
 "use strict";
 var MX=g.MXWar=g.MXWar||{};
 if(MX.Round) return;
-var LEN={short:{heat:15,semi:12,lcq:12,main:100,moto:100},standard:{heat:30,semi:25,lcq:25,main:200,moto:200},long:{heat:50,semi:40,lcq:40,main:300,moto:300}};
+/* race lengths in battles ("laps"): the CEO (2026-10-16 ~16:55): "I don't want each race to be hours... get through the full circuit":
+   Short = Heat 10 / LCQ 8 / Main 25 / Moto 20, Standard = Heat 15 / Semi 12 / LCQ 12 / Main 40 / Moto 30, Long = Heat 20 / LCQ 15 / Main 60 / Moto 40
+   (a semi as long as the LCQ); wars play out in full and do not count extra */
+var LEN={short:{heat:10,semi:8,lcq:8,main:25,moto:20},standard:{heat:15,semi:12,lcq:12,main:40,moto:30},long:{heat:20,semi:15,lcq:15,main:60,moto:40}};
 
 function clone(x){ return JSON.parse(JSON.stringify(x)); }
 /* the format for one round: the round's own override (1976 Anaheim, Daytona 1979-85), the Triple Crown night (formats.json: a 40-rider
