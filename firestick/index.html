@@ -59,6 +59,24 @@
   .lobby{display:grid;grid-template-columns:minmax(0,25rem) minmax(0,1fr);gap:2.5rem;align-items:start;width:100%;max-width:76rem;}
   .lobby .lcol{position:sticky;top:5.5rem;display:grid;gap:.9rem;justify-items:center;text-align:center;min-width:0;padding:var(--focus-room);margin:calc(-1 * var(--focus-room));}
   .lobby .rcol{display:grid;gap:1.25rem;min-width:0;padding:var(--focus-room);margin:calc(-1 * var(--focus-room));}
+  body.ps-mono-side .bg-toast{left:var(--ps-toast-x,50%);max-width:var(--ps-toast-w,calc(100vw - 2 * var(--gutter)));}
+  /* review step 10: the standings on the Victory card (leader first) */
+  .ps-stand{list-style:none;margin:.25rem 0 .5rem;padding:0;display:grid;gap:.35rem;width:100%;text-align:left;}
+  .ps-stand.is-two{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:1rem;grid-auto-flow:column;grid-template-rows:repeat(5,auto);}
+  .ps-stand li{display:flex;align-items:center;gap:.6rem;padding:.35rem .75rem;border-radius:var(--r-md);background:var(--ink-2);box-shadow:var(--well-edge);font:var(--fw-ui-strong) var(--fs-sm)/1.25 var(--font-ui);color:var(--text-1);}
+  .ps-stand li:first-child{box-shadow:inset 0 0 0 2px var(--gold-300);}
+  .ps-stand__n{min-width:1.4rem;font:400 var(--fs-md)/1 var(--font-display);color:var(--gold-200);}
+  .ps-stand__nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .ps-stand__v{flex:none;color:var(--text-2);}
+  /* review step 10: on a landscape screen (the TV) the lobby fits the screen with no page scroll (Rummy was 1118 px over at 960x540):
+     the options column scrolls inside itself (the D-pad brings each row into view; scroll-margin keeps the ring clear of its edges) */
+  @media (min-aspect-ratio:4/3){
+    body.ps-lobby{height:100vh;min-height:0;overflow:hidden;}
+    body.ps-lobby .wrap.is-lobby{flex:1 1 0;min-height:0;padding-bottom:1rem;}
+    body.ps-lobby .lobby{flex:1 1 0;min-height:0;grid-template-rows:minmax(0,1fr);}
+    body.ps-lobby .lobby .rcol{max-height:100%;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--gold-300) transparent;}
+    body.ps-lobby .lobby .rcol::after{content:"";display:block;height:var(--focus-room);}   /* room under the last row at the scroll end: its ring (and scroll-margin) is never cut */
+  }
   .qrbox{display:block;padding:.7rem;border-radius:var(--r-lg);background:#fff;box-shadow:0 0 0 1px rgba(231,202,144,.5),0 1rem 2rem -1rem rgba(0,0,0,.9);}
   .qrimg{display:block;width:min(16.5rem,56vh);height:auto;}
   .qrfallback{color:#111;background:#fff;padding:1.5rem;border-radius:var(--r-lg);font-weight:700;text-align:center;max-width:20rem;}
@@ -112,6 +130,7 @@
   #svbar button[disabled]{opacity:.42;}
   #svbar button small{grid-column:1 / -1;margin:0;font:var(--fw-ui) var(--fs-micro)/1.2 var(--font-ui);color:var(--text-3);opacity:1;}
   #svbar button.is-focus, #svbar button:focus-visible{box-shadow:var(--focus-ring);position:relative;z-index:2;}
+  #svbar button{scroll-margin:calc(var(--focus-room) + .5rem);}   /* review step 10: like every Luxe control, so the lobby column scrolls its ring fully into view */
   /* in game */
   #boardWrap{width:min(70vh,96vw);aspect-ratio:1/1;position:relative;}
   svg{width:100%;height:100%;display:block;}
@@ -280,7 +299,7 @@ function markTurn(host,key){ var B=BG(); if(!host||!B||!B.setTurn) return; var c
 /* where you are: the eyebrow and the name in the top bar (in a game the name gives way to the status line) */
 function setBar(eyebrow,name){ var e=$("barEyebrow"), n=$("barName"); if(e) e.textContent=eyebrow||""; if(n) n.textContent=name||""; }
 function setMode(mode){   /* "select" | "lobby" | "game": the page background, the wrap layout, the bar */
-  var b=document.body; b.classList.toggle("bg-app--scene",mode!=="game"); b.classList.toggle("ps-ingame",mode==="game");
+  var b=document.body; b.classList.toggle("bg-app--scene",mode!=="game"); b.classList.toggle("ps-ingame",mode==="game"); b.classList.toggle("ps-lobby",mode==="lobby"); b.classList.remove("ps-mono-side");
   wrap.className="wrap is-"+mode; var st=$("status"); if(st&&mode!=="game") st.innerHTML="";
   var B=BG(); if(B&&B.toast&&B.toast.place) B.toast.place();
 }
@@ -484,6 +503,7 @@ function onMsg(o){
       var la=lastAsk[o.pid];
       if(la||!noWait) send(la ? la : {t:"wait", pid:o.pid, msg:"Waiting for your turn…"});
       if(gameSnap) gameSnap();
+      resendFirst(o.pid);   // review step 10: back during the who-goes-first show: this phone gets the result too
     }
   } else if(o.t==="leave"){
     var pl=players[o.pid]; if(!pl) return;
@@ -558,19 +578,33 @@ function announceStart(){ send({t:"started"}); }
 function colName(c){ return seat[c]&&players[seat[c]]?players[seat[c]].name:cpuName(c); }
 function fpPlayer(c){ var n=colName(c); return {name:n,seat:seatNo(c),token:(String(n).trim().charAt(0)||"?").toUpperCase()}; }
 function hasFirstShow(){ var B=BG(); return !!(B&&B.firstPlayer&&B.firstPlayer.resolve); }
+var fpLast=null;   // review step 10: the result of this game's show, for a phone that (re)connects while the show is up or its banner shows
 function partyFirst(o,firstCol,dealCol,gate){
   var B=BG(), fp=B&&B.firstPlayer; if(!fp) return Promise.resolve({skipped:true});
-  var told=false, who=function(c){ return c?{pid:seat[c]||"",name:colName(c),color:c}:null; };
-  var tell=function(){ if(told||(gate&&!gate())) return; told=true; send({t:"first",first:who(firstCol),deal:who(dealCol)}); };
+  var told=false, who=function(c){ return c?{pid:seat[c]||"",name:colName(c),color:c}:null; }, me={run:runId,msg:null,end:0};
+  fpLast=me;
+  var tell=function(){ if(told||(gate&&!gate())) return; told=true; me.msg={t:"first",first:who(firstCol),deal:who(dealCol)}; send(me.msg); };
   var onW=o.onWinner; o.onWinner=function(w){ tell(); if(onW) onW(w); };
-  return fp(o).then(function(r){ tell(); return r; });
+  return fp(o).then(function(r){ tell(); me.end=Date.now(); return r; });
+}
+function resendFirst(pid){   // only to that phone (play.html shows a "first" with a "to" only on the phone it names); none once the banner time is over
+  var f=fpLast; if(!f||!f.msg||f.run!==runId||(f.end&&Date.now()-f.end>6000)) return;
+  var m={}; for(var k in f.msg) m[k]=f.msg[k]; m.to=pid; send(m);
 }
 /* step 10 Scattergories Ruling (Party): one sheet on the TV, made on first use; the game's onClose is dropped when it is closed from outside */
 function rulingSheet(){ var el=$("scRuling"); if(!el){ el=document.createElement("section"); el.className="bg-sheet"; el.id="scRuling"; el.setAttribute("aria-labelledby","rlTitle"); el.innerHTML='<div id="rulingSheet"></div>'; document.body.appendChild(el); } return el; }
 function closeRulingSheet(){ var el=$("scRuling"), B=BG(); if(!el) return; el._onClose=null; el.classList.remove("show"); try{ if(B&&B.sheet&&B.sheet.isOpen(el)) B.sheet.close(el); }catch(e){} }
 function closeFirstShow(){ var B=BG(); try{ if(B&&B.firstPlayer&&B.firstPlayer.isOpen()) B.firstPlayer.close(); }catch(e){} }
 var winnerName="", gameStartedAt=0, gamePlayers=0, gamePhones=0;
-function announceOver(name){ gameOver=true; winnerName=name; Sound.sfx("win"); send({t:"over", winner:name, n:gamePlayers, ms:gameStartedAt?Date.now()-gameStartedAt:0}, true); }
+/* review step 10 (the CEO's point 6): the Victory screen lists the standings, the winner on top, then 2nd, 3rd... Each game sets standFn:
+   rows {name, color, v (what it is ranked by, as text), s:[keys, bigger first], win, k (seat order for ties)}. Sent to the phones in "over". */
+var standFn=null, lastStand=null;
+function standRows(){ try{ var r=standFn&&standFn(); if(!Array.isArray(r)) return null;
+  r.sort(function(a,b){ if(!!b.win!==!!a.win) return b.win?1:-1; for(var i=0;i<Math.max(a.s.length,b.s.length);i++){ var d=(b.s[i]||0)-(a.s[i]||0); if(d) return d; } return a.k-b.k; });
+  return r.slice(0,10).map(function(x){ return {name:String(x.name),color:x.color||"#888",v:String(x.v==null?"":x.v)}; }); }catch(e){ return null; } }
+function standHTML(rows){ if(!rows||!rows.length) return "";
+  return '<ol class="ps-stand'+(rows.length>5?" is-two":"")+'" aria-label="Standings">'+rows.map(function(r,i){ return '<li><span class="ps-stand__n">'+(i+1)+'</span><span class="dot" style="background:'+attr(r.color)+'" aria-hidden="true"></span><span class="ps-stand__nm">'+esc(r.name)+'</span><span class="ps-stand__v">'+esc(r.v)+'</span></li>'; }).join("")+'</ol>'; }
+function announceOver(name){ gameOver=true; winnerName=name; lastStand=standRows(); Sound.sfx("win"); send({t:"over", winner:name, n:gamePlayers, ms:gameStartedAt?Date.now()-gameStartedAt:0, standings:lastStand}, true); }
 
 /* ---------- toast ---------- */
 var toastT;
@@ -810,7 +844,10 @@ function renderRuleBox(id,cfg,VER,HOUSE,optsFn,showFn,self){
 }
 var scCfg={version:"classic",over:{}};
 function scOpts(){ return Scatter.Engine.versionOpts(scCfg.version,scCfg.over); }
-function renderScRules(){ var E=Scatter.Engine; renderRuleBox("scbox",scCfg,E.VERSIONS,E.HOUSE,scOpts,function(hr,o){ return !(hr[5]&&hr[5]!==o.mode); },renderScRules); }
+/* review step 10: the single-device page's own house rule (scatter/index.html PAGE_HOUSE), offered while the research Ruling is on (judge "vote") */
+var SC_PAGE_HOUSE=[["overrule","Players can overrule a ruling","bool",null,0]];
+function scResearch(){ var S=window.Scatter; return !!(S&&S.Research&&S.Brain&&S.Brain.doubts&&S.Brain.evidence); }
+function renderScRules(){ var E=Scatter.Engine; renderRuleBox("scbox",scCfg,E.VERSIONS,E.HOUSE.concat(SC_PAGE_HOUSE),scOpts,function(hr,o){ if(hr[0]==="overrule") return scResearch()&&o.judge==="vote"; return !(hr[5]&&hr[5]!==o.mode); },renderScRules); }
 var unCfg={version:"classic",over:{}};
 function unOpts(){ return Uno.Engine.versionOpts(unCfg.version,unCfg.over); }
 function renderUnRules(){ var E=Uno.Engine; renderRuleBox("unbox",unCfg,E.VERSIONS,E.HOUSE,unOpts,function(hr,o){ return !!E.houseFor(hr,o.edition); },renderUnRules); }   // e.g. the starting-card rule only exists in the Classic and Flip sheets
@@ -823,7 +860,7 @@ function renderRvRules(){ var R=Rummy; renderRuleBox("rvbox",rvCfg,R.VERSIONS,R.
 
 function startGame(){
   drawCpuNames();   // step 10: fresh random names for this game's computers (also on "Play again")
-  inLobby=false; gameOver=false; leaveHandler=null; Sound.skip(); winnerName=""; gameStartedAt=Date.now(); gamePhones=Object.keys(seat).length; gamePlayers=computeActive(ORDER()).length;   // each game sets its own leaveHandler
+  inLobby=false; gameOver=false; leaveHandler=null; standFn=null; lastStand=null; Sound.skip(); winnerName=""; gameStartedAt=Date.now(); gamePhones=Object.keys(seat).length; gamePlayers=computeActive(ORDER()).length;   // each game sets its own leaveHandler
   send({t:"started"}, true);   // retained so a reconnecting phone knows the game is on (not the lobby)
   if(chosenGame==="trouble") playTrouble();
   else if(chosenGame==="sorry") playSorry();
@@ -854,6 +891,7 @@ function playTrouble(){
   leaveHandler=function(c){ human[c]=false; };                // a phone left: the computer plays that colour
   var pegs={}; active.forEach(function(c){ pegs[c]=[null,null,null,null]; });
   var die=0, turn=0, sixStreak=0, over=false;
+  standFn=function(){ return active.map(function(c,k){ var home=pegs[c].filter(function(d){ return d!==null&&d>=28; }).length, prog=pegs[c].reduce(function(a,d){ return a+(d==null?0:d+1); },0); return {name:colName(c),color:COL[c],k:k,s:[home,prog],v:home+" of 4 home"}; }); };
 
   function ang(i){ return (-90 + 360*i/TRACK)*Math.PI/180; }
   function trackXY(i){ var a=ang(i); return [cx+trackR*Math.cos(a), cy+trackR*Math.sin(a)]; }
@@ -1069,7 +1107,7 @@ function playTrouble(){
         var fpR=ro.rounds.map(function(r){ var vals={}, hi=Math.max.apply(null,r.map(function(x){ return x[1]; })); r.forEach(function(x){ vals[ix(x[0])]=x[1]; });
           return {who:r.map(function(x){ return ix(x[0]); }),vals:vals,top:r.filter(function(x){ return x[1]===hi; }).map(function(x){ return ix(x[0]); })}; });
         var pin=function(c){ try{ var m=svg.getScreenCTM(), q=svg.createSVGPoint(); q.x=PADC[c][0]; q.y=PADC[c][1]; q=q.matrixTransform(m); return {x:q.x,y:q.y}; }catch(e){ return null; } };
-        setStatus('<span class="dot" style="background:'+COL[ro.first]+'"></span> Popping for the first turn…'); rollAnim();
+        setStatus('<span class="dot" style="background:var(--gold-300)"></span> Popping for the first turn…');   /* review step 10: a neutral dot, not the winner's colour (no spoiler) */ rollAnim();
         await partyFirst({mode:"die",layout:"peek",eyebrow:"Who goes first?",title:"Everyone pops the dome",players:active.map(fpPlayer),rounds:fpR,winner:turn,
           pins:function(i){ return pin(active[i]); },
           onLand:function(i,v,r){ if(r>0&&i===fpR[r].who[0]) rollAnim(); },   // a tie: the tied players pop again
@@ -1134,6 +1172,7 @@ function playSorry(){
 
   var active=computeActive(order);
   var pawns={}; active.forEach(function(c){ pawns[c]=[0,1,2,3].map(function(id){return {color:c,id:id,loc:{t:"start"}};}); });
+  standFn=function(){ return active.map(function(c,k){ var home=pawns[c].filter(function(p){ return p.loc.t==="home"; }).length, safe=pawns[c].filter(function(p){ return p.loc.t==="safe"; }).length, out=pawns[c].filter(function(p){ return p.loc.t!=="start"; }).length; return {name:colName(c),color:COL[c],k:k,s:[home,safe,out],v:home+" of 4 home"}; }); };
   var human={}; active.forEach(function(c){ human[c]=!!seat[c]; });
   leaveHandler=function(c){ human[c]=false; };                // a phone left: the computer plays that colour
   var deck=shuffle(buildDeck()), over=false;
@@ -1360,7 +1399,7 @@ function playSorry(){
     if(hasFirstShow()&&active.length>1){   // step 10, who goes first: each flips a card, the highest number first (a Sorry! card counts 0), ties flip again
       var cut=shuffle(buildDeck()), res=BG().firstPlayer.resolve(active.length,function(){ return cut.pop(); },{rank:function(v){ return v==="sorry"?0:v; }});
       turn=res.winner; centerCard(null,active[turn],nmOf(active[turn]),true);
-      setStatus('<span class="dot" style="background:'+COL[active[turn]]+'"></span> Flipping for the first turn…');
+      setStatus('<span class="dot" style="background:var(--gold-300)"></span> Flipping for the first turn…');   /* review step 10: no spoiler */
       await partyFirst({mode:"flip",title:"Flip for the first turn",players:active.map(fpPlayer),rounds:res.rounds,winner:res.winner,
         face:function(v){ return v==="sorry"?'<b class="bg-fp__num sr-fpsorry">Sorry!</b>':'<b class="bg-fp__num">'+v+'</b>'; },label:function(v){ return v==="sorry"?"counts 0":""; },
         result:function(w){ return {title:nmOf(active[w])+" goes first",sub:"The highest card goes first; play goes clockwise."}; }},active[turn],null,live);
@@ -1431,6 +1470,7 @@ function playMonopoly(){
   function rangeArr(n){ var a=[]; for(var i=0;i<n;i++)a.push(i); return a; }
   function shuf(a){ for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i];a[i]=a[j];a[j]=t; } return a; }
   function nm(c){ return seat[c]?players[seat[c]].name:(cpuName(c)+" (CPU)"); }
+  standFn=function(){ return active.map(function(c,k){ var b=!!bankrupt[c], w=b?0:netWorth(c); return {name:colName(c),color:COL[c],k:k,win:!b&&alive().length===1,s:[b?0:1,w],v:b?"Bankrupt":"$"+w+" net worth"}; }); };
   function human(c){ return !!seat[c]; }
   function alive(){ return active.filter(function(c){return !bankrupt[c];}); }
   function money(n){ return (n<0?"-$":"$")+Math.abs(n); }
@@ -1455,41 +1495,12 @@ function playMonopoly(){
     var cc=active[turn];
     return {own:own,houses:houses,mort:mort,toks:toks,hl:(cc&&!bankrupt[cc]&&!over)?pos[cc]:-1};
   }
-  /* 8 players (step 10): board.js (shared) lays out at most 6 pieces on one square. When 7-8 share a square (all on GO at the start,
-     a full Jail) board.js places the first 6 - their spots give that square's axes and piece size - and the host lays the whole
-     square out as 4 x 2, drawing the 7th and 8th pieces itself in board.js's own token layer (same markup, same glide). */
-  var xEls={};
-  function stackKey(t){ return t.i===10?(t.jail?"10j":"10v"):String(t.i); }   // as board.js: Just visiting has its own layout for any number
-  function splitStacks(toks){ var by={}, show=[], extra=[];
-    (toks||[]).forEach(function(t){ var k=stackKey(t); by[k]=(by[k]||0)+1; if(k!=="10v"&&by[k]>6) extra.push(t); else show.push(t); });
-    return {show:show,extra:extra}; }
-  function fixStacks(show,extra){
-    var keep={};
-    if(extra.length&&MB&&MB.toks&&window.MonoBoard){
-      var groups={}; show.concat(extra).forEach(function(t){ var k=stackKey(t); (groups[k]=groups[k]||[]).push(t); });
-      var els={}; Array.prototype.forEach.call(MB.toks.children,function(el){ if(el.getAttribute("data-x")) return; var tk=el.querySelector(".tk"); if(tk) els[tk.getAttribute("title")]=el; });
-      Object.keys(groups).forEach(function(k){ var g=groups[k]; if(g.length<=6) return;
-        var P=g.slice(0,6).map(function(t){ var el=els[t.title], m=el&&/\*([-\d.]+)\),calc\([^)]*\)\*([-\d.]+)\)/.exec(el.style.transform); return m?[+m[1],+m[2]]:null; });
-        if(P.some(function(p){ return !p; })) return;
-        var u=[(P[2][0]-P[0][0])/62,(P[2][1]-P[0][1])/62], v=[(P[3][0]-P[0][0])/28,(P[3][1]-P[0][1])/28], C=[(P[1][0]+P[4][0])/2,(P[1][1]+P[4][1])/2];   // board.js's 6 spots: x -31/0/31, y -14/14
-        var w=Math.round(parseFloat(els[g[0].title].style.width)*22/28*100)/100;   // a size step smaller, as board.js does for bigger groups
-        g.forEach(function(t,j){ var ox=(j%4-1.5)*23, oy=(j<4?-.5:.5)*28, x=C[0]+u[0]*ox+v[0]*oy, y=C[1]+u[1]*ox+v[1]*oy, el=els[t.title];
-          if(j>=6){ el=xEls[t.id];
-            if(!el){ el=xEls[t.id]=document.createElement("div"); el.className="mb-pos"; el.setAttribute("data-x","1"); MB.toks.appendChild(el); }
-            var sig=t.tok+"|"+t.seat+"|"+(t.cur?1:0)+"|"+t.title;
-            if(el._sig!==sig){ el._sig=sig; el.innerHTML='<span class="mb-hw"><span class="tkp'+(t.cur?" cur":"")+'"><span class="tk" style="--pc:'+(MonoBoard.SEATS[t.seat]||MonoBoard.SEATS[1]).c+'" title="'+attr(t.title)+'">'+MonoBoard.tokenSVG(t.tok,t.seat)+'</span></span></span>'; }
-            keep[t.id]=1; }
-          if(!el) return;
-          el.style.width=el.style.height=w+"%";
-          el.style.transform="translate(calc(var(--mb-u,4px)*"+(Math.round(x*100)/100)+"),calc(var(--mb-u,4px)*"+(Math.round(y*100)/100)+")) translate(-50%,-50%)"; });
-      });
-    }
-    Object.keys(xEls).forEach(function(id){ if(!keep[id]){ var el=xEls[id]; if(el.parentNode) el.parentNode.removeChild(el); delete xEls[id]; } });
-  }
+  /* 8 players (step 10): board.js (shared, commit 819ccf0) lays 7-8 pieces on one square itself (two rows of four), so the host hands it
+     every piece and draws none of its own (review step 10: the host's old 4 x 2 copy of pieces 7-8 is gone) */
   function renderBoard(){
     if(window.MonoBoard){
       if(!MB||MB.host!==boardEl){ centerEl=document.createElement("div"); centerEl.className="mcenter"; MB=MonoBoard.mount(boardEl,{squares:BOARD,zoom:false,dpad:false,center:centerEl}); }
-      var st=boardState(), sp=splitStacks(st.toks); st.toks=sp.show; MB.update(st); fixStacks(sp.show,sp.extra);
+      MB.update(boardState());
     }
     centerRender(); renderScore(); snapSoon();
   }
@@ -1503,7 +1514,14 @@ function playMonopoly(){
     h+='</ul>';
     if(R.fpJackpot) h+='<div class="msfp">Free Parking: '+money(fpPool)+'</div>';
     el.classList.toggle("is-many",active.length>4);   // 5-8 players: the strip takes two columns beside the board
-    el.innerHTML=h; markTurn(el,"t"+turn); }
+    el.innerHTML=h; markTurn(el,"t"+turn); toastLane(); }
+  /* review step 10: the board fills the TV's height, so the shared toast (centred, full-width bands) fell back under the top bar, over
+     the board's top row. With the players strip beside the board, toasts use the free lane right of the board instead (ui.js still keeps
+     them clear of the strip, the top bar and the hint bar); a stacked layout keeps the old rule */
+  function toastLane(){ var b=$("mboard"), s=$("mscore"); if(!b||!s) return; var rb=b.getBoundingClientRect(), rs=s.getBoundingClientRect(), side=rs.width>0&&rs.left>=rb.right-1, bd=document.body;
+    bd.classList.toggle("ps-mono-side",side);
+    if(side){ bd.style.setProperty("--ps-toast-x",Math.round((rb.right+innerWidth)/2)+"px"); bd.style.setProperty("--ps-toast-w",Math.round(innerWidth-rb.right-32)+"px"); b.removeAttribute("data-toast-avoid"); }
+    else b.setAttribute("data-toast-avoid",""); }
   function snapNow(){ var pl=active.map(function(c){ var props=[]; for(var i=0;i<40;i++) if(owner[i]===c) props.push({i:i,h:houses[i],m:mort[i]}); return {color:c,pid:seat[c]||null,name:nm(c),cash:cash[c],net:netWorth(c),jail:injail[c],jokers:jokers[c],bankrupt:bankrupt[c],props:props}; }); send({t:"snap",players:pl,fp:R.fpJackpot?fpPool:0}); }
   function snapSoon(){ clearTimeout(snapT); snapT=setTimeout(function(){ if(live()) snapNow(); },400); }
   function tv(html){ setStatus(html); }
@@ -1604,21 +1622,47 @@ function playMonopoly(){
     if(give.concat(get).some(function(i){ return !groupBare(i); })) return false;
     var fee=function(list){ return list.filter(function(i){ return mort[i]; }).reduce(function(a,i){ return a+Math.ceil(BOARD[i].mort*0.1); },0); };
     return cg<=cash[c]&&cr<=cash[q]&&cash[c]-cg+cr>=fee(get)&&cash[q]-cr+cg>=fee(give); }
-  // its own turn: offers to the other computers only (a person has no offer sheet in Party); the first yes is carried out
-  function aiTrades(c){
+  // its own turn: the brain's offers, best first; the first yes is carried out. Review step 10: a person gets the offer on their phone
+  // (Accept / Decline sheet, kind "offer"), mirrored in the board's centre on the TV. monopoly/brain.js proposes to computers only, so the
+  // host asks it with every player marked as a computer and routes each offer itself; at most one offer to a person per turn, and none to
+  // the same person again from this computer for about three rounds after a "no".
+  var hOff={};
+  async function aiTrades(c){
     if(over||alive().length<2) return; var p=mb(c,"trade"); if(!p) return;
-    var offers=brainTry(function(){ return MonoBrain.propose(MG,p); }); if(!offers) return;
-    var list=(Array.isArray(offers)?offers:[offers]).slice(0,6);
+    var hum=MG.players.map(function(x){ return x.human; }), offers;
+    MG.players.forEach(function(x){ x.human=false; });
+    try{ offers=brainTry(function(){ return MonoBrain.propose(MG,p); }); } finally { MG.players.forEach(function(x,k){ x.human=hum[k]; }); }
+    if(!offers) return;
+    var list=(Array.isArray(offers)?offers:[offers]).slice(0,6), askedHuman=false;
     for(var k=0;k<list.length;k++){ var t=list[k], q=t&&active[t.to];
-      if(!q||q===c||human(q)||bankrupt[q]||!aiDealOK(c,q,t)) continue;
-      var yes=aiAccept(q,t.give||[],t.cashGive|0,0,t.get||[],t.cashGet|0,0,c);
+      if(!q||q===c||bankrupt[q]||!aiDealOK(c,q,t)) continue;
+      var give=t.give||[], get=t.get||[], cg=t.cashGive|0, cr=t.cashGet|0, yes;
+      if(human(q)){
+        var pk=c+">"+q; if(askedHuman||!seat[q]||(hOff[pk]!=null&&mTurns-hOff[pk]<3*active.length)) continue;
+        askedHuman=true;
+        yes=await offerToHuman(c,q,give,cg,get,cr); if(!live()) return;
+        if(!yes) hOff[pk]=mTurns;
+        if(!aiDealOK(c,q,t)) yes=false;   // something changed while the phone was deciding
+      } else yes=aiAccept(q,give,cg,0,get,cr,0,c);
       if(MonoBrain.heard) brainTry(function(){ MonoBrain.heard(mg(),MG.players[active.indexOf(c)],t,yes); });
-      if(yes){ var give=t.give||[], get=t.get||[], cg=t.cashGive|0, cr=t.cashGet|0;
+      if(yes){
         give.forEach(function(i){ owner[i]=q; if(mort[i]) cash[q]-=Math.ceil(BOARD[i].mort*0.1); });
         get.forEach(function(i){ owner[i]=c; if(mort[i]) cash[c]-=Math.ceil(BOARD[i].mort*0.1); });
         cash[c]+=cr-cg; cash[q]+=cg-cr;
         toast("Trade done: "+nm(c)+" and "+nm(q)); renderBoard(); return; }
     }
+  }
+  async function offerToHuman(c,q,give,cg,get,cr){   // the phone's Accept / Decline sheet; the TV shows the same offer in the board's centre
+    var fee=give.filter(function(i){ return mort[i]; }).reduce(function(a,i){ return a+Math.ceil(BOARD[i].mort*0.1); },0);
+    toast(nm(c)+" offers a trade to "+nm(q));
+    setGameCenter('<div class="mtradebox"><b>Trade offer</b><div style="margin-top:1vh"><b>'+esc(nm(c))+' gives:</b> '+esc(sumTxt(give,cg,0))+'</div><div style="margin-top:.8vh"><b>'+esc(nm(q))+' gives:</b> '+esc(sumTxt(get,cr,0))+'</div><div style="margin-top:1vh;color:#555">'+esc(nm(q))+' is deciding on their phone…</div></div>');
+    turnBanner(c,"offers "+nm(q)+" a trade");
+    var ans=await ask(q,"Trade offer from "+nm(c),nm(c)+" offers you a deal. Accept or decline.",[{id:"yes",label:"Accept",color:"green"},{id:"no",label:"Decline",color:"red"}],
+      {dflt:"no",kind:"offer",from:{name:nm(c),color:c},offer:{get:give.map(function(i){ return {i:i,m:!!mort[i]}; }),cashGet:cg,give:get.map(function(i){ return {i:i,m:!!mort[i]}; }),cashGive:cr,fee:fee,feeN:give.filter(function(i){ return mort[i]; }).length},timeoutMs:90000});
+    var yes=!!(ans&&ans.id==="yes");
+    setGameCenter(""); if(!yes) toast(nm(q)+" declined the trade");
+    if(seat[q]) waitPhone(q, nm(c)+" is playing…", c);
+    return yes;
   }
   function aiManage(c){   // before the roll, one checked step at a time: lift a mortgage, mortgage a lone deed to fund houses, build
     for(var k=0;k<80;k++){ var p=mb(c,"build"); if(!p) break;
@@ -1635,8 +1679,8 @@ function playMonopoly(){
   // ---------- movement ----------
   function passGo(c){ cash[c]+=200; toast(nm(c)+" passes GO +$200"); }
   // step 10 (the CEO's rule, SHARED-UX section 3): one hop per space at the Game speed (230 ms at medium, as the single-device board):
-  // board.js glides .mb-pos one space (--mb-hop) while BGUI.hop lifts its plain .mb-hw wrapper (the 7th / 8th piece: the host's own copy)
-  function hopTok(c,ms){ var B=BG(), x=xEls[c], h=ms||Math.max(120,Math.round(170*PACE/1.8)); if(x&&x.firstChild&&B&&B.hop){ B.hop(x.firstChild,{ms:h,lift:Math.max(3,Math.round((x.offsetHeight||20)*0.4))}); return; } if(MB&&MB.hop) MB.hop(c,h); }
+  // board.js glides .mb-pos one space (--mb-hop) while BGUI.hop lifts its plain .mb-hw wrapper (all 8 pieces are board.js's own)
+  function hopTok(c,ms){ var h=ms||Math.max(120,Math.round(170*PACE/1.8)); if(MB&&MB.hop) MB.hop(c,h); }
   async function stepTo(c,steps){ for(var s=0;s<steps;s++){ pos[c]=(pos[c]+1)%40; Sound.sfx("tick"); if(pos[c]===0) passGo(c); renderBoard(); hopTok(c); await sleep(230/1.8); } }
   async function moveToIdx(c,idx,collect){ var steps=(idx-pos[c]+40)%40; await stepTo(c,steps); }
   function goJail(c){ pos[c]=10; injail[c]=true; jailT[c]=0; doublesCount=0; renderBoard(); }
@@ -1776,7 +1820,7 @@ function playMonopoly(){
   }
 
   // ---------- turn loop ----------
-  function aiPreRoll(c){ if(mb(c,"build")){ aiTrades(c); aiManage(c); renderBoard(); return; } aiBuild(c); }
+  async function aiPreRoll(c){ if(mb(c,"build")){ await aiTrades(c); if(!live()||bankrupt[c]) return; aiManage(c); renderBoard(); return; } aiBuild(c); }
   async function run(){
     monoFrame(); boardEl=$("mboard"); gameSnap=snapNow; renderBoard(); snapNow();
     if(hasFirstShow()&&active.length>1){   // step 10, who goes first (official rule): everyone rolls both dice, the highest total starts, a tie rolls again
@@ -1784,7 +1828,7 @@ function playMonopoly(){
       var res=BG().firstPlayer.resolve(active.length,function(){ return [d6(),d6()]; },{rank:function(v){ return v[0]+v[1]; }});
       turn=res.winner; renderBoard();
       var tot=res.rounds[res.rounds.length-1].vals[turn];
-      setStatus('<span class="dot" style="background:'+PC(active[turn])+'"></span> Rolling for the first turn…');
+      setStatus('<span class="dot" style="background:var(--gold-300)"></span> Rolling for the first turn…');   /* review step 10: no spoiler */
       await partyFirst({mode:"dice",dice:2,gold:true,title:"Roll for the first turn",rounds:res.rounds,winner:res.winner,
         players:active.map(function(c){ var p=fpPlayer(c); if(window.MonoBoard) p.tokenHTML=MonoBoard.tokenSVG(tokE[c],SEATN[c]||1); return p; }),
         onLand:function(i){ hopTok(active[i],320); },
@@ -1806,7 +1850,7 @@ function playMonopoly(){
           if(cash[c]>=50) jopts.push({id:"pay",label:"Pay $50 to get out",color:"green"});
           if(jokers[c]>0) jopts.push({id:"card",label:"Use Get Out of Jail Free"});
           var jp = human(c)? await ask(c,"You’re in Jail","Turn "+(jailT[c]+1)+" of 3",jopts) : {id:aiJail(c)};
-          if(!human(c)&&jp.id==="roll"&&mb(c,"build")) aiPreRoll(c);   // step 10: the brain trades and builds from Jail too
+          if(!human(c)&&jp.id==="roll"&&mb(c,"build")) await aiPreRoll(c);   // step 10: the brain trades and builds from Jail too
           if(jp.id==="card"){ jokers[c]--; returnJoker(); injail[c]=false; jailT[c]=0; toast(nm(c)+" uses Jail card"); }
           else if(jp.id==="pay"){ await payBank(c,50); injail[c]=false; jailT[c]=0; }
           else { // roll for doubles
@@ -1821,7 +1865,7 @@ function playMonopoly(){
           var pk=await ask(c,"Your turn — "+money(cash[c]),"Roll, manage, or trade first",pre);
           if(pk.id==="manage"){ await manage(c); continue; }
           if(pk.id==="trade"){ await tradeFlow(c); continue; }
-        } else { aiPreRoll(c); }
+        } else { await aiPreRoll(c); }
         // roll + move
         await rollDice(c);
         if(R.snakeEyes&&dice[0]===1&&dice[1]===1){ cash[c]+=500; toast(nm(c)+" rolled snake-eyes — +$500!"); }
@@ -1876,7 +1920,8 @@ function playRummy(){
   var fpCut=null; if(hasFirstShow()){ var cut=[]; ["S","H","D","C"].forEach(function(s){ for(var r=1;r<=13;r++) cut.push({id:"cut"+s+r,r:r,s:s}); });
     for(var ci=cut.length-1;ci>0;ci--){ var cj=Math.floor(Math.random()*(ci+1)), ct=cut[ci]; cut[ci]=cut[cj]; cut[cj]=ct; }
     fpCut=BG().firstPlayer.resolve(active.length,function(){ return cut.pop(); },{rank:function(c){ return c.r===1?14:c.r; }}); }
-  var G=GM.newGame(fpCut?{names:names,humans:humans,opts:opts,dealer:(fpCut.winner-1+active.length)%active.length}:{names:names,humans:humans,opts:opts}); G.skill=CPU_SKILL;   // step 10: the Computer skill row (rummy500/brain.js reads G.skill)
+  var G=GM.newGame(fpCut?{names:names,humans:humans,opts:opts,dealer:(fpCut.winner-1+active.length)%active.length}:{names:names,humans:humans,opts:opts}); G.skill=CPU_SKILL;
+  standFn=function(){ var U=G.units||G.players.map(function(p,i){ return [i]; }); return U.map(function(u,ui){ var sc=G.scores?G.scores[ui]:G.players[u[0]].score; return {name:u.map(function(i){ return G.players[i].name; }).join(" & "),color:COL[active[u[0]]],k:ui,s:[sc|0],v:(sc|0)+" pts"}; }); };   // step 10: the Computer skill row (rummy500/brain.js reads G.skill)
   leaveHandler=function(c){ var i=active.indexOf(c); if(i>=0) G.players[i].human=false; };   // a phone left: the computer plays that hand
   if(G.o.teams){ var c0=COL[active[0]], c1=COL[active[1]]; G.colors=[c0,c1,c0,c1]; } else G.colors=active.map(function(c){ return COL[c]; });
   G.logText=[];
@@ -1941,12 +1986,12 @@ function playRummy(){
   async function run(){
     while(alive()){
       GM.startRound(G); G.logText=[]; flashMeld=null; flashCard=null; Sound.sfx("deal");
-      log(G.players[G.dealer].name+" deals — round "+G.round);
+      if(!fpCut) log(G.players[G.dealer].name+" deals — round "+G.round);   // review step 10: the first deal's line waits for the cut (no spoiler)
       draw();
       if(fpCut){ var fc=fpCut; fpCut=null;   // the cut for the deal, over the dealt table (the first round only)
         await partyFirst({mode:"cut",title:"Cut for the deal",rounds:fc.rounds,winner:fc.winner,players:active.map(fpPlayer),face:function(c){ return UI.cardHTML(c); },
           result:function(w){ return {title:colName(active[w])+" deals",sub:colName(active[G.turn])+" plays first, to the dealer's left. The high card deals."}; }},active[G.turn],active[fc.winner],alive);
-        if(!alive()) return; }
+        if(!alive()) return; log(G.players[G.dealer].name+" deals — round "+G.round); draw(); }
       pushAll(-1); await sleep(1800);
       while(alive()&&!G.roundOver){ var i=G.turn; if(G.players[i].human) await humanStep(i); else await cpuStep(i); }
       if(!alive()) return;
@@ -1969,7 +2014,8 @@ function playRisk(){
   // step 10, who goes first (as the single-device game): every player rolls a die, the highest places the first army and takes the first
   // turn, a tie rolls again (engine G.first). Without ui.js the engine picks at random, as before
   var fpRes=hasFirstShow()?BG().firstPlayer.resolve(active.length,function(){ return 1+Math.floor(Math.random()*6); }):null;
-  var G=E.newGame(fpRes?{names:names,humans:humans,colors:colors,opts:opts,skill:CPU_SKILL,first:fpRes.winner}:{names:names,humans:humans,colors:colors,opts:opts,skill:CPU_SKILL});   // step 10: skill known before a random setup (risk/brain.js)
+  var G=E.newGame(fpRes?{names:names,humans:humans,colors:colors,opts:opts,skill:CPU_SKILL,first:fpRes.winner}:{names:names,humans:humans,colors:colors,opts:opts,skill:CPU_SKILL});
+  standFn=function(){ return G.players.map(function(p,i){ if(p.neutral) return null; var n=(G.terr||[]).filter(function(t){ return t.o===i; }).length; return {name:p.name,color:COL[active[i]]||"#888",k:i,win:G.winner===i,s:[p.alive?1:0,n],v:p.alive?n+" territor"+(n===1?"y":"ies"):"Out"}; }).filter(Boolean); };   // step 10: skill known before a random setup (risk/brain.js)
   var afk={}, askingIdx=-1, shown=0;
   enterGame(); Skins.apply("risk");
   var st0=document.createElement("style"); st0.textContent=CT.CSS+
@@ -2070,7 +2116,8 @@ function playUno(){
     for(var k=0;k<4;k++){ pool.push(["W","Wild"]); pool.push(["W","Wild Draw 4"]); }
     for(var pi=pool.length-1;pi>0;pi--){ var pj=Math.floor(Math.random()*(pi+1)), pt=pool[pi]; pool[pi]=pool[pj]; pool[pj]=pt; }
     fpRes=BG().firstPlayer.resolve(active.length,function(){ return pool.pop(); },{rank:function(v){ return typeof v[1]==="number"?v[1]:0; }}); }
-  var G=UE.newGame(fpRes?{names:names,humans:humans,opts:opts,dealer:(fpRes.winner-1+active.length)%active.length}:{names:names,humans:humans,opts:opts}); G.skill=CPU_SKILL;   // step 10: uno/brain.js reads G.skill
+  var G=UE.newGame(fpRes?{names:names,humans:humans,opts:opts,dealer:(fpRes.winner-1+active.length)%active.length}:{names:names,humans:humans,opts:opts}); G.skill=CPU_SKILL;
+  standFn=function(){ var wn=G.roundOver&&G.roundOver.gameWinnerName; return G.players.map(function(p,i){ return {name:p.name,color:COL[active[i]],k:i,win:!!wn&&(wn===p.name||String(wn).split(" & ").indexOf(p.name)>=0),s:[p.alive===false?0:1,p.score|0],v:(p.score|0)+" pts"}; }); };   // step 10: uno/brain.js reads G.skill
   var afk={}, askingIdx=-1;
   enterGame(); Skins.apply("uno");
   if(window.__unCtl){ try{ window.__unCtl.destroy(); }catch(e){} window.__unCtl=null; }   // the Luxe controller's sheet of an earlier game
@@ -2197,6 +2244,7 @@ function playScatter(){
   // roll goes round the table (engine G.first). Without ui.js the first seat rolls first, as before
   var fpFirst=hasFirstShow()?Math.floor(Math.random()*active.length):null;
   var G=SE.newGame(fpFirst!=null?{names:names,humans:humans,opts:opts,first:fpFirst}:{names:names,humans:humans,opts:opts});
+  standFn=function(){ return G.players.map(function(p,i){ return {name:p.name,color:COL[active[i]],k:i,win:(G.winners||[]).indexOf(i)>=0,s:[p.score|0],v:(p.score|0)+" pts"}; }); };
   var endAt=0, revealN=0, ready={}, nexts={}, phase="idle", curTimer=null, rollTxt="", pendCh=null;
   enterGame(); Skins.apply("scatter");
   var st0=document.createElement("style"); st0.textContent=
@@ -2224,7 +2272,7 @@ function playScatter(){
   };
   function idxOfPid(pid){ var r=-1; G.players.forEach(function(p,i){ if(seat[active[i]]===pid) r=i; }); return r; }
   function secLeft(){ return Math.max(0,(endAt-Date.now())/1000); }
-  function snapFor(i,x){ var st=SE.snapshot(G,i,x||{}); if(st.challenges&&st.challenges.length) st.challenges=st.challenges.map(chLabel); if(phase==="roll"||phase==="star"){ st.phase=phase; st.letter=null; st.keyword=null; st.slots=[]; } else if(G.phase==="write") st.secLeft=secLeft(); st.seats=active.map(seatNo); return st; }
+  function snapFor(i,x){ var st=SE.snapshot(G,i,x||{}); if(st.challenges&&st.challenges.length) st.challenges=st.challenges.map(chLabel); var rl=rulingSnap(); if(rl) st.ruling=rl; if(phase==="roll"||phase==="star"){ st.phase=phase; st.letter=null; st.keyword=null; st.slots=[]; } else if(G.phase==="write") st.secLeft=secLeft(); st.seats=active.map(seatNo); return st; }
   function pushAll(skip){ G.players.forEach(function(p,i){ if(p.human&&seat[active[i]]&&i!==skip) send({t:"scs",pid:seat[active[i]],st:snapFor(i)}); }); }
   gameSnap=function(){ pushAll(-1); };
   function interrupt(pid){ Object.keys(pending).forEach(function(k){ if(pending[k].pid===pid){ var pr=pending[k]; delete pending[k]; pr.resolve({id:"timeout"}); } }); }
@@ -2315,6 +2363,7 @@ function playScatter(){
       if(m.t==="challenge"){ var ent=(SE.evaluate(G).entries.filter(function(e){ return e.slot===m.slot&&e.p===m.p&&e.k===m.k; }))[0]; if(!ent||!SE.canChallenge(G,ent)) return; var r2=SE.openChallenge(G,idx,m.slot,m.p,m.k); if(!r2.ok) return; r2.ch.votes[idx]=false; if(researchOn()){ r2.ch.why="human"; Sound.sfx("bump"); drawReview(false); pushAll(-1); runRulings(); return; } pendCh={raw:ent.raw,p:m.p}; Sound.sfx("bump"); SE.resolveChallenge(G,r2.ch,false); afterVote(r2.ch); autoClose(r2.ch); }
       else if(m.t==="vote"){ var chs=(G.challenges[m.slot]||{})[m.p+"/"+m.k]; if(!chs||chs.state!=="open") return; if(researchOn()&&!chs.note) return; /* being researched / ruled: no vote yet */ SE.castVote(G,idx,m.slot,m.p,m.k,!!m.accept); afterVote(chs); }
       else if(m.t==="ready"){ ready[idx]=true; }
+      else if(m.t==="overrule"){ var oc=RS.ch; if(oc&&G.o.overrule&&oc.slot===m.slot&&oc.p===m.p&&oc.k===m.k&&oc.ruling&&oc.ruling.v!=="vote"&&oc.state==="open"){ toast(G.players[idx].name+" overrules: vote on your phones"); closeRulingSheet(); applyRuling(oc,true); } }   // review step 10: "Players can overrule a ruling" from a phone
     }
     if(m.t==="next"&&(G.phase==="scored"||G.phase==="over")){ nexts[idx]=true; }
   }
@@ -2387,15 +2436,17 @@ function playScatter(){
       '<p class="sc-rl__lead">'+esc(r.lead)+'</p>'+(r.quote?'<blockquote class="sc-rl__quote"><p>“'+esc(r.quote)+'”</p>'+(r.cite?'<cite>'+esc(r.cite)+'</cite>':'')+'</blockquote>':(r.cite?'<p class="sc-rl__cite">Source: '+esc(r.cite)+'</p>':''))+
       '<p class="sc-rl__src">Checked: '+(r.src||[]).map(function(x){ return esc(x.n)+' <b>'+esc(x.s)+'</b>'; }).join(" · ")+'</p>';
     var btn=!r?'<button class="bg-btn bg-btn--ghost bg-btn--lg" type="button" id="rlSkip">Skip the lookup</button>':
-      '<button class="bg-btn bg-btn--primary bg-btn--lg" type="button" id="rlOk" data-autofocus>'+rlIcon(v==="good"?"check":v==="bad"?"close":"flag")+(v==="good"?"OK, it counts":v==="bad"?"OK, it's out":"Vote on the phones")+'</button>';
+      '<button class="bg-btn bg-btn--primary bg-btn--lg" type="button" id="rlOk" data-autofocus>'+rlIcon(v==="good"?"check":v==="bad"?"close":"flag")+(v==="good"?"OK, it counts":v==="bad"?"OK, it's out":"Vote on the phones")+'</button>'+
+      (G.o.overrule&&v!=="vote"?'<button class="bg-btn bg-btn--secondary bg-btn--lg" type="button" id="rlOver">Overrule: vote</button>':'');   // house rule (review step 10)
     rulingSheet(); $("rulingSheet").innerHTML='<div class="bg-sheet__grip" aria-hidden="true"></div><div class="sc-rl" data-v="'+v+'">'+
       '<span class="bg-eyebrow bg-eyebrow--accent">'+(r?"Ruling":"Challenge")+' · '+esc(au.name)+'’s answer</span>'+
       '<h2 class="bg-sheet__title sc-rl__verdict" id="rlTitle">'+(r?rlIcon(v==="good"?"check":v==="bad"?"close":"info"):"")+'<span>'+title+'</span></h2>'+
       '<p class="sc-rl__ans">“'+esc(raw)+'”</p>'+
       '<dl class="sc-rl__facts"><div><dt>Category</dt><dd><span>'+esc(sl.label)+'</span></dd></div><div><dt>Letter</dt>'+letter+'</div><div><dt>Challenge</dt><dd><span>'+esc(by.name)+': '+esc(WHY[ch.why]||WHY.human)+'</span></dd></div></dl>'+
       body+'<div class="sc-rl__btns">'+btn+'</div></div>';
-    var ok=$("rlOk"), sk=$("rlSkip"), B=BG();
+    var ok=$("rlOk"), sk=$("rlSkip"), ov=$("rlOver"), B=BG();
     if(ok) ok.onclick=function(){ closeRulingSheet(); applyRuling(ch); };
+    if(ov) ov.onclick=function(){ closeRulingSheet(); applyRuling(ch,true); };
     if(sk) sk.onclick=function(){ if(ch.ruling||RS.ch!==ch) return; RS.tok++; ch.ruling=Rz().offline(rulingQuery(ch),"skip"); showRuled(ch); };
     var f=ok||sk; if(f){ try{ if(B&&B.focus&&B.focus.set) B.focus.set(f); else f.focus(); }catch(e){} }
   }
@@ -2404,18 +2455,25 @@ function playScatter(){
     if(B&&B.sheet&&!B.sheet.isOpen(el)) B.sheet.open(el,{dismissible:true,focus:"#rlSkip",onClose:function(){ var f=el._onClose; el._onClose=null; el.classList.remove("show"); if(f) f(); }}); }
   var rlTimer=0;
   function showRuled(ch){   // the ruling is in: shown on the TV, then it goes on by itself (x Game speed) unless OK / Back came first
-    var r=ch.ruling; drawRuling(ch,r); openRulingSheet(ch); Sound.sfx(r.v==="good"?"coin":r.v==="bad"?"lose":"bell");
+    var r=ch.ruling; drawRuling(ch,r); openRulingSheet(ch); Sound.sfx(r.v==="good"?"coin":r.v==="bad"?"lose":"bell"); pushAll(-1);   // the phones show the Ruling too (review step 10)
     setStatus((r.v==="good"?"Ruling: “"+esc(rawOf(ch))+"” counts":r.v==="bad"?"Ruling: “"+esc(rawOf(ch))+"” doesn't count":"Too close to call: vote on your phones"));
     clearTimeout(rlTimer); var tok=RS.tok; rlTimer=setTimeout(function(){ if(alive()&&tok===RS.tok&&RS.ch===ch){ closeRulingSheet(); applyRuling(ch); } },Math.round(12000*Math.max(.75,PACE/1.8)));   // time to read it: 12 s at medium, 9 s fast, 21 s slow
   }
-  function applyRuling(ch){
+  function applyRuling(ch,over){   // over: the house rule "Players can overrule a ruling" - only the players vote (as scatter/index.html)
     var r=ch&&ch.ruling; clearTimeout(rlTimer); if(!r||RS.ch!==ch) return; RS.ch=null; RS.tok++;
     if(alive()&&G.phase==="review"&&ch.state==="open"){
-      if(r.v==="vote"){ ch.note="The sources were not clear."; pendCh={raw:rawOf(ch),p:ch.p}; autoClose(ch); }
+      if(r.v==="vote"||(over&&G.o.overrule)){ ch.note=r.v==="vote"?"The sources were not clear.":"The players overrule the ruling."; if(r.v!=="vote"){ r.over=true; Object.keys(ch.votes).forEach(function(id){ if(G.players[id]&&!G.players[id].human) delete ch.votes[id]; }); } pendCh={raw:rawOf(ch),p:ch.p}; autoClose(ch); }
       else { ch.state=r.v==="good"?"accepted":"rejected"; ch.ruled=true; if(r.v==="bad"&&r.dupOf) ch.dupOf=r.dupOf; toast(r.v==="good"?"Ruling: “"+rawOf(ch)+"” counts":"Ruling: “"+rawOf(ch)+"” doesn't count"); }
       drawReview(false); pushAll(-1);
     }
     RS.busy=false; runRulings();
+  }
+  /* review step 10: the Ruling on the phones too (compact card above the pad, play.html rlCard): what the TV's sheet says, in short */
+  function rulingSnap(){
+    var ch=RS.ch; if(!ch||!G||G.phase!=="review"||ch.state!=="open"||!researchOn()) return null;
+    var sl=G.slots[ch.slot]||{}, r=ch.ruling, v=r?r.v:"look", by=G.players[ch.by]||{name:"A player"}, au=G.players[ch.p]||{name:"?"};
+    return {slot:ch.slot,p:ch.p,k:ch.k,raw:rawOf(ch),au:au.name,by:by.name,why:WHY[ch.why]||WHY.human,cat:sl.label||"",letter:sl.letter||"",v:v,
+      title:!r?"Researching…":v==="good"?"Good answer":v==="bad"?"Doesn't count":"Too close to call",lead:r&&r.lead||"",cite:r&&r.cite||"",over:!!(r&&G.o.overrule&&v!=="vote")};
   }
   function runRulings(){   // one ruling at a time, in challenge order
     if(!alive()||!G||G.phase!=="review"||RS.busy||!researchOn()) return;
@@ -2471,7 +2529,7 @@ function openVictory(){
   var wn=winnerName||"Someone", team=/ & /.test(wn);
   winShown=true; winEl=document.createElement("div"); winEl.className="bg-win"; winEl.id="winBox"; winEl.setAttribute("aria-labelledby","winTitle");
   winEl.innerHTML='<div class="bg-win__scrim"></div><div class="bg-win__rays"></div><div class="bg-win__card"><div class="bg-win__medal"></div><p class="bg-eyebrow">Game over · '+esc(gameTitle(chosenGame))+'</p><h2 class="bg-win__title" id="winTitle">Victory</h2>'+
-    '<p class="bg-win__sub"><b>'+esc(wn)+'</b> '+(team?"win":"wins")+' the game.</p><ul class="bg-stats bg-win__stats"><li class="bg-stat"><b>'+gamePlayers+'</b><span>players</span></li><li class="bg-stat"><b>'+gamePhones+'</b><span>'+(gamePhones===1?"phone":"phones")+'</span></li><li class="bg-stat"><b>'+fmtTime(Date.now()-gameStartedAt)+'</b><span>time</span></li></ul>'+
+    '<p class="bg-win__sub"><b>'+esc(wn)+'</b> '+(team?"win":"wins")+' the game.</p>'+standHTML(lastStand)+'<ul class="bg-stats bg-win__stats"><li class="bg-stat"><b>'+gamePlayers+'</b><span>players</span></li><li class="bg-stat"><b>'+gamePhones+'</b><span>'+(gamePhones===1?"phone":"phones")+'</span></li><li class="bg-stat"><b>'+fmtTime(Date.now()-gameStartedAt)+'</b><span>time</span></li></ul>'+
     '<div class="bg-win__actions"><button class="bg-btn bg-btn--secondary bg-btn--lg" type="button" id="winBoard">See the board</button><button class="bg-btn bg-btn--primary bg-btn--lg" type="button" id="winAgain"><span data-icon="play" aria-hidden="true"></span>New game</button></div></div>';
   document.body.appendChild(winEl); paintIcons(winEl);
   $("winBoard").onclick=function(){ B.win.close(winEl); var nb=wrap.querySelector(".ps-again"); if(nb) nb.focus(); };

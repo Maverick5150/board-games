@@ -88,6 +88,34 @@
   .ph-firstbar__t{display:grid;gap:.125rem;min-width:0;}
   .ph-firstbar b{font:400 var(--fs-lg)/1.2 var(--font-display);color:var(--gold-100);}
   .ph-firstbar small{font:var(--fw-ui) var(--fs-sm)/1.3 var(--font-ui);color:var(--text-2);}
+  /* review step 10: the Scattergories Ruling on the phone (compact; the TV shows the full sheet) */
+  .ph-rl{position:sticky;top:.5rem;z-index:5;display:grid;gap:.375rem;width:100%;margin:0 0 .75rem;padding:.75rem .875rem;border-radius:var(--r-lg);background:var(--ink-3);box-shadow:inset 0 0 0 2px var(--gold-300),0 10px 24px -12px rgba(0,0,0,.8);text-align:left;}
+  .ph-rl[data-v="good"]{box-shadow:inset 0 0 0 2px #4fd69c,0 10px 24px -12px rgba(0,0,0,.8);}
+  .ph-rl[data-v="bad"]{box-shadow:inset 0 0 0 2px #ff8a8a,0 10px 24px -12px rgba(0,0,0,.8);}
+  .ph-rl__eb{font:var(--fw-caps) var(--fs-micro)/1.25 var(--font-ui);letter-spacing:var(--track-caps);text-transform:uppercase;color:var(--gold-200);}
+  .ph-rl__v{display:flex;align-items:center;gap:.5rem;margin:0;font:400 var(--fs-xl)/1.15 var(--font-display);color:var(--text-1);}
+  .ph-rl__v .bg-ico{width:1.4rem;height:1.4rem;flex:none;}
+  .ph-rl[data-v="good"] .ph-rl__v .bg-ico{color:#4fd69c;} .ph-rl[data-v="bad"] .ph-rl__v .bg-ico{color:#ff8a8a;}
+  .ph-rl__a{margin:0;font:var(--fw-ui-strong) var(--fs-md)/1.3 var(--font-ui);color:var(--text-1);}
+  .ph-rl__a small, .ph-rl__l, .ph-rl__c{font:var(--fw-ui) var(--fs-sm)/1.35 var(--font-ui);color:var(--text-2);}
+  .ph-rl__l, .ph-rl__c{margin:0;}
+  .ph-rl__l{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
+  .ph-rl .bg-btn{margin-top:.25rem;min-height:var(--tap);}
+  /* review step 10: a computer's trade offer to this phone (Monopoly) */
+  .ph-offer{display:grid;gap:.625rem;width:100%;max-width:28rem;text-align:left;}
+  .ph-offer__side{display:grid;gap:.375rem;padding:.75rem .875rem;border-radius:var(--r-lg);background:var(--ink-2);box-shadow:var(--well-edge);}
+  .ph-offer__side h3{margin:0;font:var(--fw-caps) var(--fs-micro)/1.25 var(--font-ui);letter-spacing:var(--track-caps);text-transform:uppercase;color:var(--gold-200);}
+  .ph-offer__it{display:flex;align-items:center;gap:.5rem;font:var(--fw-ui-strong) var(--fs-md)/1.3 var(--font-ui);color:var(--text-1);}
+  .ph-offer__it .chip{width:.9rem;height:.9rem;border-radius:.25rem;flex:none;box-shadow:0 0 0 1px rgba(255,255,255,.35);}
+  .ph-offer__it small{color:var(--text-2);font-weight:var(--fw-ui);}
+  .ph-stand{list-style:none;margin:0;padding:0;display:grid;gap:.375rem;width:100%;max-width:24rem;text-align:left;}
+  .ph-stand li{display:flex;align-items:center;gap:.5rem;padding:.4rem .75rem;border-radius:var(--r-md);background:var(--ink-2);box-shadow:var(--well-edge);font:var(--fw-ui-strong) var(--fs-sm)/1.3 var(--font-ui);color:var(--text-1);}
+  .ph-stand li:first-child{box-shadow:inset 0 0 0 2px var(--gold-300);}
+  .ph-stand .dotc{margin:0;}
+  .ph-stand__n{min-width:1.2rem;font:400 var(--fs-md)/1 var(--font-display);color:var(--gold-200);}
+  .ph-stand__nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .ph-stand__v{flex:none;color:var(--text-2);}
+  .ph-offer__note{margin:0;font:var(--fw-ui) var(--fs-sm)/1.35 var(--font-ui);color:var(--text-2);}
   .prow2{display:flex;align-items:center;gap:.625rem;width:100%;max-width:26rem;min-height:var(--tap);padding:.75rem .875rem;border:0;border-radius:var(--r-md);background:var(--panel-fill);box-shadow:var(--panel-edge);color:var(--text-1);font:var(--fw-ui-strong) var(--fs-md)/1.25 var(--font-ui);text-align:left;cursor:pointer;margin:0;}
   .prow2 .chip{width:1rem;height:1rem;border-radius:.25rem;flex:0 0 auto;box-shadow:0 0 0 1px rgba(255,255,255,.35);}
   .prow2 small{color:var(--text-2);font-weight:var(--fw-ui);margin-left:auto;font-size:var(--fs-micro);}
@@ -440,7 +468,8 @@ function onMsg(o){
   else if(o.t==="started"){ started=true; if(!isAsking()) showWaiting("Game starting…", false); }
   else if(o.t==="over"){ firstBar(null); started=false; curReq=null; Rummy.Party.resetUI(); showOver(o); overShown=true; }
   else if(o.t==="info" && (o.pid===myPid||!o.pid)){ toast(o.msg); }
-  else if(o.t==="first"){ showFirst(o); }
+  else if(o.t==="first" && (!o.to || o.to===myPid)){ showFirst(o); }
+  if(lastFirst&&o.t!=="first"&&(isAsking()||ownView())) firstAsking();   // the banner stops saying "Watch the TV." once this phone has its own turn
 }
 function isAsking(){ return !!curReq; }
 
@@ -471,13 +500,22 @@ main.addEventListener("click",function(e){
 });
 /* step 10 who goes first: the TV plays the show; when its result lands the first player's phone says "You go first!" (a dealer's
    "You deal"), the others who goes first. A phone already answering a prompt only gets the toast. */
-function showFirst(o){
+var lastFirst=null;
+function firstSub(o,asking){   // the banner's second line: "Watch the TV." only while the phone has nothing of its own to do (review step 10)
   var f=o.first||{}, d=o.deal||null, me=f.pid===myPid, iDeal=!!(d&&d.pid===myPid);
+  var end=asking?(me?"Your turn is below.":"Your move is below."):"Watch the TV.";
+  return me?(d?(iDeal?"":esc(d.name)+" deals. "):"")+end:iDeal?esc(f.name)+" plays first, to your left."+(asking?" "+end:""):(d?esc(d.name)+" deals. ":"")+end;
+}
+function ownView(){ return !!(rvAsk||rkAsk||unAsk||scAsk); }   // the phone shows its own turn in a game controller
+function firstAsking(){ var el=$("phFirst"), sm=el&&el.querySelector("small"); if(sm&&lastFirst) sm.innerHTML=firstSub(lastFirst,true); }
+function showFirst(o){
+  var f=o.first||{}, d=o.deal||null, me=f.pid===myPid, iDeal=!!(d&&d.pid===myPid); lastFirst=o;
   var title=me?"You go first!":iDeal?"You deal":(f.name||"Someone")+" goes first";
-  var sub=me?(d?(iDeal?"":esc(d.name)+" deals. "):"")+"Watch the TV.":iDeal?esc(f.name)+" plays first, to your left.":(d?esc(d.name)+" deals. ":"")+"Watch the TV.";
+  var sub=firstSub(o,isAsking()||ownView());
   var n=sn(me?myColor:f.color), ini=esc(((me?myName:f.name)||"?").trim().charAt(0).toUpperCase());
   firstBar('<span class="bg-token" data-seat="'+n+'" aria-hidden="true">'+ini+'</span><span class="ph-firstbar__t"><b>'+esc(title)+'</b><small>'+sub+'</small></span>',n);
-  if(isAsking()) return;
+  if(isAsking()||ownView()||main.querySelector(".scph,.unph,.rkph,.rv-ph,.rvph")) return;   // a game controller on screen stays (only the banner)
+  rvLastKey="";   // the 500 Rummy view draws again on its next snapshot
   main.className="big ph-first";
   put('<span class="bg-token mytoken" data-seat="'+n+'" aria-hidden="true">'+esc(((me?myName:f.name)||"?").trim().charAt(0).toUpperCase())+'</span><h1 class="title">'+esc(title)+'</h1><p class="sub" role="status">'+sub+'</p>');
 }
@@ -559,6 +597,22 @@ function showTrade(o){
     var data={give:give,get:get,cg:T.cg|0,cr:T.cr|0,jg:T.jg?1:0,jr:T.jr?1:0}; tradeSel=null; sendPick(o,"offer",data);
   };
 }
+/* review step 10: a computer offers this player a trade (Monopoly): what you get, what you give, Accept / Decline (the TV shows the same offer) */
+function showOffer(o){
+  main.className="big scroll"; mirror(null);
+  var f=o.offer||{};
+  function side(t,list,cash,j){ var it=(list||[]).map(function(x){ var d=MD[x.i]||{n:"?"}; return '<div class="ph-offer__it"><span class="chip" style="background:'+chipColor(x.i)+'" aria-hidden="true"></span><span>'+esc(d.n)+(x.m?' <small>(mortgaged)</small>':'')+'</span></div>'; }).join("");
+    if(cash) it+='<div class="ph-offer__it"><span>$'+(+cash)+'</span></div>'; if(j) it+='<div class="ph-offer__it"><span>a Get Out of Jail Free card</span></div>';
+    return '<section class="ph-offer__side"><h3>'+t+'</h3>'+(it||'<div class="ph-offer__it"><small>nothing</small></div>')+'</section>'; }
+  put('<h1 class="title">'+esc(clean(o.title)||"Trade offer")+'</h1>'+(o.sub?'<p class="sub">'+esc(o.sub)+'</p>':'')+
+    '<div class="ph-offer">'+side("You get",f.get,f.cashGet,f.jGet)+side("You give",f.give,f.cashGive,f.jGive)+(f.fee?'<p class="ph-offer__note">You pay the bank $'+(+f.fee)+' interest on the mortgaged deed'+(f.feeN>1?'s':'')+'.</p>':'')+'</div>'+
+    '<div class="opts">'+(o.options||[]).map(function(op,i){ return optHTML(op.label,'data-i="'+i+'"',op.color); }).join("")+'</div>');
+  paintIcons(main);
+  Array.prototype.forEach.call(main.querySelectorAll("button.opt"), function(b){
+    b.onclick=function(){ var i=+b.dataset.i, op=o.options[i]; curReq=null; net.send({t:"pick", pid:myPid, reqId:o.reqId, id:op.id, i:i}); showWaiting("Sent. Waiting…", true); };
+  });
+  focusFirst(main);
+}
 function ovShow(html){ $("ovin").innerHTML=html; paintIcons($("ovin")); openSheet($("ov"),{onClose:function(){ $("ov").classList.remove("on"); ovMode=null; mirror(null); }}); }
 function closeOv(){ var ov=$("ov"), was=ov.classList.contains("on"); closeSheet(ov); ovMode=null; if(was) mirror(null); }
 function showPlayers(){
@@ -598,6 +652,7 @@ function showAsk(o){
   if(o.kind==="scat"){ curReq=null; scShow(o.st,true,o); return; }
   if(o.kind==="manage"){ showManage(o); return; }
   if(o.kind==="trade"){ showTrade(o); return; }
+  if(o.kind==="offer"){ showOffer(o); return; }
   var opts=(o.options||[]).map(function(op,i){ return optHTML(op.label,'data-i="'+i+'"',op.color); }).join("");
   put((o.card?cardHTML(o.card):"")+'<h1 class="title">'+esc(clean(o.title)||"Your turn")+'</h1>'+
     (o.sub?'<p class="sub">'+esc(o.sub)+'</p>':'')+
@@ -633,11 +688,29 @@ function scShow(st,active,ask){
   if(!sc||!main.contains(sc.el)){
     if(sc&&sc.ctrl) sc.ctrl.destroy();
     main.className="big scroll"; main.style.justifyContent="flex-start";
-    main.innerHTML='<div class="scph" style="width:100%;max-width:640px"><div id="scC"></div></div>';
+    main.innerHTML='<div class="scph" style="width:100%;max-width:640px"><div id="scRl"></div><div id="scC"></div></div>'; rlKey="";
     var ctrl=Scatter.UI.create({root:$("scC"),toast:toast,send:scSend,readyLabel:"Done scoring",luxe:!!(BG()&&BG().sheet&&BG().icon),tv:function(){ return false; },icon:function(n){ return BG()&&BG().icon?BG().icon(n):""; },seatOf:function(i){ var s=window.__scV&&window.__scV.seats; return (s&&s[i])||(i%8)+1; },onProgress:function(ans){ if(net) net.send({t:"view",pid:myPid,sc:{t:"prog",answers:ans}}); }});
     sc={el:main.firstChild,ctrl:ctrl};
   }
   window.__scV=st; sc.ctrl.update(st); window.__sc2=sc;
+  rlCard(st.ruling);
+}
+/* review step 10: the Ruling (the TV's research sheet) as a compact card above the pad; Overrule (house rule) asks the TV for a vote */
+var rlKey="";
+function rlCard(r){
+  var el=$("scRl"); if(!el) return;
+  var key=r?JSON.stringify(r):""; if(key===rlKey) return; rlKey=key;
+  if(!r){ el.innerHTML=""; el.className=""; el.removeAttribute("data-v"); return; }
+  var ico=r.v==="good"?"check":r.v==="bad"?"close":r.v==="vote"?"info":"search";
+  el.className="ph-rl"; el.setAttribute("data-v",r.v); el.setAttribute("role","status");
+  el.innerHTML='<span class="ph-rl__eb">'+(r.v==="look"?"Challenge":"Ruling")+' · '+esc(r.au)+'’s answer</span>'+
+    '<p class="ph-rl__v"><span data-icon="'+ico+'" aria-hidden="true"></span><span>'+esc(r.title)+'</span></p>'+
+    '<p class="ph-rl__a">“'+esc(r.raw)+'” <small>'+esc(r.cat)+(r.letter?' · '+esc(r.letter):'')+'</small></p>'+
+    (r.v==="look"?'<p class="ph-rl__l">'+esc(r.by)+': '+esc(r.why)+'. Looking it up…</p>':(r.lead?'<p class="ph-rl__l">'+esc(r.lead)+'</p>':''))+
+    (r.cite?'<p class="ph-rl__c">Source: '+esc(r.cite)+'</p>':'')+
+    (r.over?'<button type="button" class="bg-btn bg-btn--secondary bg-btn--block" id="rlOver">Overrule: vote</button>':'');
+  paintIcons(el);
+  var ob=$("rlOver"); if(ob) ob.onclick=function(){ ob.disabled=true; if(net) net.send({t:"view",pid:myPid,sc:{t:"overrule",slot:r.slot,p:r.p,k:r.k}}); };
 }
 function afkHTML(id){ return '<div class="afk" role="status">The computer is playing for you <button type="button" class="bg-btn bg-btn--secondary bg-btn--sm" id="'+id+'">Take over</button></div>'; }
 var un=null, unAsk=null;
@@ -698,17 +771,20 @@ function rkShow(st,active,ask){
 var winEl=null;
 function closeVictory(){ var B=BG(); if(winEl){ try{ if(B&&B.win&&B.win.isOpen()) B.win.close(winEl); }catch(e){} if(winEl.parentNode) winEl.parentNode.removeChild(winEl); } winEl=null; }
 function fmtTime(ms){ var m=Math.floor(ms/60000), s=Math.floor(ms/1000)%60; return m+":"+(s<10?"0":"")+s; }
+function standHTML(rows){ if(!Array.isArray(rows)||!rows.length) return "";
+  return '<ol class="ph-stand" aria-label="Standings">'+rows.slice(0,10).map(function(r,i){ return '<li><span class="ph-stand__n">'+(i+1)+'</span><span class="dotc" style="background:'+esc(r.color||"#888").replace(/"/g,"")+'" aria-hidden="true"></span><span class="ph-stand__nm">'+esc(r.name)+'</span><span class="ph-stand__v">'+esc(r.v)+'</span></li>'; }).join("")+'</ol>'; }
 function showOver(o){
   var win=o.winner||"", team=/ & /.test(win), B=BG();
   main.className="big"; closeVictory();
-  put('<div class="ph-wait" aria-hidden="true" data-icon="trophy"></div><h1 class="title">'+esc(win)+(team?' win!':' wins!')+'</h1><p class="sub">Thanks for playing. The host can start a new game.</p>');
+  var st=standHTML(o.standings);   // review step 10: the standings, the winner on top (sent by the TV)
+  put('<div class="ph-wait" aria-hidden="true" data-icon="trophy"></div><h1 class="title">'+esc(win)+(team?' win!':' wins!')+'</h1>'+st+'<p class="sub">Thanks for playing. The host can start a new game.</p>');
   if(!B||!B.win) return;
   var stats='';
   if(o.n) stats+='<li class="bg-stat"><b>'+(+o.n)+'</b><span>players</span></li>';
   if(o.ms>0) stats+='<li class="bg-stat"><b>'+fmtTime(+o.ms)+'</b><span>time</span></li>';
   winEl=document.createElement("div"); winEl.className="bg-win"; winEl.id="winph"; winEl.setAttribute("aria-labelledby","winTitle");
   winEl.innerHTML='<div class="bg-win__scrim"></div><div class="bg-win__rays"></div><div class="bg-win__card"><div class="bg-win__medal"></div><p class="bg-eyebrow">Game over'+(GNAME[curGame]?' · '+esc(GNAME[curGame]):'')+'</p><h2 class="bg-win__title" id="winTitle">Victory</h2>'+
-    '<p class="bg-win__sub"><b>'+esc(win)+'</b> '+(team?"win":"wins")+' the game.</p>'+(stats?'<ul class="bg-stats bg-win__stats">'+stats+'</ul>':'')+
+    '<p class="bg-win__sub"><b>'+esc(win)+'</b> '+(team?"win":"wins")+' the game.</p>'+st+(stats?'<ul class="bg-stats bg-win__stats">'+stats+'</ul>':'')+
     '<div class="bg-win__actions"><button class="bg-btn bg-btn--primary bg-btn--lg" type="button" id="winOk">Continue</button></div></div>';
   document.body.appendChild(winEl);
   $("winOk").onclick=function(){ B.win.close(winEl); };
