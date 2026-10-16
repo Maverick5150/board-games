@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en" data-game="candy">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#080a15">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Candy Land</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="../ui/art/icon-candy-192.png">
+<link rel="apple-touch-icon" href="../ui/art/icon-candy-maskable-512.png">
+<script>/* before first paint: TV for ?tv=1 or the Fire TV bridge, and the stored effects level */
+(function (h) {
+  if (/[?&]tv=1(&|$)/.test(location.search) || window.AndroidTV) h.setAttribute("data-tv", "");
+  try { if (localStorage.getItem("bgui.effects") === "reduced") h.setAttribute("data-effects", "reduced"); } catch (e) { }
+})(document.documentElement);</script>
+<link rel="stylesheet" href="../ui/theme.css">
+<link rel="preload" href="../ui/fonts/manrope-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../ui/fonts/dmserifdisplay-latin.woff2" as="font" type="font/woff2" crossorigin>
+<script src="../ui/icons.js" defer></script>
+<script src="../ui/ui.js" defer></script>
+<style>
+  /* Candy Land on the shared Midnight Luxe system (ui/theme.css). Page layout only (cd- prefix); every control is a bg- class; the board
+     and cards are candy/board.js. Accent (wave 1): strawberry frosting on a raspberry-cocoa night. ui/theme.css has no [data-game="candy"]
+     block, so the page brings it (BGUI.stage.register in game.js). Checked with BG_audit/games/candy/page/accent.js against the 10 shipped
+     accents (8 in theme.css + War's sage + Snakes' viper lime): CIEDE2000 >= 23.6 (Party 23.6, Scattergories 24.6, Uno 25.8); deeps >= 11.4
+     (Snakes 11.4, Uno 11.9, Party 11.9); accent text 13.5:1 on the page and 10.2:1 on a lit panel, ink on the accent 12.4:1, the paper
+     accent 5.3:1, ivory on the deep 12.8:1. Search: BG_audit/games/candy/page/search.js. */
+  [data-game="candy"] { --accent: #ffc8cc; --accent-bright: #ffe3e5; --accent-deep: #402028; --accent-ink: #2a0c12; --accent-text: #ffc8cc; --accent-paper: #8a2434;
+    --accent-glow: rgba(255, 200, 204, .24); --felt: #3a1c26; --felt-deep: #160a0f; --felt-lite: #5a2c3a; --board: #402028; --board-lite: #5a3040; }
+  *, *::before, *::after{box-sizing:border-box}
+  [hidden]{display:none !important}
+  html{scroll-padding-bottom:6.5rem}
+  html[data-tv]{scroll-padding-bottom:0}
+  body.bg-app{overflow-x:hidden; touch-action:manipulation}
+  .bg-topbar__title .bg-eyebrow{white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  body.bg-app--scene [data-stage-text], body.bg-app--felt [data-stage-text]{text-shadow:0 0 .15em rgba(4,5,12,.95), 0 0 .45em rgba(4,5,12,.8), 0 0 1em rgba(4,5,12,.55)}
+  body.bg-app--scene .bg-section > [data-stage-text]{text-shadow:0 0 .1em rgba(4,5,12,1), 0 0 .3em rgba(4,5,12,.95), 0 0 .7em rgba(4,5,12,.8), 0 0 1.3em rgba(4,5,12,.5)}
+
+  /* ---------- setup page (also the in-game Menu) ---------- */
+  .cd-setup{display:flex; flex-direction:column; width:min(100%,40rem); margin:0 auto; padding:0 var(--gutter)}
+  .cd-col{display:contents}
+  .cd-hero{order:1} .cd-sec--version{order:2} .cd-sec--players{order:3} .cd-sec--names{order:4} .cd-sec--speed{order:5}
+  .cd-sec--rules{order:6} .cd-sec--save{order:7} .cd-back{order:8} .cd-dock{order:9}
+  .cd-hero{position:relative; min-height:0; margin:0 calc(-1 * var(--gutter)); padding-top:46%; border-radius:0; background:transparent}
+  .cd-hero .bg-hero__layer{bottom:auto; height:auto; aspect-ratio:16/9; border-radius:0; background-color:transparent;
+    background-image:url("../ui/art/hero-candy.svg"); background-size:100% auto; background-position:100% 0;
+    -webkit-mask-image:linear-gradient(180deg,#000 58%,rgba(0,0,0,0) 100%); mask-image:linear-gradient(180deg,#000 58%,rgba(0,0,0,0) 100%)}
+  .cd-hero .bg-hero__shade{display:none}
+  .cd-hero .bg-hero__body{max-width:none; padding:0 var(--gutter) .25rem}
+  .cd-hero .bg-hero__pitch{max-width:30rem}
+  .cd-sec{min-width:0}
+  .cd-subhead{margin-top:1.25rem}
+  #versions{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #versions .bg-version{min-height:4.75rem; justify-content:center}
+  #versions .bg-version__title{font-size:var(--fs-lg)}
+  .cd-vdesc{margin:.875rem 0 0; padding:.75rem .875rem; border-radius:var(--r-md); background:var(--ink-2); box-shadow:var(--well-edge);
+    font:var(--fw-body) var(--fs-sm)/1.45 var(--font-ui); color:var(--text-2)}
+  .cd-vdesc b{color:var(--text-1); font-weight:var(--fw-ui-strong)}
+  .cd-card{display:grid; gap:.75rem}
+  .cd-field{display:grid; gap:.15rem}
+  .cd-field .bg-row__desc{margin-top:0}
+  .cd-step{gap:.75rem}
+  .cd-step .bg-stepper__val{min-width:3.25rem}
+  .cd-young{display:flex; flex-wrap:wrap; align-items:center; gap:.5rem .875rem}
+  .cd-young .cd-field{flex:1 1 11rem}
+  .cd-young .bg-select{flex:0 1 auto; max-width:100%; min-width:9rem}
+  .cd-seats{display:flex; flex-wrap:wrap; align-items:center; gap:.625rem .875rem; padding:.625rem .875rem; border-radius:var(--r-md); background:var(--ink-2); box-shadow:var(--well-edge)}
+  .cd-seats__tokens{display:flex; flex:none; padding-left:.4rem}
+  .cd-seats__tokens .bg-token{width:2rem; height:2rem; margin-left:-.4rem; font-size:var(--fs-micro)}
+  .cd-seats__txt{display:grid; gap:.1rem; flex:1 1 10rem; min-width:0; font:var(--fw-ui) var(--fs-xs)/1.3 var(--font-ui); color:var(--text-2)}
+  .cd-seats__txt b{font:var(--fw-ui-strong) var(--fs-sm)/1.25 var(--font-ui); color:var(--text-1)}
+  .cd-colseg{grid-template-columns:repeat(4,minmax(0,1fr)); margin-top:.5rem}
+  .cd-colseg button{padding-inline:.15rem; min-width:0}
+  .cd-cdot{display:inline-block; width:1rem; height:1rem; border-radius:50%; background:radial-gradient(circle at 35% 30%,var(--seat-hi),var(--seat) 50%,var(--seat-lo)); box-shadow:0 0 0 2px rgba(8,10,21,.8)}
+  .cd-disclose .cd-chev{display:inline-grid; place-items:center; flex:none; width:1.5rem; height:1.5rem; color:var(--gold-200); transition:transform var(--dur-fast) var(--ease-out)}
+  .cd-disclose[aria-expanded="true"] .cd-chev{transform:rotate(90deg)}
+  .cd-sec--rules .bg-rows{grid-template-columns:minmax(0,1fr)}
+  .cd-rules{margin-top:.75rem}
+  .cd-legend{margin:.75rem 0 0; font:var(--fw-body) var(--fs-xs)/1.7 var(--font-ui); color:var(--text-2)}
+  .cd-boardline{margin:.75rem 0 0}
+  #svbar.svbar{margin:0; padding:var(--sp-3); border:0; border-radius:var(--r-lg); background:var(--panel-fill); box-shadow:var(--panel-edge),var(--elev-1)}
+  #svbar h4{display:none}
+  #svbar .r{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,8.5rem),1fr)); gap:.5rem; margin:0 0 .5rem}
+  #svbar .r:last-child{margin-bottom:0}
+  #svbar button{display:grid; grid-template-columns:auto minmax(0,auto); align-items:center; justify-content:center; gap:.15rem .45rem; min-width:0; min-height:var(--tap); margin:0;
+    padding:.45rem .625rem; border:0; border-radius:var(--r-md); color:var(--text-1); background:var(--control-fill);
+    box-shadow:inset 0 0 0 1px var(--line-2), inset 0 1px 0 rgba(255,255,255,.08); font:var(--fw-ui-strong) var(--fs-sm)/1.15 var(--font-ui); white-space:normal; text-align:center}
+  #svbar button:active{background:var(--ink-5)}
+  #svbar button:focus{outline:none}
+  #svbar button[disabled]{opacity:.42}
+  #svbar button .bg-ico{width:1.1em; height:1.1em; color:var(--gold-200)}
+  #svbar button small{grid-column:1 / -1; margin:0; font:var(--fw-ui) var(--fs-micro)/1.2 var(--font-ui); color:var(--text-3); opacity:1}
+  .cd-back{margin-top:var(--sp-6)}
+  .cd-dock{position:sticky; bottom:0; z-index:5; display:flex; gap:.625rem; margin:0 calc(-1 * var(--gutter)); padding:1rem var(--gutter) calc(env(safe-area-inset-bottom,0px) + .875rem);
+    background:linear-gradient(180deg,rgba(8,10,21,0),var(--ink-1) 32%)}
+  .cd-dock #startBtn{flex:1 1 0; min-width:0}
+  .cd-dock.has-resume #startBtn{padding-inline:.75rem}
+  .cd-resume{flex:1 1 0; min-width:0; padding:.5rem .75rem; border-radius:var(--r-lg)}
+  .cd-resume > span{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.2rem; min-height:2.75rem}
+  .cd-resume.bg-btn--secondary .bg-btn__sub, .cd-dock #startBtn.bg-btn--secondary .bg-btn__sub{color:var(--text-2)}
+  .cd-nw{white-space:nowrap}
+
+  /* ---------- in game: the board is the hero; standings on top (phone) or beside it (TV) ---------- */
+  .cd-game{display:flex; flex-direction:column; align-items:center; width:min(100%,40rem); margin:0 auto; padding:0 var(--gutter) 1rem}
+  body.cd-in-setup .cd-game{display:none !important}
+  .cd-stand{align-self:stretch; padding:.625rem 0 .5rem}
+  .cd-stand .bg-player{padding-right:.6rem}
+  .cd-stand .cd-rk{flex:none; min-width:1.1rem; font:var(--fw-caps) var(--fs-micro)/1 var(--font-ui); color:var(--gold-100); text-align:center}
+  .cd-stand .cd-bar{position:absolute; left:.9rem; right:.9rem; bottom:.2rem; height:.1875rem; border-radius:2px; background:rgba(255,255,255,.08); overflow:hidden}
+  .cd-stand .cd-bar > i{display:block; height:100%; background:var(--seat); transform-origin:0 50%; transform:scaleX(0); transition:transform var(--dur-med,.35s) var(--ease-out)}
+  /* the board: a gilt frame round the art; the movers ride an HTML layer over the SVG */
+  .cd-boardwrap{--bw:min(calc(100vw - 2 * var(--gutter)), 34rem); flex:none}
+  .cd-board{position:relative; width:var(--bw); padding:.3rem; border-radius:1rem; background:linear-gradient(145deg,#f6e2ac,#b88a45 40%,#e9cb87 62%,#7d5523); box-shadow:0 .75rem 2rem rgba(0,0,0,.55)}
+  .cd-art{position:relative; width:100%; aspect-ratio:1000 / 1120; border-radius:.75rem; overflow:hidden; background:#2a1420; touch-action:manipulation; user-select:none; -webkit-user-select:none}
+  .cd-art .cd-svg{position:absolute; inset:0; width:100%; height:100%; display:block; will-change:transform}   /* its own layer: the moving movers and banners above it never make the big board repaint */
+  .cd-svg .cd-startlbl{font-family:var(--font-display); fill:#5c1532; letter-spacing:.02em}
+  .cd-toks{position:absolute; inset:0; pointer-events:none}
+  .cd-tok{position:absolute; aspect-ratio:1; z-index:2; will-change:transform}
+  .cd-tok.is-turn{z-index:4}
+  .cd-tok.is-moving{z-index:5}
+  .cd-hopw{position:absolute; inset:0}
+  .cd-gb{position:absolute; inset:0; width:100%; height:100%; display:block; overflow:visible}
+  .cd-gb .cd-gbody{fill:var(--seat); stroke:#2a1208; stroke-width:4; stroke-linejoin:round}
+  .cd-gb .cd-gice{fill:none; stroke:#fff8ee; stroke-width:3.2; stroke-linecap:round; stroke-linejoin:round}
+  .cd-gb .cd-gring{fill:none; stroke:#fff3d1; stroke-width:5; opacity:0}
+  .cd-tok.is-turn .cd-gring{opacity:1; stroke:var(--seat-hi)}
+  .cd-tok.is-done .cd-gring{opacity:1; stroke:#e2bd72}
+  .cd-tok .cd-ini{position:absolute; left:0; right:0; top:52%; transform:translateY(-50%); text-align:center; font:800 max(var(--fs-micro), calc(var(--tw, 28px) * .36))/1 var(--font-ui); color:var(--seat-ink); pointer-events:none}
+  .cd-banner{position:absolute; left:50%; top:46%; z-index:8; display:grid; justify-items:center; gap:.3rem; width:max-content; max-width:88%; padding:.6rem 1.4rem .75rem; transform:translate(-50%,-50%);
+    border-radius:var(--r-lg); background:linear-gradient(180deg,rgba(40,16,30,.95),rgba(12,8,16,.95)); box-shadow:inset 0 0 0 1.5px var(--gold-200), 0 .8rem 2rem rgba(0,0,0,.6);
+    text-align:center; pointer-events:none; opacity:0; visibility:hidden}
+  .cd-banner.is-on{opacity:1; visibility:visible}
+  .cd-banner b{font:400 var(--fs-3xl)/1.05 var(--font-display); color:var(--gold-100)}
+  .cd-banner span{font:var(--fw-ui-strong) var(--fs-sm)/1.3 var(--font-ui); color:#f6e9cf}
+  .cd-banner.is-bad{background:linear-gradient(180deg,rgba(54,14,24,.96),rgba(18,6,10,.96))}
+  .cd-banner.is-bad b{color:#ffc2c8}
+  .cd-banner.is-good{background:linear-gradient(180deg,rgba(64,22,52,.96),rgba(20,8,20,.96))}
+  .cd-banner.is-good b{color:#ffd6f0}
+  .cd-banner.is-win{background:linear-gradient(180deg,rgba(74,52,14,.96),rgba(26,18,4,.96))}
+  .cd-side{display:grid; gap:.5rem; align-self:stretch; margin-top:.6rem}
+  .cd-stat{margin:0; text-align:center; font:var(--fw-ui-strong) var(--fs-sm)/1.4 var(--font-ui); color:var(--text-1); min-height:1.4em}
+  .cd-say{display:flex; align-items:center; justify-content:center; gap:.45rem; margin:0; min-height:1.75rem; font:italic 400 var(--fs-md)/1.3 var(--font-display); color:var(--text-2)}
+  .cd-say:empty{visibility:hidden}
+  .cd-say .bg-token{width:1.5rem; height:1.5rem; font:var(--fw-caps) var(--fs-micro)/1 var(--font-ui)}
+  /* the cards: the draw pile (backs, count), the discard pile (the top card, count), Draw; the two cards of "draw two" */
+  .cd-acts{--pw:3.4rem; display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:.75rem .875rem; margin:0 calc(-1 * var(--focus-room)); padding:var(--focus-room); padding-top:1.6rem}
+  .cd-piles{display:flex; flex:none; align-items:flex-end; gap:.75rem}
+  .cd-pile{position:relative; width:var(--pw); aspect-ratio:100 / 140; flex:none}
+  .cd-pile .cd-cardsvg{position:absolute; inset:0; width:100%; height:100%; display:block}
+  .cd-pile .cd-cardsvg.is-under1{transform:translate(-3px,3px)}
+  .cd-pile .cd-cardsvg.is-under2{transform:translate(-6px,6px)}
+  .cd-pile.is-empty::before{content:""; position:absolute; inset:0; border-radius:.5rem; box-shadow:inset 0 0 0 2px rgba(231,202,144,.4); background:rgba(255,255,255,.03)}
+  .cd-cnt{position:absolute; right:-.4rem; bottom:-.45rem; z-index:2; min-width:1.6rem; padding:.15rem .35rem; border-radius:var(--r-pill); background:var(--ink-1); box-shadow:inset 0 0 0 1.5px var(--gold-200);
+    font:var(--fw-caps) var(--fs-micro)/1.2 var(--font-ui); color:var(--gold-100); text-align:center; font-variant-numeric:tabular-nums}
+  .cd-pilelbl{position:absolute; left:50%; top:-1.35rem; transform:translateX(-50%); white-space:nowrap; font:var(--fw-caps) var(--fs-micro)/1 var(--font-ui); letter-spacing:.06em; text-transform:uppercase; color:var(--text-2)}
+  #drawBtn{flex:1 1 9rem; max-width:20rem; min-width:0; min-height:3.5rem; flex-direction:column; gap:.1rem; padding-block:.4rem; font-size:var(--fs-xl)}
+  #drawBtn .bg-btn__sub:empty{display:none}
+  #drawBtn .bg-btn__sub{font-size:var(--fs-xs)}
+  .cd-pick{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.75rem; flex:1 1 100%}
+  .cd-pickbtn{display:flex; align-items:center; gap:.6rem; min-height:4.5rem; padding:.45rem .7rem; text-align:left; justify-content:flex-start}
+  .cd-pickbtn .cd-cardsvg{flex:none; width:2.6rem; height:auto; display:block}
+  .cd-pickbtn > span{display:grid; gap:.1rem; min-width:0; white-space:normal; overflow-wrap:anywhere}
+  .cd-pickbtn b{font:var(--fw-ui-strong) var(--fs-sm)/1.2 var(--font-ui); color:var(--text-1)}
+  .cd-pickbtn small{font:var(--fw-ui) var(--fs-xs)/1.25 var(--font-ui); color:var(--text-2)}
+  .cd-pickbtn .bg-tag{justify-self:start}
+  .cd-pickbtn.is-best{box-shadow:inset 0 0 0 2px var(--gold-200), 0 0 0 1px rgba(0,0,0,.2)}
+  .cd-pickbtn.is-picked{box-shadow:inset 0 0 0 3px var(--accent), 0 0 1rem var(--accent-glow)}
+  .cd-pickbtn[disabled]{opacity:1; cursor:default}
+  .cd-pickbtn[disabled] > span{opacity:.86}
+  .cd-meta{display:flex; flex-wrap:wrap; justify-content:center; gap:.4rem .6rem}
+  .cd-chip{display:inline-flex; align-items:center; gap:.35rem; padding:.25rem .65rem; border-radius:var(--r-pill); background:var(--ink-3); box-shadow:inset 0 0 0 1px var(--line-1);
+    font:var(--fw-ui-strong) var(--fs-micro)/1.3 var(--font-ui); color:var(--text-1); font-variant-numeric:tabular-nums}
+  .cd-chip:empty{display:none}
+  .cd-chip.is-hot{box-shadow:inset 0 0 0 1.5px var(--accent); color:var(--accent-text)}
+  .cd-log{margin:0; padding:0; list-style:none; display:grid; gap:.15rem; text-align:center; font:var(--fw-body) var(--fs-xs)/1.4 var(--font-ui); color:var(--text-2)}
+  .cd-log li:last-child{color:var(--text-1)}
+  .cd-log li:nth-last-child(n+3){display:none}
+  html:not([data-tv]) .cd-hints{display:none}
+  /* the flying card layer: a drawn card turns over big in front of the board, then flies to the discard pile (or the hand of two) */
+  .cd-fly{position:fixed; inset:0; z-index:40; pointer-events:none}
+  .cd-big{position:fixed; display:grid; justify-items:center; align-content:start; gap:.4rem; will-change:transform}
+  .cd-big .cd-fl{position:relative; width:100%; aspect-ratio:100 / 140; perspective:60rem}
+  .cd-big .cd-fl > i{position:absolute; inset:0; transform-style:preserve-3d}
+  .cd-big .cd-fl > i > span{position:absolute; inset:0; -webkit-backface-visibility:hidden; backface-visibility:hidden; filter:none; border-radius:.6rem; box-shadow:0 1rem 2.4rem rgba(0,0,0,.6)}
+  .cd-big .cd-fl > i > span.cd-back{transform:rotateY(180deg)}
+  .cd-big .cd-cardsvg{width:100%; height:100%; display:block}
+  .cd-big .cd-cap{padding:.2rem .8rem; border-radius:var(--r-pill); background:rgba(8,10,21,.88); box-shadow:inset 0 0 0 1px var(--gold-200); white-space:nowrap;
+    font:400 var(--fs-xl)/1.15 var(--font-display); color:var(--gold-100)}
+  .cd-big.is-small .cd-cap{display:none}
+  /* the who-goes-first show: each lane's card shows the playing order */
+  .cd-fpface{display:grid; place-items:center; width:100%; height:100%; background:linear-gradient(180deg,#fffaf2,#f3e6d4)}
+  .cd-fpface b{font:400 var(--fs-2xl)/1 var(--font-display); color:#5c1532}
+  .cd-fpface b small{font-size:.55em}
+  .cd-fpback{display:block; width:100%; height:100%}
+  .cd-fpback .cd-cardsvg{width:100%; height:100%; display:block}
+  .cd-final{display:grid; gap:.35rem; margin:.25rem auto .9rem; padding:0; list-style:none; width:min(100%,24rem); text-align:left}
+  .cd-final li{display:flex; align-items:center; gap:.55rem; padding:.35rem .6rem; border-radius:var(--r-md); background:var(--ink-3); box-shadow:inset 0 0 0 1px var(--line-1);
+    font:var(--fw-ui-strong) var(--fs-sm)/1.25 var(--font-ui); color:var(--text-1)}
+  .cd-final li.is-lead{box-shadow:inset 0 0 0 1.5px var(--gold-200)}
+  .cd-final .bg-token{width:1.6rem; height:1.6rem; font-size:var(--fs-micro); flex:none}
+  .cd-final .cd-fn{flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .cd-final .cd-fc{flex:none; color:var(--gold-100); font-variant-numeric:tabular-nums}
+  .cd-final .cd-fr{flex:none; min-width:1.2rem; color:var(--text-2)}
+  .cd-final.is-grid{grid-template-columns:repeat(2,minmax(0,1fr)); width:min(100%,32rem)}
+  .cd-winhome{margin-top:.75rem}
+  /* fallbacks when ui/ui.js is missing */
+  .cd-toast{position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom,0px) + 90px); transform:translateX(-50%); max-width:90vw; padding:10px 16px; border-radius:12px; z-index:90;
+    background:#000c; color:#fff; font:700 14px system-ui,sans-serif; text-align:center; opacity:0; pointer-events:none; transition:opacity .2s}
+  .cd-toast.show{opacity:1}
+  .cd-svtoast{position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom,0px) + 7rem); transform:translateX(-50%); max-width:90vw; padding:10px 16px; border-radius:12px; z-index:100000;
+    background:#000d; color:#fff; font:700 14px system-ui,sans-serif; text-align:center; opacity:0; pointer-events:none; transition:opacity .2s}
+  .cd-svtoast.show{opacity:1}
+  html.cd-luxe .cd-toast, html.cd-luxe .cd-svtoast{display:none}
+  /* reduced effects / reduced motion: nothing endless here; the one-shot moves are skipped in script */
+  html[data-effects="reduced"] .cd-stand .cd-bar > i, html[data-motion="reduce"] .cd-stand .cd-bar > i{transition:none}
+  @media (prefers-reduced-motion: reduce){ .cd-stand .cd-bar > i, .cd-disclose .cd-chev{transition:none} }
+
+  /* ---------- TV (html[data-tv], 1rem = 24px at 1080p) ---------- */
+  html[data-tv] .cd-setup{display:grid; grid-template-columns:minmax(0,32rem) minmax(0,34rem); column-gap:3.5rem; justify-content:center; align-items:start; width:auto; padding:0 var(--gutter) 2rem}
+  html[data-tv] .cd-col{display:block; min-width:0}
+  html[data-tv] .cd-hero{margin:1.5rem 0 0; border-radius:var(--r-xl); padding-top:34%}
+  html[data-tv] .cd-hero .bg-hero__layer{border-radius:var(--r-xl) var(--r-xl) 0 0;
+    -webkit-mask-image:linear-gradient(90deg,rgba(0,0,0,0),#000 8%,#000 96%,rgba(0,0,0,0)),linear-gradient(180deg,rgba(0,0,0,0),#000 9%,#000 58%,rgba(0,0,0,0));
+    -webkit-mask-composite:source-in;
+    mask-image:linear-gradient(90deg,rgba(0,0,0,0),#000 8%,#000 96%,rgba(0,0,0,0)),linear-gradient(180deg,rgba(0,0,0,0),#000 9%,#000 58%,rgba(0,0,0,0));
+    mask-composite:intersect}
+  html[data-tv] .cd-hero .bg-hero__body{padding:0}
+  html[data-tv] #versions{gap:1.5rem}
+  html[data-tv] .cd-rules .bg-row{min-height:0; padding:.5rem .875rem}
+  html[data-tv] .cd-col--b{display:flex; flex-direction:column}
+  html[data-tv] .cd-sec--players{order:1} html[data-tv] .cd-dock{order:2} html[data-tv] .cd-sec--save{order:3} html[data-tv] .cd-back{order:4}
+  html[data-tv] .cd-dock{position:static; gap:1.75rem; margin:0; padding:1.5rem 0 0; background:none}
+  html[data-tv] #speedSeg, html[data-tv] #skillSeg, html[data-tv] .cd-colseg{gap:1.5rem}
+  html[data-tv] .cd-step{gap:1.5rem}
+  html[data-tv] .cd-card{gap:.6rem}
+  html[data-tv] .cd-young{gap:.5rem 1.5rem}
+  html[data-tv] .bg-topbar__end{gap:1.5rem}
+  html[data-tv] #svbar button{grid-template-columns:minmax(0,1fr); justify-items:center; align-content:center; row-gap:.3rem; padding:.625rem .5rem}
+  html[data-tv] #svbar button .bg-ico{width:1.25em; height:1.25em}
+  html[data-tv] #svbar .r{gap:1.5rem}
+  html[data-tv] #svbar .r:not(:last-child){margin-bottom:1.5rem}
+  /* TV in game: the board takes the full height on the left; standings, whose turn, the cards and Draw, the log and the remote's keys on the right */
+  html[data-tv] .cd-game{display:grid; --bw:calc((100vh - 4.75rem - 1.75rem - .6rem) * 1000 / 1120 + .6rem); grid-template-columns:var(--bw) minmax(0,42rem); grid-template-rows:auto minmax(0,1fr);
+    grid-template-areas:"board stand" "board side"; column-gap:3rem; justify-content:center; align-items:start; width:auto; height:calc(100vh - 4.75rem); padding:.5rem var(--gutter) 1.25rem}
+  html[data-tv] .cd-boardwrap{grid-area:board; --bw:inherit}
+  html[data-tv] .cd-stand{grid-area:stand; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.75rem; padding:.75rem 0 .75rem}
+  html[data-tv] .cd-stand .bg-player{padding:.55rem .9rem .7rem .5rem}
+  html[data-tv] .cd-stand .bg-token{width:2.25rem; height:2.25rem}
+  html[data-tv] .cd-stand .bg-player__cpu{left:2.75rem}
+  html[data-tv] .cd-side{grid-area:side; display:flex; flex-direction:column; gap:.75rem; margin:0; min-height:0; height:100%}
+  html[data-tv] .cd-stat{text-align:left; font-size:var(--fs-lg)}
+  html[data-tv] .cd-say{justify-content:flex-start}
+  html[data-tv] .cd-acts{--pw:5.25rem; justify-content:flex-start; gap:1.25rem 2rem; padding-top:1.9rem}
+  html[data-tv] .cd-piles{gap:2rem}
+  html[data-tv] .cd-pilelbl{top:-1.75rem}
+  html[data-tv] #drawBtn{flex:1 1 auto; max-width:22rem}
+  html[data-tv] .cd-pick{gap:1.5rem}
+  html[data-tv] .cd-pickbtn{min-height:5.75rem; gap:1rem; padding-block:.4rem}
+  html[data-tv] .cd-pickbtn .cd-cardsvg{width:3.75rem}
+  html[data-tv] .cd-meta{justify-content:flex-start}
+  html[data-tv] .cd-log{flex:1; min-height:0; overflow:hidden; align-content:end; text-align:left}
+  html[data-tv] .cd-log li:nth-last-child(n+3){display:block}
+  html[data-tv] .cd-log li:nth-last-child(n+6){display:none}
+  html[data-tv] .cd-hints{justify-content:flex-start; margin:0}
+  html[data-tv] .cd-banner b{font-size:var(--fs-4xl)}
+  html[data-tv] .cd-banner span{font-size:var(--fs-lg)}
+  html[data-tv] .cd-big .cd-cap{font-size:var(--fs-3xl)}
+  html[data-tv] body:not(.cd-in-setup) .bg-toast{left:calc(100vw - var(--gutter) - 21rem); max-width:30rem}
+  html[data-tv] #winSub{font-size:var(--fs-md); line-height:1.4; margin-bottom:.5rem}
+  html[data-tv] .cd-winhome{margin-top:.5rem}
+  html[data-tv] .cd-final{width:min(100%,28rem)}
+  html[data-tv] .cd-final.is-grid{width:min(100%,40rem)}
+
+  /* ---------- phone upright (step 11): the board nearly edge to edge (8 px gutters; the gilt frame is inside the box); only a narrow
+     upright screen, so tablets and desktops keep the 34rem cap ---------- */
+  @media (orientation: portrait) and (max-width: 36em){
+    html:not([data-tv]) .cd-game{padding-inline:.5rem}
+    html:not([data-tv]) .cd-boardwrap{--bw:calc(100vw - 1rem)}
+    html:not([data-tv]) .cd-acts{margin-inline:-.5rem; padding-inline:.5rem}   /* the ring (7 px) fits the 8 px gutter: nothing pokes past the screen */
+    html:not([data-tv]) .cd-stand{padding-top:.5rem}
+  }
+
+  /* ---------- phone sideways (step 11): the TV's split, phone sized. A slim top bar, the board on the left at the full height (pinned),
+     the standings, whose turn, the cards and Draw and the log on the right in their own scroll area; the page never scrolls ---------- */
+  @media (orientation: landscape) and (max-height: 31.25em){
+    html:not([data-tv]){--ls-bar:3.25rem; --ls-h:100vh; --ls-pad:.5rem;
+      --ls-game:calc(var(--ls-h) - var(--ls-bar) - env(safe-area-inset-top,0px) - 2 * var(--ls-pad))}
+    @supports (height:100dvh){ html:not([data-tv]){--ls-h:100dvh} }
+    html:not([data-tv]) .bg-topbar{height:calc(var(--ls-bar) + env(safe-area-inset-top,0px)); padding-top:calc(env(safe-area-inset-top,0px) + .25rem); padding-bottom:.25rem}
+    html:not([data-tv]) .cd-game{display:grid; --bw:calc((var(--ls-game) - .6rem) * 1000 / 1120 + .6rem); grid-template-columns:var(--bw) minmax(0,1fr); grid-template-rows:max-content max-content 1fr;
+      grid-template-areas:"board stand" "board side" "board ."; column-gap:1rem; align-items:start; align-content:start; width:auto;
+      height:calc(var(--ls-h) - var(--ls-bar) - env(safe-area-inset-top,0px)); overflow:hidden auto; overscroll-behavior:contain;
+      padding:var(--ls-pad) max(var(--gutter), env(safe-area-inset-right,0px)) var(--ls-pad) max(var(--ls-pad), env(safe-area-inset-left,0px))}
+    html:not([data-tv]) .cd-boardwrap{grid-area:board; position:sticky; top:0; --bw:inherit}
+    html:not([data-tv]) .cd-stand{grid-area:stand; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.375rem; padding:.625rem 0 .25rem}
+    html:not([data-tv]) .cd-side{grid-area:side; margin-top:.25rem}
+    html:not([data-tv]) .cd-stat{text-align:left}
+    html:not([data-tv]) .cd-say{justify-content:flex-start}
+    html:not([data-tv]) .cd-acts{justify-content:flex-start; padding-top:1.5rem}
+    html:not([data-tv]) .cd-meta{justify-content:flex-start}
+    html:not([data-tv]) .cd-log{text-align:left}
+    html:not([data-tv]) body:not(.cd-in-setup) .bg-toast{left:calc(var(--bw) + (100vw - var(--bw)) / 2); max-width:calc(100vw - var(--bw) - 2rem)}
+    /* Victory: the trophy beside the result (two columns), so Play again shows on the first screen; the same rays, confetti and trophy */
+    html:not([data-tv]) .bg-win__card{display:grid; grid-template-columns:10rem minmax(0,1fr); column-gap:1.5rem; align-items:start; width:min(100%,44rem);
+      max-height:calc(var(--ls-h) - .5rem); overflow:hidden auto; padding:.25rem .5rem 0 0}
+    html:not([data-tv]) .bg-win__card > *{grid-column:2}
+    html:not([data-tv]) .bg-win__title{margin:.25rem 0 0}
+    html:not([data-tv]) .bg-win__sub{margin:.25rem 0 .5rem}
+    html:not([data-tv]) .bg-win__actions{margin-top:.5rem}
+    html:not([data-tv]) .bg-win__rays{left:calc(50vw - min(50vw - var(--gutter), 22rem) + 5rem)}
+    html:not([data-tv]) .cd-final{margin:.25rem 0 .5rem; width:100%}
+    html:not([data-tv]) .cd-final.is-grid{width:100%}
+    html:not([data-tv]) #winEyebrow{grid-row:1} html:not([data-tv]) #winTitle{grid-row:2; font-size:var(--fs-4xl)} html:not([data-tv]) #winSub{grid-row:3; font-size:var(--fs-xs); line-height:1.35}
+    html:not([data-tv]) #winList{grid-row:4} html:not([data-tv]) .bg-win__actions{grid-row:5} html:not([data-tv]) .cd-winhome{grid-row:6; margin-top:.5rem}
+    html:not([data-tv]) .bg-win__card > .bg-win__medal{grid-column:1; grid-row:1 / span 3; align-self:center; width:8rem; height:6.8rem; margin:0 auto}
+    html:not([data-tv]) #winStats{grid-column:1; grid-row:4 / span 3; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.35rem; align-self:start; margin:.25rem 0 0}
+    html:not([data-tv]) #winStats .bg-stat{min-width:0; padding:.3rem .25rem}
+    html:not([data-tv]) .cd-final li{padding:.25rem .55rem}
+    /* setup and Menu: a lower art band (the same art, cropped to the band); the Start dock stays sticky at the bottom */
+    html:not([data-tv]) .cd-hero{padding-top:5.5rem}
+    html:not([data-tv]) .cd-hero .bg-hero__layer{bottom:0; aspect-ratio:auto; background-size:cover; background-position:50% 40%}
+  }
+</style>
+<script src="../sound.js"></script>
+<script src="../skins.js"></script>
+<script src="../saves.js"></script>
+<script src="../names.js"></script>
+<script>window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
+<script>/* a no-op Sound with every method this page uses, in case sound.js fails to load */
+window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){},closePanel:function(){},panelOpen:function(){return false;},addStyle:function(){return false;},hasStyle:function(){return false;}};
+window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";}};</script>
+</head>
+<body class="bg-app bg-app--scene cd-in-setup">
+  <header class="bg-topbar">
+    <div class="bg-topbar__start"><a class="bg-btn bg-btn--icon" id="homeBtn" href="../index.html" aria-label="All games" data-icon="back"></a></div>
+    <div class="bg-topbar__title"><span class="bg-eyebrow" id="barEyebrow">New game</span><span class="bg-topbar__name">Candy Land</span></div>
+    <div class="bg-topbar__end">
+      <button class="bg-btn bg-btn--icon" id="menuBtn" type="button" aria-label="Menu" data-icon="menu" hidden></button>
+    </div>
+  </header>
+
+  <main class="cd-setup" id="setup" aria-label="New game">
+    <div class="cd-col cd-col--a">
+      <section class="bg-hero cd-hero" aria-labelledby="setupTitle">
+        <div class="bg-hero__layer is-on"></div>
+        <div class="bg-hero__shade"></div>
+        <div class="bg-hero__body">
+          <span class="bg-eyebrow bg-eyebrow--accent" data-stage-text="strong">Draw · move · race home</span>
+          <h1 class="bg-hero__title" id="setupTitle" data-stage-text>Candy Land</h1>
+          <p class="bg-hero__pitch" data-stage-text>Draw a card and hop to the next square of its colour. Picture cards send you straight to their landmark, forward or back. First to the Sugarspire wins.</p>
+        </div>
+      </section>
+      <section class="cd-sec cd-sec--version" aria-labelledby="versionHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="versionHead" data-stage-text>Version</h2></div>
+        <div class="bg-versions" id="versions" role="radiogroup" aria-labelledby="versionHead"></div>
+        <p class="cd-vdesc" id="versionDesc" aria-live="polite"></p>
+      </section>
+      <section class="cd-sec cd-sec--names" aria-labelledby="namesHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="namesHead" data-stage-text>Names and colours</h2></div>
+        <div class="bg-card cd-namecard" id="nameCard"><p class="bg-names-note" id="namesNote">Your name is kept on this device for every game. Pick a colour; the computers take the others.</p></div>
+      </section>
+      <section class="cd-sec cd-sec--speed" aria-labelledby="speedHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="speedHead" data-stage-text>Game speed</h2></div>
+        <div class="bg-seg bg-seg--text" id="speedSeg" role="group" aria-labelledby="speedHead"><button type="button" data-s="slow" aria-pressed="false">Slow</button><button type="button" data-s="medium" class="on" aria-pressed="true">Medium</button><button type="button" data-s="fast" aria-pressed="false">Fast</button></div>
+        <div class="bg-section cd-subhead"><h2 class="bg-eyebrow" id="skillHead" data-stage-text>Computer skill</h2></div>
+        <div class="bg-seg bg-seg--text" id="skillSeg" role="group" aria-labelledby="skillHead"><button type="button" data-k="easy" aria-pressed="false">Easy</button><button type="button" data-k="normal" class="on" aria-pressed="true">Normal</button><button type="button" data-k="hard" aria-pressed="false">Hard</button></div>
+        <p class="cd-legend" id="skillNote" data-stage-text></p>
+      </section>
+      <section class="cd-sec cd-sec--rules" aria-labelledby="rulesHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="rulesHead" data-stage-text>Rules</h2></div>
+        <div class="bg-rows">
+          <button class="bg-row cd-disclose" id="rulesToggle" type="button" aria-expanded="false" aria-controls="houseRules">
+            <span class="bg-row__main"><span class="bg-row__title">Rules and house rules</span><span class="bg-row__desc" id="rulesDesc"></span></span>
+            <span class="cd-chev" data-icon="chevron" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div class="bg-rows cd-rules" id="houseRules" hidden></div>
+        <p class="cd-legend" id="rulesLegend" data-stage-text hidden><span class="bg-tag bg-tag--official">official</span> printed in the rule sheet (Hasbro / Milton Bradley) · <span class="bg-tag bg-tag--house">house</span> a later edition's rule or a popular home rule</p>
+        <p class="cd-vdesc cd-boardline" id="boardLine" aria-live="polite"></p>
+      </section>
+    </div>
+    <div class="cd-col cd-col--b">
+      <section class="cd-sec cd-sec--players" aria-labelledby="playersHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="playersHead" data-stage-text>Players</h2></div>
+        <div class="bg-card cd-card">
+          <div class="cd-field"><span class="bg-row__title" id="humansTitle">Players on this phone</span><span class="bg-row__desc" id="humansDesc">0 = watch the computers play.</span></div>
+          <div class="bg-stepper cd-step" id="humanSeg" role="group" aria-label="Players on this phone"></div>
+          <div class="cd-field"><span class="bg-row__title">Computer players</span><span class="bg-row__desc" id="cpuDesc">2 to 4 players in all (the official count).</span></div>
+          <div class="bg-stepper cd-step" id="cpuSeg" role="group" aria-label="Computer players"></div>
+          <div class="cd-young" id="youngRow"><span class="cd-field"><span class="bg-row__title" id="youngTitle">Who is the youngest?</span><span class="bg-row__desc" id="youngDesc">The youngest player goes first; play passes to the left.</span></span><select class="bg-select" id="youngSel" aria-labelledby="youngTitle"></select></div>
+          <div class="cd-seats" id="seatPreview"><span class="cd-seats__tokens" id="seatTokens"></span><span class="cd-seats__txt"><b id="seatHead"></b><span id="seatNote"></span></span></div>
+        </div>
+      </section>
+      <section class="cd-sec cd-sec--save" aria-labelledby="saveHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="saveHead" data-stage-text>Save and load</h2></div>
+        <div id="svbar"></div>
+      </section>
+      <a href="../index.html" class="bg-btn bg-btn--ghost bg-btn--block cd-back" id="backHub" data-icon="home" data-stage-text>Back to all games</a>
+      <div class="cd-dock" id="startDock" data-toast-avoid>
+        <button class="bg-btn bg-btn--secondary cd-resume" id="resumeBtn" type="button" style="display:none"><span><span class="bg-btn__label" id="resumeLabel">Resume</span><span class="bg-btn__sub" id="resumeSub">Back to the game</span></span></button>
+        <button class="bg-btn bg-btn--primary bg-btn--cta" id="startBtn" type="button"><span class="bg-btn__label" id="startLabel">Start the game</span><span class="bg-btn__sub" id="startSub">2 players</span></button>
+      </div>
+    </div>
+  </main>
+
+  <main class="cd-game" id="game" aria-label="Candy Land board">
+    <ul class="bg-players cd-stand" id="cstand" aria-label="Standings, leader first"></ul>
+    <div class="cd-boardwrap"><div class="cd-board" id="cboard" data-stage-solid>
+      <div class="cd-art" id="cart" role="img" aria-label="The board">
+        <div class="cd-svghost" id="csvg"></div>
+        <div class="cd-toks" id="ctoks"></div>
+        <div class="cd-banner" id="cbanner" aria-live="polite"><b id="cbannerT"></b><span id="cbannerS"></span></div>
+      </div>
+    </div></div>
+    <div class="cd-side">
+      <p class="cd-stat" id="cstat" data-stage-text aria-live="polite"></p>
+      <p class="cd-say" id="csay" data-stage-text></p>
+      <div class="cd-acts" id="cacts" data-toast-avoid>
+        <div class="cd-piles" data-focus="off">
+          <div class="cd-pile" id="cdeck" aria-label="Draw pile"><span class="cd-pilelbl" data-stage-text>Cards</span><span class="cd-cnt" id="cdeckN">0</span></div>
+          <div class="cd-pile" id="cdisc" aria-label="Discard pile"><span class="cd-pilelbl" data-stage-text>Played</span><span class="cd-cnt" id="cdiscN">0</span></div>
+        </div>
+        <button class="bg-btn bg-btn--primary bg-btn--lg" id="drawBtn" type="button" data-focus-first><span class="bg-btn__label" id="drawLabel">Draw</span><span class="bg-btn__sub" id="drawSub"></span></button>
+        <div class="cd-pick" id="cpick" hidden></div>
+      </div>
+      <div class="cd-meta"><span class="cd-chip" id="cneed"></span><span class="cd-chip" id="cround"></span><span class="cd-chip" id="caside"></span></div>
+      <ol class="cd-log" id="clog" aria-label="What happened" data-stage-text></ol>
+      <div class="bg-hintbar cd-hints" data-stage-text><span><span class="bg-key">OK</span> <span id="hintOk">Draw</span></span><span><span class="bg-key">Back</span> Close a list, or the Menu</span></div>
+    </div>
+  </main>
+  <div class="cd-fly" id="cfly" aria-hidden="true"></div>
+
+  <div class="bg-win" id="winBox" aria-labelledby="winTitle">
+    <div class="bg-win__scrim"></div>
+    <div class="bg-win__rays"></div>
+    <div class="bg-win__card">
+      <div class="bg-win__medal"></div>
+      <p class="bg-eyebrow" id="winEyebrow">Game over</p>
+      <h2 class="bg-win__title" id="winTitle">Victory</h2>
+      <p class="bg-win__sub" id="winSub"></p>
+      <ol class="cd-final" id="winList" aria-label="Final standings, leader first"></ol>
+      <ul class="bg-stats bg-win__stats" id="winStats"></ul>
+      <div class="bg-win__actions">
+        <button class="bg-btn bg-btn--secondary bg-btn--lg" type="button" id="winMenu">Menu</button>
+        <button class="bg-btn bg-btn--primary bg-btn--lg" type="button" id="winAgain" data-icon="play">Play again</button>
+      </div>
+      <a class="bg-btn bg-btn--ghost bg-btn--block cd-winhome" href="../index.html" id="winHome">All games</a>
+    </div>
+  </div>
+
+  <div class="cd-toast" id="toast" aria-hidden="true"></div>
+  <div class="cd-svtoast" id="svtoast" aria-hidden="true"></div>
+
+<script src="engine.js"></script>
+<script src="board.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
