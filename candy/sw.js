@@ -1,5 +1,5 @@
 // Offline cache for Candy Land (bump VERSION to force update)
-const VERSION = "candy-v2";
+const VERSION = "candy-v3";
 const PREFIX = VERSION.replace(/v[0-9]+$/, "");   // every game shares one origin (one CacheStorage): only ever delete THIS game's old caches
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "../sound.js", "../skins.js", "../saves.js", "../names.js", "./engine.js", "./brain.js", "./board.js", "./game.js",
   "../ui/theme.css", "../ui/ui.js", "../ui/icons.js",
