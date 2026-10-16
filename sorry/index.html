@@ -45,6 +45,7 @@
   .sr-sec{min-width:0}
   .sr-card{display:grid; gap:.75rem}
   .sr-field{display:grid; gap:.15rem}
+  .sr-pair, .sr-pick{display:grid; gap:.75rem}   /* the speed and skill rows: stacked on the phone, side by side on TV */
   .sr-field .bg-row__desc{margin-top:0}
   .sr-seats{display:flex; align-items:center; gap:.875rem; padding:.625rem .875rem; border-radius:var(--r-md); background:var(--ink-2); box-shadow:var(--well-edge)}
   .sr-seats__tokens{display:flex; flex:none; padding-left:.4rem}
@@ -178,6 +179,9 @@
   /* column B on TV: the players, then the Start dock (on screen at 1080p, straight under the setup it confirms), then save and
      load and the way back. The dock's gap keeps the focused button's ring and lift clear of its neighbour */
   html[data-tv] .sr-col--b{display:flex; flex-direction:column}
+  html[data-tv] .sr-pair{grid-template-columns:minmax(0,1fr) minmax(0,1fr); column-gap:1.5rem; align-items:start}
+  html[data-tv] .sr-pair .bg-seg{grid-auto-columns:auto}   /* the labels size the buttons (the 1.5rem seg gap stays) */
+  html[data-tv] .sr-pair .bg-seg > button{padding-inline:.25rem}
   html[data-tv] .sr-dock{order:4; position:static; gap:1.75rem; margin:0; padding:1.5rem 0 0; background:none}
   html[data-tv] #svbar button{grid-template-columns:minmax(0,1fr); justify-items:center; align-content:center; row-gap:.3rem; padding:.625rem .5rem}
   html[data-tv] #svbar button .bg-ico{width:1.25em; height:1.25em}
@@ -205,6 +209,7 @@
 <script src="../names.js"></script>
 <script>window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
 <script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
+<script src="brain.js"></script>
 </head>
 <body class="bg-app bg-app--scene sr-in-setup">
   <header class="bg-topbar">
@@ -249,11 +254,23 @@
           </div>
           <div class="sr-field"><span class="bg-row__title">Computer players</span><span class="bg-row__desc">2 to 4 players in all. Two players sit on opposite sides.</span></div>
           <div class="bg-seg" id="cpuSeg" role="group" aria-label="Computer players"></div>
+          <div class="sr-pair">
+            <div class="sr-pick">
           <div class="sr-field"><span class="bg-row__title">Game speed</span><span class="bg-row__desc">How fast the computers play and the pawns move. Changes at once.</span></div>
           <div class="bg-seg" id="speedSeg" role="group" aria-label="Game speed">
             <button type="button" data-speed="slow" aria-pressed="false">Slow</button>
             <button type="button" data-speed="medium" class="on" aria-pressed="true">Medium</button>
             <button type="button" data-speed="fast" aria-pressed="false">Fast</button>
+          </div>
+            </div>
+            <div class="sr-pick">
+          <div class="sr-field"><span class="bg-row__title" id="skillHead">Computer skill</span><span class="bg-row__desc">Easy is gentler, Hard is sharper. Changes at once.</span></div>
+          <div class="bg-seg" id="skillSeg" role="group" aria-labelledby="skillHead">
+            <button type="button" data-k="easy" aria-pressed="false">Easy</button>
+            <button type="button" data-k="normal" class="on" aria-pressed="true">Normal</button>
+            <button type="button" data-k="hard" aria-pressed="false">Hard</button>
+          </div>
+            </div>
           </div>
           <div class="sr-seats" id="seatPreview"></div>
         </div>
@@ -403,6 +420,11 @@ function paused(){ return armed && players.length>0 && !gameOver && setupShown()
 // the card flip, the pawn steps and the pawn glide are multiplied by speedFactor(). It is saved with the settings and the game, and
 // a change from the Menu applies at once (the next timer / animation uses the new factor).
 let gameSpeed="medium"; window.bgGameSpeed="medium";
+// Computer skill (easy / normal / hard; missing = normal): saved with the settings and the game, a change applies at once. The brain plays
+// the skills in SorryBrain.useFor (brain.js); the rest keep the old scorer (oldPickAction). One brain per computer, per game (aiBrains).
+let cpuSkill="normal", aiBrains={};
+function normSkill(v){ return v==="easy"||v==="hard"?v:"normal"; }
+function setSkill(v){ cpuSkill=normSkill(v); document.querySelectorAll("#skillSeg button").forEach(x=>{ const on=x.dataset.k===cpuSkill; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
 function speedFactor(){ return ({slow:1.75, fast:0.5})[window.bgGameSpeed] || 1 }
 function setSpeed(v){
   gameSpeed=(v==="slow"||v==="fast")?v:"medium"; window.bgGameSpeed=gameSpeed;
@@ -898,7 +920,7 @@ function drawCard(){
 let armed=false, lastSnap=null;
 function takeSnap(){
   if(!armed||gameOver) return;
-  lastSnap=JSON.parse(JSON.stringify({players:players,isHuman:isHuman,cpuNames:cpuNames,pawns:pawns,turn:turn,deck:deck,humanCount:humanCount,cpuCount:cpuCount,speed:gameSpeed,stats:{turns:stats.turns,bumps:stats.bumps,ms:playMs()}}));
+  lastSnap=JSON.parse(JSON.stringify({players:players,isHuman:isHuman,cpuNames:cpuNames,pawns:pawns,turn:turn,deck:deck,humanCount:humanCount,cpuCount:cpuCount,speed:gameSpeed,skill:cpuSkill,stats:{turns:stats.turns,bumps:stats.bumps,ms:playMs()}}));
   Saves.auto("sorry",lastSnap);
 }
 function beginTurn(){
@@ -978,6 +1000,7 @@ function chooseAction(idx){
 }
 function declareWinner(c){
   gameOver=true; Sound.sfx("win");
+  if(window.SorryBrain){ try{ SorryBrain.finish({brains:aiBrains,winner:c,skill:cpuSkill}); }catch(e){} }
   Saves.del("sorry","auto"); lastSnap=null;   // a finished game is not offered as "Continue last game"
   deckSlot.innerHTML=""; setStatus(`${dot(c)} <b>${isHuman[c]?"You win!":pn(c)+" wins!"}</b>`);
 }
@@ -1038,6 +1061,19 @@ function scoreAction(a){
   }
   return 0;
 }
+// the computer's choice (step 10): the brain decides where it is enabled; if it is missing, returns null or throws, the old scorer decides
+function oldPickAction(acts){ let best=acts[0], bs=-1e9; for(const a of acts){ const s=scoreAction(a); if(s>bs){bs=s;best=a;} } return best; }
+function brainCtx(c,acts){   // what the brain reads: the pawns, and each legal action with the board after it (the page's own dry run)
+  return {color:c, skill:cpuSkill, name:cpuNames[c]||"", brains:aiBrains, rnd:Math.random, players:players.slice(), pawns:allPawns(),
+    moves:acts.map(a=>({a:a, after:outcome(a)})), geo:{START_EXIT:START_EXIT, SAFE_ENTRY:SAFE_ENTRY, SLIDES:SLIDES}};
+}
+function pickComputerMove(c,acts){
+  const SB=window.SorryBrain;
+  if(SB&&SB.useFor&&SB.useFor[cpuSkill]){
+    try{ const a=SB.choose(brainCtx(c,acts)); if(a) return a; }catch(e){ /* the old scorer below takes over */ }
+  }
+  return oldPickAction(acts);
+}
 function aiTurn(){
   if(gameOver||isHuman[curColor()]) return;
   const c=curColor();
@@ -1049,8 +1085,7 @@ function aiTurn(){
       later(()=>{ busy=false; endTurnOrAgain(c,v,false); },1600);
       return;
     }
-    let best=acts[0], bs=-1e9;
-    for(const a of acts){ const s=scoreAction(a); if(s>bs){bs=s;best=a;} }
+    const best=pickComputerMove(c,acts);
     setStatus(`${dot(c)} ${pn(c)} drew <b>${v==='sorry'?'SORRY!':v}</b>`);
     later(()=>{                // hold on the drawn card so you can read it before the CPU moves
       applyActionAnimated(best, ()=>{
@@ -1414,7 +1449,7 @@ document.addEventListener("keydown",e=>{
   if((!down&&!up)||!a||!a.closest) return;
   const pick=sel=>document.querySelector(sel+" button.on:not([disabled])")||document.querySelector(sel+" button:not([disabled])");
   const rows=document.querySelectorAll("#svbar .r"), row1=rows[0], row2=rows[1];
-  const to=(down&&a.closest("#humanSeg"))?pick("#cpuSeg"):(up&&a.closest("#cpuSeg"))?pick("#humanSeg"):(down&&row1&&row2&&row1.contains(a))?nearestIn(row2,a):null;
+  const to=(down&&a.closest("#humanSeg"))?pick("#cpuSeg"):(up&&a.closest("#cpuSeg"))?pick("#humanSeg"):(down&&a.closest("#speedSeg"))?pick("#skillSeg"):(up&&a.closest("#skillSeg"))?pick("#speedSeg"):(down&&row1&&row2&&row1.contains(a))?nearestIn(row2,a):null;
   if(to){ e.preventDefault(); B.focus.set(to); }
 });
 
@@ -1432,17 +1467,20 @@ function drawCpuSeg(){
 }
 function setHumanSeg(){ document.querySelectorAll("#humanSeg button").forEach(x=>{ const on=+x.dataset.n===humanCount; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
 document.querySelectorAll("#speedSeg button").forEach(b=>b.addEventListener("click",()=>setSpeed(b.dataset.speed)));
+document.querySelectorAll("#skillSeg button").forEach(b=>b.addEventListener("click",()=>setSkill(b.dataset.k)));
+setSkill(cpuSkill);
 document.querySelectorAll("#humanSeg button").forEach(b=>b.addEventListener("click",()=>{ humanCount=+b.dataset.n; setHumanSeg(); drawCpuSeg(); }));
 drawCpuSeg();
 const saveBar=Saves.bar({game:"sorry",el:document.getElementById("svbar"),
-  getSettings:()=>({humans:humanCount,cpus:cpuCount,speed:gameSpeed}),
-  applySettings:s=>{ humanCount=s.humans||1; cpuCount=s.cpus!=null?s.cpus:1; setSpeed(s.speed); setHumanSeg(); drawCpuSeg(); },
-  standard:()=>{ humanCount=1; cpuCount=1; setSpeed("medium"); setHumanSeg(); drawCpuSeg(); },
+  getSettings:()=>({humans:humanCount,cpus:cpuCount,speed:gameSpeed,skill:cpuSkill}),
+  applySettings:s=>{ humanCount=s.humans||1; cpuCount=s.cpus!=null?s.cpus:1; setSpeed(s.speed); setSkill(normSkill(s.skill)); setHumanSeg(); drawCpuSeg(); },
+  standard:()=>{ humanCount=1; cpuCount=1; setSpeed("medium"); setSkill("normal"); setHumanSeg(); drawCpuSeg(); },
   getSnapshot:()=>(armed&&!gameOver)?lastSnap:null,
   loadSnapshot:d=>{ Sound.skip(); loadGame(d); showSetup(false); }});
 function loadGame(d){
   gen++;   // the previous game's pending timers must not act on the loaded one
   players=d.players; isHuman=d.isHuman; cpuNames=(d.cpuNames&&typeof d.cpuNames==="object")?d.cpuNames:{}; pawns=d.pawns; turn=d.turn; deck=d.deck; humanCount=d.humanCount||humanCount; cpuCount=d.cpuCount!=null?d.cpuCount:cpuCount;
+  setSkill(d.skill); aiBrains={};   // optional field: saves from before the brain are Normal; a loaded game starts its brains fresh
   setSpeed(d.speed);   // optional field: saves from before Game speed play at Medium
   card=null; gameOver=false; busy=false; armed=true;
   stats=readStats(d.stats); clockOn(); ui.result=false;   // saves from before the stats field start fresh counters
@@ -1484,7 +1522,7 @@ function startGame(humans, cpus){
   players = total===2 ? ["red","yellow"] : all.slice(0, total);   // 2 players sit on opposite sides (side-by-side seats favour one colour)
   isHuman={}; players.forEach((c,i)=>isHuman[c]=i<humans);
   drawCpuNames();   // a fresh random name for each computer, at every new game and every Play again
-  newPawns(); turn=0; deck=shuffle(buildDeck()); card=null; gameOver=false; busy=false;
+  newPawns(); aiBrains={}; turn=0; deck=shuffle(buildDeck()); card=null; gameOver=false; busy=false;
   stats=freshStats(); clockOn(); ui.result=false;
   buildStrip();
   buildBoard(); beginTurn();
