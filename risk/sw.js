@@ -1,5 +1,5 @@
 // Offline cache for Risk (bump VERSION to force update)
-const VERSION = "risk-v7";
+const VERSION = "risk-v8";
 const PREFIX = VERSION.replace(/v[0-9]+$/, "");   // every game shares one origin (one CacheStorage): only ever delete THIS game's old caches
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.png", "../sound.js", "../skins.js", "../saves.js", "../names.js", "./map.js", "./engine.js", "./brain.js", "./board.js", "./ctrl.js",
   "../ui/theme.css", "../ui/ui.js", "../ui/icons.js",
