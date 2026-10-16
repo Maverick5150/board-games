@@ -557,7 +557,9 @@ function syncRules(){
 }
 $("rulesToggle").addEventListener("click",()=>{ ui.rulesOpen=!ui.rulesOpen; syncRules(); });
 function setSpeedSeg(){ cfg.speed=normSpeed(cfg.speed); window.bgGameSpeed=cfg.speed; $("speedSeg").querySelectorAll("button").forEach(x=>{ const on=x.dataset.s===cfg.speed; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
-$("speedSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.speed=b.dataset.s; setSpeedSeg(); }));
+$("speedSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.speed=b.dataset.s; setSpeedSeg();
+  if(G&&!G.over&&lastSnap){ lastSnap.cfg.speed=cfg.speed; Saves.auto("rummy500",lastSnap); }   // step 10 review: a mid-game change survives a reload + Continue
+}));
 function setSkillSeg(){ cfg.skill=normSkill(cfg.skill); if(G) G.skill=cfg.skill; $("skillSeg").querySelectorAll("button").forEach(x=>{ const on=x.dataset.k===cfg.skill; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
 $("skillSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{
   cfg.skill=b.dataset.k; setSkillSeg();
