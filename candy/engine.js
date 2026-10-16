@@ -542,7 +542,7 @@ function finishDist(o){
 /* expected cards (turns) for one player from START */
 function expected(o){ return table(o).E[0]; }
 
-/* ---------------- standings: leader first ----------------
+/* ---------------- standings: leader first, every player on their own place 1..N (the CEO, 2026-10-16) ----------------
    The winner first (official). The rest by how far along the path they are (higher square first; a tie goes to whoever got there first):
    a table position, not an official placing (no source ranks them), so those rows carry table:true (RULES.md 2.7). */
 function standings(G){
@@ -553,7 +553,7 @@ function standings(G){
     if(a.at!==b.at) return a.at-b.at;
     return a.s-b.s;
   });
-  rows.forEach(function(r,i){ var prev=rows[i-1]; r.place=(prev&&!prev.done&&!r.done&&prev.pos===r.pos&&prev.at===r.at)?prev.place:i+1; });
+  rows.forEach(function(r,i){ r.place=i+1; });   // the CEO (2026-10-16): every player has their own place, 1 to N, never a shared place
   return rows;
 }
 
