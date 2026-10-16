@@ -12,6 +12,10 @@
   try { if (localStorage.getItem("bgui.effects") === "reduced") h.setAttribute("data-effects", "reduced"); } catch (e) { }
 })(document.documentElement);</script>
 <link rel="stylesheet" href="../ui/theme.css">
+<link rel="preload" href="../ui/fonts/manrope-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../ui/fonts/dmserifdisplay-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="dns-prefetch" href="https://broker.emqx.io"><link rel="dns-prefetch" href="https://broker.hivemq.com"><link rel="dns-prefetch" href="https://test.mosquitto.org">
 <script src="../ui/icons.js" defer></script>
 <script src="../ui/ui.js" defer></script>
 <style>
@@ -62,6 +66,9 @@
   .ph-wait.is-beat .bg-ico{animation:ph-flip 1.1s var(--ease-out) 1 both;}
   @keyframes ph-flip{from{transform:rotate(0)}to{transform:rotate(180deg)}}
   html[data-effects="reduced"] .ph-wait.is-beat .bg-ico{animation:none;}
+  /* step 10 smoothness: a tapped control that went to the TV dims at once (opacity only), until the TV's answer redraws it */
+  .ph-sent{opacity:.55;transition:opacity .12s ease-out;}
+  html[data-effects="reduced"] .ph-sent{transition:none;}
   .seatrow{display:flex;flex-wrap:wrap;justify-content:center;gap:.5rem;max-width:26rem;}
   .mytoken{width:4.5rem;height:4.5rem;font-size:var(--fs-2xl);}
   .prow2{display:flex;align-items:center;gap:.625rem;width:100%;max-width:26rem;min-height:var(--tap);padding:.75rem .875rem;border:0;border-radius:var(--r-md);background:var(--panel-fill);box-shadow:var(--panel-edge);color:var(--text-1);font:var(--fw-ui-strong) var(--fs-md)/1.25 var(--font-ui);text-align:left;cursor:pointer;margin:0;}
@@ -241,7 +248,7 @@
   <section class="bg-sheet" id="ov" aria-label="Details"><div class="bg-sheet__grip" aria-hidden="true"></div><div id="ovin" class="ph-sheet-body"></div></section>
   <section class="bg-sheet" id="setsheet" aria-labelledby="setTitle"><div class="bg-sheet__grip" aria-hidden="true"></div><div class="ph-sheet-body"><h2 class="bg-sheet__title" id="setTitle">Settings</h2><div class="ph-effects" id="effRow"></div><a class="bg-btn bg-btn--ghost bg-btn--block" id="sethome" href="../index.html" data-icon="home">Back to all games</a><button class="bg-btn bg-btn--secondary bg-btn--block" type="button" id="setDone">Done</button></div></section>
 
-<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js" async></script><!-- async: the screen never waits for the CDN; net.js opens the relays once it is in -->
 <script src="net.js"></script>
 <script src="monodata.js"></script>
 <script src="../rummy500/engine.js"></script>
@@ -310,6 +317,7 @@ var room=(params.get("room")||"").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0
 var myPid=BGNet.pid();
 var myName=null, myColor=null, net=null, curReq=null, started=false;
 var joined=false, joinTick=0, joinTimer=null;
+var wantJoin=false, netReady=false, netRoom=null;   /* step 10: the relays open while the name is typed; "Sit down" then only knocks */
 
 /* the player types their name fresh every time — it is never saved or pre-filled */
 
@@ -331,7 +339,7 @@ function hubLink(){ return '<a href="../index.html" class="bg-btn bg-btn--ghost 
 /* stop talking to this room (Leave, or the TV said we can't sit down) and forget the seat */
 function stopNet(){
   if(joinTimer){ clearInterval(joinTimer); joinTimer=null; }
-  var old=net; net=null; if(old){ try{ old.close(); }catch(e){} }
+  var old=net; net=null; wantJoin=false; netReady=false; netRoom=null; if(old){ try{ old.close(); }catch(e){} }
   joined=false; started=false; curReq=null; overShown=false; lastSnap=null; myColor=null;
   try{ Rummy.Party.resetUI(); }catch(e){} try{ if(sc&&sc.ctrl) sc.ctrl.destroy(); }catch(e){} sc=null; main.style.justifyContent="";
   $("plbtn").style.display="none"; chrome(false); closeOv(); closeVictory(); connEl.textContent=""; connEl.removeAttribute("data-state"); setRoom("Room —");
@@ -358,28 +366,45 @@ function askName(){
   var go=function(){ var v=($("nm").value||"").trim().slice(0,12); if(!v){ toast("Type your name first"); $("nm").focus(); return; } myName=v; connect(); };
   $("go").onclick=go; $("nm").onkeydown=function(e){ if(e.key==="Enter") go(); };
   $("nm").focus();
+  setTimeout(function(){ if(room&&!wantJoin&&$("nm")) openNet(); },60);   // the relays connect while the name is typed (nothing is sent, nothing shown, until "Sit down"); after the form is drawn
 }
-function connect(){
-  joined=false; joinTick=0; if(joinTimer){ clearInterval(joinTimer); joinTimer=null; }
-  showWaiting("Connecting to the TV…", true);
+/* one relay connection per room. Before "Sit down" it only listens to nothing: messages reach the screen once we asked to join */
+function openNet(){
+  if(net&&netRoom===room) return;
   if(net){ try{ net.close(); }catch(e){} }
+  netReady=false; netRoom=room;
   var self=null;
   self=net=BGNet.connect(room,"ctrl",{
     status:setConn,
-    ready:function(){
-      sendJoin();
-      // keep knocking every 2s until the TV confirms we are seated, then just a keep-alive every 8s
-      joinTimer=setInterval(function(){
-        joinTick++;
-        if(!joined || joinTick%4===0) sendJoin();
-        if(!joined && joinTick===5) showWaiting("Still connecting… make sure the TV is on the lobby screen for room "+room+".", true);
-      },2000);
-    },
-    up:function(){ if(!joined && joinTimer) sendJoin(); },   // a relay just came up: knock on it right away
-    msg:function(o){ if(self&&net===self) onMsg(o); }   // a closed connection (Leave / new room) can't change the screen any more
+    ready:function(){ if(net!==self) return; netReady=true; if(wantJoin) knock(); },
+    up:function(){ if(net===self&&wantJoin&&!joined&&joinTimer) sendJoin(); },   // a relay just came up: knock on it right away
+    msg:function(o){ if(self&&net===self&&wantJoin) onMsg(o); }   // a closed connection (Leave / new room) can't change the screen any more
   });
 }
+function knock(){
+  if(joinTimer){ clearInterval(joinTimer); joinTimer=null; }
+  sendJoin();
+  // keep knocking every 2s until the TV confirms we are seated, then just a keep-alive every 8s
+  joinTimer=setInterval(function(){
+    joinTick++;
+    if(!joined || joinTick%4===0) sendJoin();
+    if(!joined && joinTick===5) showWaiting("Still connecting… make sure the TV is on the lobby screen for room "+room+".", true);
+  },2000);
+}
+function connect(){
+  joined=false; joinTick=0; if(joinTimer){ clearInterval(joinTimer); joinTimer=null; }
+  showWaiting(netReady&&net&&netRoom===room?"Joining room "+room+"…":"Connecting to the TV…", true);
+  openNet(); wantJoin=true;
+  if(netReady) knock();   // already connected while the name was typed: knock now (otherwise the relay's ready does)
+}
 function sendJoin(){ net && net.send({t:"join", pid:myPid, name:myName}); }
+/* step 10: instant feedback on the phone. The control the player pressed dims the moment its choice goes to the TV
+   (the TV's answer redraws or clears it); presentation only, the message and the flow are unchanged */
+var lastPress=null;
+main.addEventListener("pointerdown",function(e){ lastPress=e.target&&e.target.closest?e.target.closest("button,[data-a],.uc,.pc,[data-i]"):null; },true);
+main.addEventListener("keydown",function(e){ if(e.key==="Enter"||e.key===" ") lastPress=e.target&&e.target.closest?e.target.closest("button,[data-a],.uc,.pc,[data-i]"):null; },true);
+function sentFx(){ var el=lastPress; lastPress=null; if(el&&el.isConnected&&main.contains(el)&&el.classList) el.classList.add("ph-sent"); }
+function unSent(){ Array.prototype.forEach.call(main.querySelectorAll(".ph-sent"),function(el){ el.classList.remove("ph-sent"); }); }
 
 var overShown=false;   // the "X wins!" screen stays until the host is back in the lobby (a keep-alive re-join must not replace it)
 function onMsg(o){
@@ -534,13 +559,13 @@ function showAsk(o){
 }
 var rvLastKey="", rvAsk=null;
 function rvShow(st,active,ask){
-  rvAsk=ask;
+  rvAsk=ask; unSent();
   var key=JSON.stringify(st)+(active?"A":"-");
   if(key===rvLastKey){ Rummy.Party.unbusy(); return; }
   rvLastKey=key;
   main.className="big scroll";
   Rummy.Party.phoneRender(main,st,{active:active,
-    act:function(id,data){ if(rvAsk&&net) net.send({t:"pick",pid:myPid,reqId:rvAsk.reqId,id:id,i:0,data:data}); },
+    act:function(id,data){ if(rvAsk&&net){ net.send({t:"pick",pid:myPid,reqId:rvAsk.reqId,id:id,i:0,data:data}); sentFx(); } },
     view:function(i){ if(net) net.send({t:"view",pid:myPid,rv:1,i:i}); },
     toast:toast});
 }
@@ -566,11 +591,11 @@ var un=null, unAsk=null;
 function unSend(a){
   if(a.t==="uno"||a.t==="catch"||a.t==="jump"){ if(net) net.send({t:"view",pid:myPid,uno:a}); return {ok:true}; }
   if(!unAsk||!net){ toast("Wait for your turn…"); return {ok:false,msg:"Wait for your turn."}; }
-  var ask=unAsk; unAsk=null; net.send({t:"pick",pid:myPid,reqId:ask.reqId,id:"act",i:0,data:a});
+  var ask=unAsk; unAsk=null; net.send({t:"pick",pid:myPid,reqId:ask.reqId,id:"act",i:0,data:a}); sentFx();
   return undefined;
 }
 function unShow(st,active,ask){
-  unAsk=active?ask:null;
+  unAsk=active?ask:null; unSent();
   if(!un||!main.contains(un.el)){
     if(un&&un.ctrl) un.ctrl.destroy();
     main.className="big scroll"; main.style.justifyContent="flex-start";
@@ -599,11 +624,11 @@ var rk=null, rkAsk=null;
 function rkSend(a){
   if(!rkAsk||!net){ toast("Wait for your turn…"); return {ok:false,msg:"Wait for your turn."}; }
   var ask=rkAsk; rkAsk=null;
-  net.send({t:"pick",pid:myPid,reqId:ask.reqId,id:"act",i:0,data:a});
+  net.send({t:"pick",pid:myPid,reqId:ask.reqId,id:"act",i:0,data:a}); sentFx();
   return undefined;
 }
 function rkShow(st,active,ask){
-  rkAsk=active?ask:null;
+  rkAsk=active?ask:null; unSent();
   if(!rk||!main.contains(rk.el)){
     if(rk&&rk.ctrl) rk.ctrl.destroy();
     main.className="big scroll"; main.style.justifyContent="flex-start";
