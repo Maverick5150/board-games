@@ -206,7 +206,7 @@ var LCSS=[
 ".un-lux .dstack .uc.h1{transform:translate(.04em,.012em) rotate(9deg)}.un-lux .dstack .uc.h2{transform:translate(-.05em,.02em) rotate(-11deg)}",
 ".un-lux .uhand .un-empty{padding:1.5rem 0;font:var(--fw-body) var(--fs-sm)/1.3 var(--font-ui);color:var(--text-2)}",
 ".un-lux .uc.is-focus{box-shadow:var(--focus-ring) !important;z-index:7}.un-lux .uc{outline:none}",
-".un-lux .ulog{min-height:2.5rem;margin:.25rem 0;font:var(--fw-body) var(--fs-micro)/1.45 var(--font-ui);color:var(--text-2);text-align:center}",
+".un-lux .ulog{min-height:4.35em;margin:.25rem 0;font:var(--fw-body) var(--fs-micro)/1.45 var(--font-ui);color:var(--text-2);text-align:center}",
 ".un-sheet .un-shead{display:grid;gap:.25rem;margin-bottom:1rem}.un-sheet .un-shead .bg-sheet__sub{margin:0}",
 ".un-sheet .un-colors{grid-template-columns:repeat(2,minmax(0,1fr))}",
 ".un-sheet .un-sheetbtns{margin-top:1rem}",
@@ -234,6 +234,11 @@ function create(cfg){
   else { modal.className="umodal"; modal.innerHTML='<div class="sh" id="ush"></div>'; }
   document.body.appendChild(modal);
   var $=function(id){ return root.querySelector("#"+id); };
+  /* smoothness (step 10): the Luxe table redraw rewrites only the parts whose markup changed. Every update used to re-parse the
+     table, the status, the actions, the whole hand and the log, lay them all out again and hand the D-pad focus to a new node (on a
+     Fire TV class CPU a card took up to 0.2 s to answer). An element is rewritten when its markup differs from what put() last
+     wrote, or when anything else changed its nodes (first node and node count are checked) */
+  function put(el,html){ if(el._uk===html&&el._un===el.childNodes.length&&el._uf===el.firstChild) return false; el.innerHTML=html; el._uk=html; el._un=el.childNodes.length; el._uf=el.firstChild; return true; }
   function act(a){ var r=cfg.send(a); if(r&&r.ok===false&&cfg.toast) cfg.toast(r.msg||"Not allowed."); return r; }
   function onTV(){ return !!(L&&cfg.tv&&cfg.tv()); }
   function tvOn(){ return !!(onTV()&&BG.focus&&BG.focus.enabled); }
@@ -372,10 +377,10 @@ function create(cfg){
     else if(newTop&&lastTopCard){ hist.unshift({card:lastTopCard,side:lastTopSide}); if(hist.length>2) hist.length=2; }
     lastTop=top?top.id:-1; lastTopCard=top; lastTopSide=V.side;
     var dname=V.color?CN[V.color]:"Any colour";
-    $("utbl").innerHTML='<div class="pile" id="udraw">'+backHTML({label:V.drawCount+" left",attrs:'data-pile="draw"'+(tv?' data-focus tabindex="-1" role="button" aria-label="Draw pile, '+V.drawCount+' cards left"':"")})+'<div class="pl">draw</div></div>'+
+    put($("utbl"),'<div class="pile" id="udraw">'+backHTML({label:V.drawCount+" left",attrs:'data-pile="draw"'+(tv?' data-focus tabindex="-1" role="button" aria-label="Draw pile, '+V.drawCount+' cards left"':"")})+'<div class="pl">draw</div></div>'+
       '<div class="pile un-mid"><div class="udir" role="img" aria-label="'+(V.dir>0?"Play goes clockwise":"Play goes counter-clockwise")+'" title="'+(V.dir>0?"Clockwise":"Counter-clockwise")+'">'+(V.dir>0?DIR_CW:DIR_CCW)+'</div>'+(V.pen?'<div class="upen">+'+V.pen.n+'</div>':'')+
       (V.color?'<div class="ucol" style="'+swStyle(V.color)+'"></div>':'<div class="ucol any" aria-hidden="true"><i style="background:'+COL.R+'"></i><i style="background:'+COL.Y+'"></i><i style="background:'+COL.G+'"></i><i style="background:'+COL.B+'"></i></div>')+'<div class="ucname">'+esc(dname)+'</div></div>'+
-      '<div class="pile"><div class="dstack">'+hist.slice().reverse().map(function(h,i){ return cardHTML(h.card,h.side,{cls:"dim h"+(hist.length-i),attrs:'aria-hidden="true"'}); }).join("")+(top?cardHTML(top,V.side,{cls:newTop?"pop top":"top",rot:(top.id*47)%9-4,attrs:'data-pile="discard" role="img" aria-label="Top card: '+esc(faceName(top.f[V.side]))+'"'}):"")+'</div><div class="pl">'+(dark?"Dark side":V.o.edition==="flip"?"Light side":"discard")+'</div></div>';
+      '<div class="pile"><div class="dstack">'+hist.slice().reverse().map(function(h,i){ return cardHTML(h.card,h.side,{cls:"dim h"+(hist.length-i),attrs:'aria-hidden="true"'}); }).join("")+(top?cardHTML(top,V.side,{cls:newTop?"pop top":"top",rot:(top.id*47)%9-4,attrs:'data-pile="discard" role="img" aria-label="Top card: '+esc(faceName(top.f[V.side]))+'"'}):"")+'</div><div class="pl">'+(dark?"Dark side":V.o.edition==="flip"?"Light side":"discard")+'</div></div>');
     // status + actions
     var st="", acts="", ts=tapw();
     if(V.over||V.roundOver) st="Round over";
@@ -401,15 +406,15 @@ function create(cfg){
     }
     var s=$("ustat");
     if(V.over||V.roundOver) s.removeAttribute("data-seat"); else s.setAttribute("data-seat",seatOf(V.actor));
-    s.innerHTML=(V.over||V.roundOver?"":'<span class="dot" aria-hidden="true"></span>')+'<span>'+st+'</span>';
-    $("uacts").innerHTML=acts;
+    put(s,(V.over||V.roundOver?"":'<span class="dot" aria-hidden="true"></span>')+'<span>'+st+'</span>');
+    put($("uacts"),acts);
     // hand
     if(me>=0){
       var pl=V.playable||[], jmp=V.jump||[];
-      $("uhand").innerHTML=V.hand.map(function(c){ var can=pl.indexOf(c.id)>=0, j=jmp.indexOf(c.id)>=0;
-        return cardHTML(c,V.side,{dim:(myTurn||V.phase==="drawn")&&!can&&!j,glow:can&&myTurn,cls:j?"jmp":"",attrs:'data-h="1" role="button" aria-label="'+esc(faceName(c.f[V.side]))+(can&&myTurn?", playable":"")+'"'+(tv?' data-focus tabindex="-1"':"")}); }).join("")||'<div class="un-empty">no cards</div>';
-    } else $("uhand").innerHTML='<div class="un-empty" data-stage-text>'+esc(tp.name)+' is playing…</div>';
-    $("ulog").innerHTML=(V.log||[]).slice(-3).map(esc).join("<br>");
+      put($("uhand"),V.hand.map(function(c){ var can=pl.indexOf(c.id)>=0, j=jmp.indexOf(c.id)>=0;
+        return cardHTML(c,V.side,{dim:(myTurn||V.phase==="drawn")&&!can&&!j,glow:can&&myTurn,cls:j?"jmp":"",attrs:'data-h="1" role="button" aria-label="'+esc(faceName(c.f[V.side]))+(can&&myTurn?", playable":"")+'"'+(tv?' data-focus tabindex="-1"':"")}); }).join("")||'<div class="un-empty">no cards</div>');
+    } else put($("uhand"),'<div class="un-empty" data-stage-text>'+esc(tp.name)+' is playing…</div>');
+    put($("ulog"),(V.log||[]).slice(-3).map(esc).join("<br>"));
     if(tvOn()) tvKeep(fk);
   }
 
