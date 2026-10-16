@@ -1198,6 +1198,19 @@
   stage.beam = BEAM;
   stage.hush = HUSH;
   stage.halo = HALO_TURN;
+  /* a game added after the first seven registers itself from its own folder before its first BGUI.stage / Skins.apply call:
+     BGUI.stage.register("war", {motifs: ["cards", "crown", "star", "cards"], halo: "#sel"}). Motifs are BGUI.icon names (add new
+     glyphs with BGUI.icon.add); the page gives the accent itself with [data-game="war"] { --accent: ...; } in its own CSS.
+     A registered game gets the TV Back default like the others. */
+  stage.register = function (game, o) {
+    if (!game || typeof game !== "string" || game === "party") return false;
+    o = o || {};
+    if (STAGE_GAMES.indexOf(game) < 0) STAGE_GAMES.push(game);
+    if (o.motifs && o.motifs.length) MOTIF[game] = o.motifs.slice(0, 4);
+    if (typeof o.halo === "string") HALO[game] = o.halo;
+    return true;
+  };
+  stage.games = function () { return STAGE_GAMES.slice(); };
 
   /* ---------------- TV Back: ONE default for every adopted game page (BGUI.back) ----------------
      The Fire TV app calls window.__tvBack() when the remote's Back is pressed (MainActivity.onBackPressed) and CLOSES THE APP when

@@ -477,5 +477,15 @@ function mountButton(o){
   d.body.appendChild(b);
 }
 
-g.Sound={music:music,skip:skip,nowPlaying:nowPlaying,stop:function(){ want=null; stopMusic(); },sfx:sfx,fromText:fromText,openPanel:openPanel,closePanel:closePanel,panelOpen:panelOpen,mountButton:mountButton,state:st,_songs:getSongs,_themes:THEMES};
+/* a game added later brings its own music style from its folder, before its first Sound.music(name):
+   Sound.addStyle("war", {scales, bpm, swing, sev, leadVol, waves, bassKind, progs, bridge, rhythms, chordSteps, drums, titles: [10 song titles]},
+   {wave: "square", reg: 0})   (the second object = the flavour of its sound effects; both shaped like the STYLES / STY entries above).
+   An existing style is never replaced. */
+function addStyle(name,S,fl){
+  if(!name||!S||STYLES[name]||name==="menu") return false;
+  if(!S.titles||S.titles.length<10||!S.progs||!S.rhythms||!S.drums||!S.scales||!S.bpm) return false;
+  STYLES[name]=S; if(fl&&!STY[name]) STY[name]=fl; delete songCache[name];
+  return true;
+}
+g.Sound={music:music,skip:skip,nowPlaying:nowPlaying,stop:function(){ want=null; stopMusic(); },sfx:sfx,fromText:fromText,openPanel:openPanel,closePanel:closePanel,panelOpen:panelOpen,mountButton:mountButton,addStyle:addStyle,hasStyle:function(n){ return !!STYLES[n]; },state:st,_songs:getSongs,_themes:THEMES};
 })(window);
