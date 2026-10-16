@@ -415,6 +415,12 @@
     /* 9-16 players: the Victory list in three columns beside the trophy */
     html:not([data-tv]) .wr-final.is-many{grid-template-columns:repeat(3,minmax(0,1fr)); width:100%}
   }
+
+  /* the CEO (2026-10-16): numbers bright enough to read on the TV across the room: a fluorescent lime with a dark edge, never dark text */
+  [data-game="war"]{--wr-num:#d6ff3c; --wr-num-glow:rgba(214,255,60,.38)}
+  .wr-n, .wr-pot__n, .wr-stand .wr-rk, .wr-stand .bg-player__meta, .wr-stand .bg-player__score, .wr-final .wr-fr, .wr-final .wr-fc{
+    color:var(--wr-num) !important; text-shadow:0 0 .3em var(--wr-num-glow), 0 1px 1px rgba(0,0,0,.9)}
+  .wr-stand .wr-rk, .wr-final .wr-fr{font-weight:800}
 </style>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
