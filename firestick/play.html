@@ -389,6 +389,7 @@
 <script src="../scatter/bank.js"></script>
 <script src="../scatter/engine.js"></script>
 <script src="../scatter/ui.js"></script>
+<script src="games/registry.js"></script><!-- Party game plugins (games/README.md): a plugin's phone files load when its room is joined -->
 <script>
 (function(){
 "use strict";
@@ -414,9 +415,10 @@ var curGame=null;
 function stageGame(g){
   if(!g||g===curGame) return; curGame=g;
   var run=function(){ var B=BG();
-    document.body.classList.toggle("bg-app--felt", g==="rummy500"||g==="uno");
-    document.body.classList.toggle("bg-app--scene", !(g==="rummy500"||g==="uno"));
-    if(barName&&GNAME[g]) barName.textContent=GNAME[g];
+    var felt=g==="rummy500"||g==="uno"||!!(pgEntry(g)&&pgEntry(g).felt);   // a plugin game says "felt" in its registry line
+    document.body.classList.toggle("bg-app--felt", felt);
+    document.body.classList.toggle("bg-app--scene", !felt);
+    if(barName&&gameName(g)) barName.textContent=gameName(g);
     if(B&&B.stage){ try{ B.stage(g,{back:false}); }catch(e){} } else document.documentElement.setAttribute("data-game",g); };
   if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",run); else run();
 }
@@ -532,7 +534,7 @@ function sentFx(){ var el=lastPress; lastPress=null; if(el&&el.isConnected&&main
 function unSent(){ Array.prototype.forEach.call(main.querySelectorAll(".ph-sent"),function(el){ el.classList.remove("ph-sent"); }); }
 
 var overShown=false;   // the "X wins!" screen stays until the host is back in the lobby (a keep-alive re-join must not replace it)
-function onMsg(o){
+function onMsg0(o){
   if(o.game) stageGame(o.game);
   if(o.t==="nojoin" && o.pid===myPid){ if(!joined){ var r=room; stopNet(); room=r; showNoJoin(o); } }
   else if(o.t==="you" && o.pid===myPid){ chrome(true); myColor=o.color; if(o.name) myName=o.name; joined=true; if(!started && !isAsking() && !overShown) showLobby({players:[{pid:myPid,name:myName,color:myColor}]}); }
@@ -541,17 +543,52 @@ function onMsg(o){
   else if(o.t==="rvs" && o.pid===myPid){ started=true; curReq=null; stageGame("rummy500"); rvShow(o.st,false,null); }
   else if(o.t==="rks" && o.pid===myPid){ started=true; curReq=null; stageGame("risk"); rkShow(o.st,false,null); }
   else if(o.t==="ups" && o.pid===myPid){ started=true; curReq=null; stageGame("uno"); unShow(o.st,false,null); }
+  else if(o.t==="pgs" && o.pid===myPid){ started=true; pgShow(o.st,null); }   // a plugin game's state for this phone
   else if(o.t==="scs" && o.pid===myPid){ started=true; curReq=null; stageGame("scatter"); scShow(o.st,false,null); }
   else if(o.t==="scdl" && o.pid===myPid){ if(sc&&sc.ctrl) sc.ctrl.setDeadlineIn(o.sec); toast("STOP! "+o.sec+" seconds left"); }
   else if(o.t==="snap"){ lastSnap=o; $("plbtn").style.display=""; if($("ov").classList.contains("on") && ovMode==="players") showPlayers(); }
-  else if(o.t==="wait" && (o.pid===myPid || o.pid==="*")){ if(o.pid==="*"){ Rummy.Party.resetUI(); firstBar(null); } curReq=null; started=(o.pid!=="*"); if(o.pid==="*"){ lastSnap=null; $("plbtn").style.display="none"; closeOv(); } showWaiting(o.msg||"Waiting…", false, o.turn, o.card); }
+  else if(o.t==="wait" && (o.pid===myPid || o.pid==="*")){ pgAsk=null; if(o.pid==="*"){ Rummy.Party.resetUI(); firstBar(null); pgReset(); } curReq=null; started=(o.pid!=="*"); if(o.pid==="*"){ lastSnap=null; $("plbtn").style.display="none"; closeOv(); } showWaiting(o.msg||"Waiting…", false, o.turn, o.card); }
   else if(o.t==="started"){ started=true; if(!isAsking()) showWaiting("Game starting…", false); }
-  else if(o.t==="over"){ firstBar(null); started=false; curReq=null; Rummy.Party.resetUI(); showOver(o); overShown=true; }
+  else if(o.t==="over"){ firstBar(null); started=false; curReq=null; Rummy.Party.resetUI(); pgReset(); showOver(o); overShown=true; }
   else if(o.t==="info" && (o.pid===myPid||!o.pid)){ toast(o.msg); }
   else if(o.t==="first" && (!o.to || o.to===myPid)){ showFirst(o); }
   if(lastFirst&&o.t!=="first"&&(isAsking()||ownView())) firstAsking();   // the banner stops saying "Watch the TV." once this phone has its own turn
 }
 function isAsking(){ return !!curReq; }
+/* ---------- Party game plugins (games/registry.js; games/README.md): a plugin game's phone side, loaded when its room is joined ----------
+   Messages of a plugin game wait in a queue (in order) while its files load. Its phone side, PartyGames.definePhone(id, {show, reset}),
+   draws this phone's view: show(st, ask, api) for the TV's snapshots ("pgs") and its turn asks (kind = the game id). Without a phone side
+   the generic option buttons answer the TV's asks. */
+var pgReady={}, pgQ=null, pgAsk=null;
+function pgEntry(g){ var P=window.PartyGames; return (g&&P&&P.get&&P.get(g))||null; }
+function pgPhone(g){ var P=window.PartyGames; return (pgEntry(g)&&P.phone(g))||null; }
+function gameName(g){ return GNAME[g]||(pgEntry(g)||{}).title||""; }
+function onMsg(o){
+  if(pgQ){ pgQ.push(o); return; }
+  if(o&&o.game&&pgEntry(o.game)&&!pgReady[o.game]){ pgQ=[o]; pgLoad(o.game); return; }
+  onMsg0(o);
+}
+function pgLoad(g){
+  var fin=function(){ pgReady[g]=true; try{ window.PartyGames.palette(g,COL,null,SEATNO); }catch(e){} var q=pgQ||[]; pgQ=null; q.forEach(function(m){ onMsg(m); }); };
+  window.PartyGames.load(g,"phone").then(fin,function(err){ try{ console.warn(err); }catch(e){} toast("This game's controls didn't load. The basic buttons still work."); fin(); });
+}
+function pgApi(g,ask){ return {
+  main:main, game:g, pid:myPid, color:function(){ return myColor; }, name:function(){ return myName; }, asking:function(){ return !!pgAsk; }, ask:ask||pgAsk,
+  put:put, toast:toast, esc:esc, clean:clean, BG:BG, paintIcons:paintIcons, optHTML:optHTML, afkHTML:afkHTML, focusFirst:focusFirst, waiting:showWaiting,
+  seat:function(c){ return sn(c||myColor); }, hex:function(c){ return COL[c||myColor]||"#888888"; },
+  /* answer the TV's turn ask: id + data (the TV's H.turn resolves {id, data}); false when this phone has no ask open */
+  act:function(id,data){ if(!pgAsk||!net){ toast("Wait for your turn…"); return false; } var a=pgAsk; pgAsk=null; net.send({t:"pick",pid:myPid,reqId:a.reqId,id:id,i:0,data:data}); sentFx(); return true; },
+  view:function(data){ if(net) net.send({t:"view",pid:myPid,pg:data}); },        // anything else for the TV (H.onView)
+  take:function(){ if(net) net.send({t:"view",pid:myPid,take:1}); }               // "Take over" after the computer played for an away phone
+}; }
+function pgShow(st,ask){
+  var g=curGame, d=pgPhone(g); if(ask) pgAsk=ask;
+  window.__pgV=st;
+  if(!d||!d.show) return;   // no phone side: only the generic asks (option buttons) reach this phone
+  unSent();
+  try{ d.show(st,ask||null,pgApi(g,ask)); }catch(e){ try{ console.warn(e); }catch(x){} }
+}
+function pgReset(){ pgAsk=null; var d=pgPhone(curGame); if(d&&d.reset){ try{ d.reset(pgApi(curGame,null)); }catch(e){} } }
 
 function showLobby(o){
   var me=(o.players||[]).filter(function(p){return p.pid===myPid;})[0];
@@ -586,7 +623,7 @@ function firstSub(o,asking){   // the banner's second line: "Watch the TV." only
   var end=asking?(me?"Your turn is below.":"Your move is below."):"Watch the TV.";
   return me?(d?(iDeal?"":esc(d.name)+" deals. "):"")+end:iDeal?esc(f.name)+" plays first, to your left."+(asking?" "+end:""):(d?esc(d.name)+" deals. ":"")+end;
 }
-function ownView(){ return !!(rvAsk||rkAsk||unAsk||scAsk); }   // the phone shows its own turn in a game controller
+function ownView(){ return !!(rvAsk||rkAsk||unAsk||scAsk||pgAsk); }   // the phone shows its own turn in a game controller
 function firstAsking(){ var el=$("phFirst"), sm=el&&el.querySelector("small"); if(sm&&lastFirst) sm.innerHTML=firstSub(lastFirst,true); }
 function showFirst(o){
   var f=o.first||{}, d=o.deal||null, me=f.pid===myPid, iDeal=!!(d&&d.pid===myPid); lastFirst=o;
@@ -594,7 +631,7 @@ function showFirst(o){
   var sub=firstSub(o,isAsking()||ownView());
   var n=sn(me?myColor:f.color), ini=esc(((me?myName:f.name)||"?").trim().charAt(0).toUpperCase());
   firstBar('<span class="bg-token" data-seat="'+n+'" aria-hidden="true">'+ini+'</span><span class="ph-firstbar__t"><b>'+esc(title)+'</b><small>'+sub+'</small></span>',n);
-  if(isAsking()||ownView()||main.querySelector(".scph,.unph,.rkph,.rv-ph,.rvph")) return;   // a game controller on screen stays (only the banner)
+  if(isAsking()||ownView()||main.querySelector(".scph,.unph,.rkph,.rv-ph,.rvph,.pgph")) return;   // a game controller on screen stays (only the banner)
   rvLastKey="";   // the 500 Rummy view draws again on its next snapshot
   main.className="big ph-first";
   put('<span class="bg-token mytoken" data-seat="'+n+'" aria-hidden="true">'+esc(((me?myName:f.name)||"?").trim().charAt(0).toUpperCase())+'</span><h1 class="title">'+esc(title)+'</h1><p class="sub" role="status">'+sub+'</p>');
@@ -730,6 +767,7 @@ function showAsk(o){
   if(o.kind==="risk"){ curReq=null; rkShow(o.st,true,o); return; }
   if(o.kind==="uno"){ curReq=null; unShow(o.st,true,o); return; }
   if(o.kind==="scat"){ curReq=null; scShow(o.st,true,o); return; }
+  if(o.kind&&pgEntry(o.kind)&&pgPhone(o.kind)){ curReq=null; pgShow(o.st,o); return; }   // a plugin game's own turn screen
   if(o.kind==="manage"){ showManage(o); return; }
   if(o.kind==="trade"){ showTrade(o); return; }
   if(o.kind==="offer"){ showOffer(o); return; }
@@ -856,7 +894,7 @@ var winEl=null;
 function closeVictory(){ var B=BG(); if(winEl){ try{ if(B&&B.win&&B.win.isOpen()) B.win.close(winEl); }catch(e){} if(winEl.parentNode) winEl.parentNode.removeChild(winEl); } winEl=null; }
 function fmtTime(ms){ var m=Math.floor(ms/60000), s=Math.floor(ms/1000)%60; return m+":"+(s<10?"0":"")+s; }
 function standHTML(rows){ if(!Array.isArray(rows)||!rows.length) return "";
-  return '<ol class="ph-stand" aria-label="Standings">'+rows.slice(0,10).map(function(r,i){ return '<li><span class="ph-stand__n">'+(i+1)+'</span><span class="dotc" style="background:'+esc(r.color||"#888").replace(/"/g,"")+'" aria-hidden="true"></span><span class="ph-stand__nm">'+esc(r.name)+'</span><span class="ph-stand__v">'+esc(r.v)+'</span></li>'; }).join("")+'</ol>'; }
+  return '<ol class="ph-stand" aria-label="Standings">'+rows.slice(0,16).map(function(r,i){ return '<li><span class="ph-stand__n">'+(i+1)+'</span><span class="dotc" style="background:'+esc(r.color||"#888").replace(/"/g,"")+'" aria-hidden="true"></span><span class="ph-stand__nm">'+esc(r.name)+'</span><span class="ph-stand__v">'+esc(r.v)+'</span></li>'; }).join("")+'</ol>'; }
 function showOver(o){
   var win=o.winner||"", team=/ & /.test(win), B=BG();
   main.className="big"; closeVictory();
@@ -867,7 +905,7 @@ function showOver(o){
   if(o.n) stats+='<li class="bg-stat"><b>'+(+o.n)+'</b><span>players</span></li>';
   if(o.ms>0) stats+='<li class="bg-stat"><b>'+fmtTime(+o.ms)+'</b><span>time</span></li>';
   winEl=document.createElement("div"); winEl.className="bg-win"; winEl.id="winph"; winEl.setAttribute("aria-labelledby","winTitle");
-  winEl.innerHTML='<div class="bg-win__scrim"></div><div class="bg-win__rays"></div><div class="bg-win__card"><div class="bg-win__medal"></div><p class="bg-eyebrow">Game over'+(GNAME[curGame]?' · '+esc(GNAME[curGame]):'')+'</p><h2 class="bg-win__title" id="winTitle">Victory</h2>'+
+  winEl.innerHTML='<div class="bg-win__scrim"></div><div class="bg-win__rays"></div><div class="bg-win__card"><div class="bg-win__medal"></div><p class="bg-eyebrow">Game over'+(gameName(curGame)?' · '+esc(gameName(curGame)):'')+'</p><h2 class="bg-win__title" id="winTitle">Victory</h2>'+
     '<p class="bg-win__sub"><b>'+esc(win)+'</b> '+(team?"win":"wins")+' the game.</p>'+st+(stats?'<ul class="bg-stats bg-win__stats">'+stats+'</ul>':'')+
     '<div class="bg-win__actions"><button class="bg-btn bg-btn--primary bg-btn--lg" type="button" id="winOk">Continue</button></div></div>';
   document.body.appendChild(winEl);
