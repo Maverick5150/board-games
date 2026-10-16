@@ -58,8 +58,8 @@ function brainOf(G,s){
   b=ai.b[s]={id:s,t:(h+s)%3,r:(hash(p.name)^(s*2654435761)^h)>>>0,om:{},pos:-1,mood:"balanced",B:0,gap:0,threat:-1,said:-1};
   return b;
 }
-/* expected rolls to 100 from a square (0 when home) */
-function eta(G,s){ var p=G.players[s]; if(p.done) return 0; var T=E.expectTable(G.L,G.o); return T?T[p.pos]:100-p.pos; }
+/* expected rolls to the goal (100 on the race boards) from a square (0 when home); any board of the catalogue (E.geo) */
+function eta(G,s){ var p=G.players[s]; if(p.done) return 0; var gm=E.geo?E.geo(G):null, T=E.expectTable(G.L,G.o,gm||undefined); return T?((p.back&&T.back&&T.back[p.pos]!=null)?T.back[p.pos]:T[p.pos]):(gm?gm.goal:100)-p.pos; }
 
 /* the in-game opponent model: read once per move from the public result (G.last) */
 function observe(G,b){
@@ -116,7 +116,7 @@ var LINES={
   snake:[["A little slip.","Snake. Not too bad.","Down a few."],["Pfft, a small snake.","Barely a scratch!","Is that all?"],["Careful... too late.","I should have rolled softer.","Hm. A snake."]],
   stay:[["Needs exactly {n}.","Not this time. {n} to go.","Close, but I need a {n}."],["Come on, a {n}!","So close! Just a {n}!","Next roll is a {n}, I can feel it."],["Patience. A {n} will come.","I'll wait for my {n}.","Exactly {n}. No rush."]],
   again:[["A 6! Again.","Another roll, please.","Six! Once more."],["Six! Keep it coming!","Roll again! Yes!","Another six, watch this!"],["A 6. Calmly again.","Another roll. Good.","Six. Let's not get greedy."]],
-  win:[["100! Good game, everyone.","Made it to the top!","That was fun - good game."],["100! Told you!","Champion of the board!","Nobody catches me!"],["Oh! I won. How nice.","Home at last. Good game.","A quiet win. Thank you."]],
+  win:[["{n}! Good game, everyone.","Made it to the top!","That was fun - good game."],["{n}! Told you!","Champion of the board!","Nobody catches me!"],["Oh! I won. How nice.","Home at last. Good game.","A quiet win. Thank you."]],
   restart:[["Back to the start. Oh dear.","Three sixes... too much luck.","From the beginning, then."],["Three sixes and I'm punished? Rude!","Back to start! I'll race back!","Too hot to handle!"],["I was afraid of that.","Back to the beginning. Calmly.","Three sixes is too many."]],
   near:[["Almost there.","Nearly home.","Just a few squares."],["Home stretch! Here I come!","Watch me finish!","Nearly there!"],["Careful now...","Don't look at the snakes.","Slowly, slowly..."]],
   otherBigSnake:[["Ouch, that's a long one.","Oh, bad luck!","That one hurt."],["Ha! Down you go!","See you at the bottom!","Bye bye!"],["Oh, poor thing.","That looked painful.","Careful out there."]],
@@ -133,13 +133,14 @@ function react(G,ev){
       if(e.e==="roll") mover=e.s;
       else if(e.e==="ladder"){ kind=e.len>=20?"bigLadder":"ladder"; len=e.len; }
       else if(e.e==="snake"){ kind=e.len>=20?"bigSnake":"snake"; len=e.len; }
-      else if(e.e==="stay"){ kind="stay"; n=e.need; }
+      else if(e.e==="stay"&&!e.cap){ kind="stay"; n=e.need; }   // (Leela's "past 72 is lost" is not an exact-number wait)
       else if(e.e==="restart") kind="restart";
-      else if(e.e==="finish"&&e.place===1) kind="win";
+      else if(e.e==="finish"&&e.place===1){ kind="win"; n=E.geo?E.geo(G).goal:100; }
     }
     if(mover<0) return null;
     if(!kind&&ev.some(function(x){ return x.e==="again"; })) kind="again";
-    if(!kind&&!G.players[mover].done&&G.players[mover].pos>=90) kind="near";
+    var gl=E.geo?E.geo(G).goal:100;
+    if(!kind&&!G.players[mover].done&&G.players[mover].pos>=gl-10&&G.players[mover].pos<gl) kind="near";
     var speaker=-1;
     if(isCpu(G,mover)&&kind){
       var bm=brainOf(G,mover), chance={bigLadder:1,bigSnake:1,win:1,restart:1,stay:.45,ladder:.5,snake:.5,again:.4,near:.25}[kind];
