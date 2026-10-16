@@ -650,11 +650,17 @@ function paintPacket(s,count){
   var h=""; for(var i=0;i<L;i++) h+=C.backHTML({attrs:'style="transform:translate('+(-i*1.6)+"px,"+(-i*1.6)+'px)"'});
   pk.innerHTML=h; pk.classList.toggle("is-empty",L===0);
 }
+/* a seat count on screen. A won pot counts up (tweenNumber); a plain write while that runs must not flash the end value over the count-up
+   (task2: 18, 36, 23, 27 ... 36), and a new value stops a count-up that is no longer right (the count would land on a stale number) */
+function putCount(el,v){
+  if(el._tw){ if(el._tw.to===v&&el._tw.end>Date.now()) return; el._tw=null; var B=BG(); if(B&&B.tweenNumber){ B.tweenNumber(el,v,v,0); return; } }
+  if(el.textContent!==String(v)) el.textContent=String(v);
+}
 function setCount(s,v,tween){
   var el=seatEls[s]&&seatEls[s].querySelector(".wr-n"); if(!el) return;
   var from=disp[s]; disp[s]=v;
   var B=BG();
-  if(tween&&B&&B.tweenNumber&&!reduced()&&from!==v) B.tweenNumber(el,from,v,sp(420)); else el.textContent=String(v);
+  if(tween&&B&&B.tweenNumber&&!reduced()&&from!==v){ var ms=sp(420); el._tw={to:v,end:Date.now()+ms+120}; B.tweenNumber(el,from,v,ms); } else putCount(el,v);
   seatEls[s].querySelector(".wr-nl").textContent=v===1?"card":"cards";
   var p=G.players[s]; paintPacket(s,G.o.length==="onepass"?Math.max(0,v-p.won.length):Math.max(0,v-p.pr.length-p.hand.length));
 }
@@ -665,14 +671,18 @@ function fightOf(){
   if(ids.some(function(c){ return c==null; })) return {f:f,t:[]};
   return {f:f,t:E.winnersOf(G,ids).map(function(i){ return f[i]; })};
 }
+/* the cards a seat has already laid for a move the engine still holds (G.pick: the others have not acted yet). They left the stack on the
+   table, so the seat count leaves them out, as it does while they fly (task2: a person who laid 3 down + the 4th read "25 cards" beside the
+   computer's 21, after the count had dropped and bounced back). Mirrors renderCards: one card for a flip, the war cards (down + 1) in a war */
+function laidN(s){ if(!G||G.over||!G.pick||!G.pick[s]) return 0; if(G.phase==="flip") return 1; if(G.phase!=="war") return 0; var a=E.avail(G,s); return a>0?Math.min(G.down,a-1)+1:0; }
 function updateSeats(){
   if(!G) return;
   if(!busy&&!ui.dealing) ui.fight=fightOf();
   var todo=needTodo();
   G.players.forEach(function(p,s){
     var el=seatEls[s]; if(!el) return;
-    if(!ui.dealing&&!busy) disp[s]=E.total(G,s);   // mid-animation the counts follow the cards on the table
-    el.querySelector(".wr-n").textContent=String(disp[s]); el.querySelector(".wr-nl").textContent=disp[s]===1?"card":"cards";
+    if(!ui.dealing&&!busy) disp[s]=E.total(G,s)-laidN(s);   // mid-animation the counts follow the cards on the table
+    putCount(el.querySelector(".wr-n"),disp[s]); el.querySelector(".wr-nl").textContent=disp[s]===1?"card":"cards";
     if(!busy) paintPacket(s,ui.dealing?disp[s]:p.pk.length);
     var sub=[];
     if(G.o.hand&&!p.out) sub.push("Hand "+p.hand.length);
@@ -779,7 +789,11 @@ function mainControl(){
 }
 function syncControls(){
   if(!G){ return; }
-  var todo=needTodo(), hs=todo.filter(isHuman), cs=todo.filter(function(s){ return !isHuman(s); }), tv=onTV(), nh=nHumans();
+  /* task2: while a move plays, the button and the status line follow the table as the chips do: a war the engine has declared but the table
+     has not shown yet (the tied cards still turning; the drum roll before a double war) stays off the button ("War! Lay 3 down...") and
+     the status until its banner, which calls this again (Flip comes back then, and the TV focus with it) */
+  var unseen=busy&&G.phase==="war"&&!!ui.shown&&ui.shown.w<G.stats.wars;
+  var todo=unseen?[]:needTodo(), hs=todo.filter(isHuman), cs=todo.filter(function(s){ return !isHuman(s); }), tv=onTV(), nh=nHumans();
   var fb=$("flipBtn"), lbl=$("flipLabel"), st="", hint="Flip";
   var handPhase=G.o.hand&&G.phase==="flip";
   fb.hidden=!nh||G.over||(handPhase&&!ui.dealing);
@@ -800,7 +814,7 @@ function syncControls(){
   if(ui.dealing) st=nm(G.dealer)+" deals "+deckN()+" cards, one at a time. Everyone flips at once: nobody goes first.";
   else if(G.over) st=G.winner>=0?nm(G.winner)+(nm(G.winner)==="You"?" win":" wins")+"!":"The game is a draw.";
   else if(G.phase==="claim"){ var w=G.pend?G.pend.w:-1; st=w>=0&&isHuman(w)&&!cfg.auto?(nm(w)==="You"?"You win":nm(w)+" wins")+" the battle: choose what to take":w>=0?nm(w)+" is collecting the cards":""; }
-  else if(busy&&!hs.length) st=G.phase==="war"?"War!":bn;
+  else if(busy&&!hs.length) st=G.phase==="war"&&!unseen?"War!":bn;
   else if(hs.length&&!cfg.auto){
     if(G.phase==="war") st="War! "+(nh>1?whoList(hs)+": lay your war cards":"Lay your war cards")+(cs.length?" · "+whoList(cs,"computers")+(cs.length>1?" are":" is")+" laying theirs":"");
     else if(handPhase) st=bn+" · "+(nh>1?nm(hs[0])+", choose a card":"Choose a card to play")+(cs.length?" · waiting for "+whoList(cs,"computers"):"");
@@ -1077,7 +1091,7 @@ async function animEvent(my,e){
       sub=e.forced?(G.o.twos?"A 2 declares war":"A joker declares war"):whoList(e.tied)+" tie"+(e.n>1?" again":"")+(e.seats.length>e.tied.length&&big()?" · "+whoList(e.seats)+" fight":"");
       sub+=e.down?": "+e.down+" face down, then the "+ord(e.down+1)+" card decides":": the next cards decide";
       if(e.n>1) for(s in tab) tab[s].forEach(function(x){ x.removeAttribute("data-wn"); });   // a new war: only its own cards are numbered
-      if(ui.shown) ui.shown.w++; chips();
+      if(ui.shown) ui.shown.w++; syncControls();   // the war is on the table now: the button and the status may say so (syncControls ends with chips)
       Sound.sfx("cannon"); flash();
       await banner(warWord(e.n),sub,dl(1500));
       for(s in tab) tab[s].forEach(function(x){ x.classList.remove("is-win"); });
