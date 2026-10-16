@@ -164,6 +164,16 @@
   @keyframes scLens{0%,100%{transform:translate(0,0) rotate(0)} 25%{transform:translate(.25rem,-.2rem) rotate(-10deg)} 50%{transform:translate(0,.2rem) rotate(0)} 75%{transform:translate(-.25rem,-.2rem) rotate(10deg)}}
   html[data-effects="reduced"] .sc-rl__lens{animation:none}
   @media (prefers-reduced-motion: reduce){ .sc-rl__lens{animation:none} }
+  /* step 10 review: on TV the Ruling is docked over the right-hand column (players, hints), a full-height panel, so the answer pad with
+     the challenged answer and its category stays in view beside it under a light scrim; the answer gets a gold outline while it is ruled */
+  html[data-tv] #ruling{top:5.25rem; left:auto; right:var(--gutter); width:28rem; max-height:calc(100vh - 6rem); margin:0; padding-left:1.5rem; padding-right:1.5rem; border-radius:var(--r-xl)}
+  html[data-tv] #ruling .sc-rl__ans{font-size:var(--fs-2xl)}
+  html[data-tv] #ruling .sc-rl{gap:.5rem}
+  html[data-tv] #ruling .bg-sheet__grip{display:none}
+  html[data-tv] #ruling .sc-rl__facts > div{grid-template-columns:6.5rem minmax(0,1fr)}
+  html[data-tv] #ruling .sc-rl__lead, html[data-tv] #ruling .sc-rl__quote p{font-size:var(--fs-md)}
+  html[data-tv] body.sc-rl-on{--scrim:rgba(3,4,10,.42)}
+  html[data-tv] .scAns.sc-rl-target{outline:3px solid var(--gold-300); outline-offset:3px}
   html[data-tv] .sc-rl__facts > div{grid-template-columns:7rem minmax(0,1fr)}
 
   /* ---------- TV (html[data-tv], 1rem = 24px at 1080p) ---------- */
@@ -698,7 +708,7 @@ function toReview(){
   if(Object.keys(G.challenges).length) banner("A computer challenged an answer — vote!","info","⚖");
   driveVotes(); autosave();
 }
-function showReview(){ ctrl.update(snap(voteMe>=0?voteMe:reviewMe)); legend(); }
+function showReview(){ ctrl.update(snap(voteMe>=0?voteMe:reviewMe)); legend(); if(RS.ch&&onTV()) markRuled(); }
 function doChallenge(a){
   // the challenger is one of the humans other than the answer's author; ask who when there is a choice (hot-seat)
   const can=G.players.filter(p=>p.human&&p.id!==a.p).map(p=>p.id);
@@ -794,8 +804,15 @@ function rulingQuery(ch){
   const t=ch.dupWith; if(t&&G.players[t.p]) q.dup={name:G.players[t.p].name,raw:String(((G.answers[t.p]||[])[ch.slot]||[])[t.k]||""),p:t.p,k:t.k};
   return q;
 }
-function openRuling(){ const el=$("ruling"), B=BG(); el.classList.add("show"); if(luxe()&&!B.sheet.isOpen(el)) B.sheet.open(el,{dismissible:false,focus:"#rlSkip"}); }
-function closeRuling(){ const el=$("ruling"), B=BG(); if(!el) return; el.classList.remove("show"); if(B&&B.sheet&&B.sheet.isOpen(el)){ ui.closing=true; try{ B.sheet.close(el); }finally{ ui.closing=false; } } }
+function openRuling(){ const el=$("ruling"), B=BG(); el.classList.add("show"); if(luxe()&&!B.sheet.isOpen(el)) B.sheet.open(el,{dismissible:false,focus:"#rlSkip"}); markRuled(); }
+// TV: the challenged answer on the pad is scrolled into view beside the docked Ruling and outlined (a static outline, no animation)
+function markRuled(){
+  document.querySelectorAll(".sc-rl-target").forEach(e=>e.classList.remove("sc-rl-target"));
+  const ch=RS.ch, on=!!(ch&&onTV()&&$("ruling").classList.contains("show")); document.body.classList.toggle("sc-rl-on",on); if(!on) return;
+  const a=document.querySelector('.scAns[data-s="'+ch.slot+'"][data-p="'+ch.p+'"][data-k="'+ch.k+'"]'); if(!a) return;
+  a.classList.add("sc-rl-target"); try{ a.scrollIntoView({block:"center",behavior:"auto"}); }catch(e){}
+}
+function closeRuling(){ const el=$("ruling"), B=BG(); if(!el) return; el.classList.remove("show"); markRuled(); if(B&&B.sheet&&B.sheet.isOpen(el)){ ui.closing=true; try{ B.sheet.close(el); }finally{ ui.closing=false; } } }
 function nextRuling(){
   if(!G||G.phase!=="review") return;
   // a ruling that arrived but was not answered yet (a reload, or a challenge tapped beside it without ui.js) is shown again first
@@ -823,7 +840,8 @@ function applyRuling(over){
   }
   closeRuling(); autosave(); nextRuling();
 }
-function drawRuling(ch,r){
+function drawRuling(ch,r){ drawRuling0(ch,r); markRuled(); }
+function drawRuling0(ch,r){
   const s=G.slots[ch.slot], raw=rawOf(ch), by=G.players[ch.by]||{name:"A player"}, au=G.players[ch.p]||{name:"?"}, L=s.letter, v=r?r.v:"look";
   const whose=au.name==="You"?"your answer":esc(au.name)+"’s answer", byN=esc(by.name);
   const title=!r?"Researching…":v==="good"?"Good answer":v==="bad"?"Doesn't count":"Too close to call";
