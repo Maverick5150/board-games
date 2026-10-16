@@ -333,7 +333,10 @@
     scrimEl = d.createElement("div");
     scrimEl.className = "bg-scrim";
     scrimEl.setAttribute("aria-hidden", "true");
-    scrimEl.addEventListener("click", function () { var t = stack[stack.length - 1]; if (t && t.opts.dismissible !== false) closeSheet(t.el, "scrim"); });
+    /* A finger tap that opens a sheet (a board handler on pointerup / touchend) is followed by the browser's own click on the same
+       spot, which now lands on this fresh scrim: it must not close the sheet it just opened (2.5.2: in Risk, tapping the enemy
+       territory opened the attack sheet and that click closed it again, so there was no way to attack on a touch screen). */
+    scrimEl.addEventListener("click", function () { var t = stack[stack.length - 1]; if (t && t.opts.dismissible !== false && now() - t.at > 450) closeSheet(t.el, "scrim"); });
     d.body.appendChild(scrimEl);
     return scrimEl;
   }
@@ -364,7 +367,7 @@
     el.setAttribute("aria-modal", "true");
     el.removeAttribute("aria-hidden");
     if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
-    stack.push({ el: el, opener: d.activeElement, opts: opts, dpad: !!d.querySelector(".is-focus") });
+    stack.push({ el: el, opener: d.activeElement, opts: opts, dpad: !!d.querySelector(".is-focus"), at: now() });
     restack();
     el.classList.add("is-open");
     var first = $(opts.focus, el) || el.querySelector("[data-autofocus]") || tabbables(el)[0] || el;
@@ -2036,7 +2039,7 @@
   }, true);
 
   /* ---------------- export ---------------- */
-  BGUI.version = "2.5.1";
+  BGUI.version = "2.5.2";
   BGUI.reducedMotion = reducedMotion;
   BGUI.setReducedMotion = setReducedMotion;
   BGUI.haptic = haptic;

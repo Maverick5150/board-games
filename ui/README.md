@@ -159,7 +159,7 @@ Focus ring: every `bg-` control gets the same ring on `:focus-visible`, and also
 
 ## 3. `window.BGUI`
 
-This is BGUI 2.5.1 (`BGUI.version`; 2.5.1: OK on a text field on TV re-focuses and clicks it so an Android WebView opens its on-screen keyboard, the name fields carry `inputmode="text"`, and the who-goes-first show takes no taps while it fades out). Every call is safe if its element is missing: it returns `null`, `false` or a resolved promise.
+This is BGUI 2.5.2 (`BGUI.version`; 2.5.2: a sheet opened by a finger tap ignores the click that same tap sends to the new scrim during its first 450 ms, so a tap that opens a sheet no longer closes it again on touch screens; 2.5.1: OK on a text field on TV re-focuses and clicks it so an Android WebView opens its on-screen keyboard, the name fields carry `inputmode="text"`, and the who-goes-first show takes no taps while it fades out). Every call is safe if its element is missing: it returns `null`, `false` or a resolved promise.
 
 | Call | Does |
 |---|---|
