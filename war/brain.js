@@ -4,7 +4,7 @@
      1. Hand War: which card to play (a simultaneous choice like Goofspiel). It counts cards from PUBLIC information only (G.kn: whose stack each
         collected card went into, and the cards on the table), estimates what each opponent can hold and is likely to play, scores every card
         (win cheaply, dump a low card when the battle is lost anyway, keep Aces back, a tie means a war), and mixes among near-equal choices.
-     2. Prisoners of War (House): which face-down card to take prisoner (the strongest), and when to play a prisoner instead of the top card.
+     2. Prisoners of War (House): which of the beaten cards to take prisoner (the strongest), and when to play a prisoner instead of the top card.
      3. Winner arranges the won cards (House): spread the strong cards out (the effect is tiny and unproven, and we say so).
    One brain per computer seat, plain data in G.ai.b[seat] (saved with the game): its own temperament (balanced / bold / reserved) and weights,
    a mood read from the standings every decision (behind = bold, ahead = reserved, close = balanced), and an in-game model of every opponent

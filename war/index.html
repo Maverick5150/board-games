@@ -163,6 +163,7 @@
   .wr-hcard.is-pr::after{content:"Prisoner"; position:absolute; left:50%; bottom:-.35rem; transform:translateX(-50%); padding:0 .35rem; border-radius:var(--r-pill);
     font:var(--fw-caps) var(--fs-micro)/1.35 var(--font-ui); color:var(--accent-ink); background:var(--accent); white-space:nowrap}
   .wr-hcard.is-best .wf{box-shadow:0 0 0 2px var(--gold-200),0 2px 5px #0009}
+  .wr-hprs{align-self:center; min-height:var(--tap); padding:.4rem .7rem; font-size:var(--fs-sm); line-height:1.2}
   .wr-side{display:grid; gap:.5rem; margin-top:.6rem}
   .wr-stat{margin:0; text-align:center; font:var(--fw-ui-strong) var(--fs-sm)/1.4 var(--font-ui); color:var(--text-1); min-height:1.4em}
   .wr-acts{display:flex; flex-wrap:wrap; justify-content:center; align-items:stretch; gap:.625rem; margin:0 calc(-1 * var(--focus-room)); padding:var(--focus-room)}
@@ -255,6 +256,7 @@
   html[data-tv] .wr-acts{justify-content:flex-start; gap:1.5rem}
   html[data-tv] #flipBtn{flex:1 1 100%}
   html[data-tv] .wr-auto{flex:1 1 100%}
+  html[data-tv] .wr-prbtn{flex:1 1 0; min-width:0; padding-inline:.75rem}   /* two prisoners side by side: the log keeps its room */
   html[data-tv] .wr-meta{justify-content:flex-start}
   html[data-tv] .wr-log{flex:1; min-height:0; overflow:hidden; align-content:end; text-align:left}
   html[data-tv] .wr-log li:nth-last-child(n+3){display:block}
@@ -266,6 +268,11 @@
   html[data-tv] .wr-n{font-size:var(--fs-3xl)}
   html[data-tv] .wr-banner b{font-size:var(--fs-5xl)}
   html[data-tv] .wr-banner span{font-size:var(--fs-lg)}
+  /* TV: the spoils and prisoner sheets dock over the right column, so the cards they judge stay in view on the table */
+  html[data-tv] #claimBox, html[data-tv] #prBox{top:5.25rem; bottom:auto; left:auto; right:var(--gutter); width:28rem; max-height:calc(100vh - 6rem); margin:0; padding-left:1.5rem; padding-right:1.5rem; border-radius:var(--r-xl); overflow-y:auto}
+  html[data-tv] #claimBox .bg-sheet__grip, html[data-tv] #prBox .bg-sheet__grip{display:none}
+  html[data-tv] #claimBox, html[data-tv] #prBox{padding-top:1.25rem}
+  html[data-tv] #claimBox .bg-sheet__options, html[data-tv] #prBox .bg-sheet__options, html[data-tv] #handoffSheet .bg-sheet__options{gap:1.5rem}   /* the ring never touches the next option */
   html[data-tv] body:not(.wr-in-setup) .bg-toast{left:calc(100vw - var(--gutter) - 13.5rem); max-width:26rem}
 </style>
 <script src="../sound.js"></script>
@@ -386,6 +393,7 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
 
   <section class="bg-sheet" id="claimBox" aria-labelledby="claimTitle"><div id="claimSheet"></div></section>
   <section class="bg-sheet" id="handoff" aria-labelledby="hoTitle"><div id="handoffSheet"></div></section>
+  <section class="bg-sheet" id="prBox" aria-labelledby="prTitle"><div id="prSheet"></div></section>
 
   <div class="bg-win" id="winBox" aria-labelledby="winTitle">
     <div class="bg-win__scrim"></div>
