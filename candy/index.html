@@ -102,6 +102,7 @@
   .cd-resume > span{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.2rem; min-height:2.75rem}
   .cd-resume.bg-btn--secondary .bg-btn__sub, .cd-dock #startBtn.bg-btn--secondary .bg-btn__sub{color:var(--text-2)}
   .cd-nw{white-space:nowrap}
+  .cd-dock .bg-btn__sub{white-space:normal; text-align:center}   /* a long sub breaks at its " · " (cd-nw parts), never past the button */
 
   /* ---------- in game: the board is the hero; standings on top (phone) or beside it (TV) ---------- */
   .cd-game{display:flex; flex-direction:column; align-items:center; width:min(100%,40rem); margin:0 auto; padding:0 var(--gutter) 1rem}
@@ -205,6 +206,8 @@
   .cd-final .cd-fc{flex:none; color:var(--gold-100); font-variant-numeric:tabular-nums}
   .cd-final .cd-fr{flex:none; min-width:1.2rem; color:var(--text-2)}
   .cd-final.is-grid{grid-template-columns:repeat(2,minmax(0,1fr)); width:min(100%,32rem)}
+  /* an upright phone: one column, so every name reads in full ("E", "G.." in two columns at 390 px) */
+  @media (max-width:34rem){ html:not([data-tv]) .cd-final.is-grid{grid-template-columns:minmax(0,1fr); width:min(100%,24rem)} }
   .cd-winhome{margin-top:.75rem}
   /* fallbacks when ui/ui.js is missing */
   .cd-toast{position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom,0px) + 90px); transform:translateX(-50%); max-width:90vw; padding:10px 16px; border-radius:12px; z-index:90;
