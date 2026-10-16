@@ -11,7 +11,12 @@
      before a tense roll, a line after a big climb or slide); Computer skill is kept and says plainly that it changes nothing.
    - The person's Roll is queued at once and played the moment the board is free, so a tap is never lost. The engine's events
      (apply().ev) play in order; after each batch the board is drawn again from G, so a reload or Continue shows the same board.
-     Saves after every roll (Saves.auto "snakes"). */
+     Saves after every roll (Saves.auto "snakes").
+   - Every classic board (2026-10-16): setup's Board row opens "Choose your board" (a BGUI sheet): every board of the catalogue
+     (boards.js) grouped by era, oldest first, each with a small picture drawn from its layout, its maker, country and year, its counts and
+     how long a game runs (the exact Markov length under the chosen rules); the Version's own board is the default and the shuffled fair
+     board is last. In play a chip names the board and its year; the Victory screen names it too; named squares (virtues and vices, the
+     Indian charts' names, Leela's) show in the ladder and snake banners. The goal is the board's own (68 on the 72-square charts). */
 (function(){
 "use strict";
 var S=window.Snakes, E=S.Engine, BD=S.Board;
@@ -69,6 +74,11 @@ var ui={fpShow:false,winShown:-1,result:false,rulesOpen:false,finished:-1,needSy
 var stats={ms:0}, clock0=0;
 
 function maxP(){ return cfg.over.big?E.MAXBIG:E.MAXP; }
+/* the board in play (or chosen): its catalogue facts, geometry and goal */
+function infoOf(bd){ return bd&&bd!=="shuffle"&&E.infoOf?E.infoOf(bd):null; }
+function gmOf(bd){ return E.geoOf&&bd&&bd!=="shuffle"?E.geoOf(bd):(E.GEO100||{end:100,goal:100}); }
+function goalSq(){ return G?gmOf(G.bd).goal:100; }
+function boardCap(bd){ var i=infoOf(bd); return bd==="shuffle"?"Shuffled fair board":i?i.cap:(E.BOARDS[bd]?E.BOARDS[bd].name:"The board"); }
 function nPlayers(){ return cfg.humans+cfg.cpus; }
 function rawOpts(){ var x={}; for(var k in cfg.over) x[k]=cfg.over[k]; if(x.first==="youngest") x.youngest=cfg.youngest; return E.versionOpts(cfg.version,x); }
 function curOpts(){ return E.normalize(rawOpts(),nPlayers()); }
@@ -194,6 +204,7 @@ function drawHouse(){
   keepFocus(box,"data-k",function(){
     box.innerHTML="";
     E.houseRows(o.version,n,o).forEach(function(h){
+      if(h[0]==="board") return;   // the board has its own row and picker ("Choose your board")
       var key=h[0], tag=h[4]?'<span class="bg-tag bg-tag--house">house</span>':'<span class="bg-tag bg-tag--official">official</span>', row, ds=hdesc(key);
       if(h[2]==="bool"){
         row=document.createElement("label"); row.className="bg-row";
@@ -220,9 +231,9 @@ function drawHouse(){
       }
     });
   });
-  syncRules(); boardLine();
+  syncRules(); boardLine(); boardRow();
 }
-function changedRules(){ var n=nPlayers(), base=E.normalize(E.versionOpts(cfg.version,{}),n), o=curOpts(); return E.houseRows(o.version,n,o).filter(function(h){ return String(o[h[0]])!==String(base[h[0]]); }).length; }
+function changedRules(){ var n=nPlayers(), base=E.normalize(E.versionOpts(cfg.version,{}),n), o=curOpts(); return E.houseRows(o.version,n,o).filter(function(h){ return h[0]!=="board"&&String(o[h[0]])!==String(base[h[0]]); }).length; }
 function syncRules(){
   var n=changedRules(), v=versionOf(cfg.version), open=ui.rulesOpen;
   $("rulesDesc").textContent=n?n+(n===1?" rule":" rules")+" changed from "+v.name:"As in "+v.name+". Open it to change any rule.";
@@ -230,18 +241,100 @@ function syncRules(){
 }
 /* the board in play and how long a game runs (the exact solo length of the board under these rules: RULES.md 5) */
 function boardLine(){
-  var o=curOpts(), b=E.boardOf(o), B0=E.BOARDS[b], nl=0, ns=0, k;
+  var o=curOpts(), b=E.boardOf(o), B0=E.BOARDS[b], gm=gmOf(b), inf=infoOf(b), nl=0, ns=0, k;
   for(k in B0.L){ if(+B0.L[k]>+k) nl++; else ns++; }
-  var e=E.expected(B0.L,o), shuffle=o.board==="shuffle";
-  var t=(shuffle?"A shuffled board, new each game: "+nl+" ladders and "+ns+" snakes like the "+B0.name+", and about as long.":B0.name+": "+nl+" ladders and "+ns+" snakes.")+
-    (isFinite(e)?" One player alone needs about "+Math.round(e)+" rolls to reach 100.":"");
+  var e=E.expected(B0.L,o,gm), shuffle=o.board==="shuffle", own=gm.play==="va72"||gm.play==="leela";
+  var t=(shuffle?"A shuffled board, new each game: "+nl+" ladders and "+ns+" snakes like the "+B0.name+", and about as long.":boardCap(b)+": "+nl+(gm.play==="leela"?" arrows":" ladders")+" and "+ns+" snakes.")+
+    (isFinite(e)?" One player alone needs about "+Math.round(e)+" rolls to reach "+gm.goal+".":"");
+  if(inf&&inf.play) t+=" "+inf.rules;
   // against the same board under the Version's own rules: say whether these house rules make the game shorter or longer
-  var base=E.expected(B0.L,E.normalize(E.versionOpts(cfg.version,{board:o.board}),nPlayers()));
+  var base=E.expected(B0.L,E.normalize(E.versionOpts(cfg.version,{board:o.board}),nPlayers()),gm);
   if(isFinite(e)&&isFinite(base)&&e<base*.95) t+=" Shorter than the official rules (about "+Math.round(base)+").";
   else if(isFinite(e)&&isFinite(base)&&e>base*1.05) t+=" Longer than the official rules (about "+Math.round(base)+").";
-  else if(o.finish!=="over") t+=" For a shorter game, try the house rule Any roll to 100 wins.";
+  else if(o.finish!=="over"&&!own) t+=" For a shorter game, try the house rule Any roll to "+gm.goal+" wins.";
   $("boardLine").textContent=t;
 }
+/* ================= Choose your board: the Board row and its sheet ================= */
+function boardFacts(id){   // counts as words: "72 squares · 10 ladders · 10 snakes"
+  var i=infoOf(id), B0=E.BOARDS[id], nl=0, ns=0, k; if(!B0) return "";
+  for(k in B0.L){ if(+B0.L[k]>+k) nl++; else ns++; }
+  var sq=i&&i.grid&&i.grid.kind==="cells"?i.squares+" squares + 6 top squares":(i?i.squares:100)+" squares";
+  var out=[sq,nl+(i&&i.devices&&i.devices.all?" arrows":nl===1?" ladder":" ladders"),ns+(ns===1?" snake":" snakes")];
+  if(i&&i.steps) out.push(Object.keys(i.steps).length+" footprints");
+  return out.join(" · ");
+}
+function optsFor(id){ var x={}; for(var k in cfg.over) x[k]=cfg.over[k]; x.board=id; if(x.first==="youngest") x.youngest=cfg.youngest; return E.normalize(E.versionOpts(cfg.version,x),nPlayers()); }
+function lengthLine(id){
+  var len=null; try{ len=E.lengthOf?E.lengthOf(id==="shuffle"?versionOf(cfg.version).board:id,optsFor(id==="shuffle"?versionOf(cfg.version).board:id)):null; }catch(e){ len=null; }
+  if(!len||!isFinite(len.solo)) return "";
+  return "About "+Math.round(len.solo)+" rolls alone · "+Math.round(len.four)+" rounds with 4 players";
+}
+function chosenBoard(){ var o=curOpts(); return o.board==="shuffle"?"shuffle":E.boardOf(o); }
+function boardRow(){
+  var btn=$("boardBtn"); if(!btn) return;
+  var id=chosenBoard(), v=versionOf(cfg.version), i=infoOf(id);
+  $("boardThumb").innerHTML=BD.preview?BD.preview(id):"";
+  $("boardName").textContent=boardCap(id);
+  $("boardTag").innerHTML=id===v.board&&cfg.over.board!=="shuffle"?'<span class="bg-tag bg-tag--official">'+esc(v.name)+" board</span>":"";
+  $("boardDesc").textContent=id==="shuffle"?"New each game, about as long as the "+boardCap(v.board)+".":(i?i.maker+" · "+i.country+", "+i.year+". ":"")+boardFacts(id)+".";
+  btn.setAttribute("aria-label","Board: "+boardCap(id)+". Choose your board");
+}
+var boardBuilt=false;
+function optionHTML(id){
+  var i=infoOf(id), v=versionOf(cfg.version), shuffle=id==="shuffle";
+  var name=shuffle?"Shuffled fair board":i?i.name:boardCap(id);
+  var desc=shuffle?"A new board each game with the "+boardCap(v.board)+"'s counts of ladders and snakes, kept only if its length is within 10% of the real board's.":
+    (i?esc(i.maker)+" · "+esc(i.country)+", "+esc(i.year):"");
+  var det=shuffle?"New each game · house rule":boardFacts(id);
+  var note=shuffle?"":(i?i.rules+" "+i.note:"");
+  return '<button type="button" class="bg-sheet__option sn-bopt" data-b="'+esc(id)+'" aria-pressed="false">'+
+    '<span class="sn-bprev">'+(BD.preview?BD.preview(id):"")+'</span>'+
+    '<span class="bg-sheet__text"><span class="bg-sheet__label">'+esc(name)+'</span><span class="sn-btags"></span>'+
+    '<span class="bg-sheet__desc">'+(shuffle?esc(desc):desc)+'</span><span class="bg-sheet__detail">'+esc(det)+'</span>'+
+    '<span class="sn-blen" data-len="'+esc(id)+'"></span>'+(note?'<span class="sn-bnote">'+esc(note)+"</span>":"")+"</span></button>";
+}
+function buildBoardSheet(){
+  if(boardBuilt) return; boardBuilt=true;
+  var list=E.catalogue?E.catalogue():[], html="", group=null;
+  if(!list.length) list=[{id:"vic",group:"Victorian Britain"},{id:"mb",group:"United States"}];   // boards.js missing: the two built-in boards
+  list.forEach(function(b){
+    if(b.group!==group){ if(group!==null) html+="</div>"; group=b.group; html+='<h3 class="bg-eyebrow sn-bgroup">'+esc(group)+'</h3><div class="bg-sheet__options sn-bopts">'; }
+    html+=optionHTML(b.id);
+  });
+  if(group!==null) html+="</div>";
+  html+='<h3 class="bg-eyebrow sn-bgroup">A board of your own</h3><div class="bg-sheet__options sn-bopts">'+optionHTML("shuffle")+"</div>";
+  $("boardList").innerHTML=html;
+  $("boardList").addEventListener("click",function(e){
+    var b=e.target.closest(".sn-bopt"); if(!b) return;
+    var id=b.getAttribute("data-b"), v=versionOf(cfg.version);
+    if(id==="shuffle") cfg.over.board="shuffle"; else if(id===v.board) delete cfg.over.board; else cfg.over.board=id;
+    var B=BG(); if(B&&B.sheet&&B.sheet.isOpen($("boardBox"))) B.sheet.close($("boardBox")); else $("boardBox").classList.remove("is-open","show");
+    drawSetup(); saveCfg();
+  });
+}
+function refreshBoardSheet(){
+  var id=chosenBoard(), v=versionOf(cfg.version);
+  document.querySelectorAll("#boardList .sn-bopt").forEach(function(b){
+    var bid=b.getAttribute("data-b"), on=bid===id, i=infoOf(bid), tags="";
+    b.setAttribute("aria-pressed",String(on)); b.classList.toggle("is-best",on);
+    if(on) tags+='<span class="bg-tag bg-tag--accent">Chosen</span>';
+    if(bid===v.board) tags+='<span class="bg-tag bg-tag--official">'+esc(v.name)+" board</span>";
+    if(i&&i.status==="PARTLY INFERRED") tags+='<span class="bg-tag bg-tag--house">Partly inferred</span>';
+    else if(i) tags+='<span class="bg-tag bg-tag--ok">Verified</span>';
+    if(bid==="shuffle") tags+='<span class="bg-tag bg-tag--house">House</span>';
+    b.querySelector(".sn-btags").innerHTML=tags;
+    var ln=b.querySelector(".sn-blen"); ln.textContent=lengthLine(bid);
+  });
+  $("boardSub").textContent="Every board whose layout is documented, oldest first, with its maker, country and year. "+(onTV()?"Press OK":"Tap one")+" to play it with the "+v.name+" rules. Each picture is drawn from the board's own layout in our own art.";
+}
+function openBoards(){
+  buildBoardSheet(); refreshBoardSheet();
+  var B=BG(), el=$("boardBox"), sel='#boardList .sn-bopt[aria-pressed="true"]';
+  if(B&&B.sheet){ B.sheet.open(el,{focus:sel}); }
+  else { el.classList.add("is-open","show"); var f=el.querySelector(sel); if(f) f.focus(); }
+  var f2=el.querySelector(sel); if(f2&&!onTV()){ try{ f2.scrollIntoView({block:"center"}); }catch(e){} }
+}
+$("boardBtn").addEventListener("click",openBoards);
 function skillNote(){ $("skillNote").textContent=(S.Brain&&S.Brain.NOTE)||"Skill makes no difference in Snakes and Ladders: it is pure luck, and every player just rolls."; }
 function drawSetup(){ clampSeats(); drawVersions(); drawSeats(); drawHouse(); skillNote(); syncStart(); }
 $("rulesToggle").addEventListener("click",function(){ ui.rulesOpen=!ui.rulesOpen; syncRules(); });
@@ -262,7 +355,7 @@ function syncStart(){
   var rb=$("resumeBtn"), sb=$("startBtn"), resumable=rb.style.display!=="none";
   $("startLabel").textContent=resumable?"New game":"Start the game";
   var o=curOpts(), parts=[nPlayers()+" players",versionOf(cfg.version).name];
-  if(!resumable){ var b=E.boardOf(o); if(o.board!=="auto") parts.push(o.board==="shuffle"?"shuffled board":E.BOARDS[b].name.replace(/ \(.*\)/,"")); if(changedRules()) parts.push("custom rules"); }
+  if(!resumable){ var b=E.boardOf(o); if(o.board!=="auto") parts.push(o.board==="shuffle"?"shuffled board":boardCap(b)); if(changedRules()) parts.push("custom rules"); }
   $("startSub").innerHTML=subParts(parts);
   $("startDock").classList.toggle("has-resume",resumable);
   sb.classList.toggle("bg-btn--primary",!resumable); sb.classList.toggle("bg-btn--secondary",resumable);
@@ -397,7 +490,8 @@ function startUI(){
 }
 
 /* ================= the board ================= */
-var R=31;   // a token's radius in board units (a square is 100)
+var R=31;   // a token's radius in board units (a square is 100; smaller squares (the Jaina chart, the spiral) scale it: BD.scale())
+function tokR(){ return R*(BD.scale?BD.scale():1); }
 function unit(){ var a=$("sart"); return a?a.clientWidth/BD.W:0; }
 function buildBoard(){
   BD.build($("ssvg"),G.L,G.bd);
@@ -409,28 +503,29 @@ function buildBoard(){
     box.appendChild(el); tokEls.push(el);
   });
   $("game").classList.toggle("is-multi",G.n>4);
-  $("sart").setAttribute("aria-label",(G.bd==="shuffle"?"A shuffled board":E.BOARDS[G.bd].name)+": "+Object.keys(G.L).filter(function(k){ return +G.L[k]>+k; }).length+" ladders and "+Object.keys(G.L).filter(function(k){ return +G.L[k]<+k; }).length+" snakes");
+  $("sart").setAttribute("aria-label",(G.bd==="shuffle"?"A shuffled board":boardCap(G.bd))+": "+Object.keys(G.L).filter(function(k){ return +G.L[k]>+k; }).length+" ladders and "+Object.keys(G.L).filter(function(k){ return +G.L[k]<+k; }).length+" snakes");
   dice();
   buildStand();
   layoutBoard();
+  var cap=$("sboardcap"); if(cap){ cap.textContent=G.bd==="shuffle"?"Shuffled fair board":boardCap(G.bd); }
 }
 function layoutBoard(){
   var u=unit(); if(!u) return false;
   BD.numbers(u,onTV()?remPx()*.875:12);
-  $("stoks").style.setProperty("--tw",Math.round(2*R*u)+"px");
+  $("stoks").style.setProperty("--tw",Math.round(2*tokR()*u)+"px");
   return true;
 }
 /* where each token rests: the start rail (by seat), else its square; tokens sharing a square fan out */
 var FAN={1:[[0,0]],2:[[-19,-6],[19,6]],3:[[-20,-12],[20,-12],[0,16]],4:[[-21,-19],[21,-19],[-21,19],[21,19]],5:[[-27,-22],[27,-22],[0,0],[-27,22],[27,22]],6:[[-28,-21],[0,-21],[28,-21],[-28,21],[0,21],[28,21]]};
 function restPose(s,pos,all){
   if(!pos) return {x:BD.startSlot(s,G.n).x,y:BD.startSlot(s,G.n).y,k:G.n>4?.9:1};
-  var c=BD.centre(pos), here=all.filter(function(q){ return disp[q]===pos; });
+  var c=BD.centre(pos), here=all.filter(function(q){ return disp[q]===pos; }), sc=BD.scale?BD.scale():1;
   if(here.length<2) return {x:c.x,y:c.y,k:1};
   var i=here.indexOf(s), f=FAN[Math.min(6,here.length)][i]||[0,0];
-  return {x:c.x+f[0],y:c.y+f[1],k:here.length>3?.68:.74};
+  return {x:c.x+f[0]*sc,y:c.y+f[1]*sc,k:here.length>3?.68:.74};
 }
 function setPose(el,p){
-  el._p=p; var r=R*(p.k||1);
+  el._p=p; var r=tokR()*(p.k||1);
   el.style.left=((p.x-r)/BD.W*100)+"%"; el.style.top=((p.y-r)/BD.H*100)+"%"; el.style.width=(2*r/BD.W*100)+"%";
 }
 function renderTokens(){
@@ -488,7 +583,7 @@ function buildStand(){
 function standRows(){
   if(!busy) return E.standings(G);
   // mid-animation the order follows the tokens on the board (disp), not the state the roll has already reached
-  var rows=G.players.map(function(p,s){ var done=disp[s]===100; return {s:s,name:p.name,pos:disp[s],done:done,fin:done?(G.fin.indexOf(s)<0?99:G.fin.indexOf(s)):-1,at:p.at,table:!done}; });
+  var gl=goalSq(), rows=G.players.map(function(p,s){ var done=disp[s]===gl; return {s:s,name:p.name,pos:disp[s],done:done,fin:done?(G.fin.indexOf(s)<0?99:G.fin.indexOf(s)):-1,at:p.at,table:!done}; });
   rows.sort(function(a,b){ if(a.done!==b.done) return a.done?-1:1; if(a.done) return a.fin-b.fin; if(b.pos!==a.pos) return b.pos-a.pos; return a.s-b.s; });
   rows.forEach(function(r,i){ var pv=rows[i-1]; r.place=pv&&!pv.done&&!r.done&&pv.pos===r.pos?pv.place:i+1; });
   return rows;
@@ -497,11 +592,11 @@ function renderStand(){
   if(!G||!standEls.length) return;
   var rows=standRows(), ul=$("sstand"), B=BG(), before=standEls.map(function(li){ return li.getBoundingClientRect(); }), moved=false;
   rows.forEach(function(r,i){
-    var li=standEls[r.s], pos=busy?disp[r.s]:G.players[r.s].pos, done=busy?pos===100:G.players[r.s].done;
+    var li=standEls[r.s], pos=busy?disp[r.s]:G.players[r.s].pos, done=busy?pos===goalSq():G.players[r.s].done;
     li.querySelector(".sn-rk").textContent=String(r.place);
     var tight=G.n>4&&!onTV();   // 5-6 players on a phone: three chips a row, so the meta is just the square
     li.querySelector(".bg-player__meta").textContent=done?(tight?"Home":"Home · "+E.ord(G.players[r.s].place||r.place)):pos?(tight?"Sq "+pos:"Square "+pos):"Start";
-    li.querySelector(".sn-bar > i").style.transform="scaleX("+(pos/100).toFixed(3)+")";
+    li.querySelector(".sn-bar > i").style.transform="scaleX("+Math.min(1,pos/goalSq()).toFixed(3)+")";
     if(ul.children[i]!==li){ ul.insertBefore(li,ul.children[i]||null); moved=true; }
   });
   if(moved&&B&&B.flip&&!reduced()) standEls.forEach(function(li,s){ B.flip(li,before[s],{ms:sp(320)}); });
@@ -551,8 +646,9 @@ function syncControls(){
 function chips(){
   if(!G) return;
   var c=$("sneed"), r=$("sround"), t="", s=G.cur, p=G.players[s];
-  if(!G.over&&!ui.fpShow&&p&&!p.done&&disp[s]===p.pos&&p.pos>=88){ var left=100-p.pos;
-    t=G.o.finish==="stay"&&left<=6&&!G.o.two?(isYou(s)?"You need":nm(s)+" needs")+" exactly "+left:nm(s)+": "+left+" to go"; }
+  var gl=goalSq(), gp=gmOf(G.bd).play, exact=gp==="va72"||gp==="leela"||G.o.finish==="stay";
+  if(!G.over&&!ui.fpShow&&p&&!p.done&&disp[s]===p.pos&&p.pos>=gl-12&&p.pos<gl){ var left=gl-p.pos;
+    t=exact&&left<=6&&!G.o.two?(isYou(s)?"You need":nm(s)+" needs")+" exactly "+left:nm(s)+": "+left+" to go"; }
   c.textContent=t; c.classList.toggle("is-hot",!!t);
   var rt=ui.fpShow?"":"Turn "+G.turn+(G.bd==="shuffle"?" · shuffled board":"");
   if(r.textContent!==rt) r.textContent=rt;
@@ -648,7 +744,9 @@ async function banner(title,sub,ms,kind){
   } else await sleep(ms);
   b.classList.remove("is-on");
 }
-function label(at){ var w=G.labels&&G.labels[at]; return w?w:""; }
+function label(at){ var w=G.labels&&G.labels[at]; if(w) return w; var i=infoOf(G.bd); return i&&i.names&&i.names[at]?i.names[at]:""; }
+function named(n){ var w=label(n); return w?(/\(/.test(w)?", "+w:" ("+w+")"):""; }   // "51 (Avarice)" / "68, Vaikuntha (heaven)"
+function device(at){ var i=infoOf(G.bd); return i&&i.devices&&i.devices[at]?i.devices[at]:""; }
 async function hops(my,s,path){
   var el=tokEls[s]; if(!el) return;
   el.classList.add("is-moving");
@@ -699,16 +797,17 @@ async function animEvent(my,e){
     }
     case "move":{
       await hops(my,s,e.path);
-      if(e.bounce) status(who+" "+verbS(s,"bounce")+" back from 100 to "+e.to);
+      if(e.bounce) status(who+" "+verbS(s,"bounce")+" back from "+(e.turnAt||gmOf(G.bd).end)+" to "+e.to);
       renderStand();
       await sleep(dl(140));
       return;
     }
     case "ladder":{
       await sleep(dl(180));
-      var lw=label(e.from);
+      var lw=label(e.from), lt=label(e.to), arrow=!!(infoOf(G.bd)&&infoOf(G.bd).devices&&infoOf(G.bd).devices.all);
       Sound.sfx("meld");
-      banner("Ladder!",(lw?lw+": ":"")+e.from+" to "+e.to,dl(1500),"ladder");
+      if(e.step) banner("Footprint!",e.from+" to "+e.to+named(e.to)+": one row straight up",dl(1500),"ladder");
+      else banner(arrow?"Arrow!":"Ladder!",(lw?lw+": ":"")+e.from+" to "+e.to+named(e.to),dl(1500),"ladder");
       status(who+" "+verbS(s,"climb")+" from "+e.from+" to "+e.to);
       await climb(my,s,e.from,e.to);
       Sound.sfx("coin");
@@ -718,9 +817,9 @@ async function animEvent(my,e){
     }
     case "snake":{
       await sleep(dl(180));
-      var sw=label(e.from);
+      var sw=label(e.from), dv=device(e.from);
       Sound.sfx("slide");
-      banner("Snake!",(sw?sw+": ":"")+e.from+" down to "+e.to,dl(1500),"snake");
+      banner(/scorpion/.test(dv)?"Scorpion!":"Snake!",(sw?sw+": ":"")+e.from+" down to "+e.to+(e.mid?", and the count goes on":""),dl(1500),"snake");
       status(who+" "+verbS(s,"slide")+" down from "+e.from+" to "+e.to);
       await slither(my,s,e.from,e.to);
       Sound.sfx("bump");
@@ -728,7 +827,7 @@ async function animEvent(my,e){
       await sleep(dl(320));
       return;
     }
-    case "stay": shake(el); Sound.sfx("discard"); await banner("Stay put",(isYou(s)?"You need":who+" needs")+" exactly "+e.need+" to reach 100",dl(1300)); return;
+    case "stay": shake(el); Sound.sfx("discard"); await banner("Stay put",e.cap?"Past "+e.cap+" a throw is lost":(isYou(s)?"You need":who+" needs")+" exactly "+e.need+" to reach "+gmOf(G.bd).end,dl(1300)); return;
     case "wait": shake(el); Sound.sfx("discard"); await banner("Needs a 6",who+" "+(isYou(s)?"need":"needs")+" a 6 to start",dl(1200)); return;
     case "void": Sound.sfx("bell"); await banner("Third 6",(isYou(s)?"Your":who+"'s")+" third 6 in a row doesn't count",dl(1400)); return;
     case "restart":{
@@ -741,8 +840,9 @@ async function animEvent(my,e){
     case "again": Sound.sfx("turn"); await banner("A 6!",who+" "+(e.spin||G.o.spinner?(isYou(s)?"spin":"spins"):(isYou(s)?"roll":"rolls"))+" again",dl(950)); return;
     case "finish":{
       BD.crest(sp(1400)); renderStand();
-      if(e.place===1){ Sound.sfx("win"); await banner("100!",who+" "+(isYou(s)?"reach":"reaches")+" the top and "+(isYou(s)?"win":"wins"),dl(1800),"win"); }
-      else { Sound.sfx("conquer"); await banner(E.ord(e.place)+" place",who+" "+(isYou(s)?"reach":"reaches")+" 100",dl(1300),"win"); }
+      var gl=goalSq(), gw=label(gl);
+      if(e.place===1){ Sound.sfx("win"); await banner(gl+"!",who+" "+(isYou(s)?"reach":"reaches")+" "+(gw?gw:"the top")+" and "+(isYou(s)?"win":"wins"),dl(1800),"win"); }
+      else { Sound.sfx("conquer"); await banner(E.ord(e.place)+" place",who+" "+(isYou(s)?"reach":"reaches")+" "+gl,dl(1300),"win"); }
       return;
     }
     default: return;
@@ -813,10 +913,12 @@ function openWin(){
   var w=G.winner, ms=playMs(), min=Math.round(ms/60000), single=nHumans()===1, pw=G.players[w];
   $("winEyebrow").textContent="Game over · "+(min<1?"under a minute":min===1?"1 minute":min+" minutes");
   $("winTitle").textContent=(isHuman(w)&&single)?"Victory":nm(w)+(isYou(w)?" win":" wins");
-  var sub=nm(w)+" "+(isYou(w)?"reach":"reached")+" 100 in "+plural(pw.st.rolls,G.o.spinner?"spin":"roll")+".", L=G.stats.longestSlide, C=G.stats.longestClimb;
-  if(isYou(w)) sub="You reached 100 in "+plural(pw.st.rolls,G.o.spinner?"spin":"roll")+".";
-  if(L) sub+=" The longest slide: "+nm(L.s)+", "+L.from+" down to "+L.to+(label(L.from)?" ("+label(L.from)+")":"")+".";
-  if(C) sub+=" The longest climb: "+nm(C.s)+", "+C.from+" to "+C.to+".";
+  var gl=goalSq(), sub=nm(w)+" "+(isYou(w)?"reach":"reached")+" "+gl+" in "+plural(pw.st.rolls,G.o.spinner?"spin":"roll")+".", L=G.stats.longestSlide, C=G.stats.longestClimb;
+  if(isYou(w)) sub="You reached "+gl+" in "+plural(pw.st.rolls,G.o.spinner?"spin":"roll")+".";
+  sub="On the "+(G.bd==="shuffle"?"shuffled fair board":boardCap(G.bd))+". "+sub;
+  var span=function(f,t,w){ var x=label(f); return x?(/\(/.test(x)?x+": "+f+w+t:f+w+t+" ("+x+")"):f+w+t; };   // "98 down to 28 (Avarice)" / "Tamoguna (inertia): 72 down to 51"
+  if(L) sub+=" The longest slide: "+nm(L.s)+", "+span(L.from,L.to," down to ")+".";
+  if(C) sub+=" The longest climb: "+nm(C.s)+", "+span(C.from,C.to," to ")+".";
   var rows0=E.standings(G), rec=null; try{ rec=S.Brain&&S.Brain.records?S.Brain.records():null; }catch(e){ rec=null; }
   if(rows0.some(function(r){ return r.table; })) sub+=" Players still on the board are ranked by their square.";
   if(rec&&rec.games>1&&rec.slide) sub+=" Longest slide on this device: "+rec.slide+" squares.";
@@ -853,6 +955,7 @@ document.addEventListener("DOMContentLoaded",function(){
   if(B&&B.back) B.back.on(backStep);
   else window.__tvBack=function(){
     if(window.Sound&&Sound.panelOpen&&Sound.panelOpen()){ Sound.closePanel(); return "panel"; }
+    if($("boardBox").classList.contains("is-open")){ $("boardBox").classList.remove("is-open","show"); return "sheet"; }
     var r=backStep(); if(r) return r;
     location.href=$("homeBtn").getAttribute("href"); return "hub";
   };

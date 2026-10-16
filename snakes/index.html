@@ -123,6 +123,23 @@
   .sn-art .sn-svg{position:absolute; inset:0; width:100%; height:100%; display:block; will-change:transform}   /* its own layer: the moving pieces and banners above it never make the big board repaint */
   .sn-svg .sn-num{font-family:var(--font-ui); font-weight:800; fill:#f8efd8; stroke:#0b0a12; stroke-opacity:.72; stroke-width:5px; paint-order:stroke; stroke-linejoin:round}
   .sn-svg .sn-num.is-100{fill:#3a2408; stroke:#fff3cf; stroke-opacity:.5}
+  .sn-svg .sn-num.is-mid{text-anchor:middle}
+  /* ---------- Choose your board: the Board row and its sheet (every classic board, with its year) ---------- */
+  .sn-boardrows{margin-top:.875rem}
+  .sn-boardrow .sn-chev{flex:none; display:inline-grid; place-items:center; width:1.5rem; height:1.5rem; color:var(--gold-200)}
+  .sn-bthumb{flex:none; width:3.5rem; height:3.5rem; border-radius:var(--r-sm); overflow:hidden; background:#0b0a12; box-shadow:inset 0 0 0 1px var(--line-gold)}
+  .sn-bthumb svg, .sn-bprev svg{display:block; width:100%; height:100%}
+  .sn-bname{display:block; margin-top:.15rem; font:400 var(--fs-lg)/1.2 var(--font-display); color:var(--gold-100)}
+  .sn-bhead{margin-bottom:.25rem}
+  .sn-bgroup{margin:1.25rem 0 .625rem}
+  .sn-bopt{grid-template-columns:4.75rem minmax(0,1fr); align-items:start}
+  .sn-bprev{width:4.75rem; aspect-ratio:1; border-radius:var(--r-sm); overflow:hidden; background:#0b0a12; box-shadow:inset 0 0 0 1px var(--line-gold)}
+  .sn-btags{display:flex; flex-wrap:wrap; gap:.3rem}
+  .sn-btags:empty{display:none}
+  .sn-blen{font:var(--fw-ui-strong) var(--fs-xs)/1.35 var(--font-ui); color:var(--text-1)}
+  .sn-blen:empty{display:none}
+  .sn-bnote{font:var(--fw-body) var(--fs-xs)/1.4 var(--font-ui); color:var(--text-2)}
+  .sn-capchip{max-width:100%; white-space:normal; text-align:center}
   .sn-svg .sn-railtxt{font-family:var(--font-ui); font-weight:800; letter-spacing:.06em; text-transform:uppercase; fill:#e7ca90; text-anchor:end}
   .sn-spin text{font-family:var(--font-ui); font-weight:800; font-size:19px; fill:#f8efd8; text-anchor:middle; dominant-baseline:central}
   .sn-toks{position:absolute; inset:0; pointer-events:none}
@@ -206,6 +223,13 @@
   html[data-tv] .sn-hero .bg-hero__body{padding:0}
   html[data-tv] #versions{gap:1.5rem}
   html[data-tv] .sn-rules .bg-row{min-height:0; padding:.5rem .875rem}
+  html[data-tv] .sn-bsheet{width:min(100%,54rem)}
+  html[data-tv] .sn-bopts{gap:1.5rem}
+  html[data-tv] .sn-bopt{grid-template-columns:7.5rem minmax(0,1fr); gap:1.25rem}
+  html[data-tv] .sn-bprev{width:7.5rem}
+  html[data-tv] .sn-bthumb{width:4.5rem; height:4.5rem}
+  html[data-tv] .sn-bgroup{margin:1.75rem 0 .75rem}
+
   html[data-tv] .sn-col--b{display:flex; flex-direction:column}
   html[data-tv] .sn-sec--players{order:1} html[data-tv] .sn-dock{order:2} html[data-tv] .sn-sec--save{order:3} html[data-tv] .sn-back{order:4}
   html[data-tv] .sn-dock{position:static; gap:1.75rem; margin:0; padding:1.5rem 0 0; background:none}
@@ -325,13 +349,20 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
         <div class="bg-hero__body">
           <span class="bg-eyebrow bg-eyebrow--accent" data-stage-text="strong">Roll · climb · slide</span>
           <h1 class="bg-hero__title" id="setupTitle" data-stage-text>Snakes and Ladders</h1>
-          <p class="bg-hero__pitch" data-stage-text>Race from the start to square 100. Land at the foot of a ladder and climb it; land on a snake's head and slide down.</p>
+          <p class="bg-hero__pitch" data-stage-text>Race from the start to the top square. Land at the foot of a ladder and climb it; land on a snake's head and slide down. Every classic board, with its year.</p>
         </div>
       </section>
       <section class="sn-sec sn-sec--version" aria-labelledby="versionHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="versionHead" data-stage-text>Version</h2></div>
         <div class="bg-versions" id="versions" role="radiogroup" aria-labelledby="versionHead"></div>
         <p class="sn-vdesc" id="versionDesc" aria-live="polite"></p>
+        <div class="bg-rows sn-boardrows">
+          <button class="bg-row sn-boardrow" id="boardBtn" type="button" aria-haspopup="dialog" aria-controls="boardBox">
+            <span class="sn-bthumb" id="boardThumb" aria-hidden="true"></span>
+            <span class="bg-row__main"><span class="bg-row__title">Board <span id="boardTag"></span></span><span class="sn-bname" id="boardName"></span><span class="bg-row__desc" id="boardDesc"></span></span>
+            <span class="sn-chev" data-icon="chevron" aria-hidden="true"></span>
+          </button>
+        </div>
       </section>
       <section class="sn-sec sn-sec--names" aria-labelledby="namesHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="namesHead" data-stage-text>Names and colours</h2></div>
@@ -396,7 +427,7 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
         <div class="sn-dice" id="sdice" data-focus="off" aria-hidden="true"></div>
         <button class="bg-btn bg-btn--primary bg-btn--lg" id="rollBtn" type="button" data-focus-first><span class="bg-btn__label" id="rollLabel">Roll</span><span class="bg-btn__sub" id="rollSub"></span></button>
       </div>
-      <div class="sn-meta"><span class="sn-chip" id="sneed"></span><span class="sn-chip" id="sround"></span></div>
+      <div class="sn-meta"><span class="sn-chip" id="sneed"></span><span class="sn-chip" id="sround"></span><span class="sn-chip sn-capchip" id="sboardcap"></span></div>
       <ol class="sn-log" id="slog" aria-label="What happened" data-stage-text></ol>
       <div class="bg-hintbar sn-hints" data-stage-text><span><span class="bg-key">OK</span> <span id="hintOk">Roll</span></span><span><span class="bg-key">Back</span> Close a list, or the Menu</span></div>
     </div>
@@ -420,9 +451,16 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
     </div>
   </div>
 
+  <section class="bg-sheet sn-bsheet" id="boardBox" aria-labelledby="boardTitle">
+    <div class="bg-sheet__grip" aria-hidden="true"></div>
+    <div class="sn-bhead"><span class="bg-eyebrow bg-eyebrow--accent">Choose your board</span><h2 class="bg-sheet__title" id="boardTitle">Every classic board, with its year</h2><p class="bg-sheet__sub" id="boardSub"></p></div>
+    <div id="boardList"></div>
+  </section>
+
   <div class="sn-toast" id="toast" aria-hidden="true"></div>
   <div class="sn-svtoast" id="svtoast" aria-hidden="true"></div>
 
+<script src="boards.js"></script>
 <script src="engine.js"></script>
 <script src="board.js"></script>
 <script src="game.js"></script>
