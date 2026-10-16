@@ -29,7 +29,7 @@ function clone(x){ return JSON.parse(JSON.stringify(x)); }
 
 function defaultOpts(){
   return {
-    length:"standard",   // short | standard | long (round.js LEN: heat 15/30/50, semi + LCQ 12/25/40, Main + moto 100/200/300 battles)
+    length:"standard",   // short | standard | long (round.js LEN: heat 10/15/20, semi + LCQ 8/12/15, Main 25/40/60, moto 20/30/40 battles)
     len:{},              // per race kind overrides {heat, semi, lcq, main, moto}
     war:{},              // race.js options (Version, House rows, cards per rider, Real form)
     fill:"full",         // full: the era's full program (privateers fill a short roster) | roster: smaller races, real riders only

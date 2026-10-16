@@ -1,0 +1,723 @@
+<!doctype html>
+<html lang="en" data-game="mxwar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#080a15">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Motocross War</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="../ui/art/icon-mxwar-192.png">
+<link rel="apple-touch-icon" href="../ui/art/icon-mxwar-maskable-512.png">
+<script>/* before first paint: TV for ?tv=1 or the Fire TV bridge, and the stored effects level */
+(function (h) {
+  if (/[?&]tv=1(&|$)/.test(location.search) || window.AndroidTV) h.setAttribute("data-tv", "");
+  try { if (localStorage.getItem("bgui.effects") === "reduced") h.setAttribute("data-effects", "reduced"); } catch (e) { }
+})(document.documentElement);</script>
+<link rel="stylesheet" href="../ui/theme.css">
+<link rel="preload" href="../ui/fonts/manrope-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../ui/fonts/dmserifdisplay-latin.woff2" as="font" type="font/woff2" crossorigin>
+<script src="../ui/icons.js" defer></script>
+<script src="../ui/ui.js" defer></script>
+<script src="../ui/picker.js" defer></script>
+<style>
+  /* Motocross War on the shared Midnight Luxe system (ui/theme.css). Page layout only (mx- prefix); every control is a bg- class.
+     The accent: gate steel on a pit-charcoal deep, the race table a spot-lit dirt brown. With 12 accents round the wheel only a neutral
+     was left: BG_audit/sprint/mxbuild/page/accent.js (CIEDE2000 against trouble, sorry, monopoly, rummy500, risk, uno, scatter, party, war,
+     snakes, candy, the house gold and the planned egyptian): #a0a0a8 is dE >= 21.1 from every one (closest scatter 21.1, war 21.5); the
+     deep #2c2830 is dE >= 17.1 from every shipped deep. Accent text #bdbdc6 on the ink page 10.4:1, ink on the accent 7.6:1. */
+  [data-game="mxwar"] { --accent: #a0a0a8; --accent-bright: #d2d2da; --accent-deep: #2c2830; --accent-ink: #101014; --accent-text: #bdbdc6; --accent-paper: #46464f;
+    --accent-glow: rgba(176, 176, 190, .26); --felt: #3b2a1b; --felt-deep: #120c07; --felt-lite: #5e4329; --board: #3b2a1b; --board-lite: #5e4329; }
+  *, *::before, *::after{box-sizing:border-box}
+  [hidden]{display:none !important}
+  html{scroll-padding-bottom:6.5rem}
+  html[data-tv]{scroll-padding-bottom:0}
+  body.bg-app{overflow-x:hidden; touch-action:manipulation}
+  .bg-topbar__title .bg-eyebrow{white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  body.bg-app--scene [data-stage-text], body.bg-app--felt [data-stage-text]{text-shadow:0 0 .15em rgba(4,5,12,.95), 0 0 .45em rgba(4,5,12,.8), 0 0 1em rgba(4,5,12,.55)}
+  body.bg-app--scene .bg-section > [data-stage-text]{text-shadow:0 0 .1em rgba(4,5,12,1), 0 0 .3em rgba(4,5,12,.95), 0 0 .7em rgba(4,5,12,.8), 0 0 1.3em rgba(4,5,12,.5)}
+  .mx-nw{white-space:nowrap}
+  /* the views: setup (also the Menu), the season, the race */
+  body.mx-in-setup .mx-season, body.mx-in-setup .mx-race{display:none !important}
+  body:not(.mx-v-season) .mx-season{display:none !important}
+  body:not(.mx-v-race) .mx-race{display:none !important}
+
+  /* ---------- a bike make: colours and names as plain text, never a logo (the CEO: Honda red, Yamaha blue, Kawasaki green ...) ---------- */
+  .mx-mk{display:inline-flex; align-items:center; flex:none; padding:.05rem .4rem; border-radius:var(--r-xs); font:var(--fw-caps) var(--fs-micro)/1.25 var(--font-ui); letter-spacing:.02em;
+    color:var(--mk-ink,#fff); background:var(--mk,#3a3a44); box-shadow:inset 0 0 0 1px rgba(255,255,255,.18); white-space:nowrap}
+  .mx-pl{display:inline-grid; place-items:center; flex:none; min-width:2.35em; padding:.1rem .3rem; border-radius:var(--r-xs); font:800 var(--fs-sm)/1.1 var(--font-ui); font-variant-numeric:tabular-nums;
+    color:var(--mk-ink,#fff); background:var(--mk,#3a3a44); box-shadow:inset 0 0 0 1px rgba(255,255,255,.22)}
+  .mx-pl.is-gen{box-shadow:inset 0 0 0 1px rgba(255,255,255,.22), inset 0 -2px 0 rgba(0,0,0,.35)}
+  .mx-you{display:inline-block; flex:none; padding:0 .35rem; border-radius:var(--r-pill); font:var(--fw-caps) var(--fs-micro)/1.35 var(--font-ui); color:var(--text-on-gold); background:var(--gold-fill)}
+  .mx-bot{display:inline-grid; place-items:center; flex:none; width:1.05rem; height:1.05rem; color:var(--text-3); opacity:.85}
+  .mx-bot .bg-ico{width:100%; height:100%}
+  .mx-priv{font:var(--fw-ui) var(--fs-micro)/1 var(--font-ui); color:var(--text-2)}
+
+  /* ---------- setup page (also the in-game Menu) ---------- */
+  .mx-setup{display:flex; flex-direction:column; width:min(100%,40rem); margin:0 auto; padding:0 var(--gutter)}
+  .mx-col{display:contents}
+  .mx-hero{order:1} .mx-sec--series{order:2} .mx-sec--players{order:3} .mx-sec--names{order:4} .mx-sec--length{order:5} .mx-sec--speed{order:6}
+  .mx-sec--rules{order:7} .mx-sec--save{order:8} .mx-back{order:9} .mx-dock{order:10}
+  .mx-hero{position:relative; min-height:0; margin:0 calc(-1 * var(--gutter)); padding-top:46%; border-radius:0; background:transparent}
+  .mx-hero .bg-hero__layer{bottom:auto; height:auto; aspect-ratio:16/9; border-radius:0; background-color:transparent;
+    background-image:url("../ui/art/hero-mxwar.svg"); background-size:100% auto; background-position:100% 0;
+    -webkit-mask-image:linear-gradient(180deg,#000 58%,rgba(0,0,0,0) 100%); mask-image:linear-gradient(180deg,#000 58%,rgba(0,0,0,0) 100%)}
+  .mx-hero .bg-hero__shade{display:none}
+  .mx-hero .bg-hero__body{max-width:none; padding:0 var(--gutter) .25rem}
+  .mx-hero .bg-hero__pitch{max-width:30rem}
+  .mx-sec{min-width:0}
+  .mx-subhead{margin-top:1.25rem}
+  .mx-card{display:grid; gap:.75rem}
+  .mx-field{display:grid; gap:.15rem}
+  .mx-field .bg-row__desc{margin-top:0}
+  #seriesSeg{grid-template-columns:repeat(3,minmax(0,1fr))}
+  #lengthSeg{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .mx-vdesc{margin:.875rem 0 0; padding:.75rem .875rem; border-radius:var(--r-md); background:var(--ink-2); box-shadow:var(--well-edge);
+    font:var(--fw-body) var(--fs-sm)/1.45 var(--font-ui); color:var(--text-2)}
+  .mx-vdesc b{color:var(--text-1); font-weight:var(--fw-ui-strong)}
+  /* the season card: the chosen year, its class and calendar; OK / a tap opens the year picker with the big preview */
+  .mx-scard{display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:.35rem 1rem; width:100%; margin-top:.875rem; padding:.875rem 1rem; text-align:left;
+    border:0; border-radius:var(--r-lg); color:var(--text-1); background:var(--panel-fill); box-shadow:var(--panel-edge),var(--elev-1); cursor:pointer}
+  .mx-scard__y{font:400 var(--fs-3xl)/1 var(--font-display); color:var(--gold-100)}
+  .mx-scard__n{font:var(--fw-ui-strong) var(--fs-md)/1.3 var(--font-ui)}
+  .mx-scard__m{grid-column:1 / -1; font:var(--fw-ui) var(--fs-xs)/1.4 var(--font-ui); color:var(--text-2)}
+  .mx-scard__go{grid-row:1 / span 2; grid-column:2; display:inline-flex; align-items:center; gap:.35rem; padding:.45rem .8rem; border-radius:var(--r-pill);
+    font:var(--fw-ui-strong) var(--fs-sm)/1.2 var(--font-ui); color:var(--text-on-gold); background:var(--gold-fill)}
+  .mx-scard__go .bg-ico{width:1.1em; height:1.1em}
+  .mx-scard__t{display:flex; flex-wrap:wrap; gap:.35rem; grid-column:1 / -1}
+  /* the riders on this device: the name field, the plate number and the team (make) */
+  .mx-rx{display:grid; grid-template-columns:6.5rem minmax(0,1fr); gap:.5rem .75rem; margin-top:.5rem}
+  .mx-rx label{display:grid; gap:.2rem; font:var(--fw-ui) var(--fs-xs)/1.2 var(--font-ui); color:var(--text-2)}
+  .mx-rx .bg-input{min-height:var(--tap)}
+  .mx-rx .bg-select{width:100%}
+  .mx-rules{margin-top:.75rem}
+  .mx-rules .bg-row--static{cursor:default; flex-wrap:wrap}
+  .mx-rules .bg-row--static .bg-row__main{flex:1 1 9rem}
+  .mx-rules .bg-select{flex:0 1 auto; max-width:100%}
+  .mx-sec--rules .bg-rows{grid-template-columns:minmax(0,1fr)}
+  .mx-disclose .mx-chev{display:inline-grid; place-items:center; flex:none; width:1.5rem; height:1.5rem; color:var(--gold-200); transition:transform var(--dur-fast) var(--ease-out)}
+  .mx-disclose[aria-expanded="true"] .mx-chev{transform:rotate(90deg)}
+  .mx-legend{margin:.75rem 0 0; font:var(--fw-body) var(--fs-xs)/1.7 var(--font-ui); color:var(--text-2)}
+  .mx-autorow{margin-top:.25rem}
+  .mx-step{gap:.75rem}
+  .mx-step .bg-stepper__val{min-width:3.25rem}
+  #svbar.svbar{margin:0; padding:var(--sp-3); border:0; border-radius:var(--r-lg); background:var(--panel-fill); box-shadow:var(--panel-edge),var(--elev-1)}
+  #svbar h4{display:none}
+  #svbar .r{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,8.5rem),1fr)); gap:.5rem; margin:0 0 .5rem}
+  #svbar .r:last-child{margin-bottom:0}
+  #svbar button{display:grid; grid-template-columns:auto minmax(0,auto); align-items:center; justify-content:center; gap:.15rem .45rem; min-width:0; min-height:var(--tap); margin:0;
+    padding:.45rem .625rem; border:0; border-radius:var(--r-md); color:var(--text-1); background:var(--control-fill);
+    box-shadow:inset 0 0 0 1px var(--line-2), inset 0 1px 0 rgba(255,255,255,.08); font:var(--fw-ui-strong) var(--fs-sm)/1.15 var(--font-ui); white-space:normal; text-align:center}
+  #svbar button:active{background:var(--ink-5)}
+  #svbar button:focus{outline:none}
+  #svbar button[disabled]{opacity:.42}
+  #svbar button .bg-ico{width:1.1em; height:1.1em; color:var(--gold-200)}
+  #svbar button small{grid-column:1 / -1; margin:0; font:var(--fw-ui) var(--fs-micro)/1.2 var(--font-ui); color:var(--text-3); opacity:1}
+  .mx-back{margin-top:var(--sp-6)}
+  .mx-dock{position:sticky; bottom:0; z-index:5; display:flex; gap:.625rem; margin:0 calc(-1 * var(--gutter)); padding:1rem var(--gutter) calc(env(safe-area-inset-bottom,0px) + .875rem);
+    background:linear-gradient(180deg,rgba(8,10,21,0),var(--ink-1) 32%)}
+  .mx-dock #startBtn{flex:1 1 0; min-width:0}
+  .mx-dock.has-resume #startBtn{padding-inline:.75rem}
+  .mx-resume{flex:1 1 0; min-width:0; padding:.5rem .75rem; border-radius:var(--r-lg)}
+  .mx-resume > span{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.2rem; min-height:2.75rem}
+  .mx-resume .bg-btn__sub, .mx-dock #startBtn .bg-btn__sub{white-space:normal; text-align:center}
+  .mx-resume.bg-btn--secondary .bg-btn__sub, .mx-dock #startBtn.bg-btn--secondary .bg-btn__sub{color:var(--text-2)}
+
+  /* ---------- the big preview of a season (the year picker, ui/picker.js): poster band, cities, top riders ---------- */
+  .mx-pv{position:relative; display:grid; grid-template-rows:auto minmax(0,1fr); width:100%; height:100%; overflow:hidden; border-radius:var(--r-md); color:var(--text-1);
+    background:linear-gradient(180deg,#1a1620,#100d14); font-size:var(--pv-fs,12px)}
+  .mx-pv__band{position:relative; display:flex; align-items:flex-end; gap:.6em; min-height:5.2em; padding:.5em .8em .45em; overflow:hidden}
+  .mx-pv__art{position:absolute; inset:0; z-index:0}
+  .mx-pv__art svg{display:block; width:100%; height:100%}
+  .mx-pv__band::after{content:""; position:absolute; inset:0; z-index:1; background:linear-gradient(180deg,rgba(16,13,20,0) 25%,rgba(16,13,20,.92))}
+  .mx-pv__y{position:relative; z-index:2; font:400 2.6em/1 var(--font-display); color:var(--gold-100)}
+  .mx-pv__h{position:relative; z-index:2; display:grid; gap:.15em; min-width:0; padding-bottom:.2em}
+  .mx-pv__s{font:var(--fw-ui-strong) 1.08em/1.2 var(--font-ui); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .mx-pv__c{font:var(--fw-ui) 1em/1.2 var(--font-ui); color:var(--text-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .mx-pv__body{display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); gap:.4em .9em; min-height:0; padding:.45em .8em .6em; overflow:hidden}
+  .mx-pv__lab{grid-column:auto; font:var(--fw-caps) 1em/1.2 var(--font-ui); letter-spacing:.06em; text-transform:uppercase; color:var(--gold-200)}
+  .mx-pv__col{display:flex; flex-direction:column; gap:.25em; min-width:0; min-height:0; overflow:hidden}
+  .mx-pv__cities{display:flex; flex-wrap:wrap; align-content:flex-start; gap:.25em .3em; min-height:0; overflow:hidden}
+  .mx-pv__city{padding:.08em .4em; border-radius:var(--r-pill); font:var(--fw-ui) 1em/1.3 var(--font-ui); color:var(--text-1); background:rgba(255,255,255,.07); white-space:nowrap}
+  .mx-pv__city b{color:var(--gold-100); font-weight:800}
+  .mx-pv__more{font:var(--fw-ui-strong) 1em/1.3 var(--font-ui); color:var(--text-2); white-space:nowrap}
+  .mx-pv__riders{display:grid; gap:.22em; margin:0; padding:0; list-style:none; min-height:0; overflow:hidden}
+  .mx-pv__riders li{display:flex; align-items:center; gap:.4em; min-width:0; font:var(--fw-ui-strong) 1em/1.25 var(--font-ui); white-space:nowrap}
+  .mx-pv__riders .mx-pl{font-size:1em; min-width:2.3em}
+  .mx-pv__riders .mx-mk{font-size:.95em}
+  .mx-pv__nm{min-width:0; overflow:hidden; text-overflow:ellipsis}
+  .mx-pv__rk{flex:none; min-width:1.1em; color:var(--text-2)}
+  .mx-pv__load{grid-column:1 / -1; align-self:center; justify-self:center; font:var(--fw-ui) 1.05em/1.3 var(--font-ui); color:var(--text-2)}
+  .mx-pv.is-narrow .mx-pv__riders .mx-mk{display:none}
+  .mx-pv.is-narrow .mx-pv__body{grid-template-columns:minmax(0,1fr) minmax(0,1.2fr)}
+  .mx-st li.is-gap{white-space:normal; text-align:left; justify-content:flex-start; font-size:var(--fs-sm); color:var(--text-2); padding:.3rem .5rem}
+  html[data-tv] .mx-pv{--pv-fs:21px}
+
+  /* ---------- the season screen: the next race, the calendar (done / next), the standings 1..N, the teams ---------- */
+  .mx-season{display:grid; gap:1rem; width:min(100%,46rem); margin:0 auto; padding:.75rem var(--gutter) 2rem}
+  .mx-shead{display:grid; gap:.3rem}
+  .mx-shead h1{margin:0; font:400 var(--fs-3xl)/1.05 var(--font-display); color:var(--text-1)}
+  .mx-shead p{margin:0; font:var(--fw-ui) var(--fs-sm)/1.4 var(--font-ui); color:var(--text-2)}
+  .mx-prog{position:relative; height:.4rem; margin-top:.35rem; border-radius:var(--r-pill); background:rgba(255,255,255,.08); overflow:hidden}
+  .mx-prog > i{position:absolute; left:0; top:0; bottom:0; width:100%; transform-origin:0 50%; background:linear-gradient(90deg,var(--gold-300),var(--gold-100))}
+  .mx-next{display:grid; gap:.75rem; padding:1rem; border-radius:var(--r-xl); background:var(--panel-fill); box-shadow:var(--panel-edge),var(--elev-1)}
+  .mx-next__t{margin:0; font:400 var(--fs-2xl)/1.15 var(--font-display); color:var(--text-1)}
+  .mx-next__s{margin:0; font:var(--fw-ui) var(--fs-sm)/1.45 var(--font-ui); color:var(--text-2)}
+  .mx-next__s b{color:var(--text-1)}
+  .mx-next__acts{display:flex; flex-wrap:wrap; gap:.625rem; margin:0 calc(-1 * var(--focus-room)); padding:var(--focus-room)}
+  .mx-next__acts .bg-btn{flex:1 1 10rem; min-width:0}
+  .mx-panel{padding:.875rem 1rem 1rem; border-radius:var(--r-xl); background:var(--panel-fill); box-shadow:var(--panel-edge),var(--elev-1); min-width:0}
+  .mx-panel h2{margin:0 0 .6rem}
+  .mx-cal{display:grid; gap:.25rem; margin:0; padding:0; list-style:none}
+  .mx-cal li{display:grid; grid-template-columns:2rem minmax(0,1fr) auto; align-items:center; gap:.15rem .6rem; padding:.35rem .5rem; border-radius:var(--r-md);
+    font:var(--fw-ui) var(--fs-sm)/1.25 var(--font-ui); color:var(--text-2)}
+  .mx-cal li.is-done{color:var(--text-1)}
+  .mx-cal li.is-next{background:linear-gradient(90deg,rgba(231,202,144,.16),rgba(231,202,144,.03)); box-shadow:inset 0 0 0 1.5px var(--gold-200); color:var(--text-1)}
+  .mx-cal__n{font:800 var(--fs-sm)/1 var(--font-ui); color:var(--gold-100); text-align:center}
+  .mx-cal__c{min-width:0}
+  .mx-cal__c b{display:block; font-weight:var(--fw-ui-strong); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .mx-cal__c span{display:block; font-size:var(--fs-micro); color:var(--text-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .mx-cal__w{font:var(--fw-ui-strong) var(--fs-micro)/1.2 var(--font-ui); text-align:right; color:var(--text-2); max-width:9.5rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .mx-cal li.is-next .mx-cal__w{color:var(--gold-100)}
+  .mx-st{display:grid; gap:.2rem; margin:0; padding:0; list-style:none}
+  .mx-st li{display:flex; align-items:center; gap:.5rem; min-width:0; padding:.3rem .5rem; border-radius:var(--r-md); font:var(--fw-ui-strong) var(--fs-sm)/1.25 var(--font-ui); color:var(--text-1)}
+  .mx-st li:nth-child(odd){background:rgba(255,255,255,.03)}
+  .mx-st li.is-me{background:linear-gradient(90deg,rgba(231,202,144,.2),rgba(231,202,144,.05)); box-shadow:inset 0 0 0 1.5px var(--gold-200)}
+  .mx-st li.is-gap{justify-content:center; padding:.05rem; background:none; color:var(--text-3); font-size:var(--fs-micro)}
+  .mx-st__p{flex:none; min-width:1.6rem; text-align:right; font:800 var(--fs-sm)/1 var(--font-ui); color:var(--gold-100); font-variant-numeric:tabular-nums}
+  .mx-st__n{flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .mx-st__v{flex:none; font:400 var(--fs-lg)/1 var(--font-display); color:var(--gold-100); font-variant-numeric:tabular-nums}
+  .mx-st__g{flex:none; min-width:2.6rem; text-align:right; font:var(--fw-ui) var(--fs-micro)/1 var(--font-ui); color:var(--text-2); font-variant-numeric:tabular-nums}
+  .mx-st__x{flex:none; font:var(--fw-ui) var(--fs-micro)/1 var(--font-ui); color:var(--text-2)}
+  .mx-panel .bg-btn--ghost{margin-top:.75rem}
+  .mx-note{margin:.5rem 0 0; font:var(--fw-ui) var(--fs-xs)/1.45 var(--font-ui); color:var(--text-2)}
+
+  /* ---------- the race: the head line, the arena (the track, the gate, the bikes, the battle's cards), the controls, the timing tower ---------- */
+  .mx-race{display:flex; flex-direction:column; width:min(100%,46rem); margin:0 auto; padding:.4rem var(--gutter) 1rem}
+  .mx-rhead{display:flex; flex-wrap:wrap; align-items:center; gap:.35rem .5rem; min-height:2.5rem; padding:.15rem 0 .4rem}
+  .mx-rtitle{flex:1 1 12rem; min-width:0; margin:0; font:400 var(--fs-xl)/1.15 var(--font-display); color:var(--text-1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .mx-chip{display:inline-flex; align-items:center; gap:.35rem; padding:.2rem .6rem; border-radius:var(--r-pill); background:var(--ink-3); box-shadow:inset 0 0 0 1px var(--line-1);
+    font:var(--fw-ui-strong) var(--fs-micro)/1.3 var(--font-ui); color:var(--text-1); font-variant-numeric:tabular-nums; white-space:nowrap}
+  .mx-chip:empty{display:none}
+  .mx-chip.is-hot{box-shadow:inset 0 0 0 1.5px var(--gold-200); color:var(--gold-100)}
+  .mx-arena{position:relative; height:clamp(15rem,calc(100svh - 34.5rem),24rem); border-radius:var(--r-xl); overflow:hidden; user-select:none; -webkit-user-select:none;
+    background:#2a1d12; box-shadow:inset 0 0 0 1px rgba(231,202,144,.22)}
+  .mx-track{position:absolute; inset:0; z-index:0}
+  .mx-track svg{display:block; width:100%; height:100%}
+  .mx-lane{position:absolute; left:0; right:0; top:0; height:var(--lane-h,38%); z-index:2; pointer-events:none}
+  .mx-bike{position:absolute; left:0; top:0; display:flex; align-items:center; gap:.15rem; transform:translate(0,0); will-change:transform;
+    transition:transform var(--mx-move,.55s) cubic-bezier(.3,.7,.25,1)}
+  .mx-bike svg{display:block; width:2.1rem; height:1.35rem; flex:none}
+  .mx-bike .mx-pl{font-size:var(--fs-micro); min-width:2.1em; padding:.02rem .2rem}
+  .mx-bike.is-me .mx-pl{box-shadow:0 0 0 2px var(--gold-100), 0 0 .6rem rgba(240,212,138,.6)}
+  .mx-bike.is-out{opacity:.35}
+  html[data-effects="reduced"] .mx-bike, html[data-motion="reduce"] .mx-bike{transition:none}
+  @media (prefers-reduced-motion: reduce){ .mx-bike{transition:none} }
+  .mx-gate{position:absolute; top:3%; height:var(--lane-h,38%); width:1.1rem; z-index:3; pointer-events:none; transform-origin:50% 100%}
+  .mx-gate svg{display:block; width:100%; height:100%}
+  .mx-dust{position:absolute; top:4%; height:var(--lane-h,38%); width:30%; z-index:3; pointer-events:none; opacity:0;
+    background:radial-gradient(50% 50% at 30% 60%,rgba(214,180,140,.55),rgba(214,180,140,0))}
+  .mx-table{position:absolute; left:0; right:0; bottom:0; top:var(--lane-h,38%); z-index:4}
+  .mx-slot{position:absolute; display:grid; justify-items:center; gap:.3rem; transform:translateX(-50%); text-align:center}
+  .mx-slot__who{display:flex; align-items:center; gap:.3rem; max-width:100%; font:var(--fw-ui-strong) var(--fs-xs)/1.2 var(--font-ui); color:var(--text-1); white-space:nowrap}
+  .mx-slot__who .mx-sn{min-width:0; overflow:hidden; text-overflow:ellipsis}
+  .mx-slot__lab{padding:.05rem .45rem; border-radius:var(--r-pill); background:rgba(8,6,4,.78); font:var(--fw-caps) var(--fs-micro)/1.2 var(--font-ui); letter-spacing:.06em; text-transform:uppercase; color:var(--gold-200)}
+  .mx-slot__who, .mx-fight__who{padding:.05rem .4rem .05rem .1rem; border-radius:var(--r-pill); background:rgba(8,6,4,.72)}
+  .mx-mid{position:absolute; left:50%; transform:translate(-50%,-50%); display:grid; justify-items:center; gap:.2rem; width:max-content; max-width:34%; text-align:center; pointer-events:none}
+  .mx-mid b{font:400 var(--fs-2xl)/1 var(--font-display); color:var(--gold-100)}
+  .mx-mid span{font:var(--fw-ui-strong) var(--fs-micro)/1.3 var(--font-ui); color:var(--text-2)}
+  .mx-war{position:absolute; inset:.4rem .5rem .5rem; display:flex; justify-content:center; align-items:stretch; gap:.5rem}
+  .mx-war:empty{display:none}
+  .mx-fight{position:relative; flex:1 1 0; max-width:9rem; min-width:0; display:grid; grid-template-rows:auto minmax(0,1fr) auto; justify-items:center; gap:.2rem; text-align:center}
+  .mx-fight__who{display:flex; align-items:center; gap:.25rem; max-width:100%; font:var(--fw-ui-strong) var(--fs-micro)/1.2 var(--font-ui); color:var(--text-1); white-space:nowrap}
+  .mx-fight__who .mx-sn{min-width:0; overflow:hidden; text-overflow:ellipsis}
+  .mx-fight__pile{position:relative; width:var(--cw); height:calc(var(--cw) * 1.4); margin-left:calc(var(--cw) * .3)}
+  .mx-fight__pile .mx-card{position:absolute; left:0; top:0}
+  .mx-fight__tie{font:var(--fw-ui) var(--fs-micro)/1.2 var(--font-ui); color:var(--text-2); white-space:nowrap}
+  .mx-fight.is-win .mx-fight__who{color:var(--gold-100)}
+  .mx-fight.is-win .mx-card.is-top .mx-cf{box-shadow:0 0 0 3px #f0d48a,0 0 0 5px #0b0a12,0 .5rem 1.2rem rgba(0,0,0,.6)}
+  .mx-fight__more{align-self:center; font:var(--fw-ui-strong) var(--fs-xs)/1.3 var(--font-ui); color:var(--text-2); white-space:nowrap}
+  /* a playing card: ivory face / steel back on a plain 3D wrapper (a flip is ONE rotateY of .mx-ci; transform only, one shot) */
+  .mx-card{width:var(--cw); height:calc(var(--cw) * 1.4); perspective:60rem}
+  .mx-ci{position:relative; width:100%; height:100%; transform-style:preserve-3d}
+  .mx-cf, .mx-cb{position:absolute; inset:0; border-radius:calc(var(--cw) * .1); backface-visibility:hidden; -webkit-backface-visibility:hidden; box-shadow:0 .3rem .8rem rgba(0,0,0,.5)}
+  .mx-cf{background:linear-gradient(180deg,#fffdf7,#ece2cb); color:#1d1a24; transform:rotateY(0deg)}
+  .mx-cf.is-red{color:#b3202a}
+  .mx-card:not(.is-up) .mx-cf{transform:rotateY(180deg)}
+  .mx-card:not(.is-up) .mx-cb{transform:rotateY(0deg)}
+  .mx-card.is-up .mx-cb{transform:rotateY(-180deg)}
+  .mx-cb{background:repeating-conic-gradient(#1d1b22 0 25%,#34313b 0 50%) 0 0/calc(var(--cw) * .22) calc(var(--cw) * .22);
+    box-shadow:inset 0 0 0 calc(var(--cw) * .05) #2a2730, inset 0 0 0 calc(var(--cw) * .065) #c99f5e, 0 .3rem .8rem rgba(0,0,0,.5)}
+  .mx-ck{position:absolute; left:calc(var(--cw) * .07); top:calc(var(--cw) * .05); display:grid; justify-items:center; line-height:1}
+  .mx-ck.is-b{left:auto; top:auto; right:calc(var(--cw) * .07); bottom:calc(var(--cw) * .05); transform:rotate(180deg)}
+  .mx-ck b{font:800 max(var(--fs-micro), calc(var(--cw) * .26))/1 var(--font-ui); letter-spacing:-.02em}
+  .mx-ck svg{width:max(.7rem, calc(var(--cw) * .17)); height:max(.7rem, calc(var(--cw) * .17))}
+  .mx-cs{position:absolute; left:50%; top:50%; width:calc(var(--cw) * .48); height:calc(var(--cw) * .48); transform:translate(-50%,-50%)}
+  .mx-cf.is-jk .mx-cs{color:#c99f5e}
+  .mx-card.is-wild.is-up .mx-cf::after{content:"Wild"; position:absolute; left:50%; bottom:calc(var(--cw) * .06); transform:translateX(-50%); padding:.05em .35em; border-radius:var(--r-pill);
+    font:var(--fw-caps) var(--fs-micro)/1.2 var(--font-ui); color:var(--accent-ink); background:var(--accent); white-space:nowrap}
+  .mx-card.is-win .mx-cf{box-shadow:0 0 0 3px #f0d48a,0 0 0 5px #0b0a12,0 .5rem 1.2rem rgba(0,0,0,.6)}
+  .mx-card.is-empty .mx-cb, .mx-card.is-empty .mx-cf{background:rgba(0,0,0,.25); box-shadow:inset 0 0 0 2px rgba(231,202,144,.28)}
+  .mx-card.is-empty .mx-cf > *{display:none}
+  .mx-banner{position:absolute; left:50%; top:50%; z-index:8; display:grid; justify-items:center; gap:.3rem; width:max-content; max-width:92%; padding:.6rem 1.4rem .75rem; transform:translate(-50%,-50%);
+    border-radius:var(--r-lg); background:linear-gradient(180deg,rgba(60,14,10,.95),rgba(22,6,6,.95)); box-shadow:inset 0 0 0 1.5px var(--gold-200), 0 .8rem 2rem rgba(0,0,0,.6);
+    text-align:center; pointer-events:none; opacity:0; visibility:hidden}
+  .mx-banner.is-on{opacity:1; visibility:visible}
+  .mx-banner b{font:400 var(--fs-4xl)/1 var(--font-display); color:#ffe2a8; letter-spacing:.01em}
+  .mx-banner span{font:var(--fw-ui-strong) var(--fs-sm)/1.3 var(--font-ui); color:#f6e9cf}
+  .mx-banner.is-calm{background:linear-gradient(180deg,rgba(14,17,33,.96),rgba(8,10,21,.96))}
+  .mx-banner.is-calm b{color:var(--gold-100)}
+  .mx-banner.is-flag{background:linear-gradient(180deg,rgba(16,16,20,.96),rgba(6,6,8,.96))}
+  .mx-banner .mx-flag{width:3.6rem; height:2.4rem}
+  .mx-flash{position:absolute; inset:0; z-index:7; pointer-events:none; opacity:0;
+    background:radial-gradient(60% 55% at 50% 60%,rgba(255,214,150,.5),rgba(214,120,40,.22) 45%,rgba(120,40,10,0) 75%)}
+  .mx-acts{display:flex; flex-wrap:wrap; align-items:stretch; gap:.625rem; margin:.5rem calc(-1 * var(--focus-room)) 0; padding:var(--focus-room)}
+  #flipBtn{flex:1 1 11rem; min-width:0; min-height:3.5rem; font-size:var(--fs-xl)}
+  #flipBtn .bg-btn__label{white-space:normal; text-align:center}
+  #flipBtn .bg-btn__sub{font-size:var(--fs-xs); white-space:normal}
+  .mx-auto{flex:0 0 auto; width:auto; min-height:3.5rem; padding:.4rem .9rem; gap:.75rem; border-radius:var(--r-lg); background:var(--panel-fill); box-shadow:var(--panel-edge),var(--elev-1)}
+  .mx-auto .bg-row__title{font-size:var(--fs-md)}
+  #skipBtn{flex:1 1 100%; min-height:var(--tap)}
+  .mx-stat{margin:.4rem 0 0; text-align:center; font:var(--fw-ui-strong) var(--fs-sm)/1.4 var(--font-ui); color:var(--text-1); min-height:1.4em}
+  .mx-tower{margin:.5rem 0 0; padding:.5rem .5rem .4rem; border-radius:var(--r-lg); background:rgba(8,8,12,.78); box-shadow:inset 0 0 0 1px rgba(231,202,144,.16)}
+  .mx-tower__h{display:flex; align-items:baseline; justify-content:space-between; gap:.5rem; padding:0 .25rem .35rem; font:var(--fw-caps) var(--fs-micro)/1.2 var(--font-ui); letter-spacing:.08em; text-transform:uppercase; color:var(--gold-200)}
+  .mx-tower__h span:last-child{letter-spacing:0; text-transform:none; color:var(--text-2); font-weight:var(--fw-ui)}
+  .mx-tw{display:grid; grid-auto-rows:var(--tw-row,1.65rem); gap:.12rem; margin:0; padding:0; list-style:none}
+  .mx-tw li{display:grid; grid-template-columns:1.6rem auto minmax(0,1fr) 2.3rem 2.1rem 2.3rem; align-items:center; gap:.4rem; padding:0 .35rem; border-radius:var(--r-sm);
+    font:var(--fw-ui-strong) var(--fs-xs)/1 var(--font-ui); color:var(--text-1); background:rgba(255,255,255,.035)}
+  .mx-tw li.is-me{background:linear-gradient(90deg,rgba(231,202,144,.26),rgba(231,202,144,.07)); box-shadow:inset 0 0 0 1.5px var(--gold-200)}
+  .mx-tw li.is-win{box-shadow:inset 0 0 0 1.5px #f0d48a; background:rgba(240,212,138,.14)}
+  .mx-tw li.is-fight{box-shadow:inset 0 0 0 1.5px #e8775a}
+  .mx-tw li.is-out{color:var(--text-2)}
+  .mx-tw li.is-sep{display:block; height:.5rem; padding:0; background:none; box-shadow:none; border-top:1px dashed rgba(231,202,144,.3); margin-top:.25rem}
+  .mx-tw__p{text-align:right; font:800 var(--fs-xs)/1 var(--font-ui); color:var(--gold-100); font-variant-numeric:tabular-nums}
+  .mx-tw__n{min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .mx-tw__c{justify-self:center; display:inline-flex; align-items:center; gap:.1rem; min-width:2.2rem; justify-content:center; padding:.12rem .25rem; border-radius:.3rem;
+    font:800 var(--fs-micro)/1 var(--font-ui); color:#1d1a24; background:#f3ead6}
+  .mx-tw__c.is-red{color:#b3202a}
+  .mx-tw__c:empty{visibility:hidden}
+  .mx-tw__c svg{width:.75em; height:.75em}
+  .mx-tw__k{text-align:right; font:400 var(--fs-md)/1 var(--font-display); color:var(--gold-100); font-variant-numeric:tabular-nums}
+  .mx-tw__g{text-align:right; font:var(--fw-ui) var(--fs-micro)/1 var(--font-ui); color:var(--text-2); font-variant-numeric:tabular-nums}
+  .mx-tw li.is-out .mx-tw__k{color:var(--text-2)}
+  .mx-tw .mx-pl{font-size:var(--fs-micro); min-width:2.2em}
+  .mx-log{margin:.6rem 0 0; padding:0; list-style:none; display:grid; gap:.15rem; text-align:center; font:var(--fw-body) var(--fs-xs)/1.4 var(--font-ui); color:var(--text-2)}
+  .mx-log li:last-child{color:var(--text-1)}
+  .mx-log li:nth-last-child(n+4){display:none}
+  html:not([data-tv]) .mx-hints{display:none}
+  .mx-hints.is-held{visibility:hidden}
+
+  /* ---------- sheets: race results, the round podium, a new season ---------- */
+  .mx-shd{display:grid; gap:.25rem; margin-bottom:.75rem}
+  .mx-shd .bg-sheet__sub{margin:0}
+  .mx-res{display:grid; gap:.2rem; margin:0 0 .75rem; padding:0; list-style:none}
+  .mx-res li{display:flex; align-items:center; gap:.45rem; min-width:0; padding:.3rem .5rem; border-radius:var(--r-md); background:var(--ink-3); box-shadow:inset 0 0 0 1px var(--line-1);
+    font:var(--fw-ui-strong) var(--fs-sm)/1.25 var(--font-ui); color:var(--text-1)}
+  .mx-res li.is-me{box-shadow:inset 0 0 0 1.5px var(--gold-200); background:linear-gradient(90deg,rgba(231,202,144,.18),var(--ink-3))}
+  .mx-res__p{flex:none; min-width:1.6rem; text-align:right; color:var(--gold-100); font-variant-numeric:tabular-nums}
+  .mx-res__n{flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .mx-res__x{flex:none; font:var(--fw-ui) var(--fs-micro)/1.2 var(--font-ui); color:var(--text-2); text-align:right}
+  .mx-tag{flex:none; padding:.05rem .4rem; border-radius:var(--r-pill); font:var(--fw-caps) var(--fs-micro)/1.3 var(--font-ui); white-space:nowrap}
+  .mx-tag--main{color:var(--text-on-gold); background:var(--gold-fill)}
+  .mx-tag--next{color:#0b0a12; background:#9fd6ff}
+  .mx-tag--out{color:var(--text-2); background:var(--ink-4)}
+  .mx-tag--pts{color:#0b0a12; background:#b6e04e}
+  .mx-sum{display:flex; flex-wrap:wrap; gap:.4rem; margin:0 0 .75rem}
+  .mx-sacts{display:flex; flex-wrap:wrap; gap:.625rem; margin:0 calc(-1 * var(--focus-room)); padding:var(--focus-room)}
+  .mx-sacts .bg-btn{flex:1 1 10rem; min-width:0}
+  #resBox .mx-res, #fullBox .mx-res{max-height:min(46vh,26rem); overflow-y:auto; overscroll-behavior:contain; padding-right:.2rem}
+  /* the podium: 2nd, 1st, 3rd on steps in the riders' team colours */
+  .mx-pod{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); align-items:end; gap:.5rem; margin:.25rem auto 1rem; width:min(100%,30rem)}
+  .mx-pod__c{display:grid; justify-items:center; gap:.3rem; min-width:0; text-align:center}
+  .mx-pod__bike{width:3.6rem; height:2.3rem}
+  .mx-pod__bike svg{display:block; width:100%; height:100%}
+  .mx-pod__nm{max-width:100%; font:var(--fw-ui-strong) var(--fs-sm)/1.2 var(--font-ui); color:var(--text-1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .mx-pod__x{font:var(--fw-ui) var(--fs-micro)/1.2 var(--font-ui); color:var(--text-2)}
+  .mx-pod__step{display:grid; place-items:center; width:100%; border-radius:var(--r-md) var(--r-md) 0 0; font:400 var(--fs-3xl)/1 var(--font-display); color:#1a1408;
+    background:linear-gradient(180deg,#f0d9a6,#a77d41); box-shadow:inset 0 3px 0 var(--mk,#c99f5e)}
+  .mx-pod__c[data-p="1"] .mx-pod__step{height:5.5rem; background:linear-gradient(180deg,#fbeec8,#c99f5e)}
+  .mx-pod__c[data-p="2"] .mx-pod__step{height:4rem; background:linear-gradient(180deg,#eef0f4,#9aa0ac)}
+  .mx-pod__c[data-p="3"] .mx-pod__step{height:3rem; background:linear-gradient(180deg,#f1c79b,#a8693a)}
+  .mx-pod__c.is-me .mx-pod__nm{color:var(--gold-100)}
+  .mx-tops{display:grid; gap:.2rem; margin:0 0 .75rem; padding:0; list-style:none}
+  .mx-tops li{display:flex; align-items:center; gap:.45rem; font:var(--fw-ui-strong) var(--fs-sm)/1.3 var(--font-ui); color:var(--text-1)}
+  .mx-tops li.is-me{color:var(--gold-100)}
+  .mx-line{margin:0 0 .75rem; font:var(--fw-ui) var(--fs-sm)/1.45 var(--font-ui); color:var(--text-2)}
+  .mx-line b{color:var(--text-1)}
+  .mx-winhome{margin-top:.75rem}
+  #winBox .mx-pod{margin-bottom:.75rem}
+  #winBox .mx-res{max-height:min(24vh,14rem); overflow-y:auto; width:min(100%,26rem); margin-inline:auto; text-align:left}
+  html:not([data-tv]) #winBox .bg-win__card{max-height:calc(100vh - .5rem); overflow-y:auto; overscroll-behavior:contain}
+  @media (orientation: portrait) and (max-width: 36em){
+    html:not([data-tv]) #winBox .mx-res{max-height:7.5rem}
+    html:not([data-tv]) #winBox .mx-pod{margin:.25rem auto .5rem}
+    html:not([data-tv]) #winBox .mx-pod__bike{width:2.8rem; height:1.8rem}
+    html:not([data-tv]) #winBox .mx-pod__c[data-p="1"] .mx-pod__step{height:3.6rem}
+    html:not([data-tv]) #winBox .mx-pod__c[data-p="2"] .mx-pod__step{height:2.8rem}
+    html:not([data-tv]) #winBox .mx-pod__c[data-p="3"] .mx-pod__step{height:2.2rem}
+    html:not([data-tv]) #winBox .bg-win__sub{font-size:var(--fs-sm)}
+    html:not([data-tv]) #winBox .bg-win__title{font-size:var(--fs-3xl)}
+  }
+  /* fallbacks when ui/ui.js is missing */
+  .mx-toast{position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom,0px) + 90px); transform:translateX(-50%); max-width:90vw; padding:10px 16px; border-radius:12px; z-index:90;
+    background:#000c; color:#fff; font:700 14px system-ui,sans-serif; text-align:center; opacity:0; pointer-events:none; transition:opacity .2s}
+  .mx-toast.show{opacity:1}
+  .mx-svtoast{position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom,0px) + 7rem); transform:translateX(-50%); max-width:90vw; padding:10px 16px; border-radius:12px; z-index:100000;
+    background:#000d; color:#fff; font:700 14px system-ui,sans-serif; text-align:center; opacity:0; pointer-events:none; transition:opacity .2s}
+  .mx-svtoast.show{opacity:1}
+  html.mx-luxe .mx-toast, html.mx-luxe .mx-svtoast{display:none}
+  html:not(.mx-luxe) .bg-sheet.show{transform:none; visibility:visible; z-index:70}
+  html[data-effects="reduced"] .mx-disclose .mx-chev, html[data-motion="reduce"] .mx-disclose .mx-chev{transition:none}
+  @media (prefers-reduced-motion: reduce){ .mx-disclose .mx-chev{transition:none} }
+
+  /* ---------- TV (html[data-tv], 1rem = 24px at 1080p) ---------- */
+  html[data-tv] .mx-setup{display:grid; grid-template-columns:minmax(0,32rem) minmax(0,34rem); column-gap:3.5rem; justify-content:center; align-items:start; width:auto; padding:0 var(--gutter) 2rem}
+  html[data-tv] .mx-col{display:block; min-width:0}
+  html[data-tv] .mx-hero{margin:1.5rem 0 0; border-radius:var(--r-xl); padding-top:34%}
+  html[data-tv] .mx-hero .bg-hero__layer{border-radius:var(--r-xl) var(--r-xl) 0 0;
+    -webkit-mask-image:linear-gradient(90deg,rgba(0,0,0,0),#000 8%,#000 96%,rgba(0,0,0,0)),linear-gradient(180deg,rgba(0,0,0,0),#000 9%,#000 58%,rgba(0,0,0,0));
+    -webkit-mask-composite:source-in;
+    mask-image:linear-gradient(90deg,rgba(0,0,0,0),#000 8%,#000 96%,rgba(0,0,0,0)),linear-gradient(180deg,rgba(0,0,0,0),#000 9%,#000 58%,rgba(0,0,0,0));
+    mask-composite:intersect}
+  html[data-tv] .mx-hero .bg-hero__body{padding:0}
+  html[data-tv] #seriesSeg, html[data-tv] #lengthSeg, html[data-tv] #speedSeg, html[data-tv] #skillSeg, html[data-tv] #versionSeg{gap:1.5rem}
+  html[data-tv] .mx-rules .bg-row{min-height:0; padding:.5rem .875rem}
+  html[data-tv] .mx-col--b{display:flex; flex-direction:column}
+  html[data-tv] .mx-sec--players{order:1} html[data-tv] .mx-dock{order:2} html[data-tv] .mx-sec--speed{order:3} html[data-tv] .mx-sec--save{order:4} html[data-tv] .mx-back{order:5}
+  html[data-tv] .mx-dock{position:static; gap:1.75rem; margin:0; padding:1.5rem 0 0; background:none}
+  html[data-tv] .bg-topbar__end, html[data-tv] .bg-topbar__start{gap:1.5rem}
+  html[data-tv] #svbar button{grid-template-columns:minmax(0,1fr); justify-items:center; align-content:center; row-gap:.3rem; padding:.625rem .5rem}
+  html[data-tv] #svbar button .bg-ico{width:1.25em; height:1.25em}
+  html[data-tv] #svbar .r{gap:1.5rem}
+  html[data-tv] #svbar .r:not(:last-child){margin-bottom:1.5rem}
+  html[data-tv] .mx-step{gap:1.5rem}
+  html[data-tv] .mx-rx{gap:1.5rem}
+  html[data-tv] .mx-autorow{margin-top:.75rem}
+  html[data-tv] .mx-scard{margin-top:1.25rem}
+  /* TV: the season screen in three columns, one screen tall */
+  html[data-tv] .mx-season{grid-template-columns:27rem minmax(0,1fr) minmax(0,1fr); grid-template-rows:auto auto minmax(0,1fr); grid-template-areas:"head head head" "next cal stand" "teams cal stand";
+    column-gap:2rem; row-gap:1rem; width:auto; height:calc(100vh - 4.75rem); padding:.75rem var(--gutter) 1rem}
+  html[data-tv] .mx-shead{grid-area:head}
+  html[data-tv] .mx-scol{display:contents}
+  html[data-tv] .mx-next{grid-area:next}
+  html[data-tv] .mx-scol--a .mx-panel{grid-area:cal; min-height:0; overflow:hidden}
+  html[data-tv] .mx-scol--b .mx-panel{grid-area:stand; min-height:0; overflow:hidden}
+  html[data-tv] .mx-scol--c .mx-panel{grid-area:teams; min-height:0; overflow:hidden}
+  html[data-tv] .mx-cal{gap:.15rem}
+  html[data-tv] .mx-cal li{grid-template-columns:2rem minmax(0,1fr) auto; padding:.1rem .5rem; font-size:var(--fs-xs)}
+  html[data-tv] .mx-cal__c{white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  html[data-tv] .mx-cal__c b{display:inline}
+  html[data-tv] .mx-cal__c span{display:inline; margin-left:.5rem}
+  html[data-tv] .mx-st{gap:.12rem}
+  html[data-tv] .mx-st li{padding:.12rem .5rem}
+  html[data-tv] .mx-next{padding:.875rem 1rem}
+  html[data-tv] .mx-next__t{font-size:var(--fs-xl)}
+  html[data-tv] .mx-next__acts{gap:1.5rem}
+  /* TV: the race. The arena on the left, the timing tower (two columns for a big gate) on the right; exactly one screen tall */
+  html[data-tv] .mx-race{display:grid; grid-template-columns:minmax(0,1fr) 42rem; grid-template-rows:auto minmax(0,1fr) auto auto auto; grid-template-areas:"head tower" "arena tower" "acts tower" "stat tower" "log tower";
+    column-gap:1.75rem; width:auto; height:calc(100vh - 4.75rem); padding:.5rem var(--gutter) 1rem}
+  html[data-tv] .mx-rhead{grid-area:head}
+  html[data-tv] .mx-arena{grid-area:arena; height:auto}
+  html[data-tv] .mx-acts{grid-area:acts; gap:1.5rem}
+  html[data-tv] .mx-stat{grid-area:stat; text-align:left; font-size:var(--fs-md)}
+  html[data-tv] .mx-logw{grid-area:log; display:flex; align-items:flex-end; justify-content:space-between; gap:1.5rem; min-width:0}
+  html[data-tv] .mx-log{flex:1 1 auto; min-width:0; text-align:left; margin:0}
+  html[data-tv] .mx-logw .mx-hints{flex:none; white-space:nowrap}
+  html[data-tv] .mx-tower{grid-area:tower; margin:0; min-height:0; overflow:hidden; display:flex; flex-direction:column}
+  html[data-tv] .mx-tw{--tw-row:1.6rem; gap:.18rem}
+  html[data-tv] .mx-tw.is-two{grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-flow:column; grid-template-rows:repeat(var(--tw-rows,20),var(--tw-row)); column-gap:.75rem}
+  html[data-tv] .mx-tw li{grid-template-columns:1.6rem auto minmax(0,1fr) 2.6rem 2.2rem 2.4rem}
+  html[data-tv] #flipBtn{flex:1 1 0}
+  html[data-tv] #skipBtn{flex:1 1 0}
+  html[data-tv] .mx-banner b{font-size:var(--fs-5xl)}
+  html[data-tv] .mx-banner span{font-size:var(--fs-lg)}
+  html[data-tv] .mx-bike svg{width:2.6rem; height:1.7rem}
+  html[data-tv] body:not(.mx-in-setup) .bg-toast{left:calc(100vw - var(--gutter) - 21rem); max-width:30rem}
+  html[data-tv] .mx-sacts, html[data-tv] #fullBox .bg-sheet__options{gap:1.5rem}
+  html[data-tv] #resBox .mx-res{grid-template-columns:repeat(2,minmax(0,1fr)); column-gap:1rem; max-height:min(52vh,30rem)}
+  html[data-tv] #winBox .bg-win__card{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.2fr); grid-template-areas:"medal pod" "eye pod" "title list" "sub list" "stats acts" "stats home";
+    column-gap:2.5rem; align-items:center; width:min(100%,76rem)}
+  html[data-tv] #winBox .bg-win__medal{grid-area:medal} html[data-tv] #winEyebrow{grid-area:eye} html[data-tv] #winTitle{grid-area:title; font-size:var(--fs-4xl)}
+  html[data-tv] #winSub{grid-area:sub} html[data-tv] #winPod{grid-area:pod; margin-top:0} html[data-tv] #winList{grid-area:list}
+  html[data-tv] #winStats{grid-area:stats; align-self:start} html[data-tv] #winBox .bg-win__actions{grid-area:acts} html[data-tv] #winHome{grid-area:home}
+  html[data-tv] #winBox .mx-res{grid-template-columns:repeat(2,minmax(0,1fr)); column-gap:.75rem; width:100%; max-height:min(30vh,14rem)}
+  html[data-tv] #fullBox .mx-res li{scroll-margin:1rem}
+
+  /* ---------- phone upright: the arena nearly edge to edge ---------- */
+  @media (orientation: portrait) and (max-width: 36em){
+    html:not([data-tv]) .mx-race{padding-inline:.5rem}
+    html:not([data-tv]) .mx-acts{margin-inline:-.5rem}
+    html:not([data-tv]) .mx-tw li{grid-template-columns:1.4rem auto minmax(0,1fr) 2.2rem 1.9rem 2.1rem; gap:.3rem}
+  }
+
+  /* ---------- phone sideways: the TV's split, phone sized. The arena on the left at the full height; the head, the controls, the tower
+     and the log on the right in their own scroll area; the page never scrolls ---------- */
+  @media (orientation: landscape) and (max-height: 31.25em){
+    html:not([data-tv]){--ls-bar:3.25rem; --ls-h:100vh; --ls-pad:.5rem; --ls-panel:clamp(17rem,40vw,21rem);
+      --ls-game:calc(var(--ls-h) - var(--ls-bar) - env(safe-area-inset-top,0px) - 2 * var(--ls-pad))}
+    @supports (height:100dvh){ html:not([data-tv]){--ls-h:100dvh} }
+    html:not([data-tv]) .bg-topbar{height:calc(var(--ls-bar) + env(safe-area-inset-top,0px)); padding-top:calc(env(safe-area-inset-top,0px) + .25rem); padding-bottom:.25rem}
+    html:not([data-tv]) .mx-race{display:grid; grid-template-columns:minmax(0,1fr) var(--ls-panel); grid-template-rows:max-content max-content max-content max-content max-content 1fr;
+      grid-template-areas:"arena head" "arena acts" "arena stat" "arena tower" "arena log" "arena ."; column-gap:1rem; align-items:start; align-content:start; width:auto;
+      height:calc(var(--ls-h) - var(--ls-bar) - env(safe-area-inset-top,0px)); overflow:hidden auto; overscroll-behavior:contain;
+      padding:var(--ls-pad) max(var(--gutter), env(safe-area-inset-right,0px)) var(--ls-pad) max(var(--ls-pad), env(safe-area-inset-left,0px))}
+    html:not([data-tv]) .mx-rhead{grid-area:head; padding-top:0}
+    html:not([data-tv]) .mx-rtitle{flex-basis:100%; font-size:var(--fs-lg)}
+    html:not([data-tv]) .mx-arena{grid-area:arena; position:sticky; top:0; height:var(--ls-game)}
+    html:not([data-tv]) .mx-acts{grid-area:acts; margin-top:0}
+    html:not([data-tv]) .mx-stat{grid-area:stat; text-align:left}
+    html:not([data-tv]) .mx-tower{grid-area:tower}
+    html:not([data-tv]) .mx-logw{grid-area:log}
+    html:not([data-tv]) .mx-log{text-align:left}
+    html:not([data-tv]) #flipBtn{flex:1 1 100%}
+    html:not([data-tv]) .mx-auto{flex:1 1 100%}
+    html:not([data-tv]) body:not(.mx-in-setup) .bg-toast{left:calc(100vw - max(var(--gutter), env(safe-area-inset-right,0px)) - var(--ls-panel) / 2); max-width:calc(var(--ls-panel) + 1rem)}
+    html:not([data-tv]) .mx-season{grid-template-columns:minmax(0,1fr) minmax(0,1fr); align-items:start; width:min(100%,60rem)}
+    html:not([data-tv]) .mx-shead{grid-column:1 / -1}
+    html:not([data-tv]) .mx-scol--a, html:not([data-tv]) .mx-scol--b, html:not([data-tv]) .mx-scol--c{display:grid; gap:1rem; min-width:0}
+    html:not([data-tv]) .mx-scol--c{grid-column:1 / -1}
+    html:not([data-tv]) .bg-win__card{display:grid; grid-template-columns:10rem minmax(0,1fr); column-gap:1.5rem; align-items:center; width:min(100%,46rem)}
+    html:not([data-tv]) .bg-win__card > *{grid-column:2}
+    html:not([data-tv]) .bg-win__card > .bg-win__medal{grid-column:1; grid-row:1 / span 8; margin:0 auto}
+    html:not([data-tv]) .bg-win__title{margin:.25rem 0 0}
+    html:not([data-tv]) .bg-win__sub{margin:.25rem 0 .5rem}
+    html:not([data-tv]) .bg-win__actions{margin-top:.5rem}
+    html:not([data-tv]) #winBox .bg-win__card{grid-template-columns:minmax(0,1fr) minmax(0,1.15fr); grid-template-areas:"medal pod" "title pod" "sub list" "stats list" "home acts";
+      column-gap:1.5rem; row-gap:.35rem; align-items:center; width:min(100%,50rem)}
+    html:not([data-tv]) #winBox .bg-win__card > *{grid-column:auto; grid-row:auto}
+    html:not([data-tv]) #winBox .bg-win__card > .bg-win__medal{grid-area:medal; width:6rem; height:5.1rem; margin:0 auto}
+    html:not([data-tv]) #winBox .bg-win__card > #winEyebrow{display:none}
+    html:not([data-tv]) #winBox .bg-win__card > #winTitle{grid-area:title; margin:0; font-size:var(--fs-3xl)}
+    html:not([data-tv]) #winBox .bg-win__card > #winSub{grid-area:sub; margin:0; font-size:var(--fs-xs)}
+    html:not([data-tv]) #winBox .bg-win__card > #winPod{grid-area:pod; margin:0 auto .25rem}
+    html:not([data-tv]) #winBox .bg-win__card > #winList{grid-area:list; width:100%; align-self:start}
+    html:not([data-tv]) #winBox .bg-win__card > #winStats{grid-area:stats; margin:0; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.35rem}
+    html:not([data-tv]) #winStats .bg-stat{min-width:0; padding:.3rem .2rem}
+    html:not([data-tv]) #winStats .bg-stat b{font-size:var(--fs-lg)}
+    html:not([data-tv]) #winStats .bg-stat span{font-size:var(--fs-micro); letter-spacing:.02em}
+    html:not([data-tv]) #winBox .bg-win__actions .bg-btn{white-space:nowrap}
+    html:not([data-tv]) #winBox .bg-win__card > .bg-win__actions{grid-area:acts; margin:0}
+    html:not([data-tv]) #winBox .bg-win__card > #winHome{grid-area:home; margin:0}
+    html:not([data-tv]) #winBox .mx-pod__bike{width:2.4rem; height:1.5rem}
+    html:not([data-tv]) #winBox .mx-res{max-height:5.4rem}
+    html:not([data-tv]) #winBox .mx-pod__c[data-p="1"] .mx-pod__step{height:2.3rem; font-size:var(--fs-2xl)}
+    html:not([data-tv]) #winBox .mx-pod__c[data-p="2"] .mx-pod__step{height:1.8rem; font-size:var(--fs-xl)}
+    html:not([data-tv]) #winBox .mx-pod__c[data-p="3"] .mx-pod__step{height:1.4rem; font-size:var(--fs-lg)}
+    html:not([data-tv]) #winBox .mx-pod{gap:.35rem}
+    html:not([data-tv]) #winBox .mx-pod__c{gap:.15rem}
+    html:not([data-tv]) #winBox .bg-win__card{padding-top:.75rem; padding-bottom:.75rem}
+    html:not([data-tv]) #winBox .mx-pod{margin-bottom:.4rem}
+    html:not([data-tv]) .mx-pod__c[data-p="1"] .mx-pod__step{height:3.5rem}
+    html:not([data-tv]) .mx-pod__c[data-p="2"] .mx-pod__step{height:2.6rem}
+    html:not([data-tv]) .mx-pod__c[data-p="3"] .mx-pod__step{height:2rem}
+    html:not([data-tv]) #resBox .mx-res, html:not([data-tv]) #fullBox .mx-res{max-height:40vh}
+    html:not([data-tv]) .mx-hero{padding-top:5.5rem}
+    html:not([data-tv]) .mx-hero .bg-hero__layer{bottom:0; aspect-ratio:auto; background-size:cover; background-position:50% 40%}
+  }
+</style>
+<script src="../sound.js"></script>
+<script src="../skins.js"></script>
+<script src="../saves.js"></script>
+<script src="../names.js"></script>
+<script>window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
+<script>/* a no-op Sound with every method this page uses, in case sound.js fails to load */
+window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){},closePanel:function(){},panelOpen:function(){return false;},addStyle:function(){return false;},hasStyle:function(){return false;}};
+window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";}};</script>
+</head>
+<body class="bg-app bg-app--scene mx-in-setup">
+  <header class="bg-topbar">
+    <div class="bg-topbar__start"><a class="bg-btn bg-btn--icon" id="homeBtn" href="../index.html" aria-label="All games" data-icon="back"></a></div>
+    <div class="bg-topbar__title"><span class="bg-eyebrow" id="barEyebrow">New season</span><span class="bg-topbar__name">Motocross War</span></div>
+    <div class="bg-topbar__end">
+      <button class="bg-btn bg-btn--icon" id="menuBtn" type="button" aria-label="Menu" data-icon="menu" hidden></button>
+    </div>
+  </header>
+
+  <main class="mx-setup" id="setup" aria-label="New season">
+    <div class="mx-col mx-col--a">
+      <section class="bg-hero mx-hero" aria-labelledby="setupTitle">
+        <div class="bg-hero__layer is-on"></div>
+        <div class="bg-hero__shade"></div>
+        <div class="bg-hero__body">
+          <span class="bg-eyebrow bg-eyebrow--accent" data-stage-text="strong">Gate drop · holeshot · war</span>
+          <h1 class="bg-hero__title" id="setupTitle" data-stage-text>Motocross War</h1>
+          <p class="bg-hero__pitch" data-stage-text>Race a real season against the pros of that year. Every heat, LCQ, Main and moto is a game of War.</p>
+        </div>
+      </section>
+      <section class="mx-sec mx-sec--series" aria-labelledby="seriesHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="seriesHead" data-stage-text>Series and year</h2></div>
+        <div class="bg-seg bg-seg--text" id="seriesSeg" role="group" aria-labelledby="seriesHead"></div>
+        <button class="mx-scard bg-focus" id="seasonCard" type="button" aria-haspopup="dialog"></button>
+        <p class="mx-vdesc" id="seasonDesc" aria-live="polite"></p>
+      </section>
+      <section class="mx-sec mx-sec--names" aria-labelledby="namesHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="namesHead" data-stage-text>Your rider</h2></div>
+        <div class="bg-card mx-namecard" id="nameCard"><p class="bg-names-note" id="namesNote">Your name is kept on this device for every game. Pick your number and your team; the pros race as themselves.</p></div>
+      </section>
+      <section class="mx-sec mx-sec--length" aria-labelledby="lengthHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="lengthHead" data-stage-text>Race length</h2></div>
+        <div class="bg-card mx-card">
+          <div class="bg-seg bg-seg--text" id="lengthSeg" role="group" aria-labelledby="lengthHead"></div>
+          <p class="mx-vdesc" id="lengthDesc" aria-live="polite" style="margin:0"></p>
+        </div>
+      </section>
+      <section class="mx-sec mx-sec--rules" aria-labelledby="rulesHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="rulesHead" data-stage-text>Rules</h2></div>
+        <div class="bg-rows">
+          <button class="bg-row mx-disclose" id="rulesToggle" type="button" aria-expanded="false" aria-controls="houseRules">
+            <span class="bg-row__main"><span class="bg-row__title">War rules, the program and house rules</span><span class="bg-row__desc" id="rulesDesc"></span></span>
+            <span class="mx-chev" data-icon="chevron" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div class="bg-rows mx-rules" id="houseRules" hidden></div>
+        <p class="mx-legend" id="rulesLegend" data-stage-text hidden><span class="bg-tag bg-tag--official">official</span> War's rules and the year's real program · <span class="bg-tag bg-tag--house">house</span> a popular home rule</p>
+      </section>
+    </div>
+    <div class="mx-col mx-col--b">
+      <section class="mx-sec mx-sec--players" aria-labelledby="playersHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="playersHead" data-stage-text>Riders</h2></div>
+        <div class="bg-card mx-card">
+          <div class="mx-field"><span class="bg-row__title" id="humansTitle">Riders on this phone</span><span class="bg-row__desc" id="humansDesc">0 = watch the pros race the season.</span></div>
+          <div class="bg-stepper mx-step" id="humanSeg" role="group" aria-label="Riders on this phone"></div>
+          <p class="mx-vdesc" id="fieldDesc" style="margin:0"></p>
+          <div class="bg-rows mx-autorow">
+            <button class="bg-row" id="autoRow" type="button" role="switch" aria-checked="false">
+              <span class="bg-row__main"><span class="bg-row__title">Auto-flip</span><span class="bg-row__desc">Your cards turn by themselves at the game speed. Switch it off any time.</span></span>
+              <span class="bg-toggle" aria-hidden="true"></span>
+            </button>
+          </div>
+        </div>
+      </section>
+      <section class="mx-sec mx-sec--speed" aria-labelledby="speedHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="speedHead" data-stage-text>Game speed</h2></div>
+        <div class="bg-seg bg-seg--text" id="speedSeg" role="group" aria-labelledby="speedHead"><button type="button" data-s="slow" aria-pressed="false">Slow</button><button type="button" data-s="medium" class="on" aria-pressed="true">Medium</button><button type="button" data-s="fast" aria-pressed="false">Fast</button></div>
+        <div class="bg-section mx-subhead"><h2 class="bg-eyebrow" id="skillHead" data-stage-text>Computer skill</h2></div>
+        <div class="bg-seg bg-seg--text" id="skillSeg" role="group" aria-labelledby="skillHead"><button type="button" data-k="easy" aria-pressed="false">Easy</button><button type="button" data-k="normal" class="on" aria-pressed="true">Normal</button><button type="button" data-k="hard" aria-pressed="false">Hard</button></div>
+        <p class="mx-legend" id="skillNote" data-stage-text></p>
+      </section>
+      <section class="mx-sec mx-sec--save" aria-labelledby="saveHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="saveHead" data-stage-text>Save and load</h2></div>
+        <div id="svbar"></div>
+      </section>
+      <a href="../index.html" class="bg-btn bg-btn--ghost bg-btn--block mx-back" id="backHub" data-icon="home" data-stage-text>Back to all games</a>
+      <div class="mx-dock" id="startDock" data-toast-avoid>
+        <button class="bg-btn bg-btn--secondary mx-resume" id="resumeBtn" type="button" style="display:none"><span><span class="bg-btn__label" id="resumeLabel">Resume</span><span class="bg-btn__sub" id="resumeSub">Back to the season</span></span></button>
+        <button class="bg-btn bg-btn--primary bg-btn--cta" id="startBtn" type="button"><span class="bg-btn__label" id="startLabel">Start the season</span><span class="bg-btn__sub" id="startSub"></span></button>
+      </div>
+    </div>
+  </main>
+
+  <main class="mx-season" id="season" aria-label="The season">
+    <div class="mx-shead">
+      <span class="bg-eyebrow bg-eyebrow--accent" id="seEyebrow" data-stage-text></span>
+      <h1 id="seTitle" data-stage-text></h1>
+      <p id="seSub" data-stage-text></p>
+      <div class="mx-prog" aria-hidden="true"><i id="seProg"></i></div>
+    </div>
+    <div class="mx-scol mx-scol--a">
+      <section class="mx-next" aria-labelledby="nextTitle">
+        <span class="bg-eyebrow" id="nextEyebrow">Next race</span>
+        <h2 class="mx-next__t" id="nextTitle"></h2>
+        <p class="mx-next__s" id="nextSub"></p>
+        <div class="mx-next__acts">
+          <button class="bg-btn bg-btn--primary bg-btn--lg" id="goBtn" type="button" data-focus-first data-icon="play">To the gate</button>
+          <button class="bg-btn bg-btn--secondary bg-btn--lg" id="simBtn" type="button" hidden>Sim to results</button>
+        </div>
+        <button class="bg-btn bg-btn--ghost bg-btn--block" id="saveBtn" type="button" data-icon="save">Save the season</button>
+      </section>
+      <section class="mx-panel" aria-labelledby="calHead">
+        <h2 class="bg-eyebrow" id="calHead">Calendar</h2>
+        <ol class="mx-cal" id="calList"></ol>
+      </section>
+    </div>
+    <div class="mx-scol mx-scol--b">
+      <section class="mx-panel" aria-labelledby="standHead">
+        <h2 class="bg-eyebrow" id="standHead">Championship standings</h2>
+        <ol class="mx-st" id="standList"></ol>
+        <button class="bg-btn bg-btn--ghost bg-btn--block" id="fullBtn" type="button">All riders</button>
+      </section>
+    </div>
+    <div class="mx-scol mx-scol--c">
+      <section class="mx-panel" aria-labelledby="teamHead">
+        <h2 class="bg-eyebrow" id="teamHead">Team standings (ours)</h2>
+        <ol class="mx-st" id="teamList"></ol>
+        <p class="mx-note" id="teamNote">Each make scores its best finisher's points at every round. Our own table: the series is scored for the riders.</p>
+      </section>
+    </div>
+  </main>
+
+  <main class="mx-race" id="race" aria-label="The race">
+    <div class="mx-rhead">
+      <h1 class="mx-rtitle" id="raceTitle" data-stage-text></h1>
+      <span class="mx-chip is-hot" id="lapChip"></span>
+      <span class="mx-chip" id="hsChip"></span>
+      <span class="mx-chip" id="fieldChip"></span>
+    </div>
+    <div class="mx-arena" id="arena" data-stage-solid aria-label="The track">
+      <div class="mx-track" id="trackArt" aria-hidden="true"></div>
+      <div class="mx-lane" id="lane" aria-hidden="true"></div>
+      <div class="mx-dust" id="dust" aria-hidden="true"></div>
+      <div class="mx-gate" id="gate" aria-hidden="true"></div>
+      <div class="mx-table" id="table">
+        <div class="mx-slot" id="youSlot"><span class="mx-slot__lab" id="youLab">Your card</span><div class="mx-card" id="youCard"></div><span class="mx-slot__who" id="youWho"></span></div>
+        <div class="mx-mid" id="midNote"><b id="midBig"></b><span id="midSmall"></span></div>
+        <div class="mx-slot" id="topSlot"><span class="mx-slot__lab" id="topLab">Top card</span><div class="mx-card" id="topCard"></div><span class="mx-slot__who" id="topWho"></span></div>
+        <div class="mx-war" id="warRow"></div>
+      </div>
+      <div class="mx-flash" id="flash" aria-hidden="true"></div>
+      <div class="mx-banner" id="banner" aria-live="polite"><b id="bannerT"></b><span id="bannerS"></span></div>
+    </div>
+    <div class="mx-acts" id="acts" data-toast-avoid>
+      <button class="bg-btn bg-btn--primary bg-btn--lg" id="flipBtn" type="button" data-focus-first><span class="bg-btn__label" id="flipLabel">Flip</span><span class="bg-btn__sub" id="flipSub"></span></button>
+      <button class="bg-row mx-auto" id="autoBtn" type="button" role="switch" aria-checked="false"><span class="bg-row__main"><span class="bg-row__title">Auto</span></span><span class="bg-toggle" aria-hidden="true"></span></button>
+      <button class="bg-btn bg-btn--secondary" id="skipBtn" type="button" hidden>Sim to the flag</button>
+    </div>
+    <p class="mx-stat" id="stat" data-stage-text aria-live="polite"></p>
+    <section class="mx-tower" aria-labelledby="towerHead">
+      <div class="mx-tower__h"><span id="towerHead">Timing</span><span id="towerSub"></span></div>
+      <ol class="mx-tw" id="tower"></ol>
+    </section>
+    <div class="mx-logw">
+      <ol class="mx-log" id="log" aria-label="What happened" data-stage-text></ol>
+      <div class="bg-hintbar mx-hints" data-stage-text><span><span class="bg-key">OK</span> <span id="hintOk">Flip</span></span><span><span class="bg-key">Back</span> Close a list, or the Menu</span></div>
+    </div>
+  </main>
+
+  <section class="bg-sheet" id="resBox" aria-labelledby="resTitle"><div id="resSheet"></div></section>
+  <section class="bg-sheet" id="podBox" aria-labelledby="podTitle"><div id="podSheet"></div></section>
+  <section class="bg-sheet" id="fullBox" aria-labelledby="fullTitle"><div id="fullSheet"></div></section>
+  <section class="bg-sheet" id="newBox" aria-labelledby="newTitle"><div id="newSheet"></div></section>
+
+  <div class="bg-win" id="winBox" aria-labelledby="winTitle">
+    <div class="bg-win__scrim"></div>
+    <div class="bg-win__rays"></div>
+    <div class="bg-win__card">
+      <div class="bg-win__medal"></div>
+      <p class="bg-eyebrow" id="winEyebrow">Season over</p>
+      <h2 class="bg-win__title" id="winTitle">Champion</h2>
+      <p class="bg-win__sub" id="winSub"></p>
+      <div class="mx-pod" id="winPod"></div>
+      <ol class="mx-res" id="winList" aria-label="Final standings"></ol>
+      <ul class="bg-stats bg-win__stats" id="winStats"></ul>
+      <div class="bg-win__actions">
+        <button class="bg-btn bg-btn--secondary bg-btn--lg" type="button" id="winMenu">Menu</button>
+        <button class="bg-btn bg-btn--primary bg-btn--lg" type="button" id="winAgain" data-icon="play">New season</button>
+      </div>
+      <a class="bg-btn bg-btn--ghost bg-btn--block mx-winhome" href="../index.html" id="winHome">All games</a>
+    </div>
+  </div>
+
+  <div class="mx-toast" id="toast" aria-hidden="true"></div>
+  <div class="mx-svtoast" id="svtoast" aria-hidden="true"></div>
+
+<script src="data/index.js"></script>
+<script src="race.js"></script>
+<script src="round.js"></script>
+<script src="season.js"></script>
+<script src="brain.js"></script>
+<script src="art.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

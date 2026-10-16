@@ -132,8 +132,11 @@ function drawVersions(){
   if(!vs.querySelector(".bg-version")){
     vs.innerHTML=E.VERSIONS.map(function(v){ return '<button type="button" class="bg-version" role="radio" data-value="'+v.id+'" data-v="'+v.id+'" aria-checked="false"><span class="bg-version__title">'+esc(v.name)+'</span><span class="bg-version__meta">'+esc(v.tag)+'</span></button>'; }).join("");
     vs.querySelectorAll(".bg-version").forEach(function(d){ d.addEventListener("click",function(){ if(cfg.version!==d.dataset.v){ cfg.version=d.dataset.v; cfg.over={}; } drawSetup(); }); });
+    /* Motocross War (its own game, mxwar/): the last entry of the list opens it (a link, not a Version of this table) */
+    var mxl=document.createElement("a"); mxl.className="bg-version"; mxl.id="mxwarLink"; mxl.href="../mxwar/index.html"+(document.documentElement.hasAttribute("data-tv")?"?tv=1":"");
+    mxl.innerHTML='<span class="bg-version__title">Motocross War</span><span class="bg-version__meta">Race a real Supercross or Motocross season</span>'; vs.appendChild(mxl);
   }
-  vs.querySelectorAll(".bg-version").forEach(function(d){ var on=cfg.version===d.dataset.v; d.classList.toggle("on",on); d.setAttribute("aria-checked",String(on)); });
+  vs.querySelectorAll(".bg-version[data-v]").forEach(function(d){ var on=cfg.version===d.dataset.v; d.classList.toggle("on",on); d.setAttribute("aria-checked",String(on)); });
   var v=versionOf(cfg.version);
   $("versionDesc").innerHTML="<b>"+esc(v.name)+".</b> "+esc(v.desc)+(v.id==="peace"?" (Peace has a one-line source; its wars are played as in Classic.)":"");
 }
