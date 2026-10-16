@@ -133,7 +133,7 @@
   .wr-nl{font:var(--fw-ui) var(--fs-micro)/1 var(--font-ui); color:var(--text-2)}
   .wr-sub{grid-column:1 / -1; font:var(--fw-ui) var(--fs-micro)/1.25 var(--font-ui); color:var(--text-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   .wr-sub:empty{display:none}
-  .wr-tag{position:absolute; right:-.35rem; top:-.6rem; padding:.1rem .45rem; border-radius:var(--r-pill); font:var(--fw-caps) var(--fs-micro)/1.3 var(--font-ui); letter-spacing:.04em;
+  .wr-tag{position:absolute; right:-.35rem; top:-.6rem; padding:.06rem .45rem; border-radius:var(--r-pill); font:var(--fw-caps) var(--fs-micro)/1.15 var(--font-ui); letter-spacing:.04em;   /* slim: it never reaches the name below it */
     color:var(--seat-ink); background:var(--seat); box-shadow:0 0 0 2px rgba(8,10,4,.9)}
   .wr-tag:empty{display:none}
   .wr-seat[data-pos="left"] .wr-plate, .wr-seat[data-pos="right"] .wr-plate{grid-template-columns:minmax(0,1fr); justify-items:center; text-align:center; padding:.35rem .4rem}
@@ -258,6 +258,9 @@
   .wr-pot__u{font:var(--fw-ui) var(--fs-xs)/1 var(--font-ui); color:var(--text-2)}
   .wr-pot.is-war .wr-pot__l{color:#ffb39a}
   .wr-table.is-gather .wr-mid{visibility:hidden}
+  .wr-game.is-big .wr-mid.is-tight{gap:0}   /* a short band with a note (game.js midPlace): the pot number one size down, the lines closer */
+  .wr-game.is-big .wr-mid.is-tight .wr-pot__n{font-size:var(--fs-xl)}
+  .wr-game.is-big .wr-mid.is-tight .wr-midnote{line-height:1.15}
   /* the count rail on the phone (upright and sideways): one scrolling row, leader first (rank, name, count; the seat colour on the edge) */
   html:not([data-tv]) .wr-game.is-multi.is-big .wr-stand{display:flex; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; overscroll-behavior-x:contain; gap:.35rem; padding:.7rem 0 .45rem}
   html:not([data-tv]) .wr-game.is-big .wr-stand::-webkit-scrollbar{display:none}
@@ -341,6 +344,7 @@
   html[data-tv] .wr-game.is-big .wr-stand .bg-player{gap:.4rem; padding:.2rem .55rem .4rem .3rem; border-radius:var(--r-md)}
   html[data-tv] .wr-game.is-big .wr-stand .bg-token{width:1.4rem; height:1.4rem; font-size:var(--fs-micro)}
   html[data-tv] .wr-game.is-big .wr-stand .bg-player__cpu{display:none}
+  html[data-tv] .wr-game.is-big .wr-stand .bg-player.is-turn .bg-token::after{inset:-.2rem}   /* the compact chip: the turn ring stays clear of the rank and the name */
   html[data-tv] .wr-game.is-big .wr-stand .bg-player__txt{display:flex; align-items:baseline; justify-content:space-between; gap:.4rem}
   html[data-tv] .wr-game.is-big .wr-stand .bg-player__meta{flex:none; font:400 var(--fs-lg)/1 var(--font-display); color:var(--gold-100)}
   html[data-tv] .wr-game.is-big #flipBtn{flex:1 1 0}

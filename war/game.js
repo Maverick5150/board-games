@@ -472,7 +472,7 @@ function bigLayout(Wd,H){
   });
   var t=$("wtable"); t.style.setProperty("--cw",cw2+"px"); t.classList.toggle("is-tight",tw2<rem*(tv?9:5.75));
   var stack={x:pad+cw2*.45,y:mid.y}, sr=stack.x+pw/2+cw2*.8;   // the left-over / tied-card stacks at the left of the band
-  GEO={W:Wd,H:H,cw:cw2,ch:ch,pw:pw,ph:ph,pad:pad,gap:gap,seats:seats,mid:mid,big:true,band:Math.max(rem*2,botStart-topEnd-2*gap),C:C,R:R,stack:stack,sr:sr};
+  GEO={W:Wd,H:H,cw:cw2,ch:ch,pw:pw,ph:ph,pad:pad,gap:gap,seats:seats,mid:mid,big:true,topEnd:topEnd,botStart:botStart,band:Math.max(rem*2,botStart-topEnd-2*gap),C:C,R:R,stack:stack,sr:sr};
   var m=$("wtMid"); m.style.top=Math.round(mid.y)+"px"; m.style.transform="translate(-50%,-50%)"; m.style.justifyItems="center";
   midPlace();
   return true;
@@ -516,7 +516,7 @@ function layoutSeats(){
   if(n===3){ seats[1].slot.room=seats[2].slot.room=Wd/2-pad*1.5; mid={x:Wd/2,y:(seats[1].slot.y+ch/2+seats[0].slot.y-ch/2)/2}; }
   if(n===4){ var tb=seats[2].slot.y+ch/2+gap, bb=seats[0].slot.y-ch/2-gap; seats[1].slot.room=seats[3].slot.room=Math.max(ch,bb-tb); }
   GEO={W:Wd,H:H,cw:cw,ch:ch,pw:pw,ph:ph,pad:pad,gap:gap,seats:seats,mid:mid};
-  var m=$("wtMid"); m.style.left=Math.round(mid.x)+"px"; m.style.top=Math.round(mid.y+ph/2+rem*.9)+"px";
+  var m=$("wtMid"); m.style.left=Math.round(mid.x)+"px"; m.style.top=Math.round(mid.y+ph/2+rem*.9)+"px"; m.style.maxWidth=""; m.style.width=""; m.classList.remove("is-tight");   // (a big table before may have set them)
   m.style.transform=n===2?"translate(-"+Math.round(pw/2+4)+"px,-50%)":"translate(-50%,-50%)"; m.style.justifyItems=n===2?"start":"center";
   return true;
 }
@@ -559,9 +559,13 @@ function midPose(i){ var k=GEO.pw/GEO.cw; return {x:GEO.mid.x-GEO.cw/2+(i||0)*GE
 function stackPose(i){ if(!GEO.big) return midPose(i); var k=GEO.pw/GEO.cw; return {x:GEO.stack.x-GEO.cw/2+(i||0)*GEO.cw*.1,y:GEO.stack.y-GEO.ch/2-(i||0)*1.5,r:0,k:k}; }
 /* the big table's pot in the centre band: a war's cards gather here before they fly to the winner */
 function potPose(i){ var k=Math.min(1,GEO.band*.95/GEO.ch); return {x:GEO.mid.x-GEO.cw/2+((i%7)-3)*1.6,y:GEO.mid.y-GEO.ch/2-(i%5)*1.2,r:((i%5)-2)*3,k:k}; }
-function layoutSeat(s,ms){ var a=tab[s]||[], m=a.length; a.forEach(function(el,i){ var p=slotPose(s,i,m,el.classList.contains("is-up")); if(ms) move(el,p,ms); else place(el,p); }); }
+function layoutSeat(s,ms){ var a=tab[s]||[], m=a.length; a.forEach(function(el,i){ var p=slotPose(s,i,m,el.classList.contains("is-up")); if(ms) move(el,p,ms); else place(el,p); }); upTop(s); }
+/* the big table's slot is narrow: a war's face-down cards slide UNDER the last face-up card (they peek out at its side), so the tied card
+   that started the war stays readable; the deciding card is raised as it turns (animEvent "reveal") */
+function upTop(s){ if(!GEO||!GEO.big) return; var u=lastUp(s); if(u&&(tab[s]||[]).indexOf(u)<(tab[s]||[]).length-1) u.style.zIndex=++zTop; }
 function addToSeat(s,el,ms){ (tab[s]=tab[s]||[]).push(el); potLine(); var a=tab[s], m=a.length, last=null;
   a.forEach(function(x,i){ var p=slotPose(s,i,m,x.classList.contains("is-up")); if(x===el) last=move(x,p,ms,{lift:true}); else move(x,p,sp(200)); });
+  upTop(s);
   return last||Promise.resolve(); }
 
 /* the whole table drawn from G (after every batch of moves, a load, a resize) */
@@ -587,8 +591,8 @@ function carryPose(j){ var p=stackPose(0); return {x:p.x+j*GEO.cw*.16,y:p.y,r:(j
 function midNote(){
   var t="";
   if(G&&ui.dealing) t=onTV()?"Press OK to skip the deal":"Tap the table to skip the deal";
-  else if(G&&G.kitty.length) t=plural(G.kitty.length,"card")+" left over: to the first war's winner";
-  else if(G&&G.carry.length) t=G.carry.length+" tied cards: to the next battle's winner";
+  else if(G&&G.kitty.length) t=(big()?G.kitty.length:plural(G.kitty.length,"card"))+" left over: to the first war's winner";   // the big table: the short form fits its band on one line
+  else if(G&&G.carry.length) t=G.carry.length+(big()?" tied":" tied cards")+": to the next battle's winner";
   else if(G&&G.aside.length) t=G.aside.length+" set aside";
   $("wtMidNote").textContent=t;
   midPlace(); potLine();
@@ -599,6 +603,12 @@ function midPlace(){
   var m=$("wtMid"), side=kittyEls.length>0||carryEls.length>0, rem=remPx();
   m.style.left=Math.round(side?(GEO.sr+GEO.W)/2:GEO.mid.x)+"px";
   m.style.maxWidth=Math.round(side?GEO.W-GEO.sr-GEO.pad-rem*.5:GEO.W-2*GEO.pad)+"px";
+  m.style.width="max-content";   // an absolute box centred by translate(-50%) would otherwise shrink to the room right of its left edge and wrap early
+  /* the clear room between the rows: the lower tiles' tags reach .6rem above them. The pot line and a note (left over / tied cards) need
+     about 2.8rem; a tighter band (Hand War upright, 16 seats) sets the pot number smaller and the lines closer (is-tight: about 2.1rem) */
+  var room=GEO.botStart-GEO.topEnd-rem*.6, note=!!$("wtMidNote").textContent;
+  m.style.top=Math.round((GEO.topEnd+GEO.botStart-rem*.6)/2)+"px";
+  m.classList.toggle("is-tight",note&&room<rem*2.8);
 }
 /* the big table's centre band: the battle pot (every card on the table) or, in a war, the war pot */
 function potLine(){
@@ -647,7 +657,9 @@ function updateSeats(){
     if(p.pr.length) sub.push((p.pr.length>1?"Prisoners ":"Prisoner ")+p.pr.map(E.shortName).join(" "));
     el.querySelector(".wr-sub").innerHTML=C.pipText(esc(sub.join(" · ")));
     var fx=ui.fight, fi=!!fx&&fx.f.indexOf(s)>=0, ti=!!fx&&fx.t.indexOf(s)>=0;
-    var tag=p.out?"Out":(ui.dealing&&s===G.dealer)?"Dealer":(!G.over&&G.pick[s]&&!busy)?"Ready":(big()&&fi)?(ti?"Tied":"War"):"";
+    /* the big table in a war: "War" / "Tied" stay on the fighters after they lay their cards (the cards in the slot already say "ready"), so
+       who is in the war and who tied stay readable until the deciding flip */
+    var tag=p.out?"Out":(ui.dealing&&s===G.dealer)?"Dealer":(big()&&fi)?(ti?"Tied":"War"):(!G.over&&G.pick[s]&&!busy)?"Ready":"";
     el.classList.toggle("is-fight",big()&&fi); el.classList.toggle("is-tied",big()&&ti);
     el.querySelector(".wr-tag").textContent=tag;
     el.classList.toggle("is-out",!!p.out);
@@ -918,8 +930,17 @@ function actMany(items){
   });
   return true;
 }
+/* several players knocked out by the same battle (a big table can lose a dozen at once): one "Out of cards" banner for all of them, so the
+   show doesn't stop for a banner per player (16 players at Fast: 13 banners took about 8.5 s) */
+function mergeOuts(evs){
+  var out=[], i, e;
+  for(i=0;i<evs.length;i++){ e=evs[i];
+    if(e.e==="out"){ var last=out[out.length-1]; if(last&&last.e==="outs"){ last.seats.push(e.s); continue; } out.push({e:"outs",seats:[e.s]}); continue; }
+    out.push(e); }
+  return out.map(function(x){ return x.e==="outs"&&x.seats.length===1?{e:"out",s:x.seats[0]}:x; });
+}
 async function playMany(my,plans,evs){
-  if(!GEO) layoutSeats();
+  if(!GEO) layoutSeats(); evs=mergeOuts(evs);
   var st=dl(plans.length>8?22:40);
   await Promise.all(plans.map(function(p,i){ return sleep(i*st).then(function(){ if(my===gen) return animPlan(my,p,i%4!==0); }); }));
   tr("plans"); for(var i=0;i<evs.length;i++){ if(my!==gen) return; tr("ev:"+evs[i].e); await animEvent(my,evs[i]); }
@@ -930,6 +951,7 @@ async function playMany(my,plans,evs){
 async function playBatch(my,plan,evs){
   if(!GEO) layoutSeats();
   if(plan) await animPlan(my,plan);
+  evs=mergeOuts(evs);
   for(var i=0;i<evs.length;i++){ if(my!==gen) return; await animEvent(my,evs[i]); }
 }
 function source(plan){
@@ -997,6 +1019,7 @@ async function animEvent(my,e){
         if(war&&x.held){ var hu=lastUp(x.s); if(hu) hu.classList.remove("is-lose"); return; }
         el=pendingOf(x.s);
         if(!el){ el=newCard(null,false,packetPose(x.s)); addToSeat(x.s,el,0); }
+        if(GEO&&GEO.big) el.style.zIndex=++zTop;
         flips.push(flipUp(el,x.c,war?sp(820):sp(430),war));
       });
       Sound.sfx(war?"dice":"card");
@@ -1062,6 +1085,7 @@ async function animEvent(my,e){
       return;
     }
     case "out": Sound.sfx("lose"); seatEls[e.s].classList.add("is-out"); setCount(e.s,0); renderStand(); await banner("Out of cards",nm(e.s)+(nm(e.s)==="You"?" are":" is")+" out of the game",dl(1300),true); return;
+    case "outs": Sound.sfx("lose"); e.seats.forEach(function(q){ seatEls[q].classList.add("is-out"); setCount(q,0); }); renderStand(); await banner("Out of cards",whoList(e.seats)+" are out of the game",dl(1300),true); return;
     case "sudden": Sound.sfx("bell"); await banner("Sudden death",whoList(e.seats)+" are tied: the next battle that breaks the tie wins",dl(1700),true); return;
     case "over": return;
     default: return;
