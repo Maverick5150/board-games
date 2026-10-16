@@ -159,7 +159,7 @@ Focus ring: every `bg-` control gets the same ring on `:focus-visible`, and also
 
 ## 3. `window.BGUI`
 
-This is BGUI 2.4.0 (`BGUI.version`). Every call is safe if its element is missing: it returns `null`, `false` or a resolved promise.
+This is BGUI 2.5.0 (`BGUI.version`). Every call is safe if its element is missing: it returns `null`, `false` or a resolved promise.
 
 | Call | Does |
 |---|---|
@@ -180,12 +180,15 @@ This is BGUI 2.4.0 (`BGUI.version`). Every call is safe if its element is missin
 | `BGUI.setTurn(playerEl, {pulse, haptic})` | Moves the static turn ring and asks `ambient` for 3 pulses. Call it every turn: the new turn's pulse replaces the previous player's on the same strip (running or queued), so it starts at once even when turns are shorter than the 4.9 s pulse. Since 2.4 it also ends a pulse on a chip that is no longer in the page: a page that rebuilds its strip (`innerHTML`, `mount.players`) needs no `ambient.remove` of the old chips (New game from the mid-game Menu twice in a row: the new strip pulsed within 6-55 ms in all four games in the final runs, 309 ms at most in any run, and the old strip's pulse ended with it). `pulse: false` moves the ring only (a hidden strip, a preview game) |
 | `BGUI.focus.enable({root, autofocus})`, `.disable()`, `.move(dir)`, `.set(el)`, `.first(scope)`, `.candidates()`, `.enabled` | D-pad spatial navigation over `[data-focus]` and focusable elements. The first arrow lands on the first page control (not the bar), same-row/column moves win, Enter/OK clicks, focus is scrolled into view below the sticky top bar, and it never leaves an open sheet or win screen. What is scrolled into view is the element that carries the ring: a switch's whole `.bg-row` with its scroll-margin, not just the switch, so a tall row's ring is never cut by the bar, the screen edge or a sheet's edge (2.3.1, step 4 Monopoly review). A `<select>` never keeps the arrows (OK opens its picker), a text field keeps Left/Right only while typing, radios and sliders keep Left/Right but let Up/Down move on. It is on automatically in TV mode |
 | `BGUI.dice.svg(n)`, `.render(el, n)`, `.roll(el, final?, {ms, flips})` | Pip faces, plus a roll made of a transform tumble and a few face swaps. Returns a promise of the final value |
+| `BGUI.names.mount(host, {count, seat, token, label, extra, onChange})`, `.list(humans, raw)`, `.cpu(n, humanNames)`, `.get(i)`, `.set(i, v)`, `.clean(v)` | Player names (step 10): one device-wide name for the first human (`localStorage["bg_player_name"]`, every game) and hot-seat names (`"bg_player_names"`); the name fields (`.bg-names` > `.bg-name` with `input.bg-input`); the names a game uses (empty = "You" / "Player n"); computer names that never repeat a human. Guide: `BG_audit/SHARED-UX.md` |
+| `BGUI.firstPlayer(opts)`, `.resolve(n, draw, {rank})`, `.skip()`, `.close()`, `.isOpen()` | The who-goes-first show (step 10): modes `dice` (2 gold dice), `die` (pins on a board, `layout: "peek"`), `card`, `cut`, `flip`, `spin`; ties draw again; the winner gets a spotlight, a gold ray burst and "Ava goes first". Paced by Game speed; a tap / OK / Back skips; Reduce effects = the short version. The game decides the result with `.resolve` first and starts its first turn when the promise resolves |
+| `BGUI.hop(el, {ms, lift, unit})` | One visible hop per space (step 10, the CEO rule): lifts a plain wrapper (Web Animations, transform only, one shot); nothing under Reduce effects / reduced motion |
 | `BGUI.setTV(on)`, `BGUI.isTV()` | Toggles `html[data-tv]` and D-pad navigation, and fires a `bgui:tv` event |
 | `BGUI.reducedMotion()`, `BGUI.setReducedMotion(true\|false\|null)` | Reads or forces reduced motion |
 | `BGUI.mount.seg(el, {options, value, onChange})`, `.stepper(el, {min, max, value, label, onChange})`, `.toggle(row, {checked, onChange})`, `.versions(el, {value, onChange})`, `.players(el, list, {turn, scroll})`, `.emblem(el, opts)`, `.orbs(host, {count})`, `.effectsRow(el, {title, desc, id})`, `.auto(scope)` | Builders and wiring. `data-bg-mount="seg\|stepper\|toggle\|versions\|emblem\|effectsRow"` wires markup on load. `effectsRow` appends the "Reduce effects" switch row to a container (or wires a given `.bg-row`), bound to `BGUI.effects` and kept in sync with changes made elsewhere. `orbs` returns the stage's orbs when a stage is up, so a page never gets two sets |
 | `BGUI.icon(name, {cls, label})`, `BGUI.icon.names`, `BGUI.icon.seal(game)` | Inline SVG icons from `icons.js` |
 
-Events on `document`: `bgui:sheet` (`{open, el, reason}`), `bgui:win` (`{open, el}`), `bgui:tv` (`{on}`), `bgui:effects` (`{level, motion}`), `bgui:stage` (`{game, el}`).
+Events on `document`: `bgui:firstplayer` (`{open, mode | winner, skipped}`), `bgui:sheet` (`{open, el, reason}`), `bgui:win` (`{open, el}`), `bgui:tv` (`{on}`), `bgui:effects` (`{level, motion}`), `bgui:stage` (`{game, el}`).
 
 ## 4. Per-game accents and seats (final mapping)
 
