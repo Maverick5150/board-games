@@ -139,6 +139,37 @@
   .sn-blen{font:var(--fw-ui-strong) var(--fs-xs)/1.35 var(--font-ui); color:var(--text-1)}
   .sn-blen:empty{display:none}
   .sn-bnote{font:var(--fw-body) var(--fs-xs)/1.4 var(--font-ui); color:var(--text-2)}
+  /* the big preview (the CEO, 2026-10-16): the highlighted board LARGE, drawn from its layout with every square's number, its name, maker,
+     country and year under it. It follows a tap or the scroll (phone) and the D-pad focus (TV). Phone upright: on top, and it stays there
+     while the list scrolls under it; phone sideways and TV: on the left, the list on the right */
+  .sn-bsheet{scroll-padding-top:var(--sn-peek-h,0px)}
+  .sn-bwrap{display:block}
+  .sn-bbig{position:sticky; top:-.5rem; z-index:3; margin:.5rem calc(-1 * (var(--gutter) + .25rem)) 0; padding:.625rem calc(var(--gutter) + .25rem) .75rem;
+    background:linear-gradient(180deg,#191e3a,#151932); box-shadow:0 1px 0 var(--line-gold), 0 .75rem 1rem -.75rem rgba(0,0,0,.85)}
+  .sn-bbigart{width:min(100%,30vh); width:min(100%,30dvh); aspect-ratio:1; margin:0 auto; border-radius:var(--r-md); overflow:hidden; background:#0b0a12;
+    box-shadow:inset 0 0 0 1px var(--line-gold), 0 .5rem 1.25rem rgba(0,0,0,.5)}
+  .sn-bbigart svg{display:block; width:100%; height:100%}
+  .sn-bbigcap{display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:.75rem; margin-top:.625rem}
+  .sn-bbigtext{display:grid; gap:.15rem; min-width:0}
+  .sn-bbigname{font:400 var(--fs-lg)/1.15 var(--font-display); color:var(--gold-100)}
+  .sn-bbigmeta{font:var(--fw-body) var(--fs-xs)/1.3 var(--font-ui); color:var(--text-2)}
+  .sn-bbigmeta b{font-weight:var(--fw-ui-strong); color:var(--text-1); white-space:nowrap}
+  .sn-bbigpick{min-height:var(--tap); white-space:nowrap}
+  .sn-bopt.is-peek{background:radial-gradient(100% 120% at 0% 0%, rgba(248,239,216,.12), rgba(0,0,0,0) 65%), var(--control-fill); box-shadow:inset 0 0 0 2px rgba(248,239,216,.62), inset 0 1px 0 rgba(255,255,255,.08)}
+  .sn-prevsvg .sn-num{font-family:var(--font-ui); font-weight:800; fill:#f8efd8; stroke:#0b0a12; stroke-opacity:.72; stroke-width:5px; paint-order:stroke; stroke-linejoin:round}
+  .sn-prevsvg .sn-num.is-100{fill:#3a2408; stroke:#fff3cf; stroke-opacity:.5}
+  .sn-prevsvg .sn-num.is-mid{text-anchor:middle}
+  @media (orientation:landscape) and (max-height:600px){
+    html:not([data-tv]) .sn-bsheet{width:min(100%,58rem); max-height:100vh; max-height:100dvh; scroll-padding-top:0}   /* the whole height: the board as big as it fits, no top-bar title half under the sheet */
+    html:not([data-tv]) .sn-bwrap{display:grid; grid-template-columns:var(--bigw) minmax(0,1fr); grid-template-areas:"big head" "big list"; column-gap:1.5rem; align-items:start;
+      --bigw:clamp(10rem, calc(100vh - 12.5rem), 15rem); --bigw:clamp(10rem, calc(100dvh - 12.5rem), 15rem)}
+    html:not([data-tv]) .sn-bhead{grid-area:head}
+    html:not([data-tv]) #boardList{grid-area:list; min-width:0}
+    html:not([data-tv]) .sn-bbig{grid-area:big; align-self:start; top:0; margin:0; padding:0; background:none; box-shadow:none}
+    html:not([data-tv]) .sn-bbigart{width:100%}
+    html:not([data-tv]) .sn-bbigcap{grid-template-columns:minmax(0,1fr); gap:.375rem; margin-top:.5rem}
+    html:not([data-tv]) .sn-bbigname{font-size:var(--fs-md)}
+  }
   .sn-capchip{max-width:100%; white-space:normal; text-align:center}
   .sn-svg .sn-railtxt{font-family:var(--font-ui); font-weight:800; letter-spacing:.06em; text-transform:uppercase; fill:#e7ca90; text-anchor:end}
   .sn-spin text{font-family:var(--font-ui); font-weight:800; font-size:19px; fill:#f8efd8; text-anchor:middle; dominant-baseline:central}
@@ -223,7 +254,14 @@
   html[data-tv] .sn-hero .bg-hero__body{padding:0}
   html[data-tv] #versions{gap:1.5rem}
   html[data-tv] .sn-rules .bg-row{min-height:0; padding:.5rem .875rem}
-  html[data-tv] .sn-bsheet{width:min(100%,54rem)}
+  html[data-tv] .sn-bsheet{width:min(100%,76rem); scroll-padding-top:0}
+  html[data-tv] .sn-bwrap{display:grid; grid-template-columns:28rem minmax(0,1fr); grid-template-areas:"big head" "big list"; column-gap:2.5rem; align-items:start}
+  html[data-tv] .sn-bhead{grid-area:head}
+  html[data-tv] #boardList{grid-area:list; min-width:0}
+  html[data-tv] .sn-bbig{grid-area:big; align-self:start; top:0; margin:0; padding:.5rem 0 0; background:none; box-shadow:none}
+  html[data-tv] .sn-bbigart{width:100%}
+  html[data-tv] .sn-bbigcap{grid-template-columns:minmax(0,1fr); margin-top:.875rem}
+  html[data-tv] .sn-bbigpick{display:none}
   html[data-tv] .sn-bopts{gap:1.5rem}
   html[data-tv] .sn-bopt{grid-template-columns:7.5rem minmax(0,1fr); gap:1.25rem}
   html[data-tv] .sn-bprev{width:7.5rem}
@@ -453,8 +491,14 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
 
   <section class="bg-sheet sn-bsheet" id="boardBox" aria-labelledby="boardTitle">
     <div class="bg-sheet__grip" aria-hidden="true"></div>
-    <div class="sn-bhead"><span class="bg-eyebrow bg-eyebrow--accent">Choose your board</span><h2 class="bg-sheet__title" id="boardTitle">Every classic board, with its year</h2><p class="bg-sheet__sub" id="boardSub"></p></div>
-    <div id="boardList"></div>
+    <div class="sn-bwrap">
+      <div class="sn-bhead"><span class="bg-eyebrow bg-eyebrow--accent">Choose your board</span><h2 class="bg-sheet__title" id="boardTitle">Every classic board, with its year</h2><p class="bg-sheet__sub" id="boardSub"></p></div>
+      <figure class="sn-bbig" id="boardBig" aria-live="polite">
+        <div class="sn-bbigart" id="boardBigArt" aria-hidden="true"></div>
+        <figcaption class="sn-bbigcap"><span class="sn-bbigtext"><span class="sn-bbigname" id="boardBigName"></span><span class="sn-bbigmeta" id="boardBigMeta"></span></span><button type="button" class="bg-btn bg-btn--primary sn-bbigpick" id="boardBigPick">Play this board</button></figcaption>
+      </figure>
+      <div id="boardList"></div>
+    </div>
   </section>
 
   <div class="sn-toast" id="toast" aria-hidden="true"></div>

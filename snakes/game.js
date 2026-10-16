@@ -304,14 +304,61 @@ function buildBoardSheet(){
   if(group!==null) html+="</div>";
   html+='<h3 class="bg-eyebrow sn-bgroup">A board of your own</h3><div class="bg-sheet__options sn-bopts">'+optionHTML("shuffle")+"</div>";
   $("boardList").innerHTML=html;
+  // a tap shows the board LARGE in the preview; a second tap on it (or "Play this board") plays it. OK on the TV, a key press (Enter /
+  // Space: detail 0) or a click on the board already shown picks at once
   $("boardList").addEventListener("click",function(e){
     var b=e.target.closest(".sn-bopt"); if(!b) return;
-    var id=b.getAttribute("data-b"), v=versionOf(cfg.version);
-    if(id==="shuffle") cfg.over.board="shuffle"; else if(id===v.board) delete cfg.over.board; else cfg.over.board=id;
-    var B=BG(); if(B&&B.sheet&&B.sheet.isOpen($("boardBox"))) B.sheet.close($("boardBox")); else $("boardBox").classList.remove("is-open","show");
-    drawSetup(); saveCfg();
+    var id=b.getAttribute("data-b");
+    if(onTV()||e.detail===0||id===peekId) pickBoard(id); else showBig(id,true);
   });
+  $("boardList").addEventListener("focusin",function(e){ var b=e.target.closest&&e.target.closest(".sn-bopt"); if(b&&onTV()) showBig(b.getAttribute("data-b")); });
+  $("boardBigPick").addEventListener("click",function(){ if(peekId) pickBoard(peekId); });
+  // phone: the preview follows the scroll (the entry at the reading line of the visible list; only while a finger or wheel moves it)
+  var box=$("boardBox"), moved=0, raf=0;
+  ["touchmove","wheel","pointermove"].forEach(function(t){ box.addEventListener(t,function(ev){ if(t!=="pointermove"||ev.buttons) moved=Date.now(); },{passive:true}); });
+  box.addEventListener("keydown",function(ev){ if(/^(Arrow|Page|Home|End| )/.test(ev.key)) moved=Date.now(); });
+  box.addEventListener("scroll",function(){
+    if(onTV()||Date.now()-moved>900||raf) return;
+    raf=requestAnimationFrame(function(){ raf=0; var id=atReadingLine(); if(id&&id!==peekId) showBig(id); });
+  },{passive:true});
 }
+var peekId=null;
+function pickBoard(id){
+  var v=versionOf(cfg.version);
+  if(id==="shuffle") cfg.over.board="shuffle"; else if(id===v.board) delete cfg.over.board; else cfg.over.board=id;
+  var B=BG(); if(B&&B.sheet&&B.sheet.isOpen($("boardBox"))) B.sheet.close($("boardBox")); else $("boardBox").classList.remove("is-open","show");
+  drawSetup(); saveCfg();
+}
+/* the entry under the reading line of the visible list: a third of the way down it, sliding to the ends at the top and the bottom of the
+   scroll so the first and last boards can be reached by scrolling too */
+function atReadingLine(){
+  var box=$("boardBox"), big=$("boardBig"), r=box.getBoundingClientRect(), side=big.getBoundingClientRect().right<=$("boardList").getBoundingClientRect().left+1;
+  var top=side?r.top:Math.max(r.top,big.getBoundingClientRect().bottom), bot=r.bottom, max=box.scrollHeight-box.clientHeight;
+  var f=max>0?.12+.76*Math.min(1,box.scrollTop/max):.35, y=top+(bot-top)*f, best=null, bd=1e9;
+  document.querySelectorAll("#boardList .sn-bopt").forEach(function(o){ var q=o.getBoundingClientRect(), d=y<q.top?q.top-y:y>q.bottom?y-q.bottom:0; if(d<bd){ bd=d; best=o; } });
+  return best?best.getAttribute("data-b"):null;
+}
+/* show a board in the big preview: its picture with every square's number (at or above the text floor), its name, maker, country, year */
+function showBig(id,tapped){
+  if(!id) return; peekId=id; $("boardBig").setAttribute("data-b",id);
+  var i=infoOf(id), v=versionOf(cfg.version), shuffle=id==="shuffle", art=$("boardBigArt");
+  art.innerHTML=BD.preview?BD.preview(id,true):"";
+  $("boardBigName").textContent=shuffle?"Shuffled fair board":i?i.name:boardCap(id);
+  $("boardBigMeta").innerHTML=shuffle?"New each game, about as long as the "+esc(boardCap(v.board))+".":
+    i?esc(i.maker)+" · "+esc(i.country)+", <b>"+esc(i.year)+"</b>":"";
+  var chosen=id===chosenBoard();
+  $("boardBigPick").textContent=chosen?"Keep this board":"Play this board";
+  $("boardBigPick").setAttribute("aria-label",(chosen?"Keep ":"Play ")+(shuffle?"a shuffled fair board":boardCap(id)));
+  document.querySelectorAll("#boardList .sn-bopt").forEach(function(o){ o.classList.toggle("is-peek",!onTV()&&o.getAttribute("data-b")===id); });
+  fitBig();
+  if(tapped){ var o=document.querySelector('#boardList .sn-bopt[data-b="'+id+'"]'); if(o) try{ o.scrollIntoView({block:"nearest"}); }catch(e){} }
+}
+function fitBig(){
+  var svg=$("boardBigArt").querySelector("svg"), w=svg?svg.getBoundingClientRect().width:0;
+  if(svg&&w&&BD.previewFit) BD.previewFit(svg,peekId,w/1000,onTV()?remPx()*.875:12);
+  $("boardBox").style.setProperty("--sn-peek-h",Math.ceil($("boardBig").getBoundingClientRect().height)+"px");
+}
+window.addEventListener("resize",function(){ if(peekId&&$("boardBox").classList.contains("is-open")) fitBig(); });
 function refreshBoardSheet(){
   var id=chosenBoard(), v=versionOf(cfg.version);
   document.querySelectorAll("#boardList .sn-bopt").forEach(function(b){
@@ -325,13 +372,15 @@ function refreshBoardSheet(){
     b.querySelector(".sn-btags").innerHTML=tags;
     var ln=b.querySelector(".sn-blen"); ln.textContent=lengthLine(bid);
   });
-  $("boardSub").textContent="Every board whose layout is documented, oldest first, with its maker, country and year. "+(onTV()?"Press OK":"Tap one")+" to play it with the "+v.name+" rules. Each picture is drawn from the board's own layout in our own art.";
+  $("boardSub").textContent="Every board whose layout is documented, oldest first, with its maker, country and year. "+(onTV()?"Move to a board to see it large; press OK to play it":"Tap a board to see it large; tap it again, or Play this board, to play it")+" with the "+v.name+" rules. Each picture is drawn from the board's own layout in our own art.";
 }
 function openBoards(){
   buildBoardSheet(); refreshBoardSheet();
   var B=BG(), el=$("boardBox"), sel='#boardList .sn-bopt[aria-pressed="true"]';
+  showBig(chosenBoard());   // the big preview starts on the chosen board
   if(B&&B.sheet){ B.sheet.open(el,{focus:sel}); }
   else { el.classList.add("is-open","show"); var f=el.querySelector(sel); if(f) f.focus(); }
+  fitBig();
   var f2=el.querySelector(sel); if(f2&&!onTV()){ try{ f2.scrollIntoView({block:"center"}); }catch(e){} }
 }
 $("boardBtn").addEventListener("click",openBoards);
@@ -915,7 +964,7 @@ function openWin(){
   $("winTitle").textContent=(isHuman(w)&&single)?"Victory":nm(w)+(isYou(w)?" win":" wins");
   var gl=goalSq(), sub=nm(w)+" "+(isYou(w)?"reach":"reached")+" "+gl+" in "+plural(pw.st.rolls,G.o.spinner?"spin":"roll")+".", L=G.stats.longestSlide, C=G.stats.longestClimb;
   if(isYou(w)) sub="You reached "+gl+" in "+plural(pw.st.rolls,G.o.spinner?"spin":"roll")+".";
-  sub="On the "+(G.bd==="shuffle"?"shuffled fair board":boardCap(G.bd))+". "+sub;
+  sub="Board: "+(G.bd==="shuffle"?"a shuffled fair board":boardCap(G.bd))+". "+sub;   // "On the Leela ..." read badly: every board name works after "Board:"
   var span=function(f,t,w){ var x=label(f); return x?(/\(/.test(x)?x+": "+f+w+t:f+w+t+" ("+x+")"):f+w+t; };   // "98 down to 28 (Avarice)" / "Tamoguna (inertia): 72 down to 51"
   if(L) sub+=" The longest slide: "+nm(L.s)+", "+span(L.from,L.to," down to ")+".";
   if(C) sub+=" The longest climb: "+nm(C.s)+", "+span(C.from,C.to," to ")+".";
