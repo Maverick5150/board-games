@@ -41,9 +41,10 @@ function shuffle(G,a){ for(var i=a.length-1;i>0;i--){ var j=rint(G,i+1), t=a[i];
 /* ---------------- options / versions ---------------- */
 function defaultOpts(){
   return {
-    version:"classic",
+    version:"three",    // the CEO's rule (2026-10-16): the default War is Three-card War, 3 down and the 4th up decides (Classic = 1 down)
     deck:52,            // 52 | 36 (6 to A, P'yanitsa) | 32 (7 to A: Tod und Leben, Bataille; also a shorter game)
-    down:1,             // face-down cards in a war (0..5) or "rank" (Război: the tied rank sets the count)
+    down:3,             // face-down cards in a war (0..5) or "rank" (Război: the tied rank sets the count). 3 = the default Three-card
+                        // War; the other Versions set their own count in VERSIONS (Classic, Peace, Hand War, Drunkard, Tod und Leben: 1)
     low:false,          // Peace: the lowest card wins
     special:0,          // a rank that beats an Ace (P'yanitsa: 6; house "2 beats Ace": 2)
     hand:0,             // Hand War: cards held in the hand (3 or 5); 0 = play the top card of the packet
@@ -71,19 +72,24 @@ function defaultOpts(){
     nd:1,               // the deck count in play (normalize() works it out from decks and the player count)
     deucesWild:false,   // House: every 2 is wild (only decks that have 2s)
     jokersWild:false,   // House: the jokers are wild (2 jokers are added to every deck in play)
+    acesWild:false,     // House (the CEO, 2026-10-16; Pagat's 21st Century War "The ace is a wild card"): every Ace is wild. Any mix of
+                        // deuces, aces and jokers wild works; all three on = every 2, Ace and joker is wild
     wildAs:"top",       // what a wild card is: top (it beats every card that isn't wild; two wilds tie = a war) | ace (it counts as an Ace)
     cap:5000            // safety cap on battles (then the most cards wins)
   };
 }
 function mergeOpts(o){ var d=defaultOpts(); for(var k in (o||{})) if(o[k]!==undefined) d[k]=o[k]; return d; }
+/* Three-card War leads (the CEO's rule, 2026-10-16: the default at this table); every other Version keeps its documented war (Classic, Peace,
+   Hand War, Drunkard: one down; Război: the tied rank) because its opts say so, so a Version plays the same whatever defaultOpts holds */
+var DEFAULT_VERSION="three";
 var VERSIONS=[
-  {id:"classic",name:"Classic War",tag:"52 cards · 1 down, 1 up",desc:"Everyone turns up the top card at once; the highest takes them all to the bottom of their stack. A tie is a War: one card face down, one face up, the higher takes everything. Win every card.",opts:{}},
-  {id:"three",name:"Three-card War",tag:"\"I declare war\": 3 down",desc:"The most common way to play a War: three cards face down, then one face up. The pot is ten cards, so the game moves faster.",opts:{down:3}},
-  {id:"peace",name:"Peace",tag:"The lowest card wins",desc:"The opposite of War: the lowest card takes the battle. Ties still go to war, and the lowest new card wins it.",opts:{low:true}},
-  {id:"hand",name:"Hand War",tag:"Hold 3, choose your card",desc:"Based on Trunks and Bataille ouverte: hold a hand of 3 from your stack, everyone chooses a card in secret, then all reveal. Refill after every battle. A tie is a War with cards from your stack.",opts:{hand:3}},
+  {id:"three",name:"Three-card War",tag:"3 down, the 4th decides",desc:"The way at this table: in a war each player lays three cards face down, then turns up the fourth, and the highest fourth card takes everything. A tie on the fourth card is a double war (then a triple war), again three down and one up, between only the tied players: you need a higher card to win.",opts:{down:3}},
+  {id:"classic",name:"Classic War",tag:"52 cards · 1 down, 1 up",desc:"Everyone turns up the top card at once; the highest takes them all to the bottom of their stack. A tie is a War: one card face down, one face up, the higher takes everything (Bicycle, Pagat). Win every card.",opts:{down:1}},
+  {id:"peace",name:"Peace",tag:"The lowest card wins",desc:"The opposite of War: the lowest card takes the battle. Ties still go to war, and the lowest new card wins it.",opts:{low:true,down:1}},
+  {id:"hand",name:"Hand War",tag:"Hold 3, choose your card",desc:"Based on Trunks and Bataille ouverte: hold a hand of 3 from your stack, everyone chooses a card in secret, then all reveal. Refill after every battle. A tie is a War with cards from your stack.",opts:{hand:3,down:1}},
   {id:"razboi",name:"Război",tag:"Romania: the tied rank sets the war",desc:"In a war you lay down as many cards as the tied rank: 2 for a 2 up to 10 for a 10, J, Q or K, and 11 for an Ace. If someone is short, everyone uses the shortest count.",opts:{down:"rank"}},
-  {id:"tod",name:"Tod und Leben",tag:"Germany: 32 cards, one pass",desc:"\"Life and Death\": 32 cards (7 to Ace), played once through with no recycling. A tie adds the cards to the next battle. Whoever has won the most cards wins.",opts:{deck:32,length:"onepass",tie:"carry"},lock:["deck","length","tie"]},
-  {id:"drunkard",name:"Drunkard (P'yanitsa)",tag:"Russia: 36 cards, a 6 beats an Ace",desc:"36 cards, 6 to Ace. The Ace is high, but a 6 beats an Ace. Ties go to war as usual.",opts:{deck:36,special:6},lock:["deck","special"]}
+  {id:"tod",name:"Tod und Leben",tag:"Germany: 32 cards, one pass",desc:"\"Life and Death\": 32 cards (7 to Ace), played once through with no recycling. A tie adds the cards to the next battle. Whoever has won the most cards wins.",opts:{deck:32,length:"onepass",tie:"carry",down:1},lock:["deck","length","tie"]},
+  {id:"drunkard",name:"Drunkard (P'yanitsa)",tag:"Russia: 36 cards, a 6 beats an Ace",desc:"36 cards, 6 to Ace. The Ace is high, but a 6 beats an Ace. Ties go to war as usual.",opts:{deck:36,special:6,down:1},lock:["deck","special"]}
 ];
 var WARV=["classic","three","peace","hand","razboi","drunkard"];   // versions that fight wars (Tod und Leben carries ties instead)
 /* [key, label, type, choices, house (1 = tag "House"), versions it applies to (null = all), minimum players] */
@@ -111,17 +117,19 @@ var HOUSE=[
 var HOUSE_MORE=[
   ["decks","Decks","choice",[[0,"By the player count"],[1,"1 deck"],[2,"2 decks"],[3,"3 decks"],[4,"4 decks"]],1],
   ["deucesWild","Deuces are wild","bool",null,1,["classic","three","peace","hand","razboi"]],
+  ["acesWild","Aces are wild","bool",null,1,["classic","three","peace","hand","razboi","tod"]],   // not Drunkard: there a 6 beats an Ace
   ["jokersWild","Jokers are wild","bool",null,1],
   ["wildAs","Wild cards count as","choice",[["top","Higher than every card"],["ace","An Ace"]],1,null,0,"wild"]
 ];
 var HDESC_MORE={
   decks:"Official: one deck for 2-4 players, two for 5-8, three for 9-12, four for 13-16. Pick 1 to 4 decks for a longer or shorter game.",
   deucesWild:"Every 2 is wild: it beats any card that isn't wild. Two wild cards tie, and that is a war.",
+  acesWild:"Every Ace is wild: it beats any card that isn't wild, even a joker. Two wild cards tie, and that is a war. With deuces and jokers wild too, every 2, Ace and joker is wild.",
   jokersWild:"Two jokers join every deck, and they are wild: a joker beats any card that isn't wild. Two wild cards tie, and that is a war.",
   wildAs:"Higher than every card: only another wild card ties it. An Ace: a wild card counts as an Ace, so it ties an Ace and a war follows."
 };
 function houseRows(version,n,o){
-  var nd=o?ndOf(o):autoDecks(n), wild=!!(o&&(o.deucesWild||o.jokersWild)), out=[];
+  var nd=o?ndOf(o):autoDecks(n), wild=!!(o&&anyWild(o)), out=[];
   HOUSE.concat(HOUSE_MORE).forEach(function(h){
     if(!houseFor(h,version,n)) return;
     var k=h[0];
@@ -130,6 +138,7 @@ function houseRows(version,n,o){
     if(k==="colourDeal"&&!colourOk(n,nd)) return;
     if(k==="deucesWild"&&o&&+o.deck===32) return;
     if(h[7]==="wild"&&!wild) return;
+    if(k==="wildAs"&&o&&o.acesWild) return;   // Aces wild: "counts as an Ace" would mean "counts as a wild card", so the row goes (normalize: top)
     if(k==="jokers"&&(n!==2||nd!==1)) h=h.slice(0,3).concat([h[3].filter(function(c){ return c[0]!=="each"; })],h.slice(4));
     out.push(h);
   });
@@ -149,8 +158,18 @@ function versionOpts(id,extra){
   for(k in (extra||{})) if(k!=="version") o[k]=extra[k];
   return mergeOpts(o);
 }
+/* a remembered setup (the page's saved settings, the setup inside a saved game, a Party room's setup): before 2026-10-16 the default
+   Version was Classic (1 down), so a setup saved then says "classic" only because it was the default. The CEO's rule makes Three-card War
+   the default: such a setup moves to "three" ONCE, and is marked cv:2, so a Classic chosen after this stays Classic. A game already in
+   progress keeps its own rules (G.o); only the next new game changes. Returns true when it moved. */
+var SETUP_V=2;
+function migrateSetup(c){
+  if(!c||typeof c!=="object"||c.cv>=SETUP_V) return false;
+  var moved=c.version==="classic"; if(moved) c.version=DEFAULT_VERSION;
+  c.cv=SETUP_V; return moved;
+}
 function normalize(o,n){
-  var v=versionOf(o.version); if(!v){ o.version="classic"; v=VERSIONS[0]; }
+  var v=versionOf(o.version); if(!v){ o.version=DEFAULT_VERSION; v=versionOf(DEFAULT_VERSION); }
   (v.lock||[]).forEach(function(k){ o[k]=v.opts[k]; });
   o.deck=+o.deck; if(o.deck!==36&&o.deck!==32) o.deck=52;
   var nd=Math.floor(+o.decks); if(nd>=1&&nd<=MAXD) o.decks=nd; else { o.decks=0; nd=autoDecks(n); } o.nd=nd;
@@ -164,13 +183,15 @@ function normalize(o,n){
   if(o.length==="battles"&&o.limit<1) o.limit=100;
   if(o.length==="time"&&o.limit<1) o.limit=10;
   o.shortTie=o.shortTie==="draw"?"draw":"sudden";
-  ["outLoses","jokerSteal","noDown","twos","underdog","prisoners","paid","colourDeal","onlyTied","arrange","progressive","guerilla","twoBeatsAce","low","deucesWild","jokersWild"].forEach(function(k){ o[k]=!!o[k]; });
+  ["outLoses","jokerSteal","noDown","twos","underdog","prisoners","paid","colourDeal","onlyTied","arrange","progressive","guerilla","twoBeatsAce","low","deucesWild","jokersWild","acesWild"].forEach(function(k){ o[k]=!!o[k]; });
   if(o.jokers!=="in"&&o.jokers!=="each") o.jokers="off";
   /* wild cards (House): the short decks have no 2s; wild jokers bring the jokers in and replace Guerilla Joker; a wild 2 replaces the two 2 rules */
   if(o.deck!==52) o.deucesWild=false;
   if(o.jokersWild){ if(o.jokers==="off") o.jokers="in"; o.guerilla=false; }
   if(o.deucesWild){ o.twos=false; o.twoBeatsAce=false; }
-  o.wildAs=o.wildAs==="ace"?"ace":"top";
+  if(o.version==="drunkard") o.acesWild=false;   // Drunkard's 6 beats an Ace: a wild Ace would undo the Version
+  if(o.acesWild) o.twoBeatsAce=false;            // a wild Ace beats every card that isn't wild
+  o.wildAs=(o.wildAs==="ace"&&!o.acesWild)?"ace":"top";
   if(o.tie==="carry"){ ["outLoses","jokerSteal","noDown","twos","underdog","prisoners","onlyTied","progressive","guerilla"].forEach(function(k){ o[k]=false; }); }
   if(o.jokerSteal){ if(n===2&&nd===1) o.jokers="each"; else o.jokerSteal=false; }   // one joker each: 2 players and one deck
   if(o.jokers==="each"&&(n!==2||nd!==1)) o.jokers="in";
@@ -204,7 +225,8 @@ function deckInfo(o,n){
     text:nd+(nd===1?" deck":" decks")+" · "+cards+" cards"+(jk?" ("+jk+" jokers)":"")};
 }
 /* wild cards (House rules "Deuces are wild", "Jokers are wild") */
-function isWild(G,id){ var o=G.o||G; if(!o.deucesWild&&!o.jokersWild) return false; var b=id%54; return b>=52?!!o.jokersWild:(!!o.deucesWild&&b%13===0); }
+function anyWild(o){ return !!(o&&(o.deucesWild||o.jokersWild||o.acesWild)); }
+function isWild(G,id){ var o=G.o||G; if(!anyWild(o)) return false; var b=id%54; return b>=52?!!o.jokersWild:((!!o.deucesWild&&b%13===0)||(!!o.acesWild&&b%13===12)); }
 function lowRank(o){ return o.deck===32?7:o.deck===36?6:2; }
 /* the rank a card plays at: a wild read "as an Ace" counts as the best natural card (an Ace; in Peace the lowest card) */
 function playRank(G,id){ var o=G.o; if(o.wildAs==="ace"&&isWild(G,id)) return o.low?lowRank(o):14; return rank(id); }
@@ -212,7 +234,7 @@ function val(G,id){ var r=playRank(G,id); return G.o.low?-r:r; }
 /* indices of the winning cards (more than one = a tie). Suits never break a tie. A "special" rank (P'yanitsa 6, house 2) beats an Ace only. */
 function winnersOf(G,ids){
   var o=G.o, i, w=[], best=-1e9;
-  if((o.deucesWild||o.jokersWild)&&o.wildAs!=="ace"){   // "top": a wild beats every card that isn't wild; wilds tie with each other
+  if(anyWild(o)&&o.wildAs!=="ace"){   // "top": a wild beats every card that isn't wild; wilds tie with each other
     for(i=0;i<ids.length;i++) if(isWild(G,ids[i])) w.push(i);
     if(w.length) return w;
   }
@@ -228,7 +250,7 @@ function beats(G,a,b){ var w=winnersOf(G,[a,b]); return w.length===2?0:w[0]===0?
 function strength(G,c){ var t=strengthTable(G); return t[c]!=null?t[c]:.5; }
 /* the whole table for this game's rules (cached per rule set): the brain fetches it once per decision */
 function strengthTable(G){
-  var o=G.o, key=o.deck+"|"+o.jokers+"|"+o.low+"|"+o.special+"|"+ndOf(o)+"|"+(o.deucesWild?1:0)+(o.jokersWild?1:0)+o.wildAs, m=strength.m||(strength.m={}), t=m[key];
+  var o=G.o, key=o.deck+"|"+o.jokers+"|"+o.low+"|"+o.special+"|"+ndOf(o)+"|"+(o.deucesWild?1:0)+(o.jokersWild?1:0)+(o.acesWild?1:0)+o.wildAs, m=strength.m||(strength.m={}), t=m[key];
   if(!t){   // the copies of a card (more decks) are identical: score each face once against the count of every face (a copy ties)
     t=m[key]={}; var d=buildDeck(o), cnt={}, faces=[];
     d.forEach(function(x){ var b=base(x); if(!cnt[b]){ cnt[b]=0; faces.push(b); } cnt[b]++; });
@@ -440,8 +462,10 @@ function startWar(G,fighters,best,forced,ev){
   ev.push({e:"war",n:G.warN,seats:fighters,tied:best,down:k,forced:!!forced});
   var twoUp=o.twos&&fighters.some(function(s){ return rank(G.cur[s])===2; });
   var why=forced?(twoUp?"A 2 declares war":"A joker declares war"):names(G,best)+" tie with "+tieWord(G,best);
-  log(G,(G.warN>1?"Double war! ":"I declare war! ")+why+": "+(k?k+" face down, then one up.":"the next cards decide."),"war");
+  log(G,warWord(G.warN)+" "+why+": "+(k?k+" face down, then the next card up decides.":"the next cards decide."),"war");
 }
+/* the banner and log word for the n-th war in a row in one battle (a tie on the deciding card = another war between the tied players) */
+function warWord(n){ return n<=1?"I declare war!":n<=5?["Double","Triple","Quadruple","Quintuple"][n-2]+" war!":"War number "+n+"!"; }
 function warFlip(G,ev){
   var k=G.down, laid=[];
   G.part.forEach(function(s){
@@ -607,11 +631,10 @@ function standings(G){
     if(b.count!==a.count) return b.count-a.count;
     return a.s-b.s;
   });
-  rows.forEach(function(r,i){
-    var prev=rows[i-1];
-    r.place=(prev&&!(G.over&&G.winner===prev.s)&&prev.out===r.out&&prev.count===r.count&&(!r.out||prev.outAt===r.outAt))?prev.place:i+1;
-    r.share=0;
-  });
+  /* every player has their own place, 1 to N, never shared (the CEO, 2026-10-16: "It should be 1 through 16 in place for a live
+     scoreboard"): a tie keeps the order above (the winner; in play before out; out players by when they went out, the later the better;
+     then the most cards; then seat order) */
+  rows.forEach(function(r,i){ r.place=i+1; r.share=0; });
   var all=buildDeck(G.o).length; rows.forEach(function(r){ r.share=all?r.count/all:0; });
   return rows;
 }
@@ -659,7 +682,7 @@ function check(G){
   return err;
 }
 
-W.Engine={VER:VER,MINP:MINP,MAXP:MAXP,MAXD:MAXD,HOUSE_MORE:HOUSE_MORE,HDESC_MORE:HDESC_MORE,houseRows:houseRows,autoDecks:autoDecks,ndOf:ndOf,deckInfo:deckInfo,colourOk:colourOk,
+W.Engine={VER:VER,DEFAULT_VERSION:DEFAULT_VERSION,SETUP_V:SETUP_V,migrateSetup:migrateSetup,warWord:warWord,anyWild:anyWild,MINP:MINP,MAXP:MAXP,MAXD:MAXD,HOUSE_MORE:HOUSE_MORE,HDESC_MORE:HDESC_MORE,houseRows:houseRows,autoDecks:autoDecks,ndOf:ndOf,deckInfo:deckInfo,colourOk:colourOk,
   isWild:isWild,isJoker:isJoker,base:base,copyOf:copyOf,playRank:playRank,VERSIONS:VERSIONS,HOUSE:HOUSE,LENGTHS:LENGTHS,WARV:WARV,houseFor:houseFor,defaultOpts:defaultOpts,mergeOpts:mergeOpts,versionOpts:versionOpts,normalize:normalize,
   buildDeck:buildDeck,newGame:newGame,legal:legal,apply:apply,need:needList,defaultMove:defaultMove,ringBell:ringBell,firstPlayer:firstPlayer,standings:standings,snapshot:snapshot,check:check,
   total:total,avail:avail,canPlay:canPlay,winnersOf:winnersOf,beats:beats,strength:strength,strengthTable:strengthTable,rank:rank,suit:suit,isRed:isRed,card:card,cardName:cardName,shortName:shortName,rankLabel:rankLabel,

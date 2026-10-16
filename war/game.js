@@ -33,6 +33,9 @@ function clamp(x,a,b){ return x<a?a:x>b?b:x; }
 function initials(name){ var m=/^(You|Player|CPU)\s*(\d*)$/.exec(String(name)); return m?(m[1]==="You"?"Y":m[1].charAt(0)+m[2]):String(name).charAt(0).toUpperCase(); }
 function listNames(a){ return a.length<=2?a.join(" and "):a.slice(0,-1).join(", ")+" and "+a[a.length-1]; }
 function plural(n,w){ return n+" "+w+(n===1?"":"s"); }
+function nb(t){ return String(t).replace(/ /g,"\u00a0"); }   // no-break spaces: a label breaks only at the natural separator left as a plain space
+function ord(n){ var t=n%100; return n+((t>=11&&t<=13)?"th":(["th","st","nd","rd"][n%10]||"th")); }
+function warWord(n){ return E.warWord?E.warWord(n):n>1?(n===2?"Double war!":n===3?"Triple war!":"War again!"):"I declare war!"; }
 /* 2-16 players: every seat has its own colour (data-seat 1..16; 11-16 are War's own, in index.html). From 5 players the table is the
    "big table": a grid of compact seat tiles (colour, name, count, the flipped card) around a centre band with the pot */
 var BIG=5;
@@ -67,7 +70,7 @@ if(window.Sound&&Sound.addStyle&&!(Sound.hasStyle&&Sound.hasStyle(GAME))){
 }
 
 /* ================= state ================= */
-var cfg={version:"classic",over:{},humans:1,cpus:1,speed:"medium",skill:"normal",auto:false,length:"end",limit:0,shortTie:"sudden"};
+var cfg={version:E.DEFAULT_VERSION||"three",cv:E.SETUP_V||2,over:{},humans:1,cpus:1,speed:"medium",skill:"normal",auto:false,length:"end",limit:0,shortTie:"sudden"};
 var G=null, gen=0, timer=null, busy=false, intent=[], hurry=false, viewer=-1;
 var ui={dealing:false,dealSkip:false,winShown:-1,result:false,rulesOpen:false,finished:-1,claimPr:undefined,claimKey:"",hoKey:"",needSync:false,lastTurn:-1,handKey:""};
 var stats={ms:0}, clock0=0;
@@ -324,7 +327,7 @@ function showSetup(on,resume){
 }
 function barTitle(){
   var e=$("barEyebrow"); if(!e) return;
-  var t=paused()?"Paused":setupShown()?(liveGame()?"Game in progress":(ui.result?"Game over":"New game")):(!G?"New game":G.over?"Game over":ui.dealing?"The deal":"Battle "+(G.battle+1));
+  var t=paused()?"Paused":setupShown()?(liveGame()?"Game in progress":(ui.result?"Game over":"New game")):(!G?"New game":G.over?"Game over":ui.dealing?"The deal":"Battle "+(((busy&&ui.shown)?ui.shown.b:G.battle)+1));   // while a move plays, the battle on the table (as the chips)
   if(e.textContent!==t) e.textContent=t;
 }
 
@@ -335,7 +338,7 @@ function loadSaved(d){
   if(!d||!d.G||d.G.id!=="war"||d.G.v!==E.VER) throw new Error("not a War save");
   var bad=E.check(d.G); if(bad.length) throw new Error("save fails its check: "+bad[0]);
   gen++; clearTimeout(timer); busy=false; intent=[]; hurry=false; viewer=-1;
-  G=d.G; var c=d.cfg||{}; for(var k in c) if(Object.prototype.hasOwnProperty.call(cfg,k)) cfg[k]=c[k];
+  G=d.G; var c=d.cfg||{}; if(E.migrateSetup) E.migrateSetup(c); for(var k in c) if(Object.prototype.hasOwnProperty.call(cfg,k)) cfg[k]=c[k];
   cfg.speed=normSpeed(cfg.speed); setSpeedSeg(); cfg.skill=normSkill(c.skill||G.skill); G.skill=cfg.skill; setSkillSeg(); setAuto(cfg.auto);
   stats={ms:Math.max(0,+((d.stats||{}).ms)||0)}; clock0=0;
   ui.winShown=-1; ui.result=false; ui.finished=-1; ui.dealing=false; ui.claimPr=undefined; ui.handKey="";
@@ -356,10 +359,23 @@ if(window.MutationObserver){
   new MutationObserver(function(){ var B=BG(), m=$("svtoast").textContent; if(luxe()&&B.toast&&m) B.toast(m,{icon:"save",ms:2400}); }).observe($("svtoast"),{childList:true,characterData:true,subtree:true});
 }
 function applySettings(s){
-  s=s||{}; cfg.version=versionOf(s.version).id; cfg.over=s.over||{}; cfg.humans=s.humans!=null?s.humans:1; cfg.cpus=s.cpus!=null?s.cpus:1;
+  s=s||{}; if(E.migrateSetup) E.migrateSetup(s); cfg.version=versionOf(s.version).id; cfg.over=s.over||{}; cfg.humans=s.humans!=null?s.humans:1; cfg.cpus=s.cpus!=null?s.cpus:1;
   cfg.speed=normSpeed(s.speed); cfg.skill=normSkill(s.skill); cfg.auto=!!s.auto; cfg.length=s.length||"end"; cfg.limit=+s.limit||0; cfg.shortTie=s.shortTie==="draw"?"draw":"sudden";
   setSpeedSeg(); setSkillSeg(); setAuto(cfg.auto); drawSetup();
 }
+/* the CEO's rule (2026-10-16): Three-card War (3 down, the 4th decides) is the default. A setup remembered on this device from before
+   (saved settings, the setup inside the autosave and the saved game) said "classic" only because Classic was the default: it moves to
+   Three-card War ONCE (E.migrateSetup marks it cv:2, written back with its own time stamp). A game in progress keeps its rules (G.o). */
+(function migrateStores(){
+  if(!E.migrateSetup) return;
+  ["settings","auto","save"].forEach(function(kind){
+    try{
+      var key="bg_"+kind+"_"+GAME, raw=localStorage.getItem(key); if(!raw) return;
+      var o=JSON.parse(raw), c=o&&o.data&&(kind==="settings"?o.data:o.data.cfg); if(!c||typeof c!=="object"||c.cv>=E.SETUP_V) return;
+      E.migrateSetup(c); localStorage.setItem(key,JSON.stringify(o));
+    }catch(e){}
+  });
+})();
 var saveBar=Saves.bar({game:GAME,el:$("svbar"),version:1,snapNote:"exactly as it is now",saveToast:"Game saved",
   getSettings:function(){ return JSON.parse(JSON.stringify(cfg)); },
   applySettings:applySettings,
@@ -577,7 +593,9 @@ function renderCards(){
   if(!G.over&&(G.phase==="flip"||G.phase==="war")) Object.keys(G.pick).forEach(function(k){
     s=+k; var add=[];
     if(G.phase==="flip") add.push(newCard(null,false,{x:0,y:0}));
-    else { var a=E.avail(G,s); if(a>0){ var nd=Math.min(G.down,a-1); for(i=0;i<nd;i++) add.push(newCard(null,false,{x:0,y:0})); add.push(newCard(null,false,{x:0,y:0})); } }
+    else { var a=E.avail(G,s); if(a>0){ var nd=Math.min(G.down,a-1), num=nd<=5&&!GEO.big, el;   // the war cards laid so far keep their numbers (animPlan)
+      for(i=0;i<nd;i++){ el=newCard(null,false,{x:0,y:0}); if(num) el.setAttribute("data-wn",String(i+1)); add.push(el); }
+      el=newCard(null,false,{x:0,y:0}); if(num&&nd) el.setAttribute("data-wn",ord(nd+1)); add.push(el); } }
     if(add.length) add[add.length-1]._pend=true;
     tab[s]=(tab[s]||[]).concat(add);
   });
@@ -619,6 +637,11 @@ function potLine(){
   var h=on&&n?'<span class="wr-pot__l">'+(war?"War pot":"Battle pot")+'</span><b class="wr-pot__n">'+n+'</b><span class="wr-pot__u">'+(n===1?"card":"cards")+"</span>":"";
   if(el._h!==h){ el._h=h; el.innerHTML=h; }
   el.classList.toggle("is-war",war);
+  var pc=$("wpot"), pt="";
+  if(pc){
+    if(!big()&&GEO&&G&&!ui.dealing&&!G.over&&war){ var k=carryEls.length; for(s in tab) k+=tab[s].length; if(k) pt="War pot · "+plural(k,"card"); }
+    if(pc.textContent!==pt) pc.textContent=pt;
+  }
 }
 function paintPacket(s,count){
   var pk=seatEls[s]&&seatEls[s].querySelector(".wr-pk"); if(!pk) return;
@@ -683,7 +706,11 @@ function renderStand(){
   if(!G||!standEls.length) return;
   var rows, all=deckN();
   if(!busy&&!ui.dealing) rows=E.standings(G);
-  else { rows=G.players.map(function(p,s){ return {s:s,count:disp[s],out:p.out}; }); rows.sort(function(a,b){ return (a.out!==b.out?(a.out?1:-1):0)||(b.count-a.count)||(a.s-b.s); }); rows.forEach(function(r,i){ var pv=rows[i-1]; r.place=pv&&pv.count===r.count&&pv.out===r.out?pv.place:i+1; }); }
+  else {   // mid-animation: the counts on screen, the same order as E.standings (out players by when they went out), places 1..N, never shared
+    rows=G.players.map(function(p,s){ return {s:s,count:disp[s],out:p.out,outAt:p.outAt}; });
+    rows.sort(function(a,b){ return (a.out!==b.out?(a.out?1:-1):0)||((a.out&&b.out)?(b.outAt||0)-(a.outAt||0):0)||(b.count-a.count)||(a.s-b.s); });
+    rows.forEach(function(r,i){ r.place=i+1; });
+  }
   var ul=$("wstand"), B=BG(), before=standEls.map(function(li){ return li.getBoundingClientRect(); }), moved=false;
   rows.forEach(function(r,i){
     var li=standEls[r.s], c=r.count;
@@ -757,7 +784,7 @@ function syncControls(){
   var handPhase=G.o.hand&&G.phase==="flip";
   fb.hidden=!nh||G.over||(handPhase&&!ui.dealing);
   fb.disabled=ui.dealing||!hs.length||G.phase==="claim";
-  if(G.phase==="war"&&hs.length){ var s0=hs[0], a=E.avail(G,s0), nd=a>0?Math.min(G.down,a-1):0; lbl.textContent=a>0?(nd?"War! Lay "+nd+" down, flip 1":"War! Flip"):"War!"; hint="Lay your war cards"; }
+  if(G.phase==="war"&&hs.length){ var s0=hs[0], a=E.avail(G,s0), nd=a>0?Math.min(G.down,a-1):0; lbl.textContent=a>0?(nd?nb("War! Lay "+nd+" down,")+" "+nb("flip the "+ord(nd+1)):"War! Flip"):"War!"; hint="Lay your war cards"; }   // a narrow phone dock breaks the label after the comma only (2 lines)
   else lbl.textContent=ui.dealing?"Dealing":(hs.length>1?"Flip all":"Flip");
   if(handPhase) hint="Play a card";
   $("autoBtn").hidden=!nh||G.over;
@@ -789,6 +816,9 @@ function syncControls(){
   if(ui.dealing) hint="Skip the deal";
   else if(!nh||G.over||allOut) hint="Open the Menu";
   $("wstat").textContent=st; $("hintOk").textContent=hint;
+  /* TV: the person's own move disables Flip for a moment, so the focus falls back to the page; when Flip is theirs again (a war to lay
+     while the banner and the computers' war cards still play) it comes back at once, so the OK pressed now lays the war cards */
+  if(tv&&!fb.hidden&&!fb.disabled&&!setupShown()){ var ae=document.activeElement; if(!ae||ae===document.body||(ae.classList&&ae.classList.contains("bg-app"))) focusTV(fb); }
   chips(); updateSeats(); renderHand(); barTitle();
 }
 function chips(){
@@ -799,7 +829,11 @@ function chips(){
   else if(o.length==="battles") t="Battle "+Math.min(G.battle+1,o.limit)+" of "+o.limit;
   else if(o.length==="onepass"){ var pl=0; G.players.forEach(function(p){ pl+=p.pk.length+p.hand.length; }); t="One pass · "+pl+" to play"; }
   if(c.textContent!==t) c.textContent=t;
-  var wars=G.stats.wars+(G.stats.wars===1?" war":" wars"), bt=o.length==="battles"?wars:G.battle+(G.battle===1?" battle":" battles")+" · "+wars;
+  /* the counts follow the table, not the engine (which has already settled the battle): while a move plays they hold the shown
+     values, and each war banner adds its war, so "2 wars" never gives away a double war before the 4th cards turn */
+  if(!busy||ui.shown==null) ui.shown={w:G.stats.wars,b:G.battle};
+  var nw=ui.shown.w, nbt=ui.shown.b;
+  var wars=nw+(nw===1?" war":" wars"), bt=o.length==="battles"?wars:nbt+(nbt===1?" battle":" battles")+" · "+wars;
   if(b.textContent!==bt) b.textContent=bt;
 }
 function sync(){
@@ -969,13 +1003,17 @@ async function animPlan(my,plan,quiet){
     return;
   }
   if(plan.kind==="war"){
+    /* the CEO's war (2026-10-16): the face-down cards land one at a time at the Game speed, each numbered (1, 2, 3; up to 5 are numbered:
+       Război lays up to 11), then the deciding card lands face down marked "4th" and waits for the drum roll (animEvent "reveal") */
+    var num=plan.nd<=5&&!(GEO&&GEO.big), gap=dl(plan.nd>5?110:plan.nd>1?300:190);
     for(var i=0;i<plan.nd;i++){
       if(my!==gen) return;
       var b=newCard(null,false,packetPose(s)); setCount(s,Math.max(0,disp[s]-1));
+      if(num) b.setAttribute("data-wn",String(i+1));
       addToSeat(s,b,sp(260)); if(!quiet) Sound.sfx("click");
-      await sleep(dl(plan.nd>4?110:190));
+      await sleep(gap);
     }
-    if(plan.up){ var u=newCard(null,false,packetPose(s)); u._pend=true; setCount(s,Math.max(0,disp[s]-1)); await addToSeat(s,u,sp(300)); }
+    if(plan.up){ var u=newCard(null,false,packetPose(s)); u._pend=true; if(num&&plan.nd) u.setAttribute("data-wn",ord(plan.nd+1)); setCount(s,Math.max(0,disp[s]-1)); await addToSeat(s,u,sp(300)); }
     else await sleep(dl(200));
   }
 }
@@ -1014,7 +1052,11 @@ async function animEvent(my,e){
   switch(e.e){
     case "reveal":{
       var flips=[], war=e.w>0;
-      if(war) await sleep(dl(520));   // the drum roll before the deciding flip
+      if(war){   // the drum roll before the deciding flip: the waiting cards beat twice (a finite transform pulse), then all turn at once
+        if(!reduced()) e.cards.forEach(function(x){ var pe=pendingOf(x.s); if(!pe||!pe._p||!pe.animate) return; var p0=pe._p, z={x:p0.x,y:p0.y-(GEO?GEO.ch*.04:3),r:0,k:(p0.k==null?1:p0.k)*1.08};
+          try{ pe.animate([{transform:T(p0)},{transform:T(z),offset:.5},{transform:T(p0)}],{duration:dl(280),iterations:2,easing:"ease-in-out"}); }catch(er){} });
+        await sleep(dl(600));
+      }
       e.cards.forEach(function(x){
         if(war&&x.held){ var hu=lastUp(x.s); if(hu) hu.classList.remove("is-lose"); return; }
         el=pendingOf(x.s);
@@ -1032,10 +1074,12 @@ async function animEvent(my,e){
       var sub;
       e.tied.forEach(function(x){ var u=lastUp(x); if(u) u.classList.add("is-win"); });
       ui.fight={f:e.seats.slice(),t:e.tied.slice()}; updateSeats(); potLine();   // big table: who is in the war (tag "War"; the tied "Tied")
-      sub=e.forced?(G.o.twos?"A 2 declares war":"A joker declares war"):whoList(e.tied)+" tie"+(e.seats.length>e.tied.length&&big()?" · "+whoList(e.seats)+" fight":"");
-      sub+=e.down?": "+e.down+" face down, then one up":": the next cards decide";
+      sub=e.forced?(G.o.twos?"A 2 declares war":"A joker declares war"):whoList(e.tied)+" tie"+(e.n>1?" again":"")+(e.seats.length>e.tied.length&&big()?" · "+whoList(e.seats)+" fight":"");
+      sub+=e.down?": "+e.down+" face down, then the "+ord(e.down+1)+" card decides":": the next cards decide";
+      if(e.n>1) for(s in tab) tab[s].forEach(function(x){ x.removeAttribute("data-wn"); });   // a new war: only its own cards are numbered
+      if(ui.shown) ui.shown.w++; chips();
       Sound.sfx("cannon"); flash();
-      await banner(e.n>1?(e.n===2?"Double war!":e.n===3?"Triple war!":"War again!"):"I declare war!",sub,dl(1500));
+      await banner(warWord(e.n),sub,dl(1500));
       for(s in tab) tab[s].forEach(function(x){ x.classList.remove("is-win"); });
       return;
     }
