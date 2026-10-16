@@ -12,8 +12,8 @@ firestick/games/<id>-phone.js   the phone side    PartyGames.definePhone(id, {..
 ## 1. The registry line
 
 ```js
-{id:"snakes", title:"Snakes and Ladders", n:"2-6", min:2, max:6, meta:"Climb and slide",
- files:{tv:["../snakes/engine.js","../snakes/board.js","games/snakes.js"], phone:["../snakes/engine.js","games/snakes-phone.js"]}}
+{id:"snakes", title:"Snakes and Ladders", n:"2-6", min:2, max:6, meta:"Climb and slide", colors:["red","blue","green","yellow","purple","teal"],
+ files:{tv:["../snakes/boards.js","../snakes/engine.js","../snakes/brain.js","../snakes/board.js","../ui/picker.js","games/snakes.js"], phone:["games/snakes-phone.js"]}}
 ```
 - `files` paths are relative to `firestick/`, loaded in order, each once. Put the game's own engine first: Party uses the SAME engine as the
   phone game (pure, no DOM, plain-JSON state, `snapshot(G, seat)`), so a rule fixed on the phone side is fixed in Party too.
@@ -55,7 +55,7 @@ are the host's own rows: nothing to do. Style the lobby with CSS scoped by `html
 
 | Time | |
 |---|---|
-| `H.sleep(ms)` | a pause scaled by Game speed (`H.pace()` multiplier, `H.speed()` "slow"/"medium"/"fast"). After a quit it never resolves, so the game loop just stops |
+| `H.sleep(ms)` | a pause scaled by Game speed: it waits `ms x H.pace()`, and the pace is 1.8 at Medium (0.9 Fast, 3.15 Slow), so `H.sleep(ms / 1.8)` waits `ms` at Medium like the phone game's `dl(ms)`; animation lengths: `ms * H.pace() / 1.8` (`H.speed()` "slow"/"medium"/"fast"). After a quit it never resolves, so the game loop just stops |
 | `H.live()` | false once the game was quit (Back twice, New game) |
 
 | Phones | |
@@ -116,3 +116,23 @@ attrs, color)` (a seat-coloured button), `api.afkHTML(id)` (the "computer is pla
 6. Trying a plugin before it is listed: `PartyGames.add(line)` at run time. BG_audit/sprint/party2/pgtest-plugin.js (a tiny "Race Test"
    game injected by the test before the page's scripts) and pg_plugin.js (TV + 2 phones over the real relays) show the whole path.
    A phone's taps reach the TV a moment later: wait for the TV's state, never read it in the same instant you tapped.
+
+## 5. Notes from the first plugin (Snakes and Ladders, games/snakes.js)
+- The whole plugin is three files: the registry line, `games/snakes.js` (lobby + TV game) and `games/snakes-phone.js`. The phone gets a slim
+  view built from `snapshot(G, seat)` (no board layout over the relays); the roll happens on the TV.
+- Lobby extras go into the box after `api.rules(...)`: insert your section after the Version section (`el.querySelectorAll('.ps-sec')[0]`).
+  The big-preview picker is `BGUI.picker` (add `../ui/picker.js` to your `files.tv`); its `refocus` puts the ring back on your row.
+  Re-focus your own rows after a redraw (renderRuleBox restores only `data-k` / `data-v` buttons).
+- The lobby api has the seat COUNT (`api.players()`, `api.seated()`), not the seated names: snakes.js reads the host's seat cards
+  (`#players .bg-seatcard:not(.bg-seatcard--empty)`, `data-seat` + `.bg-seatcard__name`) for its "Youngest player" row, and a
+  MutationObserver on `#players` redraws its box when the count or the phones change (the host redraws only its own rows then).
+- Engine rule rows with a "house" flag must be flipped for `api.rules` (its row[4] means OFFICIAL). Rows whose choices depend on other
+  rules: pass the rows computed for the current rules on every redraw (the lobby box is redrawn after each change).
+- The host puts "Players: use your phones" back in the hint bar when an ask ends: set `H.hint(...)` again when your next step starts.
+- After `H.over` the host adds New Game UNDER the hint bar: leave room for it (snakes.js shrinks the board and the log by a class on
+  game over), or the TV page scrolls and the board's top is cut.
+- A game save of your own works (the host saves only lobby settings): snakes.js autosaves `G` after every roll in localStorage
+  ("party-snakes-live") and offers "Continue the saved game" in its lobby box when the table has the same number of seats.
+- Expose test hooks on `window.__<id>` (the order of what played, counters, a resync), never test-only behaviour: the tests
+  (BG_audit/sprint/party2/sn_party.js) rig dice through the engine's own `G.rig` queue.
+

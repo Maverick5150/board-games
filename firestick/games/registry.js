@@ -9,7 +9,8 @@
 (function (g) {
   "use strict";
   var LIST = [
-    // {id:"snakes", title:"Snakes and Ladders", n:"2-6", min:2, max:6, meta:"Climb and slide", files:{tv:["../snakes/engine.js","games/snakes.js"], phone:["games/snakes-phone.js"]}},
+    {id:"snakes", title:"Snakes and Ladders", n:"2-6", min:2, max:6, meta:"Climb and slide", colors:["red","blue","green","yellow","purple","teal"],
+     files:{tv:["../snakes/boards.js","../snakes/engine.js","../snakes/brain.js","../snakes/board.js","../ui/picker.js","games/snakes.js"], phone:["games/snakes-phone.js"]}}
   ];
   var tvDefs = {}, phoneDefs = {}, loaded = {}, loading = {};
   function get(id) { for (var i = 0; i < LIST.length; i++) if (LIST[i].id === id) return LIST[i]; return null; }
