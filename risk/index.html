@@ -303,6 +303,49 @@
   html[data-tv] .rk-bonus{gap:.75rem 1.5rem}
   /* TV toasts in game sit in the right-hand column (over the log at worst), never on the map */
   html[data-tv] body:not(.rk-in-setup) .bg-toast{left:calc(100vw - var(--gutter) - 13rem); max-width:25rem}
+  /* ---------- phone sideways (step 11): a short landscape screen (a phone turned on its side; not the TV, not a tablet) gets a real
+     split layout like the TV's: a slimmer top bar, the map on the left at the full height under it (or as wide as leaves the panel
+     16.5rem), and on the right the players (one scrolling row), whose turn, the actions (before the dice, so the main action is
+     on the first screen), the dice, the toolbar and the log in their
+     own scroll area (.rk-game scrolls inside the screen; the map is sticky, so it never scrolls away). The page never scrolls in
+     game. Phone sizes and 44 px targets. The map's zoom, pan and names follow the new size (board.js reframe) */
+  @media (orientation: landscape) and (max-height: 31.25em){
+    html:not([data-tv]){--ls-bar:3.25rem; --ls-h:100vh; --ls-pad:.625rem;
+      --ls-mh:calc(var(--ls-h) - var(--ls-bar) - env(safe-area-inset-top,0px) - 2 * var(--ls-pad)); --ls-mw:min(calc(var(--ls-mh) * 5 / 3), calc(100vw - 16.5rem - 2.75rem))}
+    /* the panel rows are max-content: an auto row holding a scroll container (a scrolling player strip, the log) would shrink
+       under its content once the panel is taller than the screen, and the next row would slide under it */
+    @supports (height:100dvh){ html:not([data-tv]){--ls-h:100dvh} }
+    html:not([data-tv]) .bg-topbar{height:calc(var(--ls-bar) + env(safe-area-inset-top,0px)); padding-top:calc(env(safe-area-inset-top,0px) + .25rem); padding-bottom:.25rem}
+    html:not([data-tv]) .rk-game{display:grid; grid-template-columns:var(--ls-mw) minmax(0,1fr); grid-template-rows:max-content max-content max-content max-content max-content minmax(3rem,1fr);
+      grid-template-areas:"board strip" "board status" "board acts" "board dice" "board bar" "board log"; column-gap:1.25rem; row-gap:.5rem; align-items:start;
+      height:calc(var(--ls-h) - var(--ls-bar) - env(safe-area-inset-top,0px)); overflow:hidden auto; overscroll-behavior:contain;
+      padding:var(--ls-pad) max(var(--gutter), env(safe-area-inset-right,0px)) var(--ls-pad) max(var(--ls-pad), env(safe-area-inset-left,0px))}
+    html:not([data-tv]) #rkpanel{display:contents}
+    html:not([data-tv]) #rkframe{grid-area:board; position:sticky; top:0; width:var(--ls-mw); margin:0}
+    html:not([data-tv]) #legend{grid-area:strip; width:auto; padding:.625rem 0 .125rem}
+    html:not([data-tv]) #rkstat{grid-area:status; width:auto}
+    html:not([data-tv]) #rkdice{grid-area:dice; width:auto}
+    html:not([data-tv]) #rkacts{grid-area:acts; width:auto}
+    html:not([data-tv]) #rkbar{grid-area:bar; width:auto}
+    html:not([data-tv]) #rklog{grid-area:log; width:auto}
+    /* the move sheet rises over the right-hand column, so the map stays in view beside it (the TV's peek) */
+    html:not([data-tv]) #rkMove{left:auto; right:0; width:calc(100vw - var(--ls-mw) - max(var(--ls-pad), env(safe-area-inset-left,0px)) - .75rem); margin:0}
+    /* toasts in game sit over the right-hand column (centred on it), clear of the map, as on the TV */
+    html:not([data-tv]) body:not(.rk-in-setup) .bg-toast{left:calc(50% + (var(--ls-mw) + 1.25rem) / 2); max-width:calc(100vw - var(--ls-mw) - 3rem)}
+    /* Victory: the trophy beside the result (two columns), so Play again shows on the first screen; the same rays, confetti and trophy */
+    html:not([data-tv]) .bg-win__card{display:grid; grid-template-columns:10rem minmax(0,1fr); column-gap:1.5rem; align-items:center; width:min(100%,44rem)}
+    html:not([data-tv]) .bg-win__card > *{grid-column:2}
+    html:not([data-tv]) .bg-win__card > .bg-win__medal{grid-column:1; grid-row:1 / span 7; margin:0 auto}
+    html:not([data-tv]) .bg-win__title{margin:.25rem 0 0}
+    html:not([data-tv]) .bg-win__sub{margin:.25rem 0 .5rem}
+    html:not([data-tv]) .bg-win__stats{margin:.5rem 0 0}
+    html:not([data-tv]) .bg-win__actions{margin-top:.5rem}
+    html:not([data-tv]) .bg-win__rays{left:calc(50vw - min(50vw - var(--gutter), 22rem) + 5rem)}   /* the turning rays stay centred on the trophy (ui.js aims their height) */
+    /* setup and Menu: a lower art band (the same art, cropped to the band), so the first settings show on the first screen; the
+       Start dock stays sticky at the bottom */
+    html:not([data-tv]) .rk-hero{padding-top:5.5rem}
+    html:not([data-tv]) .rk-hero .bg-hero__layer{bottom:0; aspect-ratio:auto; background-size:cover; background-position:50% 40%}
+  }
 </style>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
@@ -788,11 +831,16 @@ function refresh(){
 // the player strip: a seat token, the name (+ the CPU badge), the territories and armies held; BGUI.setTurn every turn
 function stripName(p){ return p.name+(!p.neutral&&p.human&&humansIn()===1&&colorName(p.name)?" (you)":""); }
 function metaOf(p){ return p.alive?`<span class="rk-m">${icon("flag")}<b>${p.terrs}</b><span class="bg-sr"> territories</span></span><span class="rk-m">${icon("pawn")}<b>${p.armies}</b><span class="bg-sr"> armies</span></span>`:"Out"; }
+/* step 11: a phone on its side shows the players as one scrolling row (the panel beside the map is narrow), which scrolls to whose turn it
+   is; turning the phone lays the strip out again */
+const sidewaysMQ=window.matchMedia?window.matchMedia("(orientation: landscape) and (max-height: 31.25em)"):null;
+function phoneSideways(){ return !onTV()&&!!(sidewaysMQ&&sidewaysMQ.matches); }
+if(sidewaysMQ){ const relay=()=>{ ui.strip=""; if(V) legend(); }; if(sidewaysMQ.addEventListener) sidewaysMQ.addEventListener("change",relay); else if(sidewaysMQ.addListener) sidewaysMQ.addListener(relay); }
 function legend(){
   const el=$("legend"), B=BG();
   const key=gen+"|"+V.players.map(p=>p.name+(p.human?"H":"C")+(p.neutral?"N":"")).join(",")+"|"+(icon("cpu")?"i":"");
   if(key!==ui.strip||el.children.length!==V.players.length){
-    el.classList.toggle("bg-players--scroll",V.players.length>4);
+    el.classList.toggle("bg-players--scroll",V.players.length>4||phoneSideways());
     el.innerHTML=V.players.map((p,i)=>`<li class="bg-player chip" data-seat="${seatOfP(p,i)}" data-p="${i}"><span class="bg-token" aria-hidden="true">${esc(tokenOfP(p,i))}</span>`+
       (p.human||p.neutral?"":`<span class="bg-player__cpu" aria-hidden="true">${icon("cpu")}</span>`)+
       `<span class="bg-player__txt"><span class="bg-player__name">${esc(stripName(p))}</span><span class="bg-player__meta"></span></span></li>`).join("");
