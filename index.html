@@ -384,7 +384,27 @@
     var art = $("#hbSoonArt"); art.style.setProperty("--hb-h", soonHue(it.name)); art.innerHTML = '<span class="hb-soon-ico">' + soonArt(it.name) + '</span>';
     $("#hbSoonNote").textContent = (soonProgress(it.status) ? "Being built right now." : "Next in line to be built.") + " It joins the games above as soon as it is ready, with nothing to install.";
     b.sheet.open(sh, { focus: "#hbSoonOk" });
+    soonGuard();
   }
+  /* TV browsers without the Fire TV app (Silk: the remote's Back = history.back()): while the details sheet is open one guard entry
+     sits in the history, so Back closes the sheet and stays on the hub (the way BGUI.back guards the game pages). It is pushed inside
+     the tap / OK that opened the sheet; a close by OK, the scrim or the Back key takes the entry away again after 0.7 s, unless the
+     same press also sent history.back() (then the popstate already used it). In the app __tvBack closes the sheet first, as before. */
+  var soonG = false;
+  function soonGuard() {
+    if (soonG || !isTV() || !window.history || !history.pushState) return;
+    try { history.pushState({ hbSoon: 1 }, ""); soonG = true; } catch (e) { }
+  }
+  function soonOpen() { var b = B(); return !!(b && b.sheet && b.sheet.isOpen && b.sheet.isOpen($("#hbSoonSheet"))); }
+  window.addEventListener("popstate", function () {
+    if (!soonG) return;
+    soonG = false;
+    if (soonOpen()) { try { B().sheet.close($("#hbSoonSheet"), "back"); } catch (e) { } }
+  });
+  doc.addEventListener("bgui:sheet", function (e) {
+    var d = e && e.detail; if (!d || d.open || d.el !== $("#hbSoonSheet") || !soonG) return;
+    setTimeout(function () { if (soonG && !soonOpen()) { soonG = false; try { history.back(); } catch (x) { } } }, 700);
+  });
   function loadSoon() {
     var kept = null;
     try { kept = soonClean(JSON.parse(localStorage.getItem(SOON_KEY))); } catch (e) { }
