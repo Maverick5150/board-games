@@ -116,6 +116,36 @@
   html[data-tv] .hb-soon-tile:nth-child(-n+4){scroll-margin-top:calc(var(--focus-room) + .5rem + 2rem)}
   html[data-tv] .hb-soon-ini{font-size:3rem}
   html[data-tv] .hb-soon-sheet__art{width:9rem}
+
+  /* ---------- Party Mode: a button fixed in the bar's top-right corner (it is not one of the games). On a TV it hosts at once;
+     on a phone it asks: join a party with the TV's room code, or host on this screen ---------- */
+  #hbBar{grid-template-columns:minmax(var(--tap),1fr) auto minmax(var(--tap),1fr)}   /* equal sides: the title stays centred */
+  .hb-party{min-width:0; padding:0 1rem 0 .75rem; gap:.45rem; border-radius:999px; font-size:var(--fs-sm)}
+  .hb-party .bg-ico{width:1.125rem; height:1.125rem}
+  .hb-party__short{display:none}
+  @media (max-width:37.5em){   /* phone upright: the title moves left so the button keeps its word */
+    html:not([data-tv]) #hbBar{grid-template-columns:auto minmax(0,1fr) auto}
+    html:not([data-tv]) #hbBar .bg-topbar__title{text-align:left}
+    html:not([data-tv]) .hb-party__long{display:none}
+    html:not([data-tv]) .hb-party__short{display:inline}
+  }
+  html[data-tv] .hb-party{padding:0 1.25rem 0 1rem; gap:.6rem}
+  html[data-tv] .hb-party .bg-ico{width:1.5rem; height:1.5rem}
+  .hb-party-sheet .bg-sheet__sub{margin:.25rem 0 1.25rem}
+  .hb-party-acts{display:grid; gap:.75rem; margin-bottom:.75rem}
+
+  /* ---------- a phone held sideways (short and wide, never a TV): a slim poster with the text on the left, four games a row ---------- */
+  @media (orientation:landscape) and (max-height:31.25em){
+    html:not([data-tv]) .bg-topbar{padding-top:calc(env(safe-area-inset-top, 0px) + .25rem); padding-bottom:.25rem}
+    html:not([data-tv]) .hb-hero{padding-top:0; min-height:0; height:clamp(10.5rem, 56vh, 15rem)}
+    html:not([data-tv]) .hb-hero .bg-hero__layer{background-size:cover; background-position:100% 30%}
+    html:not([data-tv]) .hb-hero .bg-hero__shade{background:linear-gradient(90deg, var(--ink-1) 0%, rgba(8,10,21,.86) 34%, rgba(8,10,21,0) 68%), linear-gradient(0deg, var(--ink-1) 0%, rgba(8,10,21,0) 42%)}
+    html:not([data-tv]) .hb-hero .bg-hero__body{max-width:30rem; padding:.75rem var(--gutter) 1rem}
+    html:not([data-tv]) .hb-hero .bg-hero__title{font-size:var(--fs-2xl)}
+    html:not([data-tv]) .hb-continue{justify-self:start}
+    html:not([data-tv]) .bg-tiles{grid-template-columns:repeat(4, minmax(0,1fr)); gap:.75rem}
+    html:not([data-tv]) .hb-shelf-head{margin:.875rem 0 .625rem}
+  }
 </style>
 </head>
 <body class="bg-app">
@@ -124,7 +154,7 @@
 <header class="bg-topbar" id="hbBar">
   <div class="bg-topbar__start"><span class="bg-emblem" aria-hidden="true" data-bg-mount="emblem"></span></div>
   <div class="bg-topbar__title"><span class="bg-eyebrow">Classic games</span><h1 class="bg-topbar__name">Board Games</h1></div>
-  <div class="bg-topbar__end"></div>
+  <div class="bg-topbar__end"><a class="bg-btn bg-btn--ghost hb-party" id="hbParty" data-game="party" href="firestick/index.html" aria-label="Party Mode: play together. Join a party from this phone, or host one."><span data-hb-icon="tv" aria-hidden="true"></span><span class="hb-party__long">Party Mode</span><span class="hb-party__short" aria-hidden="true">Party</span></a></div>
 </header>
 
   <section class="bg-hero hb-hero" id="hbHero" data-game="trouble" aria-label="Featured game">
@@ -172,10 +202,6 @@
       <span class="bg-tile__art"><picture><source media="(max-width: 30em)" srcset="ui/art/thumb-scatter-sm.svg"><img src="ui/art/thumb-scatter.svg" alt="" width="320" height="240" decoding="async"></picture><span class="bg-tile__badge" aria-hidden="true"><span data-hb-icon="user"></span>2-8</span></span>
       <span class="bg-tile__label"><span class="bg-tile__seal" data-hb-seal="scatter" aria-hidden="true"></span><span class="bg-tile__name">Scattergories</span><span class="bg-tile__meta">Beat the clock</span></span>
     </a>
-    <a class="bg-tile bg-tile--party" data-game="party" href="firestick/index.html" id="hbParty" aria-label="Party Mode, 2 to 10 players. Host on the TV, everyone joins from a phone.">
-      <span class="bg-tile__art"><picture><source media="(max-width: 30em)" srcset="ui/art/thumb-party-sm.svg"><img src="ui/art/thumb-party.svg" alt="" width="320" height="240" decoding="async"></picture><span class="bg-tile__badge" aria-hidden="true"><span data-hb-icon="user"></span>2-10</span></span>
-      <span class="bg-tile__label"><span class="bg-tile__seal" data-hb-seal="party" aria-hidden="true"></span><span class="bg-tile__name">Party Mode</span><span class="bg-tile__meta" id="hbPartyMeta">TV + phones</span></span>
-    </a>
   </nav>
 
   <section class="hb-soon" id="hbSoon" aria-labelledby="hbSoonLabel" hidden>
@@ -197,6 +223,18 @@
   <dl class="hb-soon-facts"><div><dt>Status</dt><dd id="hbSoonStatus"></dd></div><div><dt>Expected</dt><dd id="hbSoonEta"></dd></div></dl>
   <p class="hb-soon-note" id="hbSoonNote"></p>
   <button class="bg-btn bg-btn--primary bg-btn--block" id="hbSoonOk" type="button">Got it</button>
+</div>
+
+<div class="bg-sheet hb-party-sheet" id="hbPartySheet" aria-labelledby="hbPartyTitle" aria-hidden="true">
+  <div class="bg-sheet__grip" aria-hidden="true"></div>
+  <span class="bg-eyebrow">Play together · 2 to 10 players</span>
+  <h2 class="bg-sheet__title" id="hbPartyTitle">Party Mode</h2>
+  <p class="bg-sheet__sub">One screen is the table, and everyone plays from their own phone.</p>
+  <div class="hb-party-acts">
+    <a class="bg-btn bg-btn--primary bg-btn--cta bg-btn--block" id="hbPartyJoin" href="firestick/play.html"><span class="bg-btn__label">Join a party</span><span class="bg-btn__sub">Type the room code from the TV</span></a>
+    <a class="bg-btn bg-btn--secondary bg-btn--cta bg-btn--block" id="hbPartyHost" href="firestick/index.html"><span class="bg-btn__label">Host on this screen</span><span class="bg-btn__sub">This screen becomes the table</span></a>
+  </div>
+  <button class="bg-btn bg-btn--block" id="hbPartyClose" type="button">Not now</button>
 </div>
 
 <script>
@@ -246,7 +284,7 @@
   }
 
   /* ---------- the hero follows the focused tile, and drifts through the games while nothing is focused (full effects only) ---------- */
-  function resting() { var a = doc.activeElement; return !(a && (a.closest && a.closest(".hb-tiles, .hb-hero, .hb-soon"))); }
+  function resting() { var a = doc.activeElement; return !(a && (a.closest && a.closest(".hb-tiles, .hb-hero, .hb-soon, #hbParty"))); }
   function canRotate() {
     var b = B(); return !doc.hidden && heroSeen && resting() && !(window.Sound && Sound.panelOpen && Sound.panelOpen()) && b && b.effects && b.effects.motion && b.effects.motion() === "full";
   }
@@ -276,12 +314,11 @@
 
   function links() {
     var q = isTV() ? "?tv=1" : "";
-    $$("a.bg-tile, #hbContinue").forEach(function (a) {
+    $$("a.bg-tile, #hbContinue, #hbParty").forEach(function (a) {
       var base = a.getAttribute("data-base") || (a.getAttribute("href") || "").split("?")[0];
       if (base && base !== "#") { a.setAttribute("data-base", base); a.setAttribute("href", base + q); }
     });
-    var pm = $("#hbPartyMeta"); if (pm) pm.textContent = isTV() ? "Host on this TV" : "TV + phones";
-    var par = $("#hbParty"); if (par) par.setAttribute("aria-label", isTV() ? "Party Mode, 2 to 10 players. Host the table on this TV, everyone joins with a room code." : "Party Mode, 2 to 10 players. Host on the TV, everyone joins from a phone.");
+    var par = $("#hbParty"); if (par) par.setAttribute("aria-label", isTV() ? "Party Mode, 2 to 10 players. Host the table on this TV, everyone joins with a room code." : "Party Mode: play together. Join a party from this phone, or host one.");
     if (cur) setText(cur);
   }
 
@@ -371,7 +408,7 @@
     $("#hbSoonUpd").textContent = d.updated ? "Updated " + soonDay(d.updated) : "";
     box.hidden = !d.items.length;
     if (had >= 0) {   /* a fresh list arrived while the D-pad was on the shelf: keep the place (or step up to the games) */
-      var to = $$(".hb-soon-tile", grid)[Math.min(had, d.items.length - 1)] || $("#hbParty");
+      var to = $$(".hb-soon-tile", grid)[Math.min(had, d.items.length - 1)] || $$("#hbTiles a.bg-tile").pop();
       if (to) { if (b && b.focus && b.focus.set && isTV()) b.focus.set(to); else to.focus(); }
     }
   }
@@ -463,8 +500,10 @@
     if (window.requestIdleCallback) requestIdleCallback(warm, { timeout: 4000 }); else setTimeout(warm, 2500);
     schedule();
 
-    /* sound and effects settings: the shared sound button (its panel carries "Reduce effects") docks in the bar */
+    /* sound and effects settings: the shared sound button (its panel carries "Reduce effects") docks in the bar, left of Party Mode.
+       The hub has its own music: the lounge playlist starts with the page in the app, and on the first tap or key in a browser. */
     if (window.Sound && Sound.mountButton) Sound.mountButton();
+    if (window.Sound && Sound.music) Sound.music(Sound.hasStyle && Sound.hasStyle("lobby") ? "lobby" : "menu");
     /* The hub has no Back step of its own: in the Fire TV app Back exits (no window.__tvBack). The one exception is the open sound
        panel, which Back closes first: __tvBack exists only while the panel is on screen. */
     function syncBack() {
@@ -485,6 +524,17 @@
     soonGrid.addEventListener("focusout", function () { if (okHint) okHint.textContent = "Open a game"; });
     $("#hbSoonOk").addEventListener("click", function () { if (b && b.sheet) b.sheet.close($("#hbSoonSheet")); });
     loadSoon();
+
+    /* Party Mode: on a TV the button hosts at once (the TV is the table); anywhere else it asks: join a party, or host on this screen */
+    var party = $("#hbParty");
+    party.addEventListener("click", function (e) {
+      if (isTV() || !b || !b.sheet) return;      /* the link: host */
+      e.preventDefault();
+      b.sheet.open($("#hbPartySheet"), { focus: "#hbPartyJoin" });
+    });
+    party.addEventListener("focusin", function () { onTile("party"); if (okHint) okHint.textContent = "Party Mode"; });
+    party.addEventListener("focusout", function () { if (okHint) okHint.textContent = "Open a game"; });
+    $("#hbPartyClose").addEventListener("click", function () { if (b && b.sheet) b.sheet.close($("#hbPartySheet")); });
 
     if (isTV()) {
       var first = (save && $("#hbContinue")) || $("a.bg-tile");

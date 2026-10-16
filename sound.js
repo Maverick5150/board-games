@@ -220,7 +220,15 @@ var STYLES={
     rhythms:[[1,0,1,0,1,1,0,1],[1,0,0,1,1,0,1,0],[1,0,1,1,0,1,0,1],[1,1,0,1,0,1,1,0]],
     chordSteps:[0,5],
     drums:[{kick:[1,0,0,0,0,0,0,0],kv:0.25,snare:[0,0,0,1,0,0,0,1],sv:0.1,hat:[1,0,1,0,1,0,1,0],hv:0.06},{kick:[1,0,0,0,1,0,0,0],kv:0.22,hat:[1,1,1,1,1,1,1,1],hv:0.04},{snare:[0,0,0,0,1,0,0,0],sv:0.09,hat:[1,0,1,0,1,0,1,0],hv:0.07}],
-    titles:["Boardwalk Blues","Go Collect Two Hundred","Park Place Swing","Rent Is Due","Free Parking Jazz","Railroad Rag","Hotel Lobby","Chance Encounter","Community Chest Cha-Cha","Pass Go Boogie"] }
+    titles:["Boardwalk Blues","Go Collect Two Hundred","Park Place Swing","Rent Is Due","Free Parking Jazz","Railroad Rag","Hotel Lobby","Chance Encounter","Community Chest Cha-Cha","Pass Go Boogie"] },
+  /* the hub (the opening screen): a slow late-night lounge, brushes and walking bass under a soft lead */
+  lobby:{ scales:["major","dorian","major","mixo"], bpm:[80,98], swing:0.26, sev:true, leadVol:0.1, waves:["sine","triangle","sine"], bassKind:"walk",
+    progs:[[0,5,1,4],[1,4,0,5],[2,5,1,4],[0,3,1,4],[3,4,2,5],[0,2,1,4],[0,5,3,4],[5,1,4,0]],
+    bridge:[[3,2,1,4],[5,1,4,0],[3,4,0,5],[1,4,3,0]],
+    rhythms:[[1,0,1,0,1,0,0,1],[1,0,0,1,0,1,0,0],[1,0,1,1,0,0,1,0],[1,0,0,0,1,0,1,0]],
+    chordSteps:[0,3,6],
+    drums:[{snare:[0,0,0,0,1,0,0,0],sv:0.05,hat:[1,0,1,1,1,0,1,1],hv:0.035},{kick:[1,0,0,0,0,0,0,0],kv:0.16,hat:[1,0,1,0,1,0,1,0],hv:0.04},{snare:[0,0,0,1,0,0,0,1],sv:0.045,hat:[1,1,1,1,1,1,1,1],hv:0.025}],
+    titles:["Midnight Lobby","Velvet Rope","Gold Leaf Lounge","Felt and Brass","After Hours Parlor","Lamplight Shuffle","House Rules","Starlit Table","Last Call Serenade","Game Night Glow"] }
 };
 function melody(r,sc,prog,rh,resolve){
   var out=[], prev=2+Math.floor(r()*5), LO=-2, HI=9;
@@ -332,9 +340,18 @@ function unlock(){
   ["pointerdown","keydown","touchstart","click"].forEach(function(ev){ try{ g.document.removeEventListener(ev,unlock,true); }catch(e){} });
   if(ensure()&&want) begin();
 }
+/* In the Board Games app (the Fire TV app's window.AndroidTV, the phone app's window.BoardGamesApp) the WebView lets audio start
+   without a tap, so the music starts with the page. A browser still waits for the first tap or key, as before. */
+function appStart(){
+  if(unlocked||isHidden()||!(g.AndroidTV||g.BoardGamesApp)||!ensure()) return;
+  var go=function(){ if(!unlocked&&ctx&&ctx.state==="running") unlock(); };
+  go();
+  if(!unlocked&&ctx.resume){ try{ var p=ctx.resume(); if(p&&p.then) p.then(go,function(){}); }catch(e){} }
+}
 if(g.document){
   ["pointerdown","keydown","touchstart","click"].forEach(function(ev){ g.document.addEventListener(ev,unlock,true); });
-  g.document.addEventListener("visibilitychange",function(){ if(!ctx) return; try{ if(g.document.hidden){ ctx.suspend&&ctx.suspend(); } else { ctx.resume&&ctx.resume(); } }catch(e){} });
+  g.document.addEventListener("visibilitychange",function(){ if(!ctx){ appStart(); return; } try{ if(g.document.hidden){ ctx.suspend&&ctx.suspend(); } else { ctx.resume&&ctx.resume(); appStart(); } }catch(e){} });
+  appStart();
 }
 
 /* ---------- settings panel + floating button ---------- */
