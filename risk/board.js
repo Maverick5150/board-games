@@ -273,7 +273,12 @@ function create(container,opts){
     S.names.style.display=show?"":"none"; root.classList.toggle("is-names",show);
     if(show&&!root.classList.contains("is-gesture")){ nameLayout(k); nameView(); }
   }
-  if(typeof window!=="undefined") window.addEventListener("resize",function(){ if(root.isConnected) applyLabels(); });
+  /* step 11: turning the phone (or any resize) changes the map frame's size: the pan (in px) scales with it, so the same part of the map
+     stays in view, zoomed as it was; then the names are laid out again */
+  var lastW=0;
+  function reframe(){ if(!root.isConnected) return; var w=root.clientWidth; if(lastW&&w&&w!==lastW&&(scale!==1||tx||ty)){ tx*=w/lastW; ty*=w/lastW; lastW=w; clamp(); apply(); return; } if(w) lastW=w; applyLabels(); }
+  if(typeof window!=="undefined") window.addEventListener("resize",reframe);
+  if(typeof ResizeObserver!=="undefined") new ResizeObserver(function(){ var w=root.clientWidth; if(w&&w!==lastW) reframe(); }).observe(root);
   self.setView=function(v){ V=v; keyCache=[]; drawAll(); };
   self.setMarks=function(m){ marks={sel:m.sel==null?null:m.sel,src:m.src||{},tgt:m.tgt||{},hot:m.hot||{},mine:m.mine||{}}; keyCache=[]; drawAll(); };
   self.flash=function(t,kind,ms){ flashT[t]=kind||"win"; keyCache[t]=null; drawGroup(t); paintMarks(); setTimeout(function(){ delete flashT[t]; keyCache[t]=null; drawGroup(t); paintMarks(); },ms||900); };
