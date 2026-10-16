@@ -19,10 +19,12 @@
 "use strict";
 var MX=g.MXWar=g.MXWar||{};
 if(MX.Round) return;
-/* race lengths in battles ("laps"): the CEO (2026-10-16 ~16:55): "I don't want each race to be hours... get through the full circuit":
-   Short = Heat 10 / LCQ 8 / Main 25 / Moto 20, Standard = Heat 15 / Semi 12 / LCQ 12 / Main 40 / Moto 30, Long = Heat 20 / LCQ 15 / Main 60 / Moto 40
-   (a semi as long as the LCQ); wars play out in full and do not count extra */
-var LEN={short:{heat:10,semi:8,lcq:8,main:25,moto:20},standard:{heat:15,semi:12,lcq:12,main:40,moto:30},long:{heat:20,semi:15,lcq:15,main:60,moto:40}};
+/* race lengths in battles = LAPS (one battle is one lap). The CEO, v2 (2026-10-16 ~18:30): "The rounds are way too short. The races are way
+   too short. They need to be extended." Standard = Heat 30 / Semi 25 / LCQ 25 / Main 80 / Moto 60 (each), Short = Heat 15 / Semi 12 / LCQ 12 /
+   Main 40 / Moto 30, Long = Heat 50 / Semi 40 / LCQ 40 / Main 150 / Moto 100 (a semi as long as the LCQ); wars play out in full and do not count
+   extra. (v1, ~16:55: Short 10/8/8/25/20, Standard 15/12/12/40/30, Long 20/15/15/60/40.) A season saved with v1 lengths races its next race
+   at the new lengths; a race already under way keeps its own. */
+var LEN={short:{heat:15,semi:12,lcq:12,main:40,moto:30},standard:{heat:30,semi:25,lcq:25,main:80,moto:60},long:{heat:50,semi:40,lcq:40,main:150,moto:100}};
 
 function clone(x){ return JSON.parse(JSON.stringify(x)); }
 /* the format for one round: the round's own override (1976 Anaheim, Daytona 1979-85), the Triple Crown night (formats.json: a 40-rider
@@ -42,8 +44,11 @@ function lengths(o){ var base=LEN[o&&o.length]||LEN.standard, out={}, k; for(k i
 /* ---------------- a new round ----------------
    entry: rider ids in SEED order (the season's standings / form); n = the night's field (fill === "roster" may make it smaller than the
    format's full program: the first stage's races keep their count and get smaller). */
-function newRound(F,ri,entry,o){
+function newRound(F,ri,entry,o,team){
   var L=lengths(o), RG={ri:ri,fmt:F.id,tc:!!F.isTC,F:F,entry:entry.slice(),races:[],cur:0,send:[],main:[],elim:[],fin:null,done:false,res:null};
+  /* the CEO (~18:25): "at the start of the heat races, there has to be an equal amount of teams": team = {riderId: make} balances the
+     first stage's races by team (season.js passes it; without it the plain odd / even seed split, as qualifying splits them) */
+  if(team&&typeof team==="object"){ RG.team={}; entry.forEach(function(id){ RG.team[id]=String(team[id]||"Privateer"); }); }
   var st=F.qual.map(function(s){ return clone(s); }), dir=Math.min(F.direct|0,entry.length), rest=entry.slice(dir);
   /* SMX: the seeds ride straight into the finals (in seed order) */
   entry.slice(0,dir).forEach(function(id,k){ RG.main.push({id:id,pos:k+1,r:0,s:-1}); });
@@ -66,8 +71,37 @@ function newRound(F,ri,entry,o){
 function assign(RG,si,pool){
   var s=RG.st[si], per=[], i;
   for(i=0;i<s.races;i++) per.push([]);
-  pool.forEach(function(id,k){ per[k%s.races].push(id); });
+  if(si===0&&RG.team&&s.races>1){
+    per=balanced(RG,pool,s.races);
+    var at={}; pool.forEach(function(id,k){ at[id]=k; }); per.forEach(function(a){ a.sort(function(x,y){ return at[x]-at[y]; }); });   /* each race's gate order stays the seed order */
+  }
+  else pool.forEach(function(id,k){ per[k%s.races].push(id); });
   RG.races.forEach(function(r){ if(r.st===si) r.ent=per[r.i]; });
+}
+/* balanced by team (the CEO ~18:25): the teams in turn (the biggest first, then the team of the better seed), each team's riders in seed
+   order; every rider goes to the race (with room left) that has the fewest of their team, then the fewest riders, then the weaker field
+   so far (the higher sum of seed places): every team split as evenly as it can be (at most one apart), every race the same size (at most
+   one apart), and the top seeds spread over the races instead of every team's best landing in Heat 1 */
+function balanced(RG,pool,races){
+  var g={}, order=[], first={}, cap=Math.ceil(pool.length/races), per=[], tc=[], sum=[], i;
+  for(i=0;i<races;i++){ per.push([]); tc.push({}); sum.push(0); }
+  pool.forEach(function(id,k){ var t=RG.team[id]||"Privateer"; if(!g[t]){ g[t]=[]; order.push(t); first[t]=k; } g[t].push({id:id,k:k}); });
+  order.sort(function(a,b){ return g[b].length-g[a].length||first[a]-first[b]; });
+  order.forEach(function(t){ g[t].forEach(function(x){
+    var best=-1;
+    for(var r=0;r<races;r++){ if(per[r].length>=cap) continue;
+      if(best<0) { best=r; continue; }
+      var a=(tc[r][t]||0)-(tc[best][t]||0); if(a<0){ best=r; continue; } if(a>0) continue;
+      var c=per[r].length-per[best].length; if(c<0){ best=r; continue; } if(c>0) continue;
+      if(sum[r]>sum[best]) best=r; }
+    per[best].push(x.id); tc[best][t]=(tc[best][t]||0)+1; sum[best]+=x.k+1;
+  }); });
+  return per;
+}
+/* how a stage's races share the teams: [{race label, n, teams:{make: count}}] (the heat line-up screen) */
+function teamSplit(RG,si){
+  var out=[]; RG.races.forEach(function(r){ if(r.st!==si||!r.ent) return; var t={}; r.ent.forEach(function(id){ var m=(RG.team&&RG.team[id])||"?"; t[m]=(t[m]||0)+1; }); out.push({key:r.key,label:r.label,n:r.ent.length,teams:t}); });
+  return out;
 }
 /* interleave {id,pos,r} by finishing place, then race */
 function interleave(list){ return list.slice().sort(function(a,b){ return a.pos-b.pos||a.r-b.r; }).map(function(x){ return x.id; }); }
@@ -161,6 +195,6 @@ function score(RG,title){
   return {cls:cls,pts:pts,wins:wins,places:places,finals:mot,hs:hs,winner:ov[0],title:!!title,main:RG.fin.slice()};
 }
 
-MX.Round={LEN:LEN,formatFor:formatFor,fieldSize:fieldSize,lengths:lengths,newRound:newRound,current:current,entrants:entrants,record:record,score:score,overall:overall};
+MX.Round={LEN:LEN,teamSplit:teamSplit,formatFor:formatFor,fieldSize:fieldSize,lengths:lengths,newRound:newRound,current:current,entrants:entrants,record:record,score:score,overall:overall};
 if(typeof module!=="undefined"&&module.exports) module.exports=MX.Round;
 })(typeof window!=="undefined"?window:globalThis);

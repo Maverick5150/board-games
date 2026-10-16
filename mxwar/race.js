@@ -1,6 +1,8 @@
 /* MOTOCROSS WAR — one race = one game of War (pure, no DOM). Node: module.exports = MXWar.Race; browser: window.MXWar.Race.
    The CEO (2026-10-16): "each game of war should represent each race"; a heat / semi / LCQ is a set number of battles, the Main Event a long
-   race (first about 200 battles; the CEO's ~16:55 update: Main 40 by default, round.js LEN), then whoever has the most cards; the holeshot = the winner of the first battle; a starting gate.
+   race (first about 200 battles; the CEO's ~16:55 update: Main 40; v2 (~18:30): Main 80 by default, round.js LEN; one battle = one LAP), then
+   whoever has the most cards; the holeshot = the winner of the first battle; a starting gate. v2: every lap's cards are kept for the battle
+   board (G.lastLap: the card each rider turned, the war cards [down, up] per war, the winner and the pot) and a short lap log (G.laps, 12).
    War's rules are PORTED from war/engine.js (read-only; the War builder's commit "war: three down, the fourth decides; aces wild (the CEO's
    rules)"), the parts that make sense in a race: Three-card War by default (3 face down, the 4th up decides; Classic = 1 down), only the
    riders tied for the top card go to war (the CEO's rule; House row off = everyone joins, Pagat), a tie on the deciding card is a double war
@@ -206,7 +208,8 @@ function resolve(G,ev){ if(G.phase==="flip") reveal(G,ev); else if(G.phase==="wa
 /* every card turns at once */
 function reveal(G,ev){
   var cards=[]; G.part=[]; G.tb=[]; G.cur={}; G.warN=0;
-  for(var s=0;s<G.n;s++){ var p=G.r[s]; if(!canPlay(G,s)) continue; p.bn=p.pk.length; var c=p.pk.shift(); G.part.push(s); G.tb.push({s:s,c:c,up:true,w:0}); G.cur[s]=c; cards.push({s:s,c:c}); }
+  G.lap={b:G.battle+1,c:{},w:{}};   /* v2 battle board: the card every rider turned this lap, and the war cards */
+  for(var s=0;s<G.n;s++){ var p=G.r[s]; if(!canPlay(G,s)) continue; p.bn=p.pk.length; var c=p.pk.shift(); G.part.push(s); G.tb.push({s:s,c:c,up:true,w:0}); G.cur[s]=c; G.lap.c[s]=c; cards.push({s:s,c:c}); }
   G.bpart=G.part.slice(); G.pick={}; G.need=[];
   ev.push({e:"reveal",w:0,b:G.battle+1,cards:cards});
   settle(G,ev);
@@ -259,6 +262,7 @@ function warFlip(G,ev){
       up=p.pk.shift(); G.tb.push({s:s,c:up,up:true,w:G.warN}); G.cur[s]=up; held=false;
     }
     laid.push({s:s,down:nd,c:up,held:held});
+    if(G.lap){ (G.lap.w[s]=G.lap.w[s]||[]).push([nd,held?null:up]); }
   });
   G.pick={}; G.need=[];
   ev.push({e:"reveal",w:G.warN,cards:laid});
@@ -292,6 +296,12 @@ function win(G,w,ev){
 function endBattle(G,w,ev){
   var P=G.r, s;
   G.battle++;
+  /* the lap just run, for the battle board and the lap log (plain JSON; a save from before v2 simply has none yet) */
+  var L0=G.last||{}, lap=G.lap||{b:G.battle,c:{},w:{}};
+  lap.b=G.battle; lap.win=w; lap.n=w>=0?(L0.n|0):0; lap.war=G.warN|0; lap.how=w>=0?"win":(L0.how||"deadlock"); lap.wc=w>=0&&G.cur[w]!=null?G.cur[w]:null; lap.aside=w<0?(L0.n|0):0;
+  G.lastLap=lap; G.lap=null;
+  if(!G.laps) G.laps=[];
+  G.laps.push({b:lap.b,win:w,n:lap.n,war:lap.war,c:lap.wc,aside:lap.aside}); if(G.laps.length>12) G.laps.splice(0,G.laps.length-12);
   G.bpart.forEach(function(x){ var c=G.cur[x]; if(c!=null) P[x].lc=val(G,c); });
   G.tb=[]; G.cur={}; G.part=[]; G.pick={}; G.need=[]; G.warN=0; G.down=0;
   var outs=[];
@@ -341,7 +351,7 @@ function snapshot(G,seat){
     riders:G.r.map(function(p,i){ return {s:i,id:p.id,name:p.name,human:p.human,out:p.out,count:p.pk.length,cur:G.cur[i]!=null?G.cur[i]:null}; }),
     table:G.tb.map(function(e){ return {s:e.s,w:e.w,up:e.up,c:e.up?e.c:null}; }),
     warN:G.warN,down:G.down,wars:G.wars,kitty:G.kitty.length,aside:G.aside.length,holeshot:G.hs,last:G.last,
-    standings:standings(G),over:G.over,why:G.why,log:G.log.slice(-8).map(function(e){ return e.t; }),
+    standings:standings(G),over:G.over,why:G.why,log:G.log.slice(-8).map(function(e){ return e.t; }),lastLap:G.lastLap||null,laps:(G.laps||[]).slice(),
     legal:seat>=0?legal(G,seat):[]};
 }
 
