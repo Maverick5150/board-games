@@ -392,7 +392,14 @@
       var html = "", j; for (j = 0; j < 40; j++) html += dynSVG(j, st, amt[j]);
       inst.dyn.innerHTML = html;
     }
-    function unit() { host.style.setProperty("--mb-u", (size() / 100) + "px"); }
+    /* step 11: turning the phone (or any resize) changes the frame's size: the units follow it, and the pan (in px) scales with it, so the
+       same part of the board stays in view, zoomed as it was */
+    var lastP = 0;
+    function unit() {
+      var P = size(); host.style.setProperty("--mb-u", (P / 100) + "px");
+      if (lastP && P !== lastP && (zoom !== 1 || tx || ty)) { tx *= P / lastP; ty *= P / lastP; apply(false); }
+      lastP = P;
+    }
     unit(); if (g.ResizeObserver) new ResizeObserver(unit).observe(host); else g.addEventListener("resize", unit);
     drawStatic();
     // the font arrives after the first draw: lay the names out again if the measured widths changed
