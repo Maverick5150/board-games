@@ -24,13 +24,13 @@ import java.net.URL
 import java.security.MessageDigest
 
 /**
- * Self-update for the sideloaded Fire TV app.
- * On launch and whenever the app comes back to the front (at most once every 6 hours) it reads tv/version.json from
+ * Self-update for the sideloaded app (Fire TV, phones and tablets).
+ * On every launch, and whenever the app comes back to the front (at most once every 30 minutes), it reads tv/version.json from
  * the website. When that lists a newer versionCode it asks; on Install it downloads the APK into the app's own storage,
  * checks its SHA-256 and hands it to the system installer. Every failure is silent or a short toast: the games never
  * wait on this.
  */
-class Updater(private val act: Activity, private val focusBack: View) {
+class Updater(private val act: Activity, private val focusBack: View, private val tv: Boolean = true) {
 
     companion object {
         private const val SITE = "https://maverick5150.github.io/board-games/"
@@ -39,7 +39,7 @@ class Updater(private val act: Activity, private val focusBack: View) {
         private const val KEY_LAST_CHECK = "lastCheck"
         /** versionCode the user said Install to before being sent to the "Install unknown apps" setting (0 = none). */
         private const val KEY_PENDING = "pendingCode"
-        private const val CHECK_EVERY_MS = 6L * 60 * 60 * 1000
+        private const val CHECK_EVERY_MS = 30L * 60 * 1000
         private const val TIMEOUT_MS = 8000
         private const val DOWNLOAD_READ_TIMEOUT_MS = 20000
         private const val FAILED = "The update didn't download. Try again later."
@@ -79,14 +79,15 @@ class Updater(private val act: Activity, private val focusBack: View) {
 
     private fun prefs(): SharedPreferences = act.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    /** Called from onCreate (and from [onResume]). Runs off the UI thread; at most one completed check every 6 hours,
-     *  except while an update the user already said Install to is waiting for the "Install unknown apps" setting. */
-    fun checkOnLaunch() {
+    /** Called from onCreate with force = true (every launch checks) and from [onResume]. Runs off the UI thread; between
+     *  launches at most one completed check every 30 minutes, except while an update the user already said Install to is
+     *  waiting for the "Install unknown apps" setting. */
+    fun checkOnLaunch(force: Boolean = false) {
         if (BuildConfig.DEBUG || busy || closed) return    // a debug build can't take a release-signed update
         val prefs = prefs()
         val pending = prefs.getInt(KEY_PENDING, 0)
         val since = System.currentTimeMillis() - prefs.getLong(KEY_LAST_CHECK, 0L)
-        if (pending <= 0 && since in 0L until CHECK_EVERY_MS) return
+        if (pending <= 0 && !force && since in 0L until CHECK_EVERY_MS) return
         busy = true
         Thread(Runnable {
             val rel = try { fetchRelease() } catch (e: Exception) { null }
@@ -107,7 +108,7 @@ class Updater(private val act: Activity, private val focusBack: View) {
     }
 
     /** Called from onResume: carries on after the user was sent to the "Install unknown apps" setting; otherwise
-     *  checks again (same 6-hour limit), because Fire TV usually brings the running app back instead of restarting it. */
+     *  checks again (same 30-minute limit), because Android usually brings the running app back instead of restarting it. */
     fun onResume() {
         val rel = waitingForPermission
         if (rel == null) {
@@ -207,9 +208,12 @@ class Updater(private val act: Activity, private val focusBack: View) {
     private fun askForPermission(rel: Release) {
         show(AlertDialog.Builder(act, DIALOG_THEME)
             .setTitle("Allow Board Games to update itself")
-            .setMessage("The Fire TV needs your OK once.\n\n" +
+            .setMessage(if (tv) "The Fire TV needs your OK once.\n\n" +
                 "Settings > My Fire TV > Developer Options > Install unknown apps > Board Games: ON\n\n" +
-                "Then come back to Board Games and the update carries on.")
+                "Then come back to Board Games and the update carries on."
+                else "Android needs your OK once.\n\n" +
+                "On the next screen, turn on \"Allow from this source\" for Board Games, " +
+                "then come back to Board Games and the update carries on.")
             .setPositiveButton("Open Settings") { _, _ -> openInstallSettings(rel) }
             .setNegativeButton("Later", null))
     }

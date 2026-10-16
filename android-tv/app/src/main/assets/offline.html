@@ -1,15 +1,22 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-  body{margin:0;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    background:radial-gradient(130% 100% at 50% -10%,#24346b,#0e1630 60%);color:#eef2ff;font-family:sans-serif;text-align:center}
-  h1{font-size:44px;margin:0 0 10px} p{font-size:26px;color:#9fb0d8;margin:6px 0 30px;max-width:80vw}
-  button{font-size:32px;font-weight:800;color:#fff;background:#2b7be0;border:4px solid #2b7be0;border-radius:18px;padding:18px 44px}
-  button:focus{outline:6px solid #fff}
+  /* Midnight Luxe colours; sizes follow the screen, so it reads on a TV and on a phone held either way */
+  body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;box-sizing:border-box;padding:24px;
+    background:radial-gradient(130% 100% at 50% -10%,#2a2350,#080a15 62%);color:#f6f1e7;font-family:sans-serif;text-align:center}
+  h1{font:400 clamp(28px,5.5vmin,48px)/1.15 serif;margin:0 0 12px}
+  p{font-size:clamp(16px,3vmin,26px);line-height:1.4;color:#c9c2d8;margin:0 0 28px;max-width:34em}
+  button{font-size:clamp(18px,3.4vmin,30px);font-weight:700;color:#1d1a2a;background:linear-gradient(180deg,#f1dcae,#d9b46a);border:0;border-radius:14px;
+    padding:.7em 2em;min-height:48px}
+  button:focus{outline:4px solid #f6f1e7;outline-offset:4px}
 </style></head>
 <body>
-  <h1>🎲 Can’t reach Board Games</h1>
-  <p>Party Mode needs an internet connection (phones talk to the TV through it). Check your Wi-Fi, then try again.</p>
-  <button id="r" autofocus onclick="AndroidTV.retry()">Try again</button>
-  <script>document.getElementById("r").focus();</script>
+  <h1>Can’t reach Board Games</h1>
+  <p>The games load from the internet the first time, and Party Mode always needs it. Check your Wi-Fi, then try again.</p>
+  <button id="r" autofocus>Try again</button>
+  <script>
+    var r = document.getElementById("r"), app = window.AndroidTV || window.BoardGamesApp;
+    r.onclick = function () { if (app && app.retry) app.retry(); else location.reload(); };
+    r.focus();
+  </script>
 </body></html>
