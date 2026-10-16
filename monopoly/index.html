@@ -292,6 +292,7 @@
 <script src="../saves.js"></script>
 <script src="../names.js"></script>
 <script src="board.js"></script>
+<script src="brain.js"></script>
 <script>window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
 <script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
 </head>
@@ -387,6 +388,7 @@ const BOARD=[
 ];
 const RR_IDX=[5,15,25,35], UTIL_IDX=[12,28];
 const GROUPS={}; BOARD.forEach((s,i)=>{ if(s.t==="prop"){ (GROUPS[s.g]=GROUPS[s.g]||[]).push(i);} });
+try{ if(window.MonoBrain) MonoBrain.init({BOARD,GROUPS,RR_IDX,UTIL_IDX}); }catch(e){}   // step 10: the computers' brain reads the board (monopoly/brain.js)
 
 // cards: {text, fx, a?} ; fx handled in applyCard
 const CHANCE=[
@@ -482,6 +484,13 @@ const SPEEDS=[["slow","Slow"],["medium","Medium"],["fast","Fast"]];
 function speedHTML(){ const v=(SETUP&&SETUP.speed)||"medium";
   return `<div class="bg-section"><h3 class="bg-eyebrow">Game speed</h3></div><div class="bg-card mn-card"><div class="mn-field"><span class="bg-row__title" id="spdTitle">How fast the computers play</span><span class="bg-row__desc">Medium is the normal pace. Changing it applies at once.</span></div><div class="bg-seg" id="segSpd" role="group" aria-labelledby="spdTitle">`+SPEEDS.map(s=>`<button type="button" data-spd="${s[0]}" class="${v===s[0]?"on":""}" aria-pressed="${v===s[0]}">${s[1]}</button>`).join("")+`</div></div>`; }
 function wireSpeed(scope){ const seg=scope&&scope.querySelector("#segSpd"); if(!seg) return; seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{ setSpeed(b.dataset.spd); seg.querySelectorAll("button").forEach(x=>{ const on=x===b; x.classList.toggle("on",on); x.setAttribute("aria-pressed",on); }); if(G&&G.started&&!G.over) try{ takeSnap(); }catch(e){} }); }
+// step 10: Computer skill (easy / normal / hard; normal = the new brain, monopoly/brain.js): saved with the settings and the game, a change
+// (the setup page or the Menu) applies at once; saves and settings from before have none and are Normal
+const SKILLS=[["easy","Easy"],["normal","Normal"],["hard","Hard"]];
+function normSkill(v){ return v==="easy"||v==="hard"?v:"normal"; }
+function skillHTML(){ const v=normSkill(SETUP&&SETUP.skill);
+  return `<div class="bg-section"><h3 class="bg-eyebrow">Computer skill</h3></div><div class="bg-card mn-card"><div class="mn-field"><span class="bg-row__title" id="sklTitle">How well the computers play</span><span class="bg-row__desc">Easy is gentle, Hard is sharp, Normal is the smart default. Changing it applies at once.</span></div><div class="bg-seg" id="segSkl" role="group" aria-labelledby="sklTitle">`+SKILLS.map(s=>`<button type="button" data-skl="${s[0]}" class="${v===s[0]?"on":""}" aria-pressed="${v===s[0]}">${s[1]}</button>`).join("")+`</div></div>`; }
+function wireSkill(scope){ const seg=scope&&scope.querySelector("#segSkl"); if(!seg) return; seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{ SETUP.skill=normSkill(b.dataset.skl); if(G&&G.started) G.skill=SETUP.skill; seg.querySelectorAll("button").forEach(x=>{ const on=x===b; x.classList.toggle("on",on); x.setAttribute("aria-pressed",on); }); if(G&&G.started&&!G.over) try{ takeSnap(); }catch(e){} }); }
 function freshState(nPlayers,nHumans,tokenIdx){
   const players=[];
   const hn=[]; for(let i=0;i<nHumans;i++) hn.push("You"+(nHumans>1?" "+(i+1):""));
@@ -1020,11 +1029,11 @@ function openMenu(){
   openModal(head("Menu",over?"The game is over.":"Paused. The computers wait until you resume.")+
     `<div class="mn-acts">${top}<div class="mn-acts--2"><button type="button" class="bg-btn bg-btn--secondary" onclick="window.__mplayers()">${icon("user")}Players &amp; holdings</button>`+
     `<button type="button" class="bg-btn bg-btn--secondary" onclick="window.__mrules()">${icon("gear")}House Rules</button></div></div>`+
-    speedHTML()+`<div class="bg-section"><h3 class="bg-eyebrow">Save and load</h3></div><div id="svbar2"></div>`+
+    speedHTML()+skillHTML()+`<div class="bg-section"><h3 class="bg-eyebrow">Save and load</h3></div><div id="svbar2"></div>`+
     `<div class="mn-acts">${over?"":`<button type="button" class="bg-btn bg-btn--secondary bg-btn--block" onclick="window.__mnew()">${icon("play")}New Game</button>`}`+
     `<a class="bg-btn bg-btn--ghost bg-btn--block" href="${hubHref()}">${icon("home")}All games</a></div>`,"",{dismiss:closeModal,kind:"menu"});
   ui.bar=Saves.bar({game:"monopoly",el:$("svbar2"),noSettings:true,getSnapshot:()=>(G&&G.started&&!G.over)?lastSnap:null,loadSnapshot:loadSavedGame});
-  dressSaveBar($("svbar2")); wireSpeed($("modal")); sheetGrew();
+  dressSaveBar($("svbar2")); wireSpeed($("modal")); wireSkill($("modal")); sheetGrew();
   window.__mplayers=openPlayers;
   window.__mrules=openRules;
   window.__mnew=openSetup;
@@ -1064,6 +1073,7 @@ function loadSavedGame(d){
   G=JSON.parse(JSON.stringify(d.G)); Object.assign(RULES,DEFAULT_RULES,d.rules||{}); if(d.setup) SETUP=d.setup; applySpeed();
   if(G.housesLeft<0) G.housesLeft=0; if(G.hotelsLeft<0) G.hotelsLeft=0;   // old saves (pre-M5 fix) could hold a negative bank stock
   G.stats=readStats(G.stats);   // presentation-only counters: saves made before step 4 have none and start fresh ones
+  G.skill=normSkill(G.skill||(SETUP&&SETUP.skill)); SETUP.skill=G.skill;   // step 10: a save from before the brain has no skill: Normal (its computers' brains start fresh)
   AUC=null; AUC_WAIT.length=0; TRADE=null; DEBT_THEN=null; G.bankAuctionActive=false;
   const lg=$("log"); lg.innerHTML=""; (d.log||[]).forEach(h=>{ const x=document.createElement("div"); x.innerHTML=h; lg.appendChild(x); });
   lg.scrollTop=lg.scrollHeight; log("<i>Saved game loaded.</i>");
@@ -1088,6 +1098,7 @@ function advancePlayer(){
 function endGame(){
   if(G.over) return;
   G.over=true;
+  if(window.MonoBrain) try{ MonoBrain.gameOver(G); }catch(e){}   // step 10: the brain learns on this device (Normal and Hard, only with local storage)
   Saves.del("monopoly","auto"); lastSnap=null;   // a finished game is not offered as "Continue last game"
   const w=alive()[0];
   log(`<b>${w?w.name:"?"} wins the game!</b>`);
@@ -1250,8 +1261,13 @@ function offerBuy(p,i,wasDouble){
   }
 }
 function buyProp(p,i){ const s=BOARD[i]; p.cash-=s.price; G.owner[i]=p.id; log(`${p.name} buys ${s.n} for ${money(s.price)}.`); }
+// step 10: the computers' brain (monopoly/brain.js). brainOn(p,what) is false for a human, without brain.js, or for a tournament's
+// "legacy" seat; then the old code runs. A brain error, or an answer the page cannot use, falls back to the old code as well.
+function brainOn(p,what){ try{ return !!(window.MonoBrain&&MonoBrain.ready&&MonoBrain.on(G,p,what)); }catch(e){ return false; } }
+function brainTry(fn){ try{ return fn(); }catch(e){ return undefined; } }
 function aiWantsToBuy(p,i){
   const s=BOARD[i];
+  if(brainOn(p,"buy")){ const r=brainTry(()=>MonoBrain.buy(G,p,i)); if(r===true||r===false) return r&&p.cash>=s.price; }   // step 10 (sanity: never a buy it cannot pay)
   if(p.cash < s.price+50) return false;
   // keener if completes/extends a group or buffer healthy
   let score=0.5;
@@ -1316,6 +1332,7 @@ function dropBidder(id){
   log(`${G.players[id].name} drops out.`); closeIf("auction"); auctionStep();
 }
 function aiAuctionValue(p,i){
+  if(brainOn(p,"bid")){ const v=brainTry(()=>MonoBrain.bidMax(G,p,i,AUC?{price:AUC.price,high:AUC.high}:null)); if(typeof v==="number"&&isFinite(v)) return Math.max(0,Math.min(Math.floor(v),p.cash)); }   // step 10
   const s=BOARD[i]; let v=s.price;
   if(s.t==="prop"){ const owned=GROUPS[s.g].filter(x=>G.owner[x]===p.id).length; if(owned>0) v=Math.floor(s.price*(1+0.4*owned)); }
   if(s.t==="rr") v=Math.floor(s.price*1.2);
@@ -1414,6 +1431,15 @@ function liquidatableValue(p){
   return v;
 }
 function aiRaiseFunds(p){
+  if(brainOn(p,"mortgage")){   // step 10: the brain raises it the cheapest way (lone deeds first, houses last); anything still owed: the old order below
+    for(let k=0;k<200&&p.cash<0;k++){
+      const a=brainTry(()=>MonoBrain.nextRaise(G,p,i=>canSellHouse(p,i))); if(!a||!(a.i>=0&&a.i<40)) break;
+      const c0=p.cash;
+      if(a.t==="sell"&&canSellHouse(p,a.i)) sellHouse(p,a.i,true);
+      else if(a.t==="mort"&&G.owner[a.i]===p.id&&!G.mort[a.i]&&groupBare(a.i)) mortgage(p,a.i,true);
+      if(p.cash===c0) break;
+    }
+  }
   // sell houses evenly, then mortgage
   let guard=200;
   while(p.cash<0 && guard-->0){
@@ -1559,12 +1585,23 @@ function aiTurn(){
   const p=cur();
   if(!p || p.human || p.bankrupt) return;
   if(G.phase==="preroll"){
+    if(p.jail&&brainOn(p,"jail")){   // step 10: the brain gets out early and stays in late; it trades and builds from Jail too
+      const jd=brainTry(()=>MonoBrain.jail(G,p));
+      if(jd==="card"||jd==="pay"||jd==="roll"){
+        if(jd==="card"&&p.jokers>0){ p.jokers--; p.jail=false; p.jailTurns=0; returnJoker(); log(`${p.name} uses Get Out of Jail Free.`); }
+        else if(jd==="pay"&&p.cash>=50){ payBank(p,50,true); p.jail=false; p.jailTurns=0; log(`${p.name} pays $50 to leave Jail.`); }
+        aiTrades(p); aiBuildPhase(p); refresh();
+        if(p.jail) doRoll(); else later(doRoll,400);
+        return;
+      }
+    }
     if(p.jail){
       if(p.jokers>0){ p.jokers--; p.jail=false; p.jailTurns=0; log(`${p.name} uses Get Out of Jail Free.`); refresh(); later(doRoll,400); return; }
       if(p.jailTurns<2 && p.cash<300){ doRoll(); return; } // try doubles early
       if(p.cash>=50){ payBank(p,50,true); p.jail=false; p.jailTurns=0; log(`${p.name} pays $50 to leave Jail.`); refresh(); later(doRoll,400); return; }
       doRoll(); return;
     }
+    aiTrades(p);   // step 10: the brain may offer the other computers a deal first (nothing for the old code)
     aiBuildPhase(p);
     refresh(); later(doRoll,400); return;
   }
@@ -1572,6 +1609,17 @@ function aiTurn(){
   if(G.phase==="action"){ later(()=>endTurn(),300); return; }
 }
 function aiBuildPhase(p){
+  if(brainOn(p,"build")&&MonoBrain.nextManage){   // step 10: the brain, one checked step at a time: lift a mortgage, mortgage a lone deed to fund houses, build
+    for(let k=0;k<80;k++){
+      const a=brainTry(()=>MonoBrain.nextManage(G,p,{canBuild:i=>canBuildOn(p,i)})); if(!a||!(a.i>=0&&a.i<40)) break;
+      const i=a.i, c0=p.cash, h0=G.houses[i], m0=G.mort[i];
+      if(a.t==="build"&&canBuildOn(p,i)&&p.cash>=BOARD[i].house) buildHouse(p,i);
+      else if(a.t==="unmort"&&G.owner[i]===p.id&&G.mort[i]&&p.cash>=Math.ceil(BOARD[i].mort*1.1)) unmortgage(p,i);
+      else if(a.t==="mort"&&G.owner[i]===p.id&&!G.mort[i]&&groupBare(i)) mortgage(p,i);
+      if(p.cash===c0&&G.houses[i]===h0&&G.mort[i]===m0) break;   // nothing changed: stop
+    }
+    return;
+  }
   // lift mortgages if rich; then build evenly across owned monopolies
   let guard=60;
   // build
@@ -1706,7 +1754,8 @@ function renderTrade(){
   window.__joker=(side)=>{ if(side==="give")TRADE.giveJoker=TRADE.giveJoker?0:1; else TRADE.getJoker=TRADE.getJoker?0:1; };
   window.__offer=()=>proposeTrade();
 }
-function tradeValueFor(pl, incomingIdx, incomingCash, incomingJoker, outgoingIdx, outgoingCash, outgoingJoker){
+function tradeValueFor(pl, incomingIdx, incomingCash, incomingJoker, outgoingIdx, outgoingCash, outgoingJoker, partnerId){
+  if(brainOn(pl,"trade")){ const v=brainTry(()=>MonoBrain.tradeValue(G,pl,partnerId!=null?partnerId:(TRADE?TRADE.me:-1),incomingIdx,incomingCash,incomingJoker,outgoingIdx,outgoingCash,outgoingJoker)); if(typeof v==="number"&&!isNaN(v)) return v; }   // step 10: the brain judges it (it never hands a rival a set for too little)
   let v=0;
   incomingIdx.forEach(i=>v+=assetVal(i)); v+=incomingCash+incomingJoker*50;
   outgoingIdx.forEach(i=>v-=assetVal(i)); v-=outgoingCash+outgoingJoker*50;
@@ -1743,6 +1792,37 @@ function proposeTrade(){
     log(`${them.name} rejects the trade.`); toast(them.name+" rejects.");
     closeModal();
   }
+}
+// step 10: the brain's offers on its own turn, to the other computers only (a human has no offer dialog). The partner judges each offer
+// with its own judgement (its brain, or the old rule); the first yes is carried out with the same checks and the same 10 % mortgage interest
+// as a player's trade. The "No trading until all owned" house rule holds for the computers too.
+function aiTrades(p){
+  if(!G||G.over||!brainOn(p,"trade")||!tradableList()) return;
+  const offers=brainTry(()=>MonoBrain.propose(G,p)); if(!offers) return;
+  for(const t of (Array.isArray(offers)?offers:[offers]).slice(0,6)){
+    const q=t&&G.players[t.to];
+    if(!q||q===p||q.human||q.bankrupt||!aiTradeOK(p,q,t)) continue;
+    const yes=tradeValueFor(q,t.give||[],t.cashGive|0,0,t.get||[],t.cashGet|0,0,p.id)>=-10;
+    if(MonoBrain.heard) brainTry(()=>MonoBrain.heard(G,p,t,yes));
+    if(yes){ execAITrade(p,q,t); return; }
+  }
+}
+function aiTradeOK(p,q,t){   // owners, no buildings in the deeds' colour sets, the cash on both sides and the 10 % on mortgaged deeds
+  const give=Array.isArray(t.give)?t.give:[], get=Array.isArray(t.get)?t.get:[], cg=t.cashGive|0, cr=t.cashGet|0;
+  if((!give.length&&!get.length)||cg<0||cr<0) return false;
+  if(give.some(i=>!(i>=0&&i<40)||G.owner[i]!==p.id)||get.some(i=>!(i>=0&&i<40)||G.owner[i]!==q.id)) return false;
+  if([...give,...get].some(i=>!groupBare(i))) return false;
+  const fee=list=>list.filter(i=>G.mort[i]).reduce((a,i)=>a+Math.ceil(BOARD[i].mort*0.1),0);
+  return cg<=p.cash&&cr<=q.cash&&p.cash-cg+cr>=fee(get)&&q.cash-cr+cg>=fee(give);
+}
+function execAITrade(p,q,t){
+  const give=t.give||[], get=t.get||[], cg=t.cashGive|0, cr=t.cashGet|0;
+  const nm=(idx,cash)=>[...idx.map(i=>BOARD[i].n+(G.mort[i]?" (mortgaged)":"")),...(cash?[money(cash)]:[])].join(", ")||"nothing";
+  const line=`${p.name} trades with ${q.name}: gives ${nm(give,cg)} for ${nm(get,cr)}.`;
+  give.forEach(i=>G.owner[i]=q.id); get.forEach(i=>G.owner[i]=p.id);
+  p.cash+=cr-cg; q.cash+=cg-cr;
+  give.forEach(i=>{ if(G.mort[i]) q.cash-=Math.ceil(BOARD[i].mort*0.1); }); get.forEach(i=>{ if(G.mort[i]) p.cash-=Math.ceil(BOARD[i].mort*0.1); });
+  log(line); refresh();
 }
 function execTrade(){
   const me=G.players[TRADE.me], them=G.players[TRADE.them];
@@ -1794,7 +1874,7 @@ function openRules(){
   wireRules($("modal"));
 }
 
-let SETUP={humans:1,cpus:3,humanTokens:[0]};
+let SETUP={humans:1,cpus:3,humanTokens:[0],skill:"normal"};
 // the setup page (Midnight Luxe): the hero, the players, the tokens, the rules as switches, save and load, and the Start dock with
 // a contextual label. Reached at load and from the Menu's New Game; mid-game its dock also holds Resume
 function openSetup(){
@@ -1806,7 +1886,7 @@ function openSetup(){
      `<p class="bg-hero__pitch">Roll round the board, buy streets, railroads and utilities, build houses and hotels, and be the last player standing.</p></div></section>`;
   h+=`<section class="mn-sec mn-sec--tokens"><div class="bg-section"><h3 class="bg-eyebrow" id="tokHdr">Pick your token</h3></div>`+
      `<div class="bg-seg bg-seg--grid5 mn-toks" id="tokGrid" role="group" aria-labelledby="tokHdr"></div><p class="mn-tokmsg" id="tokMsg" data-stage-text></p></section>`;
-  h+=`<section class="mn-sec mn-sec--rules">${speedHTML()}${rulesHTML()}</section></div>`;
+  h+=`<section class="mn-sec mn-sec--rules">${speedHTML()}${skillHTML()}${rulesHTML()}</section></div>`;
   h+=`<div class="mn-col mn-col--b"><section class="mn-sec mn-sec--players"><div class="bg-section"><h3 class="bg-eyebrow">Players</h3></div><div class="bg-card mn-card">`+
      `<div class="mn-field"><span class="bg-row__title" id="humTitle">${tv?"Players on this TV":"Players on this phone"}</span><span class="bg-row__desc">Pass the ${tv?"remote":"phone"} when it's a player's turn. 2 to 6 players in all.</span></div>`+
      `<div class="bg-seg" id="segH" role="group" aria-labelledby="humTitle"></div>`+
@@ -1846,12 +1926,12 @@ function openSetup(){
   drawH(); drawC(); drawTok();
   ui.bar=Saves.bar({game:"monopoly",el:$("svbar"),
     getSettings:()=>({setup:SETUP,rules:RULES}),
-    applySettings:s=>{ Object.assign(RULES,DEFAULT_RULES,s.rules||{}); SETUP=Object.assign({humans:1,cpus:3,humanTokens:[0]},s.setup||{}); applySpeed(); openSetup(); },
-    standard:()=>{ Object.assign(RULES,DEFAULT_RULES); SETUP={humans:1,cpus:3,humanTokens:[0]}; applySpeed(); openSetup(); },
+    applySettings:s=>{ Object.assign(RULES,DEFAULT_RULES,s.rules||{}); SETUP=Object.assign({humans:1,cpus:3,humanTokens:[0]},s.setup||{}); SETUP.skill=normSkill(SETUP.skill); applySpeed(); openSetup(); },
+    standard:()=>{ Object.assign(RULES,DEFAULT_RULES); SETUP={humans:1,cpus:3,humanTokens:[0],skill:"normal"}; applySpeed(); openSetup(); },
     getSnapshot:()=>(G&&G.started&&!G.over)?lastSnap:null,
     loadSnapshot:loadSavedGame});
   dressSaveBar($("svbar"));
-  wireRules($("modal")); wireSpeed($("modal"));
+  wireRules($("modal")); wireSpeed($("modal")); wireSkill($("modal"));
   window.__rules=openRules;
   window.__start=()=>{ Sound.skip(); const nH=SETUP.humans, nP=Math.min(6,Math.max(2,nH+SETUP.cpus)); startGame(nP,nH); };
   window.__resume=resumeGame;
@@ -1867,6 +1947,7 @@ function startGame(nP,nH){
   for(let i=0;i<nP;i++){ toks.push( (i<nH && chosen[i]!==undefined) ? chosen[i] : remaining.shift() ); }
   G=freshState(nP,nH,toks);
   G.started=true; G.stats=freshStats();   // presentation-only counters (Turn N, the Victory pills)
+  G.skill=normSkill(SETUP.skill);   // step 10: the computers' skill, saved with the game
   $("log").innerHTML="";
   log(`New game: ${nP} players, ${nH} human. Good luck!`);
   closeModal(); armBack(); clockOn();
@@ -1889,7 +1970,8 @@ document.addEventListener("keydown",e=>{
   const B=BG(); if(e.defaultPrevented||!B||!B.win||!B.win.isOpen()) return;
   if(e.key==="Escape"||e.key==="GoBack"||e.key==="BrowserBack"||e.keyCode===27||e.keyCode===4){ e.preventDefault(); closeWin(); }
 });
-// D-pad (TV): Down from the players picker always lands on the computer picker and Up goes back, even past a disabled count;
+// D-pad (TV): Down from the players picker always lands on the computer picker and Up goes back, even past a disabled count (and the
+// same from Game speed to Computer skill and back, step 10);
 // Down from a save bar's first row lands on the nearest button of the second row that is on. Registered before ui.js, so
 // BGUI.focus sees these keys as handled.
 document.addEventListener("keydown",e=>{
@@ -1898,7 +1980,7 @@ document.addEventListener("keydown",e=>{
   if((!down&&!up)||!a||!a.closest) return;
   const pick=sel=>document.querySelector(sel+" button.on:not([disabled])")||document.querySelector(sel+" button:not([disabled])");
   const bar=a.closest("#svbar, #svbar2"), rows=bar?bar.querySelectorAll(".r"):[], row1=rows[0], row2=rows[1];
-  const to=(down&&a.closest("#segH"))?pick("#segC"):(up&&a.closest("#segC"))?pick("#segH"):(down&&row1&&row2&&row1.contains(a))?nearestIn(row2,a):null;
+  const to=(down&&a.closest("#segH"))?pick("#segC"):(up&&a.closest("#segC"))?pick("#segH"):(down&&a.closest("#segSpd"))?pick("#segSkl"):(up&&a.closest("#segSkl"))?pick("#segSpd"):(down&&row1&&row2&&row1.contains(a))?nearestIn(row2,a):null;
   if(to){ e.preventDefault(); B.focus.set(to); }
 });
 // the play clock counts while the page is on screen
@@ -1942,7 +2024,7 @@ setInterval(()=>{
 if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
 
 // expose a few for inline handlers already set via window.__*
-window.__mono={get G(){ return G; },netWorth:netWorth,openPlayers:openPlayers};   // read-only view for the test harnesses (like __uno, __risk, __sc)
+window.__mono={get G(){ return G; },netWorth:netWorth,openPlayers:openPlayers,skill:()=>normSkill(SETUP&&SETUP.skill)};   // read-only view for the test harnesses (like __uno, __risk, __sc)
 })();
 </script>
 </body>
