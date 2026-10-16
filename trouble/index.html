@@ -37,7 +37,16 @@
   /* ---------- setup page (also the in-game Menu) ---------- */
   .tb-setup{display:flex; flex-direction:column; width:min(100%,40rem); margin:0 auto; padding:0 var(--gutter)}
   .tb-col{display:contents}
-  .tb-hero{order:1} .tb-sec--version{order:2} .tb-sec--players{order:3} .tb-sec--rules{order:4} .tb-sec--save{order:5} .tb-back{order:6} .tb-dock{order:7}
+  .tb-hero{order:1} .tb-sec--version{order:2} .tb-sec--players{order:3} .tb-sec--names{order:4} .tb-sec--rules{order:5} .tb-sec--save{order:6} .tb-back{order:7} .tb-dock{order:8}
+  /* step 10: each human's name (BGUI.names: one device-wide name for every game) and colour; the computers get the other colours */
+  .tb-colseg{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .tb-colseg > button{display:inline-flex; align-items:center; justify-content:center; gap:.35rem; min-width:0; padding-inline:.25rem}
+  .tb-colseg .tb-cdot{flex:none; width:.8rem; height:.8rem; border-radius:50%; box-shadow:0 0 0 2px rgba(8,10,21,.6)}
+  .tb-names-note{margin:0; font:var(--fw-body) var(--fs-xs)/1.35 var(--font-ui); color:var(--text-2)}
+  .tb-hopw{transform-box:fill-box}
+  /* the who-goes-first show fades out for 240 ms after it closes: it no longer takes taps then (a quick tap on the dome or the Menu
+     right after it was swallowed; ui/theme.css follow-up) */
+  .bg-fp:not(.is-open){pointer-events:none}
   /* hero art band on top, the title under it (README section 10, narrow hero); the art fades into the scene */
   .tb-hero{min-height:0; margin:0 calc(-1 * var(--gutter)); padding-top:46%; border-radius:0; background:transparent}
   .tb-hero .bg-hero__layer{bottom:auto; height:auto; aspect-ratio:16/9; border-radius:0; background-color:transparent;
@@ -138,6 +147,7 @@
   html:not([data-tv]) .tb-hints{display:none}
   /* a peg glides to its new place (transform only); it stays put under Reduce effects / reduced motion */
   .peg{cursor:default; transition:transform var(--tb-glide,.26s) cubic-bezier(.3,.7,.2,1)}
+  html.tb-hopping .peg{transition-duration:var(--tb-hop,.15s)}
   html[data-effects="reduced"] .peg, html[data-motion="reduce"] .peg, html[data-effects="reduced"] #board .dome, html[data-motion="reduce"] #board .dome{transition:none}
   @media (prefers-reduced-motion: reduce){ .peg, #board .dome{transition:none} }
   .peg.movable{cursor:pointer;}
@@ -161,10 +171,21 @@
   html[data-tv] .tb-sec--rules .bg-row{min-height:0; padding:.625rem .875rem}
   html[data-tv] #versions{gap:1.5rem}
   html[data-tv] .tb-sw{margin-top:1.5rem}
+  html[data-tv] .tb-sec--names{margin-top:1.5rem}
+  html[data-tv] .tb-colseg{gap:1.5rem; margin-top:1rem}   /* the picker stands 1.5rem+ under the name field: the ring never touches it */
+  /* TV: "Players on this TV" and "Computer players" side by side (short 1-4 pickers), so the Start dock stays on the first 1080p
+     screen with the Names section and the Computer skill row in the setup (step 10). The dock's top padding sits against the seat
+     preview (not a focus stop), so it can be smaller */
+  html[data-tv] .tb-sec--players .tb-card{grid-template-columns:minmax(0,1fr) minmax(0,1fr); column-gap:1.5rem}
+  html[data-tv] .tb-sec--players .tb-card > *{grid-column:1 / -1}
+  html[data-tv] .tb-sec--players .tb-card > :nth-child(1){grid-column:1; grid-row:1}
+  html[data-tv] .tb-sec--players .tb-card > :nth-child(2){grid-column:1; grid-row:2}
+  html[data-tv] .tb-sec--players .tb-card > :nth-child(3){grid-column:2; grid-row:1}
+  html[data-tv] .tb-sec--players .tb-card > :nth-child(4){grid-column:2; grid-row:2}
   /* column B on TV: the players, then the Start dock (on screen at 1080p, straight under the setup it confirms), then save and
      load and the way back. The dock's gap keeps the focused button's ring and lift clear of its neighbour */
   html[data-tv] .tb-col--b{display:flex; flex-direction:column}
-  html[data-tv] .tb-dock{order:4; position:static; gap:1.75rem; margin:0; padding:1.5rem 0 0; background:none}
+  html[data-tv] .tb-dock{order:4; position:static; gap:1.75rem; margin:0; padding:1rem 0 0; background:none}
   /* the save bar on TV: one layout for all six buttons (icon above the label, the date under it, centred) */
   html[data-tv] #svbar button{grid-template-columns:minmax(0,1fr); justify-items:center; align-content:center; row-gap:.3rem; padding:.625rem .5rem}
   html[data-tv] #svbar button .bg-ico{width:1.25em; height:1.25em}
@@ -215,6 +236,10 @@
         <div class="bg-versions" id="versions" role="radiogroup" aria-labelledby="versionHead"></div>
         <p class="tb-vdesc" id="versionDesc" aria-live="polite"></p>
       </section>
+      <section class="tb-sec tb-sec--names" aria-labelledby="namesHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="namesHead" data-stage-text="strong">Names and colours</h2></div>
+        <div class="bg-card tb-card" id="nameCard"><p class="tb-names-note" id="namesNote">Your name is kept on this device for every game. The computers take the other colours.</p></div>
+      </section>
       <section class="tb-sec tb-sec--rules" aria-labelledby="rulesHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="rulesHead" data-stage-text="strong">Rules</h2></div>
         <div class="bg-rows tb-rule">
@@ -230,7 +255,7 @@
       <section class="tb-sec tb-sec--players" aria-labelledby="playersHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="playersHead" data-stage-text="strong">Players</h2></div>
         <div class="bg-card tb-card">
-          <div class="tb-field"><span class="bg-row__title" id="humansTitle">Players on this phone</span><span class="bg-row__desc" id="humansDesc">You are Red. Pass the phone when it's your turn.</span></div>
+          <div class="tb-field"><span class="bg-row__title" id="humansTitle">Players on this phone</span><span class="bg-row__desc" id="humansDesc">Pick names and colours below. Pass the phone when it's your turn.</span></div>
           <div class="bg-seg" id="humanSeg" role="group" aria-label="Players on this phone">
             <button type="button" data-n="1" class="on" aria-pressed="true">1</button>
             <button type="button" data-n="2" aria-pressed="false">2</button>
@@ -327,10 +352,16 @@ const NAME   = {red:"Red", blue:"Blue", green:"Green", yellow:"Yellow"};   // th
 // a player's name: a computer draws a random American first name at every new game (names.js; saved with the game, so Continue keeps it);
 // a saved game from before the names has none stored and keeps its colour name. Humans keep their colour name.
 let cpuNames={};   // color -> the computer's name
-function pn(c){ return (!isHuman[c]&&cpuNames[c])||NAME[c]; }
-function pc(c){ return (!isHuman[c]&&cpuNames[c])?cpuNames[c]+" ("+NAME[c]+")":NAME[c]; }   // a name that also tells the colour, for a piece on the board
+// step 10: color -> a human's own name (the Your name field, BGUI.names; saved with the game). A save from before has none: its
+// humans keep the colour name and "(you)", as before
+let humanNames={}, nameUI=null;   // nameUI: the BGUI.names fields of the setup page
+function named(c){ return !!(isHuman[c]&&humanNames[c]&&humanNames[c]!=="You"); }
+function esc(t){ return String(t).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[ch]); }
+function pn(c){ return isHuman[c]?(humanNames[c]||NAME[c]):(cpuNames[c]||NAME[c]); }
+function pc(c){ return (named(c)||(!isHuman[c]&&cpuNames[c]))?pn(c)+" ("+NAME[c]+")":NAME[c]; }   // a name that also tells the colour, for a piece on the board
 function drawCpuNames(){
-  const cpus=players.filter(c=>!isHuman[c]), got=(window.Names&&Names.pick)?Names.pick(cpus.length,[]):[];
+  const cpus=players.filter(c=>!isHuman[c]), ex=Object.keys(humanNames).map(c=>humanNames[c]).concat(["You"]);
+  const got=(window.Names&&Names.pick)?Names.pick(cpus.length,ex):[];
   cpuNames={}; cpus.forEach((c,i)=>{ cpuNames[c]=got[i]||("CPU "+(i+1)); });
 }
 const SEAT   = {red:1, blue:2, green:3, yellow:4};   // ui/theme.css seat colours for the player strip and tokens
@@ -371,6 +402,7 @@ let extraRoll=false;
 let sixStreak=0;
 let gameOver=false;
 let busy=false;
+let tumbleIv=0, fpShow=false;   // step 10: fpShow = the who-goes-first show is up without its result yet (the turn badge waits)
 let gen=0;             // game generation: bumped by startGame/loadGame so an old game's timers can't act on a new one
 // every timer of the game goes through later(): while the Menu is up the computers wait ("Paused") and the timer re-arms itself, so
 // Resume continues exactly where the game was. A New game / Load bumps gen first, so it still cancels a held timer.
@@ -383,7 +415,7 @@ function speedFactor(){ return ({slow:1.75, fast:0.5})[window.bgGameSpeed] || 1 
 function setSpeed(v){
   gameSpeed=(v==="slow"||v==="fast")?v:"medium"; window.bgGameSpeed=gameSpeed;
   const f=speedFactor(), st=document.documentElement.style;
-  st.setProperty("--tb-glide",Math.max(120,Math.round(260*f))+"ms"); st.setProperty("--tb-dome",Math.max(120,Math.round(140*f))+"ms");   // animations never under 120 ms
+  st.setProperty("--tb-glide",Math.max(120,Math.round(260*f))+"ms"); st.setProperty("--tb-hop",Math.max(110,Math.round(150*f))+"ms"); st.setProperty("--tb-dome",Math.max(120,Math.round(140*f))+"ms");   // animations never under 120 ms
   document.querySelectorAll("#speedSeg button").forEach(x=>{ const on=x.dataset.speed===gameSpeed; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); });
 }
 function later(fn,ms){ ms=Math.round(ms*speedFactor()); const g=gen; return setTimeout(function tick(){ if(g!==gen) return; if(paused()){ barTitle(); setTimeout(tick,250); return; } fn(); },ms); }
@@ -393,7 +425,7 @@ const VERSIONS=[
   {id:"hasbro2022",name:"Hasbro 2022",tag:"Rules sheet F8254",desc:"The current Hasbro sheet: the youngest player goes first, a 6 earns only one extra pop per turn, and a 1 lets every other player bring a peg out.",base:{first:"youngest",oneExtra:true,roll1:true}}
 ];
 const RULEROWS=[
-  {k:"first",title:"Youngest player goes first",on:"The youngest player sits in Red and goes first; no first pop.",off:"Everyone pops once and the highest pop goes first. Ties pop again.",get:o=>o.first==="youngest",set:(o,v)=>{ o.first=v?"youngest":"highest"; }},
+  {k:"first",title:"Youngest player goes first",on:"The youngest player takes the Player 1 seat and goes first; no first pop.",off:"Everyone pops once and the highest pop goes first. Ties pop again.",get:o=>o.first==="youngest",set:(o,v)=>{ o.first=v?"youngest":"highest"; }},
   {k:"oneExtra",title:"One extra pop per turn",on:"A 6 pops again once; a 6 on that extra pop ends the turn after its move.",off:"Every 6 pops again. There is no limit on sixes in a row.",get:o=>o.oneExtra,set:(o,v)=>{ o.oneExtra=v; }},
   {k:"roll1",title:"A 1 helps the others",on:"A 1 cannot move. Every other player brings a peg from home onto their start space.",off:"A 1 moves a peg one space like any other pop.",get:o=>o.roll1,set:(o,v)=>{ o.roll1=v; }}
 ];
@@ -442,7 +474,7 @@ function onTV(){ return document.documentElement.hasAttribute("data-tv"); }
 function toast(msg,col){
   Sound.fromText(msg); toastEl.textContent=msg;   // #toast keeps the last message (the no-ui fallback, and what older tests read)
   const B=BG(), c=col||null;
-  if(B&&B.toast){ B.toast(msg, c?{seat:SEAT[c], token:pn(c).charAt(0), ms:2000}:{icon:"info", ms:2000}); return; }
+  if(B&&B.toast){ B.toast(msg, c?{seat:SEAT[c], token:pn(c).charAt(0).toUpperCase(), ms:2000}:{icon:"info", ms:2000}); return; }
   toastEl.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>toastEl.classList.remove("show"),1400);
 }
 
@@ -678,7 +710,7 @@ function renderPegs(){
     for(let k=0;k<4;k++){
       const key=c+k; keep.add(key);
       let g=pegEls[key], fresh=false;
-      if(!g){ g=document.createElementNS(svgns,"g"); g.setAttribute("data-k",k); g.setAttribute("data-c",c); g.innerHTML=pegMarkup(c,k); pegEls[key]=g; layer.appendChild(g); g.style.transition="none"; fresh=true; }
+      if(!g){ g=document.createElementNS(svgns,"g"); g.setAttribute("data-k",k); g.setAttribute("data-c",c); g.innerHTML='<g class="tb-hopw">'+pegMarkup(c,k)+'</g>'; pegEls[key]=g; layer.appendChild(g); g.style.transition="none"; fresh=true; }
       const d=pegs[c][k], [x,y]=(d===null)?homeSlotXY(c,k):pegXY(c,d);
       const mv=(c===cur && movSet.has(k));
       g.setAttribute("class","peg"+(mv?" movable":""));
@@ -779,7 +811,8 @@ function legalMovesFor(color,roll){
   return moves;
 }
 
-function applyMove(color,mv){ Sound.sfx("tick"); lastMv={c:color,k:mv.peg,from:mv.from,to:mv.to};
+function applyMove(color,mv){ Sound.sfx("tick"); landMove(color,mv); }
+function landMove(color,mv){ lastMv={c:color,k:mv.peg,from:mv.from,to:mv.to};
   // capture?
   if(mv.to<=27){
     const occ=occupantAt(color,mv.to);
@@ -792,6 +825,31 @@ function applyMove(color,mv){ Sound.sfx("tick"); lastMv={c:color,k:mv.peg,from:m
   pegs[color][mv.peg]=mv.to;
 }
 
+// step 10 (the CEO's rule): a peg hops through EVERY space it passes, one hop per space at the Game speed pace (STEP_MS x speed): it
+// glides one space (--tb-hop), lifts (BGUI.hop on its plain .tb-hopw wrapper) and rests a beat before the next. A bump plays after the
+// last hop (a beat later the bumped peg goes home). A peg coming out of home makes its one move with the usual glide. Under Reduce
+// effects / reduced motion there is no lift or glide, but the peg still steps space by space.
+const STEP_MS=240;
+function hopPeg(c,k){
+  const B=BG(), g=pegEls[c+k], w=g&&g.querySelector(".tb-hopw");
+  if(B&&B.hop&&w) B.hop(w,{ms:Math.max(120,Math.round(170*speedFactor())),lift:7});
+}
+function moveAnimated(color,mv,done){
+  const k=mv.peg, root=document.documentElement, path=[];
+  if(mv.from===null) path.push(mv.to); else for(let d=mv.from+1; d<=mv.to; d++) path.push(d);
+  const occ=mv.to<=27?occupantAt(color,mv.to):null, bump=!!(occ&&occ.color!==color);
+  let i=0;
+  const land=()=>{ root.classList.remove("tb-hopping"); pegs[color][k]=mv.from; landMove(color,mv); renderPegs(); done(); };
+  const step=()=>{
+    root.classList.toggle("tb-hopping",mv.from!==null);
+    pegs[color][k]=path[i++]; Sound.sfx("tick"); renderPegs(); hopPeg(color,k);
+    if(i<path.length) later(step,STEP_MS);
+    else if(bump) later(land,STEP_MS);   // the bump comes after the last hop has landed
+    else land();
+  };
+  step();
+}
+
 function hasWon(color){ return pegs[color].every(d=>d!==null && d>=28); }
 
 // ---- flow ----
@@ -801,13 +859,13 @@ function curColor(){ return players[turn]; }
 function showTurn(){
   const c=curColor();
   const who=isHuman[c]?"Your turn":pn(c)+" (CPU)";
-  setStatus(`<span class="dot" style="background:${CSSCOL[c]}"></span> ${isHuman[c]?"<b>Your turn</b> — pop the die":who+"…"}`);
+  setStatus(`<span class="dot" style="background:${CSSCOL[c]}"></span> ${isHuman[c]?"<b>Your turn"+(named(c)?", "+esc(pn(c)):"")+"</b> — pop the die":esc(who)+"…"}`);
 }
 
 let armed=false, lastSnap=null;
 function takeSnap(){
   if(!armed||gameOver) return;
-  lastSnap=JSON.parse(JSON.stringify({players:players,isHuman:isHuman,cpuNames:cpuNames,pegs:pegs,turn:turn,sixStreak:sixStreak,ver:gameVer,rules:rules,humanCount:humanCount,cpuCount:cpuCount,speed:gameSpeed,skill:cpuSkill,stats:{turns:stats.turns,bumps:stats.bumps,ms:playMs()}}));
+  lastSnap=JSON.parse(JSON.stringify({players:players,isHuman:isHuman,cpuNames:cpuNames,humanNames:humanNames,pegs:pegs,turn:turn,sixStreak:sixStreak,ver:gameVer,rules:rules,humanCount:humanCount,cpuCount:cpuCount,speed:gameSpeed,skill:cpuSkill,stats:{turns:stats.turns,bumps:stats.bumps,ms:playMs()}}));
   Saves.auto("trouble",lastSnap);
 }
 function beginTurn(){
@@ -816,6 +874,7 @@ function beginTurn(){
   stats.turns++;
   const c=curColor();
   die=0; awaitingMove=false; busy=!isHuman[c];   // a human's turn always starts with the dome tappable
+  document.documentElement.classList.remove("tb-hopping");
   renderPegs();
   showTurn();
   passBtn.style.visibility="hidden";
@@ -848,7 +907,7 @@ function resolveOne(color){
     const k=pegs[c].indexOf(null); if(k<0) continue;
     const occ=occupantAt(c,0); if(occ && occ.color===c) continue;
     if(occ){ pegs[occ.color][occ.peg]=null; stats.bumps++; }
-    pegs[c][k]=0; out.push(pn(c));
+    pegs[c][k]=0; out.push(esc(pn(c)));
   }
   Sound.sfx("tick");
   setStatus(`<span class="dot" style="background:${CSSCOL[color]}"></span> Rolled <b>1</b> — no move`+(out.length?"; "+out.join(", ")+(out.length===1?" brings":" bring")+" a peg out":"; nobody can bring a peg out"));
@@ -872,7 +931,7 @@ function afterRollResolve(color){
     setStatus(`<span class="dot" style="background:${CSSCOL[color]}"></span> Rolled <b>${die}</b> — tap a highlighted peg`);
     renderPegs();
   }else{
-    setStatus(`<span class="dot" style="background:${CSSCOL[color]}"></span> ${pn(color)} rolled <b>${die}</b>…`);
+    setStatus(`<span class="dot" style="background:${CSSCOL[color]}"></span> ${esc(pn(color))} rolled <b>${die}</b>…`);
     renderPegs();
     later(()=>aiPickMove(color,moves), 1300);   // hold on the rolled die so you can read it
   }
@@ -891,9 +950,7 @@ function humanMove(k){
   if(!mv) return;
   busy=true;
   awaitingMove=false;
-  applyMove(c,mv);
-  renderPegs();
-  finishMove(c);
+  moveAnimated(c,mv,()=>finishMove(c));
 }
 
 function finishMove(color){
@@ -902,7 +959,7 @@ function finishMove(color){
     if(window.TroubleBrain) { try{ TroubleBrain.finish({brains:aiBrains,winner:color,skill:cpuSkill}); }catch(e){} }
     Saves.del("trouble","auto"); lastSnap=null;   // a finished game is not offered as "Continue last game"
     renderPegs();
-    setStatus(`<span class="dot" style="background:${CSSCOL[color]}"></span> <b>${isHuman[color]?"You win!":pn(color)+" wins"}</b>`);
+    setStatus(`<span class="dot" style="background:${CSSCOL[color]}"></span> <b>${isHuman[color]&&!named(color)?"You win!":esc(pn(color))+" wins"}</b>`);
     popBtn.disabled=true;
     return;
   }
@@ -923,7 +980,7 @@ function rollAgain(color){
 }
 
 function showTurnRollAgain(c){
-  setStatus(`<span class="dot" style="background:${CSSCOL[c]}"></span> Rolled a 6 — ${isHuman[c]?"<b>roll again!</b>":pn(c)+" rolls again…"}`);
+  setStatus(`<span class="dot" style="background:${CSSCOL[c]}"></span> Rolled a 6 — ${isHuman[c]?"<b>roll again!</b>":esc(pn(c))+" rolls again…"}`);
 }
 
 // ---- AI ----
@@ -937,9 +994,7 @@ function aiRoll(){
 }
 function aiPickMove(color,moves){
   const best=pickComputerMove(color,moves);
-  applyMove(color,best);
-  renderPegs();
-  finishMove(color);
+  moveAnimated(color,best,()=>finishMove(color));
 }
 // the computer's choice (step 10): the brain (brain.js) decides; if it is missing, returns null or throws, the old scorer below decides
 let cpuSkill="normal", aiBrains={};   // skill: easy | normal | hard (missing = normal); one brain per computer, per game
@@ -1000,9 +1055,9 @@ function metaFor(c){
 function chipOf(c){ return legendEl.querySelector('[data-color="'+c+'"]'); }
 function buildStrip(){
   const B=BG(), cpu=B&&B.icon?B.icon("cpu"):"";
-  legendEl.innerHTML=players.map(c=>`<span class="bg-player" data-seat="${SEAT[c]}" data-color="${c}"><span class="bg-token" aria-hidden="true">${pn(c).charAt(0)}</span>`+
+  legendEl.innerHTML=players.map(c=>`<span class="bg-player" data-seat="${SEAT[c]}" data-color="${c}"><span class="bg-token" aria-hidden="true">${esc(pn(c).charAt(0).toUpperCase())}</span>`+
     (isHuman[c]?"":`<span class="bg-player__cpu" aria-hidden="true">${cpu}</span>`)+
-    `<span class="bg-player__txt"><span class="bg-player__name">${pn(c)}${isHuman[c]?" (you)":`<span class="bg-sr"> (CPU)</span>`}</span><span class="bg-player__meta"></span></span></span>`).join("");
+    `<span class="bg-player__txt"><span class="bg-player__name">${esc(pn(c))}${isHuman[c]?(named(c)?"":" (you)"):`<span class="bg-sr"> (CPU)</span>`}</span><span class="bg-player__meta"></span></span></span>`).join("");
   ui.strip=players.map(c=>c+(isHuman[c]?"H":"C")).join(); ui.meta={}; ui.turnKey="";
 }
 function setTurnChip(c){
@@ -1027,7 +1082,7 @@ function uiSync(){
   if(sk!==ui.strip||legendEl.children.length!==players.length) buildStrip();
   for(const c of players){ const m=metaFor(c); if(ui.meta[c]!==m){ ui.meta[c]=m; const el=chipOf(c); if(el) el.querySelector(".bg-player__meta").textContent=m; } }
   const cur=players[turn], tk=gen+":"+cur+":"+sk;
-  if(cur&&tk!==ui.turnKey){ ui.turnKey=tk; setTurnChip(cur); if(CSSCOL[cur]) pulseEl.style.color=CSSCOL[cur]; }
+  if(cur&&!fpShow&&tk!==ui.turnKey){ ui.turnKey=tk; setTurnChip(cur); if(CSSCOL[cur]) pulseEl.style.color=CSSCOL[cur]; }
   // the die in the status line mirrors the dome
   if(die!==ui.die){ ui.die=die; const B=BG();
     if(die>0){ if(B&&B.dice) B.dice.render(statusDie,die); else statusDie.textContent=String(die); statusDie.hidden=false; }
@@ -1079,7 +1134,7 @@ function moveText(c,mv){
 function fillMoveSheet(){
   const B=BG(), c=players[turn], moves=legalMovesFor(c,die), best=moves.length>1?bestMoveOf(c,moves):null;
   if(B&&B.dice) B.dice.render("#sheetDie",die);
-  document.getElementById("moveEyebrow").textContent=(humanCount>1?pn(c)+" popped a ":"You popped a ")+die;
+  document.getElementById("moveEyebrow").textContent=(humanCount>1||named(c)?pn(c)+" popped a ":"You popped a ")+die;
   document.getElementById("moveTitle").textContent=moves.length>1?"Choose your move":"Your move";
   document.getElementById("moveSub").textContent=(best?"The best move is marked. ":"")+(sixAgain()?"A 6 pops again after this move.":die===6?"That was your extra pop: the turn ends after this move.":onTV()?"Pick a move and press OK.":"You can also tap a highlighted peg on the board.");
   const chev=B&&B.icon?B.icon("chevron"):"";
@@ -1132,7 +1187,7 @@ function openWin(){
   const c=players[turn], human=!!isHuman[c], ms=playMs(), min=Math.round(ms/60000);
   document.getElementById("winEyebrow").textContent="Game over · "+(min<1?"under a minute":min===1?"1 minute":min+" minutes");
   document.getElementById("winTitle").textContent=human?"Victory":pn(c)+" wins";
-  document.getElementById("winSub").innerHTML=(human&&humanCount===1?"<b>You</b> got":"<b>"+pn(c)+"</b> got")+" all four pegs into the finish first.";
+  document.getElementById("winSub").innerHTML=(human&&humanCount===1&&!named(c)?"<b>You</b> got":"<b>"+esc(pn(c))+"</b> got")+" all four pegs into the finish first.";
   document.getElementById("winStats").innerHTML=`<li class="bg-stat"><b>${stats.turns}</b><span>${stats.turns===1?"turn":"turns"}</span></li>`+
     `<li class="bg-stat"><b>${stats.bumps}</b><span>${stats.bumps===1?"bump":"bumps"}</span></li><li class="bg-stat"><b>${fmtTime(ms)}</b><span>time</span></li>`;
   closeMoveSheet();
@@ -1182,7 +1237,7 @@ function menuResult(){
   if(resumeBtn.style.display!=="none"){
     ui.result=true;
     document.getElementById("resumeLabel").textContent="See the result";
-    document.getElementById("resumeSub").textContent=(isHuman[c]&&humanCount===1)?"You win":pn(c)+" wins";
+    document.getElementById("resumeSub").textContent=(isHuman[c]&&humanCount===1&&!named(c))?"You win":pn(c)+" wins";
   }
   saveBar.refresh(); syncStart(); barTitle();
 }
@@ -1190,11 +1245,23 @@ function menuResult(){
 function deviceCopy(){
   const tv=onTV(), t=tv?"Players on this TV":"Players on this phone";
   document.getElementById("humansTitle").textContent=t;
-  document.getElementById("humansDesc").textContent="You are Red. Pass the "+(tv?"remote":"phone")+" when it's your turn.";
+  document.getElementById("humansDesc").textContent=tv?"Pass the remote when it's your turn.":"Pick names and colours below. Pass the phone when it's your turn.";
   document.getElementById("humanSeg").setAttribute("aria-label",t);
 }
+// step 10: each human picks a colour (Player 1 first; settings + save). The computers take the next colours clockwise from Player 1.
+// Until a colour is picked the classic seats stay (Red, Green, Yellow, Blue in that order). Turns go clockwise round the board.
+const ORDER=["red","green","yellow","blue"];   // the seats clockwise (START 0, 7, 14, 21): the turn order
+let humanColors=null;   // null = the classic seats until a colour is picked
+function hcol(){ return humanColors||ORDER; }
+function normColors(a){ const out=[]; (Array.isArray(a)?a:[]).forEach(c=>{ if(ORDER.includes(c)&&!out.includes(c)) out.push(c); }); ORDER.forEach(c=>{ if(!out.includes(c)) out.push(c); }); return out; }
+function seatsFor(total,humans){
+  const h=Math.max(1,Math.min(humans==null?humanCount:humans,total)), hc=hcol().slice(0,h), s0=ORDER.indexOf(hc[0]);
+  const cols=hc.concat([1,2,3].map(k=>ORDER[(s0+k)%4]).filter(c=>!hc.includes(c)).slice(0,total-h));
+  return ORDER.filter(c=>cols.includes(c));
+}
+function humanList(){ const B=BG(); return (nameUI&&B&&B.names)?nameUI.names():null; }
 function syncStart(){
-  const total=Math.min(4,Math.max(2,humanCount+cpuCount)), cols=["red","green","yellow","blue"].slice(0,total), tv=onTV();
+  const total=Math.min(4,Math.max(2,humanCount+cpuCount)), cols=seatsFor(total), tv=onTV();
   const resumable=armed&&players.length>0&&!gameOver;
   // mid-game the dock leads with Resume (gold) and keeps "New game" beside it as the secondary
   startLabel.textContent=resumable?"New game":"Start Trouble";
@@ -1202,9 +1269,10 @@ function syncStart(){
   dockEl.classList.toggle("has-resume",resumeBtn.style.display!=="none");   // two buttons side by side: equal widths
   startBtn.classList.toggle("bg-btn--primary",!resumable); startBtn.classList.toggle("bg-btn--secondary",resumable);
   resumeBtn.classList.toggle("bg-btn--primary",resumable); resumeBtn.classList.toggle("bg-btn--secondary",!resumable);
-  startSub.textContent=(setup.version==="classic"?"":versionOf(setup.version).name+" · ")+total+" players · "+(humanCount===1?"you":humanCount+(tv?" on this TV":" on this phone"))+(cpuCount?" + "+cpuCount+(cpuCount===1?" computer":" computers"):"");
+  paintNames(); const hn=humanList(), hc=hcol().slice(0,humanCount);
+  startSub.textContent=(setup.version==="classic"?"":versionOf(setup.version).name+" · ")+total+" players · "+(humanCount===1?(hn&&hn[0]!=="You"?hn[0]:"you"):humanCount+(tv?" on this TV":" on this phone"))+(cpuCount?" + "+cpuCount+(cpuCount===1?" computer":" computers"):"");
   seatPreview.innerHTML=`<span class="tb-table__tokens">`+cols.map(c=>`<span class="bg-token" data-seat="${SEAT[c]}" aria-hidden="true">${NAME[c].charAt(0)}</span>`).join("")+`</span>`+
-    `<span class="tb-table__txt"><b>${total} at the table</b>`+cols.map((c,i)=>NAME[c]+(i<humanCount?(humanCount===1?" (you)":tv?" (player)":" (phone)"):" (CPU)")).join(", ")+`</span>`;
+    `<span class="tb-table__txt"><b>${total} at the table</b>`+cols.map(c=>{ const hi=hc.indexOf(c); return NAME[c]+(hi>=0?(hn?" ("+esc(hn[hi])+")":humanCount===1?" (you)":tv?" (player)":" (phone)"):" (CPU)"); }).join(", ")+`</span>`;
 }
 
 // saves.js bar in Luxe: its emoji labels become line icons (ids, data-a and every behaviour stay saves.js's own)
@@ -1261,7 +1329,8 @@ document.addEventListener("keydown",e=>{
   if((!down&&!up)||!a||!a.closest) return;
   const pick=sel=>document.querySelector(sel+" button.on:not([disabled])")||document.querySelector(sel+" button:not([disabled])");
   const rows=document.querySelectorAll("#svbar .r"), row1=rows[0], row2=rows[1];
-  const to=(down&&a.closest("#humanSeg"))?pick("#cpuSeg"):(up&&a.closest("#cpuSeg"))?pick("#humanSeg"):(down&&row1&&row2&&row1.contains(a))?nearestIn(row2,a):null;
+  const stacked=document.getElementById("cpuSeg").getBoundingClientRect().top>=document.getElementById("humanSeg").getBoundingClientRect().bottom;
+  const to=(stacked&&down&&a.closest("#humanSeg"))?pick("#cpuSeg"):(stacked&&up&&a.closest("#cpuSeg"))?pick("#humanSeg"):(down&&row1&&row2&&row1.contains(a))?nearestIn(row2,a):null;
   if(to){ e.preventDefault(); B.focus.set(to); }
 });
 // ---- Version picker and the three rules a Version sets (each can be changed: the changed rule is tagged House) ----
@@ -1292,13 +1361,13 @@ function drawRuleRows(){
 drawCpuSeg();
 drawVersions();
 const saveBar=Saves.bar({game:"trouble",el:document.getElementById("svbar"),
-  getSettings:()=>({humans:humanCount,cpus:cpuCount,version:setup.version,over:setup.over,speed:gameSpeed,skill:cpuSkill}),
-  applySettings:s=>{ humanCount=s.humans||1; cpuCount=s.cpus!=null?s.cpus:1; setup={version:versionOf(s.version).id,over:(s.over&&typeof s.over==="object")?s.over:{}}; setSpeed(s.speed); setSkill(normSkill(s.skill)); setHumanSeg(); drawCpuSeg(); drawVersions(); },
-  standard:()=>{ humanCount=1; cpuCount=1; setup={version:"classic",over:{}}; setSpeed("medium"); setSkill("normal"); setHumanSeg(); drawCpuSeg(); drawVersions(); },
+  getSettings:()=>Object.assign({humans:humanCount,cpus:cpuCount,version:setup.version,over:setup.over,speed:gameSpeed,skill:cpuSkill},humanColors?{colors:humanColors.slice()}:{}),
+  applySettings:s=>{ humanCount=s.humans||1; cpuCount=s.cpus!=null?s.cpus:1; setup={version:versionOf(s.version).id,over:(s.over&&typeof s.over==="object")?s.over:{}}; setSpeed(s.speed); setSkill(normSkill(s.skill)); humanColors=Array.isArray(s.colors)?normColors(s.colors):null; setHumanSeg(); drawCpuSeg(); drawVersions(); },
+  standard:()=>{ humanCount=1; cpuCount=1; setup={version:"classic",over:{}}; setSpeed("medium"); setSkill("normal"); humanColors=null; setHumanSeg(); drawCpuSeg(); drawVersions(); },
   getSnapshot:()=>(armed&&!gameOver)?lastSnap:null,
   loadSnapshot:d=>{ Sound.skip(); loadGame(d); showSetup(false); }});
 function loadGame(d){
-  players=d.players; isHuman=d.isHuman; cpuNames=(d.cpuNames&&typeof d.cpuNames==="object")?d.cpuNames:{}; pegs=d.pegs; turn=d.turn; sixStreak=d.sixStreak||0; humanCount=d.humanCount||humanCount; cpuCount=d.cpuCount!=null?d.cpuCount:cpuCount;
+  players=d.players; isHuman=d.isHuman; cpuNames=(d.cpuNames&&typeof d.cpuNames==="object")?d.cpuNames:{}; humanNames=(d.humanNames&&typeof d.humanNames==="object")?d.humanNames:{}; pegs=d.pegs; turn=d.turn; sixStreak=d.sixStreak||0; humanCount=d.humanCount||humanCount; cpuCount=d.cpuCount!=null?d.cpuCount:cpuCount;
   setSpeed(d.speed);   // optional field: saves from before Game speed play at Medium
   setSkill(d.skill); aiBrains={};   // optional field: saves from before the brain are Normal; a loaded game starts its brains fresh
   gameVer=versionOf(d.ver).id; rules=rulesFor(gameVer,(d.rules&&typeof d.rules==="object")?d.rules:{});   // saves from before the Versions are Classic
@@ -1331,6 +1400,22 @@ menuBtn.addEventListener("click",()=>{
 });
 
 // official start: everyone pops once and the highest pop goes first; players tied for highest pop again
+// the dome tumbles behind the who-goes-first show (the look of the pop; the show's lanes and the dice on the trays carry the values)
+// the dome tumble (tumbleIv, declared with the state) stops when the first pop is shown (it never writes the die after that)
+function domeTumble(){
+  clearInterval(tumbleIv);
+  const g=gen, dm=svg.querySelector(".dome"); Sound.sfx("dice");
+  if(dm){ dm.classList.add("is-press"); setTimeout(()=>dm.classList.remove("is-press"),Math.max(120,Math.round(150*speedFactor()))); }
+  let n=0; const iv=tumbleIv=setInterval(()=>{
+    if(g!==gen||++n>=8){ clearInterval(iv); return; }
+    die=1+Math.floor(Math.random()*6); tilt=(Math.random()-.5)*80; jig=[(Math.random()-.5)*14,(Math.random()-.5)*14]; renderDome();
+  },Math.round(95*speedFactor()));
+}
+// a colour's home tray centre in viewport pixels (the who-goes-first show puts that player's die there)
+function padPoint(c){
+  const M=svg.getScreenCTM&&svg.getScreenCTM(); if(!M||!PADC[c]) return null;
+  const p=svg.createSVGPoint(); p.x=PADC[c][0]; p.y=PADC[c][1]; const q=p.matrixTransform(M); return {x:q.x,y:q.y};
+}
 function rollOffFirst(cols){
   let tied=cols.slice(); const rounds=[];
   while(tied.length>1){
@@ -1343,12 +1428,15 @@ function rollOffFirst(cols){
 }
 
 function startGame(humans, cpus, rollOff){
-  // total seats = humans + cpus (2..4). First `humans` are human, rest are CPU.
-  const all=["red","green","yellow","blue"];
+  // total seats = humans + cpus (2..4): the humans sit in their picked colours (Player 1 first; the classic seats until one is
+  // picked), the computers in the next colours clockwise; turns go round the board (ORDER)
   let total=Math.min(4, Math.max(2, humans+(cpus||0)));
-  players = all.slice(0, total);
+  fpShow=false;
+  players = seatsFor(total, humans);
+  const hc=hcol().slice(0,humans);
   isHuman={}; pegs={};
-  players.forEach((c,i)=>{ isHuman[c]= i<humans; pegs[c]=[null,null,null,null]; });
+  players.forEach(c=>{ isHuman[c]=hc.includes(c); pegs[c]=[null,null,null,null]; });
+  humanNames={}; const hn=rollOff?humanList():null; if(hn) hc.forEach((c,i)=>{ if(hn[i]&&hn[i]!=="You") humanNames[c]=hn[i]; });
   drawCpuNames();   // a fresh random name for each computer, at every new game and every Play again
   turn=0; die=0; gameOver=false; busy=false; awaitingMove=false; sixStreak=0;
   aiBrains={};   // cpuSkill is the Menu's choice (kept across New game, like Game speed)
@@ -1358,9 +1446,10 @@ function startGame(humans, cpus, rollOff){
   // player strip
   buildStrip();
   if(rollOff && rules.first==="youngest"){
-    // Hasbro 2022: the youngest player goes first (Red, the first seat); nobody pops for it
+    // Hasbro 2022: the youngest player goes first (Player 1's seat: Red until a colour is picked); nobody pops for it
+    turn=Math.max(0,players.indexOf(hc[0]));
     buildBoard(); takeSnap();
-    setStatus(`<span class="dot" style="background:${CSSCOL[players[0]]}"></span> <b>${pn(players[0])} goes first</b> — the youngest player`);
+    setStatus(`<span class="dot" style="background:${CSSCOL[players[turn]]}"></span> <b>${esc(pn(players[turn]))} goes first</b> — the youngest player`);
     rollOffChips({rounds:[]});
     later(beginTurn, 1200);
     return;
@@ -1369,14 +1458,35 @@ function startGame(humans, cpus, rollOff){
     // a new game: pop for first player (Continue / Load keep the saved turn)
     const ro=rollOffFirst(players), last=ro.rounds[ro.rounds.length-1];
     turn=players.indexOf(ro.first);
-    die=last.find(x=>x[0]===ro.first)[1]; busy=true;   // the dome shows the winning pop; nobody can pop yet
-    buildBoard(); takeSnap(); Sound.sfx("dice");
-    // every pop goes on the players' chips; the status line keeps the whole text for screen readers (and tests) but shows
-    // only "First pop (after a tie) - X goes first", so it never wraps past its reserved lines and the board does not jump
-    setStatus(`<span class="dot" style="background:${CSSCOL[ro.first]}"></span> First pop`+(ro.rounds.length>1?`<span class="tb-tie" aria-hidden="true"></span>`:"")+
-      `<span class="bg-sr">: `+ro.rounds.map(r=>r.map(x=>pn(x[0])+" "+x[1]).join(", ")).join(" · tie, pop again: ")+`</span> — <b>${pn(ro.first)} goes first</b>`);
-    rollOffChips(ro);
-    later(beginTurn, 1800);
+    const firstPop=()=>{
+      clearInterval(tumbleIv); die=last.find(x=>x[0]===ro.first)[1]; tilt=0; jig=[0,0]; renderDome();   // the dome shows the winning pop; nobody can pop yet
+      // every pop goes on the players' chips; the status line keeps the whole text for screen readers (and tests) but shows
+      // only "First pop (after a tie) - X goes first", so it never wraps past its reserved lines and the board does not jump
+      setStatus(`<span class="dot" style="background:${CSSCOL[ro.first]}"></span> First pop`+(ro.rounds.length>1?`<span class="tb-tie" aria-hidden="true"></span>`:"")+
+        `<span class="bg-sr">: `+ro.rounds.map(r=>r.map(x=>esc(pn(x[0]))+" "+x[1]).join(", ")).join(" · tie, pop again: ")+`</span> — <b>${esc(pn(ro.first))} goes first</b>`);
+      rollOffChips(ro);
+    };
+    busy=true; buildBoard(); takeSnap();
+    const B=BG(), fp=B&&B.firstPlayer;
+    if(!fp){ firstPop(); Sound.sfx("dice"); later(beginTurn, 1800); return; }   // without ui.js: the old start
+    // step 10, the who-goes-first show: everyone pops the dome at once and the dice tumble; the highest pop goes first and a tie
+    // pops again (the rounds are ro's: the game is already set up with its result). Game speed paces it; a tap / OK / Back skips
+    // it; Reduce effects gives the short version. The first turn starts when it closes.
+    const g=gen; fpShow=true; renderPegs(); setStatus(`<span class="dot" style="background:${CSSCOL[ro.first]}"></span> Popping for the first turn…`);
+    const fpRounds=ro.rounds.map(r=>{ const vals={}, hi=Math.max(...r.map(x=>x[1]));
+      r.forEach(x=>{ vals[players.indexOf(x[0])]=x[1]; });
+      return {who:r.map(x=>players.indexOf(x[0])),vals:vals,top:r.filter(x=>x[1]===hi).map(x=>players.indexOf(x[0]))}; });
+    setTimeout(()=>{ if(g!==gen) return;   // after showSetup(false): the table is on screen under the show
+      domeTumble();
+      fp({mode:"die",layout:"peek",eyebrow:"Who goes first?",title:"Everyone pops the dome",
+        players:players.map(c=>({name:pn(c),seat:SEAT[c],token:pn(c).charAt(0).toUpperCase()})),rounds:fpRounds,winner:turn,
+        pins:i=>padPoint(players[i]),
+        onLand:(i,v,r)=>{ if(r>0&&i===fpRounds[r].who[0]) domeTumble(); },   // a tie: the tied players pop again
+        onWinner:()=>{ if(g!==gen) return; fpShow=false; firstPop(); uiSync(); },
+        result:w=>({title:pn(players[w])+" goes first",sub:"The highest pop goes first; play goes clockwise."}),
+        focus:()=>onTV()&&isHuman[players[turn]]?domeBtn:null   // TV: the D-pad lands on the main action
+      }).then(()=>{ if(g!==gen||gameOver) return; fpShow=false; firstPop(); beginTurn(); });
+    },0);
     return;
   }
   buildBoard();
@@ -1390,8 +1500,38 @@ document.addEventListener("visibilitychange",()=>{ if(document.hidden) clockOff(
 try{ const mq=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)"); if(mq&&mq.addEventListener) mq.addEventListener("change",pulseRefresh); }catch(e){}
 // ui/ui.js is deferred: it arrives after this script. Then the icons go in, the strip gets its CPU badges and turn ring,
 // and the Luxe toasts take over from the fallbacks.
+// the names and colours card (ui.js is deferred: it is drawn on DOMContentLoaded; nameUI is declared with humanNames)
+function colorSegHTML(i){ return '<div class="bg-seg tb-colseg" role="group" aria-label="'+(i===0&&humanCount===1?"Your colour":"Player "+(i+1)+" colour")+'" data-who="'+i+'">'+ORDER.map(c=>'<button type="button" data-col="'+c+'" aria-pressed="false"><span class="tb-cdot" style="background:'+CSSCOL[c]+'" aria-hidden="true"></span>'+NAME[c]+'</button>').join("")+'</div>'; }
+function paintNames(){   // called by syncStart: the fields follow the player count, the pickers and tokens the colours
+  if(!nameUI) return;
+  nameUI.count(humanCount);
+  const hc=hcol();
+  document.querySelectorAll("#nameCard .tb-colseg").forEach(seg=>{
+    const i=+seg.getAttribute("data-who"), mine=hc[i];
+    seg.setAttribute("aria-label",i===0&&humanCount===1?"Your colour":"Player "+(i+1)+" colour");
+    seg.querySelectorAll("button").forEach(b=>{ const on=b.dataset.col===mine; b.classList.toggle("on",on); b.setAttribute("aria-pressed",String(on)); });
+  });
+}
+function setHumanColor(i,c){
+  const a=hcol().slice(), j=a.indexOf(c);
+  if(j===i) return;
+  a[j]=a[i]; a[i]=c; humanColors=a;   // a colour another player holds: the two swap
+  syncStart();
+}
+function mountNames(){
+  const B=BG(); if(!B||!B.names||nameUI) return;
+  nameUI=B.names.mount("#nameCard",{count:humanCount,seat:i=>SEAT[hcol()[i]],extra:i=>colorSegHTML(i),onChange:()=>syncStart(),
+    label:(i,n)=>i===0?(n>1?"Player 1 name":"Your name"):"Player "+(i+1)+" name"});
+  document.getElementById("nameCard").addEventListener("click",e=>{
+    const b=e.target.closest&&e.target.closest(".tb-colseg button[data-col]"); if(!b) return;
+    setHumanColor(+b.closest(".tb-colseg").getAttribute("data-who"),b.dataset.col);
+    if(window.Sound&&Sound.sfx) Sound.sfx("tap");
+  });
+  syncStart();
+}
 document.addEventListener("DOMContentLoaded",()=>{
   const B=BG();
+  mountNames();
   if(B&&B.back) B.back.on(backStep);
   else window.__tvBack=()=>{   // no ui.js: the same steps, without the Luxe layers
     if(window.Sound&&Sound.panelOpen&&Sound.panelOpen()){ Sound.closePanel(); return "panel"; }
