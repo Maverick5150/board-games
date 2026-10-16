@@ -307,8 +307,9 @@ function rungs(foot){
 
 /* ---------- a small picture of a board for the picker (flat fills, no numbers: the same layout and colours as the board itself) ---------- */
 var PREV={};
-function preview(bd){
-  if(PREV[bd]) return PREV[bd];
+function preview(bd,nums){
+  var key=bd+(nums?"#n":"");
+  if(PREV[key]) return PREV[key];
   var e=E(), shuffle=bd==="shuffle", gm=geom(bd), P=PAL[bd]||PAL.vic, k=gm.k, L=shuffle?{12:47,31:68,58:92,97:63,74:28,43:8}:(e&&e.BOARDS[bd]?e.BOARDS[bd].L:{}), out="", n, t, kk;
   for(n in gm.T){ n=+n; t=gm.T[n];
     var fill=n===gm.goal?"#e2bd72":gm.top&&n>=gm.top?"#8c6018":(t.odd?P.b2:P.a2);
@@ -324,7 +325,28 @@ function preview(bd){
     } else { var sk=SKINS[(a+b)%SKINS.length], s=(hash(a+":"+b)%2?1:-1)*Math.min(70*k,len*.25), mx=(A.x+B.x)/2+nx*s, my=(A.y+B.y)/2+ny*s;
       out+='<path d="M'+f1(A.x)+" "+f1(A.y)+"Q"+f1(mx)+" "+f1(my)+" "+f1(B.x)+" "+f1(B.y)+'" fill="none" stroke="'+sk[0]+'" stroke-width="'+f1(22*k)+'" stroke-linecap="round"'+(shuffle?' stroke-dasharray="'+f1(30*k)+" "+f1(20*k)+'"':"")+'/><circle cx="'+f1(A.x)+'" cy="'+f1(A.y)+'" r="'+f1(22*k)+'" fill="'+sk[0]+'" stroke="#0b0a12" stroke-width="4"/>'; } }
   if(gm.steps) for(kk in gm.steps){ var f=pc(+kk); out+='<circle cx="'+f1(f.x)+'" cy="'+f1(f.y)+'" r="'+f1(12*k)+'" fill="#f0d48a"/>'; }
-  return (PREV[bd]='<svg class="sn-prevsvg" viewBox="0 0 1000 1000" aria-hidden="true" focusable="false">'+out+"</svg>");
+  if(nums){ var nt="";   // the big preview: every square's number (sized by previewFit to the text floor; top-left of a square, centred on a ring)
+    for(n in gm.T){ n=+n; t=gm.T[n];
+      if(t.kind==="rect") nt+='<text class="sn-num'+(n===gm.goal?" is-100":"")+'" x="'+f1(t.x+6*k)+'" y="'+f1(t.y+5*k)+'" dominant-baseline="hanging">'+n+"</text>";
+      else nt+='<text class="sn-num is-mid'+(n===gm.goal?" is-100":"")+'" x="'+f1(t.num.x)+'" y="'+f1(t.kind==="disc"?500:t.num.y)+'" dominant-baseline="central">'+n+"</text>"; }
+    out+='<g class="sn-pnums" font-size="'+Math.round(24*k)+'">'+nt+"</g>"; }
+  return (PREV[key]='<svg class="sn-prevsvg'+(nums?" sn-prevsvg--big":"")+'" viewBox="0 0 1000 1000" aria-hidden="true" focusable="false">'+out+"</svg>");
+}
+/* size the big preview's numbers for its drawn size: at or above the text floor (unitPx = screen px per unit), shown only when every
+   number fits its square (a two-digit number is about 1.15 em wide); returns the size used, or 0 when the numbers are hidden */
+function previewFit(svg,bd,unitPx,floorPx){
+  var g=svg&&svg.querySelector(".sn-pnums"); if(!g||!unitPx) return 0;
+  var gm=geom(bd), fs=Math.max(Math.round(24*gm.k),Math.ceil((floorPx+.4)/unitPx)), room=1e9, n, t;
+  for(n in gm.T){ t=gm.T[n];
+    if(t.kind==="rect") room=Math.min(room,t.w,t.h);
+    else if(t.kind==="sector") room=Math.min(room,t.rO-t.rI,(t.rO+t.rI)/2*Math.abs(t.a1-t.a2)); }
+  var ok=fs*1.15<=room*.92;
+  g.setAttribute("font-size",String(fs)); g.style.display=ok?"":"none";
+  // a three-digit number (100 on a square of a 10 x 10 board) that would run into the next square is left out: the gold goal square
+  // still marks it (a small sideways phone preview), never two numbers overlapping
+  [].forEach.call(g.querySelectorAll(".sn-num"),function(t){ var n=+t.textContent, c=gm.T[n]; if(!c||c.kind!=="rect"||t.textContent.length<3) return;
+    t.style.display=fs*.6*t.textContent.length+6*gm.k<=c.w?"":"none"; });
+  return ok?fs:0;
 }
 
 /* the American spinner (original art): a dial in six jewel wedges numbered 1-6 and a gold arrow; the arrow turns to the spin */
@@ -340,5 +362,5 @@ function spinnerSVG(){
 }
 
 S.Board={W:W,H:H,RAIL:RAIL,PAL:PAL,cell:cell,centre:centre,startSlot:startSlot,build:build,numbers:numbers,glow:glow,warn:warn,crest:crest,snakePts:snakePts,rungs:rungs,spinnerSVG:spinnerSVG,
-  geom:geom,scale:scale,preview:preview,state:function(){ return st; }};
+  geom:geom,scale:scale,preview:preview,previewFit:previewFit,state:function(){ return st; }};
 })(window);
