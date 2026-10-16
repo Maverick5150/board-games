@@ -1,5 +1,5 @@
 // Offline cache for Scattergories (bump VERSION to force update)
-const VERSION = "scatter-v13";
+const VERSION = "scatter-v14";
 const PREFIX = VERSION.replace(/v[0-9]+$/, "");   // every game shares one origin (one CacheStorage): only ever delete THIS game's old caches
 const ASSETS = ["./brain.js", "../names.js", "./", "./index.html", "./manifest.webmanifest", "./icon.png", "../sound.js", "../skins.js", "../saves.js", "./bank.js", "./engine.js", "./ui.js", "./research.js",
   "../ui/theme.css", "../ui/ui.js", "../ui/icons.js",

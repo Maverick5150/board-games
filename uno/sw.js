@@ -1,5 +1,5 @@
 // Offline cache for Uno (bump VERSION to force update)
-const VERSION = "uno-v11";
+const VERSION = "uno-v12";
 const PREFIX = VERSION.replace(/v[0-9]+$/, "");   // every game shares one origin (one CacheStorage): only ever delete THIS game's old caches
 const ASSETS = ["./brain.js", "../names.js", "./", "./index.html", "./manifest.webmanifest", "./icon.png", "../sound.js", "../skins.js", "../saves.js", "./engine.js", "./cards.js",
   "../ui/theme.css", "../ui/ui.js", "../ui/icons.js",
