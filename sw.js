@@ -1,5 +1,5 @@
 // Offline cache for the hub page (bump VERSION to force update)
-const VERSION = "hub-v3";
+const VERSION = "hub-v4";
 const PREFIX = "hub-";   // every game shares this origin (one CacheStorage): only ever touch the hub's own caches
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.png",
   "./ui/theme.css", "./ui/ui.js", "./ui/icons.js", "./sound.js", "./ui/fonts/dmserifdisplay-latin.woff2", "./ui/fonts/dmserifdisplay-italic-latin.woff2", "./ui/fonts/manrope-var-latin.woff2", "./ui/tex/felt.webp", "./ui/tex/paper.webp", "./ui/tex/orb-gold.webp", "./ui/tex/orb-violet.webp", "./ui/tex/rays-core.webp",
@@ -30,6 +30,9 @@ const fresh = req => { try { return new Request(req, { cache: "no-cache" }); } c
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
   const url = new URL(e.request.url);
+  // The hub's Coming soon list is edited on the live site and must never come from a cache: it is not in ASSETS, and this line keeps
+  // it out even if someone adds it there. The page fetches it with a fresh query and cache "no-store", and keeps its own last copy.
+  if (url.pathname.endsWith("/coming-soon.json")) return;
   if (!OWN.includes(url.origin + url.pathname)) return;   // a game, Party Mode, the TV page...: not the hub's business
   const save = res => { if (res.ok) { const c = res.clone(); caches.open(VERSION).then(x => x.put(e.request, c)).catch(() => {}); } return res; };
   const cached = () => caches.open(VERSION).then(x => x.match(e.request, { ignoreSearch: true }));
