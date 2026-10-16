@@ -108,7 +108,9 @@
   .status .dot{display:inline-block; width:.75rem; height:.75rem; margin-right:.2rem; border-radius:50%; vertical-align:-.04em; box-shadow:0 0 0 2px var(--ink-1),0 0 0 3px rgba(255,255,255,.18)}
   .tb-tie::before{content:" after a tie"}
   /* the board: a molded square plate drawn once (SVG), framed in gold. The stage inside it takes the phone zoom (one transform) */
-  #boardWrap{position:relative; width:min(94vw,520px); aspect-ratio:1/1; border-radius:10.667%; box-shadow:var(--frame-shadow); overflow:hidden; background:var(--ink-2)}
+  /* step 11: upright on a phone the board runs nearly edge to edge (8 px a side; the plate's own gold frame sits inside it). From 536 px
+     wide the 520 px cap rules, so tablets and desktops are unchanged; the TV sizes it below */
+  #boardWrap{position:relative; width:min(calc(100vw - 1rem),520px); aspect-ratio:1/1; border-radius:10.667%; box-shadow:var(--frame-shadow); overflow:hidden; background:var(--ink-2)}
   html:not([data-tv]) #boardWrap{touch-action:none}
   .tb-stage{position:absolute; left:0; top:0; width:100%; height:100%; transform-origin:0 0}
   .tb-stage.is-glide{transition:transform .25s ease-out}
@@ -204,6 +206,44 @@
   /* TV: toasts in game sit in the right-hand column (centred on it: 50% + (board + gap) / 2), clear of the board, where BGUI.toast
      finds the free band under the hint bar, as on Sorry!'s same layout (step 4 shared 4c: centred, a toast sat on the board's rim) */
   html[data-tv] body:not(.tb-in-setup) .bg-toast{left:calc(50% + (min(100vh - 8rem, 46vw) + 3rem) / 2); max-width:30rem}
+
+  /* ---------- phone sideways (step 11): a short landscape screen (a phone turned on its side; not the TV, not a tablet) gets a real
+     split layout like the TV's: a slimmer top bar, the board on the left at the full height under it, and on the right the players,
+     whose turn, the inspect card and the move button in their own scroll area (.tb-game scrolls inside the screen; the board is sticky,
+     so it never scrolls away). The page itself never scrolls in game. Phone sizes and 44 px targets, not the 10-foot ones */
+  @media (orientation: landscape) and (max-height: 31.25em){
+    html:not([data-tv]){--ls-bar:3.25rem; --ls-h:100vh; --ls-pad:.5rem; --ls-board:calc(var(--ls-h) - var(--ls-bar) - env(safe-area-inset-top,0px) - 2 * var(--ls-pad))}
+    /* the panel rows are max-content: an auto row holding a scroll container (a scrolling player strip, the log) would shrink
+       under its content once the panel is taller than the screen, and the next row would slide under it */
+    @supports (height:100dvh){ html:not([data-tv]){--ls-h:100dvh} }
+    html:not([data-tv]) .bg-topbar{height:calc(var(--ls-bar) + env(safe-area-inset-top,0px)); padding-top:calc(env(safe-area-inset-top,0px) + .25rem); padding-bottom:.25rem}
+    html:not([data-tv]) .tb-game{display:grid; grid-template-columns:var(--ls-board) minmax(0,1fr); grid-template-rows:max-content max-content max-content max-content 1fr;
+      grid-template-areas:"board strip" "board status" "board inspect" "board dock" "board ."; column-gap:1.25rem; align-items:start; align-content:start;
+      height:calc(var(--ls-h) - var(--ls-bar) - env(safe-area-inset-top,0px)); overflow:hidden auto; overscroll-behavior:contain;
+      padding:var(--ls-pad) max(var(--gutter), env(safe-area-inset-right,0px)) var(--ls-pad) max(var(--ls-pad), env(safe-area-inset-left,0px))}
+    html:not([data-tv]) #boardWrap{grid-area:board; position:sticky; top:0; width:var(--ls-board)}
+    html:not([data-tv]) #legend{grid-area:strip; width:auto; padding:.625rem 0 .5rem}
+    html:not([data-tv]) .tb-status{grid-area:status; width:auto; margin:0}
+    html:not([data-tv]) .tb-inspect{grid-area:inspect; width:auto}
+    html:not([data-tv]) .tb-gdock{grid-area:dock; justify-content:flex-start; margin-top:.75rem}
+    /* toasts in game sit over the right-hand column (centred on it), clear of the board, as on the TV */
+    html:not([data-tv]) body:not(.tb-in-setup) .bg-toast{left:calc(50% + (var(--ls-board) + 1.25rem) / 2); max-width:calc(100vw - var(--ls-board) - 3rem)}
+    /* the move sheet rises over the right-hand column, so the board stays in view beside it (the TV's peek) */
+    html:not([data-tv]) #moveSheet{left:auto; right:0; width:calc(100vw - var(--ls-board) - max(var(--ls-pad), env(safe-area-inset-left,0px)) - .75rem); margin:0}
+    /* Victory: the trophy beside the result (two columns), so Play again shows on the first screen; the same rays, confetti and trophy */
+    html:not([data-tv]) .bg-win__card{display:grid; grid-template-columns:10rem minmax(0,1fr); column-gap:1.5rem; align-items:center; width:min(100%,44rem)}
+    html:not([data-tv]) .bg-win__card > *{grid-column:2}
+    html:not([data-tv]) .bg-win__card > .bg-win__medal{grid-column:1; grid-row:1 / span 7; margin:0 auto}
+    html:not([data-tv]) .bg-win__title{margin:.25rem 0 0}
+    html:not([data-tv]) .bg-win__sub{margin:.25rem 0 .5rem}
+    html:not([data-tv]) .bg-win__stats{margin:.5rem 0 0}
+    html:not([data-tv]) .bg-win__actions{margin-top:.5rem}
+    html:not([data-tv]) .bg-win__rays{left:calc(50vw - min(50vw - var(--gutter), 22rem) + 5rem)}   /* the turning rays stay centred on the trophy (ui.js aims their height) */
+    /* setup and Menu: a lower art band (the same art, cropped to the band), so the first settings show on the first screen; the
+       Start dock stays sticky at the bottom */
+    html:not([data-tv]) .tb-hero{padding-top:5.5rem}
+    html:not([data-tv]) .tb-hero .bg-hero__layer{bottom:0; aspect-ratio:auto; background-size:cover; background-position:50% 40%}
+  }
 </style>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
@@ -504,6 +544,11 @@ function BoardZoom(host, stage, o){
   inst.fit=()=>{ zoom=1; tx=0; ty=0; apply(true); };
   inst.zoomTo=(fx,fy,z)=>{ const P=size(); z=z||3; zoom=z; tx=P/2-fx*P*z; ty=P/2-fy*P*z; apply(true); };
   inst.zoom=()=>zoom;
+  /* step 11: turning the phone (or any resize) changes the frame's size: the pan is in px, so it scales with the frame, and the same part
+     of the board stays in view, zoomed as it was */
+  let lastP=0;
+  const reframe=()=>{ const P=size(); if(lastP&&P!==lastP&&(zoom!==1||tx||ty)){ tx*=P/lastP; ty*=P/lastP; apply(false); } lastP=P; };
+  if(window.ResizeObserver) new ResizeObserver(reframe).observe(host); else window.addEventListener("resize",reframe);
   function ctlSync(){ if(!ctl) return; const z=zoom>1.02; ctl.setAttribute("aria-label",z?"Fit the whole board":"Zoom in"); ctl.lastChild.textContent=z?"Fit":"Zoom"; ctl.firstChild.style.display=z?"none":""; }
   inst.enable=function(v){
     on=!!v; if(!on){ if(zoom!==1) inst.fit(); if(ctl) ctl.hidden=true; return; }
