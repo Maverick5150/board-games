@@ -271,9 +271,10 @@ function syncStart(){
 function resultDue(){ var B=BG(); return !!(G&&G.over&&ui.finished===gen&&ui.winShown!==gen&&B&&B.win&&luxe()); }   // only once the winning move has played: no spoiler mid-move
 function resumeText(){
   if(ui.result) return;
-  var s="Back to the game";
-  if(G&&!G.over) s="Turn "+G.turn+" · "+nm(G.cur)+" "+vb(G.cur,"is")+" on "+(G.players[G.cur].pos?"square "+G.players[G.cur].pos:"the start");
-  $("resumeLabel").textContent="Resume"; $("resumeSub").textContent=s;
+  // the sub breaks only at its " · " (cd-nw parts) and stays short on a phone, so it never runs past the half-width button
+  var parts=["Back to the game"];
+  if(G&&!G.over) parts=["Turn "+G.turn,isYou(G.cur)?"your turn":nm(G.cur)+"'s turn"];
+  $("resumeLabel").textContent="Resume"; $("resumeSub").innerHTML=subParts(parts);
 }
 function menuResult(){
   if(!resultDue()) return;
@@ -305,7 +306,7 @@ function showSetup(on,resume){
 }
 function barTitle(){
   var e=$("barEyebrow"); if(!e) return;
-  var t=paused()?"Paused":setupShown()?(liveGame()?"Game in progress":(ui.result?"Game over":"New game")):(!G?"New game":G.over?"Game over":ui.fpShow?"Who goes first?":"Turn "+G.turn);
+  var t=paused()?"Paused":setupShown()?(liveGame()?"Game in progress":(ui.result?"Game over":"New game")):(!G?"New game":(G.over&&ui.finished===gen)?"Game over":G.over?"Turn "+G.turn:ui.fpShow?"Who goes first?":"Turn "+G.turn);
   if(e.textContent!==t) e.textContent=t;
 }
 
@@ -372,7 +373,8 @@ function contOffer(){
   var a=null; try{ a=Saves.get?Saves.get(GAME,"auto"):null; }catch(e){ a=null; }
   var d=a&&a.data; if(!d||!d.G||d.G.over||d.G.id!=="candy") return false;
   ui.cont=true; $("resumeBtn").style.display="block"; $("resumeLabel").textContent="Continue";
-  $("resumeSub").textContent="Turn "+((+d.G.turn)||1)+" · "+d.G.n+" players"+(Saves.when&&a.ts?" · "+Saves.when(a.ts):"");
+  var parts=["Turn "+((+d.G.turn)||1),d.G.n+" players"];   // one short line: the dock stays at two lines (the save's time is under Save and load)
+  $("resumeSub").innerHTML=subParts(parts);
   syncStart(); return true;
 }
 // the new game is set up before the board shows, so the old game never flashes back
@@ -743,6 +745,8 @@ function bigRect(slot,two){
 }
 function pickRect(i){ var b=$("cpick").querySelectorAll(".cd-pickbtn .cd-cardsvg")[i]; return b&&b.getClientRects().length?rectOf(b):null; }
 function pileRect(id){ return rectOf($(id)); }
+/* where a set-aside picture card goes ("Picture cards only once"): the "used up" chip (shown by renderPiles before the flight) */
+function asideRect(){ var a=$("caside"); if(a&&a.textContent&&a.getClientRects().length){ var r=rectOf(a), w=Math.max(24,r.h*.9); return {x:r.x+r.w/2-w/2,y:r.y+r.h/2-w*.7,w:w,h:w*1.4}; } return null; }
 function makeBig(cd,r,caption){
   var el=document.createElement("div"); el.className="cd-big";
   el.style.left=r.x+"px"; el.style.top=r.y+"px"; el.style.width=r.w+"px";
@@ -799,7 +803,7 @@ async function animEvent(my,e,next){
       await hold(my); if(my!==gen) return;
       var aside=cd.pic!=null&&G.o.treatsOnce&&!two;
       if(two){ dk.hand.push(e.id); renderPick(); var pr=pickRect(dk.hand.length-1); await flyCard(big,to,pr,sp(380)); }
-      else if(aside){ await flyCard(big,to,pileRect("cdeck"),sp(380)); dk.landed[e.id]="aside"; }
+      else if(aside){ dk.aside++; renderPiles(); await flyCard(big,to,asideRect(),sp(380)); dk.landed[e.id]=1; }   // set aside for good: to the "used up" chip, never back into the draw pile
       else await landOnDiscard(e.id,big,to);
       return;
     }
@@ -879,10 +883,10 @@ async function animEvent(my,e,next){
       renderStand(); return;
     }
     case "discard":{
-      if(dk.landed[e.id]){ if(dk.landed[e.id]==="aside"){ dk.aside++; renderPiles(); } delete dk.landed[e.id]; return; }
+      if(dk.landed[e.id]){ delete dk.landed[e.id]; return; }
       var hi=dk.hand.indexOf(e.id), from=hi>=0?pickRect(hi):null, cdd=pub(e.id);
       if(hi>=0){ dk.hand.splice(hi,1); }
-      if(e.aside){ if(from) await cardFly(cdd,from,pileRect("cdeck"),sp(340)); dk.aside++; renderPiles(); renderPick(); return; }
+      if(e.aside){ dk.aside++; renderPiles(); renderPick(); if(from) await cardFly(cdd,from,asideRect(),sp(340)); return; }
       var fl=from?makeBig(cdd,from,""):null; renderPick();
       if(fl){ fl.classList.add("is-small"); await landOnDiscard(e.id,fl,from); }
       else { dk.top=e.id; dk.dn++; renderPiles(); }
@@ -947,7 +951,7 @@ function finishGame(){
 function openWin(){
   var B=BG(); if(!B||!B.win||!G||!G.over||!luxe()) return;
   ui.winShown=gen; ui.result=false; clockOff();
-  var w=G.winner, ms=playMs(), min=Math.round(ms/60000), single=nHumans()===1, pw=G.players[w];
+  var w=G.winner, ms=playMs(), min=Math.floor(ms/60000), single=nHumans()===1, pw=G.players[w];
   $("winEyebrow").textContent="Game over · "+(min<1?"under a minute":min===1?"1 minute":min+" minutes");
   $("winTitle").textContent=(isHuman(w)&&single)?"Victory":nm(w)+" "+vb(w,"wins");
   var sub=(isYou(w)?"You reached":nm(w)+" reached")+" the Sugarspire with "+plural(pw.st.cards,"card")+".", T=G.stats.longestTrip;
