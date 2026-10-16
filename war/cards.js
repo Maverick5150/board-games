@@ -2,7 +2,8 @@
    namespace (window.War.Cards, ids "wc-*", class "wf"), so War never needs the Rummy globals:
    ivory faces with the rank and suit index in BOTH top corners, real pip layouts, original crown / tiara / plumed-cap court emblems in a gold
    frame, a jester-cap joker (red joker plum-red, black joker ink), and War's own back: field olive with a gold lattice and crossed sabres.
-   Card ids are the engine's: 0..51 = suit*13 + rank-2 (S H D C, Ace = 14), 52 = red joker, 53 = black joker.
+   Card ids are the engine's: 0..51 = suit*13 + rank-2 (S H D C, Ace = 14), 52 = red joker, 53 = black joker; with more decks
+   (5-16 players) deck k's card is k*54 + that id, so the face is id % 54.
    Every size comes from --cw (the card width); the index text never drops under the page's --fs-micro floor (12 px phone, 21 px TV).
    A table card (flipCard) is a face/back pair on a plain 3D wrapper: a flip is ONE rotateY of .wf-in (transform only, one shot). */
 (function(g){
@@ -10,7 +11,7 @@
 var W=g.War=g.War||{};
 var SUITS=["S","H","D","C"], RED={H:1,D:1};
 var GOLD="#c99f5e", GOLDHI="#f0d48a";
-function info(id){ id=+id; if(id>=52) return {id:id,r:15,s:"J",joker:true,red:id===52}; var s=SUITS[(id/13)|0], r=2+id%13; return {id:id,r:r,s:s,joker:false,red:!!RED[s]}; }
+function info(id){ id=(+id)%54; if(id>=52) return {id:id,r:15,s:"J",joker:true,red:id===52}; var s=SUITS[(id/13)|0], r=2+id%13; return {id:id,r:r,s:s,joker:false,red:!!RED[s]}; }
 function rankLabel(r){ return r===15?"Joker":r===14?"A":r===13?"K":r===12?"Q":r===11?"J":String(r); }
 var SPRITE='<svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden"><defs>'+
  '<symbol id="wc-S" viewBox="0 0 100 100"><path fill="currentColor" d="M50 5C50 5 13 38 13 62C13 76 24 85 36 85C42 85 47 82 49 79C48 89 44 94 35 97H65C56 94 52 89 51 79C53 82 58 85 64 85C76 85 87 76 87 62C87 38 50 5 50 5Z"/></symbol>'+

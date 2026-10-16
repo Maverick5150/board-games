@@ -216,6 +216,66 @@
   html[data-effects="reduced"] .wr-stand .wr-bar > i, html[data-motion="reduce"] .wr-stand .wr-bar > i{transition:none}
   @media (prefers-reduced-motion: reduce){ .wr-stand .wr-bar > i, .wr-disclose .wr-chev{transition:none} }
 
+  /* ---------- 2-16 players (wave 1): six more seat colours (11-16), the steppers, the deck line, the big table (5-16 seats: compact
+     tiles around a centre band with the pot; game.js bigLayout), wild cards, the long Victory list ---------- */
+  [data-game="war"] [data-seat="11"]{--seat:#b6e04e; --seat-hi:#d9f09f; --seat-lo:#5b7027; --seat-ink:#0b0a12; --seat-text:#b6e04e; --seat-tint:#313d27; --seat-ring:#60762f}
+  [data-game="war"] [data-seat="12"]{--seat:#7cc8ff; --seat-hi:#b5e0ff; --seat-lo:#3e6480; --seat-ink:#0b0a12; --seat-text:#7cc8ff; --seat-tint:#25384f; --seat-ring:#436a8a}
+  [data-game="war"] [data-seat="13"]{--seat:#ea6fe0; --seat-hi:#f5adef; --seat-lo:#753870; --seat-ink:#0b0a12; --seat-text:#ea6fe0; --seat-tint:#432a4f; --seat-ring:#7b3d77}
+  [data-game="war"] [data-seat="14"]{--seat:#eadcb4; --seat-hi:#f6eed7; --seat-lo:#756e5a; --seat-ink:#0b0a12; --seat-text:#eadcb4; --seat-tint:#3c3a40; --seat-ring:#7a735e}
+  [data-game="war"] [data-seat="15"]{--seat:#86ecc4; --seat-hi:#bcf6df; --seat-lo:#437662; --seat-ink:#0b0a12; --seat-text:#86ecc4; --seat-tint:#253f48; --seat-ring:#477c68}
+  [data-game="war"] [data-seat="16"]{--seat:#ff8f80; --seat-hi:#ffc0b7; --seat-lo:#804840; --seat-ink:#0b0a12; --seat-text:#ff8f80; --seat-tint:#44303d; --seat-ring:#854c45}
+  .wr-step{gap:.75rem}
+  .wr-step .bg-stepper__val{min-width:3.25rem}
+  .wr-seats__tokens{flex-wrap:wrap; max-width:100%; row-gap:.25rem}
+  .wr-seats.is-many .wr-seats__tokens .bg-token{width:1.6rem; height:1.6rem; margin-left:-.3rem}
+  .wr-deck{font:var(--fw-ui-strong) var(--fs-sm)/1.25 var(--font-ui); color:var(--accent-text)}
+  .wr-deck:empty{display:none}
+  /* the big table: a tile per seat (its colour on the top edge and the token, the name, the stack and its count, the battle slot) */
+  .wr-game.is-big .wr-seat{display:block; border-radius:var(--r-md); background:rgba(8,10,4,.6); box-shadow:inset 0 0 0 1px rgba(231,202,144,.16), inset 0 3px 0 var(--seat)}
+  .wr-game.is-big .wr-seat.is-need{background:linear-gradient(180deg,var(--seat-tint),rgba(8,10,4,.8) 130%); box-shadow:inset 0 0 0 2px var(--seat-ring), inset 0 3px 0 var(--seat)}
+  .wr-game.is-big .wr-seat.is-fight{box-shadow:inset 0 0 0 2px #d9603f, inset 0 3px 0 var(--seat)}
+  .wr-game.is-big .wr-seat.is-win{box-shadow:inset 0 0 0 2px var(--gold-200), inset 0 3px 0 var(--seat), 0 0 1.2rem .15rem rgba(231,202,144,.35)}
+  .wr-game.is-big .wr-plate{display:contents}
+  .wr-game.is-big .wr-tk{position:absolute; left:var(--ip); top:var(--ip); width:var(--lh); height:var(--lh); display:grid; place-items:center}
+  .wr-game.is-big .wr-plate .bg-token{width:calc(var(--lh) - .125rem); height:calc(var(--lh) - .125rem); font-size:var(--fs-micro)}
+  .wr-game.is-big .wr-plate .bg-player__cpu{right:-.55rem; bottom:-.45rem; width:.8rem; height:.8rem}
+  .wr-game.is-big .wr-plate .bg-player__cpu .bg-ico{width:.55rem; height:.55rem}
+  .wr-table.is-tight .wr-name{font-size:var(--fs-micro)}
+  .wr-game.is-big .wr-midnote{white-space:normal}
+  .wr-game.is-big .wr-name{position:absolute; left:calc(var(--ip) + var(--lh) + .4rem); right:var(--ip); top:var(--ip); font-size:var(--fs-xs); line-height:var(--lh)}
+  .wr-game.is-big .wr-pk{position:absolute; left:calc(var(--ip) + (var(--col) - var(--pw)) / 2); top:calc(var(--ip) + var(--lh) + var(--py))}
+  .wr-game.is-big .wr-cnt{position:absolute; left:calc(var(--ip) - .25rem); width:calc(var(--col) + .5rem); top:calc(var(--ip) + var(--lh) + var(--py) + var(--ph) + .1rem); justify-content:center}
+  .wr-game.is-big .wr-n{font-size:var(--fs-lg)}
+  .wr-game.is-big .wr-nl, .wr-game.is-big .wr-sub{display:none}
+  .wr-game.is-big .wr-tag{right:.3rem; top:-.55rem}
+  .wr-game.is-big .wr-seat.is-fight .wr-tag{color:#0b0a12; background:#e8775a}
+  .wr-game.is-big .wr-seat.is-tied .wr-tag{color:#0b0a12; background:var(--gold-200)}
+  /* the centre band: the battle pot, or the war pot (the cards gather there before they fly to the winner) */
+  .wr-pot{display:flex; align-items:baseline; gap:.4rem; white-space:nowrap}
+  .wr-pot:empty{display:none}
+  .wr-pot__l{font:var(--fw-caps) var(--fs-micro)/1 var(--font-ui); letter-spacing:.08em; text-transform:uppercase; color:var(--text-2)}
+  .wr-pot__n{font:400 var(--fs-2xl)/1 var(--font-display); color:var(--gold-100); font-variant-numeric:tabular-nums}
+  .wr-pot__u{font:var(--fw-ui) var(--fs-xs)/1 var(--font-ui); color:var(--text-2)}
+  .wr-pot.is-war .wr-pot__l{color:#ffb39a}
+  .wr-table.is-gather .wr-mid{visibility:hidden}
+  /* the count rail on the phone (upright and sideways): one scrolling row, leader first (rank, name, count; the seat colour on the edge) */
+  html:not([data-tv]) .wr-game.is-multi.is-big .wr-stand{display:flex; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; overscroll-behavior-x:contain; gap:.35rem; padding:.7rem 0 .45rem}
+  html:not([data-tv]) .wr-game.is-big .wr-stand::-webkit-scrollbar{display:none}
+  html:not([data-tv]) .wr-game.is-multi.is-big .wr-stand .bg-player{flex:0 0 auto; max-width:10rem; gap:.35rem; padding:.35rem .6rem .5rem .55rem; box-shadow:inset 0 0 0 1px var(--line-1), inset 3px 0 0 var(--seat)}
+  html:not([data-tv]) .wr-game.is-multi.is-big .wr-stand .bg-player.is-turn{box-shadow:inset 0 0 0 1.5px var(--seat-ring), inset 3px 0 0 var(--seat)}
+  html:not([data-tv]) .wr-game.is-multi.is-big .wr-stand .wr-rk{display:block}
+  html:not([data-tv]) .wr-game.is-multi.is-big .wr-stand .bg-player__txt{display:flex; align-items:baseline; gap:.4rem}
+  html:not([data-tv]) .wr-game.is-multi.is-big .wr-stand .bg-player__name{max-width:6.5rem}
+  /* wild cards (House: Deuces / Jokers are wild): an accent ring and a "Wild" badge while face up */
+  .wcard.is-wild.is-up{border-radius:calc(var(--cw)*.115); box-shadow:0 0 0 2px var(--accent), 0 0 .75rem .1rem var(--accent-glow)}
+  .wcard.is-wild .wf-face::after, .wr-hcard.is-wild .wf::after{content:"Wild"; position:absolute; left:50%; bottom:calc(var(--cw)*.05); transform:translateX(-50%); padding:.05em .35em; border-radius:var(--r-pill);
+    font:var(--fw-caps) var(--fs-micro)/1.2 var(--font-ui); color:var(--accent-ink); background:var(--accent); white-space:nowrap; pointer-events:none}
+  .wcard.is-wild .wf-face.jk::after, .wr-hcard.is-wild .wf.jk::after{bottom:auto; top:44%}
+  .wr-final.is-many{gap:.25rem .35rem}
+  .wr-final.is-many li{gap:.4rem; padding:.25rem .5rem}
+  .wr-final.is-many .bg-token{width:1.4rem; height:1.4rem}
+  html:not([data-tv]) .wr-final.is-many .wr-fcu{display:none}   /* 9-16 players on a phone: the count alone, so the names keep their room */
+
   /* ---------- TV (html[data-tv], 1rem = 24px at 1080p) ---------- */
   html[data-tv] .wr-setup{display:grid; grid-template-columns:minmax(0,32rem) minmax(0,34rem); column-gap:3.5rem; justify-content:center; align-items:start; width:auto; padding:0 var(--gutter) 2rem}
   html[data-tv] .wr-col{display:block; min-width:0}
@@ -274,6 +334,22 @@
   html[data-tv] #claimBox, html[data-tv] #prBox{padding-top:1.25rem}
   html[data-tv] #claimBox .bg-sheet__options, html[data-tv] #prBox .bg-sheet__options, html[data-tv] #handoffSheet .bg-sheet__options{gap:1.5rem}   /* the ring never touches the next option */
   html[data-tv] body:not(.wr-in-setup) .bg-toast{left:calc(100vw - var(--gutter) - 13.5rem); max-width:26rem}
+  /* TV, 2-16 players: the steppers' neighbours stay 1.5rem apart; the big table's count rail in two compact columns; Flip and Auto share a
+     row so the right-hand column still fits 16 players; the Victory list in four columns */
+  html[data-tv] .wr-step{gap:1.5rem}
+  html[data-tv] .wr-game.is-big .wr-stand{grid-template-columns:repeat(2,minmax(0,1fr)); gap:.75rem .6rem; padding:.6rem 0 .75rem}
+  html[data-tv] .wr-game.is-big .wr-stand .bg-player{gap:.4rem; padding:.2rem .55rem .4rem .3rem; border-radius:var(--r-md)}
+  html[data-tv] .wr-game.is-big .wr-stand .bg-token{width:1.4rem; height:1.4rem; font-size:var(--fs-micro)}
+  html[data-tv] .wr-game.is-big .wr-stand .bg-player__cpu{display:none}
+  html[data-tv] .wr-game.is-big .wr-stand .bg-player__txt{display:flex; align-items:baseline; justify-content:space-between; gap:.4rem}
+  html[data-tv] .wr-game.is-big .wr-stand .bg-player__meta{flex:none; font:400 var(--fs-lg)/1 var(--font-display); color:var(--gold-100)}
+  html[data-tv] .wr-game.is-big #flipBtn{flex:1 1 0}
+  html[data-tv] .wr-game.is-big .wr-auto{flex:0 0 auto}
+  html[data-tv] #winBox.wr-many .bg-win__card{width:min(100%,62rem)}
+  html[data-tv] .wr-final.is-many{grid-template-columns:repeat(4,minmax(0,1fr)); width:min(100%,60rem)}
+  html[data-tv] #winBox.wr-many .wr-final{margin:.1rem auto .5rem}
+  html[data-tv] #winBox.wr-many .wr-final li{padding-block:.15rem}
+  html[data-tv] #winBox.wr-many .bg-win__sub{margin-bottom:.5rem}
   /* ---------- phone upright (step 11): the table runs nearer the edges (12 px a side, the room the Flip row keeps for its focus ring, so
      nothing pokes past the screen; its height formula is unchanged); only a narrow upright screen (a phone), so tablets and desktops are
      unchanged ---------- */
@@ -325,6 +401,8 @@
        stays sticky at the bottom */
     html:not([data-tv]) .wr-hero{padding-top:5.5rem}
     html:not([data-tv]) .wr-hero .bg-hero__layer{bottom:0; aspect-ratio:auto; background-size:cover; background-position:50% 40%}
+    /* 9-16 players: the Victory list in three columns beside the trophy */
+    html:not([data-tv]) .wr-final.is-many{grid-template-columns:repeat(3,minmax(0,1fr)); width:100%}
   }
 </style>
 <script src="../sound.js"></script>
@@ -397,10 +475,10 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
         <div class="bg-section"><h2 class="bg-eyebrow" id="playersHead" data-stage-text>Players</h2></div>
         <div class="bg-card wr-card">
           <div class="wr-field"><span class="bg-row__title" id="humansTitle">Players on this phone</span><span class="bg-row__desc" id="humansDesc">0 = watch the computers play.</span></div>
-          <div class="bg-seg" id="humanSeg" role="group" aria-label="Players on this phone"></div>
-          <div class="wr-field"><span class="bg-row__title">Computer players</span><span class="bg-row__desc" id="cpuDesc">2 to 4 players in all. Two is the classic game.</span></div>
-          <div class="bg-seg" id="cpuSeg" role="group" aria-label="Computer players"></div>
-          <div class="wr-seats" id="seatPreview"><span class="wr-seats__tokens" id="seatTokens"></span><span class="wr-seats__txt"><b id="seatHead"></b><span id="seatNote"></span></span></div>
+          <div class="bg-stepper wr-step" id="humanSeg" role="group" aria-label="Players on this phone"></div>
+          <div class="wr-field"><span class="bg-row__title">Computer players</span><span class="bg-row__desc" id="cpuDesc">2 to 16 players in all. Two is the classic game; every 4 more players add a deck.</span></div>
+          <div class="bg-stepper wr-step" id="cpuSeg" role="group" aria-label="Computer players"></div>
+          <div class="wr-seats" id="seatPreview"><span class="wr-seats__tokens" id="seatTokens"></span><span class="wr-seats__txt"><b id="seatHead"></b><span class="wr-deck" id="deckLine"></span><span id="seatNote"></span></span></div>
           <div class="bg-rows wr-autorow">
             <button class="bg-row" id="autoRow" type="button" role="switch" aria-checked="false">
               <span class="bg-row__main"><span class="bg-row__title">Auto-play</span><span class="bg-row__desc">Your flips go on by themselves at the game speed. Switch it off any time.</span></span>
@@ -424,7 +502,7 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
   <main class="wr-game" id="game" aria-label="War table">
     <ul class="bg-players wr-stand" id="wstand" aria-label="Standings, most cards first"></ul>
     <div class="wr-tablewrap"><div class="wr-table bg-surface--felt" id="wtable" data-stage-solid aria-label="The table">
-      <div class="wr-mid" id="wtMid"><span class="wr-midnote" id="wtMidNote"></span></div>
+      <div class="wr-mid" id="wtMid"><span class="wr-pot" id="wtPot"></span><span class="wr-midnote" id="wtMidNote"></span></div>
       <div class="wr-cards" id="wtCards"></div>
       <div class="wr-flash" id="wtFlash" aria-hidden="true"></div>
       <div class="wr-banner" id="wtBanner" aria-live="polite"><b id="wtBannerT"></b><span id="wtBannerS"></span></div>
