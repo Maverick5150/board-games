@@ -375,6 +375,11 @@ function settle(G,ev){
     G.tb=[]; return endBattle(G,-1,ev);
   }
   var fighters=(o.onlyTied&&!forced)?best:part.slice();
+  /* every tied player is out of cards: their last cards stay up for the war (Pagat), so this tie can never break. With 3+ players
+     "everyone joins" would replay it war after war until every stack is empty (found on a 12-player table: 45 wars, then a draw).
+     It is a deadlock, as when every fighter is out (Pagat: "a draw"): the cards on the table are set aside, the battle ends, and the
+     players with no cards are out; the others play on */
+  if(best.length>1&&best.every(function(s){ return avail(G,s)===0; })) return deadlock(G,best,ev,true);
   if(!fighters.some(function(s){ return avail(G,s)>0; })){
     if(best.length===1) return win(G,best[0],ev);
     return deadlock(G,best,ev);
@@ -451,8 +456,8 @@ function potAside(G,how){
   G.tb=[]; return pot.length;
 }
 /* every fighter is out of cards and the top cards still tie (Pagat: "the game is a draw") */
-function deadlock(G,tied,ev){
-  var others=[]; for(var s=0;s<G.n;s++) if(G.part.indexOf(s)<0&&!G.players[s].out&&total(G,s)>0) others.push(s);
+function deadlock(G,tied,ev,held){
+  var others=[]; for(var s=0;s<G.n;s++) if(!G.players[s].out&&(held?tied.indexOf(s)<0&&avail(G,s)>0:G.part.indexOf(s)<0&&total(G,s)>0)) others.push(s);   // held: only the tied are stuck
   var n=potAside(G,"deadlock");
   ev.push({e:"deadlock",seats:tied,n:n});
   log(G,names(G,tied)+" tie with their last cards.","tie");

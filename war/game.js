@@ -33,6 +33,14 @@ function clamp(x,a,b){ return x<a?a:x>b?b:x; }
 function initials(name){ var m=/^(You|Player|CPU)\s*(\d*)$/.exec(String(name)); return m?(m[1]==="You"?"Y":m[1].charAt(0)+m[2]):String(name).charAt(0).toUpperCase(); }
 function listNames(a){ return a.length<=2?a.join(" and "):a.slice(0,-1).join(", ")+" and "+a[a.length-1]; }
 function plural(n,w){ return n+" "+w+(n===1?"":"s"); }
+/* 2-16 players: every seat has its own colour (data-seat 1..16; 11-16 are War's own, in index.html). From 5 players the table is the
+   "big table": a grid of compact seat tiles (colour, name, count, the flipped card) around a centre band with the pot */
+var BIG=5;
+function seatNo(s){ return s+1; }
+function tr(k){ var t=window.__warTrace; if(t&&t.push&&t.length<4000) t.push([k,Math.round(performance.now())]); }   // tests: timing marks
+function big(){ return !!(G&&G.n>=BIG); }
+/* names in a line of text: up to 3 names, else a count ("5 players"), so a 16-player war never floods the banner or the status line */
+function whoList(seats,word){ return seats.length<=3?listNames(seats.map(nm)):seats.length+" "+(word||"players"); }
 
 /* ================= registration: the new-game hooks (commit ae99bbe) ================= */
 var GLYPHS={
@@ -99,7 +107,7 @@ function hubHref(){ var B=BG(); return B&&B.back&&B.back.hub?B.back.hub():"../in
 /* ================= names ================= */
 var nameUI=null;
 function humanNames(n){ var B=BG(); if(!n) return []; return nameUI&&B&&B.names?B.names.list(n,nameUI.values()):null; }
-function mountNames(){ var B=BG(); if(!B||!B.names||nameUI) return; nameUI=B.names.mount("#nameCard",{count:Math.max(1,cfg.humans),seat:function(i){ return (i%10)+1; },onChange:function(){ drawSeats(); }}); }
+function mountNames(){ var B=BG(); if(!B||!B.names||nameUI) return; nameUI=B.names.mount("#nameCard",{count:Math.max(1,cfg.humans),seat:function(i){ return seatNo(i); },onChange:function(){ drawSeats(); }}); }
 function cpuNames(n,human){ var a=[]; try{ if(window.Names&&n>0) a=window.Names.pick(n,(human||[]).concat(["You"]))||[]; }catch(e){} while(a.length<n) a.push("CPU "+(a.length+1)); return a; }
 function seatNames(){
   var hn=humanNames(cfg.humans), out=[], i;
@@ -126,29 +134,40 @@ function drawVersions(){
   var v=versionOf(cfg.version);
   $("versionDesc").innerHTML="<b>"+esc(v.name)+".</b> "+esc(v.desc)+(v.id==="peace"?" (Peace has a one-line source; its wars are played as in Classic.)":"");
 }
+/* 2 to 16 players (E.MINP..E.MAXP): people and computers are counted apart, each on its own stepper (- value +) */
 function clampSeats(){
-  cfg.humans=clamp(cfg.humans|0,0,4); cfg.cpus=clamp(cfg.cpus|0,0,4);
-  if(cfg.humans+cfg.cpus<2) cfg.cpus=2-cfg.humans;
-  if(cfg.humans+cfg.cpus>4) cfg.cpus=4-cfg.humans;
+  var mx=E.MAXP||16, mn=E.MINP||2;
+  cfg.humans=clamp(cfg.humans|0,0,mx); cfg.cpus=clamp(cfg.cpus|0,0,mx);
+  if(cfg.humans+cfg.cpus<mn) cfg.cpus=mn-cfg.humans;
+  if(cfg.humans+cfg.cpus>mx) cfg.cpus=mx-cfg.humans;
+}
+function stepper(box,label,get,set,lo,hi){
+  if(!box.querySelector(".bg-stepper__btn")){
+    box.innerHTML='<button type="button" class="bg-stepper__btn" data-step="-1" aria-label="Fewer '+esc(label)+'">'+(icon("minus")||"&minus;")+'</button><output class="bg-stepper__val" aria-live="polite"></output><button type="button" class="bg-stepper__btn" data-step="1" aria-label="More '+esc(label)+'">'+(icon("plus")||"+")+"</button>";
+    box.querySelectorAll(".bg-stepper__btn").forEach(function(b){ b.addEventListener("click",function(){ if(b.disabled) return; set(get()+(+b.dataset.step)); clampSeats(); drawSetup(); }); });
+  }
+  var v=get(), bs=box.querySelectorAll(".bg-stepper__btn"), a=document.activeElement;
+  if(!bs[0].querySelector("svg")&&icon("minus")){ bs[0].innerHTML=icon("minus"); bs[1].innerHTML=icon("plus"); }   // the icons arrive with ui.js (deferred)
+  box.querySelector("output").textContent=String(v);
+  bs[0].disabled=v<=lo; bs[1].disabled=v>=hi;
+  bs[0].setAttribute("aria-label","Fewer "+label+" ("+v+")"); bs[1].setAttribute("aria-label","More "+label+" ("+v+")");
+  if(a&&a.disabled&&box.contains(a)) focusIn(a===bs[0]?bs[1]:bs[0]);   // never leave the focus on a disabled button
 }
 function drawSeats(){
   clampSeats();
-  var hs=$("humanSeg"), cs=$("cpuSeg");
-  keepFocus(hs,"data-n",function(){
-    hs.innerHTML=segHTML([0,1,2,3,4].map(function(n){ return [n,String(n)]; }),cfg.humans,"data-n");
-    hs.querySelectorAll("button").forEach(function(b){ b.addEventListener("click",function(){ cfg.humans=+b.dataset.n; clampSeats(); drawSetup(); }); });
-  });
-  keepFocus(cs,"data-n",function(){
-    cs.innerHTML=segHTML([0,1,2,3,4].map(function(n){ var t=cfg.humans+n; return [n,String(n),t<2||t>4]; }),cfg.cpus,"data-n");
-    cs.querySelectorAll("button:not([disabled])").forEach(function(b){ b.addEventListener("click",function(){ cfg.cpus=+b.dataset.n; drawSetup(); }); });
-  });
+  var mx=E.MAXP||16, mn=E.MINP||2;
+  stepper($("humanSeg"),onTV()?"players on this TV":"players on this phone",function(){ return cfg.humans; },function(v){ cfg.humans=v; },0,mx);
+  stepper($("cpuSeg"),"computer players",function(){ return cfg.cpus; },function(v){ cfg.cpus=v; },Math.max(0,mn-cfg.humans),mx-cfg.humans);
   if(nameUI) nameUI.count(Math.max(0,cfg.humans));
   $("nameCard").closest("section").hidden=cfg.humans===0;
-  var o=curOpts(), n=nPlayers(), names=seatNames(), dn=E.buildDeck(o).length, per=Math.floor(dn/n), left=dn-per*n;
-  if(o.jokers==="each") { per=Math.floor((dn-2)/n); left=dn-2-per*n; }
-  $("seatTokens").innerHTML=names.map(function(nmx,i){ return '<span class="bg-token" data-seat="'+((i%10)+1)+'" aria-hidden="true">'+esc(initials(nmx))+"</span>"; }).join("");
+  var o=curOpts(), n=nPlayers(), names=seatNames(), di=E.deckInfo?E.deckInfo(o,n):null, dn=di?di.cards:E.buildDeck(o).length, per, left;
+  if(di){ per=di.per; left=di.left; } else { per=Math.floor(dn/n); left=dn-per*n; if(o.jokers==="each"){ per=Math.floor((dn-2)/n); left=dn-2-per*n; } }
+  $("seatTokens").innerHTML=names.map(function(nmx,i){ return '<span class="bg-token" data-seat="'+seatNo(i)+'" aria-hidden="true">'+esc(initials(nmx))+"</span>"; }).join("");
+  $("seatPreview").classList.toggle("is-many",n>8);
   $("seatHead").textContent=n+" at the table"+(cfg.humans===0?" · watch mode":"");
-  $("seatNote").textContent=dn+" cards: "+per+" each"+(o.jokers==="each"?" plus a joker each":"")+(left?", "+left+" left over"+(o.leftover==="remove"?" (set aside)":" (to the first war's winner)"):"")+(o.colourDeal?" · dealt by colour":"");
+  $("deckLine").textContent=di?di.text:dn+" cards";   // "2 decks · 104 cards"
+  $("seatNote").textContent=per+" each"+(o.jokers==="each"?" plus a joker each":"")+(left?", "+left+" left over"+(o.leftover==="remove"?" (set aside)":" (to the first war's winner)"):"")+(o.colourDeal?" · dealt by colour":"")+
+    (cfg.humans>12?" · names 13 to "+cfg.humans+" play as Player 13 to Player "+cfg.humans:"");
   $("autoRow").setAttribute("aria-checked",String(!!cfg.auto)); $("autoRow").hidden=cfg.humans===0;
   syncStart();
 }
@@ -198,23 +217,30 @@ var HDESC={
   guerilla:"A joker turned up always starts a war (the jokers are added).",
   twoBeatsAce:"A 2 beats an Ace, and only an Ace. Few sources."
 };
+/* the rows on show: the engine's houseRows (HOUSE + the 2-16 player rows: Decks, Deuces are wild, Jokers are wild, Wild cards count as),
+   already filtered for the version, the player count and the deck count. Decks leads (it sets the size of the game). Old engine: HOUSE */
+function houseList(o,n){
+  var rows;
+  if(E.houseRows) rows=E.houseRows(o.version,n,o);
+  else rows=E.HOUSE.filter(function(h){ return E.houseFor(h,o.version,n)&&!(h[0]==="deck"&&locked("deck"))&&!((h[0]==="jokerSteal"&&n!==2)||(h[0]==="colourDeal"&&n===3)); });
+  var d=rows.filter(function(h){ return h[0]==="decks"; });
+  return d.concat(rows.filter(function(h){ return h[0]!=="decks"; }));
+}
+function hdesc(key){ return HDESC[key]||(E.HDESC_MORE&&E.HDESC_MORE[key])||""; }
 function drawHouse(){
   var o=curOpts(), n=nPlayers(), box=$("houseRules");
   keepFocus(box,"data-k",function(){
     box.innerHTML="";
-    E.HOUSE.forEach(function(h){
-      if(!E.houseFor(h,o.version,n)) return;
-      if(h[0]==="deck"&&locked("deck")) return;
-      if((h[0]==="jokerSteal"&&n!==2)||(h[0]==="colourDeal"&&n===3)) return;   // 2 players only / red-black or a suit each: no fair split for 3
-      if(h[0]==="jokers"&&n!==2) h=h.slice(0,3).concat([h[3].filter(function(c){ return c[0]!=="each"; })],h.slice(4));
-      var key=h[0], tag=h[4]?'<span class="bg-tag bg-tag--house">house</span>':'<span class="bg-tag bg-tag--official">official</span>', row;
+    houseList(o,n).forEach(function(h){
+      var key=h[0], tag=h[4]?'<span class="bg-tag bg-tag--house">house</span>':'<span class="bg-tag bg-tag--official">official</span>', row, ds=hdesc(key);
       if(h[2]==="bool"){
         row=document.createElement("label"); row.className="bg-row";
-        row.innerHTML='<span class="bg-row__main"><span class="bg-row__title">'+esc(h[1])+" "+tag+'</span>'+(HDESC[key]?'<span class="bg-row__desc">'+esc(HDESC[key])+"</span>":"")+'</span><input type="checkbox" class="bg-toggle" data-k="'+key+'"'+(o[key]?" checked":"")+">";
+        row.innerHTML='<span class="bg-row__main"><span class="bg-row__title">'+esc(h[1])+" "+tag+'</span>'+(ds?'<span class="bg-row__desc">'+esc(ds)+"</span>":"")+'</span><input type="checkbox" class="bg-toggle" data-k="'+key+'"'+(o[key]?" checked":"")+">";
         row.querySelector("input").addEventListener("change",function(e){ cfg.over[key]=e.target.checked; drawSetup(); });
       } else {
+        var lbl=function(c){ if(key==="decks"&&+c[0]===0&&E.autoDecks){ var a=E.autoDecks(n); return c[1]+" ("+a+(a===1?" deck)":" decks)"); } return c[1]; };
         row=document.createElement("div"); row.className="bg-row bg-row--static";
-        row.innerHTML='<span class="bg-row__main"><span class="bg-row__title">'+esc(h[1])+" "+tag+'</span>'+(HDESC[key]?'<span class="bg-row__desc">'+esc(HDESC[key])+"</span>":"")+'</span><select class="bg-select" data-k="'+key+'" aria-label="'+esc(h[1])+'">'+h[3].map(function(c){ return '<option value="'+esc(c[0])+'"'+(String(o[key])===String(c[0])?" selected":"")+">"+esc(c[1])+"</option>"; }).join("")+"</select>";
+        row.innerHTML='<span class="bg-row__main"><span class="bg-row__title">'+esc(h[1])+" "+tag+'</span>'+(ds?'<span class="bg-row__desc">'+esc(ds)+"</span>":"")+'</span><select class="bg-select" data-k="'+key+'" aria-label="'+esc(h[1])+'">'+h[3].map(function(c){ return '<option value="'+esc(c[0])+'"'+(String(o[key])===String(c[0])?" selected":"")+">"+esc(lbl(c))+"</option>"; }).join("")+"</select>";
         row.querySelector("select").addEventListener("change",function(e){ var m=h[3].filter(function(c){ return String(c[0])===e.target.value; })[0]; cfg.over[key]=m?m[0]:e.target.value; drawSetup(); });
       }
       box.appendChild(row);
@@ -222,7 +248,7 @@ function drawHouse(){
   });
   syncRules();
 }
-function changedRules(){ var base=E.normalize(E.versionOpts(cfg.version,{}),nPlayers()), o=curOpts(); return E.HOUSE.filter(function(h){ return E.houseFor(h,o.version,nPlayers())&&String(o[h[0]])!==String(base[h[0]]); }).length; }
+function changedRules(){ var n=nPlayers(), base=E.normalize(E.versionOpts(cfg.version,{}),n), o=curOpts(); return houseList(o,n).filter(function(h){ return String(o[h[0]])!==String(base[h[0]]); }).length; }
 function syncRules(){
   var n=changedRules(), v=versionOf(cfg.version), open=ui.rulesOpen;
   $("rulesDesc").textContent=n?n+(n===1?" rule":" rules")+" changed from "+v.name:"As in "+v.name+". Open it to change any rule.";
@@ -247,6 +273,7 @@ function deviceCopy(){
   var tv=onTV(), t=tv?"Players on this TV":"Players on this phone";
   $("humansTitle").textContent=t; $("humanSeg").setAttribute("aria-label",t);
   $("humansDesc").textContent="0 = watch the computers play. Two or more share the "+(tv?"remote":"phone")+".";
+  var hb=$("humanSeg").querySelectorAll(".bg-stepper__btn"); if(hb.length) drawSeats();   // the stepper's labels name the device too
   syncControls();
 }
 function subParts(parts){ return parts.map(function(s,i){ return '<span class="wr-nw">'+esc(s)+(i<parts.length-1?" ·":"")+"</span>"; }).join(" "); }
@@ -393,18 +420,66 @@ function buildTable(){
   seatEls.forEach(function(el){ el.remove(); }); seatEls=[]; cards.innerHTML=""; tab={}; extra=[]; carryEls=[]; kittyEls=[];
   disp=G.players.map(function(p,s){ return ui.dealing?0:E.total(G,s); });
   G.players.forEach(function(p,s){
-    var el=document.createElement("div"); el.className="wr-seat"; el.setAttribute("data-s",s); el.setAttribute("data-seat",(s%10)+1); el.setAttribute("data-pos",POS[G.n][s]);
-    el.innerHTML='<div class="wr-pk" aria-hidden="true"></div><div class="wr-plate"><span class="wr-tk"><span class="bg-token" data-seat="'+((s%10)+1)+'" aria-hidden="true">'+esc(initials(p.name))+"</span>"+
+    var el=document.createElement("div"); el.className="wr-seat"+(G.n>=BIG?" is-mini":""); el.setAttribute("data-s",s); el.setAttribute("data-seat",seatNo(s)); el.setAttribute("data-pos",G.n>=BIG?"grid":POS[G.n][s]);
+    el.innerHTML='<div class="wr-pk" aria-hidden="true"></div><div class="wr-plate"><span class="wr-tk"><span class="bg-token" data-seat="'+seatNo(s)+'" aria-hidden="true">'+esc(initials(p.name))+"</span>"+
       (p.human?"":'<span class="bg-player__cpu" title="Computer">'+icon("cpu")+"</span>")+"</span>"+
       '<span class="wr-name">'+esc(p.name)+'</span><span class="wr-cnt"><b class="wr-n">0</b><span class="wr-nl">cards</span></span><span class="wr-sub"></span><span class="wr-tag"></span></div>';
-    el.querySelector(".wr-pk").addEventListener("click",function(){ tapSeat(s); });
+    if(G.n>=BIG) el.addEventListener("click",function(){ tapSeat(s); });   // a compact tile: the whole tile is the stack to tap
+    else el.querySelector(".wr-pk").addEventListener("click",function(){ tapSeat(s); });
     t.insertBefore(el,cards); seatEls.push(el);
   });
-  $("game").classList.toggle("has-hand",!!G.o.hand); $("game").classList.toggle("is-multi",G.n>2);
+  $("game").classList.toggle("has-hand",!!G.o.hand); $("game").classList.toggle("is-multi",G.n>2); $("game").classList.toggle("is-big",G.n>=BIG);
+  ui.fight=null;
   buildStand();
+}
+/* the big table (5-16 players): a grid of compact tiles, the lower half of the seats (seat 1 first, in the row nearest the controls) below
+   a centre band with the pot, the rest above it. The grid shape (columns x rows) is the one that gives the largest cards for this table
+   size, so the same code lays out a phone upright or sideways and the TV. A tile: the token and the name on top; below, the stack with
+   its count, and the battle slot where the flipped card (and a war's face-down cards, fanned) lie */
+function bigLayout(Wd,H){
+  var n=G.n, tv=onTV(), rem=remPx(), pad=Math.round(rem*(tv?.75:.4)), gap=Math.round(rem*(tv?.7:.35));
+  var ip=Math.round(rem*(tv?.45:.25)), ig=Math.round(rem*(tv?.45:.2)), minCol=rem*(tv?2.6:1.7), cap=rem*(tv?5.5:4.4), minW=rem*(tv?7:4.3);
+  var short=H<rem*(tv?20:22), lh=Math.round(rem*(tv?1.75:short?1.35:1.5)), band=Math.round(rem*(tv?4:short?2.6:3.4)), best=null, C, R;
+  /* the lower block (seat 1 first) takes about half the seats, at least what the upper rows can't hold */
+  function blocks(c,r){ var rb=Math.ceil(r/2), rt=r-rb, nb=Math.max(n-rt*c,Math.min(Math.ceil(n/2),rb*c)); return {nb:nb,nt:n-nb}; }
+  for(C=2;C<=n;C++){
+    R=Math.ceil(n/C); if(C>2&&Math.ceil(n/(C-1))===R) continue;   // more columns for the same rows only make the tiles narrower
+    var tw=(Wd-2*pad-(C-1)*gap)/C, th=(H-2*pad-band-R*gap)/R;
+    if(tw<minW&&best) continue;
+    var cw=Math.min(cap,(th-2*ip-lh)/1.42), col=Math.max(cw*.55,minCol);
+    cw=Math.min(cw,(tw-2*ip-ig-col)/1.05);                         // the slot: the card and a little room for a war's fan
+    var score=cw+Math.min(tw,rem*(tv?12:8))*.06;                  // bigger cards first; wider tiles (longer names) break near-ties
+    if(!best||score>best.score) best={C:C,R:R,tw:tw,cw:cw,score:score};
+  }
+  C=best.C; R=best.R;
+  var cw2=Math.max(Math.floor(best.cw),tv?Math.round(2.2*rem):22), ch=Math.round(cw2*1.42), pw=Math.round(cw2*.55), ph=Math.round(pw*1.42), col=Math.round(Math.max(pw,minCol));
+  var tw2=Math.floor(Math.min(best.tw,2*ip+col+ig+cw2*2.6)), th2=2*ip+lh+ch, cntH=Math.round(rem*(tv?1.35:1.15)), py=Math.max(0,Math.round((ch-ph-cntH)/2));
+  var bl=blocks(C,R), nb=bl.nb, nt=bl.nt, rb=Math.ceil(nb/C), rt=Math.ceil(nt/C);
+  function rowsOf(m,r){ var a=[], i; for(i=0;i<r;i++) a.push(Math.floor(m/r)+(i<m%r?1:0)); return a; }
+  var rowsB=rowsOf(nb,rb), rowsT=rowsOf(nt,rt), seats=[], s=0;
+  function rowAt(k,y){ var rw=k*tw2+(k-1)*gap, x0=(Wd-rw)/2; for(var i=0;i<k;i++){ seats[s]={x:x0+i*(tw2+gap),y:y}; s++; } }
+  rowsB.forEach(function(k,j){ rowAt(k,H-pad-(j+1)*th2-j*gap); });          // the lower block, from the bottom row up
+  rowsT.forEach(function(k,j){ rowAt(k,pad+(rt-1-j)*(th2+gap)); });          // the upper block, from the band up
+  var topEnd=rt?pad+rt*th2+(rt-1)*gap:pad, botStart=H-pad-rb*th2-(rb-1)*gap, mid={x:Wd/2,y:(topEnd+botStart)/2};
+  seatEls.forEach(function(el,q){
+    var p=seats[q];
+    el.style.left=Math.round(p.x)+"px"; el.style.top=Math.round(p.y)+"px"; el.style.width=tw2+"px"; el.style.height=th2+"px";
+    el.style.setProperty("--ip",ip+"px"); el.style.setProperty("--lh",lh+"px"); el.style.setProperty("--pw",pw+"px"); el.style.setProperty("--ph",ph+"px");
+    el.style.setProperty("--col",col+"px"); el.style.setProperty("--py",py+"px");
+    var pk=el.querySelector(".wr-pk"); pk.style.width=pw+"px"; pk.style.height=ph+"px"; pk.style.setProperty("--cw",pw+"px");
+    var x0=p.x+ip+col+ig, x1=p.x+tw2-ip;
+    p.w=tw2; p.h=th2; p.pos="grid"; p.slot={x:x0+Math.min(x1-x0,cw2*1.6)/2,y:p.y+ip+lh+ch/2,axis:"x",room:Math.max(cw2,x1-x0)};
+  });
+  var t=$("wtable"); t.style.setProperty("--cw",cw2+"px"); t.classList.toggle("is-tight",tw2<rem*(tv?9:5.75));
+  var stack={x:pad+cw2*.45,y:mid.y}, sr=stack.x+pw/2+cw2*.8;   // the left-over / tied-card stacks at the left of the band
+  GEO={W:Wd,H:H,cw:cw2,ch:ch,pw:pw,ph:ph,pad:pad,gap:gap,seats:seats,mid:mid,big:true,band:Math.max(rem*2,botStart-topEnd-2*gap),C:C,R:R,stack:stack,sr:sr};
+  var m=$("wtMid"); m.style.top=Math.round(mid.y)+"px"; m.style.transform="translate(-50%,-50%)"; m.style.justifyItems="center";
+  midPlace();
+  return true;
 }
 function layoutSeats(){
   var t=$("wtable"), Wd=t.clientWidth, H=t.clientHeight; if(!G||!Wd||!H) return false;
+  if(G.n>=BIG) return bigLayout(Wd,H);
   var n=G.n, tv=onTV(), rem=remPx(), pad=Math.round(rem*(tv?.9:.6)), gap=Math.round(rem*(tv?.8:.5));
   var ch=H*(n===2?.255:n===3?.23:.19), cw=Math.min(ch/1.42,Wd*(n===2?.24:n===3?.18:.14));
   cw=Math.round(Math.max(cw,tv?3.6*rem:44)); ch=Math.round(cw*1.42);
@@ -456,8 +531,10 @@ function move(el,p,ms,o){
   if(o.lift){ var m={x:(from.x+p.x)/2,y:(from.y+p.y)/2-(GEO?GEO.ch*.12:10),r:p.r,k:(p.k==null?1:p.k)*1.06}; kf=[{transform:T(from)},{transform:T(m),offset:.5},{transform:T(p)}]; }
   try{ var a=el.animate(kf,{duration:ms,delay:o.delay||0,easing:o.ease||"cubic-bezier(.22,.7,.2,1)",fill:"backwards"}); return a.finished.then(function(){},function(){}); }catch(e){ return Promise.resolve(); }
 }
+/* a wild card (House: Deuces / Jokers are wild) carries a "Wild" badge and an accent ring while it is face up */
+function markWild(el,id){ if(el) el.classList.toggle("is-wild",id!=null&&!!(G&&E.isWild&&E.isWild(G,id))); }
 function flipUp(el,id,ms,zoom){
-  if(id!=null) C.setFace(el,id);
+  if(id!=null){ C.setFace(el,id); markWild(el,id); }
   el.classList.add("is-up"); el._pend=false;
   if(reduced()||!el.animate) return Promise.resolve();
   var inn=el.firstElementChild, ps=[];
@@ -465,7 +542,7 @@ function flipUp(el,id,ms,zoom){
   if(zoom&&el._p){ var p=el._p, z={x:p.x,y:p.y,r:0,k:(p.k==null?1:p.k)*1.28}; try{ ps.push(el.animate([{transform:T(p)},{transform:T(z),offset:.45},{transform:T(z),offset:.7},{transform:T(p)}],{duration:Math.round(ms*1.5),easing:"ease-in-out"}).finished); }catch(e){} }
   return Promise.all(ps).then(function(){},function(){});
 }
-function newCard(id,up,pose){ var el=C.tableCard(id,up); el.style.zIndex=++zTop; $("wtCards").appendChild(el); place(el,pose); return el; }
+function newCard(id,up,pose){ var el=C.tableCard(id,up); if(up) markWild(el,id); el.style.zIndex=++zTop; $("wtCards").appendChild(el); place(el,pose); return el; }
 function slotPose(s,i,m,up){
   var g=GEO.seats[s].slot, cw=GEO.cw, ch=GEO.ch, step=m>1?Math.min(cw*.42,Math.max(cw*.12,(g.room-cw)/(m-1))):0, off=(i-(m-1)/2)*step;
   var x=(g.axis==="x"?g.x+off:g.x)-cw/2, y=(g.axis==="y"?g.y+off:g.y)-ch/2;
@@ -478,8 +555,12 @@ function rectPose(r){   // a viewport rect (a packet, a hand card) as a card pos
 function packetPose(s){ var pk=seatEls[s]&&seatEls[s].querySelector(".wr-pk"); return pk?rectPose(pk.getBoundingClientRect()):midPose(0); }
 function platePose(s){ var pl=seatEls[s].querySelector(".wr-plate").getBoundingClientRect(), tr=$("wtable").getBoundingClientRect(); return {x:pl.left-tr.left+pl.width/2-GEO.cw/2,y:pl.top-tr.top+pl.height/2-GEO.ch/2,r:0,k:.5}; }
 function midPose(i){ var k=GEO.pw/GEO.cw; return {x:GEO.mid.x-GEO.cw/2+(i||0)*GEO.cw*.1,y:GEO.mid.y-GEO.ch/2-(i||0)*1.5,r:0,k:k}; }
+/* the left-over and tied-card stacks: the centre (2-4 players); the left of the band on the big table, so the pot line stays readable */
+function stackPose(i){ if(!GEO.big) return midPose(i); var k=GEO.pw/GEO.cw; return {x:GEO.stack.x-GEO.cw/2+(i||0)*GEO.cw*.1,y:GEO.stack.y-GEO.ch/2-(i||0)*1.5,r:0,k:k}; }
+/* the big table's pot in the centre band: a war's cards gather here before they fly to the winner */
+function potPose(i){ var k=Math.min(1,GEO.band*.95/GEO.ch); return {x:GEO.mid.x-GEO.cw/2+((i%7)-3)*1.6,y:GEO.mid.y-GEO.ch/2-(i%5)*1.2,r:((i%5)-2)*3,k:k}; }
 function layoutSeat(s,ms){ var a=tab[s]||[], m=a.length; a.forEach(function(el,i){ var p=slotPose(s,i,m,el.classList.contains("is-up")); if(ms) move(el,p,ms); else place(el,p); }); }
-function addToSeat(s,el,ms){ (tab[s]=tab[s]||[]).push(el); var a=tab[s], m=a.length, last=null;
+function addToSeat(s,el,ms){ (tab[s]=tab[s]||[]).push(el); potLine(); var a=tab[s], m=a.length, last=null;
   a.forEach(function(x,i){ var p=slotPose(s,i,m,x.classList.contains("is-up")); if(x===el) last=move(x,p,ms,{lift:true}); else move(x,p,sp(200)); });
   return last||Promise.resolve(); }
 
@@ -499,10 +580,10 @@ function renderCards(){
   for(s=0;s<G.n;s++) layoutSeat(s,0);
   if(G.phase==="claim"&&G.pend){ var w=G.pend.w, lw=(tab[w]||[]).filter(function(el){ return el.classList.contains("is-up"); }).pop(); if(lw) lw.classList.add("is-win"); }
   G.carry.forEach(function(c,j){ var el=newCard(c,true,carryPose(j)); carryEls.push(el); });
-  for(i=0;i<G.kitty.length;i++) kittyEls.push(newCard(null,false,midPose(i)));
+  for(i=0;i<G.kitty.length;i++) kittyEls.push(newCard(null,false,stackPose(i)));
   midNote();
 }
-function carryPose(j){ var p=midPose(0); return {x:p.x+j*GEO.cw*.16,y:p.y,r:(j%2?4:-4),k:p.k}; }
+function carryPose(j){ var p=stackPose(0); return {x:p.x+j*GEO.cw*.16,y:p.y,r:(j%2?4:-4),k:p.k}; }
 function midNote(){
   var t="";
   if(G&&ui.dealing) t=onTV()?"Press OK to skip the deal":"Tap the table to skip the deal";
@@ -510,6 +591,24 @@ function midNote(){
   else if(G&&G.carry.length) t=G.carry.length+" tied cards: to the next battle's winner";
   else if(G&&G.aside.length) t=G.aside.length+" set aside";
   $("wtMidNote").textContent=t;
+  midPlace(); potLine();
+}
+/* the big table: the pot line sits in the middle of the band, or right of the left-over / tied-card stack while there is one */
+function midPlace(){
+  if(!GEO||!GEO.big) return;
+  var m=$("wtMid"), side=kittyEls.length>0||carryEls.length>0, rem=remPx();
+  m.style.left=Math.round(side?(GEO.sr+GEO.W)/2:GEO.mid.x)+"px";
+  m.style.maxWidth=Math.round(side?GEO.W-GEO.sr-GEO.pad-rem*.5:GEO.W-2*GEO.pad)+"px";
+}
+/* the big table's centre band: the battle pot (every card on the table) or, in a war, the war pot */
+function potLine(){
+  var el=$("wtPot"); if(!el) return;
+  var on=big()&&!!GEO&&!ui.dealing&&!G.over, n=0, s;
+  if(on){ for(s in tab) n+=tab[s].length; n+=carryEls.length; }
+  var war=!!ui.fight||(!busy&&!!G&&(G.phase==="war"||(G.phase==="claim"&&!!G.pend&&G.pend.war>0)));
+  var h=on&&n?'<span class="wr-pot__l">'+(war?"War pot":"Battle pot")+'</span><b class="wr-pot__n">'+n+'</b><span class="wr-pot__u">'+(n===1?"card":"cards")+"</span>":"";
+  if(el._h!==h){ el._h=h; el.innerHTML=h; }
+  el.classList.toggle("is-war",war);
 }
 function paintPacket(s,count){
   var pk=seatEls[s]&&seatEls[s].querySelector(".wr-pk"); if(!pk) return;
@@ -526,8 +625,16 @@ function setCount(s,v,tween){
   seatEls[s].querySelector(".wr-nl").textContent=v===1?"card":"cards";
   var p=G.players[s]; paintPacket(s,G.o.length==="onepass"?Math.max(0,v-p.won.length):Math.max(0,v-p.pr.length-p.hand.length));
 }
+/* who is in the war (big table): from G when the table is still, from the "war" event while it animates */
+function fightOf(){
+  if(!G||G.over||G.phase!=="war") return null;
+  var f=G.need.slice(), ids=f.map(function(s){ return G.cur[s]; });
+  if(ids.some(function(c){ return c==null; })) return {f:f,t:[]};
+  return {f:f,t:E.winnersOf(G,ids).map(function(i){ return f[i]; })};
+}
 function updateSeats(){
   if(!G) return;
+  if(!busy&&!ui.dealing) ui.fight=fightOf();
   var todo=needTodo();
   G.players.forEach(function(p,s){
     var el=seatEls[s]; if(!el) return;
@@ -539,10 +646,12 @@ function updateSeats(){
     if(G.o.length==="onepass") sub.push("Won "+p.won.length+" · "+(p.pk.length+p.hand.length)+" to play");
     if(p.pr.length) sub.push((p.pr.length>1?"Prisoners ":"Prisoner ")+p.pr.map(E.shortName).join(" "));
     el.querySelector(".wr-sub").innerHTML=C.pipText(esc(sub.join(" · ")));
-    var tag=p.out?"Out":(ui.dealing&&s===G.dealer)?"Dealer":(!G.over&&G.pick[s]&&!busy)?"Ready":"";
+    var fx=ui.fight, fi=!!fx&&fx.f.indexOf(s)>=0, ti=!!fx&&fx.t.indexOf(s)>=0;
+    var tag=p.out?"Out":(ui.dealing&&s===G.dealer)?"Dealer":(!G.over&&G.pick[s]&&!busy)?"Ready":(big()&&fi)?(ti?"Tied":"War"):"";
+    el.classList.toggle("is-fight",big()&&fi); el.classList.toggle("is-tied",big()&&ti);
     el.querySelector(".wr-tag").textContent=tag;
     el.classList.toggle("is-out",!!p.out);
-    el.classList.toggle("is-need",!ui.dealing&&!G.over&&todo.indexOf(s)>=0);
+    el.classList.toggle("is-need",!ui.dealing&&!G.over&&todo.indexOf(s)>=0&&(!big()||p.human));   // big table: only the people's tiles light up
     el.classList.toggle("is-win",!!(G.over&&G.winner===s));
     el.querySelector(".wr-pk").style.cursor=(p.human&&!G.o.hand)?"pointer":"default";
   });
@@ -552,7 +661,7 @@ function updateSeats(){
 function buildStand(){
   var ul=$("wstand"); ul.innerHTML=""; standEls=[];
   G.players.forEach(function(p,s){
-    var li=document.createElement("li"); li.className="bg-player"; li.setAttribute("data-seat",(s%10)+1); li.setAttribute("data-s",s);
+    var li=document.createElement("li"); li.className="bg-player"; li.setAttribute("data-seat",seatNo(s)); li.setAttribute("data-s",s);
     li.innerHTML='<span class="wr-rk"></span><span class="bg-token" aria-hidden="true">'+esc(initials(p.name))+"</span>"+(p.human?"":'<span class="bg-player__cpu" title="Computer">'+icon("cpu")+"</span>")+
       '<span class="bg-player__txt"><span class="bg-player__name">'+esc(p.name)+'</span><span class="bg-player__meta"></span></span><span class="wr-bar" aria-hidden="true"><i></i></span>';
     ul.appendChild(li); standEls.push(li);
@@ -567,7 +676,8 @@ function renderStand(){
   rows.forEach(function(r,i){
     var li=standEls[r.s], c=r.count;
     li.querySelector(".wr-rk").textContent=String(r.place);
-    li.querySelector(".bg-player__meta").textContent=G.players[r.s].out?"Out":(!onTV()&&G.n>2)?String(c):c+(c===1?" card":" cards")+(onTV()?" · "+Math.round(100*c/all)+"%":"");
+    li.querySelector(".bg-player__meta").textContent=G.players[r.s].out?"Out":(!onTV()&&G.n>2)?String(c):c+(c===1?" card":" cards")+(onTV()&&G.n<BIG?" · "+Math.round(100*c/all)+"%":"");
+    if(onTV()&&G.n>=BIG&&!G.players[r.s].out) li.querySelector(".bg-player__meta").textContent=String(c);
     li.querySelector(".wr-bar > i").style.transform="scaleX("+(all?Math.min(1,c/all):0).toFixed(3)+")";
     li.classList.toggle("is-out",!!G.players[r.s].out);
     if(ul.children[i]!==li){ ul.insertBefore(li,ul.children[i]||null); moved=true; }
@@ -607,8 +717,8 @@ function renderHand(){
   var a=document.activeElement, fc=(a&&box.contains(a))?a.getAttribute("data-c"):null;
   ui.handKey=key;
   box.innerHTML='<span class="wr-hand__lbl">'+esc(G.players.filter(function(q){ return q.human; }).length>1?p.name+"'s hand":"Your hand")+"</span>"+cards.map(function(x){
-    var cn=E.cardName(x.c);
-    return '<button type="button" class="bg-focus wr-hcard'+(x.pr?" is-pr":"")+(best&&best.c===x.c?" is-best":"")+'" data-c="'+x.c+'"'+(can?"":" disabled")+' aria-label="Play the '+esc(cn)+(x.pr?" (prisoner)":"")+(best&&best.c===x.c?", suggested":"")+'">'+C.faceHTML(x.c)+"</button>";
+    var cn=E.cardName(x.c), wl=!!(E.isWild&&E.isWild(G,x.c));
+    return '<button type="button" class="bg-focus wr-hcard'+(x.pr?" is-pr":"")+(wl?" is-wild":"")+(best&&best.c===x.c?" is-best":"")+'" data-c="'+x.c+'"'+(can?"":" disabled")+' aria-label="Play the '+esc(cn)+(wl?", wild":"")+(x.pr?" (prisoner)":"")+(best&&best.c===x.c?", suggested":"")+'">'+C.faceHTML(x.c)+"</button>";
   }).join("")+(many?'<button type="button" class="bg-btn bg-btn--secondary wr-hprs" data-open="1"'+(can?"":" disabled")+'>Prisoners<br>'+p.pr.length+"</button>":"");
   box.querySelectorAll(".wr-hcard").forEach(function(b){ b.addEventListener("click",function(){ if(b.disabled) return; queue({t:"pick",s:s,c:+b.dataset.c},b); }); });
   var hp=box.querySelector(".wr-hprs"); if(hp) hp.addEventListener("click",function(){ if(!hp.disabled) openPrisoners(s); });
@@ -653,12 +763,12 @@ function syncControls(){
   else if(G.phase==="claim"){ var w=G.pend?G.pend.w:-1; st=w>=0&&isHuman(w)&&!cfg.auto?(nm(w)==="You"?"You win":nm(w)+" wins")+" the battle: choose what to take":w>=0?nm(w)+" is collecting the cards":""; }
   else if(busy&&!hs.length) st=G.phase==="war"?"War!":bn;
   else if(hs.length&&!cfg.auto){
-    if(G.phase==="war") st="War! "+(nh>1?listNames(hs.map(nm))+": lay your war cards":"Lay your war cards")+(cs.length?" · "+listNames(cs.map(nm))+(cs.length>1?" are":" is")+" laying theirs":"");
-    else if(handPhase) st=bn+" · "+(nh>1?nm(hs[0])+", choose a card":"Choose a card to play")+(cs.length?" · waiting for "+listNames(cs.map(nm)):"");
-    else if(nh>1&&hs.length<nh&&G.need.filter(isHuman).length>hs.length) st=bn+" · "+listNames(hs.map(nm))+": "+(tv?"press OK to flip":"tap Flip, or your own stack");
-    else st=bn+" · "+(tv?"Press OK to flip":nh>1?"Tap Flip, or tap your own stack":"Tap Flip, or tap your stack")+(cs.length?" · "+listNames(cs.map(nm))+(cs.length>1?" are":" is")+" ready":"");
+    if(G.phase==="war") st="War! "+(nh>1?whoList(hs)+": lay your war cards":"Lay your war cards")+(cs.length?" · "+whoList(cs,"computers")+(cs.length>1?" are":" is")+" laying theirs":"");
+    else if(handPhase) st=bn+" · "+(nh>1?nm(hs[0])+", choose a card":"Choose a card to play")+(cs.length?" · waiting for "+whoList(cs,"computers"):"");
+    else if(nh>1&&hs.length<nh&&G.need.filter(isHuman).length>hs.length) st=bn+" · "+whoList(hs)+": "+(tv?"press OK to flip":"tap Flip, or your own stack");
+    else st=bn+" · "+(tv?"Press OK to flip":nh>1?"Tap Flip, or tap your own stack":"Tap Flip, or tap your stack")+(cs.length?" · "+whoList(cs,"computers")+(cs.length>1?" are":" is")+" ready":"");
   }
-  else if(cs.length) st=bn+" · Waiting for "+listNames(cs.map(nm));
+  else if(cs.length) st=bn+" · Waiting for "+whoList(cs,"computers");
   else if(hs.length&&cfg.auto) st=bn+" · Auto-play is on";
   else st=bn;
   if(!nh&&!G.over&&!ui.dealing) st=bn+" · Watching "+G.n+" computers";
@@ -682,8 +792,10 @@ function chips(){
 }
 function sync(){
   if(!G) return;
+  tr("sync");
   if(!layoutSeats()) return;
   renderCards(); updateSeats(); renderStand(); renderLog(); syncControls();
+  tr("sync-done");
 }
 
 /* ================= the turn: queue the person's move, pace the computers ================= */
@@ -733,15 +845,23 @@ function drive(){
     later(my,function(){ act(isHuman(w)?E.defaultMove(G,w):cpuMove(w)); },dl(isHuman(w)?420:700)); return;
   }
   var todo=needTodo();
+  if(G.n>=BIG&&intent.length>1){   // the big table: "Flip all" for several people plays as one move of the table
+    var many=[]; while(intent.length){ var mm=intent.shift(); if(todo.indexOf(mm.s)>=0&&!many.some(function(x){ return x.s===mm.s; })) many.push(mm); }
+    if(many.length>1){ actMany(many); return; } if(many.length){ act(many[0]); return; }
+  }
   while(intent.length){ var m=intent.shift(); if(todo.indexOf(m.s)>=0){ act(m); return; } }
   var hs=todo.filter(isHuman), cs=todo.filter(function(s){ return !isHuman(s); });
   if(cs.length){
-    var first=Object.keys(G.pick).length===0;
-    later(my,function(){ act(cpuMove(cs[0])); },hurry?dl(110):first?dl(G.phase==="war"?260:420):dl(250)); return;
+    var first=Object.keys(G.pick).length===0, wait=hurry?dl(110):first?dl(G.phase==="war"?260:420):dl(250);
+    if(G.n>=BIG&&cs.length>1&&G.phase!=="claim"){ later(my,function(){ actMany(cs.map(function(s){ return {s:s,cpu:true}; })); },wait); return; }   // the computers flip together
+    later(my,function(){ act(cpuMove(cs[0])); },wait); return;
   }
   hurry=false;
   if(!hs.length) return;
-  if(cfg.auto){ later(my,function(){ act(autoMove(hs[0])); },dl(G.phase==="war"?360:480)); return; }
+  if(cfg.auto){
+    if(G.n>=BIG&&hs.length>1&&G.phase!=="claim"){ later(my,function(){ actMany(hs.map(function(s){ return {s:s,auto:true}; })); },dl(G.phase==="war"?360:480)); return; }
+    later(my,function(){ act(autoMove(hs[0])); },dl(G.phase==="war"?360:480)); return;
+  }
   if(G.o.hand&&G.phase==="flip"&&nHumans()>1&&viewer!==hs[0]){ showHandoff(hs[0]); return; }
   if(G.o.hand&&G.phase==="flip") { viewer=hs[0]; renderHand(); }
   var mc=mainControl(); if(onTV()&&mc&&document.activeElement!==mc&&!(document.activeElement&&$("game").contains(document.activeElement)&&!document.activeElement.disabled)) focusTV(mc);
@@ -763,13 +883,47 @@ function act(m){
     if(isHuman(mv.s)) toast(youFix(r.msg));
     syncControls(); setTimeout(drive,0); return false;
   }
-  save();
+  tr("act:"+mv.s); save();
   var my=gen; busy=true; syncControls();
   playBatch(my,plan,r.ev).then(null,function(e){ try{ console.warn("war: animation",e); }catch(x){} }).then(function(){
     if(my!==gen) return;
     busy=false; ui.needSync=false; sync(); drive();
   });
   return true;
+}
+
+/* the big table (5-16 players): several seats act as ONE move of the table (the computers flip together, "Flip all", Auto-play), so a
+   16-player battle stays quick: each move is applied in turn (the same engine calls as one by one), then the cards fly out together,
+   a few ms apart, and the events play once. items: {s, cpu:true} | {s, auto:true} | a person's queued move */
+function actMany(items){
+  if(!G||G.over||busy||!items||!items.length) return false;
+  var plans=[], evs=[], did=0;
+  for(var i=0;i<items.length;i++){
+    var it=items[i], s=it.s;
+    if(G.over||G.phase==="claim"||needTodo().indexOf(s)<0) continue;
+    var m=it.cpu?cpuMove(s):it.auto?autoMove(s):it; if(!m) continue;
+    var plan=planOf(m), mv={}; for(var k in m) if(k!=="_src"&&k!=="_fb"&&k!=="cpu"&&k!=="auto") mv[k]=m[k];
+    var r=E.apply(G,mv);
+    if(!r.ok&&!isHuman(s)){ var d=E.defaultMove(G,s); if(d){ plan=planOf(d); r=E.apply(G,d); } }
+    if(!r.ok){ if(isHuman(s)) toast(youFix(r.msg)); continue; }
+    did++; if(plan) plans.push(plan); evs=evs.concat(r.ev);
+    if(r.ev.some(function(x){ return x.e!=="acted"; })) break;   // the table resolved (the last card is in): its events play next
+  }
+  if(!did){ syncControls(); setTimeout(drive,0); return false; }
+  tr("many:"+did); save();
+  var my=gen; busy=true; syncControls();
+  playMany(my,plans,evs).then(null,function(e){ try{ console.warn("war: animation",e); }catch(x){} }).then(function(){
+    if(my!==gen) return;
+    busy=false; ui.needSync=false; sync(); drive();
+  });
+  return true;
+}
+async function playMany(my,plans,evs){
+  if(!GEO) layoutSeats();
+  var st=dl(plans.length>8?22:40);
+  await Promise.all(plans.map(function(p,i){ return sleep(i*st).then(function(){ if(my===gen) return animPlan(my,p,i%4!==0); }); }));
+  tr("plans"); for(var i=0;i<evs.length;i++){ if(my!==gen) return; tr("ev:"+evs[i].e); await animEvent(my,evs[i]); }
+  tr("evs-done");
 }
 
 /* ================= the show: every event, paced ================= */
@@ -783,11 +937,11 @@ function source(plan){
   if(plan.from==="plate") return platePose(plan.s);
   return packetPose(plan.s);
 }
-async function animPlan(my,plan){
+async function animPlan(my,plan,quiet){
   var s=plan.s;
   if(plan.kind==="flip"){
     var el=newCard(null,false,source(plan)); el._pend=true;
-    Sound.sfx("draw");
+    if(!quiet) Sound.sfx("draw");
     setCount(s,Math.max(0,disp[s]-1));
     await addToSeat(s,el,sp(300));
     return;
@@ -796,7 +950,7 @@ async function animPlan(my,plan){
     for(var i=0;i<plan.nd;i++){
       if(my!==gen) return;
       var b=newCard(null,false,packetPose(s)); setCount(s,Math.max(0,disp[s]-1));
-      addToSeat(s,b,sp(260)); Sound.sfx("click");
+      addToSeat(s,b,sp(260)); if(!quiet) Sound.sfx("click");
       await sleep(dl(plan.nd>4?110:190));
     }
     if(plan.up){ var u=newCard(null,false,packetPose(s)); u._pend=true; setCount(s,Math.max(0,disp[s]-1)); await addToSeat(s,u,sp(300)); }
@@ -814,13 +968,22 @@ async function banner(title,sub,ms,calm){
   b.classList.remove("is-on");
 }
 function flash(){ var f=$("wtFlash"); if(reduced()||!f.animate) return; try{ f.animate([{opacity:0},{opacity:1,offset:.25},{opacity:0}],{duration:sp(750),easing:"ease-out"}); }catch(e){} }
-async function sweep(to,dest,cards){
+async function sweep(to,dest,cards,war){
   var els=[]; for(var s in tab) els=els.concat(tab[s]); els=els.concat(carryEls,kittyEls,extra);
   tab={}; carryEls=[]; kittyEls=[]; extra=[];
+  var bigT=!!(GEO&&GEO.big);
+  if(bigT&&war&&els.length>1&&!reduced()){   // the big table: a war's cards gather into the pot in the centre, then the pot flies to the winner
+    $("wtable").classList.add("is-gather"); potLine();
+    var g0=Math.max(4,Math.round(dl(300)/els.length));
+    await Promise.all(els.map(function(el,i){ el.classList.remove("is-win","is-lose"); el.style.zIndex=++zTop; return move(el,potPose(i),sp(300),{delay:i*g0}); }));
+    Sound.sfx("cannon"); await sleep(dl(220));
+  }
   Sound.sfx("slide");
   var pose=dest==="won"?wonPose(to):packetPose(to), ps=[], st=dl(els.length>12?28:45);
+  if(bigT) st=Math.min(st,Math.max(4,Math.round(dl(480)/els.length)));   // a 16-player pot still lands in about half a second
   els.forEach(function(el,i){ el.style.zIndex=++zTop; ps.push(move(el,{x:pose.x,y:pose.y,r:0,k:pose.k},sp(400),{delay:i*st}).then(function(){ el.remove(); })); });
   await Promise.all(ps);
+  $("wtable").classList.remove("is-gather");
   setCount(to,disp[to]+cards,true);
 }
 function wonPose(s){ var p=packetPose(s); return {x:p.x+GEO.pw*.35,y:p.y-GEO.ph*.1,r:8,k:p.k}; }
@@ -843,26 +1006,28 @@ async function animEvent(my,e){
       return;
     }
     case "war":{
-      var tied=e.tied.map(nm), sub;
+      var sub;
       e.tied.forEach(function(x){ var u=lastUp(x); if(u) u.classList.add("is-win"); });
-      sub=e.forced?(G.o.twos?"A 2 declares war":"A joker declares war"):listNames(tied)+" tie";
+      ui.fight={f:e.seats.slice(),t:e.tied.slice()}; updateSeats(); potLine();   // big table: who is in the war (tag "War"; the tied "Tied")
+      sub=e.forced?(G.o.twos?"A 2 declares war":"A joker declares war"):whoList(e.tied)+" tie"+(e.seats.length>e.tied.length&&big()?" · "+whoList(e.seats)+" fight":"");
       sub+=e.down?": "+e.down+" face down, then one up":": the next cards decide";
       Sound.sfx("cannon"); flash();
       await banner(e.n>1?(e.n===2?"Double war!":e.n===3?"Triple war!":"War again!"):"I declare war!",sub,dl(1500));
       for(s in tab) tab[s].forEach(function(x){ x.classList.remove("is-win"); });
       return;
     }
-    case "short": await banner("Out of cards",listNames(e.seats.map(nm))+(e.seats.length>1?" can't finish the war and lose":" can't finish the war and loses"),dl(1500)); return;
+    case "short": await banner("Out of cards",whoList(e.seats)+(e.seats.length>1?" can't finish the war and lose":" can't finish the war and loses"),dl(1500)); return;
     case "underdog": Sound.sfx("bump"); await banner("Underdog!",nm(e.s)+" has a Jack face down and steals the war from "+nm(e.from),dl(1600)); return;
     case "carry":{
-      var all=[]; for(s in tab) all=all.concat(tab[s]); tab={};
+      var all=[]; for(s in tab) all=all.concat(tab[s]); tab={}; ui.fight=null;
       var base=carryEls.length, ps=[];
       all.forEach(function(x,j){ x.classList.remove("is-win","is-lose"); carryEls.push(x); ps.push(move(x,carryPose(base+j),sp(380),{delay:j*dl(40),front:true})); });
       await Promise.all(ps); await banner("A tie","The "+e.n+" cards go to the next battle's winner",dl(1100),true); return;
     }
     case "deadlock":{
       var dd=[]; for(s in tab) dd=dd.concat(tab[s]); tab={};
-      await banner("Deadlock",listNames(e.seats.map(nm))+" tie with their last cards",dl(1500),true);
+      ui.fight=null;
+      await banner("Deadlock",whoList(e.seats)+" tie with their last cards",dl(1500),true);
       await Promise.all(dd.map(function(x,j){ return move(x,midPose(j%3),sp(380),{delay:j*dl(30)}).then(function(){ x.remove(); }); }));
       return;
     }
@@ -874,6 +1039,7 @@ async function animEvent(my,e){
     case "win":{
       for(s in tab){ var u=lastUp(+s); if(u) u.classList.toggle("is-win",+s===e.s), u.classList.toggle("is-lose",+s!==e.s); }
       seatEls.forEach(function(se,q){ se.classList.toggle("is-win",q===e.s); });
+      ui.winWar=!!e.war;
       if(e.war) Sound.sfx("conquer");
       await sleep(dl(e.war?950:600));
       return;
@@ -889,13 +1055,14 @@ async function animEvent(my,e){
       return;
     }
     case "collect":{
-      await sweep(e.s,e.to,e.cards.length);
+      await sweep(e.s,e.to,e.cards.length,!!ui.winWar); ui.winWar=false;
+      ui.fight=null; updateSeats(); potLine();
       seatEls.forEach(function(se){ se.classList.remove("is-win"); });
       await sleep(dl(170));
       return;
     }
     case "out": Sound.sfx("lose"); seatEls[e.s].classList.add("is-out"); setCount(e.s,0); renderStand(); await banner("Out of cards",nm(e.s)+(nm(e.s)==="You"?" are":" is")+" out of the game",dl(1300),true); return;
-    case "sudden": Sound.sfx("bell"); await banner("Sudden death",listNames(e.seats.map(nm))+" are tied: the next battle that breaks the tie wins",dl(1700),true); return;
+    case "sudden": Sound.sfx("bell"); await banner("Sudden death",whoList(e.seats)+" are tied: the next battle that breaks the tie wins",dl(1700),true); return;
     case "over": return;
     default: return;
   }
@@ -918,8 +1085,8 @@ async function dealShow(my){
       var s=seq[i], el=newCard(null,false,midPose(0));
       (function(el,s){ flights.push(move(el,s>=0?packetPose(s):midPose(1),sp(300)).then(function(){ el.remove(); if(s>=0&&!ui.dealSkip&&my===gen) setCount(s,disp[s]+1); })); })(el,s);
       left--; if(left===0) deck.remove();
-      if(i%4===0) Sound.sfx("deal");
-      await sleep(dl(seq.length>40?40:60));
+      if(i%(seq.length>60?8:4)===0) Sound.sfx("deal");
+      await sleep(dl(seq.length>60?Math.max(10,Math.round(2400/seq.length)):seq.length>40?40:60));   // more decks: the whole deal still takes about 2.5 s
     }
     await Promise.all(flights);
   } else await sleep(dl(700));
@@ -1006,7 +1173,7 @@ function showHandoff(s){
   var tv=onTV(), p=G.players[s];
   $("handoffSheet").innerHTML='<div class="bg-sheet__grip" aria-hidden="true"></div><div class="wr-ho"><span class="bg-eyebrow bg-eyebrow--accent">Battle '+(G.battle+1)+' · hot seat</span>'+
     '<h2 class="bg-sheet__title" id="hoTitle">Pass the '+(tv?"remote":"phone")+"</h2>"+
-    '<p class="wr-ho__to"><span class="bg-token" data-seat="'+((s%10)+1)+'" aria-hidden="true">'+esc(initials(p.name))+"</span><span>to <b>"+esc(p.name)+"</b></span></p>"+
+    '<p class="wr-ho__to"><span class="bg-token" data-seat="'+seatNo(s)+'" aria-hidden="true">'+esc(initials(p.name))+"</span><span>to <b>"+esc(p.name)+"</b></span></p>"+
     '<button class="bg-btn bg-btn--primary bg-btn--lg bg-btn--block" id="hoBtn" type="button" data-autofocus>I\'m '+esc(p.name)+": show my hand</button></div>";
   sheetOpen($("handoff"),{dismissible:false,focus:"#hoBtn"});
   $("hoBtn").addEventListener("click",function(){ viewer=s; ui.handKey=""; sheetClose($("handoff")); renderHand(); syncControls(); var hc=$("whand").querySelector(".wr-hcard:not([disabled])"); if(hc) focusIn(hc); hintSync(); });
@@ -1053,10 +1220,10 @@ function openWin(){
   var chain=G.stats.chain, cw2=chain>=4?chain+" wars in a row":chain===3?"a triple war":chain===2?"a double war":"";
   $("winSub").innerHTML=esc(whyText())+(w>=0&&ac?" "+esc(nm(w)==="You"?"You":nm(w))+" captured "+plural(ac,"Ace")+".":"")+(cw2?" The longest war was "+cw2+".":"")+(G.stats.lead?" The lead changed "+(G.stats.lead===1?"once":G.stats.lead+" times")+".":"");
   var rows=E.standings(G);
-  $("winList").innerHTML=rows.map(function(r){ return '<li class="'+(r.place===1&&w>=0?"is-lead":"")+'"><span class="wr-fr">'+r.place+'</span><span class="bg-token" data-seat="'+((r.s%10)+1)+'" aria-hidden="true">'+esc(initials(r.name))+'</span><span class="wr-fn">'+esc(r.name)+(r.out?" · out":"")+'</span><span class="wr-fc">'+plural(r.count,"card")+"</span></li>"; }).join("");
+  $("winList").innerHTML=rows.map(function(r){ return '<li class="'+(r.place===1&&w>=0?"is-lead":"")+'"><span class="wr-fr">'+r.place+'</span><span class="bg-token" data-seat="'+seatNo(r.s)+'" aria-hidden="true">'+esc(initials(r.name))+'</span><span class="wr-fn">'+esc(r.name)+(r.out?" · out":"")+'</span><span class="wr-fc">'+r.count+'<span class="wr-fcu"> '+(r.count===1?"card":"cards")+"</span></span></li>"; }).join("");
   $("winStats").innerHTML='<li class="bg-stat"><b>'+G.battle+"</b><span>"+(G.battle===1?"battle":"battles")+'</span></li><li class="bg-stat"><b>'+G.stats.wars+"</b><span>"+(G.stats.wars===1?"war":"wars")+"</span></li>"+
     '<li class="bg-stat"><b>'+G.stats.pot+"</b><span>biggest pot</span></li>"+'<li class="bg-stat"><b>'+fmtTime(ms)+"</b><span>time</span></li>";
-  $("winList").classList.toggle("is-grid",rows.length>2);
+  $("winList").classList.toggle("is-grid",rows.length>2); $("winList").classList.toggle("is-many",rows.length>8); $("winBox").classList.toggle("wr-many",rows.length>8);
   closeSheets();
   B.win.open($("winBox"),{focus:"#winAgain"});
   if(B.celebrate&&(w<0||isHuman(w)||!nHumans())) B.celebrate();
