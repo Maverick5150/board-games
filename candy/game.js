@@ -475,11 +475,13 @@ function renderPiles(){
   if(a.textContent!==at) a.textContent=at;
 }
 /* what card id would do for the player whose turn it is: the detail line of a pick button */
+/* the colour of the last square (the CEO's rule: you need it to win; 1984: purple) */
+function lastColour(){ var b=board(), t=b&&b.track; return (t&&CN[t.charAt(t.length-1)])||"the last colour"; }
 function outcomeText(s,id){
   var r=E.outcome(G,s,id), cd=pub(id), B=board();
   if(r.stay==="stuck") return "Still stuck (needs "+CN[G.players[s].stuck]+")";
   if(r.stay==="same") return "Already on that square";
-  if(r.stay==="exact") return "Would pass the end: no move";
+  if(r.stay==="exact") return "Needs "+lastColour()+" to finish: no move";
   if(r.redraw) return "That square is taken: draw again";
   var t=(r.kind==="picture"?(r.dir<0?"Back to ":"To ")+"square "+r.land:"To "+(r.win&&!r.seq.length?(r.over?"past the end":"the rainbow"):"square "+r.land));
   r.seq.forEach(function(x){ t+=x.e==="shortcut"?", "+x.name+" to "+x.to:", taken: on to "+x.to; });
@@ -832,7 +834,7 @@ async function animEvent(my,e,next){
     }
     case "stay":{
       shake(el); Sound.sfx("discard");
-      await banner("Stay put",e.why==="same"?(isYou(s)?"You are":who+" is")+" already on that square":e.why==="exact"?"That card would pass the end (exact finish)":"That square is taken",dl(1300));
+      await banner("Stay put",e.why==="same"?(isYou(s)?"You are":who+" is")+" already on that square":e.why==="exact"?(isYou(s)?"You need ":who+" needs ")+lastColour()+" to finish":"That square is taken",dl(1300));
       return;
     }
     case "freed":{
