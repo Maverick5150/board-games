@@ -2,7 +2,7 @@
   "_help": "The hub's Coming soon shelf. Edit by hand and publish: no app update needed. One game per line: name, status (In progress or Next up), eta (any short date text). Remove a game when it ships; an empty items list hides the shelf. updated = the date of this list (YYYY-MM-DD).",
   "updated": "2026-10-16",
   "items": [
-    { "name": "Snakes and Ladders", "status": "Next up",     "eta": "Oct 16" },
+    { "name": "Snakes and Ladders", "status": "In progress", "eta": "Oct 16" },
     { "name": "Candy Land",         "status": "Next up",     "eta": "Oct 17" },
     { "name": "Bingo",              "status": "Next up",     "eta": "Oct 17" },
     { "name": "Crazy 8s",           "status": "Next up",     "eta": "Oct 17" },

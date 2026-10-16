@@ -131,6 +131,28 @@
   }
   html[data-tv] .hb-party{padding:0 1.25rem 0 1rem; gap:.6rem}
   html[data-tv] .hb-party .bg-ico{width:1.5rem; height:1.5rem}
+  /* ---------- Update available: a card under the bar when a new game (or a new version of the hub) is on the website; Update reloads ---------- */
+  .hb-upd{position:fixed; z-index:30; left:50%; top:calc(var(--hb-bar-h, 4rem) + .5rem); transform:translateX(-50%); width:min(calc(100% - 2 * var(--gutter)), 42rem);
+    display:grid; grid-template-columns:auto minmax(0,1fr) auto auto; align-items:center; gap:.5rem .75rem; padding:.75rem .875rem .75rem 1rem;
+    border-radius:var(--r-xl); background:var(--panel-fill); box-shadow:var(--panel-edge), inset 0 0 0 1px var(--line-gold), 0 18px 40px rgba(0,0,0,.6)}
+  .hb-upd[hidden]{display:none !important}
+  .hb-upd__ico{display:grid; place-items:center; width:2.25rem; height:2.25rem; border-radius:50%; color:var(--text-on-gold); background:var(--gold-fill)}
+  .hb-upd__ico .bg-ico{width:1.125rem; height:1.125rem}
+  .hb-upd__text{display:grid; gap:.1rem; min-width:0}
+  .hb-upd__text b{font:var(--fw-ui-strong) var(--fs-md)/1.2 var(--font-ui); color:var(--text-1)}
+  .hb-upd__text span{font:var(--fw-body) var(--fs-sm)/1.3 var(--font-ui); color:var(--text-2); overflow-wrap:anywhere}
+  @media (max-width:37.5em){   /* phone upright: the words get the width, the two buttons sit under them on the right */
+    .hb-upd{grid-template-columns:auto minmax(0,1fr) auto}
+    .hb-upd__text{grid-column:2 / -1}
+    .hb-upd__later{grid-column:2; grid-row:2; justify-self:end}
+    .hb-upd__go{grid-column:3; grid-row:2}
+  }
+  html[data-tv] .hb-upd{gap:1rem 1.5rem; padding:1rem 1.25rem 1rem 1.5rem}
+  html[data-tv] .hb-upd__ico{width:3rem; height:3rem}
+  /* NEW on a game the player has not opened yet: a gold chip on the art's top-right corner */
+  .hb-new{position:absolute; top:.625rem; right:.625rem; z-index:2; padding:.25rem .65rem; border-radius:999px; font:var(--fw-caps) var(--fs-micro)/1.1 var(--font-ui);
+    letter-spacing:var(--track-caps); text-transform:uppercase; color:var(--text-on-gold); background:var(--gold-fill); box-shadow:inset 0 1px 0 rgba(255,255,255,.6), 0 4px 12px rgba(0,0,0,.45)}
+
   /* War (wave 1) brings its own accent (ui/theme.css has none for it yet): the same field sage block as war/index.html */
   [data-game="war"]{--accent:#c8d4a4; --accent-bright:#e4ecc8; --accent-deep:#232b12; --accent-ink:#11160a; --accent-text:#c8d4a4; --accent-paper:#46512a;
     --accent-glow:rgba(200, 212, 164, .28); --felt:#27310f; --felt-deep:#0c1004; --felt-lite:#43531f; --board:#2b3613; --board-lite:#45552a}
@@ -159,6 +181,13 @@
   <div class="bg-topbar__title"><span class="bg-eyebrow">Classic games</span><h1 class="bg-topbar__name">Board Games</h1></div>
   <div class="bg-topbar__end"><a class="bg-btn bg-btn--ghost hb-party" id="hbParty" data-game="party" href="firestick/index.html" aria-label="Party Mode: play together. Join a party from this phone, or host one."><span data-hb-icon="tv" aria-hidden="true"></span><span class="hb-party__long">Party Mode</span><span class="hb-party__short" aria-hidden="true">Party</span></a></div>
 </header>
+
+  <div class="hb-upd" id="hbUpd" role="status" aria-live="polite" hidden>
+    <span class="hb-upd__ico" data-hb-icon="star" aria-hidden="true"></span>
+    <span class="hb-upd__text"><b id="hbUpdTitle">Update available</b><span id="hbUpdSub">A newer version of Board Games is ready.</span></span>
+    <button class="bg-btn bg-btn--ghost hb-upd__later" id="hbUpdLater" type="button">Later</button>
+    <button class="bg-btn bg-btn--primary hb-upd__go" id="hbUpdGo" type="button">Update</button>
+  </div>
 
   <section class="bg-hero hb-hero" id="hbHero" data-game="trouble" aria-label="Featured game">
     <div class="bg-hero__layer is-on" data-game="trouble" aria-hidden="true"></div><div class="bg-hero__layer" aria-hidden="true"></div>
@@ -264,7 +293,8 @@
     party: ["Play together", "Host on the TV, everyone joins from a phone."]
   };
   var INFO_TV = { party: ["Play together", "Host the table on this TV, everyone joins with a room code."] };
-  var cur = "", pinned = false, rotT = 0, heroSeen = true, REST = 7000;
+  var cur = "", pinned = false, rotT = 0, heroSeen = true, REST = 7000, hubReg = null;
+  function tileIds() { return $$("#hbTiles a.bg-tile").map(function (a) { return a.getAttribute("data-game"); }); }
 
   function B() { return window.BGUI || null; }
   function info(g) { return (isTV() && INFO_TV[g]) || INFO[g]; }
@@ -521,12 +551,12 @@
     /* The hub has no Back step of its own: in the Fire TV app Back exits (no window.__tvBack). The one exception is the open sound
        panel, which Back closes first: __tvBack exists only while the panel is on screen. */
     function syncBack() {
-      var snd = !!(window.Sound && Sound.panelOpen && Sound.panelOpen()), sh = !!(b && b.sheet && b.sheet.isOpen && b.sheet.isOpen());
-      if (snd || sh) window.__tvBack = function () {
-        try { if (window.Sound && Sound.panelOpen && Sound.panelOpen()) Sound.closePanel(); else if (b.sheet.isOpen()) b.sheet.close(null, "back"); } catch (e) { }
+      var snd = !!(window.Sound && Sound.panelOpen && Sound.panelOpen()), sh = !!(b && b.sheet && b.sheet.isOpen && b.sheet.isOpen()), up = !$("#hbUpd").hidden;
+      if (snd || sh || up) window.__tvBack = function () {
+        try { if (window.Sound && Sound.panelOpen && Sound.panelOpen()) Sound.closePanel(); else if (b.sheet.isOpen()) b.sheet.close(null, "back"); else if (!$("#hbUpd").hidden) hideUpd(); } catch (e) { }
       };
       else if (window.__tvBack) { try { delete window.__tvBack; } catch (e) { window.__tvBack = undefined; } }
-      var hb = $("#hbHintBack"); if (hb) hb.textContent = sh ? "Close" : "Exit";
+      var hb = $("#hbHintBack"); if (hb) hb.textContent = sh ? "Close" : (up ? "Later" : "Exit");
     }
     new MutationObserver(syncBack).observe(doc.body, { childList: true });
     /* the Coming soon details sheet is the hub's other layer: Back closes it first, like the sound panel */
@@ -550,6 +580,79 @@
     party.addEventListener("focusout", function () { if (okHint) okHint.textContent = "Open a game"; });
     $("#hbPartyClose").addEventListener("click", function () { if (b && b.sheet) b.sheet.close($("#hbPartySheet")); });
 
+    /* NEW on every game the player has not opened yet (localStorage "bg_hub_seen", guarded). The first time, everything on screen
+       counts as seen except the newest games, so War shows NEW; a game's chip goes once it is opened (its tile or Continue). */
+    var SEEN = "bg_hub_seen", FIRST_NEW = ["war"];
+    function seenList() { try { var a = JSON.parse(localStorage.getItem(SEEN)); return Array.isArray(a) ? a : null; } catch (e) { return null; } }
+    function saveSeen(a) { try { localStorage.setItem(SEEN, JSON.stringify(a)); } catch (e) { } }
+    function markNew() {
+      var seen = seenList();
+      if (!seen) { seen = tileIds().filter(function (id) { return FIRST_NEW.indexOf(id) < 0; }); saveSeen(seen); }
+      $$("#hbTiles a.bg-tile").forEach(function (a) {
+        var id = a.getAttribute("data-game"), art = $(".bg-tile__art", a), chip = $(".hb-new", a), label = a.getAttribute("data-label") || a.getAttribute("aria-label") || "";
+        a.setAttribute("data-label", label);
+        if (seen.indexOf(id) < 0) {
+          if (!chip && art) { chip = doc.createElement("span"); chip.className = "hb-new"; chip.setAttribute("aria-hidden", "true"); chip.textContent = "New"; art.appendChild(chip); }
+          a.setAttribute("aria-label", "New game. " + label);
+        } else { if (chip) chip.parentNode.removeChild(chip); a.setAttribute("aria-label", label); }
+      });
+    }
+    function markSeen(id) { var s = seenList() || []; if (id && s.indexOf(id) < 0) { s.push(id); saveSeen(s); } }
+    $$("#hbTiles a.bg-tile").forEach(function (a) { a.addEventListener("click", function () { markSeen(a.getAttribute("data-game")); }); });
+    $("#hbContinue").addEventListener("click", function () { markSeen((($("#hbContinue").getAttribute("data-base") || "").split("/")[0])); });
+    markNew();
+
+    /* Update available (the CEO: "if I add another game, it would say update available ... click OK, and then it'll update"):
+       - a new game: whenever the hub comes back to the front (the app returning from the background) and every 10 minutes, the
+         live hub page is read (no-store) and its game tiles compared with the ones on screen; the card names the new ones;
+       - anything else new: the hub's service worker is asked to update too; when a newer one takes over (controllerchange: a new
+         VERSION was published) the card says "Update available".
+       Update reloads (the page is network-first, so that is the new version); Later hides the card until something newer turns
+       up. The page never reloads by itself, and the card lives on the hub only, so it never interrupts a game. */
+    var upd = $("#hbUpd"), updAt = 0, known = tileIds(), laterSig = "", updBack = null, hadCtl = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+    function showUpd(names) {
+      var sig = names.length ? names.join(",") : "update";
+      if (sig === laterSig) return;
+      $("#hbUpdTitle").textContent = names.length ? (names.length > 1 ? "New games: " : "New game: ") + names.join(", ") : "Update available";
+      $("#hbUpdSub").textContent = names.length ? "Update to add " + (names.length > 1 ? "them" : "it") + " to your games." : "A newer version of Board Games is ready.";
+      upd.setAttribute("data-sig", sig);
+      if (upd.hidden) {
+        upd.hidden = false;
+        if (window.Sound && Sound.sfx) { try { Sound.sfx("bell"); } catch (e) { } }
+        /* TV: the remote's OK means Update at once (Back = Later), so the card takes the D-pad focus and gives it back after */
+        if (isTV() && b && b.focus && b.focus.set) { updBack = doc.activeElement; b.focus.set($("#hbUpdGo")); }
+      }
+      syncBack();
+    }
+    function hideUpd() {
+      laterSig = upd.getAttribute("data-sig") || ""; upd.hidden = true; syncBack();
+      if (isTV() && b && b.focus && b.focus.set) { var to = updBack && doc.body.contains(updBack) && updBack !== doc.body ? updBack : $("#hbTiles a.bg-tile"); if (to) b.focus.set(to); }
+      updBack = null;
+    }
+    function checkUpd() {
+      if (!window.fetch || doc.hidden) return;
+      updAt = Date.now();
+      if (hubReg && hubReg.update) { try { hubReg.update().catch(function () { }); } catch (e) { } }
+      fetch("index.html?u=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (html) {
+        var nav = /<nav[^>]*id="hbTiles"[\s\S]*?<\/nav>/.exec(html || ""), names = [], re = /<a class="bg-tile[^"]*" data-game="([a-z0-9]+)"[\s\S]*?class="bg-tile__name">([^<]+)</g, m;
+        if (!nav) return;
+        while ((m = re.exec(nav[0]))) if (known.indexOf(m[1]) < 0) names.push(m[2]);
+        if (names.length) showUpd(names);
+      }).catch(function () { });
+    }
+    if (navigator.serviceWorker) navigator.serviceWorker.addEventListener("controllerchange", function () {
+      if (hadCtl && upd.hidden) showUpd([]);   /* the first install (no worker before) is not an update */
+      hadCtl = true;
+    });
+    $("#hbUpdGo").addEventListener("click", function () { try { location.reload(); } catch (e) { } });
+    $("#hbUpdLater").addEventListener("click", hideUpd);
+    upd.addEventListener("focusin", function () { if (okHint) okHint.textContent = doc.activeElement && doc.activeElement.id === "hbUpdLater" ? "Later" : "Update"; });
+    upd.addEventListener("focusout", function () { if (okHint) okHint.textContent = "Open a game"; });
+    doc.addEventListener("visibilitychange", function () { if (!doc.hidden && Date.now() - updAt > 30000) checkUpd(); });
+    setInterval(function () { if (!doc.hidden) checkUpd(); }, 600000);
+    setTimeout(checkUpd, 20000);
+    window.__hub = { checkUpdate: checkUpd, markNew: markNew, seen: seenList };
+
     if (isTV()) {
       var first = (save && $("#hbContinue")) || $("a.bg-tile");
       if (first) { if (b && b.focus && b.focus.set) b.focus.set(first); else first.focus(); }
@@ -557,7 +660,7 @@
   }
   /* ui.js, icons.js and sound.js are deferred: they have run by DOMContentLoaded */
   if (doc.readyState === "loading") doc.addEventListener("DOMContentLoaded", boot); else boot();
-  if ("serviceWorker" in navigator) { navigator.serviceWorker.register("sw.js").catch(function () { }); }
+  if ("serviceWorker" in navigator) { navigator.serviceWorker.register("sw.js").then(function (reg) { hubReg = reg; }).catch(function () { }); }
 })();
 </script>
 </body>
