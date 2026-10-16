@@ -142,6 +142,86 @@
   #deedv{display:grid;justify-items:center;gap:.5rem;}
   .ph-effects{margin-top:.25rem;}
   .ph-link{display:inline-flex;}
+  /* ---------- phone sideways (step 11): a short landscape screen (a phone on its side). Upright is unchanged. A slimmer top bar (the
+     room, the name and the link chip on two lines); the prompts' choices in two columns; the card games and Risk as table-plus-hand: the
+     table (or the map) pinned on the left under the bar with your hand pinned under it, and on the right whose turn, the buttons and the
+     log, which scroll with the page ---------- */
+  @media (orientation: landscape) and (max-height: 31.25em){
+    html{--ls-bar:3.25rem; --ls-h:100vh; --ls-panel:clamp(15rem,34vw,18rem); --ls-hand:5.75rem;
+      --ls-game:calc(var(--ls-h) - var(--ls-bar) - env(safe-area-inset-top,0px) - 1.25rem)}
+    @supports (height:100dvh){ html{--ls-h:100dvh} }
+    .bg-topbar{height:calc(var(--ls-bar) + env(safe-area-inset-top,0px)); padding-top:calc(env(safe-area-inset-top,0px) + .25rem); padding-bottom:.25rem}
+    .bg-topbar__title{grid-template-columns:auto auto; justify-content:center; align-items:center; column-gap:.5rem}
+    .bg-topbar__title .bg-eyebrow{grid-column:1 / -1; margin-bottom:.1rem}
+    .bg-topbar__name{font-size:var(--fs-lg)}
+    #conn{margin:0}
+    #main{max-width:52rem}
+    .big{padding-top:.75rem; padding-left:max(var(--gutter), env(safe-area-inset-left,0px)); padding-right:max(var(--gutter), env(safe-area-inset-right,0px))}
+    .opts{max-width:48rem; grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr))}
+    /* the card games and Risk use the whole width */
+    #main:has(.rvp, .unph, .scph, .rkph){max-width:none}
+    .unph, .scph, .rkph{max-width:none !important}
+    /* 500 Rummy: the table (melds beside the stock and the pile) and the hand on the left, the rest on the right */
+    html .rvp{display:grid; max-width:none; grid-template-columns:minmax(0,1fr) var(--ls-panel); grid-template-rows:max-content max-content max-content max-content 1fr;
+      grid-template-areas:"L head" "L sb" "L chips" "L acts" "L lg"; column-gap:1rem; row-gap:.5rem; align-items:start; text-align:left}
+    html .rvp > .head{grid-area:head} html .rvp > .sc:nth-child(2){grid-area:sb; justify-content:flex-start} html .rvp > .sc:nth-child(3){grid-area:chips; justify-content:flex-start}
+    html .rvp > .acts{grid-area:acts; justify-content:flex-start} html .rvp > .lg{grid-area:lg; text-align:left} html .rvp > .sheet{grid-column:2}
+    html .rvp > .tbl{grid-area:L; position:sticky; top:calc(var(--ls-bar) + env(safe-area-inset-top,0px) + .5rem); display:flex; height:calc(var(--ls-game) - var(--ls-hand)); min-height:0}
+    html .rvp .rm{flex:1 1 0; min-width:0; min-height:0; max-height:none}
+    html .rvp .pl{flex:none; flex-direction:column; justify-content:center; width:8rem; border-top:0; border-left:1px dashed var(--line-2); padding:4px 2px 4px 8px}
+    html .rvp .stk{--cw:42px} html .rvp .dp{--cw:40px; flex:none; width:100%; padding:10px 4px 4px 2px} html .rvp .dp .pc{margin-left:-22px}
+    html .rvp > .hd{grid-area:L; position:sticky; top:calc(var(--ls-bar) + env(safe-area-inset-top,0px) + .5rem + var(--ls-game) - var(--ls-hand)); margin-top:calc(var(--ls-game) - var(--ls-hand));
+      --cw:48px; flex-wrap:nowrap; height:var(--ls-hand); padding:18px 22px 4px 4px}
+    html .rvp > .hd .pc{margin-right:-20px}
+    html .rvp > .hd:has(.pc:nth-child(14)) .pc{margin-right:-27px}
+    html .rvp > .hd:has(.pc:nth-child(19)) .pc{margin-right:-33px}
+    html .rvp > .hd:has(.pc:nth-child(25)){justify-content:flex-start; overflow:auto hidden; scrollbar-width:none}
+    /* Uno: the same, from the Uno table (cards.js) */
+    .unph .unoT.un-lux{display:grid; grid-template-columns:minmax(0,1fr) var(--ls-panel); grid-template-rows:max-content max-content max-content 1fr;
+      grid-template-areas:"L strip" "L stat" "L acts" "L log"; column-gap:1rem; align-items:start}
+    .unph #upl{grid-area:strip; padding:.625rem 0 .25rem}
+    .unph #ustat{grid-area:stat; margin:0; padding:.5rem .75rem; font-size:var(--fs-sm); justify-content:flex-start; text-align:left}
+    .unph #uacts{grid-area:acts; justify-content:flex-start; margin:.5rem 0 0}
+    .unph #ulog{grid-area:log; min-height:0; margin:.5rem 0 0; text-align:left}
+    .unph #utbl{grid-area:L; position:sticky; top:calc(var(--ls-bar) + env(safe-area-inset-top,0px) + .5rem); height:calc(var(--ls-game) - var(--ls-hand) - .75rem); min-height:0; margin:0; padding:.75rem .75rem .5rem}
+    .unph #utbl .pile:not(.un-mid){--cw:min(100px, calc((var(--ls-game) - var(--ls-hand) - 5rem) / 1.5))}
+    .unph #uhand{grid-area:L; position:sticky; top:calc(var(--ls-bar) + env(safe-area-inset-top,0px) + .5rem + var(--ls-game) - var(--ls-hand)); margin-top:calc(var(--ls-game) - var(--ls-hand));
+      --cw:50px; flex-wrap:nowrap; height:var(--ls-hand); min-height:0; padding:1.25rem 1.25rem .25rem .25rem}
+    .unph #uhand[data-n="m"]{--cw:44px} .unph #uhand[data-n="m"] .uc{margin-right:-.52em}
+    .unph #uhand[data-n="l"]{--cw:38px; justify-content:flex-start; overflow:auto hidden; scrollbar-width:none} .unph #uhand[data-n="l"] .uc{margin-right:-.6em}
+    /* Scattergories: the pad in two columns, the letter and the timer pinned on the left, the answers on the right (as on its own page) */
+    .scph .scPad{display:grid; grid-template-columns:clamp(13.5rem,30vw,16rem) minmax(0,1fr); grid-template-rows:max-content 1fr; border-radius:var(--r-lg);
+      background:linear-gradient(180deg,#141833,#10142a) 0 0 / clamp(13.5rem,30vw,16rem) 100% no-repeat}
+    .scph .scHead{grid-column:1; grid-row:1 / span 2; align-self:start; grid-template-columns:minmax(0,1fr) auto; grid-template-areas:"die ring" "txt txt";
+      gap:.625rem .5rem; padding:.875rem .75rem .75rem; border-radius:var(--r-lg) 0 0 var(--r-lg)}
+    .scph .scHead.is-still{grid-template-columns:minmax(0,1fr); grid-template-areas:"die" "txt"}
+    .scph .scHead .scDie{grid-area:die; justify-self:start; width:3.25rem; height:3.25rem; font-size:2rem}
+    .scph .scHead .scDie.is-kw{width:auto; height:2.75rem; font-size:1.125rem}
+    .scph .scHead .scRing{grid-area:ring} .scph .scHead .scHeadTxt{grid-area:txt} .scph .scHead .scRule{font-size:var(--fs-sm)}
+    .scph .scBody{grid-column:2; grid-row:1 / span 2; min-height:15.5rem; border-radius:0 var(--r-lg) var(--r-lg) 0}
+    .scph .scPad > .scDock{grid-column:1; grid-row:1 / span 2; align-self:end; padding:.5rem .75rem calc(env(safe-area-inset-bottom,0px) + .5rem);
+      background:linear-gradient(180deg,rgba(16,20,42,0),#10142a 30%); border-radius:0 0 0 var(--r-lg)}
+    /* Risk: the map pinned on the left at the full height (or as wide as leaves the panel 16.5rem), the panel on the right */
+    .rkph{display:grid; grid-template-columns:var(--ls-mw) minmax(0,1fr); column-gap:1rem; align-items:start;
+      --ls-mw:min(calc((var(--ls-game) - .5rem) * 5 / 3), calc(100vw - 16.5rem - 3rem))}
+    .rkph > #rkAfk{grid-column:1 / -1}
+    .rkph > #rkB{grid-column:1; position:sticky; top:calc(var(--ls-bar) + env(safe-area-inset-top,0px) + .5rem)}
+    .rkph #rkframe{width:var(--ls-mw); margin:0}
+    .rkph > #rkP{grid-column:2; min-width:0}
+    .rkph .rk-panel{width:auto}
+    /* Victory: the trophy beside the result (two columns), so its buttons show on the first screen; the same rays, confetti and trophy */
+    .bg-win__card{display:grid; grid-template-columns:10rem minmax(0,1fr); column-gap:1.5rem; align-items:center; width:min(100%,44rem)}
+    .bg-win__card > *{grid-column:2}
+    .bg-win__card > .bg-win__medal{grid-column:1; grid-row:1 / span 7; margin:0 auto}
+    .bg-win__title{margin:.25rem 0 0} .bg-win__sub{margin:.25rem 0 .5rem} .bg-win__stats{margin:.5rem 0 0} .bg-win__actions{margin-top:.5rem}
+    .bg-win__rays{left:calc(50vw - min(50vw - var(--gutter), 22rem) + 5rem)}
+  }
+  /* the on-screen keyboard is up on a phone on its side (Scattergories): "I'm done" waits at the end of the list */
+  @media (orientation: landscape) and (max-height: 15em){
+    .scph .scPad > .scDock{position:static}
+    body:has(.scph) .bg-topbar{position:relative}   /* the top bar scrolls away too, so the list keeps the room under the pinned letter */
+    .scph .scHead{top:.25rem}
+  }
 </style>
 <style id="rkLuxCss">
 /* the Risk phone in Midnight Luxe: the same panel, sheet and map-card rules the single-device page uses (risk/index.html, in game), so the Party phone looks the same. Text-align: the page default here is centred */
@@ -720,13 +800,17 @@ function unSend(a){
   var ask=unAsk; unAsk=null; net.send({t:"pick",pid:myPid,reqId:ask.reqId,id:"act",i:0,data:a}); sentFx();
   return undefined;
 }
+/* step 11: a phone on its side shows the Uno players as one scrolling row (the panel beside the table is narrow); turning re-lays it out */
+var sidewaysMQ=window.matchMedia?window.matchMedia("(orientation: landscape) and (max-height: 31.25em)"):null;
+function phoneSideways(){ return !!(sidewaysMQ&&sidewaysMQ.matches); }
+if(sidewaysMQ){ var relay=function(){ if(un&&un.ctrl&&window.__unV&&main.contains(un.el)) un.ctrl.update(window.__unV); }; if(sidewaysMQ.addEventListener) sidewaysMQ.addEventListener("change",relay); else if(sidewaysMQ.addListener) sidewaysMQ.addListener(relay); }
 function unShow(st,active,ask){
   unAsk=active?ask:null; unSent();
   if(!un||!main.contains(un.el)){
     if(un&&un.ctrl) un.ctrl.destroy();
     main.className="big scroll"; main.style.justifyContent="flex-start";
     main.innerHTML='<div class="unph" style="width:100%;max-width:640px"><div id="unAfk"></div><div id="unC"></div></div>';
-    var ctrl=Uno.Ctrl.create({root:$("unC"),toast:toast,send:unSend,luxe:true,tv:function(){ return false; },pulse:function(){ return !document.hidden; },gameKey:function(){ return room; },seatOf:function(i){ var s=window.__unV&&window.__unV.seats; return (s&&s[i])||(i%10)+1; }});
+    var ctrl=Uno.Ctrl.create({root:$("unC"),toast:toast,send:unSend,luxe:true,tv:function(){ return false; },pulse:function(){ return !document.hidden; },gameKey:function(){ return room; },seatOf:function(i){ var s=window.__unV&&window.__unV.seats; return (s&&s[i])||(i%10)+1; },scrollStrip:phoneSideways});
     un={el:main.firstChild,ctrl:ctrl};
   }
   window.__unV=st; un.ctrl.update(st); window.__un=un;
