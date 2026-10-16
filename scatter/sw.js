@@ -1,7 +1,7 @@
 // Offline cache for Scattergories (bump VERSION to force update)
-const VERSION = "scatter-v4";
+const VERSION = "scatter-v5";
 const PREFIX = VERSION.replace(/v[0-9]+$/, "");   // every game shares one origin (one CacheStorage): only ever delete THIS game's old caches
-const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.png", "../sound.js", "../skins.js", "../saves.js", "../names.js", "./bank.js", "./engine.js", "./brain.js", "./ui.js",
+const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.png", "../sound.js", "../skins.js", "../saves.js", "../names.js", "./bank.js", "./engine.js", "./brain.js", "./research.js", "./ui.js",
   "../ui/theme.css", "../ui/ui.js", "../ui/icons.js",
   "../ui/fonts/dmserifdisplay-latin.woff2", "../ui/fonts/dmserifdisplay-italic-latin.woff2", "../ui/fonts/manrope-var-latin.woff2",
   "../ui/tex/felt.webp", "../ui/tex/paper.webp", "../ui/tex/orb-gold.webp", "../ui/tex/orb-violet.webp", "../ui/tex/rays-core.webp",
@@ -28,6 +28,7 @@ const fresh = req => { try { return new Request(req, { cache: "no-cache" }); } c
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
   const url = new URL(e.request.url);
+  if (url.origin !== self.location.origin) return;   // step 10: the answer research (Wikipedia, dictionaryapi.dev, Datamuse) always goes to the network, never into this cache
   const isDoc = e.request.mode === "navigate" || url.pathname.endsWith("/") || url.pathname.endsWith(".html") || url.pathname.endsWith(".js");
   if (isDoc) {
     e.respondWith(

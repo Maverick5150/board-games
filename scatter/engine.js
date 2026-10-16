@@ -250,7 +250,9 @@ function evaluate(G){
           var dupOwn=null; seenOwn[p.id].some(function(x){ if(eqKey(x.key,e.key,o.strict)){ dupOwn=x.si; return true; } return false; });
           if(dupOwn!=null){ e.status="invalid"; e.reason=dupOwn===si?"already written in this category":"already used in another line"; } else seenOwn[p.id].push({key:e.key,si:si});
         }
-        var ch=(G.challenges[si]||{})[p.id+"/"+k]; if(ch&&ch.state==="rejected"&&e.status==="ok"){ e.status="invalid"; e.reason="voted out"; e.out=true; }
+        var ch=(G.challenges[si]||{})[p.id+"/"+k];
+        if(ch&&ch.state==="rejected"&&e.status==="ok"&&ch.dupOf&&G.answers[ch.dupOf.p]){ e.status="dup"; e.reason="the same answer as another player's"; e.twin=ch.dupOf; }   // step 10: a ruling that two answers are the same (scatter/index.html; Party never sets dupOf)
+        else if(ch&&ch.state==="rejected"&&e.status==="ok"){ e.status="invalid"; e.reason="voted out"; e.out=true; }
         e.challenge=ch?ch.state:null;
         entries.push(e); bySlot[si].push(e);
       }
@@ -261,6 +263,8 @@ function evaluate(G){
     var out=list.filter(function(e){ return e.out; });
     if(out.length) list.forEach(function(e){ if(e.status==="ok"&&out.some(function(x){ return same(x.key,e.key,o.strict); })){ e.status="invalid"; e.reason="voted out"; } });
   });
+  // a ruled duplicate: its twin scores nothing either
+  bySlot.forEach(function(list){ list.forEach(function(e){ if(!e.twin) return; list.forEach(function(x){ if(x.p===e.twin.p&&x.k===e.twin.k&&x.status==="ok"){ x.status="dup"; x.reason="someone else wrote it too"; } }); }); });
   // duplicates between different players
   bySlot.forEach(function(list){
     var live=list.filter(function(e){ return e.status==="ok"; });

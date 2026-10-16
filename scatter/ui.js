@@ -221,7 +221,7 @@ function create(cfg){
     var o=S.o, cls=e.status==="ok"?"ok":(e.status==="dup"?"dup":"invalid"), canC=!scored&&o.judge==="vote"&&(e.status==="ok"||e.status==="dup"), chal=(S.challenges||[]).filter(function(c){ return c.slot===e.slot&&c.p===e.p&&c.k===e.k; })[0];
     var attrs=' data-s="'+e.slot+'" data-p="'+e.p+'" data-k="'+e.k+'"', mine=e.p===S.me?" me":"", btn=canC&&!chal;
     var inner='<span class="ico">'+ic(e.status==="ok"?"check":"close")+'</span><span class="t">'+esc(e.raw)+'</span>'+(e.pts?'<b>+'+e.pts+'</b>':'')+
-      '<span class="cap"><span class="w">'+esc(playerName(e.p))+'</span>'+(chal?'<span class="x">challenged: '+(chal.state==="open"?"voting…":chal.state==="accepted"?"kept":"voted out")+'</span>':(e.status!=="ok"&&e.reason?'<span class="x">'+esc(e.reason)+'</span>':''))+'</span>';
+      '<span class="cap"><span class="w">'+esc(playerName(e.p))+'</span>'+(chal?'<span class="x">challenged: '+(chal.label?esc(chal.label):chal.state==="open"?"voting…":chal.state==="accepted"?"kept":"voted out")+'</span>':(e.status!=="ok"&&e.reason?'<span class="x">'+esc(e.reason)+'</span>':''))+'</span>';
     return btn?'<button type="button" class="scAns '+cls+' chal'+mine+'"'+attrs+' aria-label="Challenge '+esc(playerName(e.p))+"'s answer: "+esc(e.raw)+'">'+inner+'</button>':'<span class="scAns '+cls+mine+'"'+attrs+'>'+inner+'</span>';
   }
   function reviewL(res,scored){
@@ -268,7 +268,7 @@ function create(cfg){
       var list=res.entries.filter(function(e){ return e.slot===i&&e.raw; });
       var chips=list.map(function(e){
         var cls=e.status==="ok"?"ok":(e.status==="dup"?"dup":"invalid"), canC=!scored&&o.judge==="vote"&&(e.status==="ok"||e.status==="dup"), chal=(S.challenges||[]).filter(function(c){ return c.slot===e.slot&&c.p===e.p&&c.k===e.k; })[0];
-        return '<span class="scAns '+cls+(canC&&!chal?" chal":"")+(e.p===me?" me":"")+'" data-s="'+e.slot+'" data-p="'+e.p+'" data-k="'+e.k+'"><span class="w">'+esc(playerName(e.p))+'</span>'+esc(e.raw)+(e.pts?'<b>+'+e.pts+'</b>':'')+(chal?'<span class="x">⚖ '+(chal.state==="open"?"voting…":chal.state==="accepted"?"kept":"voted out")+'</span>':(e.status!=="ok"&&e.reason?'<span class="x">'+esc(e.reason)+'</span>':''))+'</span>';
+        return '<span class="scAns '+cls+(canC&&!chal?" chal":"")+(e.p===me?" me":"")+'" data-s="'+e.slot+'" data-p="'+e.p+'" data-k="'+e.k+'"><span class="w">'+esc(playerName(e.p))+'</span>'+esc(e.raw)+(e.pts?'<b>+'+e.pts+'</b>':'')+(chal?'<span class="x">⚖ '+(chal.label?esc(chal.label):chal.state==="open"?"voting…":chal.state==="accepted"?"kept":"voted out")+'</span>':(e.status!=="ok"&&e.reason?'<span class="x">'+esc(e.reason)+'</span>':''))+'</span>';
       }).join("")||'<span style="opacity:.6;font-size:12px">no answers</span>';
       return '<div class="scSlot"><div class="scCat"><span>'+(i+1)+'.</span>'+(S.o.mode==="keyword"?'<b style="color:#ffd23f">'+esc(s.letter)+'</b> — ':'')+esc(s.label)+'</div>'+chips+'</div>';
     }).join("");
@@ -350,7 +350,7 @@ function create(cfg){
     if(!open){ if(modal.classList.contains("show")&&modal.dataset.vote){ closeModal(); modal.dataset.vote=""; } return; }
     var id=open.slot+"/"+open.p+"/"+open.k; if(modal.dataset.vote===id) return; modal.dataset.vote=id;
     var ent=S.review.entries.filter(function(x){ return x.slot===open.slot&&x.p===open.p&&x.k===open.k; })[0]||{raw:"?"};
-    if(L) openModal(sheetL("Vote","Is this answer OK?",esc(ent.raw),'For “'+esc(S.slots[open.slot].label)+'” starting with '+esc(S.slots[open.slot].letter)+'. Written by '+esc(playerName(open.p))+', challenged by '+esc(playerName(open.by))+'.',
+    if(L) openModal(sheetL("Vote","Is this answer OK?",esc(ent.raw),(open.note?esc(open.note)+" ":"")+'For “'+esc(S.slots[open.slot].label)+'” starting with '+esc(S.slots[open.slot].letter)+'. Written by '+esc(playerName(open.p))+', challenged by '+esc(playerName(open.by))+'.',
       '<button type="button" class="bg-btn bg-btn--primary bg-btn--lg" data-v="1" data-autofocus>'+ic("check")+'Accept</button><button type="button" class="bg-btn bg-btn--secondary bg-btn--lg" data-v="0">'+ic("close")+'Reject</button>'),true);
     else openModal('<h3>Vote: is this answer OK?</h3><div class="big">'+esc(ent.raw)+'</div><div style="font-size:13px;opacity:.9">for “'+esc(S.slots[open.slot].label)+'” starting with <b>'+esc(S.slots[open.slot].letter)+'</b><br><span style="opacity:.8">written by '+esc(playerName(open.p))+' · challenged by '+esc(playerName(open.by))+'</span></div><div class="scBtns"><button class="b pri" data-v="1">👍 Accept</button><button class="b" data-v="0">👎 Reject</button></div>',true);
     modal.querySelector("#scsh").onclick=function(ev){ var b=ev.target.closest&&ev.target.closest("button[data-v]"); if(!b) return; modal.dataset.vote=""; closeModal(); send({t:"vote",slot:open.slot,p:open.p,k:open.k,accept:b.dataset.v==="1"}); };

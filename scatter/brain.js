@@ -177,6 +177,73 @@ function wantsChallenge(G,e){
   var s=G.slots[e.slot]; if(!s) return false;
   return readTable().bad.indexOf(catKey(s,e.slot)+"|"+e.key)>=0;
 }
+/* ---------- the computers challenge doubtful human answers (step 10; the single-device page calls it, Party Mode does not yet) ----------
+   Each doubt has a strength; the skill sets the bar and how many a round may raise (Easy 1, Normal 2, Hard 3):
+     letter (.9)  the letter comes from an added word ("Big Dog" for B; not when the whole is on a list, "Big Ben")
+     fit    (.8)  the lists know the answer only from other categories ("Zebra" for Something in a kitchen): Normal and Hard
+     dup    (.7)  another player wrote nearly the same answer ("Kiwi fruit" and "Kiwi"; not already a duplicate under the game's rule): Normal and Hard
+     word  (.5-.7) a word the lists have never seen: Hard always, Normal for about half of them
+   (clearly made-up answers are challenged by Sc.Engine.cpuChallenges already.) The bank.js lists are the evidence: an answer on this
+   category's list is never doubted. Returns [{slot,p,k,why,by,trick,dupOf}]; deterministic (no dice). */
+var DOUBT={easy:{bar:.85,cap:1},normal:{bar:.6,cap:2},hard:{bar:.5,cap:3}};
+var TRICK={my:1,mr:1,mrs:1,ms:1,miss:1,dr:1,sir:1,st:1,saint:1,big:1,little:1,small:1,tiny:1,giant:1,huge:1,baby:1,mini:1,super:1,mega:1,great:1,red:1,blue:1,green:1,yellow:1,black:1,white:1,pink:1,purple:1,orange:1,brown:1,grey:1,gray:1,old:1,young:1,fat:1,hot:1,cold:1,good:1,bad:1,best:1,very:1,really:1,fake:1,toy:1,pet:1,wild:1,cute:1,funny:1,happy:1,sad:1,silly:1,crazy:1,lady:1,king:1,queen:1,prince:1,princess:1,uncle:1,aunt:1,auntie:1,grandma:1,grandpa:1,mama:1,papa:1,mister:1,professor:1,captain:1};
+var GENERIC={fruit:1,fruits:1,plant:1,tree:1,flower:1,dog:1,cat:1,fish:1,bird:1,city:1,state:1,river:1,lake:1,mount:1,mountain:1,island:1,game:1,show:1,movie:1,film:1,song:1,band:1,car:1,shoe:1,shoes:1,hat:1,drink:1,food:1,sauce:1,juice:1,cake:1,pie:1,the:1,of:1,and:1};
+var IDX=null;
+function bankIndex(){   // every answer key (and its singulars) -> the categories that list it
+  if(IDX) return IDX; var m={}, bank=g.ScatterBank||[];
+  bank.forEach(function(c){ Object.keys(c.answers||{}).forEach(function(L){ c.answers[L].forEach(function(a){ var k=E.keyOf(a); [k].concat(E.singulars(k)).forEach(function(x){ (m[x]=m[x]||{})[c.id]=c.text; }); }); }); });
+  if(bank.length) IDX=m; return m;
+}
+function listsOf(raw){ var m=bankIndex(), k=E.keyOf(raw), out={}; [k].concat(E.singulars(k)).forEach(function(x){ var h=m[x]; if(h) Object.keys(h).forEach(function(id){ out[id]=h[id]; }); }); return out; }
+/* the bank evidence for one answer in one slot: on this category's list, the other categories that list it */
+function evidence(G,si,raw){
+  var s=G.slots[si], id=s&&s.bank&&s.bank.id, l=listsOf(raw), here=!!(id&&l[id]);
+  return {here:here||(s?E.inBank(s,raw):false),elsewhere:Object.keys(l).filter(function(x){ return x!==id; }).map(function(x){ return l[x]; })};
+}
+function letterTrick(G,e){
+  var w=E.words(e.raw), L=(G.slots[e.slot].letter||"").toLowerCase();
+  if(w.length<2||!TRICK[w[0]]||w[0][0]!==L||w[1][0]===L) return null;
+  if(Object.keys(listsOf(e.raw)).length) return null;   // a listed name ("Big Ben", "Saint Bernard") is fine
+  var rest=w.slice(1).join(" ");
+  if(!(E.knownWords(rest)||Object.keys(listsOf(rest)).length)) return null;
+  var rw=String(e.raw).trim().split(/\s+/); return {word:rw[0],rest:rw.slice(1).join(" ")};
+}
+function nearSame(a,b){
+  if(!a||!b||a===b) return false;
+  if(E.same(a,b,"fuzzy")) return true;
+  var wa=a.split(" "), wb=b.split(" "), sm=wa.length<=wb.length?wa:wb, lg=sm===wa?wb:wa;
+  if(sm.length===lg.length) return false;
+  var has=function(arr,x){ return arr.some(function(y){ return E.pluralSame(y,x); }); };
+  return sm.every(function(x){ return has(lg,x); })&&lg.every(function(x){ return has(sm,x)||GENERIC[x]; });
+}
+function doubts(G){
+  var out=[];
+  try{
+    if(!G||G.o.judge!=="vote"||G.phase!=="review") return out;
+    var sk=G.o.cpuSkill||"normal", D=DOUBT[sk]||DOUBT.normal, o=G.o;
+    var comps=G.players.filter(function(q){ return !q.human&&E.inPlay(G,q.id); }).map(function(q){ return q.id; });
+    if(!comps.length) return out;
+    var ev=E.evaluate(G).entries, cand=[];
+    ev.forEach(function(e){
+      if(e.status!=="ok"||!G.players[e.p].human||!e.raw) return;
+      if((G.challenges[e.slot]||{})[e.p+"/"+e.k]) return;
+      var b=evidence(G,e.slot,e.raw); if(b.here) return;   // on this category's list: never doubted
+      var c=null, tr=letterTrick(G,e);
+      if(tr) c={why:"letter",w:.9,trick:tr};
+      else if(sk!=="easy"&&E.cpuJudge&&!E.madeUp(e.raw)&&E.cpuJudge(G,G.slots[e.slot],e.raw)===false) c={why:"fit",w:.8};
+      else if(sk!=="easy"){
+        var twin=ev.filter(function(x){ return x.slot===e.slot&&x.p!==e.p&&(x.status==="ok"||x.status==="dup")&&x.key&&!E.same(x.key,e.key,o.strict)&&nearSame(x.key,e.key); })[0];
+        if(twin) c={why:"dup",w:.7,dupOf:{p:twin.p,k:twin.k}};
+        else if(!E.knownWords(e.raw)&&!b.elsewhere.length&&!E.madeUp(e.raw)) c={why:"word",w:.5+(hash(e.key)%100)/500};
+      }
+      if(c&&c.w>=D.bar){ c.slot=e.slot; c.p=e.p; c.k=e.k; cand.push(c); }
+    });
+    cand.sort(function(a,b){ return b.w-a.w||a.slot-b.slot; });
+    cand.slice(0,D.cap).forEach(function(c,i){ c.by=comps[(G.round+i)%comps.length]; out.push(c); });
+  }catch(e){ stats.errors++; stats.lastError=String(e&&e.stack||e); }
+  return out;
+}
+
 /* a finished game: each brain nudges the table toward its own weights if it won, slightly away if it lost */
 function finish(G){
   try{
@@ -194,7 +261,7 @@ function finish(G){
   }catch(e){}
 }
 
-Sc.Brain={ decide:decide, learnRound:learnRound, finish:finish, vote:vote, wantsChallenge:wantsChallenge, brainOf:brainOf, readMood:readMood,
+Sc.Brain={ decide:decide, learnRound:learnRound, finish:finish, vote:vote, wantsChallenge:wantsChallenge, brainOf:brainOf, readMood:readMood, doubts:doubts, evidence:evidence, DOUBT:DOUBT,
   SKILL:SKILL, P:P, OPP:OPP, KEY:KEY, VER:VER, stats:stats, setStore:setStore, readTable:readTable, catKey:catKey, clash:clash, ptsOf:ptsOf };
 if(typeof module!=="undefined"&&module.exports) module.exports=Sc.Brain;
 })(typeof window!=="undefined"?window:globalThis);
