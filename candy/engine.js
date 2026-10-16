@@ -82,7 +82,9 @@ function defaultOpts(){
     version:"v2004",
     older:false,      // "Older players": draw two, choose one (2004 official option [HAS04]; House on the 1984 board)
     younger:false,    // "Younger players": a picture card that would send you back is discarded and you draw again (2004 official option)
-    exact:false,      // House (1984): land exactly on the last square; a card that would pass it does not move you [WIK; SCH]
+    exact:true,       // the CEO's rule (2026-10-16), on by default: you need the last square's colour to win. A card must land exactly on
+                      // the last square; a card that would take you past it does not move you [WIK; SCH]. Off = the printed 1984 rule
+                      // [MB84 4]: any colour card that would pass the last purple square wins. Moot on the 2004 rainbow square (normalize)
     noShare:false,    // House (2013+ rule): an occupied colour square sends you on to the next free square of that colour; an occupied
                       // picture square: draw again [HAS13; HASW; HASDP; HASGG; HAS25]
     treatsOnce:false, // House (2025 rule): a picture card is used once a game, then set aside [HAS25]
@@ -94,8 +96,8 @@ var VERSIONS=[
   {id:"v2004",name:"Classic 2004",tag:"Rainbow finish · licorice = lose a turn",board:"b04",deck:"d04",
     desc:"The 2004 board: 134 squares to a rainbow square that any colour reaches. 64 cards. Land on one of the 3 licorice squares and you lose your next turn. Two shortcuts, taken only on an exact landing. Official options for younger and older players.",
     opts:{},lock:[]},
-  {id:"v1984",name:"Classic 1984",tag:"Sticky squares · any card past the end wins",board:"b84",deck:"d84",
-    desc:"The 1984 board: 134 squares, the last one purple. 64 cards. Land on one of the 3 sticky squares and you are stuck there until you draw a card of that square's colour. A colour card that would take you past the end wins.",
+  {id:"v1984",name:"Classic 1984",tag:"Sticky squares · land on the last purple to win",board:"b84",deck:"d84",
+    desc:"The 1984 board: 134 squares, the last one purple. 64 cards. Land on one of the 3 sticky squares and you are stuck there until you draw a card of that square's colour. To win you need purple: a card must land exactly on the last purple square (the rule at this table; the printed rule, any card past the end wins, is a switch).",
     opts:{},lock:[]}
 ];
 /* [key, label, type, choices, house (0 = official option, 1 = House), versions it applies to (null = all), minimum players, needs, tag] */
@@ -104,14 +106,14 @@ var HOUSE=[
   ["older","Older players: draw two, choose one","bool",null,0,["v2004"],0,null,"Official option"],
   ["younger","No going back","bool",null,1,["v1984"],0,null,"House"],
   ["older","Draw two, choose one","bool",null,1,["v1984"],0,null,"House"],
-  ["exact","Exact finish","bool",null,1,["v1984"],0,null,"House"],
+  ["exact","You need the last colour to win","bool",null,1,["v1984"],0,null,"House"],
   ["noShare","No sharing squares","bool",null,1,null,0,null,"House"],
   ["treatsOnce","Picture cards only once","bool",null,1,null,0,null,"House"]
 ];
 var HDESC={
   younger:"A picture card that would send you backward is put on the discard pile and you draw a new card instead. (Printed in the 2004 rules for younger players.)",
   older:"Draw two cards, choose the one you want to play, then discard both. (Printed in the 2004 rules for older players: it helps children learn to make decisions and speeds the game up.)",
-  exact:"You must land exactly on the last purple square. A card that would take you past it does not move you. A popular family rule; games run about a third longer.",
+  exact:"On (the usual way at this table): you need a card of the last square's colour that lands exactly on it, so on this board only purple wins; a card that would take you past the end does not move you. Off: the printed 1984 rule: any colour card that would take you past the last purple square wins.",
   noShare:"From the 2013 rules on: if you land on a square someone is already on, go on to the next square of the same colour. If the picture square is taken, draw again.",
   treatsOnce:"From the 2025 rules: each picture card can be used only once a game. After it is drawn it is set aside and never shuffled back in."
 };
