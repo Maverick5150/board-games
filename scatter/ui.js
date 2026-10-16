@@ -162,7 +162,11 @@ function create(cfg){
       var t=e.target; if(!t||!t.matches||!t.matches("input,.scAns.chal,.scLet button")) return;
       setTimeout(function(){
         if(!t.isConnected) return;
-        var hd=root.querySelector(".scHead"), dk=root.querySelector(".scDock"), r=t.getBoundingClientRect(), top=hd?hd.getBoundingClientRect().bottom:barH(), pad=Math.round(window.innerHeight*0.03);
+        var hd=root.querySelector(".scHead"), dk=root.querySelector(".scDock"), r=t.getBoundingClientRect(), pad=Math.round(window.innerHeight*0.03);
+        // a phone on its side puts the header and the dock in a column beside the list (step 11): only what is above / below the answer covers it
+        var over=function(e){ if(!e) return false; var q=e.getBoundingClientRect(); return q.right>r.left+1&&q.left<r.right-1; };
+        if(!over(hd)) hd=null; if(!over(dk)) dk=null;
+        var top=hd?hd.getBoundingClientRect().bottom:barH();
         if(r.top<top+pad) window.scrollBy(0,r.top-top-pad-12);
         else if(dk){ var db=dk.getBoundingClientRect().top; if(db<window.innerHeight&&r.bottom>db-pad) window.scrollBy(0,r.bottom-db+pad+12); }
       },30);
