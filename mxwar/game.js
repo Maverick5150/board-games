@@ -4,7 +4,10 @@
    advances and the points, the round podium, the season champion (Victory). The rules live in race.js / round.js / season.js (pure, no
    DOM), the riders' character in brain.js, the art in art.js; this file only drives and shows them.
    - War has no first player (everyone turns a card at once): the opening show of every race is the starting gate (race.js firstPlayer:
-     rule "none", show "gate"). There is no track of spaces either: the bikes on the start straight stand where their card count puts them.
+     rule "none", show "gate"). There is no track of spaces either (so no hops): v2 draws the round's real-looking loop (track.js) and every
+     rider rides it continuously at a gap from the standings; a pass is a smooth ride-up. One battle = one lap ("Lap 7 of 30", the white
+     flag on the last lap, the checkered flag). v2 also: the red plate (the points leader), the battle board, the heat line-up (balanced
+     by team), free numbers only (a taken one is refused with who holds it).
    - Every batch of engine events is played in order (the gate, the reveal, a war's 3 down + the 4th, the win, the holeshot, the flag), then
      the race is drawn again from G. The person's Flip is queued while a battle plays, so a tap is never lost; Auto-flip turns for them.
    - Saves after every action (Saves.auto "mxwar"); the season is plain JSON, so Continue resumes it exactly, mid-race too. */
@@ -42,7 +45,8 @@ function fmtDate(s){ try{ var d=new Date(s+"T12:00:00"); if(isNaN(d)) return s||
 var GLYPHS={
   helmet:'<path d="M4 14a8 8 0 0 1 16-1.5V15h-6.5L12 18H6.5A2.5 2.5 0 0 1 4 15.5z"/><path d="M13.5 12.5H20"/><path d="M8 8.5l3 1"/>',
   wheel:'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.2"/><path d="M12 4v5.8M12 14.2V20M4 12h5.8M14.2 12H20"/>',
-  checkflag:'<path d="M5 21V4"/><path d="M5 4h13l-2.5 4L18 12H5"/><path d="M9 4v8M13 4v8M5 8h11"/>'
+  checkflag:'<path d="M5 21V4"/><path d="M5 4h13l-2.5 4L18 12H5"/><path d="M9 4v8M13 4v8M5 8h11"/>',
+  board:'<path d="M4.5 6h2.5M10 6h9.5M4.5 12h2.5M10 12h9.5M4.5 18h2.5M10 18h9.5"/>'
 };
 var registered=false;
 function register(){
@@ -132,12 +136,45 @@ function mountNames(){
   var B=BG(); if(!B||!B.names||nameUI) return;
   nameUI=B.names.mount("#nameCard",{count:Math.max(1,cfg.humans),seat:function(i){ return i+1; },onChange:function(){ syncStart(); },
     label:function(i,n){ return n>1?"Rider "+(i+1)+" name":"Your name"; },
-    extra:function(i){ var r=rx(i); return '<div class="mx-rx"><label>Number<input class="bg-input" type="text" inputmode="numeric" maxlength="3" autocomplete="off" data-rx="num" data-i="'+i+'" value="'+esc(r.num)+'" placeholder="Any"></label>'+
-      '<label>Team<select class="bg-select" data-rx="bike" data-i="'+i+'">'+bikeOptions(r.bike)+"</select></label></div>"; }});
+    extra:function(i){ var r=rx(i); return '<div class="mx-rx"><label>Team<select class="bg-select" data-rx="bike" data-i="'+i+'">'+bikeOptions(r.bike)+"</select></label>"+
+      '<label>Number<input class="bg-input" type="text" inputmode="numeric" maxlength="3" autocomplete="off" data-rx="num" data-i="'+i+'" value="'+esc(r.num)+'" placeholder="Any"></label></div>'+
+      '<p class="mx-numst" data-rx="st" data-i="'+i+'" aria-live="polite"></p><div class="mx-free" data-rx="free" data-i="'+i+'"></div>'; }});
   var nc=$("nameCard");
-  nc.addEventListener("input",function(e){ var t=e.target; if(!t.getAttribute||t.getAttribute("data-rx")!=="num") return; var v=cleanNum(t.value); if(v!==t.value) t.value=v; rx(+t.getAttribute("data-i")).num=v; writeRiders(); });
-  nc.addEventListener("change",function(e){ var t=e.target, k=t.getAttribute&&t.getAttribute("data-rx"); if(!k) return; var r=rx(+t.getAttribute("data-i")); if(k==="bike") r.bike=t.value; else r.num=cleanNum(t.value); writeRiders(); });
+  nc.addEventListener("input",function(e){ var t=e.target; if(!t.getAttribute||t.getAttribute("data-rx")!=="num") return; var v=cleanNum(t.value); if(v!==t.value) t.value=v; rx(+t.getAttribute("data-i")).num=v; writeRiders(); syncNums(); });
+  nc.addEventListener("change",function(e){ var t=e.target, k=t.getAttribute&&t.getAttribute("data-rx"); if(!k||k==="st"||k==="free") return; var r=rx(+t.getAttribute("data-i")); if(k==="bike") r.bike=t.value; else r.num=cleanNum(t.value); writeRiders(); syncNums(); });
+  nc.addEventListener("click",function(e){ var b=e.target.closest&&e.target.closest("button[data-free]"); if(!b) return; var i=+b.getAttribute("data-i"), n=b.getAttribute("data-free"); rx(i).num=n; writeRiders();
+    var inp=nc.querySelector('input[data-rx="num"][data-i="'+i+'"]'); if(inp) inp.value=n; syncNums(); focusIn(inp); });
 }
+/* v2 numbers (the CEO ~18:25): "you should be able to choose your own number or a number available for the season ... you can't have the same
+   number as another rider for that year". Every rider of the season holds their own number (real, or assigned where no source gives one);
+   a taken number is refused with who holds it, and the nearest free numbers are offered. */
+function numState(i){
+  var r=rx(i), v=r.num, si=seasonInfo(cfg.sid), D=si&&DATA[si.id];
+  if(v===""||v==null) return {ok:true,t:"Any free number: one is picked for you."};
+  var n=+v;
+  for(var j=0;j<i;j++){ var o=rx(j); if(o.num!==""&&+o.num===n) return {ok:false,t:"#"+n+" is already "+(cfg.humans>1?"Rider "+(j+1)+"'s":"taken")+" number.",n:n}; }
+  if(!D) return {ok:true,t:"Checking the "+(si?si.year:"")+" numbers...",wait:true};
+  var h=D.riders.filter(function(x){ return x.num===n; })[0];
+  if(h) return {ok:false,t:"#"+n+" is taken in "+D.year+": "+h.name+(h.bike?" ("+h.bike+")":"")+" rides it"+(h.ns==="a"?" (a number assigned for the game)":"")+".",n:n};
+  return {ok:true,t:"#"+n+" is free in "+D.year+"."};
+}
+function freeNear(n,k){
+  var si=seasonInfo(cfg.sid), D=si&&DATA[si.id], used={}, out=[];
+  if(D) D.riders.forEach(function(x){ if(x.num!=null) used[x.num]=1; });
+  for(var j=0;j<cfg.humans;j++){ var o=rx(j); if(o.num!=="") used[+o.num]=1; }
+  for(var d=1;d<1000&&out.length<k;d++){ if(n-d>=1&&!used[n-d]) out.push(n-d); if(out.length<k&&n+d<=999&&!used[n+d]) out.push(n+d); }
+  return out.sort(function(a,b){ return a-b; });
+}
+function syncNums(){
+  var nc=$("nameCard"); if(!nc) return;
+  for(var i=0;i<cfg.humans;i++){
+    var st=nc.querySelector('[data-rx="st"][data-i="'+i+'"]'), fr=nc.querySelector('[data-rx="free"][data-i="'+i+'"]'), inp=nc.querySelector('input[data-rx="num"][data-i="'+i+'"]'); if(!st) continue;
+    var x=numState(i); st.textContent=x.t; st.classList.toggle("is-bad",!x.ok); st.classList.toggle("is-ok",x.ok&&!x.wait&&rx(i).num!==""); if(inp) inp.setAttribute("aria-invalid",String(!x.ok));
+    var want=!x.ok?freeNear(x.n,onTV()?5:4):[], have=fr?[].map.call(fr.querySelectorAll("button"),function(b){ return +b.getAttribute("data-free"); }):[];
+    if(fr&&want.join()!==have.join()) fr.innerHTML=want.length?'<span class="mx-free__l">Free:</span>'+want.map(function(n){ return '<button type="button" class="bg-btn bg-btn--secondary mx-free__b" data-free="'+n+'" data-i="'+i+'" aria-label="Take number '+n+'">'+n+"</button>"; }).join(""):"";
+  }
+}
+function numsBad(){ for(var i=0;i<cfg.humans;i++){ if(!numState(i).ok) return i; } return -1; }
 function refreshBikeSelects(){ document.querySelectorAll('#nameCard select[data-rx="bike"]').forEach(function(s){ var i=+s.getAttribute("data-i"); s.innerHTML=bikeOptions(rx(i).bike); }); }
 function humanList(){ var n=cfg.humans, nm=humanNames(n), out=[]; for(var i=0;i<n;i++){ var r=rx(i); out.push({name:nm[i],num:r.num===""?undefined:+r.num,bike:r.bike}); } return out; }
 
@@ -218,7 +255,7 @@ function fillPreview(el,D){
   body.innerHTML='<div class="mx-pv__col"><span class="mx-pv__lab">'+(D.series==="mx"?"Tracks":"Cities")+'</span><div class="mx-pv__cities">'+
     D.rounds.map(function(r){ return '<span class="mx-pv__city"><b>'+r.n+"</b> "+esc(r.city||r.venue)+"</span>"; }).join("")+'</div></div>'+
     '<div class="mx-pv__col"><span class="mx-pv__lab">Top riders</span><ol class="mx-pv__riders">'+
-    top.map(function(r){ return '<li><span class="mx-pv__rk">'+r.pos+'</span><span class="mx-pl" style="'+A.mkStyle(r.bike)+'">'+(r.num!=null?r.num:"-")+'</span><span class="mx-pv__nm">'+esc(r.name)+'</span>'+(r.bike?'<span class="mx-mk" style="'+A.mkStyle(r.bike)+'">'+esc(r.bike)+"</span>":"")+"</li>"; }).join("")+"</ol></div>";
+    top.map(function(r){ return '<li><span class="mx-pv__rk">'+r.pos+'</span><span class="mx-pl'+(r.ns==="a"?" is-gen":"")+'" style="'+A.mkStyle(r.bike)+'">'+(r.num!=null?r.num:"-")+'</span><span class="mx-pv__nm">'+esc(r.name)+'</span>'+(r.bike?'<span class="mx-mk" style="'+A.mkStyle(r.bike)+'">'+esc(r.bike)+"</span>":"")+"</li>"; }).join("")+"</ol></div>";
   if(el._fit) fitPreview(el,el._fit); else { var p=el.closest&&el.parentNode; if(p&&p._fit) fitPreview(el,p._fit); }
 }
 function fitPreview(pic,o){
@@ -256,6 +293,7 @@ function drawRiders(){
   cfg.humans=clamp(cfg.humans|0,0,S.MAXH||8);
   stepper($("humanSeg"),onTV()?"riders on this TV":"riders on this phone",function(){ return cfg.humans; },function(v){ cfg.humans=clamp(v,0,S.MAXH||8); },0,S.MAXH||8);
   if(nameUI) nameUI.count(Math.max(1,cfg.humans));
+  syncNums();
   $("nameCard").closest("section").hidden=cfg.humans===0;
   var si=seasonInfo(cfg.sid), F=si&&IDX.formats[si.format], field=F?RD.fieldSize(F):0;
   $("fieldDesc").textContent=si?(cfg.humans?(cfg.humans===1?"You race":"Your "+cfg.humans+" riders race")+" every round of "+si.year+" against the real riders of that season ("+si.riders+" in the research); a night needs "+field+" riders"+(si.riders+cfg.humans<field?", so labelled privateers fill the gate.":"."):
@@ -269,10 +307,20 @@ function drawLength(){
     box.innerHTML=segHTML([["short","Short"],["standard","Standard"],["long","Long"]],cfg.length,"data-l");
     box.querySelectorAll("button").forEach(function(b){ b.addEventListener("click",function(){ cfg.length=b.dataset.l; drawSetup(); }); });
   });
-  var L=RD.LEN[cfg.length]||RD.LEN.standard, si=seasonInfo(cfg.sid), mx=si&&si.series==="mx";
-  var mins={short:mx?"about 4":"about 5",standard:mx?"about 6":"about 8",long:mx?"about 8":"about 11"}[cfg.length];
-  $("lengthDesc").innerHTML=(mx?"<b>Moto "+L.moto+" battles</b> each, two motos a round.":"<b>Heat "+L.heat+" · LCQ "+L.lcq+" · Main "+L.main+" battles</b> (semis "+L.semi+" where the year had them).")+
-    " Every battle is a lap; wars play out in full and don't count extra. At the flag the most cards wins. A round takes "+mins+" minutes at Medium when you watch your own races and sim the rest.";
+  var L=RD.LEN[cfg.length]||RD.LEN.standard, si=seasonInfo(cfg.sid), mx=si&&si.series==="mx", E=estimate(L,mx,si);
+  $("lengthDesc").innerHTML=(mx?"<b>Moto "+L.moto+" laps</b> each, two motos a round.":"<b>Heat "+L.heat+" · LCQ "+L.lcq+" · Main "+L.main+" laps</b> (semis "+L.semi+" where the year had them).")+
+    " Every battle is a lap; wars play out in full and don't count extra. At the flag the most cards wins.<br><b>Time ("+esc(({slow:"Slow",medium:"Medium",fast:"Fast"})[normSpeed(cfg.speed)])+", measured):</b> a lap about "+E.lap+" s; "+
+    (mx?"a moto about "+E.race+" min":"a heat about "+E.heat+" min, the Main about "+E.race+" min")+"; a round about "+E.round+" min when you ride your own races and sim the rest"+(si?"; the "+si.rounds+"-round "+si.year+" season about "+E.season:"")+".";
+}
+/* v2 time estimates, MEASURED in the browser (BG_audit/sprint/mxv2 run1 + run5: 20-22-rider Supercross races with the person on Auto, the
+   time from one lap's cards to the next, wars included; Medium 4.0-5.0 s, Slow 5.8-6.9 s, Fast 2.0-2.8 s; watching a race without you is
+   slower, about 6.9 s at Medium): seconds a lap at each Game speed, plus the gate, the results and the podium of a race */
+var LAP_S={slow:6.8,medium:4.4,fast:2.3}, RACE_EXTRA_S=14;
+function estimate(L,mx,si){
+  var sp=normSpeed(cfg.speed), lap=LAP_S[sp]||LAP_S.medium, races=mx?[L.moto,L.moto]:[L.heat,L.main,L.lcq*0.5];
+  var sec=0; races.forEach(function(n){ sec+=n*lap+RACE_EXTRA_S; });
+  var min=function(x){ return x<1.5?"1":String(Math.round(x)); }, rs=sec/60, ss=si?rs*si.rounds:0;
+  return {lap:lap.toFixed(lap<2?2:1).replace(/0$/,""),heat:min(L.heat*lap/60),race:min((mx?L.moto:L.main)*lap/60),round:String(Math.round(rs)),season:ss>=90?(Math.round(ss/30)/2)+" hours":Math.round(ss)+" min"};
 }
 /* War's rules for every race (race.js VERSIONS + HOUSE), the year's program, and the races you're not in */
 var HDESC={
@@ -322,7 +370,7 @@ function syncRules(){
 $("rulesToggle").addEventListener("click",function(){ ui.rulesOpen=!ui.rulesOpen; syncRules(); });
 function drawSetup(){ fixSeason(); drawSeries(); drawSeasonCard(); drawRiders(); drawLength(); drawRules(); $("skillNote").textContent=BR.skillNote; syncStart(); }
 function setSpeedSeg(){ cfg.speed=normSpeed(cfg.speed); window.bgGameSpeed=cfg.speed; $("speedSeg").querySelectorAll("button").forEach(function(x){ var on=x.dataset.s===cfg.speed; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
-$("speedSeg").querySelectorAll("button").forEach(function(b){ b.addEventListener("click",function(){ cfg.speed=b.dataset.s; setSpeedSeg(); save(); }); });
+$("speedSeg").querySelectorAll("button").forEach(function(b){ b.addEventListener("click",function(){ cfg.speed=b.dataset.s; setSpeedSeg(); save(); drawLength(); }); });
 function setSkillSeg(){ cfg.skill=normSkill(cfg.skill); if(G&&G.o) G.o.skill=cfg.skill; $("skillSeg").querySelectorAll("button").forEach(function(x){ var on=x.dataset.k===cfg.skill; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
 $("skillSeg").querySelectorAll("button").forEach(function(b){ b.addEventListener("click",function(){ cfg.skill=b.dataset.k; setSkillSeg(); save(); }); });
 function setAuto(on){ cfg.auto=!!on; $("autoRow").setAttribute("aria-checked",String(cfg.auto)); $("autoBtn").setAttribute("aria-checked",String(cfg.auto)); }
@@ -376,7 +424,7 @@ function showSetup(on,resume){
     armBack();
     if(!busy) drive();
   }
-  barTitle();
+  barTitle(); trackShow();
   var B=BG(); if(luxe()&&B.toast&&B.toast.place) B.toast.place();
 }
 function setView(v,keepBody){
@@ -386,6 +434,7 @@ function setView(v,keepBody){
   b.classList.toggle("bg-app--scene",setup||v==="season"); b.classList.toggle("bg-app--felt",!setup&&v==="race");
   if(keepBody) return;
   if(v==="season") renderSeason(); else { layoutArena(); renderRace(); }
+  trackShow();
   barTitle();
 }
 function barTitle(){
@@ -415,7 +464,7 @@ function loadSaved(d){
   showSetup(false); drawSetup(); armBack();
   if(G.over){ ui.finished=gen; setView("season"); setTimeout(function(){ if(G&&G.over&&!setupShown()) openWin(); },300); }
 }
-function resetUI(){ ui.winShown=-1; ui.result=false; ui.finished=-1; ui.order=[]; ui.lastCards={}; ui.bikes={}; ui.pendRound=null; ui.pendSeason=null; ui.log=[]; ui.rc=null; ui.rmap=null; ui.hs=null; disp=null; $("lane").innerHTML=""; renderLog(); }
+function resetUI(){ ui.winShown=-1; ui.result=false; ui.finished=-1; ui.order=[]; ui.lastCards={}; ui.bikes={}; ui.pendRound=null; ui.pendSeason=null; ui.log=[]; ui.rc=null; ui.rmap=null; ui.hs=null; ui.trkKey=null; disp=null; trackShow(); renderLog(); }
 function dressSaveBar(){
   var B=BG(), IC={ss:"save",ls:"load",std:"reset",sg:"save",lg:"load",au:"resume"};
   document.querySelectorAll("#svbar button[data-a]").forEach(function(b){
@@ -467,6 +516,8 @@ function contOffer(){
   syncStart(); return true;
 }
 $("startBtn").addEventListener("click",function(){
+  var bad=numsBad();
+  if(bad>=0){ syncNums(); toast(numState(bad).t+" Pick a free number."); var inp=$("nameCard").querySelector('input[data-rx="num"][data-i="'+bad+'"]'); if(inp){ try{ inp.scrollIntoView({block:"center"}); }catch(e){} focusIn(inp); } return; }
   if(liveGame()&&!ui.newOk){ confirmNew(); return; }
   ui.newOk=false; Sound.skip(); closeSheets(); closeWin(); armBack(); startSeason();
 });
@@ -498,11 +549,13 @@ function startSeason(){
 
 /* ================= the season screen ================= */
 function myId(){ return G&&G.humans.length?G.humans[0]:null; }
-function plateHTML(R){ return '<span class="mx-pl'+(R.plateGen?" is-gen":"")+'" style="'+A.mkStyle(R.bike)+'" title="'+(R.plateGen?"Number made up for the game":"")+'">'+(R.plate!=null?R.plate:"-")+"</span>"; }
+/* a plate: white with the team colour down its edge; the championship points leader's is RED (the CEO v2); an assigned number (no source
+   gives the rider's real one) is set in italics and says so */
+function plateHTML(R){ var red=R.id===redId(); return '<span class="mx-pl'+(R.plateGen?" is-gen":"")+(red?" is-red":"")+'" style="'+A.mkStyle(R.bike)+'" title="'+(red?"Red plate: the points leader. ":"")+(R.plateGen?"Number assigned for the game (no source gives it)":"")+'">'+(R.plate!=null?R.plate:"-")+"</span>"; }
 function nameHTML(R){ return esc(R.name)+(R.kind==="privateer"?' <span class="mx-priv">(privateer)</span>':""); }
 function stRow(r,meIds,top){
   var R=rider(r.id), me=meIds.indexOf(r.id)>=0;
-  return '<li class="'+(me?"is-me":"")+'"><span class="mx-st__p">'+r.place+"</span>"+plateHTML(R)+'<span class="mx-st__n">'+nameHTML(R)+"</span>"+(me?'<span class="mx-you">'+(G.humans.length>1?"P"+(R.seat+1):"You")+"</span>":"")+
+  return '<li class="'+(me?"is-me":"")+'"><span class="mx-st__p">'+r.place+"</span>"+plateHTML(R)+'<span class="mx-st__n">'+nameHTML(R)+"</span>"+(me&&!(G.humans.length===1&&/^you$/i.test(R.name))?'<span class="mx-you">'+(G.humans.length>1?"P"+(R.seat+1):"You")+"</span>":"")+
     '<span class="mx-st__v">'+r.pts+'</span><span class="mx-st__g">'+(r.place===1?(r.wins?plural(r.wins,"win"):"leader"):"-"+(top-r.pts))+"</span></li>";
 }
 function standRows(L,max){
@@ -516,7 +569,7 @@ function teamTable(){
   var t={}, rows=[];
   G.results.forEach(function(res){
     var seen={};
-    res.cls.forEach(function(id,p){ var R=G.riders[id], b=R&&R.bike; if(!b||seen[b]) return; seen[b]=1;
+    res.cls.forEach(function(id,p){ var R=G.riders[id], b=R&&R.bike; if(!b||b==="Privateer"||seen[b]) return; seen[b]=1;
       var e=t[b]||(t[b]={make:b,pts:0,wins:0,best:99}); e.pts+=res.pts[id]||0; if(p===0) e.wins++; if(p<e.best) e.best=p; });
   });
   for(var k in t) rows.push(t[k]);
@@ -571,15 +624,17 @@ function setBtn(b,text,ic){ b.innerHTML=(ic?icon(ic):"")+esc(text); }
 $("goBtn").addEventListener("click",function(){
   if(!G||busy) return;
   if(G.over){ openWin(); return; }
+  if(lineupDue()){ var t=$("goBtn").textContent.trim(); openLineup(ui.goSim?simNow:enterRace,t||"To the gate"); return; }
   if(ui.goSim){ simNow(); return; }
   enterRace();
 });
-$("simBtn").addEventListener("click",function(){ if(!G||busy||G.over) return; simNow(); });
+$("simBtn").addEventListener("click",function(){ if(!G||busy||G.over) return; if(lineupDue()){ openLineup(simNow,"Sim to results"); return; } simNow(); });
 $("saveBtn").addEventListener("click",function(){ if(!G||G.over) return; var ok=Saves.put(GAME,"save",pack()); toast(ok?"Season saved: Load saved game brings it back":"Couldn't save (storage blocked?)",{icon:"save"}); saveBar.refresh(); });
 $("fullBtn").addEventListener("click",function(){
   var L=S.standings(G), top=L.length?L[0].pts:0;
   $("fullSheet").innerHTML='<div class="bg-sheet__grip" aria-hidden="true"></div><div class="mx-shd"><span class="bg-eyebrow">'+esc(G.year+" "+LONG[G.series])+'</span><h2 class="bg-sheet__title" id="fullTitle">All riders</h2></div>'+
-    '<ol class="mx-res">'+L.map(function(r){ var R=rider(r.id), me=G.humans.indexOf(r.id)>=0; return '<li class="'+(me?"is-me":"")+(onTV()?" bg-focus":"")+'"'+(onTV()?' data-focus tabindex="-1"':"")+'><span class="mx-res__p">'+r.place+"</span>"+plateHTML(R)+'<span class="mx-res__n">'+nameHTML(R)+'</span><span class="mx-res__x">'+r.pts+" pts"+(r.place>1?" · -"+(top-r.pts):"")+"</span></li>"; }).join("")+"</ol>"+
+    '<ol class="mx-res">'+L.map(function(r){ var R=rider(r.id), me=G.humans.indexOf(r.id)>=0; return '<li class="'+(me?"is-me":"")+(onTV()?" bg-focus":"")+'"'+(onTV()?' data-focus tabindex="-1"':"")+'><span class="mx-res__p">'+r.place+"</span>"+plateHTML(R)+'<span class="mx-res__n">'+nameHTML(R)+(R.plateGen&&R.kind!=="human"?' <span class="mx-asg">assigned no.</span>':"")+'</span><span class="mx-res__x">'+r.pts+" pts"+(r.place>1?" · -"+(top-r.pts):"")+"</span></li>"; }).join("")+"</ol>"+
+    '<p class="mx-note">The <span class="mx-pl is-red" style="'+A.mkStyle("")+'">red</span> plate is the points leader. Numbers in <i>italics</i> marked "assigned no." are given by the game: no source for '+G.year+' gives that rider&rsquo;s number.</p>'+
     '<div class="mx-sacts"><button class="bg-btn bg-btn--primary bg-btn--lg" id="fullClose" type="button">Close</button></div>';
   sheetOpen($("fullBox"),{focus:"#fullClose"});
   $("fullClose").addEventListener("click",function(){ sheetClose($("fullBox")); });
@@ -590,8 +645,7 @@ function raceLabel(){ if(!G||!G.round) return ""; var k=G.rkey; var r=G.round.ra
 function enterRace(){
   if(!G||G.over) return;
   if(!G.race){ S.startRace(G); }
-  skipQ=false; ui.rc=G.race; ui.rmap=G.rmap.slice(); ui.label=raceLabel(); ui.hs=null; ui.lap=0; ui.lastWin=null; disp=null; ui.lastCards={}; ui.bikes={}; ui.order=[]; ui.flagged=false;
-  $("lane").innerHTML="";
+  skipQ=false; ui.rc=G.race; ui.rmap=G.rmap.slice(); ui.label=raceLabel(); ui.hs=null; ui.lap=0; ui.lastWin=null; disp=null; ui.lastCards={}; ui.bikes={}; ui.order=[]; ui.flagged=false; ui.trkKey=null;
   save();
   setView("race");
   logLine((G.cal[G.ri].city||G.cal[G.ri].venue)+" "+ui.label+": "+ui.rc.n+" riders behind the gate.");
@@ -600,62 +654,58 @@ function enterRace(){
 function raceHumans(){ var rc=ui.rc; if(!rc) return []; var a=[]; rc.r.forEach(function(p,s){ if(p.human) a.push(s); }); return a; }
 function humansAlive(){ var rc=ui.rc; return raceHumans().filter(function(s){ return !rc.r[s].out&&rc.r[s].pk.length>0; }); }
 var GEO=null;
+/* v2: the arena's top part is the TRACK (track.js: the round's loop, every rider riding it in team colours, passes as ride-ups); the cards of
+   the battle under it */
+var TRK=null;
+function track(){ if(!TRK&&MX.Track){ try{ TRK=MX.Track.create($("lane")); window.__mxtrk=TRK; }catch(e){ TRK=null; } } return TRK; }
 function layoutArena(){
   var ar=$("arena"), W=ar.clientWidth, H=ar.clientHeight; if(!W||!H) return false;
-  var rem=remPx(), tv=onTV(), laneH=Math.round(H*(H<rem*16?0.36:0.38));
+  var rem=remPx(), tv=onTV(), laneH=Math.round(H*(tv?0.56:0.54));
   ar.style.setProperty("--lane-h",laneH+"px");
   var th=H-laneH, cw=Math.round(Math.min((th-rem*(tv?3.4:3.3))/1.4,W*0.2,rem*(tv?7.5:7)));
-  cw=Math.max(cw,tv?Math.round(2.6*rem):36);
+  cw=Math.max(cw,tv?Math.round(2.6*rem):34);
   $("table").style.setProperty("--cw",cw+"px");
   var you=$("youSlot"), top=$("topSlot"), mid=$("midNote");
   you.style.left="24%"; top.style.left="76%"; you.style.top=top.style.top=Math.round(rem*.35)+"px";
   you.style.width=top.style.width=Math.round(W*.4)+"px";
   mid.style.top=Math.round(th*.48)+"px";
-  var mw=Math.round(rem*(tv?4.4:3.5)), mh=Math.round(rem*(tv?1.9:1.55));
-  GEO={W:W,H:H,laneH:laneH,cw:cw,mw:mw,mh:mh,lanes:Math.max(2,Math.min(5,Math.floor((laneH-rem*.5)/mh))),gateX:0};
-  var cols=Math.ceil(Math.min(shownIds().length||11,15)/GEO.lanes);
-  GEO.gateX=Math.round(Math.min(W*.5,cols*(mw*.82)+rem*.6));
-  var gt=$("gate"); gt.style.left=GEO.gateX+"px";
-  if(!gt.firstChild) gt.innerHTML=A.gate();
+  GEO={W:W,H:H,laneH:laneH,cw:cw};
+  var T=track(); if(T){ T.resize(); placeGate(); }
   return true;
 }
-/* the bikes on the start straight: the top 10 and the people, placed by their share of the leader's cards (the gaps in cards) */
-function shownIds(){
-  var rc=ui.rc; if(!rc) return [];
-  var ord=ui.order.length?ui.order:rc.r.map(function(p,s){ return s; }), out=[], hs=raceHumans();
-  var cap=10;
-  if(GEO){ var per=Math.max(2,Math.floor((GEO.W-GEO.mw-remPx())/(GEO.mw*1.05))); cap=Math.max(3,Math.min(10,GEO.lanes*per-hs.length)); }
-  ord.forEach(function(s){ if((out.length<cap&&hs.indexOf(s)<0)||hs.indexOf(s)>=0) out.push(s); });
-  hs.forEach(function(s){ if(out.indexOf(s)<0) out.push(s); });
-  return out;
+/* the steel gate (#gate, its drop animation and the dust) stands across the track's start straight */
+function placeGate(){
+  var T=track(), gt=$("gate"), du=$("dust"); if(!gt.firstChild) gt.innerHTML=A.gate();
+  var r=T&&T.gateRect(); if(!r) return;
+  gt.style.left=Math.round(r.x-r.w/2)+"px"; gt.style.top=Math.round(r.y)+"px"; gt.style.height=Math.round(r.h)+"px"; gt.style.width=Math.round(r.w)+"px";
+  du.style.left=Math.round(r.x-r.h*0.2)+"px"; du.style.top=Math.round(r.y-r.h*0.2)+"px"; du.style.height=Math.round(r.h*1.4)+"px"; du.style.width=Math.round(r.h*3)+"px";
 }
-function bikeEl(s){
-  var b=ui.bikes[s]; if(b&&b.isConnected) return b;
-  var id=seatId(s), R=G.riders[id], c=A.mk(R.bike);
-  b=document.createElement("div"); b.className="mx-bike"+(R.kind==="human"?" is-me":"");
-  b.innerHTML=A.bike(c[0],c[0]==="#f2f4f8"?"#183a8c":"#f2f2f6")+'<span class="mx-pl" style="'+A.mkStyle(R.bike)+'">'+(R.plate!=null?R.plate:"-")+"</span>";
-  $("lane").appendChild(b); ui.bikes[s]=b; return b;
+function redId(){ if(!G) return null; var k=gen+"|"+G.results.length+"|"+G.ri; if(ui.redK!==k){ ui.redK=k; ui.red=S.redPlate(G); } return ui.red; }
+/* the track's riders for this race (team colours, plates, the red plate, the people) */
+function trackRiders(){
+  var T=track(), rc=ui.rc; if(!T||!rc) return;
+  var key=gen+"|"+G.ri+"|"+G.rkey; if(ui.trkKey===key) return;
+  ui.trkKey=key;
+  var c=G.cal[Math.min(G.ri,G.cal.length-1)], red=redId();
+  T.setLayout(G.series==="mx"?"outdoor":"stadium",(c.venue||"")+"|"+(c.city||"")+"|"+G.year);
+  T.setRiders(rc.r.map(function(p,s){ var R=G.riders[seatId(s)], m=A.mk(R.bike); return {s:s,color:m[0],accent:m[0]==="#f2f4f8"?"#183a8c":"#f2f2f6",plate:R.plate,red:R.id===red,me:R.kind==="human"}; }));
+  T.setPace(lapGuess());
+  if(rc.phase==="gate") T.gate(true);
+  else { T.gate(false); trackSync(false); T.setLaps(rc.battle,rc.o.len); }
+  T.setFlag(rc.over?"checkered":(rc.phase!=="gate"&&rc.battle+1===rc.o.len?"white":null));
 }
-function placeBikes(atGate){
-  var rc=ui.rc; if(!rc||!GEO) return;
-  var ids=shownIds(), keep={}, rem=remPx();
-  var counts=disp?disp.cnt:rc.r.map(function(p){ return p.pk.length; });
-  var max=1; counts.forEach(function(c,s){ if(!rc.r[s].out&&c>max) max=c; });
-  var back=atGate?GEO.gateX+rem*.8:rem*.4, front=GEO.W-GEO.mw-rem*.4;
-  ids.forEach(function(s,k){
-    keep[s]=1; var b=bikeEl(s), x, y;
-    if(atGate){ var col=Math.floor(k/GEO.lanes), ln=k%GEO.lanes; x=GEO.gateX-(col+1)*GEO.mw*.82-rem*.15; y=rem*.25+ln*GEO.mh; }
-    else { var ord2=ui.order.indexOf(s), rk=ord2<0?k:ord2, ln2=rk%GEO.lanes, spread=1-Math.min(rk,ids.length-1)/Math.max(1,ids.length-1), share=clamp(counts[s]/max,0,1);
-      x=rc.r[s].out?back:back+(front-back)*(.85*spread+.15*share); y=rem*.25+ln2*GEO.mh; }
-    /* a 3-digit plate makes a bike wider than the lane's step: the leader is never cut off at the arena's edge (measured once per size) */
-    if(b._wr!==rem||!b._w){ b._w=b.offsetWidth; b._wr=rem; }
-    if(b._w) x=Math.min(x,GEO.W-b._w-rem*.3);
-    b.style.transform="translate("+Math.round(x)+"px,"+Math.round(y)+"px)";
-    b.classList.toggle("is-out",!!rc.r[s].out);
-    b.style.zIndex=String(rc.r[s].human?200:100-k);   /* your bike is never hidden behind a pro's */
-  });
-  Object.keys(ui.bikes).forEach(function(s){ if(!keep[s]){ ui.bikes[s].remove(); delete ui.bikes[s]; } });
+/* a first guess at a lap's length on screen (the track learns the real one from the laps it sees) */
+function lapGuess(){ var hs=raceHumans().length; return Math.round((hs&&!cfg.auto?2600:Math.max(200,BR.pace(G,cfg.speed)*(hs?0.6:1))+1500*speedFactor())); }
+/* the standings on the track: every rider at their gap behind the leader (the cards on show while a battle plays) */
+function trackSync(atGate){
+  var T=track(), rc=ui.rc; if(!T||!rc) return;
+  if(atGate){ T.gate(true); return; }
+  var counts=disp?disp.cnt:rc.r.map(function(p){ return p.pk.length; }), outs={};
+  rc.r.forEach(function(p,s){ if(p.out&&(!disp||disp.cnt[s]===0)) outs[s]=1; });   /* parked once the show has reached their last card */
+  var order=ui.order.length?ui.order:rc.r.map(function(p,s){ return s; });
+  T.update(order,counts,outs);
 }
+function trackShow(){ var T=track(); if(T) T.show(!!(G&&ui.rc&&ui.view==="race"&&!setupShown()&&!boardOpen())); }
 function setCard(el,id,up){
   var top=el.classList.contains("is-top");
   el.className="mx-card"+(up&&id!=null?" is-up":"")+(id==null&&!up?" is-empty":"")+(top?" is-top":"");
@@ -670,7 +720,7 @@ function flipCard(el,id,ms,zoom){
   if(zoom){ try{ ps.push(el.animate([{transform:"scale(1)"},{transform:"scale(1.18)",offset:.5},{transform:"scale(1)"}],{duration:Math.round(ms*1.4),easing:"ease-in-out"}).finished); }catch(e){} }
   return Promise.all(ps).then(function(){},function(){});
 }
-function whoHTML(s){ var id=seatId(s), R=G.riders[id]; return plateHTML(R)+'<span class="mx-sn">'+esc(R.name)+"</span>"+(R.kind==="human"&&G.humans.length===1?' <span class="mx-you">You</span>':""); }
+function whoHTML(s){ var id=seatId(s), R=G.riders[id]; return plateHTML(R)+'<span class="mx-sn">'+esc(R.name)+"</span>"+(R.kind==="human"&&G.humans.length===1&&!/^you$/i.test(R.name)?' <span class="mx-you">You</span>':""); }
 function focusHuman(){ var hs=raceHumans(); if(!hs.length) return -1; var rc=ui.rc, need=RC.need(rc); if(need.length) return need[0]; var al=hs.filter(function(s){ return !rc.r[s].out; }); return al.length?al[0]:hs[0]; }
 function renderRace(){
   var rc=ui.rc; if(!rc||!G) return;
@@ -683,7 +733,7 @@ function renderRace(){
   chips();
   var gate=rc.phase==="gate";
   var gt=$("gate"); if(gt.getAnimations) gt.getAnimations().forEach(function(a){ a.cancel(); }); gt.style.display=gate?"":"none"; gt.style.transform="";
-  layoutArena(); placeBikes(gate);
+  layoutArena(); trackRiders(); trackSync(gate);
   /* the cards on the table now (a war in progress is drawn as a war; else the last battle) */
   if(rc.phase==="war"&&rc.part&&rc.part.length) drawWar(rc.part,rc.tb,false);
   else { $("warRow").innerHTML=""; drawDuel(); }
@@ -707,7 +757,9 @@ function drawDuel(winS){
 }
 function chips(){
   var rc=ui.rc; if(!rc) return;
-  $("lapChip").textContent=rc.phase==="gate"?"On the gate":"Lap "+Math.min(ui.lap,rc.o.len)+" / "+rc.o.len;
+  var lp=Math.min(ui.lap,rc.o.len), last=rc.phase!=="gate"&&!rc.over&&lp===rc.o.len&&rc.o.len>1;
+  $("lapChip").innerHTML=rc.phase==="gate"?"On the gate":rc.over?A.flag()+"Checkered flag":(last?A.wflag():"")+"Lap "+lp+" of "+rc.o.len+(last?" · last lap":"");
+  $("lapChip").classList.toggle("is-white",last);
   $("hsChip").innerHTML=ui.hs!=null?"Holeshot: "+esc(G.riders[seatId(ui.hs)].name):"";
   $("fieldChip").textContent=fieldWords();
 }
@@ -738,7 +790,9 @@ function renderTower(mark){
   var two=tv&&rows.length>20; tw.classList.toggle("is-two",two); if(two) tw.style.setProperty("--tw-rows",String(Math.ceil(rows.length/2))); else tw.style.removeProperty("--tw-rows");
   $("towerSub").textContent=tv||n<=10?n+" riders · cards held":"top 10"+(miss.length?" + you":"")+" of "+n+" · cards held";
 }
-function logLine(t){ if(!t) return; ui.log.push(t); if(ui.log.length>12) ui.log.shift(); renderLog(); }
+/* "You" is the person when they raced without a name: "You win", never "You wins" */
+function youVerb(t){ return String(t).replace(/\bYou (wins|takes|moves|gets|grabs|turns|leads|holds|keeps|pulls|snaps|runs|flips)\b/g,function(m,v){ return "You "+v.slice(0,-1); }).replace(/\bYou has\b/g,"You have").replace(/\bYou is\b/g,"You are").replace(/\bYou's\b/g,"Your"); }
+function logLine(t){ if(!t) return; t=youVerb(t); ui.log.push(t); if(ui.log.length>12) ui.log.shift(); renderLog(); }
 function renderLog(){ $("log").innerHTML=ui.log.slice(-6).map(function(t){ return "<li>"+esc(t)+"</li>"; }).join(""); }
 function say(e){ try{ var t=BR.react(G,e); if(t) logLine(t); }catch(x){} }
 
@@ -861,14 +915,14 @@ async function animEvent(my,e){
         await sleep(sp(340));
       }
       gt.style.display="none";
-      ui.lap=1; chips(); placeBikes(false);
+      ui.lap=1; chips(); var T0=track(); if(T0){ T0.gate(false); T0.lap(0,rc.o.len); }
       await sleep(dl(250));
       return;
     }
     case "acted": { if(!e.auto&&isHumanId(seatId(e.s))){ Sound.sfx("click"); } return; }
     case "reveal": {
       if(e.w===0){
-        ui.lastWin=null; $("warRow").innerHTML=""; $("youSlot").hidden=false; $("topSlot").hidden=false; $("midNote").hidden=false;
+        ui.lapPre=disp.cnt.slice(); ui.lastWin=null; $("warRow").innerHTML=""; $("youSlot").hidden=false; $("topSlot").hidden=false; $("midNote").hidden=false;
         e.cards.forEach(function(x){ ui.lastCards[x.s]=x.c; disp.cnt[x.s]=Math.max(0,disp.cnt[x.s]-1); });
         Sound.sfx("card");
         var h=focusHuman(), left=h>=0&&ui.lastCards[h]!=null?h:null;
@@ -911,7 +965,7 @@ async function animEvent(my,e){
     }
     case "kitty": { logLine(nm(e.s)+" also takes "+plural(e.n,"left-over card")+"."); return; }
     case "short": { e.seats.forEach(function(s){ disp.cnt[s]=0; }); logLine(whoList(e.seats)+(e.seats.length>1?" don't":" doesn't")+" have enough cards for the war."); return; }
-    case "deadlock": { logLine(whoList(e.seats)+" tie with their last cards: "+plural(e.n,"card")+" set aside."); await banner("Dead heat",plural(e.n,"card")+" set aside",dl(800),"is-calm"); return; }
+    case "deadlock": { var T2=track(); if(T2) T2.lap(ui.lap,rc.o.len); refreshBoard(); logLine(whoList(e.seats)+" tie with their last cards: "+plural(e.n,"card")+" set aside."); await banner("Dead heat",plural(e.n,"card")+" set aside",dl(800),"is-calm"); return; }
     case "win": {
       disp.cnt[e.s]+=e.n; ui.lastWin=e.s;
       var me=isHumanId(seatId(e.s));
@@ -924,7 +978,7 @@ async function animEvent(my,e){
       }
       Sound.sfx(me?"coin":e.war?"slide":"tick");
       ui.order=RC.standings(rc).map(function(r){ return r.s; });
-      renderTower({win:e.s}); placeBikes(false);
+      renderTower({win:e.s}); trackSync(false); var T1=track(); if(T1) T1.lap(ui.lap,rc.o.len); refreshBoard();
       await sleep(dl(e.war?520:300));
       return;
     }
@@ -935,11 +989,17 @@ async function animEvent(my,e){
       await banner("Holeshot!","#"+R.plate+" "+R.name+(R.bike?" · "+R.bike:""),dl(1100),"is-calm");
       return;
     }
-    case "out": { e.seats.forEach(function(s){ disp.cnt[s]=0; }); logLine(whoList(e.seats)+(e.seats.length>1?" are":" is")+" out of cards."); if(e.seats.length===1) say(e); renderTower(null); placeBikes(false); return; }
+    case "out": { e.seats.forEach(function(s){ disp.cnt[s]=0; }); logLine(whoList(e.seats)+(e.seats.length>1?" are":" is")+" out of cards."); if(e.seats.length===1) say(e); renderTower(null); trackSync(false); return; }
     case "lead": { say(e); return; }
-    case "next": { ui.lap=e.b; chips(); return; }
+    case "next": {
+      ui.lap=e.b; chips();
+      /* the white flag: the last lap (the CEO v2: "Lap 7 of 30", the white flag on the last lap, the checkered flag at the end) */
+      if(e.b===rc.o.len&&rc.o.len>1){ var T3=track(); if(T3) T3.setFlag("white"); Sound.sfx("bell"); logLine("White flag: last lap!"); await banner("White flag","Last lap · "+e.b+" of "+rc.o.len,dl(900),"is-calm is-white",false,true); }
+      return;
+    }
     case "flag": {
       ui.lap=Math.min(e.b,rc.o.len); chips();
+      var T4=track(); if(T4){ T4.lap(e.b,rc.o.len); T4.setFlag("checkered"); }
       var w=e.order[0], hw=isHumanId(seatId(w));
       ui.order=e.order.slice(); renderTower({win:w});
       Sound.sfx(hw?"win":"conquer");
@@ -983,9 +1043,9 @@ function addBack(col,d){
 }
 function flipTop(col,c,ms){ var top=col.querySelector(".mx-fight__pile .is-top"); if(!top) return Promise.resolve(); return flipCard(top,c,ms,true); }
 function flash(){ var f=$("flash"); if(reduced()||!f.animate) return; try{ f.animate([{opacity:0},{opacity:1,offset:.25},{opacity:0}],{duration:sp(700),easing:"ease-out"}); }catch(e){} }
-function banner(t,s,ms,cls,flagIcon){
+function banner(t,s,ms,cls,flagIcon,white){
   var b=$("banner");
-  $("bannerT").innerHTML=(flagIcon?A.flag()+"<br>":"")+esc(t); $("bannerS").textContent=s||"";
+  $("bannerT").innerHTML=(flagIcon?A.flag()+"<br>":white?A.wflag()+"<br>":"")+esc(t); $("bannerS").textContent=s||"";
   b.className="mx-banner is-on"+(cls?" "+cls:"");
   var p=Promise.resolve();
   if(!reduced()&&b.animate){ try{ p=b.animate([{opacity:0,transform:"translate(-50%,-50%) scale(.85)"},{opacity:1,transform:"translate(-50%,-50%) scale(1)"}],{duration:sp(220),easing:"cubic-bezier(.2,.8,.3,1.2)"}).finished.then(function(){},function(){}); }catch(e){} }
@@ -1031,6 +1091,8 @@ function racePoints(e,p){
   return ((F.table||[])[p]||0)*(c.mult||1);
 }
 function openResults(e,simmed){
+  var T=track(); if(T) T.show(false);
+  if(boardOpen()) sheetClose($("boardBox"),"go");
   var c=G.cal[e.ri], me=G.humans, order=e.order, rcStats=G.last||{};
   var myP=-1; order.forEach(function(id,i){ if(me.indexOf(id)>=0&&myP<0) myP=i; });
   var head='<div class="bg-sheet__grip" aria-hidden="true"></div><div class="mx-shd"><span class="bg-eyebrow">Round '+(e.ri+1)+" · "+esc(c.city||c.venue)+(simmed?" · simmed":"")+'</span>'+
@@ -1116,13 +1178,85 @@ document.addEventListener("keydown",function(e){
   if(e.key==="Escape"||e.key==="GoBack"||e.key==="BrowserBack"||e.keyCode===27||e.keyCode===4){ e.preventDefault(); closeWin(); }
 });
 
+/* ================= v2: the battle board (the CEO: "show everybody's place and what cards were dealt that round") ================= */
+function boardOpen(){ var B=BG(), el=$("boardBox"); return el.classList.contains("show")||!!(B&&B.sheet&&B.sheet.isOpen&&B.sheet.isOpen(el)); }
+function refreshBoard(){ if(boardOpen()) renderBoard(true); }
+function cardChip(c){ return c==null?"":'<span class="mx-tw__c'+(A.chipRed(c)?" is-red":"")+'">'+A.chip(c)+"</span>"; }
+function warWordP(n){ return n===2?"Double war":n===3?"Triple war":"War x"+n; }
+function lapLine(L){
+  var rc=ui.rc; if(!L) return "";
+  var head="Lap "+L.b+(rc?" of "+rc.o.len:"")+" · ";
+  if(L.win<0) return head+(L.aside?"dead heat: "+plural(L.aside,"card")+" set aside":"no winner");
+  var R=G.riders[seatId(L.win)]; if(!R) return head;
+  return head+(L.war?(L.war>1?warWordP(L.war)+": ":"War: "):"")+"#"+R.plate+" "+R.name+" wins with "+(typeof L.c==="number"?A.short(L.c):typeof L.wc==="number"?A.short(L.wc):"the top card")+" (+"+Math.max(0,(L.n|0)-1)+")";
+}
+function renderBoard(keep){
+  var rc=ui.rc, box=$("boardSheet"); if(!rc||!G) return;
+  var lap=rc.lastLap||null, order=ui.order.length?ui.order:RC.standings(rc).map(function(r){ return r.s; });
+  var counts=disp?disp.cnt:rc.r.map(function(p){ return p.pk.length; }), pre=ui.lapPre||null, c=G.cal[Math.min(G.ri,G.cal.length-1)];
+  var rows=order.map(function(s,i){
+    var R=G.riders[seatId(s)], p=rc.r[s], card=lap&&lap.c?lap.c[s]:null, war=lap&&lap.w?lap.w[s]:null, d=pre&&!p.out?counts[s]-pre[s]:null;
+    var warH=war?war.map(function(w){ return '<span class="mx-bd__war">'+(w[0]?w[0]+" down ":"")+(w[1]!=null?cardChip(w[1]):"")+"</span>"; }).join(""):"";
+    var win=lap&&lap.win===s;
+    return '<li class="'+(R.kind==="human"?"is-me ":"")+(win?"is-win ":"")+(p.out?"is-out":"")+'"><span class="mx-bd__p">'+(i+1)+"</span>"+plateHTML(R)+'<span class="mx-bd__n">'+esc(R.name)+'</span><span class="mx-mk mx-bd__mk" style="'+A.mkStyle(R.bike)+'">'+esc(R.bike||"")+"</span>"+
+      '<span class="mx-bd__c">'+(card!=null?cardChip(card):p.out?'<span class="mx-bd__x">out</span>':"")+warH+'</span><span class="mx-bd__k">'+(p.out?"0":counts[s])+'</span><span class="mx-bd__d'+(d>0?" is-up":d<0?" is-dn":"")+'">'+(d==null||d===0?"":(d>0?"+":"")+d)+"</span></li>";
+  }).join("");
+  var laps=(rc.laps||[]).slice(-8).reverse().map(function(L){ return "<li>"+esc(lapLine(L))+"</li>"; }).join("")||"<li>The first lap is still to come.</li>";
+  var eye=(c.city||c.venue)+" · "+ui.label+" · "+(rc.phase==="gate"?"on the gate":"lap "+Math.min(lap?lap.b:0,rc.o.len)+" of "+rc.o.len), sub=lap?lapLine(lap):"The gate hasn't dropped yet: the cards turn on lap 1.";
+  /* a refresh while it is open changes the contents only: the button (and the remote's ring on it) stays */
+  var list=box.querySelector(".mx-bd");
+  if(!keep||!list){
+    box.innerHTML='<div class="bg-sheet__grip" aria-hidden="true"></div><div class="mx-shd"><span class="bg-eyebrow" id="boardEye"></span>'+
+      '<h2 class="bg-sheet__title" id="boardTitle">Battle board</h2><p class="bg-sheet__sub" id="boardSub"></p></div>'+
+      '<div class="mx-bdw"><div class="mx-bdw__main"><p class="mx-bd__h">Place · rider · the card turned this lap (and the war cards) · cards held · won or lost this lap</p>'+
+      '<ol class="mx-bd"></ol></div><div class="mx-bdw__log"><h3 class="bg-eyebrow mx-bd__lh">Lap log</h3><ol class="mx-lapl"></ol></div></div>'+
+      '<div class="mx-sacts"><button class="bg-btn bg-btn--primary bg-btn--lg" id="boardClose" type="button">Back to the race</button></div>';
+    $("boardClose").addEventListener("click",function(){ sheetClose($("boardBox"),"go"); });
+    list=box.querySelector(".mx-bd");
+  }
+  var st=list.scrollTop;
+  $("boardEye").textContent=eye; $("boardSub").textContent=sub;
+  list.innerHTML=rows; list.style.setProperty("--bd-rows",String(Math.max(1,Math.ceil(order.length/2)))); list.scrollTop=st;
+  box.querySelector(".mx-lapl").innerHTML=laps;
+}
+/* the board covers the track (a sheet on the phone, big on TV): the track rests while it is open and rides on when it closes */
+$("boardBtn").addEventListener("click",function(){ if(!G||!ui.rc) return; renderBoard(false); sheetOpen($("boardBox"),{focus:"#boardClose",onClose:function(){ $("boardBox").classList.remove("show"); setTimeout(function(){ trackShow(); if(onTV()&&!sheetUp()) focusTV($("boardBtn")); },60); }}); trackShow(); });
+
+/* ================= v2: the heat line-up before the gate (the CEO ~18:25: "at the start of the heat races, there has to be an equal amount
+   of teams"): tonight's heats, balanced by team, each with its riders and its team counts; outdoors the gate of the first moto ================= */
+function lineupDue(){ if(!G||G.over||G.race) return false; var RG=G.round; if(RG&&(RG.cur>0||RG.races.some(function(r){ return r.res; }))) return false; return ui.lineSeen!==gen+"|"+G.ri; }
+function openLineup(go,label){
+  if(!G.round){ S.startRound(G); save(); }
+  ui.lineSeen=gen+"|"+G.ri;
+  var RG=G.round, c=G.cal[G.ri], F=RG.F, heats=RG.races.filter(function(r){ return r.st===0&&r.ent; }), cols=[];
+  if(heats.length){ var sp=RD.teamSplit(RG,0); heats.forEach(function(r,i){ cols.push({label:r.label,ids:r.ent,teams:(sp[i]||{}).teams||{},rule:RG.st[0].toMain?"top "+RG.st[0].toMain+" to the "+(F.finals.kind==="moto"?"motos":F.finals.label):RG.st[0].toNext&&RG.st[0].toNext!=="rest"?"top "+RG.st[0].toNext+" move on":""}); }); }
+  else { var t={}; (RG.fin||[]).forEach(function(id){ var m=G.riders[id].bike||"Privateer"; t[m]=(t[m]||0)+1; }); cols.push({label:(RG.races[0]||{}).label||"The gate",ids:RG.fin||[],teams:t,rule:F.finals.kind==="moto"?"the motos, the overall by points":""}); }
+  var me=G.humans;
+  var html=cols.map(function(col){
+    var tm=Object.keys(col.teams).sort(function(a,b){ return col.teams[b]-col.teams[a]||(a<b?-1:1); });
+    return '<section class="mx-lu__col"><h3 class="mx-lu__h">'+esc(col.label)+' <span>'+plural(col.ids.length,"rider")+(col.rule?" · "+esc(col.rule):"")+"</span></h3>"+
+      '<p class="mx-lu__tm">'+tm.map(function(m){ return '<span class="mx-mk" style="'+A.mkStyle(m)+'">'+esc(m)+" "+col.teams[m]+"</span>"; }).join("")+"</p>"+
+      '<ol class="mx-lu__l'+(col.ids.length>20?" is-wide":"")+'" style="--lu-rows:'+Math.ceil(col.ids.length/2)+'">'+col.ids.map(function(id,k){ var R=G.riders[id]; return '<li class="'+(me.indexOf(id)>=0?"is-me":"")+'"><span class="mx-lu__g">'+(k+1)+"</span>"+plateHTML(R)+'<span class="mx-lu__n">'+nameHTML(R)+'</span><span class="mx-mk mx-lu__mk" style="'+A.mkStyle(R.bike)+'">'+esc(R.bike||"")+"</span></li>"; }).join("")+"</ol></section>";
+  }).join("");
+  var mine=me.map(function(h){ var col=cols.filter(function(x){ return x.ids.indexOf(h)>=0; })[0]; return col?(me.length>1?G.riders[h].name+": ":"You ride ")+col.label:null; }).filter(Boolean);
+  $("lineSheet").innerHTML='<div class="bg-sheet__grip" aria-hidden="true"></div><div class="mx-shd"><span class="bg-eyebrow">Round '+(G.ri+1)+" of "+G.cal.length+" · "+esc(c.city||c.venue)+'</span>'+
+    '<h2 class="bg-sheet__title" id="lineTitle">'+(heats.length>1?"Tonight's heats":heats.length?"Tonight's "+esc(heats[0].label):"The gate")+"</h2>"+
+    '<p class="bg-sheet__sub">'+(heats.length>1?"Balanced by team: every team's riders are split as evenly as they can be over the heats, then by seed.":"Every rider on the gate, in gate-pick order.")+(mine.length?" <b>"+esc(mine.join(" · "))+".</b>":"")+"</p></div>"+
+    '<div class="mx-lu'+(cols.length>1?" is-multi":"")+'" style="--lu-cols:'+cols.length+'">'+html+"</div>"+
+    '<div class="mx-sacts"><button class="bg-btn bg-btn--primary bg-btn--lg" id="lineGo" type="button" data-icon="play">'+esc(label)+'</button><button class="bg-btn bg-btn--ghost bg-btn--lg" id="lineSeason" type="button">Season</button></div>';
+  var B=BG(); if(B&&B.icon) $("lineSheet").querySelectorAll("[data-icon]").forEach(function(el){ el.insertAdjacentHTML("afterbegin",B.icon(el.getAttribute("data-icon"))); });
+  sheetOpen($("lineBox"),{focus:"#lineGo",onClose:function(reason){ if(reason!=="go"){ renderSeason(); setTimeout(function(){ if(onTV()&&!sheetUp()) focusTV($("goBtn")); },60); } }});
+  $("lineGo").addEventListener("click",function(){ sheetClose($("lineBox"),"go"); go(); });
+  $("lineSeason").addEventListener("click",function(){ sheetClose($("lineBox")); renderSeason(); });
+}
+
 /* ================= sheets ================= */
 function sheetOpen(el,o){ var B=BG(); el.classList.add("show"); if(luxe()&&!B.sheet.isOpen(el)) B.sheet.open(el,o); else if(!luxe()){ var f=el.querySelector((o&&o.focus)||"button"); if(f) try{ f.focus(); }catch(e){} } }
 function sheetClose(el,reason){ var B=BG(); el.classList.remove("show"); if(B&&B.sheet&&B.sheet.isOpen(el)) B.sheet.close(el,reason); }
-function closeSheets(){ ["resBox","podBox","fullBox","newBox"].forEach(function(id){ var el=$(id); if(el.classList.contains("show")||(BG()&&BG().sheet&&BG().sheet.isOpen(el))) sheetClose(el,"go"); }); }
+function closeSheets(){ ["resBox","podBox","fullBox","newBox","boardBox","lineBox"].forEach(function(id){ var el=$(id); if(el.classList.contains("show")||(BG()&&BG().sheet&&BG().sheet.isOpen(el))) sheetClose(el,"go"); }); }
 function hintSync(){
   var B=BG();
-  if(luxe()) ["resBox","podBox","fullBox","newBox"].forEach(function(id){ var el=$(id); if(el&&el.classList.contains("show")&&!B.sheet.isOpen(el)) el.classList.remove("show"); });
+  if(luxe()) ["resBox","podBox","fullBox","newBox","boardBox","lineBox"].forEach(function(id){ var el=$(id); if(el&&el.classList.contains("show")&&!B.sheet.isOpen(el)) el.classList.remove("show"); });
   /* a sheet closed by Back on the TV (the podium, All riders): the ring goes back to the main action, never left on the page body */
   if(!onTV()) return;
   var tries=0;
@@ -1131,7 +1265,7 @@ function hintSync(){
     setTimeout(function(){
       if(!G||setupShown()) return;
       if(sheetUp()||busy) return again();   /* a sheet still closing, or the next one opening: look again */
-      var a=document.activeElement, shut=a&&a.closest&&a.closest("#resBox,#podBox,#fullBox,#newBox,#winBox");
+      var a=document.activeElement, shut=a&&a.closest&&a.closest("#resBox,#podBox,#fullBox,#newBox,#winBox,#boardBox,#lineBox");
       var fine=a&&a!==document.body&&a.isConnected&&!a.hidden&&!shut&&a.getClientRects().length&&(!a.checkVisibility||a.checkVisibility({visibilityProperty:true}));
       if(!fine) focusTV(mainControl());
     },tries===1?260:180);
@@ -1147,7 +1281,7 @@ function backStep(){
 }
 document.addEventListener("visibilitychange",function(){ if(!document.hidden&&G&&!busy) drive(); });
 var rsz=0;
-window.addEventListener("resize",function(){ clearTimeout(rsz); rsz=setTimeout(function(){ if(!G||setupShown()) return; if(ui.view==="race"&&ui.rc){ layoutArena(); if(!busy) renderRace(); else placeBikes(ui.rc.phase==="gate"); } else if(ui.view==="season") renderSeason(); },140); });
+window.addEventListener("resize",function(){ clearTimeout(rsz); rsz=setTimeout(function(){ if(!G||setupShown()) return; if(ui.view==="race"&&ui.rc){ layoutArena(); if(!busy) renderRace(); else trackSync(ui.rc.phase==="gate"); } else if(ui.view==="season") renderSeason(); },140); });
 
 document.addEventListener("DOMContentLoaded",function(){
   register();

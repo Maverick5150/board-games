@@ -5,7 +5,7 @@
    - bike(color, accent): a generic dirt bike and rider seen from the side (viewBox 0 0 60 40, facing right);
    - track(kind, uid): the arena behind a race: "stadium" (a supercross night: stands, lights, a dirt floor, tuff blocks, whoops, a
      tabletop) or "outdoor" (a national: sky, hills, trees, a dirt ribbon on grass); viewBox 0 0 1000 400, sliced to fill;
-   - gate(): the steel starting gate (viewBox 0 0 20 160); flag(): the checkered flag;
+   - gate(): the steel starting gate (viewBox 0 0 20 160); flag(): the checkered flag; wflag(): the white flag (the last lap);
    - suit(s): a suit symbol path (viewBox 0 0 100 100); card(id, up, extra): a playing card's HTML (ids as race.js: id % 54). */
 (function(g){
 "use strict";
@@ -19,7 +19,8 @@ var MK={
   "CZ":["#7d1f1f","#ffffff"], "Bultaco":["#a8adb5","#0b0a12"], "Can-Am":["#26292e","#ffd23f"], "Beta":["#c3102a","#ffffff"],
   "Penton":["#ef7d22","#0b0a12"], "Triumph":["#1b1b1e","#e8e8ee"], "Harley-Davidson":["#121214","#ff8a3d"], "Ducati":["#c8101e","#ffffff"],
   "ATK":["#2c5d9c","#ffffff"], "Montesa":["#d9262e","#ffffff"], "Cannondale":["#8cc63f","#0b0a12"], "Greeves":["#1f6f5c","#ffffff"],
-  "Carabela":["#3a3a44","#ffffff"], "Cagiva":["#b01c2e","#ffffff"], "Ammex/Islo":["#55555f","#ffffff"], "AJS":["#222226","#f0d48a"]
+  "Carabela":["#3a3a44","#ffffff"], "Cagiva":["#b01c2e","#ffffff"], "Ammex/Islo":["#55555f","#ffffff"], "AJS":["#222226","#f0d48a"],
+  "Privateer":["#6b6f7a","#ffffff"]   // v2: a rider whose make no source gives rides "Privateer" (its own neutral colour)
 };
 var MK0=["#3a3a44","#e8e8f0"];
 var MODERN=["Honda","Yamaha","Kawasaki","Suzuki","KTM","Husqvarna","GasGas"];
@@ -105,6 +106,12 @@ function flag(){
   return '<svg class="mx-flag" viewBox="0 0 60 40" aria-hidden="true" focusable="false"><rect x="4" y="2" width="3" height="37" rx="1.5" fill="#c99f5e"/><g transform="skewY(-6) translate(0 4)">'+sq+'</g></svg>';
 }
 
+/* the white flag (v2: the last lap) */
+function wflag(){
+  return '<svg class="mx-flag mx-wflag" viewBox="0 0 60 40" aria-hidden="true" focusable="false"><rect x="4" y="2" width="3" height="37" rx="1.5" fill="#c99f5e"/>'+
+    '<path d="M8 4C20 1 30 9 42 5C47 3.5 51 3 54 4V28C51 27 47 27.5 42 29C30 33 20 25 8 28Z" fill="#fbfaf5" stroke="#22222a" stroke-width="1.2"/></svg>';
+}
+
 /* ---------------- cards ---------------- */
 var SUIT={
   S:'<path fill="currentColor" d="M50 5C50 5 13 38 13 62C13 76 24 85 36 85C42 85 47 82 49 79C48 89 44 94 35 97H65C56 94 52 89 51 79C53 82 58 85 64 85C76 85 87 76 87 62C87 38 50 5 50 5Z"/>',
@@ -126,6 +133,6 @@ function chip(id){ if(id==null) return ""; var c=info(id); return '<span class="
 function chipRed(id){ return id!=null&&info(id).red; }
 function short(id){ var c=info(id); return rankLabel(c.r)+({S:"♠",H:"♥",D:"♦",C:"♣",J:""}[c.s]); }
 
-MX.Art={MK:MK,MODERN:MODERN,mk:mk,mkStyle:mkStyle,bike:bike,track:track,gate:gate,flag:flag,suit:suit,info:info,rankLabel:rankLabel,face:face,cardInner:cardInner,chip:chip,chipRed:chipRed,short:short};
+MX.Art={MK:MK,MODERN:MODERN,mk:mk,mkStyle:mkStyle,bike:bike,track:track,gate:gate,flag:flag,wflag:wflag,suit:suit,info:info,rankLabel:rankLabel,face:face,cardInner:cardInner,chip:chip,chipRed:chipRed,short:short};
 if(typeof module!=="undefined"&&module.exports) module.exports=MX.Art;
 })(typeof window!=="undefined"?window:globalThis);

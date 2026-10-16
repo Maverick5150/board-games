@@ -29,7 +29,7 @@ function clone(x){ return JSON.parse(JSON.stringify(x)); }
 
 function defaultOpts(){
   return {
-    length:"standard",   // short | standard | long (round.js LEN: heat 10/15/20, semi + LCQ 8/12/15, Main 25/40/60, moto 20/30/40 battles)
+    length:"standard",   // short | standard | long (round.js LEN, v2: heat 15/30/50, semi + LCQ 12/25/40, Main 40/80/150, moto 30/60/100 laps)
     len:{},              // per race kind overrides {heat, semi, lcq, main, moto}
     war:{},              // race.js options (Version, House rows, cards per rider, Real form)
     fill:"full",         // full: the era's full program (privateers fill a short roster) | roster: smaller races, real riders only
@@ -64,8 +64,11 @@ function newSeason(season,index,opts,humans,seed){
     fmt:season.format,status:season.status,o:o,rs:(seed==null?Math.floor(Math.random()*4294967296):seed)>>>0,
     riders:{},roster:[],humans:[],priv:[],formats:{},cal:[],ri:0,round:null,race:null,rmap:null,rkey:null,
     results:[],pts:{},st:{},last:null,over:false,log:[],ai:{}};
-  var used={}, i;
-  season.riders.forEach(function(r){ if(r.num!=null) used[r.num]=1; });
+  var used={}, i, holder={};
+  /* v2 (the CEO ~18:25): every rider of the season has their OWN number. The packer gives every rider a number (the real one where a
+     source has it; a free one marked ns "a" = assigned, never shown as historical, where none does); a clash left in the data keeps the
+     first rider's number and gives the next a free one (plateGen). */
+  season.riders.forEach(function(r,k){ if(r.num!=null&&!used[r.num]){ used[r.num]=1; holder[r.num]=k; } });
   /* the human riders */
   var hn={};
   humans.forEach(function(h,k){
@@ -77,11 +80,15 @@ function newSeason(season,index,opts,humans,seed){
     G.riders[id]={id:id,name:name,kind:"human",seat:k,plate:num,plateGen:num==null,bike:(h&&h.bike)?String(h.bike).slice(0,20):null,country:null,pos:null};
     G.humans.push(id);
   });
-  humans.forEach(function(h,k){ var r=G.riders["h"+k]; if(r.plate==null){ r.plate=plate(G,used); } used[r.plate]=1; });
+  /* a person's number must be free that season (the setup refuses a taken one, with who holds it); a clash that still gets here (an old
+     setting, two people typing the same number) rides a free number instead */
+  humans.forEach(function(h,k){ var r=G.riders["h"+k]; if(r.plate!=null&&used[r.plate]){ r.wanted=r.plate; r.plate=null; } if(r.plate==null){ r.plate=plate(G,used); r.plateGen=true; } used[r.plate]=1; });
   /* the real riders */
   season.riders.forEach(function(r,k){
     var id="r"+k, form=r.pos!=null&&r.pos<=5?2:r.pos!=null&&r.pos<=10?1:0;
-    G.riders[id]={id:id,name:r.name,kind:"pro",plate:r.num!=null?r.num:null,plateGen:r.num==null,bike:r.bike,country:r.country,pos:r.pos,realPts:r.pts,realWins:r.wins,starts:r.starts,edge:form,seed:r.seed||null};
+    var own=r.num!=null&&holder[r.num]===k;
+    G.riders[id]={id:id,name:r.name,kind:"pro",plate:own?r.num:null,plateGen:!own||r.ns==="a",ns:own?(r.ns||"s"):"a",bike:r.bike||"Privateer",country:r.country,pos:r.pos,realPts:r.pts,realWins:r.wins,starts:r.starts,edge:form,seed:r.seed||null};
+    if(r.num!=null&&!own) G.riders[id].realNum=r.num;
     G.roster.push(id);
   });
   G.roster.forEach(function(id){ var r=G.riders[id]; if(r.plate==null){ r.plate=plate(G,used); used[r.plate]=1; } });
@@ -152,7 +159,8 @@ function startRound(G){
     var idx={}; entry.forEach(function(id,k){ idx[id]=k; });
     entry.sort(function(a,b){ return (G.pts[b]||0)-(G.pts[a]||0)||seedPos(G,a)-seedPos(G,b)||idx[a]-idx[b]; });
   }
-  G.round=Round.newRound(F,G.ri,entry,G.o);
+  var team={}; entry.forEach(function(id){ team[id]=G.riders[id].bike||"Privateer"; });
+  G.round=Round.newRound(F,G.ri,entry,G.o,team);
   log(G,"Round "+(G.ri+1)+": "+(cal.city||cal.venue)+(cal.title?"":" (no points)")+".","round");
   return G.round;
 }
@@ -274,6 +282,11 @@ function standings(G){
   return ids.map(function(id,i){ var R=G.riders[id], s=stRead(G,id); return {place:i+1,id:id,name:R.name,plate:R.plate,plateGen:R.plateGen,bike:R.bike,kind:R.kind,human:R.kind==="human",pts:G.pts[id]||0,gap:top-(G.pts[id]||0),wins:s.wins,hs:s.hs,pod:s.pod,rounds:s.rounds,best:s.best||null}; });
 }
 
+/* ---------------- the red plate (the CEO v2: "The points leader should have the red plate"): the championship points leader, by the
+   standings' own tie-break (points, wins, 2nds ...); nobody before the first points are scored. It moves after every round (the Main, or
+   the round's motos). ---------------- */
+function redPlate(G){ if(!G) return null; var L=standings(G); return L.length&&L[0].pts>0?L[0].id:null; }
+
 /* ---------------- seats: human rider index <-> race seat ---------------- */
 function raceSeat(G,id){ return G.rmap?G.rmap.indexOf(id):-1; }
 function humanSeats(G){ return G.humans.map(function(id){ return raceSeat(G,id); }); }
@@ -281,7 +294,7 @@ function humanSeats(G){ return G.humans.map(function(id){ return raceSeat(G,id);
 /* ---------------- snapshot (Party phones; -1 = the TV) ---------------- */
 function snapshot(G,seat){
   var me=seat>=0?G.humans[seat]:null, rs=me?raceSeat(G,me):-1, L=standings(G);
-  var riders={}; function add(id){ if(id&&!riders[id]){ var R=G.riders[id]; riders[id]={id:id,name:R.name,plate:R.plate,plateGen:R.plateGen,bike:R.bike,country:R.country,kind:R.kind}; } }
+  var riders={}; function add(id){ if(id&&!riders[id]){ var R=G.riders[id]; riders[id]={id:id,name:R.name,plate:R.plate,plateGen:R.plateGen,ns:R.ns||null,bike:R.bike,country:R.country,kind:R.kind}; } }
   if(G.rmap) G.rmap.forEach(add); L.forEach(function(r){ add(r.id); });
   var RG=G.round;
   return {v:G.v,id:"mxwar",sid:G.sid,name:G.name,series:G.series,seriesName:G.seriesName,year:G.year,cls:G.cls,status:G.status,o:G.o,me:seat,meId:me,
@@ -289,7 +302,7 @@ function snapshot(G,seat){
     ri:G.ri,next:next(G),base:G.base||{},
     round:RG?{fmt:RG.fmt,tc:RG.tc,cur:RG.cur,races:RG.races.map(function(r){ return {key:r.key,label:r.label,kind:r.kind,len:r.len,done:!!r.res,res:r.res,hs:r.hs,n:(r.st<0?RG.fin:r.ent)?(r.st<0?RG.fin:r.ent).length:null}; })}:null,
     race:G.race?Race.snapshot(G.race,rs):null,rmap:G.rmap?G.rmap.slice():null,raceSeat:rs,
-    standings:L,riders:riders,last:G.last,over:G.over,log:G.log.slice(-8).map(function(e){ return e.t; })};
+    standings:L,red:L.length&&L[0].pts>0?L[0].id:null,riders:riders,last:G.last,over:G.over,log:G.log.slice(-8).map(function(e){ return e.t; })};
 }
 
 /* ---------------- invariants: [] = fine ---------------- */
@@ -313,6 +326,6 @@ function check(G){
 }
 
 MX.Season={VER:VER,MAXH:MAXH,defaultOpts:defaultOpts,normalize:normalize,newSeason:newSeason,next:next,startRound:startRound,startRace:startRace,apply:apply,step:step,simRace:simRace,
-  standings:standings,snapshot:snapshot,check:check,raceSeat:raceSeat,humanSeats:humanSeats,rider:rider,calFormat:calFormat};
+  standings:standings,redPlate:redPlate,snapshot:snapshot,check:check,raceSeat:raceSeat,humanSeats:humanSeats,rider:rider,calFormat:calFormat};
 if(typeof module!=="undefined"&&module.exports) module.exports=MX.Season;
 })(typeof window!=="undefined"?window:globalThis);
