@@ -15,6 +15,7 @@
 <link rel="stylesheet" href="theme.css">
 <script src="icons.js" defer></script>
 <script src="ui.js" defer></script>
+<script src="picker.js" defer></script>
 <style>
   /* style-guide page layout only (sg- prefix); every component below is a real bg- class */
   .sg-main { padding: var(--sp-4) var(--gutter) 6rem; max-width: 120rem; margin: 0 auto; }
@@ -116,6 +117,7 @@
         <button class="bg-btn bg-btn--secondary bg-btn--sm" type="button" data-act="toast">Toast</button>
         <button class="bg-btn bg-btn--secondary bg-btn--sm" type="button" data-act="sheet" id="sgOpenSheet">Move sheet</button>
         <button class="bg-btn bg-btn--primary bg-btn--sm" type="button" data-act="win" id="sgOpenWin">Win screen</button>
+        <button class="bg-btn bg-btn--secondary bg-btn--sm" type="button" data-act="picker" id="sgOpenPicker">Version picker</button>
         <button class="bg-btn bg-btn--secondary bg-btn--sm" type="button" data-act="celebrate">Celebrate</button>
         <button class="bg-btn bg-btn--secondary bg-btn--sm" type="button" data-act="flip">Flip</button>
         <button class="bg-btn bg-btn--secondary bg-btn--sm" type="button" data-act="tween">Tween</button>
@@ -479,10 +481,31 @@ document.addEventListener("DOMContentLoaded", function () {
 
   /* helper buttons */
   var slots = ["#sgSlotA", "#sgSlotB", "#sgSlotC"], slot = 0, money = 1500;
+  var sgPick = "classic";
   var acts = {
     toast: function () { B.toast("Ava rolled a <b>6</b> and bumped Jules", { seat: 1, token: "A", html: true }); },
     sheet: function () { B.sheet.open("#sgSheet"); },
     win: function () { B.win.open("#sgWin"); B.celebrate(); },
+    picker: function () {   /* BGUI.picker (picker.js, README section 11): four original demo boards, a race track of n spaces */
+      var V = [
+        { id: "classic", name: "Classic board", meta: "Demo, 4 players", desc: "28 spaces round the centre, 4 homes.", n: 28, c: ["#c8433f", "#2f7fd0", "#2f9a55", "#d9a521"], tags: [{ text: "Official", kind: "official" }] },
+        { id: "short", name: "Short track", meta: "Demo, 4 players", desc: "A faster game: 20 spaces.", n: 20, c: ["#c8433f", "#2f7fd0", "#2f9a55", "#d9a521"] },
+        { id: "six", name: "Six players", meta: "Demo, 6 players", desc: "42 spaces and 6 homes.", n: 42, c: ["#c8433f", "#2f7fd0", "#2f9a55", "#d9a521", "#8a5bd6", "#e07b2f"] },
+        { id: "house", name: "Double laps", meta: "New each game", desc: "Go round twice before home.", n: 28, c: ["#8a5bd6", "#e07b2f", "#2f9a55", "#d9a521"], tags: [{ text: "House", kind: "house" }] }
+      ], by = {};
+      function art(v) {
+        var o = '<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="200" fill="#151932"/><circle cx="100" cy="100" r="34" fill="#232a52" stroke="#e7ca90" stroke-width="2"/>';
+        for (var i = 0; i < v.n; i++) { var a = i / v.n * 2 * Math.PI, k = Math.floor(i / (v.n / v.c.length)), first = i % (v.n / v.c.length) === 0;
+          o += '<circle cx="' + (100 + 78 * Math.cos(a)).toFixed(1) + '" cy="' + (100 + 78 * Math.sin(a)).toFixed(1) + '" r="' + (first ? 7 : 5) + '" fill="' + (first ? v.c[k] : "#f8efd8") + '" opacity="' + (first ? 1 : .8) + '"/>'; }
+        return o + "</svg>";
+      }
+      V.forEach(function (v) { by[v.id] = v; });
+      B.picker.open({ eyebrow: "Choose your board", title: "Board versions", sub: "Original demo art: each board drawn from its own track.", chosen: sgPick, pickLabel: "Play this board",
+        groups: [{ head: "Official", items: V.slice(0, 3).map(function (v) { return { id: v.id, name: v.name, meta: v.meta, desc: v.desc, tags: v.tags, small: art(v) }; }) },
+                 { head: "House rules", items: [V[3]].map(function (v) { return { id: v.id, name: v.name, meta: v.meta, desc: v.desc, tags: v.tags, small: art(v) }; }) }],
+        render: function (id) { return art(by[id]); },
+        onPick: function (id) { sgPick = id; B.toast("Board: " + by[id].name, { icon: "check" }); } });
+    },
     celebrate: function () { B.celebrate({ origin: $("#sgEmblem") }); },
     flip: function () { var p = $("#sgPiece"), from = p.getBoundingClientRect(); slot = (slot + 1) % slots.length; $(slots[slot]).appendChild(p); B.flip(p, from, { spring: true }); B.haptic("tap"); },
     tween: function () { var to = money + (Math.random() < .5 ? -200 : 350); B.tweenNumber("#sgCount", money, to, 700); money = to; },
