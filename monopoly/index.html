@@ -197,10 +197,11 @@
   .mn-card{display:grid; gap:.75rem}
   .mn-field{display:grid; gap:.15rem}
   .mn-field .bg-row__desc{margin-top:0}
-  .mn-seats{display:flex; align-items:center; gap:.875rem; padding:.625rem .875rem; border-radius:var(--r-md); background:var(--ink-2); box-shadow:var(--well-edge)}
+  .mn-seats{display:flex; flex-wrap:wrap; align-items:center; gap:.5rem .875rem; padding:.625rem .875rem; border-radius:var(--r-md); background:var(--ink-2); box-shadow:var(--well-edge)}
   .mn-seats__tokens{display:flex; flex:none; padding-left:.4rem}
   .mn-seats__tokens .bg-token{width:2rem; height:2rem; margin-left:-.4rem; font-size:1rem}
-  .mn-seats__txt{min-width:0; font:var(--fw-ui) var(--fs-xs)/1.3 var(--font-ui); color:var(--text-2)}
+  .mn-seats__nm{white-space:nowrap}
+  .mn-seats__txt{flex:1 1 10rem; min-width:0; font:var(--fw-ui) var(--fs-xs)/1.3 var(--font-ui); color:var(--text-2)}
   .mn-seats__txt b{display:block; font:var(--fw-ui-strong) var(--fs-sm)/1.25 var(--font-ui); color:var(--text-1)}
   /* the token picker: the eight pieces in a 4 x 2 keypad; a picked piece takes its player's seat colour and P1, P2 ... */
   .mn-toks{grid-template-columns:repeat(4, minmax(0, 1fr))}
@@ -287,6 +288,46 @@
      game sit in that column too */
   html[data-tv] #overlay.bg-sheet{left:calc(50% + (var(--mn-bw) + 3rem) / 2 - 16rem); right:auto; width:32rem; margin:0; padding-left:1.75rem; padding-right:1.75rem}
   html[data-tv] body:not(.mn-in-setup) .bg-toast{left:calc(50% + (var(--mn-bw) + 3rem) / 2); max-width:30rem}
+  /* night-a (step 10): the player pickers are 2 rows of 4 (2-8 players), so every key keeps a full target on a phone */
+  .bg-seg.mn-seg4{grid-auto-flow:row; grid-template-columns:repeat(4,minmax(0,1fr))}
+  /* night-a: the deed sheet turns from deed to deed (swipe, the arrows, Left / Right) and builds from the colour-set view */
+  .mn-dpane{touch-action:pan-y}
+  .mn-dpane.is-in-next{animation:mn-in-next .22s var(--ease-out) both}
+  .mn-dpane.is-in-prev{animation:mn-in-prev .22s var(--ease-out) both}
+  @keyframes mn-in-next{from{opacity:0; transform:translateX(2rem)} to{opacity:1; transform:none}}
+  @keyframes mn-in-prev{from{opacity:0; transform:translateX(-2rem)} to{opacity:1; transform:none}}
+  html[data-effects="reduced"] .mn-dpane, html[data-motion="reduce"] .mn-dpane{animation:none !important}
+  @media (prefers-reduced-motion: reduce){ .mn-dpane{animation:none !important} }
+  .mn-dnav{display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:.75rem; margin:0 0 .875rem}
+  .mn-dnav__btn{width:var(--tap); min-width:var(--tap); height:var(--tap); padding:0}
+  .mn-dnav__btn .bg-ico{width:1.25rem; height:1.25rem; margin:0}
+  .mn-dnav__btn--prev .bg-ico{transform:scaleX(-1)}
+  .mn-dnav__pos{display:grid; gap:.1rem; text-align:center}
+  .mn-dnav__pos b{font:var(--fw-ui-strong) var(--fs-sm)/1.25 var(--font-ui); color:var(--text-1)}
+  .mn-dnav__pos span{font:var(--fw-body) var(--fs-xs)/1.3 var(--font-ui); color:var(--text-2)}
+  .mn-set{margin:0 0 .25rem}
+  .mn-set__head{display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:.25rem .75rem; margin:0 0 .5rem}
+  .mn-set__title{margin:0; font:var(--fw-ui-strong) var(--fs-md)/1.25 var(--font-ui); color:var(--text-1)}
+  .mn-set__title::before{content:""; display:inline-block; width:.75rem; height:.75rem; margin-right:.45rem; border-radius:3px; vertical-align:-.05em; background:var(--grp); box-shadow:inset 0 0 0 1px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.22)}
+  .mn-set__cost{font:var(--fw-body) var(--fs-xs)/1.3 var(--font-ui); color:var(--text-2)}
+  .mn-set__cost b{color:var(--accent-text); font-weight:var(--fw-ui-strong)}
+  .mn-set__lots{display:grid; grid-template-columns:repeat(var(--n,3),minmax(0,1fr)); gap:.5rem}
+  .mn-lot{display:flex; flex-direction:column; gap:.375rem; min-width:0; padding:.5rem .25rem .375rem; border-radius:var(--r-md); text-align:center; background:var(--ink-2); box-shadow:inset 0 3px 0 var(--grp), inset 0 0 0 1px var(--line-1)}
+  .mn-lot.is-cur{background:var(--ink-3); box-shadow:inset 0 3px 0 var(--grp), inset 0 0 0 1.5px var(--line-gold)}
+  .mn-lot__name{font:var(--fw-ui-strong) var(--fs-xs)/1.2 var(--font-ui); color:var(--text-1)}
+  .mn-lot.is-other .mn-lot__name{color:var(--text-2)}
+  .mn-lot__bld{display:flex; align-items:flex-end; justify-content:center; gap:.2rem; height:.875rem}
+  .mn-pip{display:block; width:.75rem; height:.75rem; background:#46c97a; clip-path:polygon(50% 0,100% 45%,100% 100%,0 100%,0 45%)}
+  .mn-pip--hotel{width:1.625rem; background:#ff5d5d; clip-path:polygon(50% 0,100% 38%,100% 100%,0 100%,0 38%)}
+  .mn-pip--none{width:1.5rem; height:2px; margin-bottom:.3rem; background:var(--line-2); clip-path:none}
+  .mn-lot__count{font:var(--fw-ui) var(--fs-xs)/1.25 var(--font-ui); color:var(--text-2)}
+  .mn-lot .bg-btn{width:100%; min-width:0; padding-left:.25rem; padding-right:.25rem; white-space:nowrap}
+  .mn-lot__why{min-height:2.5em; font:var(--fw-ui) var(--fs-micro)/1.25 var(--font-ui); color:var(--text-2)}
+  html[data-tv] .mn-dnav{margin-bottom:1.5rem}
+  html[data-tv] .mn-set__lots{gap:1.5rem}
+  html[data-tv] .mn-lot{padding:.625rem .5rem .5rem}
+  html[data-tv] .mn-lot__sub{margin-top:1.125rem}
+  html[data-tv] .mn-lot__add{margin-top:.375rem}   /* the focused + lifts 1.05: its ring stays clear of the count above */   /* + and - stand 1.5rem apart: the focused one's ring and lift never touch the other */
 </style>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
@@ -432,7 +473,7 @@ const TOKENS=[
  {e:"🎩",n:"Top Hat"},{e:"🏎️",n:"Race Car"},{e:"🐕",n:"Dog"},{e:"🚢",n:"Battleship"},
  {e:"👢",n:"Boot"},{e:"🧵",n:"Thimble"},{e:"🛒",n:"Wheelbarrow"},{e:"🐎",n:"Horse & Rider"}
 ];
-const PCOLORS=["#e23b3b","#2b7be0","#27a758","#eec21b","#b45be0","#e06f1c"];
+const PCOLORS=["#e23b3b","#2b7be0","#27a758","#eec21b","#b45be0","#e06f1c","#2bb5bd","#e0559f"];   // 2-8 players (the classic set has 8 tokens)
 
 /* ======================= HOUSE RULES ======================= */
 // default = rules-accurate classic game
@@ -553,7 +594,7 @@ function groupBare(i){ return BOARD[i].t!=="prop" || ownLots(i).every(x=>G.house
    Luxe bottom sheet (BGUI.sheet) or the setup page, keeps the player strip, the dice and the top bar in step with G, and adds
    the Victory screen, Luxe toasts, the TV Back steps and the D-pad focus. Without ui/ui.js every dialog opens as it always did
    (the jsdom harnesses run that path). */
-const SEATS=[1,2,3,4,5,7];   // players 1-6 -> Luxe seats red, blue, green, yellow, purple, orange (the board keeps PCOLORS until step 5)
+const SEATS=[1,2,3,4,5,7,6,8];   // players 1-8 -> Luxe seats red, blue, green, yellow, purple, orange, teal, pink (players 1-6 keep their old colours)
 const DARK_BAND={light_blue:1,pink:1,orange:1,red:1,yellow:1,green:1};   // deed bands where dark text reads (the ivory reads on the others)
 const SV_ICON={ss:"save",ls:"load",std:"reset",sg:"save",lg:"load",au:"resume"};
 const CTRL_ICON={"Roll Dice":"dice","Roll for doubles":"dice","Roll Again (doubles)":"dice","End Turn":"check","Manage":"deed","Trade":"swap","Players":"user","New Game":"play","CPU thinking…":"hourglass","Moving…":"hourglass"};
@@ -827,14 +868,14 @@ function wireRules(scope){ [].forEach.call(scope.querySelectorAll("input.bg-togg
 // the Start button says what it starts, and the seat preview who sits at the table
 function syncCTA(){
   const lab=$("startLabel"), sub=$("startSub"), pv=$("seatPreview"); if(!lab||!sub) return;
-  const tv=onTV(), nH=SETUP.humans, nP=Math.min(6,Math.max(2,nH+SETUP.cpus)), nC=nP-nH, tk=SETUP.humanTokens||[];
+  const tv=onTV(), nH=SETUP.humans, nP=Math.min(8,Math.max(2,nH+SETUP.cpus)), nC=nP-nH, tk=SETUP.humanTokens||[];
   lab.textContent="Start Game · "+nP+" players";
   const hn=humanNames(nH);
   sub.textContent=(nH===1?(hn?hn[0]:"You"):nH+(tv?" on this TV":" on this phone"))+(nC?" + "+plural(nC,"computer","computers"):"")+" · "+money(RULES.startingCash)+" each";
   if(!pv) return;
   const names=[]; for(let i=0;i<nP;i++) names.push(i<nH?(hn?hn[i]:("You"+(nH>1?" "+(i+1):""))):"CPU "+(i+1-nH));
   pv.innerHTML=`<span class="mn-seats__tokens">`+names.map((n,i)=>`<span class="bg-token" data-seat="${SEATS[i]}" aria-hidden="true">${i<nH&&tk[i]!==undefined?tokV(TOKENS[tk[i]]):"?"}</span>`).join("")+`</span>`+
-    `<span class="mn-seats__txt"><b>${nP} at the table</b>${names.map((n,i)=>n+(i<nH&&tk[i]!==undefined?" ("+TOKENS[tk[i]].n+")":"")).join(", ")}</span>`;
+    `<span class="mn-seats__txt"><b>${nP} at the table</b>${names.map((n,i)=>`<span class="mn-seats__nm">${n+(i<nH&&tk[i]!==undefined?" ("+TOKENS[tk[i]].n+")":"")}</span>`).join(", ")}</span>`;   // a name never breaks inside (CPU 3)
 }
 function nearestIn(row,a){   // D-pad: the nearest enabled button of a save-bar row
   const r0=a.getBoundingClientRect(), x0=r0.left+r0.width/2; let best=null, bd=Infinity;
@@ -909,9 +950,10 @@ function sqHead(i,sub){
   const s=BOARD[i], M=MBd(), g=M&&M.GROUPS[s.g], ic=M?M.iconFor(i):"";
   return `<div class="bg-sheet__grip" aria-hidden="true"></div><div class="mn-head mn-sqhead"${g?` style="--grp:${g.c}"`:""}><div class="mn-sqhead__row">${ic?`<span class="mn-sqhead__ic" aria-hidden="true">${M.icon(ic,44)}</span>`:""}<h2 class="bg-sheet__title" id="dlgTitle">${dispName(i)}</h2></div>${sub?`<p class="bg-sheet__sub">${sub}</p>`:""}</div>`;
 }
-function openDeed(i,fromManage){
+function openDeed(i,fromManage,flip){
   const s=BOARD[i];
   const opt={dismiss:fromManage?openManage:closeModal,kind:"deed"};   // Back (TV) / the scrim: back to Manage, or closed
+  ui.deedNav=null;
   if(!s.price){
     let h=sqHead(i,spaceDesc(s));
     if(s.t==="fp" && RULES.freeParkingJackpot){
@@ -928,6 +970,11 @@ function openDeed(i,fromManage){
   else { sub+=` · Owner ${dotc(G.players[own])}<b>${G.players[own].name}</b>`; if(G.mort[i]) sub+=` · <span class="mn-neg">mortgaged</span>`; if(s.t==="prop"&&G.houses[i]) sub+=` · ${G.houses[i]===5?"hotel":plural(G.houses[i],"house","houses")}`; }
   if(own>=0 && !G.mort[i]) sub+=`<br>Rent if landed on now: <b class="mn-money">${money(computeRent(i,own,1))}</b>`;
   let h=sqHead(i,sub), acts="";
+  // step 10 (night-a): the owner moves through their own deeds in colour-set order (swipe, the arrows, Left / Right) and builds
+  // from the set view; presentation only (the same buildHouse / sellHouse as the buttons below)
+  const order=mine?deedOrder(v):[], at=order.indexOf(i);
+  if(mine&&order.length>1&&at>=0){ ui.deedNav={i,at,order,fromManage:!!fromManage}; h+=deedNavHTML(i,at,order); }
+  if(mine&&s.t==="prop") h+=setViewHTML(v,i);
   if(mine){
     const grpMort = s.t==="prop" && GROUPS[s.g].some(x=>G.mort[x]);
     if(s.t==="prop"){
@@ -940,13 +987,79 @@ function openDeed(i,fromManage){
   }
   acts+=`<button type="button" class="bg-btn bg-btn--secondary bg-btn--block" onclick="${fromManage?"window.__backManage()":"window.__close()"}">${fromManage?"Back":"Close"}</button>`;
   h+=`<div class="mn-acts">${acts}</div>`+deedCardHTML(i);   // the actions first, so they are on screen; the deed under them
+  const grip='<div class="bg-sheet__grip" aria-hidden="true"></div>';
+  if(mine) h=grip+`<div class="mn-dpane${flip?" is-in-"+(flip>0?"next":"prev"):""}">`+h.replace(grip,"")+`</div>`;   // the page that slides in on a flip
   openModal(h,"",opt);
   const reopen=()=>{ refresh(); openDeed(i,fromManage); };
+  if(mine){
+    // one tap builds (or sells); the focus stays on that button, or (now greyed by the even-building rule) moves to the next + / - that is on
+    const after=(id,cls)=>{ const m=$("modal"), a=document.activeElement; if(a&&a.id===id&&usableEl(a)) return; if(!a||!m.contains(a)||!usableEl(a)||a.id==="deedPrev"){ const t=[].slice.call(m.querySelectorAll(cls)).find(usableEl)||m.querySelector("[data-autofocus]:not([disabled])"); if(t) focusEl(t); } };
+    $("modal").querySelectorAll(".mn-lot__add").forEach(b=>b.onclick=()=>{ const x=+b.dataset.lot; if(canBuildOn(v,x)&&v.cash>=BOARD[x].house) buildHouse(v,x); reopen(); after(b.id,".mn-lot__add"); });
+    $("modal").querySelectorAll(".mn-lot__sub").forEach(b=>b.onclick=()=>{ const x=+b.dataset.lot; if(canSellHouse(v,x)) sellHouse(v,x); reopen(); after(b.id,".mn-lot__sub"); });
+    const pv=$("deedPrev"), nx=$("deedNext"); if(pv) pv.onclick=()=>deedStep(-1); if(nx) nx.onclick=()=>deedStep(1);
+    if(flip&&ui.flipTo==="cur"){ const t=$("modal").querySelector(".mn-lot.is-cur .mn-lot__add:not([disabled])")||$("modal").querySelector("[data-autofocus]:not([disabled])"); if(t) focusEl(t); }
+    ui.flipTo=null;
+  }
   window.__dBuild=()=>{ buildHouse(v,i); reopen(); };
   window.__dSell=()=>{ sellHouse(v,i); reopen(); };
   window.__dMort=()=>{ mortgage(v,i); reopen(); };
   window.__dUnmort=()=>{ unmortgage(v,i); reopen(); };
   window.__backManage=openManage;
+}
+
+// the viewer's deeds in colour-set order (brown to dark blue, each set in board order), then the railroads, then the utilities
+function deedOrder(pl){ const a=[]; Object.keys(GROUPS).forEach(g=>GROUPS[g].forEach(x=>{ if(G.owner[x]===pl.id) a.push(x); })); RR_IDX.concat(UTIL_IDX).forEach(x=>{ if(G.owner[x]===pl.id) a.push(x); }); return a; }
+function shortName(i){ return BOARD[i].n.replace(/ Avenue$/,""); }
+function deedNavHTML(i,at,order){
+  const n=order.length, pv=order[(at-1+n)%n], nx=order[(at+1)%n], tv=onTV();
+  return `<div class="mn-dnav" role="group" aria-label="Your deeds"><button type="button" class="bg-btn bg-btn--secondary mn-dnav__btn mn-dnav__btn--prev" id="deedPrev" aria-label="Previous deed: ${BOARD[pv].n}">${icon("chevron")}</button>`+
+    `<span class="mn-dnav__pos"><b>Deed ${at+1} of ${n}</b><span>${tv?"Left / Right: your other deeds":"Swipe for your other deeds"}</span></span>`+
+    `<button type="button" class="bg-btn bg-btn--secondary mn-dnav__btn" id="deedNext" aria-label="Next deed: ${BOARD[nx].n}">${icon("chevron")}</button></div>`;
+}
+function deedStep(d){   // the previous / next of the viewer's deeds (wraps round); the new page slides in from that side
+  const nav=ui.deedNav; if(!nav||!overlayOn()||(ui.dlg||{}).kind!=="deed") return false;
+  const n=nav.order.length, j=nav.order[(nav.at+d+n)%n], a=document.activeElement;
+  ui.flipTo=a&&(a.id==="deedPrev"||a.id==="deedNext")?"nav":"cur";
+  Sound.sfx("card"); openDeed(j,nav.fromManage,d); return true;
+}
+// why + is off on a lot of the set (a short line under it), "" when a tap builds; it follows canBuildOn step by step
+function buildWhy(p,x){
+  const s=BOARD[x], L=GROUPS[s.g], own=G.owner[x];
+  if(own!==p.id) return own>=0?G.players[own].name+" owns it":"Unowned";
+  if(G.houses[x]>=5) return "Hotel built";
+  if(RULES.buildFullSet&&!ownsFullGroup(p,s.g)) return "Own the whole set to build";
+  const m=L.find(y=>G.mort[y]); if(m!==undefined) return "Lift the mortgage on "+shortName(m)+" first";
+  if(G.houses[x]===4){
+    if(RULES.evenBuild){ const lag=L.find(y=>G.houses[y]<4); if(lag!==undefined) return "Build on "+shortName(lag)+" first"; }
+    if(RULES.hotelsRequire4&&!RULES.unlimitedBuildings&&G.hotelsLeft<=0) return "No hotels left in the bank";
+  } else {
+    if(!RULES.unlimitedBuildings&&G.housesLeft<=0) return "No houses left in the bank";
+    if(RULES.evenBuild){ const mn=Math.min(...L.map(y=>G.houses[y])); if(G.houses[x]!==mn) return "Build on "+shortName(L.find(y=>G.houses[y]===mn))+" first"; }
+  }
+  if(!canBuildOn(p,x)) return "Can't build here now";
+  return p.cash<s.house?"Need "+money(s.house):"";
+}
+function sellWhy(p,x){
+  if(G.owner[x]!==p.id||G.houses[x]<=0||canSellHouse(p,x)) return "";
+  const top=ownLots(x).reduce((a,y)=>G.houses[y]>G.houses[a]?y:a,x); return "Sell on "+shortName(top)+" first";
+}
+// the set view: every lot of the colour set side by side, its buildings, + to build and - to sell (one tap each), the even-building
+// rule as a short line under a greyed button
+function setViewHTML(p,i){
+  const s=BOARD[i], L=GROUPS[s.g], M=MBd(), gc=M&&M.GROUPS[s.g]?M.GROUPS[s.g].c:COLORVAR[s.g];
+  let h=`<section class="mn-set" style="--grp:${gc}" aria-labelledby="setTitle"><div class="mn-set__head"><h3 class="mn-set__title" id="setTitle">${grpName(s.g)}</h3>`+
+    `<span class="mn-set__cost">House <b>${money(s.house)}</b> · sells for ${money(Math.floor(s.house/2))}</span></div><div class="mn-set__lots" style="--n:${L.length}">`;
+  L.forEach((x,k)=>{
+    const hs=G.houses[x], why=buildWhy(p,x), canS=G.owner[x]===p.id&&hs>0&&canSellHouse(p,x), what=hs>=4?"Hotel":"House", nm=BOARD[x].n;
+    let pips=""; if(hs===5) pips='<i class="mn-pip mn-pip--hotel"></i>'; else for(let q=0;q<hs;q++) pips+='<i class="mn-pip"></i>';
+    h+=`<div class="mn-lot${x===i?" is-cur":""}${G.owner[x]===p.id?"":" is-other"}"><span class="mn-lot__name">${shortName(x)}</span>`+
+      `<span class="mn-lot__bld" aria-hidden="true">${pips||'<i class="mn-pip mn-pip--none"></i>'}</span>`+
+      `<span class="mn-lot__count">${hs===5?"Hotel":hs?plural(hs,"house","houses"):"No houses"}${G.mort[x]?" · mortgaged":""}</span>`+
+      `<button type="button" class="bg-btn bg-btn--primary mn-lot__add" id="setAdd${k}" data-lot="${x}"${why?" disabled":""}${x===i&&!why?" data-autofocus":""} aria-label="Build a ${what.toLowerCase()} on ${nm}, ${money(s.house)}">+ ${what}</button>`+
+      `<button type="button" class="bg-btn bg-btn--secondary mn-lot__sub" id="setSub${k}" data-lot="${x}"${canS?"":" disabled"} aria-label="Sell a ${hs===5?"hotel":"house"} on ${nm}, plus ${money(hs?sellGain(x):Math.floor(s.house/2))}">− ${hs===5?"Hotel":"House"}</button>`+
+      `<span class="mn-lot__why">${why||sellWhy(p,x)}</span></div>`;
+  });
+  return h+`</div></section>`;
 }
 
 /* ========================= UI BITS ========================= */
@@ -1649,7 +1762,7 @@ function openManage(){
   h+=`<p class="mn-note">${tapWord()} a property to see its deed and build or mortgage it.</p>`;
   // group owned properties by color group for a tidy list
   let any=false, rows="";
-  for(let i=0;i<40;i++) if(G.owner[i]===p.id){ const s=BOARD[i], tags=[];
+  for(const i of deedOrder(p)){ const s=BOARD[i], tags=[];   // colour-set order (night-a), the same order the deed sheet's swipe follows
     if(s.t==="prop"&&G.houses[i]) tags.push(G.houses[i]===5?"Hotel":plural(G.houses[i],"house","houses"));
     if(s.t==="prop"&&ownsFullGroup(p,s.g)) tags.push("Full set");
     if(G.mort[i]) tags.push("Mortgaged");
@@ -1896,10 +2009,10 @@ function openSetup(){
   h+=`<section class="mn-sec mn-sec--names"><div class="bg-section"><h3 class="bg-eyebrow" id="namesHdr">${SETUP.humans>1?"Names":"Your name"}</h3></div><div class="bg-card mn-card" id="nameCard"><p class="mn-namenote">Kept on this ${tv?"TV":"device"} for every game. The computers get their own names.</p></div></section>`;
   h+=`<section class="mn-sec mn-sec--rules">${speedHTML()}${skillHTML()}${rulesHTML()}</section></div>`;
   h+=`<div class="mn-col mn-col--b"><section class="mn-sec mn-sec--players"><div class="bg-section"><h3 class="bg-eyebrow">Players</h3></div><div class="bg-card mn-card">`+
-     `<div class="mn-field"><span class="bg-row__title" id="humTitle">${tv?"Players on this TV":"Players on this phone"}</span><span class="bg-row__desc">Pass the ${tv?"remote":"phone"} when it's a player's turn. 2 to 6 players in all.</span></div>`+
-     `<div class="bg-seg" id="segH" role="group" aria-labelledby="humTitle"></div>`+
+     `<div class="mn-field"><span class="bg-row__title" id="humTitle">${tv?"Players on this TV":"Players on this phone"}</span><span class="bg-row__desc">Pass the ${tv?"remote":"phone"} when it's a player's turn. 2 to 8 players in all.</span></div>`+
+     `<div class="bg-seg mn-seg4" id="segH" role="group" aria-labelledby="humTitle"></div>`+
      `<div class="mn-field"><span class="bg-row__title" id="cpuTitle">Computer players</span><span class="bg-row__desc">They buy, build, bid and trade on their own.</span></div>`+
-     `<div class="bg-seg" id="segC" role="group" aria-labelledby="cpuTitle"></div><div class="mn-seats" id="seatPreview"></div></div></section>`;
+     `<div class="bg-seg mn-seg4" id="segC" role="group" aria-labelledby="cpuTitle"></div><div class="mn-seats" id="seatPreview"></div></div></section>`;
   h+=`<section class="mn-sec mn-sec--save"><div class="bg-section"><h3 class="bg-eyebrow">Save and load</h3></div><div id="svbar"></div></section>`;
   h+=`<a href="${hubHref()}" class="bg-btn bg-btn--ghost bg-btn--block mn-back" id="backHub">${icon("home")}Back to all games</a>`;
   h+=`<div class="mn-dock${live||due?" has-resume":""}" id="startDock" data-toast-avoid>`+
@@ -1929,8 +2042,8 @@ function openSetup(){
     syncCTA();
   };
   const clampTokens=()=>{ if(SETUP.humanTokens.length>SETUP.humans) SETUP.humanTokens=SETUP.humanTokens.slice(0,SETUP.humans); };
-  let drawH=()=>{ const seg=$("segH"); seg.innerHTML=[1,2,3,4,5,6].map(n=>`<button type="button" data-n="${n}" class="${SETUP.humans===n?"on":""}" aria-pressed="${SETUP.humans===n}">${n}</button>`).join(""); seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{ SETUP.humans=+b.dataset.n; clampTokens(); keepIn(seg,()=>{ drawH(); drawC(); drawTok(); }); }); };
-  const drawC=()=>{ const seg=$("segC"); const maxC=6-SETUP.humans, minC=SETUP.humans>=2?0:(2-SETUP.humans); if(SETUP.cpus>maxC)SETUP.cpus=maxC; if(SETUP.cpus<minC)SETUP.cpus=minC; seg.innerHTML=[0,1,2,3,4,5].map(n=>`<button type="button" data-n="${n}" class="${SETUP.cpus===n?"on":""}" aria-pressed="${SETUP.cpus===n}"${(n>maxC||n<minC)?" disabled":""}>${n}</button>`).join(""); seg.querySelectorAll("button:not([disabled])").forEach(b=>b.onclick=()=>{ SETUP.cpus=+b.dataset.n; keepIn(seg,drawC); }); syncCTA(); };
+  let drawH=()=>{ const seg=$("segH"); seg.innerHTML=[1,2,3,4,5,6,7,8].map(n=>`<button type="button" data-n="${n}" class="${SETUP.humans===n?"on":""}" aria-pressed="${SETUP.humans===n}">${n}</button>`).join(""); seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{ SETUP.humans=+b.dataset.n; clampTokens(); keepIn(seg,()=>{ drawH(); drawC(); drawTok(); }); }); };
+  const drawC=()=>{ const seg=$("segC"); const maxC=8-SETUP.humans, minC=SETUP.humans>=2?0:(2-SETUP.humans); if(SETUP.cpus>maxC)SETUP.cpus=maxC; if(SETUP.cpus<minC)SETUP.cpus=minC; seg.innerHTML=[0,1,2,3,4,5,6,7].map(n=>`<button type="button" data-n="${n}" class="${SETUP.cpus===n?"on":""}" aria-pressed="${SETUP.cpus===n}"${(n>maxC||n<minC)?" disabled":""}>${n}</button>`).join(""); seg.querySelectorAll("button:not([disabled])").forEach(b=>b.onclick=()=>{ SETUP.cpus=+b.dataset.n; keepIn(seg,drawC); }); syncCTA(); };
   // step 10: the name fields (one device-wide name, BGUI.names), one per human; the seat colour and initial on each
   nameUI=null;
   if(B&&B.names){ nameUI=B.names.mount("#nameCard",{count:SETUP.humans,seat:i=>SEATS[i],onChange:()=>syncCTA()}); }
@@ -1946,7 +2059,7 @@ function openSetup(){
   dressSaveBar($("svbar"));
   wireRules($("modal")); wireSpeed($("modal")); wireSkill($("modal"));
   window.__rules=openRules;
-  window.__start=()=>{ Sound.skip(); const nH=SETUP.humans, nP=Math.min(6,Math.max(2,nH+SETUP.cpus)); startGame(nP,nH,humanNames(nH)); };
+  window.__start=()=>{ Sound.skip(); const nH=SETUP.humans, nP=Math.min(8,Math.max(2,nH+SETUP.cpus)); startGame(nP,nH,humanNames(nH)); };
   window.__resume=resumeGame;
   if(had) focusEl([].slice.call($("modal").querySelectorAll("button, input, a[href]")).find(e=>!e.disabled&&focusKey(e)===had));
   else if(!redraw&&(live||due)&&B&&B.focus&&B.focus.enabled&&tv){ const r=$("resumeBtn"); setTimeout(()=>{ if(r&&r.isConnected&&setupShown()) B.focus.set(r); },0); }   // a stray OK goes back to the game
@@ -2011,9 +2124,37 @@ document.addEventListener("keydown",e=>{
   if((!down&&!up)||!a||!a.closest) return;
   const pick=sel=>document.querySelector(sel+" button.on:not([disabled])")||document.querySelector(sel+" button:not([disabled])");
   const bar=a.closest("#svbar, #svbar2"), rows=bar?bar.querySelectorAll(".r"):[], row1=rows[0], row2=rows[1];
-  const to=(down&&a.closest("#segH"))?pick("#segC"):(up&&a.closest("#segC"))?pick("#segH"):(down&&a.closest("#segSpd"))?pick("#segSkl"):(up&&a.closest("#segSkl"))?pick("#segSpd"):(down&&row1&&row2&&row1.contains(a))?nearestIn(row2,a):null;
+  const edge=(sel,dn)=>{ const seg=a.closest(sel); if(!seg) return false; const t=a.getBoundingClientRect().top; return ![].some.call(seg.querySelectorAll("button"),b=>dn?b.getBoundingClientRect().top>t+2:b.getBoundingClientRect().top<t-2); };   // the pickers are 2 rows of 4 (2-8 players): Up/Down stay in a picker until its edge row
+  const to=(down&&edge("#segH",true))?pick("#segC"):(up&&edge("#segC",false))?pick("#segH"):(down&&a.closest("#segSpd"))?pick("#segSkl"):(up&&a.closest("#segSkl"))?pick("#segSpd"):(down&&row1&&row2&&row1.contains(a))?nearestIn(row2,a):null;
   if(to){ e.preventDefault(); B.focus.set(to); }
 });
+// the deed sheet (night-a): a horizontal swipe of 48 px or more (and clearly more across than down) turns to the next / previous of the
+// owner's deeds; Left / Right do it too. With the D-pad on, Left / Right first move along the focused control's row (the set's + / -
+// buttons, Prev -> Next) and turn the page at the row's end. Registered before ui.js, so BGUI.focus sees a handled key.
+(function(){
+  const ov=$("overlay"), MIN=48; let x0=0, y0=0, t0=0, live=false, swiped=0;
+  const deedUp=()=>!!(ui.deedNav&&overlayOn()&&(ui.dlg||{}).kind==="deed");
+  ov.addEventListener("touchstart",e=>{ live=deedUp()&&e.touches.length===1; if(!live) return; const t=e.touches[0]; x0=t.clientX; y0=t.clientY; t0=Date.now(); },{passive:true});
+  ov.addEventListener("touchend",e=>{ if(!live) return; live=false; const t=e.changedTouches[0], dx=t.clientX-x0, dy=t.clientY-y0;
+    if(Math.abs(dx)>=MIN&&Math.abs(dx)>Math.abs(dy)*1.5&&Date.now()-t0<1000){ swiped=Date.now(); deedStep(dx<0?1:-1); } },{passive:true});
+  ov.addEventListener("touchcancel",()=>{ live=false; },{passive:true});
+  ov.addEventListener("click",e=>{ if(Date.now()-swiped<450){ e.preventDefault(); e.stopPropagation(); } },true);   // the lift of a swipe never taps a button
+  document.addEventListener("keydown",e=>{
+    if(e.defaultPrevented||e.altKey||e.ctrlKey||e.metaKey||e.shiftKey||!deedUp()) return;
+    const r=e.key==="ArrowRight"||e.key==="Right"||e.keyCode===39, l=e.key==="ArrowLeft"||e.key==="Left"||e.keyCode===37; if(!r&&!l) return;
+    const a=document.activeElement, B=BG();
+    if(a&&a!==document.body&&!ov.contains(a)) return;
+    if(a&&/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) return;
+    if(a&&ov.contains(a)&&a.getBoundingClientRect){   // the nearest control on the same row that way, if any
+      const ar=a.getBoundingClientRect(), cy=ar.top+ar.height/2;
+      let best=null, bd=1e9;
+      ov.querySelectorAll("button:not([disabled]), a[href]").forEach(b=>{ if(b===a||!b.getClientRects().length) return; const br=b.getBoundingClientRect();
+        if(br.top>cy||br.bottom<cy) return; const d=r?br.left-ar.right:ar.left-br.right; if(d<-1) return; if(d<bd){ bd=d; best=b; } });
+      if(best){ e.preventDefault(); focusEl(best); return; }
+    }
+    e.preventDefault(); deedStep(r?1:-1);
+  });
+})();
 // the play clock counts while the page is on screen
 document.addEventListener("visibilitychange",()=>{ if(document.hidden) clockOff(); else clockOn(); });
 // saves.js toasts ("Game saved ...") go through BGUI.toast, so they are placed clear of the dock and the player strip
