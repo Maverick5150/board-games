@@ -17,6 +17,11 @@
   try { if (localStorage.getItem("bgui.effects") === "reduced") h.setAttribute("data-effects", "reduced"); } catch (e) { }
 })(document.documentElement);</script>
 <link rel="stylesheet" href="../ui/theme.css">
+<!-- smoothness (step 10): the two faces and the hero art of the first screen load with the page, so the title never swaps font
+     (a jump) and the art never pops in late -->
+<link rel="preload" href="../ui/fonts/manrope-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../ui/fonts/dmserifdisplay-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../ui/art/hero-rummy500-960.webp" as="image" type="image/webp">
 <script src="../ui/icons.js" defer></script>
 <script src="../ui/ui.js" defer></script>
 <style>
@@ -123,7 +128,7 @@
     font:var(--fw-ui) var(--fs-md)/1.3 var(--font-ui); text-align:center; color:var(--text-1)}
   .rm-status[data-seat]{box-shadow:var(--panel-edge), inset 0 0 0 1.5px var(--seat-ring), var(--elev-2)}
   .rm-status .dot{flex:none; width:.75rem; height:.75rem; border-radius:50%; box-shadow:0 0 0 2px var(--ink-1), 0 0 0 3px rgba(255,255,255,.18)}
-  .rm-log{width:min(100%,600px); min-height:3rem; margin:.25rem 0; text-align:center; font:var(--fw-body) var(--fs-micro)/1.45 var(--font-ui); color:var(--text-2)}
+  .rm-log{width:min(100%,600px); min-height:5.8em; margin:.25rem 0; text-align:center; font:var(--fw-body) var(--fs-micro)/1.45 var(--font-ui); color:var(--text-2)}
   .rm-actions{display:flex; flex-wrap:wrap; gap:.5rem; justify-content:center; width:min(100%,600px); min-height:var(--tap); margin:.375rem 0}
   .rm-actions .bg-btn{padding:0 .875rem}
   #hand{--cw:58px; display:flex; flex-wrap:wrap; justify-content:center; width:min(100%,600px); min-height:96px; padding:20px 22px 8px 4px; gap:8px 0}
@@ -583,12 +588,12 @@ function menuResult(){
 }
 // the setup page is also the in-game Menu: one page at a time (the table is not drawn while it is up). .show is the old state class
 function showSetup(on,resume){
-  const s=$("setup"), b=document.body;
+  const s=$("setup"), b=document.body, se=document.scrollingElement||document.documentElement, y=se.scrollTop;   // read while the layout is clean
   s.style.display=on?"":"none"; s.classList.toggle("show",on);
   b.classList.toggle("rm-in-setup",on); b.classList.toggle("bg-app--scene",on); b.classList.toggle("bg-app--felt",!on);
   $("menuBtn").hidden=on; $("scoreBtn").hidden=on;
   if(on){ closeBox(); closeWin(); syncStart(); }
-  (document.scrollingElement||document.documentElement).scrollTop=0;
+  if(y) se.scrollTop=0;
   if(!on&&G){
     ui.turnKey=""; ui.focusPhase=""; render();   // the table is back: the strip pulses whose turn it is, the D-pad focus finds its control
     if(resume){
@@ -837,6 +842,13 @@ function renderStrip(){
   else { el.querySelectorAll(".is-turn").forEach(x=>x.classList.remove("is-turn")); c.classList.add("is-turn"); }
 }
 function tvAttrs(label){ return onTV()?' data-focus tabindex="-1"'+(label?' aria-label="'+label+'"':""):""; }
+/* smoothness (step 10): a redraw rewrites only the parts whose markup changed. A tap on a card used to re-parse the melds, the
+   stock, the whole pile, the hand and the log, lay them all out again and move the D-pad focus to a new node (on a Fire TV class
+   CPU a tap took up to 0.2 s to show). same(el, key): el still holds what render() last put there under that key (its first node
+   and node count are checked too, so a part changed by any other code is always rewritten) */
+function same(el,k){ return el._rk===k&&el._rn===el.childNodes.length&&el._rf===el.firstChild; }
+function keep(el,k){ el._rk=k; el._rn=el.childNodes.length; el._rf=el.firstChild; }
+function put(el,html){ const k=(onTV()?"T":"P")+html; if(same(el,k)) return false; el.innerHTML=html; keep(el,k); return true; }
 function render(){
   if(!G) return;
   const fk=tvOn()?tvKey(document.activeElement):null;
@@ -846,23 +858,30 @@ function render(){
   const ma=$("meldsArea");
   const vh0=viewerHand(), VG=viewG();
   const one=(sel.size===1&&vh0)?vh0.hand.filter(c=>sel.has(c.id))[0]:null;
-  ma.innerHTML=G.melds.length?G.melds.map(m=>{
+  const maNew=put(ma,G.melds.length?G.melds.map(m=>{
     const fit=human&&G.phase==="play"&&one&&GM.mayLayOn(G,m,G.turn)&&R.layOff(m,one,G.o)&&!(G.mustNew&&G.mustUse===one.id);
     return UI.meldHTML(m,VG,{cls:(fit?"fit":"")+(flashMeld===m.id?" flash":"")});
-  }).join(""):`<div class="empty">No melds yet.<br>A set is 3–4 of a kind · a run is 3+ in a row of one suit.</div>`;
+  }).join(""):`<div class="empty">No melds yet.<br>A set is 3–4 of a kind · a run is 3+ in a row of one suit.</div>`);
   ma.classList.toggle("is-crowded",G.melds.length>12);
-  if(onTV()) ma.querySelectorAll(".meld.fit").forEach(m=>{ m.setAttribute("data-focus",""); m.setAttribute("tabindex","-1"); m.setAttribute("aria-label","Lay off on this meld"); });
+  if(maNew&&onTV()) ma.querySelectorAll(".meld.fit").forEach(m=>{ m.setAttribute("data-focus",""); m.setAttribute("tabindex","-1"); m.setAttribute("aria-label","Lay off on this meld"); });
   // stock + discard
-  $("stock").innerHTML=UI.backHTML({label:G.stock.length?"":"EMPTY",cls:G.stock.length?"":"dead",attrs:'id="stockCard"'+tvAttrs("The stock")})+`${G.stock.length} left`;
-  $("discard").innerHTML=G.discard.length?G.discard.map((c,i)=>UI.cardHTML(c,{cls:(pileFrom!=null&&i>=pileFrom?"pf ":"")+(flashCards[c.id]?"flash":""),attrs:`data-i="${i}"`+tvAttrs(R.cardLabel(c))})).join(""):`<span class="none">Discard pile is empty</span>`;
-  $("discard").scrollLeft=1e5;
+  put($("stock"),UI.backHTML({label:G.stock.length?"":"EMPTY",cls:G.stock.length?"":"dead",attrs:'id="stockCard"'+tvAttrs("The stock")})+`${G.stock.length} left`);
+  if(put($("discard"),G.discard.length?G.discard.map((c,i)=>UI.cardHTML(c,{cls:(pileFrom!=null&&i>=pileFrom?"pf ":"")+(flashCards[c.id]?"flash":""),attrs:`data-i="${i}"`+tvAttrs(R.cardLabel(c))})).join(""):`<span class="none">Discard pile is empty</span>`)) $("discard").scrollLeft=1e5;   // the newest card in view (only when the pile changed: the scroll forces a layout)
   // hand
   const vh=viewerHand(), hd=$("hand");
-  if(vh){ const sp=sortPref(vh); hd.innerHTML=UI.sortHand(vh.hand,sp.mode,sp.order).map(c=>UI.cardHTML(c,{cls:(sel.has(c.id)?"sel ":""),style:UI.drawnStyle(drawnAt,c.id),attrs:onTV()?tvAttrs(R.cardLabel(c)).trim():undefined})).join(""); }
-  else hd.innerHTML=`<div class="rm-wait" data-stage-text>${G.roundOver?"":esc(p.name)+" is playing…"}</div>`;
+  if(vh){ const sp=sortPref(vh), cards=UI.sortHand(vh.hand,sp.mode,sp.order);
+    // the hand's key leaves out how far a just-drawn card's 3 s glow has run, so a tap in that time keeps the glow going instead of
+    // rebuilding the hand (drawnStyle still drops a glow that has ended, as before)
+    const ids=(onTV()?"T":"P")+"h"+cards.map(c=>c.id+(UI.drawnStyle(drawnAt,c.id)?"d":"")).join(","), k=ids+"|"+cards.filter(c=>sel.has(c.id)).map(c=>c.id).join(",");
+    // a tap that only selects or drops a card (the commonest tap of the game) flips that card's class in place
+    const flip=!same(hd,k)&&hd._rids===ids&&hd._rn===hd.childNodes.length&&hd._rf===hd.firstChild&&hd.children.length===cards.length&&
+      cards.every((c,i)=>+hd.children[i].getAttribute("data-id")===c.id);
+    if(flip){ cards.forEach((c,i)=>hd.children[i].classList.toggle("sel",sel.has(c.id))); keep(hd,k); }
+    else if(!same(hd,k)){ hd._rids=ids; hd.innerHTML=cards.map(c=>UI.cardHTML(c,{cls:(sel.has(c.id)?"sel ":""),style:UI.drawnStyle(drawnAt,c.id),attrs:onTV()?tvAttrs(R.cardLabel(c)).trim():undefined})).join(""); keep(hd,k); } }
+  else { hd._rids=null; put(hd,`<div class="rm-wait" data-stage-text>${G.roundOver?"":esc(p.name)+" is playing…"}</div>`); }
   // status
   const st=$("status");
-  if(G.roundOver){ st.innerHTML="Round over"; st.removeAttribute("data-seat"); }
+  if(G.roundOver){ put(st,"Round over"); st.removeAttribute("data-seat"); }
   else {
     st.setAttribute("data-seat",seatOf(p.id));
     let t;
@@ -871,9 +890,9 @@ function render(){
       t=(G.stock.length?"Your turn — draw from the stock or take from the discard pile":"The stock is empty — take from the pile, or "+(onTV()?"press OK on":"tap")+" the stock to end the round");
       if(pileFrom!=null){ t=GM.takeFeasible(G,pileFrom)?`Take ${G.discard.length-pileFrom} card${G.discard.length-pileFrom>1?"s":""} from the pile?`:"You can't use that card right away — pick another"; }
     } else t=G.mustUse!=null?"Use the card you took from the pile (meld it"+(G.mustNew?"":" or lay it off")+"), then discard":"Meld, lay off, then discard one card";
-    st.innerHTML=`${dotHTML(p.id)}<span>${t}</span>`;
+    put(st,`${dotHTML(p.id)}<span>${t}</span>`);
   }
-  $("log").innerHTML=logLines.map(esc).join("<br>");
+  put($("log"),logLines.map(esc).join("<br>"));
   renderActions(human);
   barTitle();
   if(tvOn()) tvKeep(fk);
