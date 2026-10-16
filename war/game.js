@@ -181,6 +181,23 @@ function drawLength(){
   if(L.limits) d+=" Equal leaders at the limit: "+(o.shortTie==="draw"?"the game is a draw.":"sudden death, the next battle that breaks the tie wins.");
   $("lengthDesc").textContent=d;
 }
+/* one line under each house rule: what it does in play */
+var HDESC={
+  outLoses:"Official (off): your last card plays for the whole war. On: too few cards for a war and you are out.",
+  jokers:"Two jokers rank above the Aces.",
+  jokerSteal:"One joker is buried in each stack; win a war that captures the other joker and you win the game.",
+  noDown:"A tie is decided at once by the next face-up cards.",
+  twos:"Any 2 turned up starts a war.",
+  underdog:"Lose a war with a Jack among your face-down cards and you take it anyway.",
+  prisoners:"Win a battle and keep one beaten card face up (after a war, a face-down one too). Play it later instead of your top card; if it loses, you also pay the card you would have played.",
+  paid:"The loser of each battle also pays one card from their stack.",
+  colourDeal:"Every player gets a whole colour or suit: an even share of Aces, Kings and every rank.",
+  onlyTied:"Only the tied players fight a war (Card Games For Dummies); officially everyone joins (Pagat).",
+  arrange:"Choose the order your won cards go under your stack (otherwise they are shuffled).",
+  progressive:"The first war lays 5 cards down, each later war one more.",
+  guerilla:"A joker turned up always starts a war (the jokers are added).",
+  twoBeatsAce:"A 2 beats an Ace, and only an Ace. Few sources."
+};
 function drawHouse(){
   var o=curOpts(), n=nPlayers(), box=$("houseRules");
   keepFocus(box,"data-k",function(){
@@ -188,14 +205,16 @@ function drawHouse(){
     E.HOUSE.forEach(function(h){
       if(!E.houseFor(h,o.version,n)) return;
       if(h[0]==="deck"&&locked("deck")) return;
+      if((h[0]==="jokerSteal"&&n!==2)||(h[0]==="colourDeal"&&n===3)) return;   // 2 players only / red-black or a suit each: no fair split for 3
+      if(h[0]==="jokers"&&n!==2) h=h.slice(0,3).concat([h[3].filter(function(c){ return c[0]!=="each"; })],h.slice(4));
       var key=h[0], tag=h[4]?'<span class="bg-tag bg-tag--house">house</span>':'<span class="bg-tag bg-tag--official">official</span>', row;
       if(h[2]==="bool"){
         row=document.createElement("label"); row.className="bg-row";
-        row.innerHTML='<span class="bg-row__main"><span class="bg-row__title">'+esc(h[1])+" "+tag+'</span></span><input type="checkbox" class="bg-toggle" data-k="'+key+'"'+(o[key]?" checked":"")+">";
+        row.innerHTML='<span class="bg-row__main"><span class="bg-row__title">'+esc(h[1])+" "+tag+'</span>'+(HDESC[key]?'<span class="bg-row__desc">'+esc(HDESC[key])+"</span>":"")+'</span><input type="checkbox" class="bg-toggle" data-k="'+key+'"'+(o[key]?" checked":"")+">";
         row.querySelector("input").addEventListener("change",function(e){ cfg.over[key]=e.target.checked; drawSetup(); });
       } else {
         row=document.createElement("div"); row.className="bg-row bg-row--static";
-        row.innerHTML='<span class="bg-row__main"><span class="bg-row__title">'+esc(h[1])+" "+tag+'</span></span><select class="bg-select" data-k="'+key+'" aria-label="'+esc(h[1])+'">'+h[3].map(function(c){ return '<option value="'+esc(c[0])+'"'+(String(o[key])===String(c[0])?" selected":"")+">"+esc(c[1])+"</option>"; }).join("")+"</select>";
+        row.innerHTML='<span class="bg-row__main"><span class="bg-row__title">'+esc(h[1])+" "+tag+'</span>'+(HDESC[key]?'<span class="bg-row__desc">'+esc(HDESC[key])+"</span>":"")+'</span><select class="bg-select" data-k="'+key+'" aria-label="'+esc(h[1])+'">'+h[3].map(function(c){ return '<option value="'+esc(c[0])+'"'+(String(o[key])===String(c[0])?" selected":"")+">"+esc(c[1])+"</option>"; }).join("")+"</select>";
         row.querySelector("select").addEventListener("change",function(e){ var m=h[3].filter(function(c){ return String(c[0])===e.target.value; })[0]; cfg.over[key]=m?m[0]:e.target.value; drawSetup(); });
       }
       box.appendChild(row);
@@ -222,7 +241,7 @@ function setSkillSeg(){ cfg.skill=normSkill(cfg.skill); if(G) G.skill=cfg.skill;
 $("skillSeg").querySelectorAll("button").forEach(function(b){ b.addEventListener("click",function(){ cfg.skill=b.dataset.k; setSkillSeg(); save(); }); });
 function setAuto(on){ cfg.auto=!!on; $("autoRow").setAttribute("aria-checked",String(cfg.auto)); $("autoBtn").setAttribute("aria-checked",String(cfg.auto)); }
 $("autoRow").addEventListener("click",function(){ setAuto(!cfg.auto); save(); });
-$("autoBtn").addEventListener("click",function(){ setAuto(!cfg.auto); save(); toast(cfg.auto?"Auto-play on: your flips go on by themselves":"Auto-play off: you flip",{ms:1800}); syncControls(); drive(); });
+$("autoBtn").addEventListener("click",function(){ setAuto(!cfg.auto); save(); syncControls(); drive(); });   // the switch and the status line show it (a toast would cover the table)
 setSpeedSeg();
 function deviceCopy(){
   var tv=onTV(), t=tv?"Players on this TV":"Players on this phone";
@@ -329,7 +348,23 @@ $("menuBtn").addEventListener("click",function(){
   if(result) menuResult();
   focusTV($("resumeBtn").style.display!=="none"?$("resumeBtn"):$("startBtn"));
 });
-$("resumeBtn").addEventListener("click",function(){ showSetup(false,true); });
+$("resumeBtn").addEventListener("click",function(){
+  if(!G&&ui.cont){   // a fresh page: Continue the last game (the same path as "Continue last game" under Save and load)
+    var au=document.querySelector("#svbar button[data-a=au]"); if(au&&!au.disabled) au.click();
+    if(!G){ ui.cont=false; $("resumeBtn").style.display="none"; syncStart(); }
+    return;
+  }
+  showSetup(false,true);
+});
+/* a fresh page with an unfinished game saved: the dock offers Continue (gold) next to New game, so it is on screen without scrolling */
+function contOffer(){
+  ui.cont=false; if(G) return false;
+  var a=null; try{ a=Saves.get?Saves.get(GAME,"auto"):null; }catch(e){ a=null; }
+  var d=a&&a.data; if(!d||!d.G||d.G.over||d.G.id!=="war") return false;
+  ui.cont=true; $("resumeBtn").style.display="block"; $("resumeLabel").textContent="Continue";
+  $("resumeSub").textContent="Battle "+((+d.G.battle||0)+1)+" · "+d.G.n+" players"+(Saves.when&&a.ts?" · "+Saves.when(a.ts):"");
+  syncStart(); return true;
+}
 // the new game is dealt before the table shows, so the old game never flashes back
 $("startBtn").addEventListener("click",function(){ Sound.skip(); closeSheets(); closeWin(); startGame(); showSetup(false); armBack(); dealShow(gen); });
 
@@ -379,12 +414,14 @@ function layoutSeats(){
   seatEls.forEach(function(el,s){
     var pos=POS[n][s], side=pos==="left"||pos==="right", pk=el.querySelector(".wr-pk"), pl=el.querySelector(".wr-plate");
     pk.style.width=pw+"px"; pk.style.height=ph+"px"; pk.style.setProperty("--cw",pw+"px");
-    pl.style.maxWidth=(side?rem*(tv?9:5):n===3?Math.max(rem*4.5,Wd/2-pad*1.5-pw-gap):Math.min(rem*(tv?16:10),Wd-2*pad-pw-gap))+"px";
+    var sg=parseFloat(getComputedStyle(el).columnGap)||rem*.6;   // the gap between the packet and the plate
+    pl.style.maxWidth=(side?rem*(tv?9:5):n===3?Math.max(rem*4.5,Wd/2-pad-gap/2-pw-sg):Math.min(rem*(tv?16:10),Wd-2*pad-pw-gap))+"px";
     el.style.left="0px"; el.style.top="0px";
     var sw=el.offsetWidth, sh=el.offsetHeight, x, y, slot;
     if(!side){
       var cx=pos==="topleft"?Wd*.27:pos==="topright"?Wd*.73:Wd/2;
-      x=clamp(cx-sw/2,pad,Wd-pad-sw); y=pos==="bottom"?H-pad-sh:pad;
+      x=pos==="topleft"?clamp(cx-sw/2,pad,Math.max(pad,Wd/2-gap/2-sw)):pos==="topright"?clamp(cx-sw/2,Math.min(Wd-pad-sw,Wd/2+gap/2),Wd-pad-sw):clamp(cx-sw/2,pad,Wd-pad-sw);
+      y=pos==="bottom"?H-pad-sh:pad;
       slot={x:cx,y:pos==="bottom"?y-gap-ch/2:y+sh+gap+ch/2,axis:"x",room:Wd-2*pad};
     } else {
       x=pos==="left"?pad:Wd-pad-sw; y=(H-sh)/2;
@@ -562,8 +599,9 @@ function renderHand(){
   var s=handSeat(), tv=onTV();
   if(s<0){ var k0="hidden"; if(ui.handKey!==k0){ box.innerHTML='<span class="wr-hand__lbl">Hands stay hidden until the next player takes the '+(tv?"remote":"phone")+"</span>"; ui.handKey=k0; } return; }
   var p=G.players[s], can=!ui.dealing&&!G.over&&G.phase==="flip"&&E.need(G).indexOf(s)>=0&&!G.pick[s]&&!cfg.auto&&!intent.some(function(m){ return m.s===s; });   // live while the table animates too: a pick is queued
-  var cards=p.hand.map(function(c){ return {c:c,pr:false}; }).concat(p.pr.map(function(c){ return {c:c,pr:true}; }));
-  var key=s+"|"+cards.map(function(x){ return x.c; }).join(",")+"|"+can+"|"+G.battle+"|"+G.phase;
+  var many=p.pr.length>PR_MAX, cards=p.hand.map(function(c){ return {c:c,pr:false}; }).concat(many?[]:p.pr.map(function(c){ return {c:c,pr:true}; }));
+  var key=s+"|"+cards.map(function(x){ return x.c; }).join(",")+"|"+(many?p.pr.length:0)+"|"+can+"|"+G.battle+"|"+G.phase;
+  if(!can) closePrisoners();
   if(ui.handKey===key) return;
   var best=can&&cfg.skill!=="hard"?suggest(s):null;   // the brain's pick is marked "suggested" (not on Hard: no help there)
   var a=document.activeElement, fc=(a&&box.contains(a))?a.getAttribute("data-c"):null;
@@ -571,8 +609,9 @@ function renderHand(){
   box.innerHTML='<span class="wr-hand__lbl">'+esc(G.players.filter(function(q){ return q.human; }).length>1?p.name+"'s hand":"Your hand")+"</span>"+cards.map(function(x){
     var cn=E.cardName(x.c);
     return '<button type="button" class="bg-focus wr-hcard'+(x.pr?" is-pr":"")+(best&&best.c===x.c?" is-best":"")+'" data-c="'+x.c+'"'+(can?"":" disabled")+' aria-label="Play the '+esc(cn)+(x.pr?" (prisoner)":"")+(best&&best.c===x.c?", suggested":"")+'">'+C.faceHTML(x.c)+"</button>";
-  }).join("");
+  }).join("")+(many?'<button type="button" class="bg-btn bg-btn--secondary wr-hprs" data-open="1"'+(can?"":" disabled")+'>Prisoners<br>'+p.pr.length+"</button>":"");
   box.querySelectorAll(".wr-hcard").forEach(function(b){ b.addEventListener("click",function(){ if(b.disabled) return; queue({t:"pick",s:s,c:+b.dataset.c},b); }); });
+  var hp=box.querySelector(".wr-hprs"); if(hp) hp.addEventListener("click",function(){ if(!hp.disabled) openPrisoners(s); });
   if(fc!=null){ var again=box.querySelector('[data-c="'+fc+'"]:not([disabled])'); if(again) focusIn(again); }
 }
 /* the brain's pick for the person (Auto-play, and the "suggested" mark): on a copy of G, so the computers' own brains and the device's
@@ -602,8 +641,11 @@ function syncControls(){
   $("autoBtn").hidden=!nh||G.over;
   // the prisoners a person may play instead of the top card
   var pb=$("wprs"), h="";
-  if(!G.o.hand&&G.phase==="flip"&&hs.length&&!ui.dealing) hs.forEach(function(s){ G.players[s].pr.forEach(function(c){ h+='<button type="button" class="bg-btn bg-btn--secondary bg-btn--lg wr-prbtn" data-s="'+s+'" data-c="'+c+'">'+(hs.length>1?esc(nm(s))+": ":"")+"Play prisoner "+C.pipText(esc(E.shortName(c)))+"</button>"; }); });
-  if(pb._h!==h){ pb._h=h; pb.innerHTML=h; pb.querySelectorAll(".wr-prbtn").forEach(function(b){ b.addEventListener("click",function(){ queue({t:"flip",s:+b.dataset.s,pr:+b.dataset.c},b); }); }); }
+  if(!G.o.hand&&G.phase==="flip"&&hs.length&&!ui.dealing) hs.forEach(function(s){ var pr=G.players[s].pr;
+    if(pr.length>PR_MAX){ h+='<button type="button" class="bg-btn bg-btn--secondary bg-btn--lg wr-prbtn" data-s="'+s+'" data-open="1">'+(hs.length>1?esc(nm(s))+": ":"")+"Play a prisoner ("+pr.length+")</button>"; return; }
+    pr.forEach(function(c){ h+='<button type="button" class="bg-btn bg-btn--secondary bg-btn--lg wr-prbtn" data-s="'+s+'" data-c="'+c+'">'+(hs.length>1?esc(nm(s))+": ":"")+"Play prisoner "+C.pipText(esc(E.shortName(c)))+"</button>"; }); });
+  if(pb._h!==h){ pb._h=h; pb.innerHTML=h; pb.querySelectorAll(".wr-prbtn").forEach(function(b){ b.addEventListener("click",function(){ if(b.dataset.open) openPrisoners(+b.dataset.s); else queue({t:"flip",s:+b.dataset.s,pr:+b.dataset.c},b); }); }); }
+  if(!G.o.hand&&(!hs.length||G.phase!=="flip"||cfg.auto)) closePrisoners();
   // the status line: what the table waits for
   var bn="Battle "+(G.battle+1);
   if(ui.dealing) st=nm(G.dealer)+" deals "+deckN()+" cards, one at a time. Everyone flips at once: nobody goes first.";
@@ -620,8 +662,10 @@ function syncControls(){
   else if(hs.length&&cfg.auto) st=bn+" · Auto-play is on";
   else st=bn;
   if(!nh&&!G.over&&!ui.dealing) st=bn+" · Watching "+G.n+" computers";
+  var allOut=nh>0&&G.players.every(function(p){ return !p.human||p.out; });
+  if(allOut&&!G.over&&!ui.dealing){ st=bn+" · "+(nh>1?"Every player here is out":"You are out")+": the computers play on. The Menu starts a new game."; fb.hidden=true; $("autoBtn").hidden=true; }
   if(ui.dealing) hint="Skip the deal";
-  else if(!nh||G.over) hint="Open the Menu";
+  else if(!nh||G.over||allOut) hint="Open the Menu";
   $("wstat").textContent=st; $("hintOk").textContent=hint;
   chips(); updateSeats(); renderHand(); barTitle();
 }
@@ -836,11 +880,12 @@ async function animEvent(my,e){
     }
     case "claim": return;
     case "prisoner":{
-      var src=null; for(s in tab){ if(+s===e.s) continue; var a=tab[s]; for(i=0;i<a.length;i++) if(!a[i].classList.contains("is-up")){ src=a[i]; a.splice(i,1); break; } if(src) break; }
+      var src=null, own=-1, li=G.last&&G.last.cards?G.last.cards.indexOf(e.c):-1; if(li>=0) own=G.last.from[li];
+      for(s in tab){ if(+s===e.s) continue; var a=tab[s]; for(i=0;i<a.length;i++) if(a[i].getAttribute("data-id")===String(e.c)){ src=a[i]; a.splice(i,1); break; } if(src) break; }
+      if(!src) for(s in tab){ if(+s===e.s||(own>=0&&+s!==own)) continue; var a2=tab[s]; for(i=0;i<a2.length;i++) if(!a2[i].classList.contains("is-up")){ src=a2[i]; a2.splice(i,1); break; } if(src) break; }
       if(!src){ seatEls[e.s].classList.add("is-win"); return; }
-      await flipUp(src,e.c,sp(360),false);
+      src.classList.remove("is-win","is-lose"); if(!src.classList.contains("is-up")) await flipUp(src,e.c,sp(360),false);
       await move(src,platePose(e.s),sp(420),{lift:true,front:true}); src.remove();
-      toast(nm(e.s)+" takes the "+E.cardName(e.c)+" prisoner",{ms:2000});
       return;
     }
     case "collect":{
@@ -849,7 +894,7 @@ async function animEvent(my,e){
       await sleep(dl(170));
       return;
     }
-    case "out": Sound.sfx("lose"); seatEls[e.s].classList.add("is-out"); toast(nm(e.s)+(nm(e.s)==="You"?" are":" is")+" out of cards",{ms:2200}); await sleep(dl(450)); return;
+    case "out": Sound.sfx("lose"); seatEls[e.s].classList.add("is-out"); setCount(e.s,0); renderStand(); await banner("Out of cards",nm(e.s)+(nm(e.s)==="You"?" are":" is")+" out of the game",dl(1300),true); return;
     case "sudden": Sound.sfx("bell"); await banner("Sudden death",listNames(e.seats.map(nm))+" are tied: the next battle that breaks the tie wins",dl(1700),true); return;
     case "over": return;
     default: return;
@@ -890,7 +935,23 @@ async function dealShow(my){
 /* ================= sheets: the spoils (prisoners, arranging) and the hot-seat hand-off ================= */
 function sheetOpen(el,o){ var B=BG(); el.classList.add("show"); if(luxe()&&!B.sheet.isOpen(el)) B.sheet.open(el,o); }
 function sheetClose(el){ var B=BG(); el.classList.remove("show"); if(B&&B.sheet&&B.sheet.isOpen(el)) B.sheet.close(el); }
-function closeSheets(){ sheetClose($("claimBox")); sheetClose($("handoff")); }
+function closeSheets(){ sheetClose($("claimBox")); sheetClose($("handoff")); closePrisoners(); }
+/* Prisoners of War: with more than PR_MAX prisoners a person picks one from a sheet (strongest first) instead of a row of buttons */
+var PR_MAX=2;
+function closePrisoners(){ var el=$("prBox"); if(el&&el.classList.contains("show")) sheetClose(el); }
+function openPrisoners(s){
+  if(!G||G.over||!G.players[s]) return;
+  var p=G.players[s], hand=!!G.o.hand, list=p.pr.slice().sort(function(a,b){ return E.strength(G,b)-E.strength(G,a); }); if(!list.length) return;
+  $("prSheet").innerHTML='<div class="bg-sheet__grip" aria-hidden="true"></div><div class="wr-shead"><span class="bg-eyebrow bg-eyebrow--accent">Prisoners of War · house rule</span><h2 class="bg-sheet__title" id="prTitle">'+(nHumans()>1?esc(nm(s))+": play":"Play")+' a prisoner?</h2><p class="bg-sheet__sub">It plays instead of your '+(hand?"hand card":"top card")+'. If it loses, you also pay the card you would have played.</p></div><div class="bg-sheet__options">'+
+    list.map(function(c,i){ return optHTML("p"+c,"Play the "+C.pipText(esc(E.cardName(c))),"","Beats about "+pct(c)+"% of the deck",i===0); }).join("")+
+    optHTML("none",hand?"Back to my hand":"Not now","",hand?"Choose a card from your hand":"Flip your top card as usual",false)+"</div>";
+  sheetOpen($("prBox"),{focus:".bg-sheet__option"});
+  $("prBox").querySelectorAll(".bg-sheet__option").forEach(function(b){ b.addEventListener("click",function(){
+    var o=b.getAttribute("data-o"); closePrisoners();
+    if(o==="none"){ focusTV(mainControl()); return; }
+    var c=+o.slice(1); queue(hand?{t:"pick",s:s,c:c}:{t:"flip",s:s,pr:c},null);
+  }); });
+}
 function optHTML(id,label,desc,detail,best){ return '<button type="button" class="bg-sheet__option'+(best?" is-best":"")+'" data-o="'+esc(id)+'"><span class="bg-sheet__text"><span class="bg-sheet__label">'+label+(best?' <span class="bg-tag bg-tag--ok">best</span>':"")+'</span>'+(desc?'<span class="bg-sheet__desc">'+desc+"</span>":"")+(detail?'<span class="bg-sheet__detail">'+detail+"</span>":"")+'</span>'+icon("chevron")+"</button>"; }
 function pct(c){ return Math.round(100*E.strength(G,c)); }
 function orderOf(kind,rest){
@@ -907,7 +968,7 @@ function openClaim(w,step){
   var el=$("claimBox"), h, who=nm(w)==="You"?"You":nm(w);
   if(pd.prOk.length&&ui.claimPr===undefined){
     var bestC=pd.prOk.slice().sort(function(a,b){ return E.strength(G,b)-E.strength(G,a); })[0];
-    h='<div class="bg-sheet__grip" aria-hidden="true"></div><div class="wr-shead"><span class="bg-eyebrow bg-eyebrow--accent">Prisoners of War · house rule</span><h2 class="bg-sheet__title" id="claimTitle">'+esc(who)+(who==="You"?" win":" wins")+' the war: take a prisoner?</h2><p class="bg-sheet__sub">A prisoner stays face up beside your stack. Play it in any battle instead of your top card; if it loses, you pay one more card.</p></div><div class="bg-sheet__options">'+
+    h='<div class="bg-sheet__grip" aria-hidden="true"></div><div class="wr-shead"><span class="bg-eyebrow bg-eyebrow--accent">Prisoners of War · house rule</span><h2 class="bg-sheet__title" id="claimTitle">'+esc(who)+(who==="You"?" win":" wins")+(pd.war?" the war":" the battle")+': take a prisoner?</h2><p class="bg-sheet__sub">Take one of the other '+(G.n>2?"players'":"player's")+' cards. A prisoner stays face up beside your stack: play it in a later battle instead of your top card; if it loses, you also pay the card you would have played.</p></div><div class="bg-sheet__options">'+
       pd.prOk.map(function(c){ return optHTML("p"+c,"Take the "+C.pipText(esc(E.cardName(c))),"","Beats about "+pct(c)+"% of the deck",c===bestC); }).join("")+
       optHTML("none","No prisoner","All "+pd.pot.length+" cards go under your stack","",false)+"</div>";
   } else {
@@ -953,6 +1014,8 @@ function showHandoff(s){
 }
 function hintSync(){
   var B=BG(), t=B&&B.sheet&&B.sheet.top?B.sheet.top():null, h=document.querySelector(".wr-hints");
+  // a sheet BGUI closed itself (Back on the prisoner sheet) loses the page's "show" mark too
+  if(luxe()) ["claimBox","handoff","prBox"].forEach(function(id){ var el=$(id); if(el&&el.classList.contains("show")&&!B.sheet.isOpen(el)) el.classList.remove("show"); });
   if(h) h.classList.toggle("is-held",!!t&&(t.id==="handoff"||t.id==="claimBox"));
 }
 document.addEventListener("bgui:sheet",hintSync);
@@ -1018,7 +1081,7 @@ $("wtable").addEventListener("click",function(){ if(ui.dealing) skipDeal(); });
 function backStep(){
   if(ui.dealing&&!setupShown()){ skipDeal(); return "deal"; }
   if(!setupShown()){ $("menuBtn").click(); return "menu"; }
-  if($("resumeBtn").style.display!=="none"){ $("resumeBtn").click(); return "resume"; }
+  if(G&&$("resumeBtn").style.display!=="none"){ $("resumeBtn").click(); return "resume"; }
   return false;
 }
 function tick(){
@@ -1026,12 +1089,14 @@ function tick(){
   chips();
   if(G.o.length==="time"&&!G.bell&&playMs()>=G.o.limit*60000){
     var ev=E.ringBell(G); save(); Sound.sfx("bell");
-    toast("Time! The battle in play finishes, then the most cards wins",{ms:2600});
+    bellBanner(gen);
     renderLog(); chips();
     if(ev.length&&G.over&&!busy) drive();
   }
 }
 setInterval(tick,1000);
+/* the bell: a calm banner on the table once the table is free (a toast would cover the table) */
+async function bellBanner(my){ for(var k=0;k<80&&busy&&my===gen;k++) await sleep(100); if(my!==gen||!G) return; await banner("Time!",G.over?"The most cards wins":"The battle in play finishes, then the most cards wins",dl(1500),true); }
 document.addEventListener("visibilitychange",function(){ if(document.hidden) clockOff(); else clockOn(); });
 var rsz=0;
 window.addEventListener("resize",function(){ clearTimeout(rsz); rsz=setTimeout(function(){ if(!G||setupShown()) return; if(busy||ui.dealing) ui.needSync=true; else sync(); },120); });
@@ -1052,12 +1117,13 @@ document.addEventListener("DOMContentLoaded",function(){
   if(B.icon) document.querySelectorAll("[data-icon]").forEach(function(el){ if(!el.querySelector("svg")) el.insertAdjacentHTML("afterbegin",B.icon(el.getAttribute("data-icon"))); });
   var hub=hubHref(); ["homeBtn","backHub","winHome"].forEach(function(id){ var a=$(id); if(a) a.setAttribute("href",hub); });
   saveBar.refresh(); deviceCopy();
+  if(ui.cont&&!G) focusTV($("resumeBtn"));   // TV: a saved game waits on Continue
   document.addEventListener("bgui:tv",function(){ deviceCopy(); syncStart(); if(G&&!setupShown()&&!busy&&!ui.dealing) sync(); });
 });
 
 C.injectCSS();
 Sound.mountButton(); Sound.music(GAME);
-deviceCopy(); drawSetup(); saveBar.refresh(); showSetup(true);
+deviceCopy(); drawSetup(); saveBar.refresh(); showSetup(true); contOffer();
 if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(function(){}); }
 window.__war={get G(){ return G; },cfg:cfg,act:act,drive:drive,startGame:startGame,skipDeal:skipDeal,queue:queue,sync:function(){ if(!busy&&!ui.dealing) sync(); },
   addMs:function(ms){ stats.ms+=+ms||0; },   // tests: move the play clock on (the time-limit bell)

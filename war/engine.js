@@ -78,7 +78,7 @@ var WARV=["classic","three","peace","hand","razboi","drunkard"];   // versions t
 var HOUSE=[
   ["hand","Cards in your hand","choice",[[3,"3 (Trunks)"],[5,"5"]],0,["hand"]],
   ["deck","Deck","choice",[[52,"52 cards"],[32,"32 cards, 7 to Ace (a shorter game)"]],0,["classic","three","peace","hand","razboi"]],
-  ["leftover","Cards that don't divide evenly","choice",[["war","Go to the first war's winner (Dummies)"],["remove","Set aside"]],0,null,3],
+  ["leftover","Cards that don't divide evenly","choice",[["war","Go to the first war's winner (Dummies)"],["remove","Set aside"]],0,["classic","three","peace","hand","razboi","drunkard"],3],
   ["outLoses","Out of cards in a war = you lose","bool",null,1,WARV],
   ["jokers","Jokers (above the Aces)","choice",[["off","Off"],["in","Shuffled in"],["each","One buried in each stack (2 players)"]],1],
   ["jokerSteal","Capture the other joker in a war to win (2 players)","bool",null,1,WARV,2],
@@ -129,9 +129,10 @@ function normalize(o,n){
   if(o.jokers==="each"&&n!==2) o.jokers="in";
   if(o.guerilla&&o.jokers==="off") o.jokers="in";
   if(n<3) o.onlyTied=false;
+  if(n===3) o.colourDeal=false;   // red vs black (2) or a suit each (4): there is no fair colour split for 3
   if(o.low) o.twoBeatsAce=false;
   o.special=o.version==="drunkard"?6:(o.twoBeatsAce&&o.deck===52?2:0);
-  o.leftover=o.leftover==="remove"?"remove":"war";
+  o.leftover=(o.leftover==="remove"||o.tie==="carry")?"remove":"war";   // no wars in Tod und Leben: a left-over card is set aside
   o.cap=Math.max(50,Math.min(100000,Math.floor(+o.cap||5000)));
   return o;
 }
@@ -394,7 +395,9 @@ function win(G,w,ev){
     var owe=(o.paid?1:0)+(G.usedPr.indexOf(s)>=0?1:0);
     for(var j=0;j<owe;j++){ var c=takeBlind(G,s); if(c<0) break; pot.push(c); from.push(s); G.kn[c]=K_TABLE; paid++; ev.push({e:"pay",s:s,to:w}); }
   });
-  var prOk=(o.prisoners&&war)?G.tb.filter(function(e){ return !e.up&&e.s!==w; }).map(function(e){ return e.c; }):[];
+  /* Prisoners of War (Wikipedia): the winner of a battle may take one of the other players' cards as a prisoner (never their own); after a war
+     the face-down cards may be captured too */
+  var prOk=o.prisoners?G.tb.filter(function(e){ return e.s!==w&&(e.up||war); }).map(function(e){ return e.c; }):[];
   var steal=false;
   if(o.jokerSteal&&war&&G.jok) pot.forEach(function(c){ if(c>=52&&G.jok[c]!=null&&G.jok[c]!==w) steal=true; });
   G.pend={w:w,pot:pot,from:from,war:G.warN,prOk:prOk,how:how,steal:steal,paid:paid};
