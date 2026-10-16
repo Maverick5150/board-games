@@ -139,6 +139,7 @@
     background:radial-gradient(95% 70% at 50% 0%, var(--paper-50) 0%, var(--paper-100) 62%, var(--paper-300) 100%);
     box-shadow:inset 0 0 0 .3125rem var(--paper-50), inset 0 0 0 calc(.3125rem + 2px) var(--mn-deck, #e07a10), 0 10px 24px -14px rgba(0,0,0,.9)}
   .cardbig.is-chest{--mn-deck:#2b6fd0}
+  .cardbig__orig{display:block; margin-top:.625rem; font:var(--fw-body) var(--fs-sm)/1.35 var(--font-ui); font-style:italic; color:var(--text-on-paper-muted)}   /* editions: the printed line of a translated card */
   /* the debt dialog's rows, lists of properties, player cards, property chips */
   .mn-debt{display:grid; gap:.5rem; margin:.25rem 0 0}
   .mn-drow{display:flex; align-items:center; justify-content:space-between; gap:.75rem; padding:.45rem .5rem .45rem .875rem; border-radius:var(--r-md); background:var(--ink-2); box-shadow:var(--well-edge); font:var(--fw-ui) var(--fs-sm)/1.3 var(--font-ui)}
@@ -242,6 +243,74 @@
   .mn-resume > span{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.2rem; min-height:2.75rem}
   .mn-resume .bg-btn__sub{color:var(--text-2)}
   .mn-winhome{margin-top:.75rem}
+  /* ---------- editions (batch 1, 2026-10-16): the Edition row on the setup page and its picker sheet, with a BIG preview of the
+     highlighted edition (snakes' board picker pattern): the whole board drawn by board.js with that edition's names, colours, prices and
+     money, its token set, name, maker, country and year. It follows a tap or the scroll (phone) and the D-pad focus (TV). Phone upright:
+     the preview on top, sticky while the list scrolls under it; phone sideways and TV: the preview on the left, the list on the right ---------- */
+  .mn-sec--edition{order:2}
+  .mn-edrow{gap:.875rem}
+  .mn-ethumb{flex:none; width:3.75rem; height:3.75rem; border-radius:var(--r-sm); overflow:hidden; background:#0f3d24; box-shadow:inset 0 0 0 1px var(--line-gold)}
+  .mn-ethumb svg, .mn-eprev svg{display:block; width:100%; height:100%}
+  .mn-edrow .mn-ename{display:block; font:400 var(--fs-lg)/1.2 var(--font-display); color:var(--gold-100)}
+  .mn-edrow .mn-emeta{display:block; margin-top:.15rem; font:var(--fw-ui) var(--fs-sm)/1.3 var(--font-ui); color:var(--text-1)}
+  .mn-chev{flex:none; display:inline-grid; place-items:center; width:1.5rem; height:1.5rem; color:var(--gold-200)}
+  .mn-egroup{margin:1.25rem 0 .625rem}
+  .mn-eopt{grid-template-columns:4.75rem minmax(0,1fr); align-items:start}
+  .mn-eprev{width:4.75rem; aspect-ratio:1; border-radius:var(--r-sm); overflow:hidden; background:#0f3d24; box-shadow:inset 0 0 0 1px var(--line-gold)}
+  .mn-etags{display:flex; flex-wrap:wrap; gap:.3rem}
+  .mn-etags:empty{display:none}
+  .mn-enote{font:var(--fw-body) var(--fs-xs)/1.4 var(--font-ui); color:var(--text-2)}
+  .mn-eopt.is-peek{background:radial-gradient(100% 120% at 0% 0%, rgba(248,239,216,.12), rgba(0,0,0,0) 65%), var(--control-fill); box-shadow:inset 0 0 0 2px rgba(248,239,216,.62), inset 0 1px 0 rgba(255,255,255,.08)}
+  .mn-esheet{scroll-padding-top:var(--mn-peek-h,0px)}
+  .mn-ewrap{display:block}
+  .mn-ebig{position:sticky; top:-.5rem; z-index:3; margin:.5rem calc(-1 * (var(--gutter) + .25rem)) 0; padding:.625rem calc(var(--gutter) + .25rem) .75rem;
+    background:linear-gradient(180deg,#191e3a,#151932); box-shadow:0 1px 0 var(--line-gold), 0 .75rem 1rem -.75rem rgba(0,0,0,.85)}
+  .mn-ebigart{width:min(100%,32vh); width:min(100%,32dvh); aspect-ratio:1; margin:0 auto; border-radius:var(--r-md); overflow:hidden; background:#0f3d24;
+    box-shadow:inset 0 0 0 1px var(--line-gold), 0 .5rem 1.25rem rgba(0,0,0,.5); transition:opacity var(--dur-fast,.16s) var(--ease-out)}
+  .mn-ebigart.is-wait{opacity:.45}
+  #edBoard{width:100%; height:100%}
+  .mn-ebigcap{display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:.375rem .75rem; margin-top:.625rem}
+  .mn-ebigtext{display:grid; gap:.15rem; min-width:0}
+  .mn-ebigname{font:400 var(--fs-lg)/1.15 var(--font-display); color:var(--gold-100)}
+  .mn-ebigmeta{font:var(--fw-body) var(--fs-xs)/1.3 var(--font-ui); color:var(--text-2)}
+  .mn-ebigmeta b{font-weight:var(--fw-ui-strong); color:var(--text-1); white-space:nowrap}
+  .mn-ebigpick{min-height:var(--tap); white-space:nowrap}
+  .mn-ebigtoks{grid-column:1 / -1; display:flex; flex-wrap:wrap; align-items:center; gap:.25rem .3rem}
+  .mn-etok{display:inline-grid; place-items:center; position:relative}
+  .mn-etok .bg-token{width:1.75rem; height:1.75rem; font-size:.9rem}
+  .mn-etok.is-added::after{content:"+"; position:absolute; right:-.2rem; top:-.25rem; font:var(--fw-caps) .75rem/1 var(--font-ui); color:var(--gold-200)}
+  .mn-etoktxt{flex:1 1 100%; font:var(--fw-body) var(--fs-xs)/1.35 var(--font-ui); color:var(--text-2)}
+  .mn-etoktxt--long{display:none}
+  @media (orientation:landscape) and (max-height:600px){
+    html:not([data-tv]) .mn-esheet{width:min(100%,58rem); max-height:100vh; max-height:100dvh; scroll-padding-top:0}
+    html:not([data-tv]) .mn-ewrap{display:grid; grid-template-columns:var(--bigw) minmax(0,1fr); grid-template-areas:"big head" "big list"; column-gap:1.5rem; align-items:start;
+      --bigw:clamp(10rem, calc(100vh - 11rem), 17rem); --bigw:clamp(10rem, calc(100dvh - 11rem), 17rem)}
+    html:not([data-tv]) .mn-ehead{grid-area:head}
+    html:not([data-tv]) #edList{grid-area:list; min-width:0}
+    html:not([data-tv]) .mn-ebig{grid-area:big; align-self:start; top:0; margin:0; padding:0; background:none; box-shadow:none}
+    html:not([data-tv]) .mn-ebigart{width:100%}
+    html:not([data-tv]) .mn-ebigcap{grid-template-columns:minmax(0,1fr); gap:.375rem; margin-top:.5rem}
+    html:not([data-tv]) .mn-ebigname{font-size:var(--fs-md)}
+    html:not([data-tv]) .mn-ebigtoks{gap:.15rem}
+    html:not([data-tv]) .mn-etok .bg-token{width:1.375rem; height:1.375rem}
+    html:not([data-tv]) .mn-etoktxt--short{display:none}   /* sideways: the row of tokens only (each names itself), so the column fits the screen */
+  }
+  html[data-tv] .mn-esheet{width:min(100%,78rem); scroll-padding-top:0}
+  html[data-tv] .mn-ewrap{display:grid; grid-template-columns:26.5rem minmax(0,1fr); grid-template-areas:"big head" "big list"; column-gap:2.5rem; align-items:start}
+  html[data-tv] .mn-ehead{grid-area:head}
+  html[data-tv] #edList{grid-area:list; min-width:0}
+  html[data-tv] .mn-ebig{grid-area:big; align-self:start; top:0; margin:0; padding:.5rem 0 0; background:none; box-shadow:none}
+  html[data-tv] .mn-ebigart{width:100%}
+  html[data-tv] .mn-ebigcap{grid-template-columns:minmax(0,1fr); margin-top:.875rem}
+  html[data-tv] .mn-ebigpick{display:none}
+  html[data-tv] .mn-etok .bg-token{width:2.25rem; height:2.25rem}
+  html[data-tv] .mn-etoktxt--short{display:none}
+  html[data-tv] .mn-etoktxt--long{display:block}
+  html[data-tv] .mn-eopts{gap:1.5rem}
+  html[data-tv] .mn-eopt{grid-template-columns:7rem minmax(0,1fr); gap:1.25rem}
+  html[data-tv] .mn-eprev{width:7rem}
+  html[data-tv] .mn-ethumb{width:4.5rem; height:4.5rem}
+  html[data-tv] .mn-egroup{margin:1.75rem 0 .75rem}
   /* fallbacks without ui/ui.js (the Luxe toasts take over when it is there) */
   .toast{position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#000c; color:#fff; padding:9px 15px; border-radius:16px; font:600 14px system-ui,sans-serif; opacity:0; transition:opacity .2s; pointer-events:none; z-index:90; max-width:92vw; text-align:center}
   .toast.show{opacity:1}
@@ -381,6 +450,8 @@
 <script src="../names.js"></script>
 <script src="board.js"></script>
 <script src="brain.js"></script>
+<script src="editions/index.js"></script>
+<script src="edition.js"></script>
 <script>window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
 <script>window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){}};window.Skins=window.Skins||{apply:function(){}};</script>
 </head>
@@ -402,6 +473,18 @@
   </main>
 
   <section class="mn-ov" id="overlay" aria-labelledby="dlgTitle"><div class="modal" id="modal"></div></section>
+
+  <section class="bg-sheet mn-esheet" id="edBox" aria-labelledby="edTitle">
+    <div class="bg-sheet__grip" aria-hidden="true"></div>
+    <div class="mn-ewrap">
+      <div class="mn-ehead"><span class="bg-eyebrow bg-eyebrow--accent">Choose your edition</span><h2 class="bg-sheet__title" id="edTitle">Every edition, with its own board</h2><p class="bg-sheet__sub" id="edSub"></p></div>
+      <figure class="mn-ebig" id="edBig" aria-live="polite">
+        <div class="mn-ebigart" id="edBigArt" aria-hidden="true"><div id="edBoard"></div></div>
+        <figcaption class="mn-ebigcap"><span class="mn-ebigtext"><span class="mn-ebigname" id="edBigName"></span><span class="mn-ebigmeta" id="edBigMeta"></span></span><button type="button" class="bg-btn bg-btn--primary mn-ebigpick" id="edBigPick">Play this edition</button><span class="mn-ebigtoks" id="edBigToks"></span></figcaption>
+      </figure>
+      <div id="edList"></div>
+    </div>
+  </section>
 
   <div class="bg-win" id="winBox" aria-labelledby="winTitle">
     <div class="bg-win__scrim"></div>
@@ -519,6 +602,41 @@ const TOKENS=[
  {e:"🎩",n:"Top Hat"},{e:"🏎️",n:"Race Car"},{e:"🐕",n:"Dog"},{e:"🚢",n:"Battleship"},
  {e:"👢",n:"Boot"},{e:"🧵",n:"Thimble"},{e:"🛒",n:"Wheelbarrow"},{e:"🐎",n:"Horse & Rider"}
 ];
+/* ===================== EDITIONS (batch 1, 2026-10-16) =====================
+   The data above is the classic US edition (the 2008 update), the game's built-in default, unchanged. Every other edition comes from
+   monopoly/editions/<id>.js through monopoly/edition.js (loaded on demand, cached by sw.js). useEdition() puts an edition's board,
+   cards, tokens and colours INTO the same arrays and objects (BOARD, CHANCE, CHEST, TOKENS, COLORVAR, GROUPS), and ED holds the numbers
+   the game reads from it: salary, jail fine, taxes, railroad rents, utility multipliers, deck names, currency. The classic numbers in
+   CLASSIC_ED are the ones the game always used, so the classic game plays exactly as before. */
+const CLASSIC={BOARD:JSON.parse(JSON.stringify(BOARD)),CHANCE:JSON.parse(JSON.stringify(CHANCE)),CHEST:JSON.parse(JSON.stringify(CHEST)),TOKENS:JSON.parse(JSON.stringify(TOKENS)),COLORVAR:Object.assign({},COLORVAR)};
+const CLASSIC_ED={id:"classic-us-2008",name:"Classic US (2008 update)",fmt:null,salary:200,startCash:1500,jail:50,houses:32,hotels:12,
+  inc:{amount:200,pct:10,printed:false,name:"Income Tax"},lux:100,luxName:"Luxury Tax",luxToggle:true,luxOfficial:false,incTag:"official",
+  rr:[25,50,100,200],rrWord:"Railroad",util:[4,10],decks:{chance:"Chance",chest:"Community Chest",chestShort:"Chest"},rules:{},tokensAdded:[],board:null};
+CLASSIC.ED=CLASSIC_ED;
+let ED=CLASSIC_ED;
+let EDCHOICE=CLASSIC_ED.id, PV=null, edPeek=null, edBuilt=false, edPtrAt=0, edProgAt=0, edPickAt=0;   // the edition chosen on the setup page (ED is the one in play)
+const ED_KEY="bg_monopoly_edition";   // the edition last chosen on this device (new key; guarded)
+const MED=()=>window.MonoEdition||null;
+const ED_CACHE={};
+function edData(id){ if(!id||id===CLASSIC_ED.id) return CLASSIC; if(ED_CACHE[id]) return ED_CACHE[id]; const M=MED(), d=M&&M.get(id); if(!d) return null; return (ED_CACHE[id]=M.engine(d)); }
+function setArr(a,b){ a.length=0; b.forEach(x=>a.push(x)); }
+function useEdition(id){
+  const E=edData(id)||CLASSIC, c=x=>JSON.parse(JSON.stringify(x));
+  setArr(BOARD,c(E.BOARD)); setArr(CHANCE,c(E.CHANCE)); setArr(CHEST,c(E.CHEST)); setArr(TOKENS,c(E.TOKENS));
+  Object.keys(COLORVAR).forEach(k=>delete COLORVAR[k]); Object.assign(COLORVAR,E.COLORVAR);
+  Object.keys(GROUPS).forEach(k=>delete GROUPS[k]); BOARD.forEach((s,i)=>{ if(s.t==="prop"){ (GROUPS[s.g]=GROUPS[s.g]||[]).push(i);} });
+  JOKER_IDX.chance=CHANCE.findIndex(x=>x.fx==="joker"); JOKER_IDX.chest=CHEST.findIndex(x=>x.fx==="joker");
+  ED=E.ED;
+  try{ if(window.MonoBrain) MonoBrain.init({BOARD,GROUPS,RR_IDX,UTIL_IDX,RR_RENT:ED.rr,UTIL_MULT:ED.util,JAIL:ED.jail}); }catch(e){}
+  if(BV&&BV.setEdition) BV.setEdition(ED.board,BOARD);
+}
+// an edition's money: "$200", "£200" (one formatter, monopoly/edition.js); the classic dollars exactly as before
+function moneyE(E,n){ return E&&E.fmt?E.fmt(n):(n<0?"-$":"$")+Math.abs(n); }
+function luxAmt(){ return ED.luxToggle?(RULES.luxury75?75:100):ED.lux; }
+function incPct(w){ return ED.inc.pct===10?Math.floor(w*0.1):Math.floor(w*ED.inc.pct/100); }
+function grpWord(g){ const gr=BV&&BV.groups; return ED===CLASSIC_ED||!gr||!gr[g]?g.replace("_"," "):gr[g].n.toLowerCase(); }
+function rrWord(n){ const w=ED.rrWord; return n===1?w.toLowerCase():w.toLowerCase()+"s"; }
+const escH=t=>String(t==null?"":t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const PCOLORS=["#e23b3b","#2b7be0","#27a758","#eec21b","#b45be0","#e06f1c","#2bb5bd","#e0559f"];   // 2-8 players (the classic set has 8 tokens)
 
 /* ======================= HOUSE RULES ======================= */
@@ -598,7 +716,7 @@ function freshState(nPlayers,nHumans,tokenIdx,names){
     chanceDraw:shuffle(CHANCE.map((_,i)=>i)), chanceDisc:[],
     chestDraw:shuffle(CHEST.map((_,i)=>i)), chestDisc:[],
     jokersHeld:{chance:0,chest:0},
-    housesLeft:32, hotelsLeft:12, fpPool:0, over:false, started:false,
+    housesLeft:ED.houses, hotelsLeft:ED.hotels, fpPool:0, over:false, started:false,
     turnDouble:false, phaseSince:0, bankAuctionActive:false
   };
 }
@@ -904,24 +1022,41 @@ function dressSaveBar(el){
 }
 
 /* ---- the rules as whole-row switches (setup page and the Menu's House Rules), tagged Official or House ---- */
-function rulesHTML(){
+// the rule rows in an edition's words and money; the classic edition keeps RULE_DEFS exactly. An edition's printed rule is Official for it
+// (the 1935 / 1936 US boards print the 10% income tax option and the $75 Luxury Tax); the $75 switch only exists for US boards
+function ruleDefs(E){
+  E=E||ED; if(E===CLASSIC_ED) return RULE_DEFS;
+  const m=n=>moneyE(E,n), L=E.luxName;
+  return RULE_DEFS.map(r=>{
+    const k=r[0];
+    if(k==="fpSeed500") return [k,"Seed the pool with "+m(500),"With the Free Parking jackpot: when claimed, the pool resets to "+m(500)+" instead of empty.","house"];
+    if(k==="incomeTaxChoice") return [k,E.inc.name+": "+m(E.inc.amount)+" or "+E.inc.pct+"%",E.inc.printed?"Let the player choose to pay "+m(E.inc.amount)+" or "+E.inc.pct+"% of total worth (printed on this edition's board).":"Let the player choose to pay "+m(E.inc.amount)+" or 10% of total worth (the US rule before 2008; not on this edition's board).",E.incTag];
+    if(k==="luxury75") return E.luxToggle?[k,L+" = "+m(75),E.luxOfficial?"The "+m(75)+" "+L+" printed on this edition's board. Off: the later "+m(100)+".":"Use the older "+m(75)+" "+L+" instead of the current "+m(100)+".",E.luxOfficial?"official":"house"]:null;
+    if(k==="mustLeaveAfter3") return [k,r[1],"After 3 turns you must pay "+m(E.jail)+" and move (official rule).","official"];
+    if(k==="doubleGoSalary") return [k,r[1],"Landing exactly on GO pays "+m(2*E.salary)+" instead of "+m(E.salary)+".","house"];
+    if(k==="snakeEyesBonus") return [k,"Snake-eyes bonus "+m(500),"Rolling double 1s pays a "+m(500)+" bonus.","house"];
+    return r;
+  }).filter(Boolean);
+}
+function rulesHTML(E){
+  const DEFS=ruleDefs(E);
   const row=([k,name,desc,kind])=>`<label class="bg-row"><span class="bg-row__main"><span class="bg-row__title">${name} <span class="bg-tag bg-tag--${kind==="official"?"official":"house"}">${kind==="official"?"Official":"House"}</span></span><span class="bg-row__desc">${desc}</span></span><input type="checkbox" class="bg-toggle" data-k="${k}"${RULES[k]?" checked":""}></label>`;
-  return `<div class="bg-section"><h3 class="bg-eyebrow">Official rules</h3></div><div class="bg-rows mn-rules">${RULE_DEFS.filter(r=>r[3]==="official").map(row).join("")}</div>`+
+  return `<div class="bg-section"><h3 class="bg-eyebrow">Official rules</h3></div><div class="bg-rows mn-rules">${DEFS.filter(r=>r[3]==="official").map(row).join("")}</div>`+
     `<div class="bg-section"><h3 class="bg-eyebrow">House rules</h3></div><p class="mn-rulenote">Variants many families play. Each one is off until you switch it on.</p>`+
-    `<div class="bg-rows mn-rules">${RULE_DEFS.filter(r=>r[3]!=="official").map(row).join("")}</div>`;
+    `<div class="bg-rows mn-rules">${DEFS.filter(r=>r[3]!=="official").map(row).join("")}</div>`;
 }
 function wireRules(scope){ [].forEach.call(scope.querySelectorAll("input.bg-toggle[data-k]"),el=>{ el.onchange=()=>{ RULES[el.dataset.k]=el.checked; }; }); }
 // the Start button says what it starts, and the seat preview who sits at the table
 function syncCTA(){
   const lab=$("startLabel"), sub=$("startSub"), pv=$("seatPreview"); if(!lab||!sub) return;
-  const tv=onTV(), nH=SETUP.humans, nP=Math.min(8,Math.max(2,nH+SETUP.cpus)), nC=nP-nH, tk=SETUP.humanTokens||[];
+  const tv=onTV(), nH=SETUP.humans, nP=Math.min(8,Math.max(2,nH+SETUP.cpus)), nC=nP-nH, tk=SETUP.humanTokens||[], TK=setupTokens();
   lab.textContent="Start Game · "+nP+" players";
   const hn=humanNames(nH);
-  sub.textContent=(nH===1?(hn?hn[0]:"You"):nH+(tv?" on this TV":" on this phone"))+(nC?" + "+plural(nC,"computer","computers"):"")+" · "+money(RULES.startingCash)+" each";
+  sub.textContent=(nH===1?(hn?hn[0]:"You"):nH+(tv?" on this TV":" on this phone"))+(nC?" + "+plural(nC,"computer","computers"):"")+" · "+moneyE(setupED(),RULES.startingCash)+" each";
   if(!pv) return;
   const names=[]; for(let i=0;i<nP;i++) names.push(i<nH?(hn?hn[i]:("You"+(nH>1?" "+(i+1):""))):"CPU "+(i+1-nH));
-  pv.innerHTML=`<span class="mn-seats__tokens">`+names.map((n,i)=>`<span class="bg-token" data-seat="${SEATS[i]}" aria-hidden="true">${i<nH&&tk[i]!==undefined?tokV(TOKENS[tk[i]]):"?"}</span>`).join("")+`</span>`+
-    `<span class="mn-seats__txt"><b>${nP} at the table</b>${names.map((n,i)=>`<span class="mn-seats__nm">${n+(i<nH&&tk[i]!==undefined?" ("+TOKENS[tk[i]].n+")":"")}</span>`).join(", ")}</span>`;   // a name never breaks inside (CPU 3)
+  pv.innerHTML=`<span class="mn-seats__tokens">`+names.map((n,i)=>`<span class="bg-token" data-seat="${SEATS[i]}" aria-hidden="true">${i<nH&&tk[i]!==undefined&&TK[tk[i]]?tokV(TK[tk[i]]):"?"}</span>`).join("")+`</span>`+
+    `<span class="mn-seats__txt"><b>${nP} at the table</b>${names.map((n,i)=>`<span class="mn-seats__nm">${n+(i<nH&&tk[i]!==undefined&&TK[tk[i]]?" ("+TK[tk[i]].n+")":"")}</span>`).join(", ")}</span>`;   // a name never breaks inside (CPU 3)
 }
 function nearestIn(row,a){   // D-pad: the nearest enabled button of a save-bar row
   const r0=a.getBoundingClientRect(), x0=r0.left+r0.width/2; let best=null, bd=Infinity;
@@ -930,9 +1065,9 @@ function nearestIn(row,a){   // D-pad: the nearest enabled button of a save-bar 
 }
 function buyWhy(p,i){   // the plain-English line under "Buy for $X"
   const s=BOARD[i];
-  if(s.t==="rr"){ const n=rrOwned(p.id)+1; return n===1?"Your first railroad: rent $25.":"Railroad number "+n+" for you: rent "+money(25*Math.pow(2,n-1))+" on each."; }
+  if(s.t==="rr"){ const n=rrOwned(p.id)+1; return n===1?"Your first "+rrWord(1)+": rent "+money(ED.rr[0])+".":ED.rrWord+" number "+n+" for you: rent "+money(ED.rr[n-1])+" on each."; }
   if(s.t==="util") return utilOwned(p.id)?"Both utilities: rent 10 times the dice.":"Rent is 4 times the dice.";
-  const g=GROUPS[s.g], mine=g.filter(x=>G.owner[x]===p.id).length+1, name=s.g.replace("_"," ");
+  const g=GROUPS[s.g], mine=g.filter(x=>G.owner[x]===p.id).length+1, name=grpWord(s.g);
   if(mine===g.length) return "Completes your "+name+" set: double rent, and you can build.";
   return "Rent "+money(s.rent[0])+". You would own "+mine+" of the "+g.length+" "+name+" streets.";
 }
@@ -943,18 +1078,18 @@ function buyWhy(p,i){   // the plain-English line under "Buy for $X"
    simply skips the drawing. Old saves need nothing new: it all comes from G. */
 let BV=null;
 const MBd=()=>window.MonoBoard||null;
-function tokV(t,seat){ const M=MBd(); return M?M.tokenSVG(t.n,seat||0):t.e; }   // a piece for a seat disc: silver metal on the seat colour
+function tokV(t,seat){ const M=MBd(); return M?M.tokenSVG(t.id||t.n,seat||0):t.e; }   // a piece for a seat disc: silver metal on the seat colour
 function boardState(){
   const own=[], toks=[];
   for(let i=0;i<40;i++){ const o=G.owner[i]; own[i]=o>=0&&G.players[o]?seatOf(G.players[o]):0; }
-  G.players.forEach(p=>{ if(!p.bankrupt) toks.push({id:p.id,i:p.pos,seat:seatOf(p),tok:p.token.n,cur:!!(G.started&&p.id===G.cur),title:p.name,jail:!!p.jail}); });   // jail: drawn in the jail cell, not on the visitors' L
+  G.players.forEach(p=>{ if(!p.bankrupt) toks.push({id:p.id,i:p.pos,seat:seatOf(p),tok:p.token.id||p.token.n,cur:!!(G.started&&p.id===G.cur),title:p.name,jail:!!p.jail}); });   // jail: drawn in the jail cell, not on the visitors' L
   const cp=G.started&&!G.over?G.players[G.cur]:null;
   return {own,houses:G.houses,mort:G.mort,toks,hl:cp&&!cp.bankrupt?cp.pos:-1,
-    amt:{4:RULES.incomeTaxChoice?"PAY 10% OR $200":"PAY $200",38:"PAY $"+(RULES.luxury75?75:100)}};
+    amt:{4:RULES.incomeTaxChoice?"PAY "+ED.inc.pct+"% OR "+money(ED.inc.amount):"PAY "+money(ED.inc.amount),38:"PAY "+money(luxAmt())}};
 }
 function ensureBoard(){
   const M=MBd(); if(BV||!M) return BV;
-  BV=M.mount($("board"),{squares:BOARD,zoom:!onTV(),emblem:true,
+  BV=M.mount($("board"),{squares:BOARD,zoom:!onTV(),emblem:true,edition:ED.board,
     start:()=>G&&G.started&&G.players[G.cur]?G.players[G.cur].pos:0,
     onTap:i=>{ if($("overlay").classList.contains("on")) return; openDeed(i); },   // tap any square: its deed / info sheet (not over an open dialog)
     onOpen:i=>{ if($("overlay").classList.contains("on")) return; openDeed(i); },  // TV: OK on the square the D-pad is on
@@ -970,30 +1105,32 @@ function renderBoard(){
 function squareInfo(i){
   const s=BOARD[i], o=G.owner[i]>=0?G.players[G.owner[i]]:null;
   return {sq:s,owner:o?{name:o.name,seat:seatOf(o)}:null,houses:G.houses[i],mort:G.mort[i],now:o&&s.price&&!G.mort[i]?computeRent(i,G.owner[i],1):null,
-    desc:spaceDesc(s),amt:s.tax==="income"?(RULES.incomeTaxChoice?"Pay $200 or 10%":"Pay $200"):s.tax==="luxury"?"Pay $"+(RULES.luxury75?75:100):""};
+    desc:spaceDesc(s),amt:s.tax==="income"?(RULES.incomeTaxChoice?"Pay "+money(ED.inc.amount)+" or "+ED.inc.pct+"%":"Pay "+money(ED.inc.amount)):s.tax==="luxury"?"Pay "+money(luxAmt()):""};
 }
 function tvInspect(i){
   const el=$("sqInsp"), lg=$("log"); if(!el||!lg) return;
   const M=MBd();
   if(i<0||!M||!G||!onTV()){ el.hidden=true; lg.hidden=false; return; }
-  el.innerHTML=M.card(i,squareInfo(i)); el.hidden=false; lg.hidden=true;
+  el.innerHTML=BV&&BV.card?BV.card(i,squareInfo(i)):M.card(i,squareInfo(i)); el.hidden=false; lg.hidden=true;
 }
 function spaceDesc(s){
-  if(s.t==="go") return "Collect $200 salary as you pass.";
+  if(s.t==="go") return "Collect "+money(ED.salary)+" salary as you pass.";
   if(s.t==="jail") return "Just visiting (or in jail). No penalty for visiting.";
   if(s.t==="fp") return RULES.freeParkingJackpot?"Land here to win the pool of collected fees.":"Free resting space — nothing happens (officially).";
-  if(s.t==="gotojail") return "Go directly to Jail. Do not pass GO, do not collect $200.";
-  if(s.tax==="income") return RULES.incomeTaxChoice?"Pay $200 or 10% of your total worth.":"Pay $200.";
-  if(s.tax==="luxury") return "Pay "+(RULES.luxury75?"$75":"$100")+".";
-  if(s.t==="chance") return "Draw a Chance card.";
-  if(s.t==="cc") return "Draw a Community Chest card.";
+  if(s.t==="gotojail") return "Go directly to Jail. Do not pass GO, do not collect "+money(ED.salary)+".";
+  if(s.tax==="income") return RULES.incomeTaxChoice?"Pay "+money(ED.inc.amount)+" or "+ED.inc.pct+"% of your total worth.":"Pay "+money(ED.inc.amount)+".";
+  if(s.tax==="luxury") return "Pay "+money(luxAmt())+".";
+  if(s.t==="chance") return "Draw a "+ED.decks.chance+" card.";
+  if(s.t==="cc") return "Draw a "+ED.decks.chest+" card.";
   return "";
 }
-function dispName(i){ const M=MBd(); return M?M.NAMES[i].replace(/ /g," "):BOARD[i].n; }   // the name as printed on the board
-function grpName(g){ const M=MBd(); return (M&&M.GROUPS[g]?M.GROUPS[g].n:String(g).replace("_"," "))+" set"; }
+function edNames(M){ return (BV&&BV.names)||M.NAMES; }
+function edGroups(M){ return (BV&&BV.groups)||M.GROUPS; }
+function dispName(i){ const M=MBd(); return M?edNames(M)[i].replace(/ /g," "):BOARD[i].n; }   // the name as printed on the board
+function grpName(g){ const M=MBd(); return (M&&edGroups(M)[g]?edGroups(M)[g].n:String(g).replace("_"," "))+" set"; }
 // a square's sheet head: the name in large type over its colour group's band, with its own drawn icon
 function sqHead(i,sub){
-  const s=BOARD[i], M=MBd(), g=M&&M.GROUPS[s.g], ic=M?M.iconFor(i):"";
+  const s=BOARD[i], M=MBd(), g=M&&edGroups(M)[s.g], ic=M?M.iconFor(i):"";
   return `<div class="bg-sheet__grip" aria-hidden="true"></div><div class="mn-head mn-sqhead"${g?` style="--grp:${g.c}"`:""}><div class="mn-sqhead__row">${ic?`<span class="mn-sqhead__ic" aria-hidden="true">${M.icon(ic,44)}</span>`:""}<h2 class="bg-sheet__title" id="dlgTitle">${dispName(i)}</h2></div>${sub?`<p class="bg-sheet__sub">${sub}</p>`:""}</div>`;
 }
 function openDeed(i,fromManage,flip,back){
@@ -1104,7 +1241,7 @@ function sellWhy(p,x){
 // the set view: every lot of the colour set side by side, its buildings, + to build and - to sell (one tap each), the even-building
 // rule as a short line under a greyed button
 function setViewHTML(p,i){
-  const s=BOARD[i], L=GROUPS[s.g], M=MBd(), gc=M&&M.GROUPS[s.g]?M.GROUPS[s.g].c:COLORVAR[s.g];
+  const s=BOARD[i], L=GROUPS[s.g], M=MBd(), gc=M&&edGroups(M)[s.g]?edGroups(M)[s.g].c:COLORVAR[s.g];
   let h=`<section class="mn-set" style="--grp:${gc}" aria-labelledby="setTitle"><div class="mn-set__head"><h3 class="mn-set__title" id="setTitle">${grpName(s.g)}</h3>`+
     `<span class="mn-set__cost">House <b>${money(s.house)}</b> · sells for ${money(Math.floor(s.house/2))}</span></div><div class="mn-set__lots" style="--n:${L.length}">`;
   L.forEach((x,k)=>{
@@ -1130,7 +1267,7 @@ function toast(m){ Sound.fromText(m); const t=$("toast"); t.textContent=m; t.cla
   B.toast(m,who?{seat:seatOf(who),token:"",ms:2400}:{icon:"info",ms:2400});
   if(who&&MBd()){ const d=document.querySelector(".bg-toast .bg-token"); if(d) d.innerHTML=tokV(who.token); } }   // the piece, not an emoji, in the toast's seat disc
 function log(m){ Sound.fromText(m); const l=$("log"); const d=document.createElement("div"); d.innerHTML=m; l.appendChild(d); l.scrollTop=l.scrollHeight; }
-function money(n){ return (n<0?"-$":"$")+Math.abs(n); }
+function money(n){ return moneyE(ED,n); }   // the edition's money (classic: "$200", "-$15" as always)
 function dotc(p){ return `<span class="mn-dot" data-seat="${seatOf(p)}" aria-hidden="true"></span>`; }   // the Luxe seat colour
 
 // the status card: whose turn and what to do, then the bank (the .pill hooks stay); the strip, the dice and the top bar follow G
@@ -1144,7 +1281,7 @@ function renderStatus(){
     let what;
     if(!p.human) what=G.phase==="moving"&&G.dice[0]?"rolled "+G.dice[0]+" + "+G.dice[1]:"is playing";
     else if(G.phase==="preroll"){
-      const o=["roll for doubles"]; if(p.cash>=50) o.push("pay $50"); if(p.jokers>0) o.push("use your Jail card");
+      const o=["roll for doubles"]; if(p.cash>=ED.jail) o.push("pay "+money(ED.jail)); if(p.jokers>0) o.push("use your Jail card");
       what=p.jail?"in Jail: "+(o.length<3?o.join(" or "):o.slice(0,-1).join(", ")+" or "+o[o.length-1]):"roll the dice";
     }
     else if(G.phase==="rolledAgain") what="doubles, roll again";
@@ -1173,7 +1310,7 @@ function renderControls(){
   if(G.phase==="preroll"){
     if(p.jail){
       add("Roll for doubles","go",humanRoll);
-      if(p.cash>=50) add("Pay $50","",()=>{ payBank(p,50,true); p.jail=false; p.jailTurns=0; log(`${p.name} pays $50 to leave Jail.`); refresh(); });
+      if(p.cash>=ED.jail) add("Pay "+money(ED.jail),"",()=>{ payBank(p,ED.jail,true); p.jail=false; p.jailTurns=0; log(`${p.name} pays ${money(ED.jail)} to leave Jail.`); refresh(); });
       if(p.jokers>0) add("Use Jail card","",()=>{ p.jokers--; p.jail=false; p.jailTurns=0; returnJoker(); log(`${p.name} uses Get Out of Jail Free.`); refresh(); });
     } else {
       add("Roll Dice","go",humanRoll);
@@ -1246,11 +1383,17 @@ const PAUSE_KINDS={menu:1,players:1,rules:1,manage:1,deed:1,trade:1,setup:1};
 function paused(){ return !!(G&&G.started&&!G.over)&&overlayOn()&&!!PAUSE_KINDS[(ui.dlg||{}).kind]; }
 function later(fn,ms){ ms=Math.round((ms||0)*speedFactor()); const e=EPOCH; const run=()=>{ if(e!==EPOCH) return; if(paused()){ G.phaseSince=Date.now(); setTimeout(run,250); return; } fn(); }; return setTimeout(run,ms); }
 function loadSavedGame(d){
+  // editions: a save resumes on its own edition; one made before editions has none and is the classic US edition. A file not loaded
+  // yet loads first (cached by sw.js for offline play)
+  const edId=(d&&d.G&&d.G.edition)||CLASSIC_ED.id;
+  if(!edData(edId)){ const M=MED(); if(M&&M.info(edId)){ M.load(edId,e=>{ if(e) loadSavedGame(d); else toast("This game's edition could not be loaded. Try again online."); }); return; } toast("This game's edition is not in this version of the game."); return; }
   EPOCH++;
-  G=JSON.parse(JSON.stringify(d.G)); Object.assign(RULES,DEFAULT_RULES,d.rules||{}); if(d.setup) SETUP=d.setup; applySpeed();
+  G=JSON.parse(JSON.stringify(d.G));
+  useEdition(edId); G.edition=edId; Object.assign(RULES,DEFAULT_RULES,d.rules||{}); if(d.setup) SETUP=d.setup; applySpeed();
   if(G.housesLeft<0) G.housesLeft=0; if(G.hotelsLeft<0) G.hotelsLeft=0;   // old saves (pre-M5 fix) could hold a negative bank stock
   G.stats=readStats(G.stats);   // presentation-only counters: saves made before step 4 have none and start fresh ones
-  G.skill=normSkill(G.skill||(SETUP&&SETUP.skill)); SETUP.skill=G.skill;   // step 10: a save from before the brain has no skill: Normal (its computers' brains start fresh)
+  G.skill=normSkill(G.skill||(SETUP&&SETUP.skill)); SETUP.skill=G.skill;
+  EDCHOICE=SETUP.edition&&edData(SETUP.edition)?SETUP.edition:edId; SETUP.edition=EDCHOICE;   // the next New game starts on the same edition   // step 10: a save from before the brain has no skill: Normal (its computers' brains start fresh)
   AUC=null; AUC_WAIT.length=0; TRADE=null; DEBT_THEN=null; G.bankAuctionActive=false;
   const lg=$("log"); lg.innerHTML=""; (d.log||[]).forEach(h=>{ const x=document.createElement("div"); x.innerHTML=h; lg.appendChild(x); });
   lg.scrollTop=lg.scrollHeight; log("<i>Saved game loaded.</i>");
@@ -1296,7 +1439,7 @@ function doRoll(){ Sound.sfx("dice");
   if(p.jail){ handleJailRoll(dbl,d1+d2); return; }
   if(dbl){ G.doublesCount++; if(RULES.threeDoublesJail && G.doublesCount===3){ log(`${p.name} rolled 3 doubles — Go to Jail!`); goToJail(p); endOrContinue(); return; } G.turnDouble=true; }
   else G.doublesCount=0;
-  if(RULES.snakeEyesBonus && d1===1 && d2===1){ gain(p,500); log(`${p.name} rolled snake-eyes — +$500!`); }
+  if(RULES.snakeEyesBonus && d1===1 && d2===1){ gain(p,500); log(`${p.name} rolled snake-eyes — +${money(500)}!`); }
   moveBy(p,d1+d2,dbl);
 }
 function handleJailRoll(dbl,total){
@@ -1304,10 +1447,10 @@ function handleJailRoll(dbl,total){
   if(dbl){ log(`${p.name} rolls doubles and leaves Jail!`); p.jail=false; p.jailTurns=0; moveBy(p,total,false); return; }
   p.jailTurns++;
   if(p.jailTurns>=3 && RULES.mustLeaveAfter3){
-    log(`${p.name} failed 3 times — pays $50 and moves.`);
+    log(`${p.name} failed 3 times — pays ${money(ED.jail)} and moves.`);
     // a player bankrupted by the fine never moves; a human short of cash settles it in the debt dialog first
     const leave=()=>{ if(p.bankrupt){ endOrContinue(); return; } p.jail=false; p.jailTurns=0; moveBy(p,total,false); };
-    payBank(p,50,true);
+    payBank(p,ED.jail,true);
     if(p.cash<0 && !p.bankrupt){ DEBT_THEN=leave; return; }
     leave(); return;
   }
@@ -1326,7 +1469,7 @@ function stepMove(p,steps,dir,done){
   const bv=ensureBoard(); if(bv&&bv.hop) bv.hop(p.id,Math.max(120,Math.round(170*speedFactor())));
   later(()=>stepMove(p,steps-1,dir,done), STEP_MS);
 }
-function passGo(p){ gain(p,200); p.lapDone=true; log(`${p.name} passes GO (+$200).`); }
+function passGo(p){ gain(p,ED.salary); p.lapDone=true; log(`${p.name} passes GO (+${money(ED.salary)}).`); }
 function animateLand(p,wasDouble){
   refresh();
   later(()=>resolveLanding(p,wasDouble),350);
@@ -1336,7 +1479,7 @@ function animateLand(p,wasDouble){
 function resolveLanding(p,wasDouble){
   if(p.bankrupt){ endOrContinue(); return; }   // a bankrupt player's token never resolves a landing
   const i=p.pos, s=BOARD[i];
-  if(i===0 && RULES.doubleGoSalary){ gain(p,200); log(`${p.name} landed on GO — extra $200!`); }
+  if(i===0 && RULES.doubleGoSalary){ gain(p,ED.salary); log(`${p.name} landed on GO — extra ${money(ED.salary)}!`); }
   switch(s.t){
     case "go": case "jail": case "fp":
       if(s.t==="fp" && RULES.freeParkingJackpot && G.fpPool>0){ gain(p,G.fpPool); log(`${p.name} collects Free Parking pool ${money(G.fpPool)}!`); G.fpPool=RULES.fpSeed500?500:0; }
@@ -1351,18 +1494,19 @@ function resolveLanding(p,wasDouble){
 function goToJail(p){ p.pos=10; p.jail=true; p.jailTurns=0; G.doublesCount=0; }
 function doTax(p,s){
   if(s.tax==="income"){
+    const flat=ED.inc.amount, pc=ED.inc.pct;
     if(RULES.incomeTaxChoice && p.human){
-      const pct=Math.floor(taxWorth(p)*0.1), flatBest=pct>=200;   // the cheaper choice is marked: gold edge and the check (the other: a plain minus)
+      const pct=incPct(taxWorth(p)), flatBest=pct>=flat;   // the cheaper choice is marked: gold edge and the check (the other: a plain minus)
       const opt=(amt,label,desc,best)=>`<button type="button" class="bg-sheet__option${best?" is-best":""}"${best?" data-autofocus":""} onclick="window.__tax(${amt})">${icon(best?"check":"minus")}<span class="bg-sheet__text"><span class="bg-sheet__label">${label}</span><span class="bg-sheet__desc">${desc}</span><span class="bg-sheet__detail">Cash ${money(p.cash)} to ${money(p.cash-amt)}</span></span></button>`;
-      openModal(head("Income Tax",`Pay $200, or 10% of your total worth: your cash, the printed price of every deed you own and your buildings, ${money(taxWorth(p))} in all.`)+
-        `<div class="bg-sheet__options mn-opts">${opt(200,"Pay $200","The flat amount.",flatBest)}${opt(pct,`Pay 10% (${money(pct)})`,"10% of your total worth.",!flatBest)}</div>`,"",{peek:true,kind:"tax"});
-      window.__tax=(amt)=>{ closeModal(); payBank(p,amt,true); log(`${p.name} pays Income Tax ${money(amt)}.`); endOrContinue(false); };
+      openModal(head(s.n,`Pay ${money(flat)}, or ${pc}% of your total worth: your cash, the printed price of every deed you own and your buildings, ${money(taxWorth(p))} in all.`)+
+        `<div class="bg-sheet__options mn-opts">${opt(flat,"Pay "+money(flat),"The flat amount.",flatBest)}${opt(pct,`Pay ${pc}% (${money(pct)})`,`${pc}% of your total worth.`,!flatBest)}</div>`,"",{peek:true,kind:"tax"});
+      window.__tax=(amt)=>{ closeModal(); payBank(p,amt,true); log(`${p.name} pays ${s.n} ${money(amt)}.`); endOrContinue(false); };
       return;
     }
-    const amt = (RULES.incomeTaxChoice? Math.min(200,Math.floor(taxWorth(p)*0.1)) : 200);
-    payBank(p,amt,true); log(`${p.name} pays Income Tax ${money(amt)}.`);
+    const amt = (RULES.incomeTaxChoice? Math.min(flat,incPct(taxWorth(p))) : flat);
+    payBank(p,amt,true); log(`${p.name} pays ${s.n} ${money(amt)}.`);
   } else {
-    const amt=RULES.luxury75?75:100; payBank(p,amt,true); log(`${p.name} pays Luxury Tax ${money(amt)}.`);
+    const amt=luxAmt(); payBank(p,amt,true); log(`${p.name} pays ${s.n} ${money(amt)}.`);
   }
   endOrContinue(false);
 }
@@ -1391,13 +1535,13 @@ function computeRent(i,own,mult){
     else r = ownsFullGroup(G.players[own],s.g) ? s.rent[0]*2 : s.rent[0];
     return r;
   }
-  if(s.t==="rr"){ const n=rrOwned(own); return 25*Math.pow(2,n-1)*mult; }
+  if(s.t==="rr"){ const n=rrOwned(own); return ED.rr[n-1]*mult; }
   if(s.t==="util"){
     const n=utilOwned(own);
     const d = (mult>1)? (1+rnd(6))+(1+rnd(6)) : (G.dice[0]+G.dice[1]);
     // card "nearest utility" pays 10x dice regardless of count
     if(mult>1) return 10*d;
-    return (n===2?10:4)*d;
+    return (n===2?ED.util[1]:ED.util[0])*d;
   }
   return 0;
 }
@@ -1424,7 +1568,7 @@ function offerBuy(p,i,wasDouble){
       `<button type="button" class="bg-sheet__option${can?" is-best":""}"${can?" data-autofocus":""} ${p.cash<s.price?"disabled":""} onclick="window.__buy()">${icon("check")}<span class="bg-sheet__text"><span class="bg-sheet__label">Buy for ${money(s.price)}</span>`+
         `<span class="bg-sheet__desc">${can?buyWhy(p,i):"Not enough cash. Decline, and it goes to auction."}</span><span class="bg-sheet__detail">${can?"Cash "+money(p.cash)+" to "+money(p.cash-s.price):"Needs "+money(s.price-p.cash)+" more"}</span></span></button>`+
       `<button type="button" class="bg-sheet__option" onclick="window.__decline()">${icon("close")}<span class="bg-sheet__text"><span class="bg-sheet__label">${RULES.noAuction?"Don't buy":"Decline"}</span>`+
-        `<span class="bg-sheet__desc">${RULES.noAuction?"It stays with the bank for now.":"Then every player, you too, can bid for it at auction."}</span><span class="bg-sheet__detail">${RULES.noAuction?"Stays unowned":"Auction from $1"}</span></span></button>`+
+        `<span class="bg-sheet__desc">${RULES.noAuction?"It stays with the bank for now.":"Then every player, you too, can bid for it at auction."}</span><span class="bg-sheet__detail">${RULES.noAuction?"Stays unowned":"Auction from "+money(1)}</span></span></button>`+
       `</div>${deedCardHTML(i)}`,"",{peek:true,kind:"buy"});
     window.__buy=()=>{ closeModal(); buyProp(p,i); endOrContinue(); };
     window.__decline=()=>{ closeModal(); if(RULES.noAuction){ log(`${p.name} declines ${s.n}.`); endOrContinue();} else startAuction(i,endOrContinue); };
@@ -1466,7 +1610,7 @@ function startAuction(i,onDone){
   const bidders=alive();
   if(bidders.length===0){ if(onDone) onDone(); return; }
   AUC={i,onDone,price:0,high:null,active:bidders.map(b=>b.id),idx:0};
-  log(`Auction: ${BOARD[i].n} — bidding starts at $1.`);
+  log(`Auction: ${BOARD[i].n} — bidding starts at ${money(1)}.`);
   auctionStep();
 }
 function auctionStep(){
@@ -1530,10 +1674,10 @@ function drawCard(p,deck){ Sound.sfx("card");
   if(draw.length===0){ endOrContinue(); return; } // only possible if every card is held (impossible here)
   const cardIdx=draw.shift();
   const card=src[cardIdx];
-  const face=`<div class="cardbig${isCh?"":" is-chest"}">${card.text}</div>`;   // a paper card with the deck's colour inlay
+  const face=`<div class="cardbig${isCh?"":" is-chest"}">${card.text}${card.orig?`<span class="cardbig__orig">${escH(card.orig)}</span>`:""}</div>`;   // a paper card with the deck's colour inlay
   const show=cb=>{
-    if(p.human){ openModal(head(isCh?"Chance":"Community Chest",humansN()>1||!isYou(p)?p.name+" draws a card.":"You draw a card.")+face+`<div class="mn-acts"><button type="button" class="bg-btn bg-btn--primary bg-btn--block" data-autofocus onclick="window.__ok()">OK</button></div>`,"",{peek:true,kind:"card"}); window.__ok=()=>{ closeModal(); cb(); }; }
-    else { log(`${p.name} — ${isCh?"Chance":"Chest"}: ${card.text}`); cpuShow(head(`${isCh?"Chance":"Community Chest"} — ${p.name}`)+face, cb, 1900); }
+    if(p.human){ openModal(head(isCh?ED.decks.chance:ED.decks.chest,humansN()>1||!isYou(p)?p.name+" draws a card.":"You draw a card.")+face+`<div class="mn-acts"><button type="button" class="bg-btn bg-btn--primary bg-btn--block" data-autofocus onclick="window.__ok()">OK</button></div>`,"",{peek:true,kind:"card"}); window.__ok=()=>{ closeModal(); cb(); }; }
+    else { log(`${p.name} — ${isCh?ED.decks.chance:ED.decks.chestShort}: ${card.text}`); cpuShow(head(`${isCh?ED.decks.chance:ED.decks.chest} — ${p.name}`)+face, cb, 1900); }
   };
   show(()=>{
     if(card.fx==="joker"){ G.jokersHeld[deck]++; }   // held by player, stays out of the pile
@@ -1558,7 +1702,28 @@ function applyCard(p,card,deck){
     case "repairs": { let h=0,ht=0; for(let i=0;i<40;i++) if(G.owner[i]===p.id && BOARD[i].t==="prop"){ if(G.houses[i]===5) ht++; else h+=G.houses[i]; } const amt=h*card.a[0]+ht*card.a[1]; payBank(p,amt,true); log(`${p.name} pays repairs ${money(amt)}.`); endOrContinue(false); break; }
     case "nearRR": { const idx=nearest(p.pos,RR_IDX); goToAndPay(p,idx,2); break; }
     case "nearUtil": { const idx=nearest(p.pos,UTIL_IDX); goToAndPay(p,idx,10); break; }
+    // editions: "Go back to Old Kent Road / Baltic Avenue": hop BACKWARDS to the space (never collects the salary), then land on it
+    case "moveBack": { stepMove(p,(p.pos-card.a+40)%40,-1,()=>resolveLanding(p,false)); break; }
+    // editions: "Pay a $10 fine or take a Chance": the player chooses (computers: monopoly/brain.js fineOrChance)
+    case "fineOrChance": { fineOrChance(p,card.a); break; }
   }
+}
+function fineOrChance(p,a){
+  const ch=ED.decks.chance;
+  const pay=()=>{ payBank(p,a,true); log(`${p.name} pays the ${money(a)} fine.`); endOrContinue(false); };
+  const take=()=>{ log(`${p.name} takes a ${ch} card.`); drawCard(p,"chance"); };
+  if(p.human){
+    const payBest=p.cash>=a+100, one=humansN()===1;
+    const opt=(k,label,desc,det,best)=>`<button type="button" class="bg-sheet__option${best?" is-best":""}"${best?" data-autofocus":""} onclick="window.__fine('${k}')">${icon(best?"check":"minus")}<span class="bg-sheet__text"><span class="bg-sheet__label">${label}</span><span class="bg-sheet__desc">${desc}</span><span class="bg-sheet__detail">${det}</span></span></button>`;
+    openModal(head(`Pay ${money(a)} or take a ${ch}?`,`${one?"Your":p.name+"'s"} cash <b class="mn-money">${money(p.cash)}</b>`)+
+      `<div class="bg-sheet__options mn-opts">${opt("pay","Pay the "+money(a)+" fine","The fine goes to the bank.","Cash "+money(p.cash)+" to "+money(p.cash-a),payBest)}${opt("chance","Take a "+ch+" card","Draw the top "+ch+" card and do what it says: it may pay, cost or move you.","A "+ch+" card",!payBest)}</div>`,"",{peek:true,kind:"fine"});
+    window.__fine=k=>{ closeModal(); if(k==="pay") pay(); else take(); };
+    return;
+  }
+  let d=p.cash>=a+150?"pay":"chance";
+  if(brainOn(p,"fine")&&MonoBrain.fineOrChance){ const r=brainTry(()=>MonoBrain.fineOrChance(G,p,a,CHANCE)); if(r==="pay"||r==="chance") d=r; }
+  if(d==="pay"&&p.cash<a) d="chance";
+  cpuShow(head(d==="pay"?`${p.name} pays the ${money(a)} fine`:`${p.name} takes a ${ch} card`), ()=>{ if(d==="pay") pay(); else take(); }, 1500);
 }
 function returnJoker(){ // a held Get-Out-of-Jail card goes back to the bottom of its deck
   if(G.jokersHeld.chance>0){ G.jokersHeld.chance--; G.chanceDisc.push(JOKER_IDX.chance); }
@@ -1767,7 +1932,7 @@ function aiTurn(){
       const jd=brainTry(()=>MonoBrain.jail(G,p));
       if(jd==="card"||jd==="pay"||jd==="roll"){
         if(jd==="card"&&p.jokers>0){ p.jokers--; p.jail=false; p.jailTurns=0; returnJoker(); log(`${p.name} uses Get Out of Jail Free.`); }
-        else if(jd==="pay"&&p.cash>=50){ payBank(p,50,true); p.jail=false; p.jailTurns=0; log(`${p.name} pays $50 to leave Jail.`); }
+        else if(jd==="pay"&&p.cash>=ED.jail){ payBank(p,ED.jail,true); p.jail=false; p.jailTurns=0; log(`${p.name} pays ${money(ED.jail)} to leave Jail.`); }
         aiTrades(p); aiBuildPhase(p); refresh();
         if(p.jail) doRoll(); else later(doRoll,400);
         return;
@@ -1776,7 +1941,7 @@ function aiTurn(){
     if(p.jail){
       if(p.jokers>0){ p.jokers--; p.jail=false; p.jailTurns=0; log(`${p.name} uses Get Out of Jail Free.`); refresh(); later(doRoll,400); return; }
       if(p.jailTurns<2 && p.cash<300){ doRoll(); return; } // try doubles early
-      if(p.cash>=50){ payBank(p,50,true); p.jail=false; p.jailTurns=0; log(`${p.name} pays $50 to leave Jail.`); refresh(); later(doRoll,400); return; }
+      if(p.cash>=ED.jail){ payBank(p,ED.jail,true); p.jail=false; p.jailTurns=0; log(`${p.name} pays ${money(ED.jail)} to leave Jail.`); refresh(); later(doRoll,400); return; }
       doRoll(); return;
     }
     aiTrades(p);   // step 10: the brain may offer the other computers a deal first (nothing for the old code)
@@ -1824,7 +1989,7 @@ function openManage(){
     if(s.t==="prop"&&G.houses[i]) tags.push(G.houses[i]===5?"Hotel":plural(G.houses[i],"house","houses"));
     if(s.t==="prop"&&ownsFullGroup(p,s.g)) tags.push("Full set");
     if(G.mort[i]) tags.push("Mortgaged");
-    if(!tags.length) tags.push(s.t==="rr"?"Railroad":s.t==="util"?"Utility":"No buildings");
+    if(!tags.length) tags.push(s.t==="rr"?ED.rrWord:s.t==="util"?"Utility":"No buildings");
     rows+=`<button type="button" class="deedrow mn-lrow bg-focus" data-i="${i}"${any?"":" data-autofocus"}>${colorChip(i)}<span><span class="mn-lrow__name">${s.n}</span><span class="mn-lrow__meta">${tags.join(" · ")}</span></span>${icon("chevron")}</button>`;
     any=true;
   }
@@ -1854,9 +2019,9 @@ function openPlayers(){
         h+=`<button type="button" class="pchip mn-pchip bg-focus${G.mort[i]?" is-mort":""}" data-i="${i}">${colorChip(i)} ${s.n}${hs}${G.mort[i]?" · mortgaged":""}</button>`;
       }
       h+=`</div>`;
-      const sets=[]; for(const g in GROUPS) if(ownsFullGroup(p,g)) sets.push(g.replace('_',' '));
+      const sets=[]; for(const g in GROUPS) if(ownsFullGroup(p,g)) sets.push(grpWord(g));
       const rr=rrOwned(p.id), ut=utilOwned(p.id);
-      let extra=[]; if(sets.length) extra.push("Sets: "+sets.join(", ")); if(rr) extra.push(rr+" railroad"+(rr>1?'s':'')); if(ut) extra.push(ut+" utilit"+(ut>1?'ies':'y'));
+      let extra=[]; if(sets.length) extra.push("Sets: "+sets.join(", ")); if(rr) extra.push(rr+" "+rrWord(rr)); if(ut) extra.push(ut+" utilit"+(ut>1?'ies':'y'));
       if(extra.length) h+=`<div class="mn-sets">${extra.join(" · ")}</div>`;
     } else h+=`<div class="mn-pcard__meta">No properties yet.</div>`;
     h+=`</div>`;
@@ -1865,9 +2030,11 @@ function openPlayers(){
   openModal(h,"",{dismiss:closeModal,kind:"players"});
   document.querySelectorAll(".pchip").forEach(el=>{ el.onclick=()=>openDeed(+el.dataset.i); });
 }
+// editions: dark or ivory text on a group colour the classic game never had: whichever contrasts more (WCAG relative luminance)
+function darkReads(hex){ const v=String(hex||"").replace("#",""); if(v.length!==6) return false; const L=[0,2,4].map(k=>{ const c=parseInt(v.substr(k,2),16)/255; return c<=0.03928?c/12.92:Math.pow((c+0.055)/1.055,2.4); }); const Y=0.2126*L[0]+0.7152*L[1]+0.0722*L[2]; return (Y+0.05)/0.0533>=0.967/(Y+0.05); }
 function deedCardHTML(i){
   const s=BOARD[i];
-  const dark=!!DARK_BAND[s.g];   // the group colours where dark text reads; the ivory reads on the others
+  const dark=COLORVAR[s.g]===CLASSIC.COLORVAR[s.g]?!!DARK_BAND[s.g]:darkReads(COLORVAR[s.g]);   // the group colours where dark text reads; the ivory reads on the others (an edition's own colour: the better contrast)
   let band="", body="";
   if(s.t==="prop"){
     band=`<div class="deed-band${dark?" light":""}" style="background:${COLORVAR[s.g]}"><div class="deed-title">DEED</div><div class="deed-name">${s.n}</div></div>`;
@@ -1880,16 +2047,14 @@ function deedCardHTML(i){
   } else if(s.t==="rr"){
     band=`<div class="deed-band" style="background:#1e1e1e"><div class="deed-title">DEED</div><div class="deed-name">${s.n}</div></div>`;
     body+=`<div class="icon-band">${MBd()?MBd().icon("train",56):""}</div>`;
-    body+=`<div class="dl"><span>Rent</span><b>$25</b></div>`;
-    body+=`<div class="dl"><span>If 2 Railroads are owned</span><b>$50</b></div>`;
-    body+=`<div class="dl"><span>If 3 Railroads are owned</span><b>$100</b></div>`;
-    body+=`<div class="dl"><span>If 4 Railroads are owned</span><b>$200</b></div>`;
-    body+=`<div class="dl rule"><span>Mortgage Value</span><b>$100</b></div>`;
+    body+=`<div class="dl"><span>Rent</span><b>${money(ED.rr[0])}</b></div>`;
+    for(let k=2;k<=4;k++) body+=`<div class="dl"><span>If ${k} ${ED.rrWord}s are owned</span><b>${money(ED.rr[k-1])}</b></div>`;
+    body+=`<div class="dl rule"><span>Mortgage Value</span><b>${money(s.mort)}</b></div>`;
   } else if(s.t==="util"){
     band=`<div class="deed-band" style="background:#1e1e1e"><div class="deed-title">DEED</div><div class="deed-name">${s.n}</div></div>`;
     body+=`<div class="icon-band">${MBd()?MBd().icon(i===12?"bulb":"tap",56):""}</div>`;
-    body+=`<div class="deed-note">If <b>one</b> Utility is owned, rent is <b>4×</b> the amount shown on the dice.<br>If <b>both</b> Utilities are owned, rent is <b>10×</b> the amount shown on the dice.</div>`;
-    body+=`<div class="dl rule"><span>Mortgage Value</span><b>$75</b></div>`;
+    body+=`<div class="deed-note">If <b>one</b> Utility is owned, rent is <b>${ED.util[0]}×</b> the amount shown on the dice.<br>If <b>both</b> Utilities are owned, rent is <b>${ED.util[1]}×</b> the amount shown on the dice.</div>`;
+    body+=`<div class="dl rule"><span>Mortgage Value</span><b>${money(s.mort)}</b></div>`;
   }
   return `<div class="deed">${band}<div class="deed-body">${body}</div></div>`;
 }
@@ -2046,7 +2211,7 @@ function closeModal(){ $("overlay").classList.remove("on"); MODAL_TAG=""; dlgHid
 window.__close=closeModal;
 
 function openRules(){
-  let h=head("House Rules","Defaults match the official classic game. Official is the real rule (switching it off is the variant); House is a variant, off by default.")+rulesHTML();
+  let h=head("House Rules","Defaults match the official classic game. Official is the real rule (switching it off is the variant); House is a variant, off by default.")+rulesHTML(ED);
   h+=`<div class="mn-acts"><button type="button" class="bg-btn bg-btn--primary bg-btn--block" onclick="window.__close()">Done</button></div>`;
   openModal(h,"",{dismiss:closeModal,kind:"rules"});
   wireRules($("modal"));
@@ -2062,10 +2227,11 @@ function openSetup(){
   h+=`<section class="bg-hero mn-hero" aria-labelledby="setupTitle"><div class="bg-hero__layer is-on"></div><div class="bg-hero__shade"></div><div class="bg-hero__body" data-stage-text>`+
      `<span class="bg-eyebrow">Roll · buy · build</span><h2 class="bg-hero__title" id="setupTitle">Monopoly</h2>`+
      `<p class="bg-hero__pitch">Roll round the board, buy streets, railroads and utilities, build houses and hotels, and be the last player standing.</p></div></section>`;
+  h+=edRowHTML();   // editions: the chosen edition and its small board; it opens the picker
   h+=`<section class="mn-sec mn-sec--tokens"><div class="bg-section"><h3 class="bg-eyebrow" id="tokHdr">Pick your token</h3></div>`+
      `<div class="bg-seg bg-seg--grid5 mn-toks" id="tokGrid" role="group" aria-labelledby="tokHdr"></div><p class="mn-tokmsg" id="tokMsg" data-stage-text></p></section>`;
   h+=`<section class="mn-sec mn-sec--names"><div class="bg-section"><h3 class="bg-eyebrow" id="namesHdr">${SETUP.humans>1?"Names":"Your name"}</h3></div><div class="bg-card mn-card" id="nameCard"><p class="mn-namenote">Kept on this ${tv?"TV":"device"} for every game. The computers get their own names.</p></div></section>`;
-  h+=`<section class="mn-sec mn-sec--rules">${speedHTML()}${skillHTML()}${rulesHTML()}</section></div>`;
+  h+=`<section class="mn-sec mn-sec--rules">${speedHTML()}${skillHTML()}${rulesHTML(setupED())}</section></div>`;
   h+=`<div class="mn-col mn-col--b"><section class="mn-sec mn-sec--players"><div class="bg-section"><h3 class="bg-eyebrow">Players</h3></div><div class="bg-card mn-card">`+
      `<div class="mn-field"><span class="bg-row__title" id="humTitle">${tv?"Players on this TV":"Players on this phone"}</span><span class="bg-row__desc">Pass the ${tv?"remote":"phone"} when it's a player's turn. 2 to 8 players in all.</span></div>`+
      `<div class="bg-seg mn-seg4" id="segH" role="group" aria-labelledby="humTitle"></div>`+
@@ -2084,7 +2250,7 @@ function openSetup(){
   const drawTok=()=>{
     const hdr=$("tokHdr"), grid=$("tokGrid"), msg=$("tokMsg");
     hdr.textContent = SETUP.humans>1 ? "Pick tokens (P1, P2 … in player order)" : "Pick your token";
-    grid.innerHTML = TOKENS.map((t,i)=>{
+    grid.innerHTML = setupTokens().map((t,i)=>{
       const slot=SETUP.humanTokens.indexOf(i);   // a picked piece takes its player's seat colour, P1, P2 ...
       return `<button type="button" class="tokbtn" data-t="${i}" aria-pressed="${slot>=0}"><span class="bg-token"${slot>=0?` data-seat="${SEATS[slot]}"`:""} aria-hidden="true">${tokV(t)}</span><span>${t.n}</span>${slot>=0?`<span class="pb">P${slot+1}</span>`:""}</button>`;
     }).join("");
@@ -2110,12 +2276,13 @@ function openSetup(){
   drawH(); drawC(); drawTok();
   ui.bar=Saves.bar({game:"monopoly",el:$("svbar"),
     getSettings:()=>({setup:SETUP,rules:RULES}),
-    applySettings:s=>{ Object.assign(RULES,DEFAULT_RULES,s.rules||{}); SETUP=Object.assign({humans:1,cpus:3,humanTokens:[0]},s.setup||{}); SETUP.skill=normSkill(SETUP.skill); applySpeed(); openSetup(); },
-    standard:()=>{ Object.assign(RULES,DEFAULT_RULES); SETUP={humans:1,cpus:3,humanTokens:[0],skill:"normal"}; applySpeed(); openSetup(); },
+    applySettings:s=>{ Object.assign(RULES,DEFAULT_RULES,s.rules||{}); SETUP=Object.assign({humans:1,cpus:3,humanTokens:[0]},s.setup||{}); SETUP.skill=normSkill(SETUP.skill); if(SETUP.edition&&edData(SETUP.edition)) EDCHOICE=SETUP.edition; applySpeed(); openSetup(); },
+    standard:()=>{ Object.assign(RULES,DEFAULT_RULES); applyEdRules(setupED()); SETUP={humans:1,cpus:3,humanTokens:[0],skill:"normal",edition:EDCHOICE}; applySpeed(); openSetup(); },
     getSnapshot:()=>(G&&G.started&&!G.over)?lastSnap:null,
     loadSnapshot:loadSavedGame});
   dressSaveBar($("svbar"));
   wireRules($("modal")); wireSpeed($("modal")); wireSkill($("modal"));
+  const eb=$("edBtn"); if(eb) eb.onclick=openEditions;
   window.__rules=openRules;
   window.__start=()=>{ Sound.skip(); const nH=SETUP.humans, nP=Math.min(8,Math.max(2,nH+SETUP.cpus)); startGame(nP,nH,humanNames(nH)); };
   window.__resume=resumeGame;
@@ -2124,13 +2291,15 @@ function openSetup(){
 }
 function startGame(nP,nH,names){
   EPOCH++; AUC=null; AUC_WAIT.length=0; TRADE=null; DEBT_THEN=null;   // nothing from the old game carries over
-  const chosen=(SETUP.humanTokens||[]).slice(0,nH);
+  useEdition(edData(EDCHOICE)?EDCHOICE:CLASSIC_ED.id); SETUP.edition=ED.id;   // editions: the chosen edition's board, cards, tokens and numbers
+  const chosen=(SETUP.humanTokens||[]).slice(0,nH).filter(t=>t<TOKENS.length);
   const used=new Set(chosen);
   const remaining=shuffle(TOKENS.map((_,i)=>i).filter(i=>!used.has(i)));
   const toks=[];
   for(let i=0;i<nP;i++){ toks.push( (i<nH && chosen[i]!==undefined) ? chosen[i] : remaining.shift() ); }
   G=freshState(nP,nH,toks,names);
   G.started=true; G.stats=freshStats();   // presentation-only counters (Turn N, the Victory pills)
+  G.edition=ED.id;   // editions: a save resumes on its edition (saves without one are the classic US edition)
   G.skill=normSkill(SETUP.skill);   // step 10: the computers' skill, saved with the game
   $("log").innerHTML="";
   log(`New game: ${nP} players, ${nH} human. Good luck!`);
@@ -2162,6 +2331,141 @@ Skins.apply("monopoly"); Sound.mountButton(); Sound.music("monopoly");
 renderBoard(); renderStatus(); renderControls();   // never leave the UI blank
 // Tap any square (phone) or press OK on it (TV): board.js calls onTap / onOpen (ensureBoard) and the square's deed / info sheet opens
 openSetup();
+edBoot();
+
+/* ---- editions: Choose your edition (the picker sheet with the big preview; the pattern of snakes' board picker) ---- */
+function edRemembered(){ try{ return localStorage.getItem(ED_KEY)||""; }catch(e){ return ""; } }
+function edRemember(id){ try{ localStorage.setItem(ED_KEY,id); }catch(e){} }
+function edInfo(id){ const M=MED(); return (M&&M.info(id))||null; }
+function setupED(){ const E=edData(EDCHOICE); return E?E.ED:ED; }
+function setupTokens(){ const E=edData(EDCHOICE); return E?E.TOKENS:TOKENS; }
+// an edition's printed rules become the switches' defaults (the 1936 US board: the 10% option and the $75 Luxury Tax); its starting cash
+function applyEdRules(E){ ["incomeTaxChoice","luxury75"].forEach(k=>{ RULES[k]=E.rules&&E.rules[k]!==undefined?!!E.rules[k]:DEFAULT_RULES[k]; }); RULES.startingCash=E.startCash||DEFAULT_RULES.startingCash; }
+function edBoot(){
+  const M=MED(), id=edRemembered();
+  if(!M||!id||id===CLASSIC_ED.id||!M.info(id)) return;
+  M.load(id,e=>{ if(!e||(G&&G.started)||EDCHOICE!==CLASSIC_ED.id) return;
+    EDCHOICE=id; SETUP.edition=id; applyEdRules(edData(id).ED); useEdition(id); G=freshState(4,1,[0,1,2,3]); refresh();
+    if(setupShown()) openSetup(); });
+}
+function edRowHTML(){
+  const M=MED(); if(!M||!M.list().length) return "";
+  const it=edInfo(EDCHOICE)||{name:CLASSIC_ED.name,countryName:"United States",year:2008,maker:"Parker Brothers / Hasbro",facts:""}, E=edData(EDCHOICE), B=MBd();
+  return `<section class="mn-sec mn-sec--edition"><div class="bg-section"><h3 class="bg-eyebrow" id="edHdr" data-stage-text>Edition</h3></div><div class="bg-rows">`+
+    `<button class="bg-row mn-edrow" id="edBtn" type="button" aria-haspopup="dialog" aria-controls="edBox" aria-label="Edition: ${escH(it.name)}, ${escH(it.countryName)} ${escH(it.year)}. Choose your edition">`+
+    `<span class="mn-ethumb" aria-hidden="true">${E&&B&&B.mini?B.mini(E.BOARD,E.ED.board):""}</span>`+
+    `<span class="bg-row__main"><span class="mn-ename">${escH(it.name)}</span><span class="bg-row__title mn-emeta">${escH(it.countryName)}, ${escH(it.year)} · ${escH(it.maker)}</span><span class="bg-row__desc">${escH(it.facts||"")}</span></span>`+
+    `<span class="mn-chev" aria-hidden="true">${icon("chevron")}</span></button></div></section>`;
+}
+function edOptHTML(it){
+  return `<button type="button" class="bg-sheet__option mn-eopt" data-ed="${escH(it.id)}" aria-pressed="false"><span class="mn-eprev" data-prev="${escH(it.id)}" aria-hidden="true"></span>`+
+    `<span class="bg-sheet__text"><span class="bg-sheet__label">${escH(it.name)}</span><span class="mn-etags"></span>`+
+    `<span class="bg-sheet__desc">${escH(it.maker)} · ${escH(it.countryName)}, ${escH(it.years||it.year)}</span><span class="bg-sheet__detail">${escH(it.facts||"")}</span>`+
+    (it.inferred&&it.inferred.length?`<span class="mn-enote">Partly inferred: ${escH(it.inferred.join(", "))}.</span>`:"")+`</span></button>`;
+}
+function fillPrevs(){ const B=MBd(); if(!B||!B.mini) return; document.querySelectorAll("#edList [data-prev]").forEach(el=>{ if(el.firstChild) return; const E=edData(el.getAttribute("data-prev")); if(E) el.innerHTML=B.mini(E.BOARD,E.ED.board); }); }
+function buildEdSheet(){
+  if(edBuilt) return; edBuilt=true;
+  const M=MED(), list=M?M.list():[]; let html="", grp=null;
+  list.forEach(it=>{ if(it.group!==grp){ if(grp!==null) html+="</div>"; grp=it.group; html+=`<h3 class="bg-eyebrow mn-egroup">${escH(grp)}</h3><div class="bg-sheet__options mn-eopts">`; } html+=edOptHTML(it); });
+  if(grp!==null) html+="</div>";
+  $("edList").innerHTML=html; fillPrevs();
+  // a tap shows the edition LARGE in the preview; a second tap on it (or "Play this edition") plays it. OK on the TV, a key press (Enter /
+  // Space: detail 0) or a click on the edition already shown picks at once
+  $("edList").addEventListener("click",e=>{ const b=e.target.closest(".mn-eopt"); if(!b) return; const id=b.getAttribute("data-ed");
+    // a click with no finger or pointer down just before it came from a key (Enter / Space): it picks at once. A touch screen can send
+    // two clicks for one tap: one tap is one step (the second click of the same tap is ignored)
+    const viaKey=Date.now()-edPtrAt>900;
+    if(!onTV()&&!viaKey&&edDownAt===edLastTap) return;
+    edLastTap=edDownAt;
+    if(onTV()||viaKey||id===edPeek) pickEdition(id,!onTV()&&!viaKey); else showEd(id,true); });
+  $("edList").addEventListener("pointerdown",()=>{ edPtrAt=Date.now(); },{passive:true});
+  $("edList").addEventListener("touchstart",()=>{ edPtrAt=Date.now(); },{passive:true});
+  $("edList").addEventListener("focusin",e=>{ const b=e.target.closest&&e.target.closest(".mn-eopt"); if(b&&onTV()) showEd(b.getAttribute("data-ed")); });
+  $("edBigPick").addEventListener("click",e=>{ if(!edPeek||(e.detail>0&&edDownAt===edLastTap)) return; edLastTap=edDownAt; pickEdition(edPeek,e.detail>0); });
+  // phone: the preview follows the scroll (the entry at the reading line of the visible list; only while a finger or wheel moves it)
+  const box=$("edBox"); let moved=0, raf=0;
+  ["touchmove","wheel","pointermove"].forEach(t=>box.addEventListener(t,ev=>{ if(t!=="pointermove"||ev.buttons) moved=Date.now(); },{passive:true}));
+  box.addEventListener("keydown",ev=>{ if(/^(Arrow|Page|Home|End| )/.test(ev.key)) moved=Date.now(); });
+  // any scroll the person makes (a finger, the wheel, a scrollbar, keys) moves the preview; the list's own scrolls into view do not
+  box.addEventListener("scroll",()=>{ if(onTV()||(Date.now()-moved>900&&Date.now()-edProgAt<700)||raf) return;
+    raf=requestAnimationFrame(()=>{ raf=0; const id=edAtReadingLine(); if(id&&id!==edPeek) showEd(id); }); },{passive:true});
+}
+/* the entry under the reading line of the visible list: a third of the way down it, sliding to the ends at the top and the bottom of the
+   scroll so the first and last editions can be reached by scrolling too */
+function edAtReadingLine(){
+  const box=$("edBox"), big=$("edBig"), r=box.getBoundingClientRect(), side=big.getBoundingClientRect().right<=$("edList").getBoundingClientRect().left+1;
+  const top=side?r.top:Math.max(r.top,big.getBoundingClientRect().bottom), bot=r.bottom, max=box.scrollHeight-box.clientHeight;
+  const f=max>0?.12+.76*Math.min(1,box.scrollTop/max):.35, y=top+(bot-top)*f; let best=null, bd=1e9;
+  document.querySelectorAll("#edList .mn-eopt").forEach(o=>{ const q=o.getBoundingClientRect(), d=y<q.top?q.top-y:y>q.bottom?y-q.bottom:0; if(d<bd){ bd=d; best=o; } });
+  return best?best.getAttribute("data-ed"):null;
+}
+// the official tax lines of an edition (as its board prints them), for the preview
+function edAmt(E){ const r=E.rules||{}, m=n=>moneyE(E,n), lux=E.luxToggle?(r.luxury75?75:100):E.lux;
+  return {4:r.incomeTaxChoice?"PAY "+E.inc.pct+"% OR "+m(E.inc.amount):"PAY "+m(E.inc.amount),38:"PAY "+m(lux)}; }
+/* show an edition in the big preview: the whole board in its own names, colours, prices and money, its tokens, name, maker, country, year */
+function showEd(id,tapped){
+  if(!id) return; edPeek=id;
+  const it=edInfo(id)||{}, E=edData(id), B=MBd(), art=$("edBigArt");
+  $("edBigName").textContent=it.name||"";
+  $("edBigMeta").innerHTML=escH(it.maker)+" · "+escH(it.countryName)+", <b>"+escH(it.years||it.year)+"</b>";
+  const chosen=id===EDCHOICE, pk=$("edBigPick");
+  pk.textContent=chosen?"Keep this edition":"Play this edition"; pk.setAttribute("aria-label",(chosen?"Keep ":"Play ")+(it.name||"this edition"));
+  document.querySelectorAll("#edList .mn-eopt").forEach(o=>o.classList.toggle("is-peek",!onTV()&&o.getAttribute("data-ed")===id));
+  if(E&&B){
+    const add=E.ED.tokensAdded||[], T=E.TOKENS;
+    $("edBigToks").innerHTML=T.map(t=>`<span class="mn-etok${add.includes(t.id)?" is-added":""}" title="${escH(t.n)}${add.includes(t.id)?" (added)":""}"><span class="bg-token" aria-hidden="true">${B.tokenSVG(t.id||t.n,0)}</span></span>`).join("")+
+      `<span class="mn-etoktxt mn-etoktxt--short">${T.length} tokens${add.length?", "+add.length+" added (+)":""}</span><span class="mn-etoktxt mn-etoktxt--long">${T.length} tokens: ${escH(T.map(t=>t.n+(add.includes(t.id)?" (added)":"")).join(", "))}</span>`;
+    if(!PV) PV=B.mount($("edBoard"),{squares:E.BOARD,zoom:false,dpad:false,emblem:true,edition:E.ED.board});
+    else PV.setEdition(E.ED.board,E.BOARD);
+    PV.update({own:[],houses:[],mort:[],toks:[],amt:edAmt(E.ED)});
+    art.classList.remove("is-wait");
+  } else { art.classList.add("is-wait"); $("edBigToks").innerHTML=""; const M=MED(); if(M) M.load(id,()=>{ if(edPeek===id) showEd(id); }); }
+  edFit();
+  if(tapped){ const o=document.querySelector('#edList .mn-eopt[data-ed="'+id+'"]'); if(o){ edProgAt=Date.now(); try{ o.scrollIntoView({block:"nearest"}); }catch(e){} } }
+}
+function edFit(){ const big=$("edBig"); if(big) $("edBox").style.setProperty("--mn-peek-h",Math.ceil(big.getBoundingClientRect().height)+"px"); }
+window.addEventListener("resize",()=>{ if(edPeek&&$("edBox").classList.contains("is-open")) edFit(); });
+function refreshEdSheet(){
+  document.querySelectorAll("#edList .mn-eopt").forEach(b=>{
+    const id=b.getAttribute("data-ed"), on=id===EDCHOICE, it=edInfo(id)||{}; let t="";
+    b.setAttribute("aria-pressed",String(on)); b.classList.toggle("is-best",on);
+    if(on) t+='<span class="bg-tag bg-tag--accent">Chosen</span>';
+    t+=it.status==="PARTLY INFERRED"?'<span class="bg-tag bg-tag--house">Partly inferred</span>':'<span class="bg-tag bg-tag--ok">Verified</span>';
+    b.querySelector(".mn-etags").innerHTML=t;
+  });
+  $("edSub").textContent="Every edition documented in full, oldest first, with its maker, country and year. "+(onTV()?"Move to an edition to see its board; press OK to play it.":"Tap an edition to see its board large; tap it again, or Play this edition, to play it.")+" Each board is drawn in our own art from the edition's own streets, prices, cards and money.";
+}
+// the click a finger tap sends after it played an edition (it can arrive late, over the redrawn Edition row) never opens the list again: a
+// pointer click opens it only when its finger or pointer went down after that pick; a key press (detail 0) always opens it
+let edDownAt=0, edLastTap=-1; document.addEventListener("pointerdown",()=>{ edDownAt=Date.now(); },{capture:true,passive:true}); document.addEventListener("touchstart",()=>{ edDownAt=Date.now(); },{capture:true,passive:true});
+function openEditions(e){
+  const M=MED(); if(!M||(e&&e.detail>0&&edDownAt<=edPickAt)) return;
+  buildEdSheet(); refreshEdSheet(); edProgAt=Date.now();
+  const B=BG(), el=$("edBox"), sel='#edList .mn-eopt[aria-pressed="true"]';
+  showEd(EDCHOICE);   // the big preview starts on the chosen edition
+  if(B&&B.sheet) B.sheet.open(el,{focus:sel}); else { el.classList.add("is-open","show"); const f=el.querySelector(sel); if(f) f.focus(); }
+  edFit();
+  M.loadAll(()=>{ fillPrevs(); if(edPeek&&el.classList.contains("is-open")) showEd(edPeek); });
+  const f2=el.querySelector(sel); if(f2&&!onTV()){ edProgAt=Date.now(); try{ f2.scrollIntoView({block:"center"}); }catch(e){} }
+}
+// touch: the sheet closes a moment after the tap (it shows "Chosen" first), so a late second click of that tap lands on the sheet, not on
+// the setup page under it
+function pickEdition(id,touch){
+  const E=edData(id), M=MED();
+  if(!E){ if(M) M.load(id,e=>{ if(e) pickEdition(id,touch); else toast("That edition could not be loaded. Try again online."); }); return; }
+  const changed=id!==EDCHOICE;
+  EDCHOICE=id; SETUP.edition=id; edRemember(id); edPickAt=Date.now();
+  if(changed){ applyEdRules(E.ED); SETUP.humanTokens=(SETUP.humanTokens||[]).filter(t=>t<E.TOKENS.length); Sound.sfx("card"); }
+  if(touch){ refreshEdSheet(); showEd(id); setTimeout(()=>edPicked(id),350); return; }
+  edPicked(id);
+}
+function edPicked(id){
+  if(id!==EDCHOICE) return;
+  const B=BG(), el=$("edBox"); if(B&&B.sheet&&B.sheet.isOpen(el)) B.sheet.close(el); else el.classList.remove("is-open","show");
+  if(!(G&&G.started)){ useEdition(id); G=freshState(4,1,[0,1,2,3]); refresh(); }   // the board behind the setup page shows it too
+  if(setupShown()){ openSetup(); const b=$("edBtn"); if(b) setTimeout(()=>{ if(b.isConnected&&!(BG()&&BG().sheet&&BG().sheet.top())) focusEl(b); },0); }
+}
 
 /* ---- Midnight Luxe wiring (presentation only) ---- */
 $("menuBtn").addEventListener("click",()=>openMenu());   // the top bar's menu knob (it took over from the old menu glyph button in the action row)
@@ -2254,7 +2558,7 @@ setInterval(()=>{
 if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
 
 // expose a few for inline handlers already set via window.__*
-window.__mono={get G(){ return G; },netWorth:netWorth,openPlayers:openPlayers,skill:()=>normSkill(SETUP&&SETUP.skill),deed:i=>openDeed(i),refresh:()=>{ if(G) refresh(); }};   // read-only view for the test harnesses (like __uno, __risk, __sc)
+window.__mono={get G(){ return G; },edition:()=>ED.id,chosen:()=>EDCHOICE,pickEdition:id=>pickEdition(id),netWorth:netWorth,openPlayers:openPlayers,skill:()=>normSkill(SETUP&&SETUP.skill),deed:i=>openDeed(i),refresh:()=>{ if(G) refresh(); }};   // read-only view for the test harnesses (like __uno, __risk, __sc)
 })();
 </script>
 </body>
