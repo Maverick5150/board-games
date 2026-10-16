@@ -239,7 +239,7 @@ function boardLine(){
   var base=E.expected(B0.L,E.normalize(E.versionOpts(cfg.version,{board:o.board}),nPlayers()));
   if(isFinite(e)&&isFinite(base)&&e<base*.95) t+=" Shorter than the official rules (about "+Math.round(base)+").";
   else if(isFinite(e)&&isFinite(base)&&e>base*1.05) t+=" Longer than the official rules (about "+Math.round(base)+").";
-  else t+=" Shorter: Any roll to 100 wins (house rule).";
+  else if(o.finish!=="over") t+=" For a shorter game, try the house rule Any roll to 100 wins.";
   $("boardLine").textContent=t;
 }
 function skillNote(){ $("skillNote").textContent=(S.Brain&&S.Brain.NOTE)||"Skill makes no difference in Snakes and Ladders: it is pure luck, and every player just rolls."; }
@@ -268,7 +268,7 @@ function syncStart(){
   sb.classList.toggle("bg-btn--primary",!resumable); sb.classList.toggle("bg-btn--secondary",resumable);
   rb.classList.toggle("bg-btn--primary",resumable); rb.classList.toggle("bg-btn--secondary",!resumable);
 }
-function resultDue(){ var B=BG(); return !!(G&&G.over&&ui.winShown!==gen&&B&&B.win&&luxe()); }
+function resultDue(){ var B=BG(); return !!(G&&G.over&&ui.finished===gen&&ui.winShown!==gen&&B&&B.win&&luxe()); }   // only once the winning move has played: no spoiler mid-move
 function resumeText(){
   if(ui.result) return;
   var s="Back to the game";
@@ -351,7 +351,7 @@ var saveBar=Saves.bar({game:GAME,el:$("svbar"),version:1,snapNote:"exactly as it
 /* ================= Menu, Resume, Start ================= */
 $("menuBtn").addEventListener("click",function(){
   var result=resultDue();
-  saveBar.refresh(); $("resumeBtn").style.display=((G&&!G.over)||result)?"block":"none";
+  saveBar.refresh(); $("resumeBtn").style.display=((G&&!G.over)||result||(G&&G.over&&ui.finished!==gen))?"block":"none";   // the winning move still playing: Resume finishes it
   ui.result=false; ui.cont=false; resumeText();
   drawSetup(); showSetup(true);
   if(result) menuResult();
@@ -529,7 +529,7 @@ function syncControls(){
   var tv=onTV(), nh=nHumans(), cur=G.cur, hum=!G.over&&isHuman(cur), rb=$("rollBtn"), st="", w=spinWord();
   var allDone=nh>0&&G.players.every(function(p){ return !p.human||p.done; });
   rb.hidden=!nh||G.over||allDone;
-  rb.disabled=!hum||ui.fpShow||intent;
+  rb.disabled=!hum||ui.fpShow||intent||(busy&&ui.mover!==cur);
   $("rollLabel").textContent=(G.sixes>0&&hum&&!busy?(w==="spin"?"Spin again":"Roll again"):(w==="spin"?"Spin":"Roll"));
   var pc=G.players[cur];
   $("rollSub").textContent=G.over?"":busy?"Next: "+nm(cur):hum?(nh>1?nm(cur)+"'s turn":(pc.pos?"On square "+pc.pos:"From the start")):nm(cur)+"'s turn";
@@ -565,7 +565,7 @@ function sync(){
 function say(r){
   var el=$("ssay");
   if(!r||!G||!G.players[r.s]){ el.innerHTML=""; ui.say=null; return; }
-  ui.say=r; el.innerHTML='<span class="bg-token" data-seat="'+seatNo(r.s)+'" aria-hidden="true">'+esc(initials(nm(r.s)))+"</span><span>"+esc(nm(r.s))+": “"+esc(r.text)+"”</span>";
+  ui.say=r; ui.sayStep=G.step; el.innerHTML='<span class="bg-token" data-seat="'+seatNo(r.s)+'" aria-hidden="true">'+esc(initials(nm(r.s)))+"</span><span>"+esc(nm(r.s))+": “"+esc(r.text)+"”</span>";
 }
 
 /* ================= the turn: queue the person's roll, pace the computers ================= */
@@ -574,6 +574,7 @@ $("sdice").addEventListener("click",function(){ tapRoll(); });
 function tapRoll(){
   if(!G||G.over||ui.fpShow||setupShown()) return;
   if(!isHuman(G.cur)||intent) return;
+  if(busy&&ui.mover!==G.cur) return;   // hot-seat: a double tap during this move must not roll for the next person
   intent=true; syncControls();
   if(!busy) drive();
 }
@@ -621,7 +622,7 @@ function act(m){
     syncControls(); setTimeout(drive,0); return false;
   }
   save();
-  var my=gen; busy=true; disp=before; syncControls();
+  var my=gen; busy=true; ui.mover=mv.s; disp=before; syncControls();
   var line=null; try{ if(S.Brain&&S.Brain.react) line=S.Brain.react(G,r.ev); }catch(e){ line=null; }
   playBatch(my,r.ev,line).then(null,function(e){ try{ console.warn("snakes: animation",e); }catch(x){} }).then(function(){
     if(my!==gen) return;
@@ -631,8 +632,11 @@ function act(m){
 }
 
 /* ================= the show: every event, paced ================= */
+/* the Menu pauses the move: nothing plays (or sounds) behind it; Resume picks it up where it stopped */
+async function hold(my){ while(my===gen&&setupShown()) await sleep(150); }
 async function playBatch(my,evs,line){
-  for(var i=0;i<evs.length;i++){ if(my!==gen) return; await animEvent(my,evs[i]); }
+  for(var i=0;i<evs.length;i++){ await hold(my); if(my!==gen) return; await animEvent(my,evs[i]); }
+  await hold(my);
   if(line&&my===gen) say(line);
 }
 function status(t){ ui.status=t; $("sstat").textContent=t; }
@@ -649,7 +653,7 @@ async function hops(my,s,path){
   var el=tokEls[s]; if(!el) return;
   el.classList.add("is-moving");
   for(var i=0;i<path.length;i++){
-    if(my!==gen) return;
+    await hold(my); if(my!==gen) return;
     disp[s]=path[i];
     glide(el,{x:BD.centre(path[i]).x,y:BD.centre(path[i]).y,k:1},sp(150));
     hop(el); Sound.sfx("tick");
@@ -685,6 +689,7 @@ async function animEvent(my,e){
   var s=e.s, el=tokEls[s], who=s!=null&&G.players[s]?nm(s):"";
   switch(e.e){
     case "roll":{
+      if(ui.say&&G.step-(ui.sayStep||0)>=2) say(null);   // a computer's line stays for one more move, then goes
       tokEls.forEach(function(t,q){ t.classList.toggle("is-turn",q===s); });
       status(who+" "+(e.spin?(isYou(s)?"spin":"spins"):(isYou(s)?"roll":"rolls"))+"…");
       await showRoll(e.d,true);
