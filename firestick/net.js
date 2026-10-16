@@ -1,7 +1,7 @@
 /* Shared realtime layer for the TV-host + phone-controller party mode.
    Connects to SEVERAL free public MQTT relays at once and publishes to all of them, so the TV and a phone
    always share at least one working relay. Duplicate deliveries are dropped via a per-message id.
-   mqtt.js must be loaded first. */
+   mqtt.js may still be loading (the pages load it async so the screen never waits for the CDN): the relays open as soon as it is in. */
 (function(global){
   "use strict";
   var BROKERS = [
@@ -9,6 +9,13 @@
     "wss://broker.hivemq.com:8884/mqtt",
     "wss://test.mosquitto.org:8081/mqtt"
   ];
+  // run fn once window.mqtt exists (the async <script> that loads it may still be on its way)
+  function whenMqtt(fn){
+    if(global.mqtt){ fn(); return; }
+    var done=false, go=function(){ if(!done && global.mqtt){ done=true; fn(); } };
+    var s=document.querySelector('script[src*="mqtt"]'); if(s) s.addEventListener("load", go);
+    var n=0, t=setInterval(function(){ go(); if(done || ++n>600) clearInterval(t); }, 100);   // also polls (a cached script may have run already)
+  }
   function topic(room, which){ return "bgfs/" + room + "/" + which; }
   function rnd(n){ return Math.floor(Math.random()*n); }
   function mkId(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,9); }
@@ -29,7 +36,7 @@
     var subT = topic(room, role==="host" ? "c" : "h");
     var pubT = topic(room, role==="host" ? "h" : "c");
     var entries = [], closed = false, readyFired = false;
-    var seen = {}, seenQ = [], lastRetained = null;
+    var seen = {}, seenQ = [], lastRetained = null, early = [];
 
     function remember(id){ seen[id]=1; seenQ.push(id); if(seenQ.length>500){ delete seen[seenQ.shift()]; } }
     function report(){
@@ -47,6 +54,7 @@
         e.c.subscribe(subT, {qos:0}, function(){
           e.up = true; report(); handlers.up && handlers.up();
           if(lastRetained){ try{ e.c.publish(pubT, lastRetained, {qos:0, retain:true}); }catch(x){} }   // bring a late relay up to date
+          if(early.length){ var q=early; early=[]; q.forEach(function(p){ try{ e.c.publish(pubT, p, {qos:0, retain:false}); }catch(x){} }); }
           if(!readyFired){ readyFired = true; handlers.ready && handlers.ready(); }
         });
       });
@@ -59,7 +67,7 @@
       e.c.on("close", function(){ e.up = false; if(!closed) report(); });
     }
     handlers.status && handlers.status("connecting");
-    BROKERS.forEach(function(u){ try{ open(u); }catch(x){} });
+    whenMqtt(function(){ if(!closed) BROKERS.forEach(function(u){ try{ open(u); }catch(x){} }); });
 
     return {
       send: function(obj, retain){
@@ -68,6 +76,7 @@
         if(retain) lastRetained = payload;
         var targets=entries.filter(function(e){ return e.up; });
         if(!targets.length) targets=entries;   // none up right now: let the client queue it and deliver on reconnect
+        if(!targets.length){ if(!retain) early.push(payload); return; }   // mqtt.js not in yet: sent when the first relay opens
         targets.forEach(function(e){ try{ e.c.publish(pubT, payload, {qos:0, retain: !!retain}); }catch(x){} });
       },
       close: function(clear){

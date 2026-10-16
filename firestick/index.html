@@ -12,6 +12,10 @@
   try { if (localStorage.getItem("bgui.effects") === "reduced") h.setAttribute("data-effects", "reduced"); } catch (e) { }
 })(document.documentElement);</script>
 <link rel="stylesheet" href="../ui/theme.css">
+<link rel="preload" href="../ui/fonts/manrope-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../ui/fonts/dmserifdisplay-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="dns-prefetch" href="https://broker.emqx.io"><link rel="dns-prefetch" href="https://broker.hivemq.com"><link rel="dns-prefetch" href="https://test.mosquitto.org">
 <script src="../ui/icons.js" defer></script>
 <script src="../ui/ui.js" defer></script>
 <style>
@@ -173,7 +177,7 @@
   <div class="bg-sr" id="toast" aria-hidden="true"></div>
   <div class="bg-sr" id="svtoast" aria-hidden="true"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js" async></script><!-- async: the screen never waits for the CDN; net.js opens the relays once it is in -->
 <script src="qr.js"></script>
 <script src="net.js"></script>
 <script src="monodata.js"></script>
@@ -361,16 +365,33 @@ var reqSeq=1;
 var inLobby=true;
 
 function send(o,retain){ if(net){ if(o&&o.game===undefined&&chosenGame) o.game=chosenGame; net.send(o,retain); } }   // every message says which game this room is, so a phone can theme itself (older phones ignore it)
+function showConn(s){ connEl.textContent = s==="online"?"relay connected":(s==="connecting"?"connecting…":"reconnecting…"); connEl.setAttribute("data-state",s); }
+/* step 10 smoothness: the next room's relays open while the game picker is up (its code is new and shown nowhere yet, so
+   nobody can talk to it), and picking a game takes it over: the lobby is "relay connected" at once instead of seconds later */
+var pre=null;   // {room, net, st}
+function prepRoom(){
+  if(pre||!window.BGNet) return;
+  var p={room:BGNet.roomCode(), net:null, st:"connecting"};
+  p.net=BGNet.connect(p.room,"host",{
+    status:function(s){ p.st=s; if(net===p.net) showConn(s); },
+    ready:function(){},
+    msg:function(o){ if(net===p.net) onMsg(o); }
+  });
+  pre=p;
+}
 function startRoom(){
   closeRoom("The host opened a new game room. Scan the new QR code to join.");
-  room=BGNet.roomCode();
   players={}; seat={}; settlePending(); lastAsk={};
+  if(pre){ var p=pre; pre=null; room=p.room; net=p.net; showConn(p.st); }
+  else {
+    room=BGNet.roomCode();
+    net=BGNet.connect(room,"host",{
+      status:showConn,
+      ready:function(){},
+      msg:onMsg
+    });
+  }
   JOIN_URL=BASE+"play.html?room="+room; SHORT_URL=JOIN_URL.replace(/^https?:\/\//,"");
-  net=BGNet.connect(room,"host",{
-    status:function(s){ connEl.textContent = s==="online"?"relay connected":(s==="connecting"?"connecting…":"reconnecting…"); connEl.setAttribute("data-state",s); },
-    ready:function(){},
-    msg:onMsg
-  });
 }
 function closeRoom(msg){
   if(!net) return;
@@ -480,6 +501,7 @@ function dressTiles(){ var B=BG(); if(!B||!B.icon) return;
 function screenSelect(){
   runId++; settlePending(); noWait=false; inLobby=true; screenState="select"; gameSnap=null; viewHandler=null; leaveHandler=null; unguardHistory(); closeWin(); Skins.apply("party"); Sound.music("menu"); setBack(window.AndroidTV?"Exit":"Hub", true);
   closeRoom("The host went back to the game menu.");                  // each game gets its own brand-new room
+  setTimeout(function(){ if(screenState==="select") prepRoom(); },400);   // after the picker is on screen
   setMode("select"); setBar("Play together","Party Mode");
   wrap.innerHTML='<div class="ps-select"><div class="ps-head"><h1 data-stage-text>Pick a game</h1><p data-stage-text>Players scan a QR code on the next screen and join from their phones.</p></div>'+
     '<nav class="bg-tiles" id="cards" aria-label="Games"></nav></div>';
