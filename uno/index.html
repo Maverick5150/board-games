@@ -17,6 +17,11 @@
   try { if (localStorage.getItem("bgui.effects") === "reduced") h.setAttribute("data-effects", "reduced"); } catch (e) { }
 })(document.documentElement);</script>
 <link rel="stylesheet" href="../ui/theme.css">
+<!-- smoothness (step 10): the two faces and the hero art of the first screen load with the page, so the title never swaps font
+     (a jump) and the art never pops in late -->
+<link rel="preload" href="../ui/fonts/manrope-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../ui/fonts/dmserifdisplay-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../ui/art/hero-uno-960.webp" as="image" type="image/webp">
 <script src="../ui/icons.js" defer></script>
 <script src="../ui/ui.js" defer></script>
 <style>
@@ -455,12 +460,12 @@ function menuResult(){
 }
 // the setup page is also the in-game Menu: one page at a time (the table is not drawn while it is up). .show is the old state class
 function showSetup(on,resume){
-  const s=$("setup"), b=document.body;
+  const s=$("setup"), b=document.body, se=document.scrollingElement||document.documentElement, y=se.scrollTop;   // read while the layout is clean: the write below forces a full layout, so it only runs when the page has moved
   s.style.display=on?"":"none"; s.classList.toggle("show",on);
   b.classList.toggle("un-in-setup",on); b.classList.toggle("bg-app--scene",on); b.classList.toggle("bg-app--felt",!on);
   $("menuBtn").hidden=on;
   if(on){ closeBox(); closeWin(); syncStart(); }
-  (document.scrollingElement||document.documentElement).scrollTop=0;
+  if(y) se.scrollTop=0;
   if(!on&&G){
     if(ctrl&&V){ ctrl.resetTurn(); ctrl.update(V); }   // the table is back: the strip pulses whose turn it is, the D-pad focus finds its control
     if(resume){
