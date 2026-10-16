@@ -41,7 +41,9 @@
   /* ---------- setup page (also the in-game Menu) ---------- */
   .un-setup{display:flex; flex-direction:column; width:min(100%,40rem); margin:0 auto; padding:0 var(--gutter)}
   .un-col{display:contents}
-  .un-hero{order:1} .un-sec--version{order:2} .un-sec--players{order:3} .un-sec--speed{order:4} .un-sec--rules{order:5} .un-sec--save{order:6} .un-back{order:7} .un-dock{order:8}
+  .un-hero{order:1} .un-sec--version{order:2} .un-sec--players{order:3} .un-sec--names{order:4}
+  .un-fpc{position:absolute; inset:0; display:grid; place-items:center; border-radius:.5rem; box-shadow:inset 0 0 0 .3rem #f6f1e7; font:400 1.9rem/1 var(--font-display); color:#fff; text-shadow:0 2px 0 rgba(0,0,0,.4)}
+  .un-fpc small{font:var(--fw-caps) .75rem/1.1 var(--font-ui); letter-spacing:.04em; text-transform:uppercase} .un-sec--speed{order:5} .un-sec--rules{order:6} .un-sec--save{order:7} .un-back{order:8} .un-dock{order:9}
   .un-hero{min-height:0; margin:0 calc(-1 * var(--gutter)); padding-top:46%; border-radius:0; background:transparent}
   .un-hero .bg-hero__layer{bottom:auto; height:auto; aspect-ratio:16/9; border-radius:0; background-color:transparent;
     background-image:url("../ui/art/hero-uno-960.webp"); background-size:100% auto; background-position:100% 0;
@@ -226,6 +228,10 @@
         <div class="bg-section un-skillhead"><h2 class="bg-eyebrow" id="skillHead" data-stage-text>Computer skill</h2></div>
         <div class="bg-seg bg-seg--text" id="skillSeg" role="group" aria-labelledby="skillHead"><button type="button" data-k="easy" aria-pressed="false">Easy</button><button type="button" data-k="normal" class="on" aria-pressed="true">Normal</button><button type="button" data-k="hard" aria-pressed="false">Hard</button></div>
       </section>
+      <section class="un-sec un-sec--names" aria-labelledby="namesHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="namesHead" data-stage-text>Names</h2></div>
+        <div class="bg-card un-namecard" id="nameCard"><p class="bg-names-note">Your name is kept on this device for every game. The computers get their own names.</p></div>
+      </section>
       <section class="un-sec un-sec--rules" aria-labelledby="rulesHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="rulesHead" data-stage-text>Rules</h2></div>
         <div class="bg-rows">
@@ -302,7 +308,11 @@ const SEATC=["#e23b3b","#2b7be0","#27a758","#eec21b","#a65bd6","#19b5b0","#f08a2
    The human's fair moments (catch UNO 1300-2000 ms, jump-in) are rules of fairness, not pace, and stay as they were. */
 function speedFactor(){ return ({slow:1.75, fast:0.5})[window.bgGameSpeed] || 1 }
 function normSpeed(v){ return v==="slow"||v==="fast"?v:"medium"; }
-function cpuNames(n,human){ let a=[]; try{ if(window.Names&&n>0) a=window.Names.pick(n,human)||[]; }catch(e){} while(a.length<n) a.push("CPU "+(a.length+1)); return a; }
+function cpuNames(n,human){ let a=[]; try{ if(window.Names&&n>0) a=window.Names.pick(n,(human||[]).concat(["You"]))||[]; }catch(e){} while(a.length<n) a.push("CPU "+(a.length+1)); return a; }
+// step 10: the players' own names (BGUI.names: one device-wide name for every game, one field per human); without ui.js "You" / "Player n" as before
+let nameUI=null;
+function humanNames(n){ const B=BG(); return nameUI&&B&&B.names?B.names.list(n,nameUI.values()):null; }
+function mountNames(){ const B=BG(); if(!B||!B.names||nameUI) return; nameUI=B.names.mount("#nameCard",{count:cfg.humans,seat:i=>(i%10)+1,onChange:()=>{ drawSeats(); }}); }
 const SHORT={classic:"Classic",flip:"Flip",nomercy:"No Mercy",allwild:"All Wild"};
 const SV_ICON={ss:"save",ls:"load",std:"reset",sg:"save",lg:"load",au:"resume"};
 // step 10: Computer skill (easy / normal / hard; normal = the new brain, uno/brain.js): saved with the settings and the game; a change from the Menu applies at once; old saves = normal
@@ -372,7 +382,7 @@ function drawVersions(){
   $("versionDesc").innerHTML=`<b>${esc(v.name)}.</b> ${esc(v.desc)}`;
 }
 function drawSetup(){ clampSeats(); drawVersions(); drawSeats(); drawHouse(); }
-function seatNames(){ const names=[]; for(let i=0;i<cfg.humans+cfg.cpus;i++){ const h=i<cfg.humans; names.push(h?(cfg.humans===1?"You":"Player "+(i+1)):"CPU "+(i+1-cfg.humans)); } return names; }
+function seatNames(){ const hn=humanNames(cfg.humans), names=[]; for(let i=0;i<cfg.humans+cfg.cpus;i++){ const h=i<cfg.humans; names.push(h?(hn?hn[i]:cfg.humans===1?"You":"Player "+(i+1)):"CPU "+(i+1-cfg.humans)); } return names; }
 function drawSeats(){
   const o=curOpts(), hs=$("humanSeg"), cs=$("cpuSeg");
   keepFocus(hs,"data-n",()=>{
@@ -383,6 +393,7 @@ function drawSeats(){
     cs.innerHTML=[0,1,2,3,4,5,6,7,8,9].map(n=>{ const t=cfg.humans+n, okk=t>=2&&t<=10&&(!o.teams||t===4); return `<button type="button" data-n="${n}" class="${cfg.cpus===n?"on":""}" aria-pressed="${cfg.cpus===n}"${okk?"":" disabled"}>${n}</button>`; }).join("");
     cs.querySelectorAll("button:not([disabled])").forEach(b=>b.addEventListener("click",()=>{ cfg.cpus=+b.dataset.n; drawSetup(); }));
   });
+  if(nameUI) nameUI.count(cfg.humans);
   const tot=cfg.humans+cfg.cpus, names=seatNames(), tm=!!o.teams&&tot===4;
   $("seatNote").textContent=tot+" players"+(o.teams?" · partners sit opposite (1 & 3 vs 2 & 4)":"")+(o.edition==="nomercy"&&tot>6?" · the box says 2–6 players, but more works":"");
   $("seatTokens").innerHTML=names.map((n,i)=>`<span class="bg-token" data-seat="${seatIn(tm,i)}" aria-hidden="true">${esc(initials(n))}</span>`).join("");
@@ -549,12 +560,33 @@ $("startBtn").addEventListener("click",()=>{ Sound.skip(); closeBox(); closeWin(
 function startGame(){
   gen++; clearTimeout(timer); clampSeats();
   const total=cfg.humans+cfg.cpus, names=[], humans=[];
-  const hn=[]; for(let i=0;i<cfg.humans;i++) hn.push(cfg.humans===1?"You":"Player "+(i+1));
+  const hn=humanNames(cfg.humans)||[]; for(let i=hn.length;i<cfg.humans;i++) hn.push(cfg.humans===1?"You":"Player "+(i+1));
   const cn=cpuNames(total-cfg.humans,hn);   // step 10: fresh random names for the computers at every new game; stored in G and its save
   for(let i=0;i<total;i++){ const h=i<cfg.humans; humans.push(h); names.push(h?hn[i]:cn[i-cfg.humans]); }
-  G=E.newGame({names,humans,opts:curOpts()}); G.skill=normSkill(cfg.skill); E.startRound(G); handoffOk=null;
+  // step 10, who deals (official rule): everyone draws a card, the highest number deals (an action or Wild card counts 0) and a tie
+  // draws again; play starts to the dealer's left. The show is BGUI.firstPlayer; without ui.js the dealer is random, as before
+  const B=BG(), fp=B&&B.firstPlayer;
+  let res=null, dealer;
+  if(fp){
+    const pool=[]; ["R","G","B","Y"].forEach(c=>{ pool.push([c,0]); for(let v=1;v<=9;v++){ pool.push([c,v]); pool.push([c,v]); } ["Skip","Reverse","Draw 2"].forEach(a=>{ pool.push([c,a]); pool.push([c,a]); }); });
+    for(let k=0;k<4;k++){ pool.push(["W","Wild"]); pool.push(["W","Wild Draw 4"]); }
+    for(let i=pool.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [pool[i],pool[j]]=[pool[j],pool[i]]; }
+    res=fp.resolve(total,()=>pool.pop(),{rank:v=>typeof v[1]==="number"?v[1]:0});
+    dealer=(res.winner-1+total)%total;   // startRound moves the deal one seat on: the high card deals the first round
+  }
+  G=E.newGame(Object.assign({names,humans,opts:curOpts()},fp?{dealer}:{})); G.skill=normSkill(cfg.skill); E.startRound(G); handoffOk=null;
   stats={ms:0,played:0}; ui.winShown=-1; ui.result=false; closeHandoff();
-  startUI(); clockOn(); drive();
+  startUI(); clockOn();
+  if(!fp){ drive(); return; }
+  const g=gen, FC={R:"#d83a3a",G:"#1f9a52",B:"#2a6fd6",Y:"#d6a514",W:"#1d1a2a"};
+  setTimeout(()=>{ if(g!==gen) return;   // after showSetup(false): the dealt table is on screen under the show
+    fp({mode:"card",title:"Draw for the deal",rounds:res.rounds,winner:res.winner,
+      players:G.players.map((pl,i)=>({name:pl.name,seat:(i%10)+1})),
+      face:v=>'<span class="un-fpc" style="background:'+FC[v[0]]+'">'+(typeof v[1]==="number"?v[1]:'<small>'+v[1]+'</small>')+'</span>',
+      label:v=>typeof v[1]==="number"?"":"counts 0",
+      result:w=>({title:G.players[w].name+" deals",sub:G.players[G.turn].name+" plays first, to the dealer's left. The highest card deals."})
+    }).then(()=>{ if(g===gen&&G&&!G.over) drive(); });
+  },0);
 }
 function startUI(){
   Skins.apply("uno"); Sound.music("uno");
@@ -749,6 +781,7 @@ document.addEventListener("bgui:sheet",hintSync);
 document.addEventListener("visibilitychange",()=>{ if(document.hidden) clockOff(); else clockOn(); });
 // ui/ui.js is deferred: it arrives after this script. Then the icons go in, and the Luxe sheets, toasts and the Victory screen take over
 document.addEventListener("DOMContentLoaded",()=>{
+  mountNames(); drawSeats();
   const B=BG();
   if(B&&B.back) B.back.on(backStep);
   else window.__tvBack=()=>{   // no ui.js: the same steps, without the Luxe layers
