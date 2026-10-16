@@ -44,7 +44,9 @@
   /* ---------- setup page (also the in-game Menu) ---------- */
   .rm-setup{display:flex; flex-direction:column; width:min(100%,40rem); margin:0 auto; padding:0 var(--gutter)}
   .rm-col{display:contents}
-  .rm-hero{order:1} .rm-sec--version{order:2} .rm-sec--players{order:3} .rm-sec--rules{order:4} .rm-sec--save{order:5} .rm-back{order:6} .rm-dock{order:7}
+  .rm-hero{order:1} .rm-sec--version{order:2} .rm-sec--players{order:3} .rm-sec--names{order:4}
+  .bg-fp__face .pc{--cw:var(--fpcw,3.6rem); position:absolute; inset:0; width:auto; height:auto}
+  html[data-tv]{--fpcw:4.4rem} .rm-sec--rules{order:5} .rm-sec--save{order:6} .rm-back{order:7} .rm-dock{order:8}
   /* the hero art band on top, the title under it (ui README section 10, narrow hero); the art fades into the scene */
   .rm-hero{min-height:0; margin:0 calc(-1 * var(--gutter)); padding-top:46%; border-radius:0; background:transparent}
   .rm-hero .bg-hero__layer{bottom:auto; height:auto; aspect-ratio:16/9; border-radius:0; background-color:transparent;
@@ -308,6 +310,10 @@
         <div class="bg-versions" id="versions" role="radiogroup" aria-labelledby="versionHead"></div>
         <p class="rm-vdesc" id="versionDesc" aria-live="polite"></p>
       </section>
+      <section class="rm-sec rm-sec--names" aria-labelledby="namesHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="namesHead" data-stage-text>Names</h2></div>
+        <div class="bg-card rm-namecard" id="nameCard"><p class="bg-names-note">Your name is kept on this device for every game. The computers get their own names.</p></div>
+      </section>
       <section class="rm-sec rm-sec--rules" aria-labelledby="rulesHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="rulesHead" data-stage-text>Rules</h2></div>
         <div class="bg-rows">
@@ -491,7 +497,11 @@ function clampSeats(){
   if(o.teams){ cfg.humans=Math.min(cfg.humans,4); cfg.cpus=4-cfg.humans; }
   else { if(cfg.humans+cfg.cpus<2) cfg.cpus=2-cfg.humans; if(cfg.humans+cfg.cpus>8) cfg.cpus=8-cfg.humans; }
 }
-function seatNames(){ const names=[]; for(let i=0;i<cfg.humans+cfg.cpus;i++){ const h=i<cfg.humans; names.push(h?(cfg.humans===1?"You":"Player "+(i+1)):"CPU "+(i+1-cfg.humans)); } return names; }
+function seatNames(){ const hn=humanNames(cfg.humans), names=[]; for(let i=0;i<cfg.humans+cfg.cpus;i++){ const h=i<cfg.humans; names.push(h?(hn?hn[i]:cfg.humans===1?"You":"Player "+(i+1)):"CPU "+(i+1-cfg.humans)); } return names; }
+// step 10: the players' own names (BGUI.names: one device-wide name for every game, one field per human); without ui.js "You" / "Player n" as before
+let nameUI=null;
+function humanNames(n){ const B=BG(); return nameUI&&B&&B.names?B.names.list(n,nameUI.values()):null; }
+function mountNames(){ const B=BG(); if(!B||!B.names||nameUI) return; nameUI=B.names.mount("#nameCard",{count:cfg.humans,seat:i=>i+1,onChange:()=>{ drawSeats(); }}); }
 function drawSeats(){
   const o=curOpts(), teams=o.teams, hs=$("humanSeg"), cs=$("cpuSeg");
   keepFocus(hs,"data-n",()=>{
@@ -506,6 +516,7 @@ function drawSeats(){
   const tot=cfg.humans+cfg.cpus, decks=o.decksAuto?(tot>=5?2:1):o.decks;
   $("seatNote").textContent=`${tot} players · ${decks} deck${decks>1?"s":""}${o.jokers?` + ${o.jokers*decks} jokers`:""}${teams?" · partners sit opposite (1&3 vs 2&4)":""}`;
   // the seat preview: who sits at the table, in the seat colours of the strip
+  if(nameUI) nameUI.count(cfg.humans);
   const names=seatNames(), tm=teams&&tot===4;
   $("seatTokens").innerHTML=names.map((n,i)=>`<span class="bg-token" data-seat="${seatIn(tm,i)}" aria-hidden="true">${initials(n)}</span>`).join("");
   $("seatHead").textContent=tot+" at the table";
@@ -631,7 +642,7 @@ function takeRoundSnap(){
   Saves.auto("rummy500",lastSnap);
 }
 function loadSaved(d){
-  gen++; G=d.G; G.rnd=Math.random; G.log=[]; G.snap=null;
+  gen++; firstHold=false; G=d.G; G.rnd=Math.random; G.log=[]; G.snap=null;
   if(!(d.between===true&&G.roundOver&&typeof G.roundOver==="object"&&Array.isArray(G.roundOver.rows)&&!G.over)) G.roundOver=null;   // a mid-round save; a between-rounds one keeps its summary
   /* saves from before the Persian deck fix hold 2 jokers: deal the published 4 from the next round on */
   if(G.o&&G.o.jokerMode==="group"&&G.o.jokers===2&&d.cfg&&d.cfg.version==="persian"&&!(d.cfg.over&&d.cfg.over.jokers!=null)) G.o.jokers=4;
@@ -721,22 +732,41 @@ $("startBtn").addEventListener("click",()=>{ Sound.skip(); closeWin(); startGame
 
 /* ---------------- game ---------------- */
 function startGame(){
-  gen++; clampSeats();
+  gen++; firstHold=false; clampSeats();
   const total=cfg.humans+cfg.cpus, names=seatNames(), humans=[];
   for(let i=0;i<total;i++) humans.push(i<cfg.humans);
   /* the computers get fresh random American first names at every new game and every Play again (names.js); they live in G.players, so a
      save keeps them. Without names.js the setup names ("CPU 1") stay. */
-  if(window.Names&&Names.pick&&cfg.cpus>0){ const got=Names.pick(cfg.cpus,names.slice(0,cfg.humans)); for(let i=cfg.humans;i<total;i++) names[i]=got[i-cfg.humans]||names[i]; }
+  if(window.Names&&Names.pick&&cfg.cpus>0){ const got=Names.pick(cfg.cpus,names.slice(0,cfg.humans).concat(["You"])); for(let i=cfg.humans;i<total;i++) names[i]=got[i-cfg.humans]||names[i]; }
   if(curOpts().teams){ /* seat humans so teammates alternate: seats 0..3 */ }
-  G=GM.newGame({names,humans,opts:curOpts()}); G.skill=normSkill(cfg.skill);
+  // step 10, who deals: a high-card cut (aces high; a tie cuts again); the dealer deals the first round and play starts to the dealer's
+  // left. The show is BGUI.firstPlayer; without ui.js the dealer is random, as before
+  const B=BG(), fp=B&&B.firstPlayer;
+  let res=null;
+  if(fp){
+    const cut=[]; ["S","H","D","C"].forEach(s=>{ for(let r=1;r<=13;r++) cut.push({id:"cut"+s+r,r:r,s:s}); });
+    for(let i=cut.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [cut[i],cut[j]]=[cut[j],cut[i]]; }
+    res=fp.resolve(total,()=>cut.pop(),{rank:c=>c.r===1?14:c.r});
+  }
+  G=GM.newGame(Object.assign({names,humans,opts:curOpts()},fp?{dealer:(res.winner-1+total)%total}:{})); G.skill=normSkill(cfg.skill);   // startRound moves the deal on one seat
   stats={ms:0}; ui.winShown=-1; ui.result=false; ui.strip=""; ui.hoKey=""; closeBox(); closeHandoff();
-  logLines=[]; startRound(true);
+  if(!fp){ logLines=[]; startRound(true); clockOn(); return; }
+  logLines=[]; firstHold=true; startRound(true);
   clockOn();
+  const g=gen;
+  setTimeout(()=>{ if(g!==gen) return;   // after showSetup(false): the dealt table is on screen under the show
+    fp({mode:"cut",title:"Cut for the deal",rounds:res.rounds,winner:res.winner,
+      players:G.players.map((pl,i)=>({name:pl.name,seat:seatIn(!!G.o.teams,i)})),
+      face:c=>UI.cardHTML(c),
+      result:w=>({title:G.players[w].name+" deals",sub:G.players[G.turn].name+" plays first, to the dealer's left. The high card deals."})
+    }).then(()=>{ if(g!==gen) return; firstHold=false; loop(); });
+  },0);
 }
+var firstHold=false;   // the cut for the deal is on screen: the first turn waits for it
 function startRound(first){
   GM.startRound(G); sel.clear(); pileFrom=null; flashCards={}; flashMeld=null; handoffOk=null; lastTurn=-1; drawnAt={};
   Sound.sfx("deal");
-  logLines=[]; say(`${G.players[G.dealer].name} ${G.players[G.dealer].human&&G.n>0&&cfg.humans===1?"deal":"deals"} — round ${G.round}`,true);
+  logLines=[]; say(`${G.players[G.dealer].name} ${G.players[G.dealer].name==="You"&&cfg.humans===1?"deal":"deals"} — round ${G.round}`,true);
   loop();
 }
 const cur=()=>GM.cur(G);
@@ -769,6 +799,7 @@ function perform(a){
 }
 
 function loop(){
+  if(firstHold){ busy=true; render(); return; }   // the dealt table shows under the cut; no turn starts yet
   if(G.roundOver){
     if(G.over){ Saves.del("rummy500","auto"); lastSnap=null; clockOff(); }   // a finished game is not offered as "Continue last game"
     else takeRoundSnap();
@@ -1099,6 +1130,7 @@ document.addEventListener("visibilitychange",()=>{ if(document.hidden) clockOff(
 // ui/ui.js is deferred: it arrives after this script. Then the icons go in, the strip gets its CPU badges and turn ring, and the
 // Luxe sheets, toasts and the Victory screen take over from the fallbacks
 document.addEventListener("DOMContentLoaded",()=>{
+  mountNames(); drawSeats();
   const B=BG();
   if(B&&B.back) B.back.on(backStep);
   else window.__tvBack=()=>{   // no ui.js: the same steps, without the Luxe layers
