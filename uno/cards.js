@@ -342,10 +342,12 @@ function create(cfg){
   var stripKey="", turnKey="", lastTop=-1, lastTopCard=null, lastTopSide=0, hist=[], histKey="", focusPhase="";
   function strip(){
     var el=$("upl"), gk=cfg.gameKey?cfg.gameKey():"";
-    var key=gk+"|"+V.players.map(function(p){ return p.name+(p.human?"H":"C"); }).join(",")+"|"+(V.o.teams?"T":"");
+    // cfg.scrollStrip (optional): the page asks for the one scrolling row (a phone on its side, step 11); part of the key, so turning re-lays it out
+    var row=V.players.length>4||!!(cfg.scrollStrip&&cfg.scrollStrip());
+    var key=gk+"|"+V.players.map(function(p){ return p.name+(p.human?"H":"C"); }).join(",")+"|"+(V.o.teams?"T":"")+(row?"|S":"");
     if(key!==stripKey||el.children.length!==V.players.length){
       var old=[].slice.call(el.children);
-      el.className="bg-players upl"+(V.players.length>4?" bg-players--scroll":"");
+      el.className="bg-players upl"+(row?" bg-players--scroll":"");
       el.innerHTML=V.players.map(function(p,i){ return '<li class="bg-player upc" data-seat="'+seatOf(i)+'" data-p="'+i+'"><span class="bg-token" aria-hidden="true">'+esc(initialsOf(p.name))+'</span>'+(p.human?"":'<span class="bg-player__cpu" aria-hidden="true">'+ico("cpu")+'</span>')+
         '<span class="bg-player__txt"><span class="bg-player__name">'+esc(p.name)+'</span><span class="bg-player__meta"></span></span></li>'; }).join("");
       // a turn pulse still running on a chip of the old strip ends with it

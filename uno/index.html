@@ -189,6 +189,63 @@
   html[data-tv] .un-tip{display:none}
   /* TV toasts in game sit in the right-hand column (over the log at worst), never on the table */
   html[data-tv] body:not(.un-in-setup) .bg-toast{left:calc(100vw - var(--gutter) - 14rem); max-width:26rem}
+  /* ---------- phone upright (step 11): the table runs nearly edge to edge (8 px a side) and the felt takes the screen's spare height with
+     bigger piles, so the hand sits low, near the thumbs; only a narrow upright screen (a phone), so tablets and desktops are unchanged ---------- */
+  @media (orientation: portrait) and (max-width: 36em){
+    html:not([data-tv]) .un-game{padding-inline:.5rem; min-height:calc(100vh - 3.75rem - env(safe-area-inset-top,0px))}
+    @supports (height:100dvh){ html:not([data-tv]) .un-game{min-height:calc(100dvh - 3.75rem - env(safe-area-inset-top,0px))} }
+    html:not([data-tv]) #uctrl{display:flex; flex-direction:column; flex:1 0 auto}
+    html:not([data-tv]) #utbl{flex:1 0 auto}
+    html:not([data-tv]) #utbl .pile:not(.un-mid){--cw:clamp(86px,27vw,116px)}
+  }
+
+  /* ---------- phone sideways (step 11): a short landscape screen (a phone on its side; not the TV, not a tablet) gets the TV's table
+     layout: a slimmer top bar, the felt table on the left, your hand on one line under it, and on the right the players (one scrolling
+     row), whose turn, the actions and the log in their own scroll area. The table and the hand are pinned (sticky in one grid area), so
+     only the right-hand column ever scrolls; the page never scrolls ---------- */
+  @media (orientation: landscape) and (max-height: 31.25em){
+    html:not([data-tv]){--ls-bar:3.25rem; --ls-h:100vh; --ls-pad:.5rem; --ls-panel:clamp(15rem,34vw,18rem); --ls-hand:6.75rem;
+      --ls-game:calc(var(--ls-h) - var(--ls-bar) - env(safe-area-inset-top,0px) - 2 * var(--ls-pad))}
+    @supports (height:100dvh){ html:not([data-tv]){--ls-h:100dvh} }
+    html:not([data-tv]) .bg-topbar{height:calc(var(--ls-bar) + env(safe-area-inset-top,0px)); padding-top:calc(env(safe-area-inset-top,0px) + .25rem); padding-bottom:.25rem}
+    /* the panel rows are max-content (an auto row holding a scroll container would shrink under its content); the table's area spans
+       every row, so it is always the full height of the scrolling grid and its pinned table and hand never scroll away */
+    html:not([data-tv]) .un-game{display:grid; grid-template-columns:minmax(0,1fr) var(--ls-panel); grid-template-rows:max-content max-content max-content max-content 1fr;
+      grid-template-areas:"table strip" "table status" "table actions" "table log" "table ."; column-gap:1rem; align-items:start; align-content:start;
+      height:calc(var(--ls-h) - var(--ls-bar) - env(safe-area-inset-top,0px)); overflow:hidden auto; overscroll-behavior:contain;
+      padding:var(--ls-pad) max(var(--gutter), env(safe-area-inset-right,0px)) var(--ls-pad) max(var(--ls-pad), env(safe-area-inset-left,0px))}
+    html:not([data-tv]) #uctrl{display:contents}
+    html:not([data-tv]) #utbl{grid-area:table; position:sticky; top:0; height:calc(var(--ls-game) - var(--ls-hand)); min-height:0; margin:0; padding:.75rem .75rem .5rem}
+    html:not([data-tv]) #utbl .pile:not(.un-mid){--cw:min(110px, calc((var(--ls-game) - var(--ls-hand) - 4.25rem) / 1.5))}
+    /* the hand: one line right under the table (same area, pinned below it); a longer hand takes smaller cards that overlap more */
+    html:not([data-tv]) #uhand{grid-area:table; position:sticky; top:calc(var(--ls-game) - var(--ls-hand)); --cw:54px; flex-wrap:nowrap; width:auto;
+      height:var(--ls-hand); min-height:0; margin-top:calc(var(--ls-game) - var(--ls-hand)); padding:1.375rem 1.25rem .25rem .25rem}
+    html:not([data-tv]) #uhand[data-n="m"]{--cw:46px} html:not([data-tv]) #uhand[data-n="m"] .uc{margin-right:-.52em}
+    html:not([data-tv]) #uhand[data-n="l"]{--cw:40px; justify-content:flex-start; overflow:auto hidden; scrollbar-width:none} html:not([data-tv]) #uhand[data-n="l"] .uc{margin-right:-.6em}
+    html:not([data-tv]) #uhand .un-empty{padding:1.25rem 0 0}
+    html:not([data-tv]) #upl{grid-area:strip; width:auto; padding:.625rem 0 .375rem}
+    html:not([data-tv]) #ustat{grid-area:status; width:auto; margin:0; padding:.5rem .75rem; font-size:var(--fs-sm); justify-content:flex-start; text-align:left}
+    html:not([data-tv]) #uacts{grid-area:actions; width:auto; justify-content:flex-start; margin:.5rem 0 0}
+    html:not([data-tv]) #ulog{grid-area:log; width:auto; min-height:0; margin:.5rem 0 0; text-align:left}
+    html:not([data-tv]) .un-tip{display:none}   /* the how-to line stays upright; sideways the hand needs its row */
+    /* toasts in game sit over the right-hand column (centred on it), clear of the table and the hand, as on the TV */
+    html:not([data-tv]) body:not(.un-in-setup) .bg-toast{left:calc(100vw - max(var(--gutter), env(safe-area-inset-right,0px)) - var(--ls-panel) / 2); max-width:calc(var(--ls-panel) + 1rem)}
+    /* the colour / challenge sheet rises over the right-hand column, so the table stays in view beside it (the TV's peek) */
+    html:not([data-tv]) .un-sheet{left:auto; right:0; width:calc(var(--ls-panel) + max(var(--gutter), env(safe-area-inset-right,0px)) + 3rem); margin:0}
+    /* Victory: the trophy beside the result (two columns), so Play again shows on the first screen; the same rays, confetti and trophy */
+    html:not([data-tv]) .bg-win__card{display:grid; grid-template-columns:10rem minmax(0,1fr); column-gap:1.5rem; align-items:center; width:min(100%,44rem)}
+    html:not([data-tv]) .bg-win__card > *{grid-column:2}
+    html:not([data-tv]) .bg-win__card > .bg-win__medal{grid-column:1; grid-row:1 / span 7; margin:0 auto}
+    html:not([data-tv]) .bg-win__title{margin:.25rem 0 0}
+    html:not([data-tv]) .bg-win__sub{margin:.25rem 0 .5rem}
+    html:not([data-tv]) .bg-win__stats{margin:.5rem 0 0}
+    html:not([data-tv]) .bg-win__actions{margin-top:.5rem}
+    html:not([data-tv]) .bg-win__rays{left:calc(50vw - min(50vw - var(--gutter), 22rem) + 5rem)}
+    /* setup and Menu: a lower art band (the same art, cropped to the band), so the first settings show on the first screen; the Start dock
+       stays sticky at the bottom */
+    html:not([data-tv]) .un-hero{padding-top:5.5rem}
+    html:not([data-tv]) .un-hero .bg-hero__layer{bottom:0; aspect-ratio:auto; background-size:cover; background-position:50% 40%}
+  }
 </style>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
@@ -590,9 +647,14 @@ function startGame(){
 }
 function startUI(){
   Skins.apply("uno"); Sound.music("uno");
-  if(!ctrl) ctrl=U.Ctrl.create({root:$("uctrl"),toast,send,luxe:true,seatOf:i=>(i%10)+1,seatColor:i=>SEATC[i%SEATC.length],tv:onTV,pulse:()=>!setupShown()&&!document.hidden,gameKey:()=>gen});
+  if(!ctrl) ctrl=U.Ctrl.create({root:$("uctrl"),toast,send,luxe:true,seatOf:i=>(i%10)+1,seatColor:i=>SEATC[i%SEATC.length],tv:onTV,pulse:()=>!setupShown()&&!document.hidden,gameKey:()=>gen,scrollStrip:phoneSideways});
   refresh();
 }
+/* step 11: a phone on its side shows the players as one scrolling row (the panel beside the table is narrow; ui.js scrolls it to whose
+   turn it is); turning the phone lays the strip out again (the table itself is CSS) */
+const sidewaysMQ=window.matchMedia?window.matchMedia("(orientation: landscape) and (max-height: 31.25em)"):null;
+function phoneSideways(){ return !onTV()&&!!(sidewaysMQ&&sidewaysMQ.matches); }
+if(sidewaysMQ){ const relay=()=>{ if(ctrl&&V) ctrl.update(V); }; if(sidewaysMQ.addEventListener) sidewaysMQ.addEventListener("change",relay); else if(sidewaysMQ.addListener) sidewaysMQ.addListener(relay); }
 function meIndex(){
   const humans=G.players.map((p,i)=>p.human?i:-1).filter(i=>i>=0);
   if(humans.length===1) return humans[0];
