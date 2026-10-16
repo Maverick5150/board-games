@@ -1431,6 +1431,18 @@
     if (t.tagName === "INPUT" && /^(range|radio)$/i.test(t.type)) return h;
     return false;
   }
+  /* OK on a text field opens the on-screen keyboard. An Android WebView (the Fire TV app) shows its keyboard when a field gains focus
+     inside a user gesture or is tapped, not when it already holds the D-pad's focus: so the OK press re-focuses the field (blur + focus,
+     caret at the end) and clicks it. The D-pad is never held: Up / Down leave the field, Left / Right move the caret only while typing,
+     the keyboard's Done (Enter) ends typing, and Back closes the keyboard first (Android). */
+  function kbOpen(el) {
+    try {
+      if (!el.getAttribute("inputmode")) el.setAttribute("inputmode", "text");
+      el.blur(); el.focus({ preventScroll: true });
+      var n = (el.value || "").length; if (typeof el.setSelectionRange === "function") el.setSelectionRange(n, n);
+      el.click();
+    } catch (err) { }
+  }
   function onFocusKey(e) {
     if (!focusOn || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
     var dir = dirOf(e), t = e.target;
@@ -1446,7 +1458,7 @@
       var el = d.activeElement;
       if (!el || el === d.body || el === root) return;
       var tag = el.tagName, enter = k === "Enter" || c === 13;
-      if (isTextField(el)) { editing = editing === el ? null : el; if (enter) return; }   // OK starts typing (the TV keyboard opens), OK again ends it
+      if (isTextField(el)) { var was = editing === el; editing = was ? null : el; if (!was) kbOpen(el); if (enter) return; }   // OK starts typing (the TV keyboard opens), OK again ends it
       if (tag === "SELECT" && typeof el.showPicker === "function") { try { el.showPicker(); e.preventDefault(); return; } catch (err) { } }
       var native = enter && (tag === "BUTTON" || tag === "A" || tag === "SUMMARY" || tag === "SELECT" ||
         (tag === "INPUT" && /^(submit|button|reset|image)$/i.test(el.type)));
@@ -1756,7 +1768,7 @@
       var r = d.createElement("div"), id = "bgName" + (++nmSeq);
       r.className = "bg-name";
       r.innerHTML = "<span class=\"bg-token bg-name__tok\" aria-hidden=\"true\"></span><span class=\"bg-name__body\"><label class=\"bg-name__lab\" for=\"" + id + "\"></label>" +
-        "<input class=\"bg-input\" id=\"" + id + "\" type=\"text\" maxlength=\"" + NAME_MAX + "\" autocomplete=\"off\" autocapitalize=\"words\" spellcheck=\"false\" enterkeyhint=\"done\" data-name-index=\"" + i + "\"></span>";
+        "<input class=\"bg-input\" id=\"" + id + "\" type=\"text\" maxlength=\"" + NAME_MAX + "\" autocomplete=\"off\" autocapitalize=\"words\" spellcheck=\"false\" inputmode=\"text\" enterkeyhint=\"done\" data-name-index=\"" + i + "\"></span>";
       var rec = { el: r, inp: r.querySelector("input"), tok: r.querySelector(".bg-name__tok"), lab: r.querySelector("label") };
       rec.inp.value = nmGet(i);
       rec.inp.addEventListener("input", function () { nmSet(i, rec.inp.value); paint(i); changed(); });
@@ -2024,7 +2036,7 @@
   }, true);
 
   /* ---------------- export ---------------- */
-  BGUI.version = "2.5.0";
+  BGUI.version = "2.5.1";
   BGUI.reducedMotion = reducedMotion;
   BGUI.setReducedMotion = setReducedMotion;
   BGUI.haptic = haptic;
