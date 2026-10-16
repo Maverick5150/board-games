@@ -14,7 +14,11 @@
      when the game is played to the end. Hard: also reads the queue (an opponent's hand is their oldest cards), learns each opponent's habit
      (always strong / always weak), mixes near-equal choices so it can't be read, and drops the reserve in the last battles of a limit.
    A game played to the end vs a limited game (time, battles, one pass): the reserve keeps you alive to the end; in a limited game the count wins.
-   Every decision is well under 50 ms (mean about 0.1 ms in node; a few hundred samples at most). */
+   Any table from 2 to 16 seats and 1 to 4 decks (the card tables grow with the decks; copies of a card are counted as copies), and the wild-card
+   House rules (the engine's winnersOf / strength know what is wild, so counting and the sanity filter follow them). A big table (4+
+   opponents) where everyone joins a war (Pagat) plays differently: any tie at the top is a lottery for the whole pot, and long war chains
+   empty the stacks so the war cards come from the hand, so the brain keeps its strong cards as war insurance (tournament: 16 seats).
+   Every decision is well under 50 ms (mean about 0.1 ms in node; a few hundred samples at most; fewer against more than 3 opponents). */
 (function(g){
 "use strict";
 var W=g.War, E=W&&W.Engine, KEY="bg_ai_war", VER=1;
@@ -31,6 +35,9 @@ var store=null, storeSet=false;
 function getStore(){ if(storeSet) return store; try{ return g.localStorage||null; }catch(e){ return null; } }
 function setStore(s){ store=s; storeSet=true; }
 function clamp(x,a,b){ return x<a?a:x>b?b:x; }
+/* card strength from the engine's table, fetched once per decision (a 16-seat decision looks it up thousands of times) */
+var ST=null, STo=null;
+function str(G,c){ if(G.o!==STo||!ST){ STo=G.o; ST=E.strengthTable(G); } var v=ST[c]; return v!=null?v:.5; }
 function now(){ try{ return (g.performance&&g.performance.now)?g.performance.now():Date.now(); }catch(e){ return Date.now(); } }
 
 /* ---------- the per-device weight table ---------- */
@@ -66,11 +73,11 @@ function observe(G,b){
   var L=G.last; if(!L||L.b<=b.pos) return; b.pos=L.b;
   if(!G.o.hand||!L.first) return;
   L.first.forEach(function(x){
-    if(x.s===b.id) return; var m=b.om[x.s]||(b.om[x.s]={n:0,sum:0,pn:0,ps:0}), st=E.strength(G,x.c);
+    if(x.s===b.id) return; var m=b.om[x.s]||(b.om[x.s]={n:0,sum:0,pn:0,ps:0}), st=str(G,x.c);
     m.n++; m.sum+=st;
     /* where the played card sat among the cards we were sure they held (Hard): 0 = they played their weakest, 1 = their strongest */
     var sure=(b.sure&&b.sure[x.s])||[];
-    if(sure.length>=2&&sure.indexOf(x.c)>=0){ var lo=0; sure.forEach(function(c){ if(c!==x.c&&E.strength(G,c)<st) lo++; }); m.pn=(m.pn||0)+1; m.ps=(m.ps||0)+lo/(sure.length-1); }
+    if(sure.length>=2&&sure.indexOf(x.c)>=0){ var lo=0; sure.forEach(function(c){ if(c!==x.c&&str(G,c)<st) lo++; }); m.pn=(m.pn||0)+1; m.ps=(m.ps||0)+lo/(sure.length-1); }
   });
   b.sure={};
 }
@@ -100,7 +107,7 @@ function oppModel(G,me,q,b,sk){
   var m={q:q,hn:hn,pr:p.pr.slice(),h:sk.model?tendency(b,q):0,fixed:[],edge:[],edgeN:0,fromU:hn,unk:[]};
   if(!sk.count){ E.buildDeck(G.o).forEach(function(x){ if(!excl[x]) m.unk.push(x); }); return m; }
   var known=[];
-  for(c=0;c<54;c++){ if(excl[c]) continue; var k=G.kn[c]; if(k===q) known.push(c); else if(k===E.K_UNKNOWN&&inDeck(G,c)) m.unk.push(c); }
+  for(c=0;c<G.kn.length;c++){ if(excl[c]) continue; var k=G.kn[c]; if(k===q) known.push(c); else if(k===E.K_UNKNOWN&&inDeck(G,c)) m.unk.push(c); }
   var u=Math.max(0,E.avail(G,q)-known.length);
   if(!(sk.queue>=1||(sk.queue>0&&rnd(b)<sk.queue))){   // knows WHAT each player holds, not in which order (Normal reads the queue only some of the time)
     var tot=known.length+u; m.edge=known; m.edgeN=tot?Math.round(hn*known.length/tot):0; m.fromU=hn-m.edgeN;
@@ -115,39 +122,52 @@ function oppModel(G,me,q,b,sk){
   if(sk.model&&q!==me){ b.sure=b.sure||{}; b.sure[q]=(!m.fromU&&m.edgeN===m.edge.length)?m.fixed.concat(m.edge,m.pr):[]; }
   return m;
 }
-function inDeck(G,c){ var d=inDeck.d||(inDeck.d={}), key=G.o.deck+"|"+G.o.jokers; if(!d[key]){ d[key]={}; E.buildDeck(G.o).forEach(function(x){ d[key][x]=1; }); } return !!d[key][c]; }
+function inDeck(G,c){ var d=inDeck.d||(inDeck.d={}), key=G.o.deck+"|"+G.o.jokers+"|"+E.ndOf(G.o); if(!d[key]){ d[key]={}; E.buildDeck(G.o).forEach(function(x){ d[key][x]=1; }); } return !!d[key][c]; }
 function sampleCard(G,m,b){
-  var opts=m.pr.concat(m.fixed), i, e=m.edge.slice();
-  for(i=0;i<m.edgeN&&e.length;i++) opts.push(e.splice(Math.floor(rnd(b)*e.length),1)[0]);
+  var opts=m.pr.concat(m.fixed), i, q, j, L=m.edge.length, ch=[];
+  /* edgeN cards drawn without replacement from m.edge (same draws as splicing a copy, without copying a long list every sample) */
+  for(i=0;i<m.edgeN&&ch.length<L;i++){
+    j=Math.floor(rnd(b)*(L-ch.length));
+    for(q=0;q<ch.length&&ch[q]<=j;q++) j++;
+    ch.splice(q,0,j); opts.push(m.edge[j]);
+  }
   for(i=0;i<m.fromU&&m.unk.length;i++) opts.push(m.unk[Math.floor(rnd(b)*m.unk.length)]);
   if(!opts.length) return -1;
   var h=m.h, a=Math.abs(h);
-  if(a>0&&rnd(b)<a){ var bi=0; for(i=1;i<opts.length;i++){ var x=E.strength(G,opts[i]), y=E.strength(G,opts[bi]); if(h>0?x>y:x<y) bi=i; } return opts[bi]; }
+  if(a>0&&rnd(b)<a){ var bi=0; for(i=1;i<opts.length;i++){ var x=str(G,opts[i]), y=str(G,opts[bi]); if(h>0?x>y:x<y) bi=i; } return opts[bi]; }
   return opts[Math.floor(rnd(b)*opts.length)];
 }
-function cardV(G,c){ return 1+P.lam*(E.strength(G,c)-.5); }
+function cardV(G,c){ return 1+P.lam*(str(G,c)-.5); }
+/* samples per decision: the full count against up to 3 opponents; with more (up to 15 at a 16-seat table) fewer samples keep every
+   decision well under 50 ms (each sample already draws a card for every opponent, so the picture stays as sharp) */
+function samples(sk,k){ return k<=3?sk.samples:Math.max(Math.min(sk.samples,40),Math.round(sk.samples*3/k)); }
 /* score every card in the hand */
 function rateHand(G,s,b,sk,opts){
   var p=G.players[s], B=b.B, opps=G.need.filter(function(q){ return q!==s; }), o=G.o;
   var models=opps.map(function(q){ return oppModel(G,s,q,b,sk); });
   var R=opts.map(function(c){ return {c:c,w:0,t:0,l:0,g:0,pr:p.pr.indexOf(c)>=0}; });
   var self=opts.indexOf(-1)>=0?oppModel(G,s,s,b,sk):null;
-  var N=sk.samples, carryV=0; G.carry.forEach(function(c){ carryV+=cardV(G,c); });
+  var N=samples(sk,opps.length), carryV=0; G.carry.forEach(function(c){ carryV+=cardV(G,c); });
   var tieV=P.tie*b.k.tie*B*.6;
+  /* a big table (4+ opponents) where everyone joins a war (Pagat): any tie at the top, with or without me, starts a war that every seat
+     fights with blind cards from the stack, so it is a lottery for the whole pot (my card goes in, and I have a 1-in-F chance at all of it).
+     The two-to-four player model (a tie I'm not in = my card is lost) undervalues a cheap card there; the tournament showed it (16 seats). */
+  var big=opps.length>3&&o.tie==="war"&&!o.onlyTied, F=opps.length+1;
   for(var n=0;n<N;n++){
     var oc=[], ov=0;
     for(var i=0;i<models.length;i++){ var x=sampleCard(G,models[i],b); if(x>=0){ oc.push(x); ov+=cardV(G,x); } }
-    var top=self?sampleCard(G,self,b):-1;
+    var top=self?sampleCard(G,self,b):-1, ids=[0].concat(oc);
     R.forEach(function(r){
       var mc=r.c<0?top:r.c; if(mc<0) return;
-      var ids=[mc].concat(oc), wi=E.winnersOf(G,ids);
+      ids[0]=mc; var wi=E.winnersOf(G,ids);
       if(wi.length===1&&wi[0]===0){ r.w++; r.g+=ov+carryV+(o.paid?oc.length:0); }
+      else if(big&&wi.length>1){ var mine=wi.indexOf(0)>=0; if(mine) r.t++; r.g+=(ov+carryV-cardV(G,mc)*(F-1))/F+(mine?tieV:0); }
       else if(wi.indexOf(0)>=0){ r.t++; r.g+=tieV; }
-      else { r.l++; r.g-=cardV(G,mc)*(1+b.k.save*P.save*Math.max(0,-B)*E.strength(G,mc))+(o.paid?1:0)+(r.pr?1:0); }
+      else { r.l++; r.g-=cardV(G,mc)*(1+b.k.save*P.save*Math.max(0,-B)*str(G,mc))+(o.paid?1:0)+(r.pr?1:0); }
     });
   }
-  var keep=(limited(G)?P.keepLim*sk.keepLim*horizon(G,sk):P.keep*killFactor(G,s,opps,sk))*b.k.keep*(1-.15*B);
-  R.forEach(function(r){ r.w/=N; r.t/=N; r.l/=N; var st=r.c<0?0:E.strength(G,r.c); r.score=r.g/N-keep*st*st; });
+  var keep=((limited(G)&&!big)?P.keepLim*sk.keepLim*horizon(G,sk):P.keep*(big?1:killFactor(G,s,opps,sk)))*b.k.keep*(1-.15*B);
+  R.forEach(function(r){ r.w/=N; r.t/=N; r.l/=N; var st=r.c<0?0:str(G,r.c); r.score=r.g/N-keep*st*st; });
   return R;
 }
 /* a reserve of strong cards in the hand keeps you alive in a game played to the end; in a limited game (time, battles, one pass, sudden
@@ -164,9 +184,9 @@ function killFactor(G,s,opps,sk){
 /* sanity: never spend a stronger card when a weaker one does the same job; a hopeless battle costs the weakest card */
 function sane(G,R){
   var ok=R.filter(function(r){
-    return !R.some(function(q){ return q!==r&&E.strength(G,q.c)<E.strength(G,r.c)&&q.w>=r.w-.02&&q.l<=r.l+.02&&!q.pr; });
+    return !R.some(function(q){ return q!==r&&str(G,q.c)<str(G,r.c)&&q.w>=r.w-.02&&q.l<=r.l+.02&&!q.pr; });
   });
-  if(R.every(function(r){ return r.w<.04&&r.t<.04; })){ var lo=R.slice().sort(function(a,b){ return E.strength(G,a.c)-E.strength(G,b.c); })[0]; return [lo]; }
+  if(R.every(function(r){ return r.w<.04&&r.t<.04; })){ var lo=R.slice().sort(function(a,b){ return str(G,a.c)-str(G,b.c); })[0]; return [lo]; }
   return ok.length?ok:R;
 }
 function pickMove(G,s,b,L){
@@ -193,12 +213,12 @@ function claimMove(G,s,b){
   var pd=G.pend, sk=skillOf(G,G.players[s]), pr=null;
   if(pd.prOk.length){
     if(sk.rand&&rnd(b)<sk.rand) pr=pd.prOk[Math.floor(rnd(b)*pd.prOk.length)];
-    else pd.prOk.forEach(function(c){ if(pr==null||E.strength(G,c)>E.strength(G,pr)) pr=c; });
+    else pd.prOk.forEach(function(c){ if(pr==null||str(G,c)>str(G,pr)) pr=c; });
   }
   var m={t:"claim",s:s,pr:pr};
   if(G.o.arrange){
     var rest=pd.pot.slice(); if(pr!=null) rest.splice(rest.indexOf(pr),1);
-    rest.sort(function(a,c){ return E.strength(G,c)-E.strength(G,a); });
+    rest.sort(function(a,c){ return str(G,c)-str(G,a); });
     var order=[], i=0, j=rest.length-1; while(i<=j){ order.push(rest[i++]); if(i<=j) order.push(rest[j--]); }
     m.order=order;
   }
@@ -209,7 +229,7 @@ function claimMove(G,s,b){
 function decide(G,s){
   var t0=now(), mv=null, L;
   try{
-    L=E.legal(G,s); if(!L.length) return null;
+    L=E.legal(G,s); if(!L.length) return null; STo=null;
     var p=G.players[s], b=brainOf(G,s); observe(G,b); readMood(G,b);
     if(G.phase==="claim") mv=claimMove(G,s,b);
     else if(G.phase==="flip"&&G.o.hand) mv=pickMove(G,s,b,L);
