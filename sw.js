@@ -1,5 +1,5 @@
 // Offline cache for the hub page (bump VERSION to force update)
-const VERSION = "hub-v16";
+const VERSION = "hub-v17";
 const PREFIX = "hub-";   // every game shares this origin (one CacheStorage): only ever touch the hub's own caches
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.png",
   "./ui/theme.css", "./ui/ui.js", "./ui/icons.js", "./sound.js", "./ui/fonts/dmserifdisplay-latin.woff2", "./ui/fonts/dmserifdisplay-italic-latin.woff2", "./ui/fonts/manrope-var-latin.woff2", "./ui/tex/felt.webp", "./ui/tex/paper.webp", "./ui/tex/orb-gold.webp", "./ui/tex/orb-violet.webp", "./ui/tex/rays-core.webp",
