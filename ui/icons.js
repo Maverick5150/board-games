@@ -58,5 +58,12 @@
   }
   icon.names = Object.keys(I);
   icon.seal = function (game) { return SEAL[game] || "dice"; };
+  /* a game added later registers its own glyphs and seal from its folder: BGUI.icon.add("ladder", "<path .../>") (24px line
+     glyph, same rules as above; an existing name is never replaced) and BGUI.icon.seal.set("war", "cards") */
+  icon.add = function (name, paths) {
+    if (!name || typeof paths !== "string" || I[name]) return false;
+    I[name] = paths; icon.names.push(name); return true;
+  };
+  icon.seal.set = function (game, name) { if (game && I[name]) { SEAL[game] = name; return true; } return false; };
   BGUI.icon = icon;
 })(typeof window !== "undefined" ? window : null);
