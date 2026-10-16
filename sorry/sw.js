@@ -1,5 +1,5 @@
 // Offline cache for Sorry! (bump VERSION to force update)
-const VERSION = "sorry-v13";
+const VERSION = "sorry-v14";
 const PREFIX = VERSION.replace(/v[0-9]+$/, "");   // every game shares one origin (one CacheStorage): only ever delete THIS game's old caches
 const ASSETS = ["./", "./index.html", "./brain.js", "./manifest.webmanifest", "./icon.png", "../sound.js", "../skins.js", "../saves.js", "../names.js",
   "../ui/theme.css", "../ui/ui.js", "../ui/icons.js",
