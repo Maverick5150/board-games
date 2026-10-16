@@ -19,9 +19,9 @@
 
         <activity
             android:name=".MainActivity"
-            android:configChanges="orientation|screenSize|keyboard|keyboardHidden|navigation|uiMode"
-            android:exported="true"
-            android:screenOrientation="landscape">
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode"
+            android:exported="true">
+            <!-- no fixed orientation here: MainActivity keeps a TV in landscape and lets a phone or tablet turn -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
