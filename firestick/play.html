@@ -71,6 +71,23 @@
   html[data-effects="reduced"] .ph-sent{transition:none;}
   .seatrow{display:flex;flex-wrap:wrap;justify-content:center;gap:.5rem;max-width:26rem;}
   .mytoken{width:4.5rem;height:4.5rem;font-size:var(--fs-2xl);}
+  /* step 10 colour pick (Trouble, Sorry!): a colour another phone holds is greyed out and cannot be picked */
+  .ph-colpick{display:grid;gap:.5rem;width:100%;max-width:22rem;}
+  .ph-colpick .bg-eyebrow{justify-self:center;}
+  .ph-cols{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;padding:var(--focus-room);margin:0 calc(-1 * var(--focus-room));}
+  .ph-col{display:flex;align-items:center;justify-content:flex-start;gap:.5rem;min-height:3rem;padding:.5rem .75rem;margin:0;font:var(--fw-ui-strong) var(--fs-md)/1.2 var(--font-ui);text-align:left;}
+  .ph-col .ph-cdot{width:1.25rem;height:1.25rem;border-radius:50%;flex:0 0 auto;box-shadow:0 0 0 2px rgba(255,255,255,.3);}
+  .ph-col small{display:block;font:var(--fw-ui) var(--fs-xs)/1.2 var(--font-ui);color:var(--text-2);}
+  .ph-col[aria-pressed="true"]{box-shadow:inset 0 0 0 2px var(--gold-200),0 0 0 1px rgba(0,0,0,.4);}
+  .ph-col:disabled{opacity:.7;cursor:not-allowed;}
+  .ph-col:disabled .ph-cdot{filter:grayscale(1);}
+  /* step 10 who goes first: the result the TV shows */
+  .ph-first .title{color:var(--gold-100);}
+  .ph-firstbar{display:flex;align-items:center;gap:.75rem;width:calc(100% - 2 * var(--gutter));max-width:30rem;margin:.75rem auto 0;padding:.625rem .875rem;border-radius:var(--r-lg);background:var(--panel-fill);box-shadow:inset 0 0 0 2px var(--gold-300),var(--panel-edge);}
+  .ph-firstbar .bg-token{width:2.5rem;height:2.5rem;flex:none;}
+  .ph-firstbar__t{display:grid;gap:.125rem;min-width:0;}
+  .ph-firstbar b{font:400 var(--fs-lg)/1.2 var(--font-display);color:var(--gold-100);}
+  .ph-firstbar small{font:var(--fw-ui) var(--fs-sm)/1.3 var(--font-ui);color:var(--text-2);}
   .prow2{display:flex;align-items:center;gap:.625rem;width:100%;max-width:26rem;min-height:var(--tap);padding:.75rem .875rem;border:0;border-radius:var(--r-md);background:var(--panel-fill);box-shadow:var(--panel-edge);color:var(--text-1);font:var(--fw-ui-strong) var(--fs-md)/1.25 var(--font-ui);text-align:left;cursor:pointer;margin:0;}
   .prow2 .chip{width:1rem;height:1rem;border-radius:.25rem;flex:0 0 auto;box-shadow:0 0 0 1px rgba(255,255,255,.35);}
   .prow2 small{color:var(--text-2);font-weight:var(--fw-ui);margin-left:auto;font-size:var(--fs-micro);}
@@ -419,10 +436,11 @@ function onMsg(o){
   else if(o.t==="scs" && o.pid===myPid){ started=true; curReq=null; stageGame("scatter"); scShow(o.st,false,null); }
   else if(o.t==="scdl" && o.pid===myPid){ if(sc&&sc.ctrl) sc.ctrl.setDeadlineIn(o.sec); toast("STOP! "+o.sec+" seconds left"); }
   else if(o.t==="snap"){ lastSnap=o; $("plbtn").style.display=""; if($("ov").classList.contains("on") && ovMode==="players") showPlayers(); }
-  else if(o.t==="wait" && (o.pid===myPid || o.pid==="*")){ if(o.pid==="*") Rummy.Party.resetUI(); curReq=null; started=(o.pid!=="*"); if(o.pid==="*"){ lastSnap=null; $("plbtn").style.display="none"; closeOv(); } showWaiting(o.msg||"Waiting…", false, o.turn, o.card); }
+  else if(o.t==="wait" && (o.pid===myPid || o.pid==="*")){ if(o.pid==="*"){ Rummy.Party.resetUI(); firstBar(null); } curReq=null; started=(o.pid!=="*"); if(o.pid==="*"){ lastSnap=null; $("plbtn").style.display="none"; closeOv(); } showWaiting(o.msg||"Waiting…", false, o.turn, o.card); }
   else if(o.t==="started"){ started=true; if(!isAsking()) showWaiting("Game starting…", false); }
-  else if(o.t==="over"){ started=false; curReq=null; Rummy.Party.resetUI(); showOver(o); overShown=true; }
+  else if(o.t==="over"){ firstBar(null); started=false; curReq=null; Rummy.Party.resetUI(); showOver(o); overShown=true; }
   else if(o.t==="info" && (o.pid===myPid||!o.pid)){ toast(o.msg); }
+  else if(o.t==="first"){ showFirst(o); }
 }
 function isAsking(){ return !!curReq; }
 
@@ -433,8 +451,43 @@ function showLobby(o){
   var n=sn(me.color);
   var list=(o.players||[]).map(function(p){ return '<span class="bg-chip" data-seat="'+sn(p.color)+'"><span class="bg-chip__dot"></span>'+esc(p.name)+(p.pid===myPid?" (you)":"")+'</span>'; }).join("");
   put('<span class="bg-token mytoken" data-seat="'+n+'" aria-hidden="true">'+esc((myName||"?").trim().charAt(0).toUpperCase())+'</span><h1 class="title">You’re in!</h1><p class="sub"><b class="seatword" data-seat="'+n+'">'+esc(myName)+(me&&me.color?(" — "+me.color.toUpperCase()):"")+'</b></p>'+
-    '<div class="seatrow">'+list+'</div>'+
+    '<div class="seatrow">'+list+'</div>'+colPickHTML(o,me)+
     '<p class="sub ph-status" role="status"><span data-icon="hourglass" aria-hidden="true"></span> Waiting for the host to start on the TV…</p>');
+}
+/* step 10 colour pick (Trouble, Sorry!): the TV's lobby lists the game's colours; a colour another phone holds is greyed out */
+var CNAMES={red:"Red",blue:"Blue",green:"Green",yellow:"Yellow"};
+function colPickHTML(o,me){
+  if(!o.colors||!o.colors.length||!me) return "";
+  var held={}; (o.players||[]).forEach(function(p){ if(p.pid!==myPid) held[p.color]=p.name; });
+  return '<div class="ph-colpick" role="group" aria-label="Your colour"><span class="bg-eyebrow" data-stage-text>Your colour</span><div class="ph-cols">'+o.colors.map(function(c){
+    var mine=me.color===c, by=held[c];
+    return '<button type="button" class="bg-btn bg-btn--secondary ph-col" data-col="'+esc(c)+'" aria-pressed="'+mine+'"'+(by?' disabled':'')+'><span class="ph-cdot" style="background:'+(by?"#6b6f80":(COL[c]||"#777"))+'" aria-hidden="true"></span><span>'+esc(CNAMES[c]||c)+(by?'<small>'+esc(by)+'</small>':mine?'<small>You</small>':'')+'</span></button>';
+  }).join("")+'</div></div>';
+}
+main.addEventListener("click",function(e){
+  var b=e.target.closest&&e.target.closest(".ph-col[data-col]"); if(!b||b.disabled||started) return;
+  if(b.getAttribute("aria-pressed")==="true") return;
+  try{ net&&net.send({t:"color",pid:myPid,color:b.getAttribute("data-col")}); }catch(err){}
+});
+/* step 10 who goes first: the TV plays the show; when its result lands the first player's phone says "You go first!" (a dealer's
+   "You deal"), the others who goes first. A phone already answering a prompt only gets the toast. */
+function showFirst(o){
+  var f=o.first||{}, d=o.deal||null, me=f.pid===myPid, iDeal=!!(d&&d.pid===myPid);
+  var title=me?"You go first!":iDeal?"You deal":(f.name||"Someone")+" goes first";
+  var sub=me?(d?(iDeal?"":esc(d.name)+" deals. "):"")+"Watch the TV.":iDeal?esc(f.name)+" plays first, to your left.":(d?esc(d.name)+" deals. ":"")+"Watch the TV.";
+  var n=sn(me?myColor:f.color), ini=esc(((me?myName:f.name)||"?").trim().charAt(0).toUpperCase());
+  firstBar('<span class="bg-token" data-seat="'+n+'" aria-hidden="true">'+ini+'</span><span class="ph-firstbar__t"><b>'+esc(title)+'</b><small>'+sub+'</small></span>',n);
+  if(isAsking()) return;
+  main.className="big ph-first";
+  put('<span class="bg-token mytoken" data-seat="'+n+'" aria-hidden="true">'+esc(((me?myName:f.name)||"?").trim().charAt(0).toUpperCase())+'</span><h1 class="title">'+esc(title)+'</h1><p class="sub" role="status">'+sub+'</p>');
+}
+var firstT=0;
+function firstBar(html,n){   /* the banner: 6 s, gone at once when the room or the game ends */
+  var el=$("phFirst"); clearTimeout(firstT);
+  if(html==null){ if(el&&el.parentNode) el.parentNode.removeChild(el); return; }
+  if(!el){ el=document.createElement("div"); el.id="phFirst"; el.className="ph-firstbar"; el.setAttribute("role","status"); main.parentNode.insertBefore(el,main); }
+  el.setAttribute("data-seat",String(n||1)); el.innerHTML=html;
+  firstT=setTimeout(function(){ firstBar(null); },6000);
 }
 function cardHTML(cd){
   var col=COL[cd.color]||"#c62222";
