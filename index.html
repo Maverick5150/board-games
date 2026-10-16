@@ -131,6 +131,9 @@
   }
   html[data-tv] .hb-party{padding:0 1.25rem 0 1rem; gap:.6rem}
   html[data-tv] .hb-party .bg-ico{width:1.5rem; height:1.5rem}
+  /* War (wave 1) brings its own accent (ui/theme.css has none for it yet): the same field sage block as war/index.html */
+  [data-game="war"]{--accent:#c8d4a4; --accent-bright:#e4ecc8; --accent-deep:#232b12; --accent-ink:#11160a; --accent-text:#c8d4a4; --accent-paper:#46512a;
+    --accent-glow:rgba(200, 212, 164, .28); --felt:#27310f; --felt-deep:#0c1004; --felt-lite:#43531f; --board:#2b3613; --board-lite:#45552a}
   .hb-party-sheet .bg-sheet__sub{margin:.25rem 0 1.25rem}
   .hb-party-acts{display:grid; gap:.75rem; margin-bottom:.75rem}
 
@@ -202,6 +205,10 @@
       <span class="bg-tile__art"><picture><source media="(max-width: 30em)" srcset="ui/art/thumb-scatter-sm.svg"><img src="ui/art/thumb-scatter.svg" alt="" width="320" height="240" decoding="async"></picture><span class="bg-tile__badge" aria-hidden="true"><span data-hb-icon="user"></span>2-8</span></span>
       <span class="bg-tile__label"><span class="bg-tile__seal" data-hb-seal="scatter" aria-hidden="true"></span><span class="bg-tile__name">Scattergories</span><span class="bg-tile__meta">Beat the clock</span></span>
     </a>
+    <a class="bg-tile" data-game="war" href="war/index.html" aria-label="War, 2 to 4 players. Everyone flips at once, the high card takes them all, a tie means war.">
+      <span class="bg-tile__art"><img src="ui/art/thumb-war.svg" alt="" width="320" height="240" decoding="async"><span class="bg-tile__badge" aria-hidden="true"><span data-hb-icon="user"></span>2-4</span></span>
+      <span class="bg-tile__label"><span class="bg-tile__seal" data-hb-seal="war" aria-hidden="true"></span><span class="bg-tile__name">War</span><span class="bg-tile__meta">Flip and battle</span></span>
+    </a>
   </nav>
 
   <section class="hb-soon" id="hbSoon" aria-labelledby="hbSoonLabel" hidden>
@@ -243,8 +250,8 @@
   var doc = document, root = doc.documentElement;
   var $ = function (s, r) { return (r || doc).querySelector(s); }, $$ = function (s, r) { return Array.prototype.slice.call((r || doc).querySelectorAll(s)); };
   var isTV = function () { return root.hasAttribute("data-tv"); };
-  var ORDER = ["trouble", "sorry", "monopoly", "rummy500", "risk", "uno", "scatter", "party"];
-  var NAME = { trouble: "Trouble", sorry: "Sorry!", monopoly: "Monopoly", rummy500: "500 Rummy", risk: "Risk", uno: "Uno", scatter: "Scattergories", party: "Party Mode" };
+  var ORDER = ["trouble", "sorry", "monopoly", "rummy500", "risk", "uno", "scatter", "war", "party"];
+  var NAME = { trouble: "Trouble", sorry: "Sorry!", monopoly: "Monopoly", rummy500: "500 Rummy", risk: "Risk", uno: "Uno", scatter: "Scattergories", war: "War", party: "Party Mode" };
   var INFO = {
     trouble: ["Pop · move · bump", "Pop the die and race your pegs home."],
     sorry: ["Slide · bump · sorry", "Draw cards, slide and bump home."],
@@ -253,6 +260,7 @@
     risk: ["Deploy · attack · fortify", "Wooden-cube armies, conquer the world."],
     uno: ["Match · stack · call it", "Classic, Flip, No Mercy and All Wild."],
     scatter: ["One letter · twelve lists", "Roll a letter, beat the clock, be unique."],
+    war: ["Flip · battle · declare war", "Everyone flips at once, the high card takes them all."],
     party: ["Play together", "Host on the TV, everyone joins from a phone."]
   };
   var INFO_TV = { party: ["Play together", "Host the table on this TV, everyone joins with a room code."] };
@@ -261,7 +269,10 @@
   function B() { return window.BGUI || null; }
   function info(g) { return (isTV() && INFO_TV[g]) || INFO[g]; }
   /* pre-rendered backdrops: 1920 on a 1080p TV, 960 everywhere else (phone, desktop, 960x540 TV WebView) */
-  function heroSrc(g) { return "ui/art/hero-" + g + "-" + (isTV() && innerWidth * (devicePixelRatio || 1) > 1280 ? 1920 : 960) + ".webp"; }
+  function heroSrc(g) {
+    if (g === "war") return "ui/art/hero-war.svg";   /* the new games ship their poster as one SVG */
+    return "ui/art/hero-" + g + "-" + (isTV() && innerWidth * (devicePixelRatio || 1) > 1280 ? 1920 : 960) + ".webp";
+  }
   function setText(g) {
     var t = info(g); $("#hbEyebrow").textContent = t[0]; $("#hbTitle").textContent = NAME[g]; $("#hbPitch").textContent = t[1];
   }
@@ -463,6 +474,9 @@
   function boot() {
     var b = B();
     if (b && b.icon) {
+      /* War's seal: its crossed swords (the same glyph war/game.js registers) */
+      if (b.icon.add) b.icon.add("swords", '<path d="M4.5 4.5L15 15M13 17l4-4M15 15l3.2 3.2M19.5 4.5L9 15M11 17l-4-4M9 15l-3.2 3.2"/><circle cx="19.2" cy="19.2" r="1" fill="currentColor"/><circle cx="4.8" cy="19.2" r="1" fill="currentColor"/>');
+      if (b.icon.seal && b.icon.seal.set) b.icon.seal.set("war", "swords");
       $$("[data-hb-icon]").forEach(function (el) { el.innerHTML = b.icon(el.getAttribute("data-hb-icon")); });
       $$("[data-hb-seal]").forEach(function (el) { el.innerHTML = b.icon(b.icon.seal(el.getAttribute("data-hb-seal"))); });
     }

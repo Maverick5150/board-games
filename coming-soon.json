@@ -2,12 +2,17 @@
   "_help": "The hub's Coming soon shelf. Edit by hand and publish: no app update needed. One game per line: name, status (In progress or Next up), eta (any short date text). Remove a game when it ships; an empty items list hides the shelf. updated = the date of this list (YYYY-MM-DD).",
   "updated": "2026-10-16",
   "items": [
-    { "name": "War",                "status": "In progress", "eta": "Oct 16" },
     { "name": "Snakes and Ladders", "status": "Next up",     "eta": "Oct 16" },
     { "name": "Candy Land",         "status": "Next up",     "eta": "Oct 16" },
     { "name": "Bingo",              "status": "Next up",     "eta": "Oct 17" },
     { "name": "Crazy 8s",           "status": "Next up",     "eta": "Oct 17" },
     { "name": "Mancala",            "status": "Next up",     "eta": "Oct 17" },
-    { "name": "Connect 4",          "status": "Next up",     "eta": "Oct 17" }
+    { "name": "Connect 4",          "status": "Next up",     "eta": "Oct 18" },
+    { "name": "Golf",               "status": "Next up",     "eta": "Oct 18" },
+    { "name": "Trash",              "status": "Next up",     "eta": "Oct 18" },
+    { "name": "Yahtzee",            "status": "Next up",     "eta": "Oct 19" },
+    { "name": "Checkers",           "status": "Next up",     "eta": "Oct 19" },
+    { "name": "Battleship",         "status": "Next up",     "eta": "Oct 20" },
+    { "name": "Guess Who",          "status": "Next up",     "eta": "Oct 20" }
   ]
 }
