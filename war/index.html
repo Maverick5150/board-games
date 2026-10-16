@@ -169,6 +169,7 @@
   .wr-acts{display:flex; flex-wrap:wrap; justify-content:center; align-items:stretch; gap:.625rem; margin:0 calc(-1 * var(--focus-room)); padding:var(--focus-room)}
   #flipBtn{flex:1 1 11rem; min-width:0; min-height:3.5rem; font-size:var(--fs-xl)}
   #flipBtn .bg-btn__sub{font-size:var(--fs-xs)}
+  #flipBtn .bg-btn__label{white-space:normal; text-align:center}   /* a long war label ("War! Lay 3 down, / flip the 4th") takes 2 lines on a narrow phone; its no-break spaces leave one break */
   .wr-auto{flex:0 0 auto; width:auto; min-height:3.5rem; padding:.4rem .9rem; gap:.75rem; border-radius:var(--r-lg); background:var(--panel-fill); box-shadow:var(--panel-edge),var(--elev-1)}
   .wr-auto .bg-row__title{font-size:var(--fs-md)}
   .wr-prs{display:contents}
@@ -274,6 +275,12 @@
   .wcard.is-wild .wf-face::after, .wr-hcard.is-wild .wf::after{content:"Wild"; position:absolute; left:50%; bottom:calc(var(--cw)*.05); transform:translateX(-50%); padding:.05em .35em; border-radius:var(--r-pill);
     font:var(--fw-caps) var(--fs-micro)/1.2 var(--font-ui); color:var(--accent-ink); background:var(--accent); white-space:nowrap; pointer-events:none}
   .wcard.is-wild .wf-face.jk::after, .wr-hcard.is-wild .wf.jk::after{bottom:auto; top:44%}
+  /* a war's cards (the CEO's war: 3 face down, then the 4th decides): each face-down card carries its number, the waiting deciding card
+     "4th"; the chip sits at the card's left edge, the part the next card leaves in view; gone once the card is face up */
+  .wcard[data-wn]::before{content:attr(data-wn); position:absolute; left:calc(var(--cw)*.05); top:calc(var(--cw)*.07); z-index:2; min-width:1.5em; padding:.12em .4em;
+    border-radius:var(--r-pill); font:var(--fw-caps) var(--fs-micro)/1.15 var(--font-ui); text-align:center; color:#1a1408; background:var(--gold-100);
+    box-shadow:0 0 0 2px rgba(11,10,18,.85); pointer-events:none}
+  .wcard.is-up[data-wn]::before{display:none}
   .wr-final.is-many{gap:.25rem .35rem}
   .wr-final.is-many li{gap:.4rem; padding:.25rem .5rem}
   .wr-final.is-many .bg-token{width:1.4rem; height:1.4rem}
@@ -519,7 +526,7 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
         <span class="wr-prs" id="wprs"></span>
         <button class="bg-row wr-auto" id="autoBtn" type="button" role="switch" aria-checked="false"><span class="bg-row__main"><span class="bg-row__title">Auto</span></span><span class="bg-toggle" aria-hidden="true"></span></button>
       </div>
-      <div class="wr-meta"><span class="wr-chip" id="wclock"></span><span class="wr-chip" id="wbattle"></span></div>
+      <div class="wr-meta"><span class="wr-chip" id="wclock"></span><span class="wr-chip" id="wbattle"></span><span class="wr-chip is-hot" id="wpot"></span></div>
       <ol class="wr-log" id="wlog" aria-label="What happened" data-stage-text></ol>
       <div class="bg-hintbar wr-hints" data-stage-text><span><span class="bg-key">OK</span> <span id="hintOk">Flip</span></span><span><span class="bg-key">Back</span> Close a list, or the Menu</span></div>
     </div>
