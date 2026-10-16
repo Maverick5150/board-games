@@ -74,6 +74,48 @@
   html[data-tv] .bg-tiles{gap:1.5rem}      /* a focused tile's lift and ring reach about 21 px: the next tile stands 36 px away */
   html[data-tv] .hb-foot{display:none}
   html[data-tv] .hb-hints{display:flex; position:fixed; left:0; right:0; bottom:0; z-index:15; padding:.75rem var(--gutter) 1rem; background:linear-gradient(0deg, var(--ink-1) 72%, rgba(8,10,21,0))}
+
+  /* ---------- Coming soon shelf (coming-soon.json, fetched fresh; not launchable: a tile opens a details sheet) ---------- */
+  .hb-soon-head{margin:1.75rem 0 .75rem}
+  .hb-soon-upd{font:var(--fw-ui) var(--fs-xs)/1.2 var(--font-ui); color:var(--text-3)}
+  .hb-soon-tiles{margin-top:0}
+  .hb-soon-tile{--accent:var(--gold-300); --accent-deep:#10132a; --felt-lite:hsl(var(--hb-h,230),32%,22%); --accent-glow:rgba(231,202,144,.26);
+    background:#10132a; box-shadow:inset 0 0 0 1px rgba(230,201,143,.22), 0 18px 34px -18px rgba(0,0,0,.95)}
+  .hb-soon-tile .bg-tile__art{aspect-ratio:16 / 10; background:radial-gradient(75% 80% at 50% 62%, var(--felt-lite) 0%, #10132a 78%)}
+  .hb-soon-tile .bg-tile__label{flex:1 1 auto; align-content:start; background:linear-gradient(180deg, #10132a 0%, #0b0c18 100%); gap:.35rem}   /* fills a row made taller by a 2-line name */
+  .hb-soon-tile .bg-tile__name{white-space:normal; overflow:visible; overflow-wrap:anywhere; line-height:1.12}
+  .hb-soon-ico{position:absolute; left:0; right:0; top:22%; bottom:6%; display:block; opacity:.74}   /* dimmed: not playable yet */
+  .hb-soon-ico svg{display:block; width:100%; height:100%}
+  .hb-soon-ini{position:absolute; inset:0; display:grid; place-items:center; font:400 2.25rem/1 var(--font-display); color:var(--gold-100)}
+  /* the gold ribbon: a sash pinned to the art's left edge, forked at its end (a static clip-path, never animated) */
+  .hb-soon-rib{position:absolute; left:0; top:.625rem; z-index:2; display:block; padding:.3rem 1.15rem .3rem .625rem;
+    font:var(--fw-caps) var(--fs-micro)/1.1 var(--font-ui); letter-spacing:var(--track-caps); text-transform:uppercase; white-space:nowrap;
+    color:var(--text-on-gold); background:var(--gold-fill); clip-path:polygon(0 0, 100% 0, calc(100% - .55rem) 50%, 100% 100%, 0 100%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.6)}
+  .hb-soon-meta{display:flex; flex-wrap:wrap; align-items:center; gap:.35rem .5rem}
+  .hb-soon-chip{min-height:1.75rem; padding:.2rem .6rem}
+  .hb-soon-chip .bg-chip__dot{background:transparent; box-shadow:inset 0 0 0 2px var(--text-3)}
+  .hb-soon-chip.is-progress{color:var(--gold-100); box-shadow:inset 0 0 0 1px var(--line-gold)}
+  .hb-soon-chip.is-progress .bg-chip__dot{background:var(--gold-200); box-shadow:0 0 0 3px rgba(231,202,144,.22)}
+  .hb-soon-eta{font:var(--fw-ui) var(--fs-xs)/1.2 var(--font-ui); color:var(--text-2)}
+  /* the details sheet */
+  .hb-soon-sheet__top{display:grid; grid-template-columns:auto 1fr; align-items:center; gap:1rem; margin-bottom:1rem}
+  .hb-soon-sheet__art{position:relative; display:block; width:6.5rem; aspect-ratio:16 / 10; border-radius:var(--r-lg); overflow:hidden;
+    background:radial-gradient(75% 80% at 50% 62%, hsl(var(--hb-h,230),32%,24%) 0%, #10132a 80%); box-shadow:inset 0 0 0 1px rgba(230,201,143,.3)}
+  .hb-soon-sheet__art .hb-soon-ico{top:8%; bottom:8%; opacity:.9}
+  .hb-soon-sheet .bg-sheet__sub{margin-top:.25rem}
+  .hb-soon-facts{display:grid; grid-template-columns:1fr 1fr; gap:.625rem; margin:0 0 .875rem}
+  .hb-soon-facts > div{padding:.625rem .875rem; border-radius:var(--r-lg); background:var(--ink-3); box-shadow:inset 0 0 0 1px var(--line-2)}
+  .hb-soon-facts dt{font:var(--fw-caps) var(--fs-micro)/1.2 var(--font-ui); letter-spacing:var(--track-caps); text-transform:uppercase; color:var(--text-3)}
+  .hb-soon-facts dd{margin:.25rem 0 0; font:var(--fw-ui-strong) var(--fs-md)/1.2 var(--font-ui); color:var(--text-1)}
+  .hb-soon-note{margin:0 0 1.25rem; font:var(--fw-body) var(--fs-sm)/1.45 var(--font-ui); color:var(--text-2)}
+  html[data-tv] .hb-soon-head{margin:2.5rem 0 .5rem}
+  /* TV: the first row's focus also brings the shelf's heading out from under the pinned poster (and its fade); the squatter art keeps
+     that row, its ring and the heading inside the band between the poster and the hint bar */
+  html[data-tv] .hb-soon-tile .bg-tile__art{aspect-ratio:2.2 / 1}
+  html[data-tv] .hb-soon-tile:nth-child(-n+4){scroll-margin-top:calc(var(--focus-room) + .5rem + 2rem)}
+  html[data-tv] .hb-soon-ini{font-size:3rem}
+  html[data-tv] .hb-soon-sheet__art{width:9rem}
 </style>
 </head>
 <body class="bg-app">
@@ -136,10 +178,26 @@
     </a>
   </nav>
 
+  <section class="hb-soon" id="hbSoon" aria-labelledby="hbSoonLabel" hidden>
+    <div class="bg-section hb-soon-head"><span class="bg-eyebrow" id="hbSoonLabel">Coming soon</span><span class="hb-soon-upd" id="hbSoonUpd"></span></div>
+    <div class="bg-tiles hb-soon-tiles" id="hbSoonTiles"></div>
+  </section>
+
   <p class="hb-foot">Single games work offline. Party Mode needs internet and a TV browser.</p>
 </main>
 
-<div class="bg-hintbar hb-hints" id="hbHints"><span><span class="bg-key" data-hb-icon="arrow"></span> Move</span><span><span class="bg-key">OK</span> Open a game</span><span><span class="bg-key">Back</span> Exit</span></div>
+<div class="bg-hintbar hb-hints" id="hbHints"><span><span class="bg-key" data-hb-icon="arrow"></span> Move</span><span><span class="bg-key">OK</span> <span id="hbHintOk">Open a game</span></span><span><span class="bg-key">Back</span> <span id="hbHintBack">Exit</span></span></div>
+
+<div class="bg-sheet hb-soon-sheet" id="hbSoonSheet" aria-labelledby="hbSoonTitle" aria-hidden="true">
+  <div class="bg-sheet__grip" aria-hidden="true"></div>
+  <div class="hb-soon-sheet__top">
+    <span class="hb-soon-sheet__art" id="hbSoonArt" aria-hidden="true"></span>
+    <div><span class="bg-eyebrow">Coming soon</span><h2 class="bg-sheet__title" id="hbSoonTitle"></h2><p class="bg-sheet__sub">Not playable yet</p></div>
+  </div>
+  <dl class="hb-soon-facts"><div><dt>Status</dt><dd id="hbSoonStatus"></dd></div><div><dt>Expected</dt><dd id="hbSoonEta"></dd></div></dl>
+  <p class="hb-soon-note" id="hbSoonNote"></p>
+  <button class="bg-btn bg-btn--primary bg-btn--block" id="hbSoonOk" type="button">Got it</button>
+</div>
 
 <script>
 (function () {
@@ -188,7 +246,7 @@
   }
 
   /* ---------- the hero follows the focused tile, and drifts through the games while nothing is focused (full effects only) ---------- */
-  function resting() { var a = doc.activeElement; return !(a && (a.closest && a.closest(".hb-tiles, .hb-hero"))); }
+  function resting() { var a = doc.activeElement; return !(a && (a.closest && a.closest(".hb-tiles, .hb-hero, .hb-soon"))); }
   function canRotate() {
     var b = B(); return !doc.hidden && heroSeen && resting() && !(window.Sound && Sound.panelOpen && Sound.panelOpen()) && b && b.effects && b.effects.motion && b.effects.motion() === "full";
   }
@@ -225,6 +283,124 @@
     var pm = $("#hbPartyMeta"); if (pm) pm.textContent = isTV() ? "Host on this TV" : "TV + phones";
     var par = $("#hbParty"); if (par) par.setAttribute("aria-label", isTV() ? "Party Mode, 2 to 10 players. Host the table on this TV, everyone joins with a room code." : "Party Mode, 2 to 10 players. Host on the TV, everyone joins from a phone.");
     if (cur) setText(cur);
+  }
+
+  /* ---------- Coming soon shelf: coming-soon.json at the site root, fetched fresh on every launch (network first, a cache-busting
+     query, cache "no-store"), the last good copy kept in localStorage for offline launches. Rendering never waits on it: the
+     stored copy draws at once, the fresh one replaces it when (and only if) it differs. An empty list hides the shelf. ---------- */
+  var SOON_KEY = "bg_hub_soon", soonList = [], soonSig = "";
+  var SG = "#e7ca90", SI = "#f6f1e7", SR = "#e0787a", ST = "#6cc4b0", SS = "#7aa7e8", SN = "#10132a";
+  /* original line-and-fill icons drawn here (no copied art); a game with no drawing gets its initial on a dashed card */
+  var SOON_ART = {
+    war: '<g transform="translate(66 52) rotate(-12)"><rect x="-22" y="-32" width="44" height="62" rx="6" fill="' + SS + '" stroke="' + SG + '" stroke-width="2.5"/><path d="M-13 -23 L13 21 M13 -23 L-13 21" stroke="' + SI + '" stroke-opacity=".5" stroke-width="2"/></g>' +
+      '<g transform="translate(94 50) rotate(10)"><rect x="-22" y="-32" width="44" height="62" rx="6" fill="' + SI + '" stroke="' + SG + '" stroke-width="2.5"/><path d="M0 -14 C8 -6 14 -2 14 4 C14 10 6 12 2 7 L4 14 L-4 14 L-2 7 C-6 12 -14 10 -14 4 C-14 -2 -8 -6 0 -14Z" fill="' + SN + '"/></g>',
+    snakes: '<g transform="translate(66 52) rotate(18)"><path d="M-12 -40 V40 M12 -40 V40 M-12 -26 H12 M-12 -10 H12 M-12 6 H12 M-12 22 H12" stroke="' + SG + '" stroke-width="4" stroke-linecap="round" fill="none"/></g>' +
+      '<path d="M86 88 C68 76 114 68 98 53 C86 41 124 35 110 21" stroke="' + ST + '" stroke-width="8" stroke-linecap="round" fill="none"/><circle cx="110" cy="18" r="7.5" fill="' + ST + '"/><circle cx="112.5" cy="16" r="1.8" fill="' + SN + '"/>',
+    candy: '<g transform="translate(80 52) rotate(-18)"><path d="M-20 0 L-44 -17 L-39 0 L-44 17Z M20 0 L44 -17 L39 0 L44 17Z" fill="' + SR + '" stroke="' + SG + '" stroke-width="2" stroke-linejoin="round"/><circle r="22" fill="' + SI + '" stroke="' + SG + '" stroke-width="2.5"/>' +
+      '<path d="M-12 -17 C-3 -6 -3 6 -12 17 M2 -21 C11 -8 11 8 2 21" stroke="' + SR + '" stroke-width="5" fill="none" stroke-linecap="round"/></g>',
+    bingo: '<rect x="38" y="16" width="62" height="70" rx="6" fill="' + SI + '" stroke="' + SG + '" stroke-width="2.5"/><rect x="39.5" y="17.5" width="59" height="12" rx="4.5" fill="' + SG + '"/>' +
+      '<path d="M53 32 V84 M69 32 V84 M85 32 V84 M40 44 H98 M40 57 H98 M40 70 H98" stroke="' + SN + '" stroke-opacity=".35" stroke-width="1.5"/>' +
+      '<circle cx="46" cy="38" r="4.5" fill="' + SR + '"/><circle cx="61" cy="51" r="4.5" fill="' + SR + '"/><circle cx="77" cy="63" r="4.5" fill="' + SR + '"/><circle cx="92" cy="77" r="4.5" fill="' + SR + '"/>' +
+      '<circle cx="112" cy="66" r="18" fill="' + SS + '" stroke="' + SG + '" stroke-width="2.5"/><circle cx="112" cy="66" r="9" fill="' + SI + '"/>',
+    crazy8: '<g transform="translate(74 52) rotate(-8)"><rect x="-24" y="-34" width="48" height="68" rx="6" fill="' + SI + '" stroke="' + SG + '" stroke-width="2.5"/><circle cy="-11" r="8.5" fill="none" stroke="' + SR + '" stroke-width="5"/><circle cy="11" r="11" fill="none" stroke="' + SR + '" stroke-width="5"/></g>' +
+      '<path d="M114 22 l4 10 10 4 -10 4 -4 10 -4 -10 -10 -4 10 -4z" fill="' + SG + '"/><path d="M108 66 l2.5 6 6 2.5 -6 2.5 -2.5 6 -2.5 -6 -6 -2.5 6 -2.5z" fill="' + SG + '" fill-opacity=".7"/>',
+    mancala: '<rect x="16" y="28" width="128" height="48" rx="24" fill="#8a6633" stroke="' + SG + '" stroke-width="2.5"/><ellipse cx="34" cy="52" rx="9" ry="16" fill="' + SN + '" fill-opacity=".75"/><ellipse cx="126" cy="52" rx="9" ry="16" fill="' + SN + '" fill-opacity=".75"/>' +
+      '<g fill="' + SN + '" fill-opacity=".75"><circle cx="52" cy="42" r="6"/><circle cx="66" cy="42" r="6"/><circle cx="80" cy="42" r="6"/><circle cx="94" cy="42" r="6"/><circle cx="108" cy="42" r="6"/><circle cx="52" cy="62" r="6"/><circle cx="66" cy="62" r="6"/><circle cx="80" cy="62" r="6"/><circle cx="94" cy="62" r="6"/><circle cx="108" cy="62" r="6"/></g>' +
+      '<circle cx="64.5" cy="41" r="2.4" fill="' + ST + '"/><circle cx="67.5" cy="43.5" r="2.4" fill="' + SI + '"/><circle cx="94" cy="62" r="2.4" fill="' + SR + '"/><circle cx="33" cy="48" r="2.4" fill="' + ST + '"/><circle cx="35" cy="56" r="2.4" fill="' + SR + '"/><circle cx="108" cy="42" r="2.4" fill="' + SI + '"/>',
+    connect4: '<path d="M44 86 L40 94 M116 86 L120 94" stroke="' + SG + '" stroke-width="4" stroke-linecap="round"/><rect x="38" y="14" width="84" height="72" rx="8" fill="' + SS + '" stroke="' + SG + '" stroke-width="2.5"/>'
+  };
+  (function () {   /* Connect 4's holes and discs, from a pattern: . empty, g gold, r rose */
+    var rows = [".....", "..r..", ".gr.g", "rggrr"], s = "";
+    rows.forEach(function (row, y) { for (var x = 0; x < 5; x++) { var c = row.charAt(x); s += '<circle cx="' + (52 + x * 14) + '" cy="' + (28 + y * 15) + '" r="5.5" fill="' + (c === "g" ? SG : c === "r" ? SR : SN) + '"/>'; } });
+    SOON_ART.connect4 += s;
+  })();
+  function soonKind(n) {
+    n = n.toLowerCase();
+    if (/^war\b/.test(n)) return "war";
+    if (/snake|ladder|chute/.test(n)) return "snakes";
+    if (/candy/.test(n)) return "candy";
+    if (/bingo/.test(n)) return "bingo";
+    if (/crazy|eight|\b8/.test(n)) return "crazy8";
+    if (/mancala/.test(n)) return "mancala";
+    if (/connect/.test(n)) return "connect4";
+    return "";
+  }
+  function soonHue(n) { var h = 0; for (var i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) % 360; return String(h); }
+  function soonArt(n) {
+    var k = soonKind(n), body = k ? SOON_ART[k] : '<rect x="50" y="14" width="60" height="72" rx="8" fill="none" stroke="' + SG + '" stroke-width="2.5" stroke-dasharray="6 5"/>';
+    var ini = (/[A-Za-z0-9]/.exec(n) || ["?"])[0].toUpperCase();
+    return '<svg viewBox="0 0 160 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">' + body + '</svg>' + (k ? '' : '<span class="hb-soon-ini">' + ini + '</span>');
+  }
+  function soonProgress(s) { return /progress|building|now/i.test(s); }
+  function soonClean(o) {
+    if (!o || typeof o !== "object" || !Array.isArray(o.items)) return null;
+    var items = [];
+    o.items.forEach(function (it) {
+      if (!it || typeof it.name !== "string" || !it.name.trim()) return;
+      items.push({ name: it.name.trim().slice(0, 40), status: String(it.status || "Next up").trim().slice(0, 24) || "Next up", eta: String(it.eta == null ? "" : it.eta).trim().slice(0, 24) });
+    });
+    return { updated: typeof o.updated === "string" ? o.updated.slice(0, 10) : "", items: items.slice(0, 24) };
+  }
+  function soonDay(s) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || "");
+    if (!m) return s || "";
+    try { return new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString("en-US", { month: "short", day: "numeric" }); } catch (e) { return s; }
+  }
+  function soonTile(it, i) {
+    var t = doc.createElement("button"), prog = soonProgress(it.status);
+    t.type = "button"; t.className = "bg-tile hb-soon-tile"; t.setAttribute("data-soon", String(i));
+    t.style.setProperty("--hb-h", soonHue(it.name));
+    t.setAttribute("aria-label", it.name + ", coming soon. " + it.status + (it.eta ? ", expected " + it.eta : "") + ". Shows the details.");
+    t.innerHTML = '<span class="bg-tile__art"><span class="hb-soon-ico">' + soonArt(it.name) + '</span><span class="hb-soon-rib" aria-hidden="true">Coming soon</span></span>' +
+      '<span class="bg-tile__label" aria-hidden="true"><span class="bg-tile__name"></span><span class="hb-soon-meta"><span class="bg-chip hb-soon-chip' + (prog ? ' is-progress' : '') + '"><span class="bg-chip__dot"></span><span class="hb-soon-st"></span></span></span><span class="hb-soon-eta"></span></span>';
+    $(".bg-tile__name", t).textContent = it.name;
+    $(".hb-soon-st", t).textContent = it.status;
+    $(".hb-soon-eta", t).textContent = it.eta ? "Expected " + it.eta : "Date to come";
+    t.addEventListener("click", function () { openSoon(i); });
+    return t;
+  }
+  function renderSoon(d) {
+    var sig = JSON.stringify(d);
+    if (sig === soonSig) return;
+    soonSig = sig;
+    var box = $("#hbSoon"), grid = $("#hbSoonTiles"), a = doc.activeElement, b = B();
+    var had = a && a.closest && a.closest("#hbSoonTiles") ? $$(".hb-soon-tile", grid).indexOf(a) : -1;
+    soonList = d.items;
+    grid.textContent = "";
+    d.items.forEach(function (it, i) { grid.appendChild(soonTile(it, i)); });
+    $("#hbSoonUpd").textContent = d.updated ? "Updated " + soonDay(d.updated) : "";
+    box.hidden = !d.items.length;
+    if (had >= 0) {   /* a fresh list arrived while the D-pad was on the shelf: keep the place (or step up to the games) */
+      var to = $$(".hb-soon-tile", grid)[Math.min(had, d.items.length - 1)] || $("#hbParty");
+      if (to) { if (b && b.focus && b.focus.set && isTV()) b.focus.set(to); else to.focus(); }
+    }
+  }
+  function openSoon(i) {
+    var it = soonList[i], b = B(), sh = $("#hbSoonSheet");
+    if (!it || !b || !b.sheet) return;
+    $("#hbSoonTitle").textContent = it.name;
+    $("#hbSoonStatus").textContent = it.status;
+    $("#hbSoonEta").textContent = it.eta || "To come";
+    var art = $("#hbSoonArt"); art.style.setProperty("--hb-h", soonHue(it.name)); art.innerHTML = '<span class="hb-soon-ico">' + soonArt(it.name) + '</span>';
+    $("#hbSoonNote").textContent = (soonProgress(it.status) ? "Being built right now." : "Next in line to be built.") + " It joins the games above as soon as it is ready, with nothing to install.";
+    b.sheet.open(sh, { focus: "#hbSoonOk" });
+  }
+  function loadSoon() {
+    var kept = null;
+    try { kept = soonClean(JSON.parse(localStorage.getItem(SOON_KEY))); } catch (e) { }
+    if (kept) renderSoon(kept);
+    if (!window.fetch) return;
+    var ctl = window.AbortController ? new AbortController() : null, tm = setTimeout(function () { if (ctl) ctl.abort(); }, 12000);
+    fetch("coming-soon.json?t=" + Date.now(), ctl ? { cache: "no-store", signal: ctl.signal } : { cache: "no-store" })
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (o) {
+        var d = soonClean(o);
+        if (!d) return;
+        try { localStorage.setItem(SOON_KEY, JSON.stringify(d)); } catch (e) { }
+        renderSoon(d);
+      })
+      .catch(function () { })   /* offline or a bad file: the stored copy stays on screen (or the shelf stays hidden) */
+      .then(function () { clearTimeout(tm); });
   }
 
   function boot() {
@@ -272,11 +448,23 @@
     /* The hub has no Back step of its own: in the Fire TV app Back exits (no window.__tvBack). The one exception is the open sound
        panel, which Back closes first: __tvBack exists only while the panel is on screen. */
     function syncBack() {
-      var open = !!(window.Sound && Sound.panelOpen && Sound.panelOpen());
-      if (open) window.__tvBack = function () { try { Sound.closePanel(); } catch (e) { } };
+      var snd = !!(window.Sound && Sound.panelOpen && Sound.panelOpen()), sh = !!(b && b.sheet && b.sheet.isOpen && b.sheet.isOpen());
+      if (snd || sh) window.__tvBack = function () {
+        try { if (window.Sound && Sound.panelOpen && Sound.panelOpen()) Sound.closePanel(); else if (b.sheet.isOpen()) b.sheet.close(null, "back"); } catch (e) { }
+      };
       else if (window.__tvBack) { try { delete window.__tvBack; } catch (e) { window.__tvBack = undefined; } }
+      var hb = $("#hbHintBack"); if (hb) hb.textContent = sh ? "Close" : "Exit";
     }
     new MutationObserver(syncBack).observe(doc.body, { childList: true });
+    /* the Coming soon details sheet is the hub's other layer: Back closes it first, like the sound panel */
+    doc.addEventListener("bgui:sheet", syncBack);
+
+    /* Coming soon: the stored copy draws now, the fresh list follows; OK on a soon tile shows its details */
+    var okHint = $("#hbHintOk"), soonGrid = $("#hbSoonTiles");
+    soonGrid.addEventListener("focusin", function () { if (okHint) okHint.textContent = "See details"; });
+    soonGrid.addEventListener("focusout", function () { if (okHint) okHint.textContent = "Open a game"; });
+    $("#hbSoonOk").addEventListener("click", function () { if (b && b.sheet) b.sheet.close($("#hbSoonSheet")); });
+    loadSoon();
 
     if (isTV()) {
       var first = (save && $("#hbContinue")) || $("a.bg-tile");
