@@ -1531,8 +1531,10 @@ function drawCpuSeg(){
   syncStart();
 }
 function setHumanSeg(){ document.querySelectorAll("#humanSeg button").forEach(x=>{ const on=+x.dataset.n===humanCount; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
-document.querySelectorAll("#speedSeg button").forEach(b=>b.addEventListener("click",()=>setSpeed(b.dataset.speed)));
-document.querySelectorAll("#skillSeg button").forEach(b=>b.addEventListener("click",()=>setSkill(b.dataset.k)));
+// step 10 review: a change from the Menu mid-game also goes into the running game's last save, so a reload + Continue keeps it
+function keepInSave(){ if(armed&&!gameOver&&lastSnap){ lastSnap.speed=gameSpeed; lastSnap.skill=cpuSkill; Saves.auto("sorry",lastSnap); } }
+document.querySelectorAll("#speedSeg button").forEach(b=>b.addEventListener("click",()=>{ setSpeed(b.dataset.speed); keepInSave(); }));
+document.querySelectorAll("#skillSeg button").forEach(b=>b.addEventListener("click",()=>{ setSkill(b.dataset.k); keepInSave(); }));
 setSkill(cpuSkill);
 document.querySelectorAll("#humanSeg button").forEach(b=>b.addEventListener("click",()=>{ humanCount=+b.dataset.n; setHumanSeg(); drawCpuSeg(); }));
 drawCpuSeg();
