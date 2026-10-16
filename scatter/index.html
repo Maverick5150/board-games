@@ -150,7 +150,7 @@
   html[data-tv] .sc-col--b{display:flex; flex-direction:column}
   html[data-tv] .sc-sec--players{order:1} html[data-tv] .sc-sec--save{order:3} html[data-tv] .sc-back{order:4}
   html[data-tv] .sc-dock{order:2; position:static; gap:1.75rem; margin:0; padding:1.5rem 0 0; background:none}
-  html[data-tv] #humanSeg, html[data-tv] #cpuSeg, html[data-tv] #speedSeg{gap:1.5rem}
+  html[data-tv] #humanSeg, html[data-tv] #cpuSeg, html[data-tv] #speedSeg, html[data-tv] #skillSeg{gap:1.5rem}
   html[data-tv] .bg-topbar__end{gap:1.5rem}
   html[data-tv] #svbar button{grid-template-columns:minmax(0,1fr); justify-items:center; align-content:center; row-gap:.3rem; padding:.625rem .5rem}
   html[data-tv] #svbar button .bg-ico{width:1.25em; height:1.25em}
@@ -205,6 +205,8 @@
       <section class="sc-sec sc-sec--speed" aria-labelledby="speedHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="speedHead" data-stage-text>Game speed</h2></div>
         <div class="bg-seg bg-seg--text" id="speedSeg" role="group" aria-labelledby="speedHead"><button type="button" data-s="slow" aria-pressed="false">Slow</button><button type="button" data-s="medium" class="on" aria-pressed="true">Medium</button><button type="button" data-s="fast" aria-pressed="false">Fast</button></div>
+        <div class="sc-field"><span class="bg-row__title" id="skillHead">Computer skill</span><span class="bg-row__desc">Easy leaves more blanks, Hard picks sharper. Changes at once.</span></div>
+        <div class="bg-seg bg-seg--text" id="skillSeg" role="group" aria-labelledby="skillHead"><button type="button" data-k="easy" aria-pressed="false">Easy</button><button type="button" data-k="normal" class="on" aria-pressed="true">Normal</button><button type="button" data-k="hard" aria-pressed="false">Hard</button></div>
       </section>
       <section class="sc-sec sc-sec--rules" aria-labelledby="rulesHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="rulesHead" data-stage-text>Rules</h2></div>
@@ -275,6 +277,7 @@
 
 <script src="bank.js"></script>
 <script src="engine.js"></script>
+<script src="brain.js"></script>
 <script src="ui.js"></script>
 <script>
 (function(){
@@ -288,11 +291,12 @@ const SV_ICON={ss:"save",ls:"load",std:"reset",sg:"save",lg:"load",au:"resume"};
    rule timer are never scaled. names.js gives the computers random names at every new game. */
 function speedFactor(){ return ({slow:1.75, fast:0.5})[window.bgGameSpeed] || 1 }
 function normSpeed(v){ return v==="slow"||v==="fast"?v:"medium"; }
+function normSkill(v){ return v==="easy"||v==="hard"?v:"normal"; }   // step 10: the computer skill (saved with the settings and the game; old saves = normal)
 function cpuNames(n,human){ let a=[]; try{ if(window.Names&&n>0) a=window.Names.pick(n,human)||[]; }catch(e){} while(a.length<n) a.push("CPU "+(a.length+1)); return a; }
-let cfg={version:"classic",over:{},humans:1,cpus:3,speed:"medium"};
+let cfg={version:"classic",over:{},humans:1,cpus:3,speed:"medium",skill:"normal"};
 let G=null,ctrl=null,gen=0,writeQueue=[],curWriter=-1,reviewMe=0,voteMe=-1,roundStart=0,stopTimer=null,stopAt=0,stopGen=-1,stopLeft=-1,stopped=false,voteBusy=false;
 const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
-function curOpts(){ return E.versionOpts(cfg.version,cfg.over); }
+function curOpts(){ const o=E.versionOpts(cfg.version,cfg.over); o.cpuSkill=normSkill(cfg.skill); return o; }
 
 /* ============== MIDNIGHT LUXE: presentation only (ui/theme.css + ui/ui.js, step 4) ==============
    Nothing here changes a rule, the engine or the save format. It dresses the page in the shared Luxe pieces: the setup page (which is also
@@ -466,9 +470,13 @@ function barTitle(){
 function setSpeedSeg(){ cfg.speed=normSpeed(cfg.speed); window.bgGameSpeed=cfg.speed; $("speedSeg").querySelectorAll("button").forEach(x=>{ const on=x.dataset.s===cfg.speed; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
 $("speedSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.speed=b.dataset.s; setSpeedSeg(); if(G&&!G.over){ const pk=packG(); if(pk) Saves.auto("scatter",pk); } }));   // applies at once; the running game's save keeps it
 setSpeedSeg();
+function setSkillSeg(){ cfg.skill=normSkill(cfg.skill); if(G&&G.o) G.o.cpuSkill=cfg.skill; $("skillSeg").querySelectorAll("button").forEach(x=>{ const on=x.dataset.k===cfg.skill; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
+$("skillSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.skill=b.dataset.k; setSkillSeg(); if(G&&!G.over){ const pk=packG(); if(pk) Saves.auto("scatter",pk); } }));   // applies at once; the running game's save keeps it
+setSkillSeg();
 function packG(){ if(!G) return null; return {G:E.serialize(G),cfg:JSON.parse(JSON.stringify(cfg)),stats:{ms:Math.round(playMs())}}; }
 function loadSaved(d){
   gen++; clearStop(); G=E.restore(JSON.parse(JSON.stringify(d.G))); Object.assign(cfg,d.cfg||{}); setSpeedSeg();
+  cfg.skill=normSkill((d.cfg&&d.cfg.skill)||(d.cfg&&d.cfg.over&&d.cfg.over.cpuSkill)||(d.G&&d.G.o&&d.G.o.cpuSkill)); if(cfg.over) delete cfg.over.cpuSkill; setSkillSeg();
   stats=readStats(d.stats); ui.winShown=-1; ui.result=false; closeWin(); closeRoll(); closeHandoff();
   Sound.skip(); startUI(); showSetup(false); resetView(); resumePhase(); drawSetup(); clockOn(); armBack();
 }
@@ -488,9 +496,9 @@ if(window.MutationObserver){
   new MutationObserver(()=>{ const B=BG(), m=$("svtoast").textContent; if(luxe()&&B.toast&&m) B.toast(m,{icon:"save",ms:2400}); }).observe($("svtoast"),{childList:true,characterData:true,subtree:true});
 }
 const saveBar=Saves.bar({game:"scatter",el:$("svbar"),snapNote:"this round (writing restarts)",saveToast:"Game saved",
-  getSettings:()=>({version:cfg.version,over:cfg.over,humans:cfg.humans,cpus:cfg.cpus,speed:cfg.speed}),
-  applySettings:s=>{ cfg.version=s.version||"classic"; cfg.over=s.over||{}; cfg.humans=s.humans||1; cfg.cpus=s.cpus!=null?s.cpus:3; cfg.speed=normSpeed(s.speed); setSpeedSeg(); drawSetup(); },
-  standard:()=>{ cfg={version:"classic",over:{},humans:1,cpus:3,speed:"medium"}; setSpeedSeg(); drawSetup(); },
+  getSettings:()=>({version:cfg.version,over:cfg.over,humans:cfg.humans,cpus:cfg.cpus,speed:cfg.speed,skill:cfg.skill}),
+  applySettings:s=>{ cfg.version=s.version||"classic"; cfg.over=s.over||{}; cfg.humans=s.humans||1; cfg.cpus=s.cpus!=null?s.cpus:3; cfg.speed=normSpeed(s.speed); cfg.skill=normSkill(s.skill); if(cfg.over) delete cfg.over.cpuSkill; setSpeedSeg(); setSkillSeg(); drawSetup(); },
+  standard:()=>{ cfg={version:"classic",over:{},humans:1,cpus:3,speed:"medium",skill:"normal"}; setSpeedSeg(); setSkillSeg(); drawSetup(); },
   getSnapshot:()=>(G&&!G.over)?packG():null,loadSnapshot:loadSaved});
 $("menuBtn").addEventListener("click",()=>{
   // Resume only while a game is on, or "See the result" when it has just ended and its Victory screen is still to come
