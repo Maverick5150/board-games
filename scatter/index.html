@@ -134,6 +134,37 @@
   html.sc-luxe .sc-toast, html.sc-luxe .sc-svtoast, html.sc-luxe #banner{display:none}
   html:not(.sc-luxe) .bg-sheet.show{transform:none; visibility:visible; z-index:70}
   html:not(.sc-luxe) #handoff.show, html:not(.sc-luxe) #rollBox.show{z-index:80}
+  html:not(.sc-luxe) #ruling.show{z-index:85; background:#26193f; color:#fff}
+
+  /* ---------- step 10: the Ruling sheet (#ruling): a challenged answer, researched ---------- */
+  .sc-rl{display:grid; gap:.75rem; padding:.25rem 0 .25rem; text-align:left}
+  .sc-rl__verdict{display:flex; align-items:center; gap:.5rem; margin:0}
+  .sc-rl__verdict svg{width:1.15em; height:1.15em; flex:none}
+  .sc-rl[data-v="good"] .sc-rl__verdict{color:var(--ok-text)}
+  .sc-rl[data-v="bad"] .sc-rl__verdict{color:var(--danger-text)}
+  .sc-rl[data-v="vote"] .sc-rl__verdict{color:var(--gold-200)}
+  .sc-rl__ans{margin:0; font:400 var(--fs-3xl)/1.1 var(--font-display); color:var(--text-1); overflow-wrap:anywhere}
+  .sc-rl__facts{display:grid; gap:.375rem; margin:0; padding:.625rem .875rem; border-radius:12px; background:rgba(255,255,255,.04); box-shadow:inset 0 0 0 1px rgba(231,202,144,.22)}
+  .sc-rl__facts > div{display:grid; grid-template-columns:6.25rem minmax(0,1fr); gap:.5rem; align-items:baseline}
+  .sc-rl__facts dt{font:700 var(--fs-micro)/1.3 var(--font-ui); letter-spacing:.08em; text-transform:uppercase; color:var(--text-3)}
+  .sc-rl__facts dd{margin:0; display:flex; gap:.375rem; align-items:center; font:600 var(--fs-md)/1.35 var(--font-ui); color:var(--text-1)}
+  .sc-rl__facts dd svg{width:1.1em; height:1.1em; flex:none}
+  .sc-rl__facts dd.is-ok svg{color:var(--ok-text)} .sc-rl__facts dd.is-no svg{color:var(--danger-text)}
+  .sc-rl__lead{margin:0; font:600 var(--fs-lg)/1.4 var(--font-ui); color:var(--text-1)}
+  .sc-rl__quote{margin:0; padding:.375rem 0 .375rem .875rem; border-left:3px solid var(--gold-300)}
+  .sc-rl__quote p{margin:0; font:italic 400 var(--fs-lg)/1.45 var(--font-display); color:var(--text-2)}
+  .sc-rl__quote cite{display:block; margin-top:.375rem; font:600 var(--fs-xs)/1.35 var(--font-ui); font-style:normal; color:var(--gold-200)}
+  .sc-rl__cite, .sc-rl__src{margin:0; font:500 var(--fs-xs)/1.45 var(--font-ui); color:var(--text-3)}
+  .sc-rl__src b{font-weight:700; color:var(--text-2)}
+  .sc-rl__btns{display:flex; flex-wrap:wrap; gap:.75rem; padding:var(--focus-room); margin:0 calc(-1 * var(--focus-room))}
+  .sc-rl__btns .bg-btn{flex:1 1 11rem; margin:0}
+  .sc-rl__look{display:flex; align-items:center; gap:.875rem; padding:.5rem 0; font:600 var(--fs-md)/1.4 var(--font-ui); color:var(--text-2)}
+  .sc-rl__lens{display:inline-grid; place-items:center; width:3rem; height:3rem; flex:none; border-radius:50%; color:var(--gold-200); background:rgba(231,202,144,.1); animation:scLens 1.6s ease-in-out 7}
+  .sc-rl__lens svg{width:1.75rem; height:1.75rem}
+  @keyframes scLens{0%,100%{transform:translate(0,0) rotate(0)} 25%{transform:translate(.25rem,-.2rem) rotate(-10deg)} 50%{transform:translate(0,.2rem) rotate(0)} 75%{transform:translate(-.25rem,-.2rem) rotate(10deg)}}
+  html[data-effects="reduced"] .sc-rl__lens{animation:none}
+  @media (prefers-reduced-motion: reduce){ .sc-rl__lens{animation:none} }
+  html[data-tv] .sc-rl__facts > div{grid-template-columns:7rem minmax(0,1fr)}
 
   /* ---------- TV (html[data-tv], 1rem = 24px at 1080p) ---------- */
   html[data-tv] .sc-setup{display:grid; grid-template-columns:minmax(0,32rem) minmax(0,34rem); column-gap:3.5rem; justify-content:center; align-items:start; width:auto; padding:0 var(--gutter) 2rem}
@@ -257,6 +288,7 @@
   </main>
 
   <section class="bg-sheet" id="handoff" aria-labelledby="hoTitle"><div id="handoffSheet"></div></section>
+  <section class="bg-sheet" id="ruling" aria-labelledby="rlTitle"><div id="rulingSheet"></div></section>
   <section class="bg-sheet" id="rollBox" aria-labelledby="rollNote">
     <div class="bg-sheet__grip" aria-hidden="true"></div>
     <div class="sc-roll"><span class="bg-eyebrow bg-eyebrow--accent" id="rollRound">Round 1</span><h2 class="bg-sheet__title" id="rollNote">The letter is</h2><div class="bg-die bg-die--gold sc-die" id="rollLetter" role="img" aria-label="Letter die">?</div></div>
@@ -285,6 +317,7 @@
 <script src="bank.js"></script>
 <script src="engine.js"></script>
 <script src="brain.js"></script>
+<script src="research.js"></script>
 <script src="ui.js"></script>
 <script>
 (function(){
@@ -396,14 +429,14 @@ function drawHouse(){
   const o=curOpts(), box=$("houseRules");
   keepFocus(box,"data-k",()=>{
     box.innerHTML="";
-    E.HOUSE.forEach(h=>{
+    E.HOUSE.concat(Rz()&&o.judge==="vote"?PAGE_HOUSE:[]).forEach(h=>{
       if(h[5]&&h[5]!==o.mode) return;
       const key=h[0], tag=h[4]?'<span class="bg-tag bg-tag--official">official</span>':'<span class="bg-tag bg-tag--house">house</span>';
       let row;
       if(h[2]==="bool"){
         row=document.createElement("label"); row.className="bg-row row";
         row.innerHTML=`<span class="bg-row__main"><span class="bg-row__title">${esc(h[1])} ${tag}</span></span><input type="checkbox" class="bg-toggle" data-k="${key}"${o[key]?" checked":""}>`;
-        row.querySelector("input").addEventListener("change",e=>{ cfg.over[key]=e.target.checked; drawSetup(); });
+        row.querySelector("input").addEventListener("change",e=>{ if(!e.target.checked&&E.versionOpts(cfg.version,{})[key]===undefined) delete cfg.over[key]; else cfg.over[key]=e.target.checked; drawSetup(); });
       } else {
         row=document.createElement("div"); row.className="bg-row bg-row--static row";
         row.innerHTML=`<span class="bg-row__main"><span class="bg-row__title">${esc(h[1])} ${tag}</span></span><select class="bg-select" data-k="${key}" aria-label="${esc(h[1])}">${h[3].map(c=>`<option value="${esc(c[0])}"${String(o[key])===String(c[0])?" selected":""}>${esc(c[1])}</option>`).join("")}</select>`;
@@ -580,7 +613,7 @@ function startGame(){
   },0);
 }
 /* a new or loaded game starts clean: the old sheet's timer, vote window and hand-off must not act on it */
-function resetView(){ closeHandoff(); closeRoll(); voteMe=-1; ctrl.closeModal(); ctrl.update(snap(-1,{phase:"roll"})); }
+function resetView(){ RS.tok++; RS.ch=null; closeRuling(); closeHandoff(); closeRoll(); voteMe=-1; ctrl.closeModal(); ctrl.update(snap(-1,{phase:"roll"})); }
 function startUI(){
   Skins.apply("scatter"); Sound.music("scatter");
   if(!ctrl) ctrl=Sc.UI.create({root:$("sctrl"),toast,send:onIntent,readyLabel:luxe()?"Done scoring":"Done scoring ▶",luxe:luxe(),tv:onTV,icon:icon,seatOf:seatIn});
@@ -636,7 +669,7 @@ function nextWriter(){
   curWriter=writeQueue.shift(); const nh=G.players.filter(p=>p.human).length;
   if(nh>1) showHandoff(G.players[curWriter],"write",()=>openWrite()); else openWrite();
 }
-function snap(me,extra){ return E.snapshot(G,me,extra); }
+function snap(me,extra){ const s=E.snapshot(G,me,extra); if(s.challenges&&s.challenges.length) s.challenges=s.challenges.map(chLabel); return s; }
 function openWrite(){
   ctrl.update(snap(curWriter,{secLeft:G.o.timer})); legend(); roundStart=Date.now();
   autosave();
@@ -661,6 +694,7 @@ function onIntent(a){
 }
 function toReview(){
   E.beginReview(G); Sound.sfx("bell"); reviewMe=G.players.findIndex(p=>p.human); voteMe=-1;
+  if(researchOn()){ computerChallenges(); autosave(); nextRuling(); return; }   // step 10: the computers challenge, every challenge is researched
   if(Object.keys(G.challenges).length) banner("A computer challenged an answer — vote!","info","⚖");
   driveVotes(); autosave();
 }
@@ -683,6 +717,7 @@ function openCh(a,by){
   const r=E.openChallenge(G,by,a.slot,a.p,a.k); if(!r.ok) return r;
   const ch=r.ch; // the challenger counts as voting "reject"; every other human (the author too) votes next
   if(G.players[by].human) ch.votes[by]=false;
+  if(researchOn()){ ch.why="human"; autosave(); nextRuling(); return {ok:true}; }   // step 10: looked up first; the vote only when it is too close to call
   const res=E.resolveChallenge(G,ch,false);
   if(!res.done) driveVotes(); else { toast(res.state==="accepted"?"Answer kept":"Answer voted out"); showReview(); }
   autosave(); return {ok:true};
@@ -704,6 +739,7 @@ function doVote(a){
 function finishRound(){
   // settle any challenge still open (a human walked away) in favour of the answer
   Object.keys(G.challenges).forEach(s=>Object.keys(G.challenges[s]).forEach(k=>{ const c=G.challenges[s][k]; if(c.state==="open") E.resolveChallenge(G,c,true); }));
+  RS.tok++; RS.ch=null; closeRuling();
   E.finishRound(G); voteMe=-1; legend();
   Sound.sfx("win"); ctrl.update(snap(reviewMe)); autosave();
   if(G.over){ clockOff(); if(setupShown()) menuResult(); else setTimeout(()=>{ if(G&&G.over&&!setupShown()) openWin(); },700); }
@@ -717,9 +753,103 @@ function resumePhase(){
     G.star=false; banner("Star round — this round's letter is "+G.letter,"star","⭐");
   }
   if(G.phase==="write"){ writeQueue=G.players.filter(p=>p.human&&E.inPlay(G,p.id)).map(p=>p.id); G._cpuStops=[]; E.cpuFillAll(G); nextWriter(); }
-  else if(G.phase==="review"){ reviewMe=G.players.findIndex(p=>p.human); voteMe=-1; driveVotes(); }
+  else if(G.phase==="review"){ reviewMe=G.players.findIndex(p=>p.human); voteMe=-1; nextRuling(); }
   else if(G.phase==="scored"||G.phase==="over"){ reviewMe=G.players.findIndex(p=>p.human); ctrl.update(snap(reviewMe)); legend(); }
   else newRound();
+}
+/* ---------------- step 10: the computers challenge, and every challenged answer is researched (brain.js doubts + research.js) ----------------
+   After the writing the brain challenges doubtful human answers (a letter from an added word, not a real word, not the category, nearly
+   another player's answer; how many and how bold follows the Computer skill). Every challenge, the computers' and the players', is looked up
+   live (Wikipedia, the dictionary, Datamuse, the game's lists; 4 s per source) while the Ruling sheet shows "Researching…"; then the sheet
+   says GOOD ANSWER or DOESN'T COUNT with the source's own sentence, or "too close to call" and the players vote as before. Offline or on a
+   failure: bank.js, then the vote. House rule "Players can overrule a ruling" (default off): the sheet also offers a vote. The new state is
+   optional fields on a challenge (why, trick, dupWith, ruling, ruled, dupOf, note): old saves have none, and their open challenges are
+   researched when they Continue. Party Mode does not use this yet (FOLLOWUPS: For party-ai). */
+const RS={tok:0,ch:null};
+const PAGE_HOUSE=[["overrule","Players can overrule a ruling","bool",null,0]];
+const WHY={letter:"the letter may come from an added word",word:"it may not be a real word or name",fit:"it may not fit the category",dup:"it is nearly another player's answer",memory:"it was voted out on this device before",human:"challenged it"};
+const LENS='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6.2" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M14.6 14.6 20.5 20.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg>';
+function Rz(){ return (Sc.Research&&Sc.Brain&&Sc.Brain.doubts)?Sc.Research:null; }
+function researchOn(){ return !!(Rz()&&G&&G.o.judge==="vote"); }
+function allCh(){ const out=[]; Object.keys(G.challenges||{}).forEach(s=>Object.keys(G.challenges[s]).forEach(k=>out.push(G.challenges[s][k]))); return out; }
+function rawOf(ch){ return String(((G.answers[ch.p]||[])[ch.slot]||[])[ch.k]||"").trim(); }
+// the pad's view of a challenge: "checking…" while it is looked up (and no vote sheet yet), "ruled OK" / "ruled out" after a ruling
+function chLabel(c){
+  const ch=((G.challenges||{})[c.slot]||{})[c.p+"/"+c.k]; if(!ch) return c;
+  if(c.state==="open"&&!ch.ruling&&researchOn()) return Object.assign({},c,{state:"research",label:"checking…"});
+  if(ch.ruled) return Object.assign({},c,{label:ch.state==="accepted"?"ruled OK":"ruled out"});
+  if(ch.note&&c.state==="open") return Object.assign({},c,{note:ch.note});
+  return c;
+}
+function computerChallenges(){
+  allCh().forEach(ch=>{ if(!ch.why&&G.players[ch.by]&&!G.players[ch.by].human) ch.why=E.madeUp(rawOf(ch))?"word":"memory"; });   // the engine's own two
+  Sc.Brain.doubts(G).forEach(d=>{
+    const r=E.openChallenge(G,d.by,d.slot,d.p,d.k); if(!r.ok) return;
+    const ch=r.ch; ch.why=d.why; ch.votes[d.by]=false; if(d.trick) ch.trick=d.trick; if(d.dupOf) ch.dupWith=d.dupOf;
+  });
+}
+function rulingQuery(ch){
+  const s=G.slots[ch.slot], raw=rawOf(ch), b=Sc.Brain.evidence(G,ch.slot,raw);
+  const q={raw:raw,cat:{id:s.bank&&s.bank.id,text:s.label},letter:s.letter,why:ch.why,inHere:b.here,elsewhere:b.elsewhere,madeUp:E.madeUp(raw),startsOk:E.startsWith(raw,s.letter),trick:ch.trick||null,dup:null};
+  const t=ch.dupWith; if(t&&G.players[t.p]) q.dup={name:G.players[t.p].name,raw:String(((G.answers[t.p]||[])[ch.slot]||[])[t.k]||""),p:t.p,k:t.k};
+  return q;
+}
+function openRuling(){ const el=$("ruling"), B=BG(); el.classList.add("show"); if(luxe()&&!B.sheet.isOpen(el)) B.sheet.open(el,{dismissible:false,focus:"#rlSkip"}); }
+function closeRuling(){ const el=$("ruling"), B=BG(); if(!el) return; el.classList.remove("show"); if(B&&B.sheet&&B.sheet.isOpen(el)){ ui.closing=true; try{ B.sheet.close(el); }finally{ ui.closing=false; } } }
+function nextRuling(){
+  if(!G||G.phase!=="review") return;
+  // a ruling that arrived but was not answered yet (a reload, or a challenge tapped beside it without ui.js) is shown again first
+  const shown=researchOn()?allCh().filter(c=>c.state==="open"&&c.ruling&&!c.note)[0]:null;
+  if(shown){ RS.tok++; RS.ch=shown; voteMe=-1; showReview(); drawRuling(shown,shown.ruling); openRuling(); return; }
+  const ch=researchOn()?allCh().filter(c=>c.state==="open"&&!c.ruling)[0]:null;
+  if(!ch){ RS.ch=null; closeRuling(); driveVotes(); return; }
+  const my=gen, tok=++RS.tok; RS.ch=ch; voteMe=-1;
+  showReview(); drawRuling(ch,null); openRuling();
+  Rz().research(rulingQuery(ch)).then(r=>{
+    if(my!==gen||tok!==RS.tok||!G||G.phase!=="review"||ch.state!=="open") return;
+    ch.ruling=r; drawRuling(ch,r); Sound.sfx(r.v==="good"?"coin":r.v==="bad"?"lose":"bell"); autosave();
+  });
+}
+function skipLookup(){ const ch=RS.ch; if(!ch||ch.ruling||!G||G.phase!=="review") return; RS.tok++; ch.ruling=Rz().offline(rulingQuery(ch),"skip"); drawRuling(ch,ch.ruling); autosave(); }
+function applyRuling(over){
+  const ch=RS.ch, r=ch&&ch.ruling; if(!r||!G||G.phase!=="review"||ch.state!=="open") return;
+  RS.ch=null;
+  if(r.v==="vote"||over){
+    ch.note=over?"The players overrule the ruling.":"The sources were not clear.";
+    if(over){ r.over=true; Object.keys(ch.votes).forEach(id=>{ if(G.players[id]&&!G.players[id].human) delete ch.votes[id]; }); }   // only the players vote
+  } else {
+    ch.state=r.v==="good"?"accepted":"rejected"; ch.ruled=true; if(r.v==="bad"&&r.dupOf) ch.dupOf=r.dupOf;
+    toast(r.v==="good"?"Ruling: “"+rawOf(ch)+"” counts":"Ruling: “"+rawOf(ch)+"” doesn't count");
+  }
+  closeRuling(); autosave(); nextRuling();
+}
+function drawRuling(ch,r){
+  const s=G.slots[ch.slot], raw=rawOf(ch), by=G.players[ch.by]||{name:"A player"}, au=G.players[ch.p]||{name:"?"}, L=s.letter, v=r?r.v:"look";
+  const whose=au.name==="You"?"your answer":esc(au.name)+"’s answer", byN=esc(by.name);
+  const title=!r?"Researching…":v==="good"?"Good answer":v==="bad"?"Doesn't count":"Too close to call";
+  const ico=r?icon(v==="good"?"check":v==="bad"?"close":"info"):"";
+  const okL=E.startsWith(raw,L)&&!ch.trick;
+  const letter=okL?`<dd class="is-ok">${icon("check")}<span>Starts with ${esc(L)}</span></dd>`:ch.trick?`<dd class="is-no">${icon("close")}<span>The ${esc(L)} comes from “${esc(ch.trick.word)}”</span></dd>`:`<dd class="is-no">${icon("close")}<span>Doesn't start with ${esc(L)}</span></dd>`;
+  let body;
+  if(!r) body=`<div class="sc-rl__look" role="status"><span class="sc-rl__lens">${LENS}</span><span>Looking it up: Wikipedia, the dictionary, a word list and the game's own lists…</span></div>`;
+  else body=`<p class="sc-rl__lead">${esc(r.lead)}</p>`+
+    (r.quote?`<blockquote class="sc-rl__quote"><p>“${esc(r.quote)}”</p>${r.cite?`<cite>${esc(r.cite)}</cite>`:""}</blockquote>`:(r.cite?`<p class="sc-rl__cite">Source: ${esc(r.cite)}</p>`:""))+
+    `<p class="sc-rl__src">Checked: ${(r.src||[]).map(x=>`${esc(x.n)} <b>${esc(x.s)}</b>`).join(" · ")}</p>`;
+  const btns=!r?`<button class="bg-btn bg-btn--ghost bg-btn--lg" type="button" id="rlSkip">Skip the lookup</button>`:
+    v==="vote"?`<button class="bg-btn bg-btn--primary bg-btn--lg" type="button" id="rlOk" data-autofocus>${icon("flag")}Vote on it</button>`:
+    `<button class="bg-btn bg-btn--primary bg-btn--lg" type="button" id="rlOk" data-autofocus>${icon(v==="good"?"check":"close")}${v==="good"?"OK, it counts":"OK, it's out"}</button>`+(G.o.overrule?`<button class="bg-btn bg-btn--secondary bg-btn--lg" type="button" id="rlOver">Overrule: vote</button>`:"");
+  $("rulingSheet").innerHTML=`<div class="bg-sheet__grip" aria-hidden="true"></div><div class="sc-rl" data-v="${v}">`+
+    `<span class="bg-eyebrow bg-eyebrow--accent">${r?"Ruling":"Challenge"} · ${whose}</span>`+
+    `<h2 class="bg-sheet__title sc-rl__verdict" id="rlTitle">${ico}<span>${title}</span></h2>`+
+    `<p class="sc-rl__ans">“${esc(raw)}”</p>`+
+    `<dl class="sc-rl__facts"><div><dt>Category</dt><dd><span>${esc(s.label)}</span></dd></div><div><dt>Letter</dt>${letter}</div><div><dt>Challenge</dt><dd><span>${byN}: ${esc(WHY[ch.why]||WHY.human)}</span></dd></div></dl>`+
+    body+`<div class="sc-rl__btns">${btns}</div></div>`;
+  const ok=$("rlOk"), ov=$("rlOver"), sk=$("rlSkip");
+  if(ok) ok.addEventListener("click",()=>applyRuling(false));
+  if(ov) ov.addEventListener("click",()=>applyRuling(true));
+  if(sk) sk.addEventListener("click",skipLookup);
+  if(r&&ok&&$("ruling").classList.contains("show")) focusIn(ok);
+  const B=BG(); if(B&&B.toast&&B.toast.place) requestAnimationFrame(()=>{ try{ B.toast.place(); }catch(e){} });   // the sheet grew: a showing toast moves clear of it, or waits
 }
 // pass the phone (hot seat): a sheet that must be answered; the pad stays hidden until the next player says it is them
 function showHandoff(p,kind,go){
