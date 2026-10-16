@@ -316,6 +316,13 @@
   .mn-lot.is-cur{background:var(--ink-3); box-shadow:inset 0 3px 0 var(--grp), inset 0 0 0 1.5px var(--line-gold)}
   .mn-lot__name{font:var(--fw-ui-strong) var(--fs-xs)/1.2 var(--font-ui); color:var(--text-1)}
   .mn-lot.is-other .mn-lot__name{color:var(--text-2)}
+  /* a lot name that opens its deed (step 10 review): a full-width text button, 44 / 48 px tall, underlined like a link */
+  .mn-set .mn-lot__name{display:flex; align-items:center; justify-content:center; min-height:var(--tap,44px); margin:-.25rem 0 -.125rem}   /* every lot's name row the same height: the + / - rows line up across the set */
+  .mn-lot__link{padding:0 .25rem; border:0; border-radius:var(--r-sm,6px); background:none; cursor:pointer; text-decoration:underline; text-decoration-color:var(--line-gold); text-underline-offset:.2em}
+  .mn-here{display:flex; flex-wrap:wrap; align-items:center; gap:.375rem .75rem; margin:.5rem 0 .75rem; font:var(--fw-ui) var(--fs-sm)/1.3 var(--font-ui); color:var(--text-1)}
+  .mn-here__lab{font:var(--fw-ui-strong) var(--fs-xs)/1.3 var(--font-ui); letter-spacing:.06em; text-transform:uppercase; color:var(--text-2)}
+  .mn-here__p{display:inline-flex; align-items:center; gap:.375rem}
+  .mn-here .bg-token{width:2rem; height:2rem; font-size:1rem}
   .mn-lot__bld{display:flex; align-items:flex-end; justify-content:center; gap:.2rem; height:.875rem}
   .mn-pip{display:block; width:.75rem; height:.75rem; background:#46c97a; clip-path:polygon(50% 0,100% 45%,100% 100%,0 100%,0 45%)}
   .mn-pip--hotel{width:1.625rem; background:#ff5d5d; clip-path:polygon(50% 0,100% 38%,100% 100%,0 100%,0 38%)}
@@ -950,12 +957,14 @@ function sqHead(i,sub){
   const s=BOARD[i], M=MBd(), g=M&&M.GROUPS[s.g], ic=M?M.iconFor(i):"";
   return `<div class="bg-sheet__grip" aria-hidden="true"></div><div class="mn-head mn-sqhead"${g?` style="--grp:${g.c}"`:""}><div class="mn-sqhead__row">${ic?`<span class="mn-sqhead__ic" aria-hidden="true">${M.icon(ic,44)}</span>`:""}<h2 class="bg-sheet__title" id="dlgTitle">${dispName(i)}</h2></div>${sub?`<p class="bg-sheet__sub">${sub}</p>`:""}</div>`;
 }
-function openDeed(i,fromManage,flip){
+function openDeed(i,fromManage,flip,back){
   const s=BOARD[i];
-  const opt={dismiss:fromManage?openManage:closeModal,kind:"deed"};   // Back (TV) / the scrim: back to Manage, or closed
+  // back = the deed a set view's lot name was tapped from (another owner's lot): Back / Close return to that deed
+  const backDeed=back!=null?()=>openDeed(back,fromManage):null;
+  const opt={dismiss:backDeed||(fromManage?openManage:closeModal),kind:"deed"};   // Back (TV) / the scrim: back to Manage, or closed
   ui.deedNav=null;
   if(!s.price){
-    let h=sqHead(i,spaceDesc(s));
+    let h=sqHead(i,spaceDesc(s))+hereHTML(i);
     if(s.t==="fp" && RULES.freeParkingJackpot){
       h+=`<p class="mn-note">Current pot <b class="mn-money">${money(G.fpPool)}</b></p>`;
     }
@@ -969,7 +978,7 @@ function openDeed(i,fromManage,flip){
   if(own<0) sub+=` · Unowned`;
   else { sub+=` · Owner ${dotc(G.players[own])}<b>${G.players[own].name}</b>`; if(G.mort[i]) sub+=` · <span class="mn-neg">mortgaged</span>`; if(s.t==="prop"&&G.houses[i]) sub+=` · ${G.houses[i]===5?"hotel":plural(G.houses[i],"house","houses")}`; }
   if(own>=0 && !G.mort[i]) sub+=`<br>Rent if landed on now: <b class="mn-money">${money(computeRent(i,own,1))}</b>`;
-  let h=sqHead(i,sub), acts="";
+  let h=sqHead(i,sub)+hereHTML(i), acts="";
   // step 10 (night-a): the owner moves through their own deeds in colour-set order (swipe, the arrows, Left / Right) and builds
   // from the set view; presentation only (the same buildHouse / sellHouse as the buttons below)
   const order=mine?deedOrder(v):[], at=order.indexOf(i);
@@ -985,7 +994,7 @@ function openDeed(i,fromManage,flip){
     if(!G.mort[i] && groupBare(i)) acts+=`<button type="button" class="bg-btn bg-btn--danger bg-btn--block" onclick="window.__dMort(${i})">Mortgage — +${money(s.mort)}</button>`;
     if(G.mort[i]) acts+=`<button type="button" class="bg-btn bg-btn--accent bg-btn--block" onclick="window.__dUnmort(${i})" ${v.cash<Math.ceil(s.mort*1.1)?"disabled":""}>Lift mortgage — ${money(Math.ceil(s.mort*1.1))}</button>`;
   }
-  acts+=`<button type="button" class="bg-btn bg-btn--secondary bg-btn--block" onclick="${fromManage?"window.__backManage()":"window.__close()"}">${fromManage?"Back":"Close"}</button>`;
+  acts+=`<button type="button" class="bg-btn bg-btn--secondary bg-btn--block" onclick="${backDeed?"window.__backDeed()":fromManage?"window.__backManage()":"window.__close()"}">${backDeed||fromManage?"Back":"Close"}</button>`;
   h+=`<div class="mn-acts">${acts}</div>`+deedCardHTML(i);   // the actions first, so they are on screen; the deed under them
   const grip='<div class="bg-sheet__grip" aria-hidden="true"></div>';
   if(mine) h=grip+`<div class="mn-dpane${flip?" is-in-"+(flip>0?"next":"prev"):""}">`+h.replace(grip,"")+`</div>`;   // the page that slides in on a flip
@@ -997,6 +1006,9 @@ function openDeed(i,fromManage,flip){
     $("modal").querySelectorAll(".mn-lot__add").forEach(b=>b.onclick=()=>{ const x=+b.dataset.lot; if(canBuildOn(v,x)&&v.cash>=BOARD[x].house) buildHouse(v,x); reopen(); after(b.id,".mn-lot__add"); });
     $("modal").querySelectorAll(".mn-lot__sub").forEach(b=>b.onclick=()=>{ const x=+b.dataset.lot; if(canSellHouse(v,x)) sellHouse(v,x); reopen(); after(b.id,".mn-lot__sub"); });
     const pv=$("deedPrev"), nx=$("deedNext"); if(pv) pv.onclick=()=>deedStep(-1); if(nx) nx.onclick=()=>deedStep(1);
+    // a lot name in the set view opens that lot's deed: one of mine flips to it, anyone else's opens with Back to this deed
+    $("modal").querySelectorAll(".mn-lot__link").forEach(b=>b.onclick=()=>{ const x=+b.dataset.deed; Sound.sfx("card");
+      if(G.owner[x]===v.id){ const o=deedOrder(v); openDeed(x,fromManage,o.indexOf(x)<o.indexOf(i)?-1:1); } else openDeed(x,fromManage,0,i); });
     if(flip&&ui.flipTo==="cur"){ const t=$("modal").querySelector(".mn-lot.is-cur .mn-lot__add:not([disabled])")||$("modal").querySelector("[data-autofocus]:not([disabled])"); if(t) focusEl(t); }
     ui.flipTo=null;
   }
@@ -1005,6 +1017,13 @@ function openDeed(i,fromManage,flip){
   window.__dMort=()=>{ mortgage(v,i); reopen(); };
   window.__dUnmort=()=>{ unmortgage(v,i); reopen(); };
   window.__backManage=openManage;
+  window.__backDeed=backDeed||closeModal;
+}
+// who stands on square i (8 pieces on one square are small on the phone board): a line in its sheet, piece + name, the jailed marked
+function hereHTML(i){
+  const ps=G.players.filter(p=>!p.bankrupt&&p.pos===i); if(!ps.length) return "";
+  const e=t=>String(t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  return `<p class="mn-here"><span class="mn-here__lab">Here now</span>`+ps.map(p=>`<span class="mn-here__p"><span class="bg-token" data-seat="${seatOf(p)}" aria-hidden="true">${tokV(p.token)}</span>${e(p.name)}${i===10?(p.jail?" (in jail)":" (visiting)"):""}</span>`).join("")+`</p>`;
 }
 
 // the viewer's deeds in colour-set order (brown to dark blue, each set in board order), then the railroads, then the utilities
@@ -1052,7 +1071,7 @@ function setViewHTML(p,i){
   L.forEach((x,k)=>{
     const hs=G.houses[x], why=buildWhy(p,x), canS=G.owner[x]===p.id&&hs>0&&canSellHouse(p,x), what=hs>=4?"Hotel":"House", nm=BOARD[x].n;
     let pips=""; if(hs===5) pips='<i class="mn-pip mn-pip--hotel"></i>'; else for(let q=0;q<hs;q++) pips+='<i class="mn-pip"></i>';
-    h+=`<div class="mn-lot${x===i?" is-cur":""}${G.owner[x]===p.id?"":" is-other"}"><span class="mn-lot__name">${shortName(x)}</span>`+
+    h+=`<div class="mn-lot${x===i?" is-cur":""}${G.owner[x]===p.id?"":" is-other"}">`+(x===i?`<span class="mn-lot__name">${shortName(x)}</span>`:`<button type="button" class="mn-lot__name mn-lot__link bg-focus" data-deed="${x}" aria-label="Open the deed: ${nm}${G.owner[x]>=0&&G.owner[x]!==p.id?", "+G.players[G.owner[x]].name+"'s":""}">${shortName(x)}</button>`)+
       `<span class="mn-lot__bld" aria-hidden="true">${pips||'<i class="mn-pip mn-pip--none"></i>'}</span>`+
       `<span class="mn-lot__count">${hs===5?"Hotel":hs?plural(hs,"house","houses"):"No houses"}${G.mort[x]?" · mortgaged":""}</span>`+
       `<button type="button" class="bg-btn bg-btn--primary mn-lot__add" id="setAdd${k}" data-lot="${x}"${why?" disabled":""}${x===i&&!why?" data-autofocus":""} aria-label="Build a ${what.toLowerCase()} on ${nm}, ${money(s.house)}">+ ${what}</button>`+
@@ -2025,7 +2044,7 @@ function openSetup(){
   $("modal").querySelectorAll(".mn-setup .bg-section > .bg-eyebrow, .mn-rulenote, #backHub").forEach(e=>e.setAttribute("data-stage-text",""));
   const drawTok=()=>{
     const hdr=$("tokHdr"), grid=$("tokGrid"), msg=$("tokMsg");
-    hdr.textContent = SETUP.humans>1 ? "Pick tokens (Player 1 = You)" : "Pick your token";
+    hdr.textContent = SETUP.humans>1 ? "Pick tokens (P1, P2 … in player order)" : "Pick your token";
     grid.innerHTML = TOKENS.map((t,i)=>{
       const slot=SETUP.humanTokens.indexOf(i);   // a picked piece takes its player's seat colour, P1, P2 ...
       return `<button type="button" class="tokbtn" data-t="${i}" aria-pressed="${slot>=0}"><span class="bg-token"${slot>=0?` data-seat="${SEATS[slot]}"`:""} aria-hidden="true">${tokV(t)}</span><span>${t.n}</span>${slot>=0?`<span class="pb">P${slot+1}</span>`:""}</button>`;
@@ -2196,7 +2215,7 @@ setInterval(()=>{
 if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
 
 // expose a few for inline handlers already set via window.__*
-window.__mono={get G(){ return G; },netWorth:netWorth,openPlayers:openPlayers,skill:()=>normSkill(SETUP&&SETUP.skill)};   // read-only view for the test harnesses (like __uno, __risk, __sc)
+window.__mono={get G(){ return G; },netWorth:netWorth,openPlayers:openPlayers,skill:()=>normSkill(SETUP&&SETUP.skill),deed:i=>openDeed(i),refresh:()=>{ if(G) refresh(); }};   // read-only view for the test harnesses (like __uno, __risk, __sc)
 })();
 </script>
 </body>
