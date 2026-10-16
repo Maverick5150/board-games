@@ -292,6 +292,7 @@
   html[data-tv] #rklog{grid-area:log; align-self:stretch; width:auto; min-height:0; overflow:hidden; margin-top:.5rem; text-align:left}
   html[data-tv] .rk-hints{grid-area:hints; align-self:end; justify-content:flex-start; width:auto; margin:0 0 .75rem}
   /* TV choice sheets sit over the right-hand column, beside the map; the windows (cards, players) are wider */
+  html.bg-fp-open #rkpanel{visibility:hidden}   /* step 10 review: the status and log say who goes first: hidden until the show ends */
   html[data-tv] #rkMove{top:5.25rem; left:auto; right:calc(var(--gutter) - .5rem); width:28rem; max-height:none; margin:0; padding-left:1.5rem; padding-right:1.5rem}   /* a full-height panel over the column */
   html[data-tv] #rkSheet{width:min(100%,52rem)}
   html[data-tv] .rk-cards .rkcard{width:8.5rem; height:12.25rem}
@@ -726,12 +727,33 @@ function startGame(){
   handoffOk=null; startUI(); clockOn();
   if(!res){ drive(); return; }
   const g=gen;
+  // the dice on the map stand far apart (step 10 review: they clustered on neighbouring territories): each player in turn takes the
+  // territory of theirs (any territory before the claim) farthest from the dice already placed, inside the part of the map the show's
+  // panel leaves free (a die under the panel is hidden by the show)
+  let pinAt=null;
+  const spreadPins=rt=>{
+    const all=MP.x.map((_,k)=>k), scr=k=>{ const v=board.viewPoint(k); return [rt.left+v[0]*rt.width,rt.top+v[1]*rt.height]; };
+    const lim=innerHeight*(onTV()?.6:.5), top=Math.max(rt.top,0)+24, left=Math.max(rt.left,0)+24, right=Math.min(rt.right,innerWidth)-24;
+    const ok=k=>{ const p=scr(k); return p[1]>=top&&p[1]<=Math.min(lim,rt.bottom-24)&&p[0]>=left&&p[0]<=right; };
+    const out=[], used=[];
+    for(let i=0;i<total;i++){
+      const own=G.terr.map((t,k)=>t.o===i?k:-1).filter(k=>k>=0), base=(own.length?own:all).filter(k=>used.indexOf(k)<0);
+      let cand=base.filter(ok); if(!cand.length) cand=base.length?base:all;
+      let best=cand[0], bd=-1;
+      cand.forEach(k=>{ const p=scr(k); let d;
+        if(out.length) d=Math.min(...out.map(q=>Math.hypot(p[0]-q[0],p[1]-q[1])));
+        else d=Math.abs(p[0]-(left+right)/2);   // the first die starts at one side of the map
+        if(d>bd){ bd=d; best=k; } });
+      used.push(best); out.push(scr(best));
+    }
+    return out;
+  };
   const pinTerr=i=>{ const own=G.terr.map((t,k)=>t.o===i?k:-1).filter(k=>k>=0); if(own.length) return own[Math.floor(own.length/2)]; const c=MP.continents[i%MP.continents.length]; return c.terrs[Math.floor(c.terrs.length/2)]; };
   setTimeout(()=>{ if(g!==gen) return;   // after showSetup(false): the map is on screen under the show
     fp({mode:"die",layout:"peek",title:"Roll for the first turn",rounds:res.rounds,winner:res.winner,
       players:G.players.slice(0,total).map((pl,i)=>({name:pl.name,seat:seatOfP(pl,i),token:tokenOfP(pl,i)})),
-      pins:i=>{ const rt=board&&board.root&&board.root.getBoundingClientRect(); if(!rt||!rt.width) return null; const v=board.viewPoint(pinTerr(i)); return {x:rt.left+v[0]*rt.width,y:rt.top+v[1]*rt.height}; },
-      onWinner:w=>{ if(!board||!board.flash) return; const own=G.terr.map((t,k)=>t.o===w?k:-1).filter(k=>k>=0); (own.length?own:[pinTerr(w)]).forEach(t=>board.flash(t,"win",2600)); },
+      pins:i=>{ const rt=board&&board.root&&board.root.getBoundingClientRect(); if(!rt||!rt.width) return null; if(!pinAt) pinAt=spreadPins(rt); const p=pinAt[i]; return p?{x:p[0],y:p[1]}:null; },
+      onWinner:w=>{ if(!board||!board.flash) return; const own=G.terr.map((t,k)=>t.o===w?k:-1).filter(k=>k>=0); (own.length?own:[pinTerr(w)]).forEach(t=>board.flash(t,"first",2700)); },
       result:w=>({title:G.players[w].name+" goes first",sub:"The highest roll places the first army and takes the first turn."})
     }).then(()=>{ if(g===gen&&G&&!G.over) drive(); });
   },0);
