@@ -300,7 +300,7 @@ html[data-tv] {
    Focus (keyboard + TV D-pad). One ring everywhere: dark gap + ivory ring + gold glow.
    It swaps instantly (never transitions); on TV focused controls also lift with a transform.
    ===================================================================== */
-.bg-focus, .bg-btn, .bg-version, .bg-seg > button, .bg-stepper__btn, .bg-row, .bg-toggle, .bg-select, .bg-sheet__option, .bg-tile, [data-focus] { scroll-margin: calc(var(--focus-room) + .5rem); }
+.bg-focus, .bg-btn, .bg-version, .bg-seg > button, .bg-stepper__btn, .bg-row, .bg-toggle, .bg-select, .bg-sheet__option, .bg-tile, .bg-input, [data-focus] { scroll-margin: calc(var(--focus-room) + .5rem); }
 .bg-focus:focus, .bg-btn:focus, .bg-version:focus, .bg-seg > button:focus, .bg-stepper__btn:focus, .bg-row:focus, .bg-toggle:focus, .bg-select:focus, .bg-sheet__option:focus, .bg-tile:focus { outline: none; }
 /* three separate rules: an old WebView that lacks :focus-visible or :has() must still get the .is-focus ring BGUI.focus sets */
 .bg-focus.is-focus, .bg-btn.is-focus, .bg-version.is-focus, .bg-seg > button.is-focus, .bg-stepper__btn.is-focus, .bg-row.is-focus, .bg-select.is-focus, .bg-sheet__option.is-focus { box-shadow: var(--focus-ring) !important; position: relative; z-index: 2; }
@@ -1011,3 +1011,107 @@ html[data-motion="reduce"] .bg-motifs > b { transition: none; }
 html[data-motion="reduce"] .bg-orbs > i, html[data-motion="reduce"] .bg-motifs > b, html[data-motion="reduce"] .bg-beams > i, html[data-motion="reduce"] .bg-halo > i, html[data-motion="reduce"] .bg-emblem.is-glint::after, html[data-motion="reduce"] .bg-player.is-pulse .bg-token::after,
 html[data-motion="reduce"] .bg-win__rays, html[data-motion="reduce"] .bg-win__wheel, html[data-motion="reduce"] .bg-win__card, html[data-motion="reduce"] .bg-die.is-rolling { animation: none !important; }
 html[data-motion="reduce"] .bg-win__confetti, html[data-motion="reduce"] .bg-celebrate { display: none !important; }
+
+/* =====================================================================
+   Step 10 shared player features (BG_audit/SHARED-UX.md): name fields (BGUI.names.mount) and the who-goes-first show
+   (BGUI.firstPlayer). Transform / opacity only, every animation one shot; Reduce effects / reduced motion: no burst, no motion.
+   ===================================================================== */
+.bg-names { display: grid; gap: .75rem; }
+.bg-name { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: end; column-gap: .75rem; row-gap: .5rem; min-width: 0; }
+.bg-name[hidden] { display: none; }
+.bg-name__tok.bg-token { width: 2.25rem; height: 2.25rem; margin-bottom: .25rem; font-size: var(--fs-sm); }
+.bg-name__body { display: grid; gap: .3rem; min-width: 0; }
+.bg-name__lab { font: var(--fw-ui-strong) var(--fs-xs)/1.2 var(--font-ui); color: var(--text-2); }
+.bg-name > :nth-child(n+3) { grid-column: 1 / -1; min-width: 0; }   /* a game's extra (the Sorry! colour picker) runs under the field */
+.bg-input { display: block; width: 100%; min-width: 0; min-height: var(--tap); margin: 0; padding: 0 .875rem; border: 0; border-radius: var(--r-md);
+  font: var(--fw-ui-strong) var(--fs-lg)/1.2 var(--font-ui); color: var(--text-1); background: var(--ink-2); box-shadow: var(--well-edge), inset 0 0 0 1px var(--line-2);
+  -webkit-appearance: none; appearance: none; }
+.bg-input::placeholder { color: var(--text-2); opacity: 1; }
+.bg-input:focus { outline: none; }
+.bg-input:focus-visible, .bg-input.is-focus { box-shadow: var(--focus-ring) !important; position: relative; z-index: 2; }
+.bg-names-note { margin: 0 0 .75rem; font: var(--fw-body) var(--fs-xs)/1.35 var(--font-ui); color: var(--text-2); }
+html[data-tv] .bg-names { gap: 1.5rem; }
+html[data-tv] .bg-names-note { margin-bottom: 1rem; }
+html[data-tv] .bg-name__tok.bg-token { width: 2.5rem; height: 2.5rem; }
+
+.bg-fp { position: fixed; inset: 0; z-index: var(--z-overlay); display: grid; place-items: center; overflow: hidden;
+  padding: calc(env(safe-area-inset-top, 0px) + 1rem) var(--gutter) calc(env(safe-area-inset-bottom, 0px) + 1rem);
+  background: radial-gradient(ellipse at 50% 45%, rgba(8, 10, 21, .66), rgba(5, 6, 14, .92)); opacity: 0; transition: opacity var(--dur-slow) var(--ease-out);
+  cursor: pointer; outline: none; -webkit-tap-highlight-color: transparent; color: var(--text-1); }
+.bg-fp.is-open { opacity: 1; }
+.bg-fp--peek { place-items: end center; background: linear-gradient(180deg, rgba(5, 6, 14, 0) 35%, rgba(5, 6, 14, .85) 100%); }
+.bg-fp__panel { position: relative; display: grid; justify-items: center; gap: .75rem; width: min(100%, 44rem); max-height: 100%; overflow: hidden auto; padding: 1.25rem 1rem 1rem;
+  border-radius: var(--r-xl); text-align: center; background: var(--panel-fill); box-shadow: var(--panel-edge), 0 24px 60px rgba(0, 0, 0, .55); }
+.bg-fp--peek .bg-fp__panel { width: min(100%, 52rem); gap: .5rem; padding: .875rem 1rem .75rem; }
+.bg-fp__eyebrow { color: var(--gold-200); }
+.bg-fp__title { margin: 0; font: 400 var(--fs-2xl)/1.1 var(--font-display); color: var(--text-1); }
+.bg-fp__title:empty { display: none; }
+.bg-fp__lanes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr)); gap: .75rem; width: 100%; padding: .5rem; }
+.bg-fp--many .bg-fp__lanes { grid-template-columns: repeat(auto-fit, minmax(min(100%, 7rem), 1fr)); gap: .5rem; }
+.bg-fp__lane { position: relative; isolation: isolate; display: grid; justify-items: center; align-content: start; gap: .5rem; min-width: 0; padding: .75rem .5rem .625rem;
+  border-radius: var(--r-lg); background: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line-2); transition: opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out); }
+.bg-fp__lane.is-out, .bg-fp__lane.is-dim { opacity: .45; }
+.bg-fp__lane.is-tie { box-shadow: inset 0 0 0 2px var(--gold-300); }
+.bg-fp__lane.is-lit { box-shadow: inset 0 0 0 3px var(--seat), 0 0 1.25rem rgba(255, 228, 160, .35); }
+.bg-fp__lane.is-win { z-index: 1; transform: scale(1.06); box-shadow: inset 0 0 0 2px var(--gold-200), 0 0 2rem .25rem rgba(255, 214, 120, .45); }
+.bg-fp__spot { position: absolute; inset: -35% -15%; z-index: -1; border-radius: 50%; background: radial-gradient(closest-side, rgba(255, 228, 160, .3), rgba(255, 228, 160, 0));
+  opacity: 0; transition: opacity var(--dur-slow) var(--ease-out); pointer-events: none; }
+.bg-fp__lane.is-win .bg-fp__spot { opacity: 1; }
+.bg-fp__burst { position: absolute; left: 50%; top: 2.1rem; z-index: -1; width: 13rem; height: 13rem; margin: -6.5rem 0 0 -6.5rem; border-radius: 50%; opacity: 0; pointer-events: none;
+  background: repeating-conic-gradient(from 0deg, rgba(249, 235, 198, 0) 0deg 9deg, rgba(249, 235, 198, .6) 9deg 12deg, rgba(249, 235, 198, 0) 12deg 18deg);
+  -webkit-mask-image: radial-gradient(closest-side, #000 25%, rgba(0, 0, 0, 0) 100%); mask-image: radial-gradient(closest-side, #000 25%, rgba(0, 0, 0, 0) 100%); }
+.bg-fp__burst.is-go { animation: bg-fp-burst 1200ms var(--ease-out) 1 both; }
+@keyframes bg-fp-burst { 0% { opacity: 0; transform: scale(.3) rotate(0deg); } 30% { opacity: 1; } 100% { opacity: 0; transform: scale(1.3) rotate(30deg); } }
+.bg-fp__who { display: grid; justify-items: center; gap: .35rem; min-width: 0; max-width: 100%; }
+.bg-fp__tok { display: block; }
+.bg-fp__tok .bg-token { width: 2.75rem; height: 2.75rem; font-size: var(--fs-md); }
+.bg-fp__tok.is-jump { animation: bg-fp-jump 480ms var(--ease-out) 1; }
+@keyframes bg-fp-jump { 0%, 100% { transform: none; } 40% { transform: translateY(-.9rem) scale(1.08); } 72% { transform: translateY(.1rem) scale(.97); } }
+.bg-fp__name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--fw-ui-strong) var(--fs-md)/1.25 var(--font-ui); color: var(--text-1); }
+.bg-fp__lane.is-win .bg-fp__name { color: var(--gold-100); }
+.bg-fp__slot { display: flex; align-items: center; justify-content: center; gap: .4rem; min-height: 2.75rem; }
+.bg-fp__slot .bg-die { width: 2.75rem; height: 2.75rem; }
+.bg-fp__val { min-height: 1.25em; font: var(--fw-caps) var(--fs-sm)/1.25 var(--font-ui); color: var(--gold-200); letter-spacing: .02em; }
+.bg-fp__card { display: block; width: 3.6rem; height: 5rem; perspective: 40rem; opacity: 0; transform: translateY(-1.25rem); transition: opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out); }
+.bg-fp__lane.is-in .bg-fp__card { opacity: 1; transform: none; }
+.bg-fp__flip { position: relative; display: block; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform 440ms var(--ease-out); }
+.bg-fp__lane.is-up .bg-fp__flip { transform: rotateY(180deg); }
+.bg-fp__back, .bg-fp__face { position: absolute; inset: 0; display: grid; place-items: center; overflow: hidden; border-radius: .5rem; -webkit-backface-visibility: hidden; backface-visibility: hidden; }
+.bg-fp__back { background: linear-gradient(160deg, #26336f, #111838); box-shadow: inset 0 0 0 2px var(--gold-300), inset 0 0 0 5px #111838, inset 0 0 0 6px rgba(231, 202, 144, .55), 0 6px 14px rgba(0, 0, 0, .45); }
+.bg-fp__back > i { display: block; width: 1.4rem; height: 1.4rem; border-radius: .2rem; background: var(--gold-fill); transform: rotate(45deg); }
+.bg-fp__face { transform: rotateY(180deg); color: #1d1a2a; background: #f6f1e7; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .2), 0 6px 14px rgba(0, 0, 0, .45); }
+.bg-fp__num { font: 400 2rem/1 var(--font-display); }
+.bg-fp__die { display: grid; place-items: center; width: 5rem; height: 5rem; border-radius: 22%; background: linear-gradient(160deg, #fcf5e3, #e7ca90); box-shadow: inset 0 -4px 8px rgba(0, 0, 0, .25), 0 8px 20px rgba(0, 0, 0, .5); }
+.bg-fp__letter { font: 400 3rem/1 var(--font-display); color: #1c1407; }
+.bg-fp__die.is-spin { animation: bg-fp-spin 240ms var(--ease-out) 1; }
+@keyframes bg-fp-spin { 0% { transform: rotate(-26deg) scale(.9); } 100% { transform: none; } }
+.bg-fp.is-final .bg-fp__die { box-shadow: inset 0 -4px 8px rgba(0, 0, 0, .25), 0 0 0 3px var(--gold-200), 0 0 2rem .5rem rgba(255, 214, 120, .5); }
+.bg-fp__res { display: grid; gap: .2rem; min-height: 3.25rem; }
+.bg-fp__rt { font: 400 var(--fs-2xl)/1.15 var(--font-display); color: var(--gold-100); }
+.bg-fp__rs { font: var(--fw-ui) var(--fs-sm)/1.3 var(--font-ui); color: var(--text-2); }
+.bg-fp__skip { font: var(--fw-ui) var(--fs-xs)/1.2 var(--font-ui); color: var(--text-2); }
+.bg-fp__pin { position: absolute; z-index: 1; width: 2.5rem; height: 2.5rem; margin: -1.25rem 0 0 -1.25rem; box-shadow: 0 0 0 3px var(--seat), 0 6px 14px rgba(0, 0, 0, .55); }
+.bg-fp--spin .bg-fp__slot, .bg-fp--spin .bg-fp__val { display: none; }
+.bg-fp--spin .bg-fp__lane { padding-bottom: .75rem; }
+/* peek (the board stays in view, e.g. the Risk map): no title, each lane one row (token, name, die, value) */
+.bg-fp--peek .bg-fp__title { display: none; }
+.bg-fp--peek .bg-fp__panel { overflow: hidden; }   /* the winner glow stays inside; a peek panel holds one or two rows */
+.bg-fp--peek .bg-fp__lanes { grid-template-columns: repeat(auto-fit, minmax(min(100%, 10.5rem), 1fr)); padding: .25rem .5rem; }
+.bg-fp--peek .bg-fp__lane { display: flex; align-items: center; justify-content: center; gap: .625rem; padding: .5rem .75rem; }
+.bg-fp--peek .bg-fp__who { display: flex; align-items: center; gap: .5rem; }
+.bg-fp--peek .bg-fp__tok .bg-token { width: 2.25rem; height: 2.25rem; }
+.bg-fp--peek .bg-fp__burst { top: 50%; }
+.bg-fp--peek .bg-fp__res { min-height: 0; }
+html[data-tv] .bg-fp__panel { width: min(100%, 60rem); gap: 1rem; padding: 1.75rem 1.75rem 1.25rem; }
+html[data-tv] .bg-fp--peek .bg-fp__panel { width: min(100%, 66rem); gap: .625rem; padding: 1rem 1.5rem .875rem; }
+html[data-tv] .bg-fp__lanes { grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: 1rem; }
+html[data-tv] .bg-fp__slot .bg-die { width: 3.25rem; height: 3.25rem; }
+html[data-tv] .bg-fp__card { width: 4.4rem; height: 6.1rem; }
+html[data-effects="reduced"] .bg-fp__burst, html[data-motion="reduce"] .bg-fp__burst { display: none; }
+html[data-effects="reduced"] .bg-fp__tok.is-jump, html[data-effects="reduced"] .bg-fp__die.is-spin, html[data-motion="reduce"] .bg-fp__tok.is-jump, html[data-motion="reduce"] .bg-fp__die.is-spin { animation: none; }
+html[data-effects="reduced"] .bg-fp__flip, html[data-motion="reduce"] .bg-fp__flip, html[data-effects="reduced"] .bg-fp__card, html[data-motion="reduce"] .bg-fp__card { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .bg-fp__burst { display: none; }
+  .bg-fp__tok.is-jump, .bg-fp__die.is-spin { animation: none; }
+  .bg-fp__flip, .bg-fp__card { transition: none; }
+}

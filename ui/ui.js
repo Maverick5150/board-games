@@ -43,7 +43,10 @@
    BGUI.setTV(on) / isTV()           html[data-tv]; auto for ?tv=1 and window.AndroidTV
    BGUI.mount.*                      seg, stepper, toggle, versions, players, emblem, orbs, effectsRow (the "Reduce effects" switch
                                      row), auto (declarative data-bg-mount)
-   BGUI.icon(name)                   from ui/icons.js (optional) */
+   BGUI.icon(name)                   from ui/icons.js (optional)
+   BGUI.names                        player names: one device-wide name ("bg_player_name") + hot-seat names, the fields, the computers' names
+   BGUI.hop(el, {ms, lift})          one visible hop (a lift on a plain wrapper) per space a piece passes
+   BGUI.firstPlayer(opts)            the who-goes-first show (dice, die on the map, card, cut, flip, spin); .resolve runs the rule */
 (function (w, d) {
   "use strict";
   if (!w || !d) return;
@@ -1222,6 +1225,7 @@
   }
   function backStep(src) {
     var S = w.Sound;
+    if (fpS) { fpSkip(); return "first"; }   // the who-goes-first show: Back skips it (a second Back closes it)
     if (S && typeof S.panelOpen === "function" && S.panelOpen()) { try { S.closePanel(); } catch (e) { } return "panel"; }
     if (stack.length) {
       var top = stack[stack.length - 1];
@@ -1685,8 +1689,329 @@
     }
   };
 
+  /* ---------------- player names (step 10; BG_audit/SHARED-UX.md) ----------------
+     ONE device-wide name for the first human ("bg_player_name", every game) and the hot-seat names 2..n ("bg_player_names",
+     an array indexed by seat, slot 0 unused). Cleaned: no control characters or < >, single spaces, at most 16 characters.
+     names.mount(host, {count, seat(i), token(i, value), label(i, count), extra(i, row), onChange(values)}) draws the fields;
+     names.list(humans, raw) gives the names a game uses (raw = the fields; an empty field = "You" for a lone human, "Player n" in
+     hot-seat; a duplicate gets its seat number); names.cpu(n, humanNames) draws the computers' names from names.js, never one of the
+     humans' (nor "You"). */
+  var NAME_KEY = "bg_player_name", NAMES_KEY = "bg_player_names", NAME_MAX = 16;
+  function nmClean(v) { return String(v == null ? "" : v).replace(/[\u0000-\u001f\u007f<>]/g, "").replace(/\s+/g, " ").trim().slice(0, NAME_MAX).trim(); }
+  function nmArr() { try { var a = JSON.parse(w.localStorage.getItem(NAMES_KEY) || "[]"); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+  function nmGet(i) {
+    i = +i || 0;
+    try { return i === 0 ? nmClean(w.localStorage.getItem(NAME_KEY)) : nmClean(nmArr()[i]); } catch (e) { return ""; }
+  }
+  function nmSet(i, v) {
+    i = +i || 0; v = nmClean(v);
+    try {
+      if (i === 0) { if (v) w.localStorage.setItem(NAME_KEY, v); else w.localStorage.removeItem(NAME_KEY); }
+      else { var a = nmArr(); a[0] = null; a[i] = v || null; w.localStorage.setItem(NAMES_KEY, JSON.stringify(a)); }
+    } catch (e) { }
+    return v;
+  }
+  function nmDefault(i, humans) { return (humans || 1) <= 1 && !i ? "You" : "Player " + ((+i || 0) + 1); }
+  function nmList(humans, raw) {
+    var out = [], seen = {};
+    for (var i = 0; i < humans; i++) {
+      var v = raw ? nmClean(raw[i]) : nmGet(i);
+      if (!v) v = nmDefault(i, humans);
+      var k = v.toLowerCase();
+      if (seen[k]) { v = nmClean(v.slice(0, NAME_MAX - 3)) + " " + (i + 1); k = v.toLowerCase(); }
+      seen[k] = 1; out.push(v);
+    }
+    return out;
+  }
+  function nmCpu(n, humanNames) {
+    var ex = (humanNames || []).concat(["You"]), a = [];
+    try { if (w.Names && w.Names.pick && n > 0) a = w.Names.pick(n, ex) || []; } catch (e) { a = []; }
+    for (var i = a.length; i < n; i++) a.push("CPU " + (i + 1));
+    return a.slice(0, n);
+  }
+  function nmInitial(v) { v = nmClean(v); return v ? v.charAt(0).toUpperCase() : "?"; }
+  var nmSeq = 0;
+  function nmMount(target, opts) {
+    var host = $(target); opts = opts || {};
+    if (!host) return null;
+    var box = d.createElement("div"); box.className = "bg-names"; host.appendChild(box);
+    var count = 0, rows = [];
+    function label(i) { return opts.label ? opts.label(i, count) : (i === 0 ? (count > 1 ? "Player 1 name" : "Your name") : "Player " + (i + 1) + " name"); }
+    function values() { return rows.slice(0, count).map(function (r) { return r.inp.value; }); }
+    function changed() { if (opts.onChange) { try { opts.onChange(values()); } catch (e) { setTimeout(function () { throw e; }); } } }
+    function row(i) {
+      var r = d.createElement("div"), id = "bgName" + (++nmSeq);
+      r.className = "bg-name";
+      r.innerHTML = "<span class=\"bg-token bg-name__tok\" aria-hidden=\"true\"></span><span class=\"bg-name__body\"><label class=\"bg-name__lab\" for=\"" + id + "\"></label>" +
+        "<input class=\"bg-input\" id=\"" + id + "\" type=\"text\" maxlength=\"" + NAME_MAX + "\" autocomplete=\"off\" autocapitalize=\"words\" spellcheck=\"false\" enterkeyhint=\"done\" data-name-index=\"" + i + "\"></span>";
+      var rec = { el: r, inp: r.querySelector("input"), tok: r.querySelector(".bg-name__tok"), lab: r.querySelector("label") };
+      rec.inp.value = nmGet(i);
+      rec.inp.addEventListener("input", function () { nmSet(i, rec.inp.value); paint(i); changed(); });
+      rec.inp.addEventListener("change", function () { var v = nmClean(rec.inp.value); if (v !== rec.inp.value) rec.inp.value = v; nmSet(i, v); paint(i); changed(); });
+      rec.inp.addEventListener("keydown", function (e) { if ((e.key === "Enter" || e.keyCode === 13) && editing === rec.inp) { e.preventDefault(); editing = null; } else if ((e.key === "Enter" || e.keyCode === 13) && !focusOn) { try { rec.inp.blur(); } catch (x) { } } });   // OK while typing = Done: the D-pad moves on again (the first OK is BGUI.focus: typing starts)
+      if (opts.extra) { try { var x = opts.extra(i, r); if (x && x.nodeType) r.appendChild(x); else if (typeof x === "string" && x) r.insertAdjacentHTML("beforeend", x); } catch (e) { setTimeout(function () { throw e; }); } }
+      return rec;
+    }
+    function paint(i) {
+      var rec = rows[i]; if (!rec) return;
+      var seat = opts.seat ? opts.seat(i) : i + 1;
+      rec.el.setAttribute("data-seat", String(seat)); rec.tok.setAttribute("data-seat", String(seat));
+      rec.tok.textContent = opts.token ? opts.token(i, rec.inp.value) : nmInitial(rec.inp.value || nmDefault(i, count));
+      rec.lab.textContent = label(i);
+      rec.inp.placeholder = nmDefault(i, count);
+    }
+    var api = {
+      el: box,
+      count: function (n) {
+        count = clamp(+n || 1, 1, 12);
+        while (rows.length < count) { var rec = row(rows.length); rows.push(rec); box.appendChild(rec.el); }
+        rows.forEach(function (r, i) { r.el.hidden = i >= count; paint(i); });
+        return api;
+      },
+      values: values,
+      names: function () { return nmList(count, values()); },
+      input: function (i) { return rows[i] ? rows[i].inp : null; },
+      row: function (i) { return rows[i] ? rows[i].el : null; },
+      refresh: function () { rows.forEach(function (r, i) { paint(i); }); return api; }
+    };
+    api.count(opts.count || 1);
+    return api;
+  }
+  var names = { key: NAME_KEY, listKey: NAMES_KEY, max: NAME_MAX, clean: nmClean, get: nmGet, set: nmSet, fallback: nmDefault, list: nmList, cpu: nmCpu, initial: nmInitial, mount: nmMount };
+
+  /* ---------------- hop: one visible hop per space (step 10, the CEO's step-by-step rule) ----------------
+     BGUI.hop(el, {ms, lift, unit}) lifts a PLAIN wrapper and sets it down again (Web Animations, transform only, one shot). The
+     game moves the piece one space per hop; under Reduce effects or reduced motion there is no lift (it still steps space by space). */
+  function hop(target, opts) {
+    var el = $(target); opts = opts || {};
+    if (!el || reducedMotion() || fxLevel === "reduced" || d.hidden || typeof el.animate !== "function") return null;
+    var lift = opts.lift == null ? 6 : opts.lift, u = opts.unit || "px";
+    try {
+      return el.animate([{ transform: "translateY(0)" }, { transform: "translateY(" + (-lift) + u + ")", offset: 0.45 }, { transform: "translateY(0)" }],
+        { duration: Math.max(80, opts.ms || 180), easing: "ease-out" });
+    } catch (e) { return null; }
+  }
+
+  /* ---------------- who goes first (step 10; BG_audit/SHARED-UX.md) ----------------
+     BGUI.firstPlayer.resolve(n, draw, {rank, who, maxRounds}) runs the game's official rule: draw(i, round) gives player i's value,
+     the highest rank wins and a tie draws again among the tied players only. Returns {winner, rounds:[{who, vals, top}]}.
+     BGUI.firstPlayer(opts) plays the show of that result and resolves {winner, skipped} when it closes:
+       mode "dice" (dice: 2, gold: true: Monopoly), "die" (Risk; pins put a die on the map), "card" (Uno: face down, then flip),
+       "cut" (Rummy), "flip" (Sorry!), "spin" (Scattergories: the letter die spins and lands on a player; letter = its last face);
+       players [{name, seat, token, tokenHTML (trusted markup, e.g. a Monopoly piece)}], rounds + winner (from resolve), face(v, i) -> HTML of a card face, back -> HTML of a card back,
+       label(v, i) -> the line under a card, title, eyebrow, result {title, sub} (or a function of the winner), pins(i) -> {x, y}
+       viewport point, onLand(i, v, round), onWinner(w), layout "center" | "peek" (the board stays in view), focus (element or
+       function: the main action to focus when it closes).
+     Pace: x Game speed (window.bgGameSpeed). A tap, OK/Enter/Space or Back skips to the result; a second one closes it. Reduce
+     effects or reduced motion: the short version (the values at once, the spotlight without the burst). */
+  var fpS = null;
+  function fpFactor() { return ({ slow: 1.75, fast: 0.5 })[w.bgGameSpeed] || 1; }
+  function fpShort() { return reducedMotion() || fxLevel === "reduced"; }
+  function fpDice(o) { return o.mode === "dice" || o.mode === "die"; }
+  function fpSfx(name) { try { if (w.Sound && typeof w.Sound.sfx === "function") w.Sound.sfx(name); } catch (e) { } }
+  function fpResolve(n, draw, opts) {
+    opts = opts || {};
+    var list = opts.who ? opts.who.slice() : [], rounds = [], i, rank = opts.rank || function (v) { return +v || 0; };
+    if (!opts.who) for (i = 0; i < n; i++) list.push(i);
+    for (var r = 0; r < (opts.maxRounds || 8); r++) {
+      var vals = {}, best = -Infinity, top = [];
+      for (i = 0; i < list.length; i++) {
+        var p = list[i], v = draw(p, r), k = rank(v, p);
+        vals[p] = v;
+        if (k > best) { best = k; top = [p]; } else if (k === best) top.push(p);
+      }
+      rounds.push({ who: list.slice(), vals: vals, top: top.slice() });
+      if (top.length === 1) return { winner: top[0], rounds: rounds };
+      list = top;
+    }
+    return { winner: list[0], rounds: rounds };
+  }
+  function fpLater(f, ms) { if (!fpS) return; var s = fpS; s.timers.push(setTimeout(function () { if (fpS === s) f(); }, Math.max(0, Math.round(ms)))); }
+  function fpTotal(v) { return Array.isArray(v) ? v.reduce(function (a, b) { return a + b; }, 0) : v; }
+  function fpLane(o, i) {
+    var p = o.players[i] || {}, lane = d.createElement("div"), seat = p.seat || i + 1, slot;
+    lane.className = "bg-fp__lane"; lane.setAttribute("data-seat", String(seat));
+    lane.innerHTML = "<span class=\"bg-fp__spot\" aria-hidden=\"true\"></span><span class=\"bg-fp__burst\" aria-hidden=\"true\"></span>" +
+      "<span class=\"bg-fp__who\"><span class=\"bg-fp__tok\"><span class=\"bg-token\" data-seat=\"" + seat + "\">" + (p.tokenHTML || esc(p.token || nmInitial(p.name))) + "</span></span>" +
+      "<span class=\"bg-fp__name\">" + esc(p.name || "Player " + (i + 1)) + "</span></span><span class=\"bg-fp__slot\"></span><span class=\"bg-fp__val\" aria-hidden=\"true\"></span>";
+    slot = lane.querySelector(".bg-fp__slot");
+    if (fpDice(o)) {
+      var n = o.mode === "dice" ? (o.dice || 2) : 1;
+      for (var k = 0; k < n; k++) { var dd = d.createElement("span"); dd.className = "bg-die" + (o.gold ? " bg-die--gold" : ""); slot.appendChild(dd); dieRender(dd, 1 + ((i + k * 3) % 6)); }
+    } else if (o.mode !== "spin") {
+      slot.innerHTML = "<span class=\"bg-fp__card\"><span class=\"bg-fp__flip\"><span class=\"bg-fp__back\">" + (o.back || "<i></i>") + "</span><span class=\"bg-fp__face\"></span></span></span>";
+    }
+    return lane;
+  }
+  function fpSet(s, i, v, anim) {
+    var lane = s.lanes[i]; if (!lane) return;
+    var o = s.o, val = lane.querySelector(".bg-fp__val");
+    lane.classList.add("is-in");
+    if (fpDice(o)) {
+      var dv = Array.isArray(v) ? v : [v], dice = lane.querySelectorAll(".bg-fp__slot .bg-die"), ms = 640 * fpFactor();
+      for (var k = 0; k < dice.length; k++) { if (anim) dieRoll(dice[k], dv[k], { ms: ms, haptic: k === 0 }); else dieRender(dice[k], dv[k]); }
+      var pin = s.pins[i]; if (pin) { if (anim) dieRoll(pin, dv[0], { ms: ms, haptic: false }); else dieRender(pin, dv[0]); }
+      if (anim && dice.length > 1) { val.textContent = ""; setTimeout(function () { if (!s.closed) val.textContent = "= " + fpTotal(v); }, ms); }
+      else val.textContent = dice.length > 1 ? "= " + fpTotal(v) : "";
+    } else if (o.mode !== "spin") {
+      var face = "";
+      try { face = o.face ? o.face(v, i) : "<b class=\"bg-fp__num\">" + esc(v) + "</b>"; } catch (e) { face = esc(v); }
+      lane.querySelector(".bg-fp__face").innerHTML = face;
+      lane.classList.add("is-up");
+      try { val.textContent = o.label ? o.label(v, i) : ""; } catch (e) { val.textContent = ""; }
+    }
+  }
+  function fpJump(lane) {
+    var t = lane && lane.querySelector(".bg-fp__tok"); if (!t || fpShort()) return;
+    t.classList.remove("is-jump"); void t.offsetWidth; t.classList.add("is-jump");
+  }
+  function fpText(s, title, sub) {
+    s.res.querySelector(".bg-fp__rt").textContent = title || "";
+    s.res.querySelector(".bg-fp__rs").textContent = sub || "";
+  }
+  function fpRound(s, r) {
+    var o = s.o, f = fpFactor(), R = o.rounds[r], dice = fpDice(o);
+    if (!R) { fpFinal(s); return; }
+    s.lanes.forEach(function (lane, i) {
+      var inR = R.who.indexOf(i) >= 0;
+      lane.classList.toggle("is-out", !inR);
+      if (inR && r > 0) { lane.classList.remove("is-up", "is-tie"); lane.querySelector(".bg-fp__val").textContent = ""; }
+    });
+    fpText(s, "", "");
+    var t = 0, step = (dice ? 420 : 320) * f;
+    if (!dice) {   // the cards come face down first, then turn over one by one
+      R.who.forEach(function (i, k) { fpLater(function () { s.lanes[i].classList.add("is-in"); fpSfx("card"); }, k * 110 * f); });
+      t = R.who.length * 110 * f + 420 * f;
+    } else R.who.forEach(function (i) { s.lanes[i].classList.add("is-in"); });
+    R.who.forEach(function (i, k) {
+      fpLater(function () {
+        fpSet(s, i, R.vals[i], true);
+        fpLater(function () { fpJump(s.lanes[i]); if (o.onLand) { try { o.onLand(i, R.vals[i], r); } catch (e) { } } }, (dice ? 660 : 360) * f);
+      }, t + k * step);
+    });
+    var end = t + (R.who.length - 1) * step + (dice ? 1100 : 820) * f;
+    fpLater(function () {
+      if (R.top.length > 1 && o.rounds[r + 1]) {
+        R.top.forEach(function (i) { s.lanes[i].classList.add("is-tie"); });
+        fpText(s, dice ? "Tie! Roll again" : "Tie! Draw again", R.top.map(function (i) { return (o.players[i] || {}).name; }).join(" and ") + " tie for the top");
+        fpLater(function () { fpRound(s, r + 1); }, 1300 * f);
+      } else fpFinal(s);
+    }, end);
+  }
+  function fpSpin(s) {
+    var o = s.o, f = fpFactor(), n = s.lanes.length, at = Math.floor(Math.random() * n), steps = 2 * n + ((o.winner - at + 2 * n) % n), t = 0;
+    var die = s.box.querySelector(".bg-fp__letter"), L = "ABCDEFGHIJKLMNOPRSTW";
+    function hit(k) {
+      s.lanes.forEach(function (lane, i) { lane.classList.toggle("is-lit", i === k); });
+      if (die) die.textContent = L.charAt(Math.floor(Math.random() * L.length));
+      var spin = s.box.querySelector(".bg-fp__die"); if (spin) { spin.classList.remove("is-spin"); void spin.offsetWidth; spin.classList.add("is-spin"); }
+      fpSfx("tick");
+    }
+    s.lanes.forEach(function (lane) { lane.classList.add("is-in"); });
+    for (var k = 0; k <= steps; k++) {
+      t += (70 + 270 * Math.pow(k / Math.max(1, steps), 2.2)) * f;
+      (function (k) { fpLater(function () { hit((at + k) % n); }, t); })(k);
+    }
+    fpLater(function () { fpFinal(s); }, t + 480 * f);
+  }
+  function fpFinal(s) {
+    if (s.final) return;
+    s.final = true;
+    var o = s.o, wi = o.winner;
+    s.timers.forEach(clearTimeout); s.timers = [];
+    s.lanes.forEach(function (lane, i) {
+      lane.classList.add("is-in"); lane.classList.remove("is-out", "is-tie", "is-lit");
+      if (o.mode !== "spin") {   // every lane shows its last value
+        var v; for (var r = (o.rounds || []).length - 1; r >= 0; r--) if (o.rounds[r].who.indexOf(i) >= 0) { v = o.rounds[r].vals[i]; break; }
+        if (v !== undefined) fpSet(s, i, v, false);
+        var hist = (o.rounds || []).filter(function (R) { return R.who.indexOf(i) >= 0; }), val = lane.querySelector(".bg-fp__val");
+        if (hist.length > 1 && val) {   // a tie-break: the lane says every value it drew, so the winner never looks lower than a loser
+          val.textContent = fpDice(o) ? "= " + hist.map(function (R) { return fpTotal(R.vals[i]); }).join(", then ") : "Tie-break draw";
+        }
+      }
+      lane.classList.toggle("is-win", i === wi); lane.classList.toggle("is-dim", i !== wi);
+    });
+    if (o.mode === "spin") { var die = s.box.querySelector(".bg-fp__letter"); if (die) die.textContent = o.letter || nmInitial((o.players[wi] || {}).name); }
+    var p = o.players[wi] || {}, res = typeof o.result === "function" ? o.result(wi) : o.result;
+    res = res || {};
+    s.box.setAttribute("data-seat", String(p.seat || wi + 1));
+    fpText(s, res.title || (p.name || "Player " + (wi + 1)) + " goes first", res.sub || "");
+    s.box.classList.add("is-final");
+    if (!fpShort()) { var b = s.lanes[wi] && s.lanes[wi].querySelector(".bg-fp__burst"); if (b) { b.classList.remove("is-go"); void b.offsetWidth; b.classList.add("is-go"); } }
+    fpJump(s.lanes[wi]); haptic("success"); fpSfx("win");
+    if (o.onWinner) { try { o.onWinner(wi); } catch (e) { setTimeout(function () { throw e; }); } }
+    var hold = s.skipped ? 1000 : (fpShort() ? 1600 : 2100) * fpFactor();
+    fpLater(function () { fpClose(s); }, hold);
+  }
+  function fpClose(s) {
+    if (!s || s.closed) return;
+    s.closed = true; s.timers.forEach(clearTimeout); s.timers = [];
+    if (fpS === s) fpS = null;
+    root.classList.remove("bg-fp-open");
+    s.box.classList.remove("is-open");
+    setTimeout(function () { if (s.box.parentNode) s.box.parentNode.removeChild(s.box); }, fpShort() ? 0 : 240);
+    var f = s.o.focus; try { f = typeof f === "function" ? f() : $(f); } catch (e) { f = null; }
+    if (f && isVisible(f)) { if (focusOn) setFocus(f); else focusEl(f); }
+    else if (s.prev && s.prev !== d.body && connected(s.prev) && isVisible(s.prev)) focusEl(s.prev);
+    else { try { s.box.blur(); } catch (e) { } }
+    emit("firstplayer", { open: false, winner: s.o.winner, skipped: !!s.skipped });
+    if (s.res0) s.res0({ winner: s.o.winner, skipped: !!s.skipped });
+  }
+  function fpSkip() {
+    var s = fpS; if (!s) return false;
+    if (s.final) { fpClose(s); return true; }
+    s.skipped = true; fpFinal(s); return true;
+  }
+  function firstPlayer(opts) {
+    opts = opts || {};
+    if (fpS) fpClose(fpS);
+    var o = {}; for (var k in opts) o[k] = opts[k];
+    o.players = o.players || []; o.mode = o.mode || "dice";
+    if (!o.rounds) o.rounds = [];
+    if (o.winner == null) o.winner = o.rounds.length ? o.rounds[o.rounds.length - 1].top[0] : 0;
+    if (!d.body || !o.players.length) return resolved({ winner: o.winner, skipped: true });
+    var tv = isTV(), box = d.createElement("div"), mode = o.mode;
+    box.className = "bg-fp bg-fp--" + mode + (o.layout === "peek" ? " bg-fp--peek" : "") + (o.players.length > 4 ? " bg-fp--many" : "");
+    box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true"); box.setAttribute("aria-label", o.title || "Who goes first"); box.tabIndex = -1;
+    box.innerHTML = "<div class=\"bg-fp__panel\"><span class=\"bg-eyebrow bg-fp__eyebrow\">" + esc(o.eyebrow || "Who goes first?") + "</span>" +
+      "<h2 class=\"bg-fp__title\">" + esc(o.title || "") + "</h2>" + (mode === "spin" ? "<div class=\"bg-fp__die\" aria-hidden=\"true\"><span class=\"bg-fp__letter\">?</span></div>" : "") +
+      "<div class=\"bg-fp__lanes\"></div><div class=\"bg-fp__res\" aria-live=\"polite\"><span class=\"bg-fp__rt\"></span><span class=\"bg-fp__rs\"></span></div>" +
+      "<span class=\"bg-fp__skip\">" + (tv ? "Press OK to skip" : "Tap to skip") + "</span></div>";
+    var lanesEl = box.querySelector(".bg-fp__lanes"), s = { o: o, box: box, lanes: [], pins: [], timers: [], final: false, closed: false, skipped: false, prev: d.activeElement };
+    s.res = box.querySelector(".bg-fp__res");
+    o.players.forEach(function (p, i) { var l = fpLane(o, i); s.lanes.push(l); lanesEl.appendChild(l); });
+    if (o.pins && fpDice(o)) o.players.forEach(function (p, i) {
+      var at = null; try { at = o.pins(i); } catch (e) { at = null; }
+      if (!at) { s.pins.push(null); return; }
+      var pin = d.createElement("span"); pin.className = "bg-die bg-fp__pin"; pin.setAttribute("data-seat", String(p.seat || i + 1));
+      pin.style.left = Math.round(at.x) + "px"; pin.style.top = Math.round(at.y) + "px"; dieRender(pin, 1); box.appendChild(pin); s.pins.push(pin);
+    });
+    fpS = s; d.body.appendChild(box); root.classList.add("bg-fp-open");
+    void box.offsetWidth; box.classList.add("is-open");
+    var pr0 = box.querySelector(".bg-fp__panel").getBoundingClientRect();   // a die on the board never sits under (or on) the panel
+    s.pins.forEach(function (pin) { if (pin && parseFloat(pin.style.top) > pr0.top - 28) pin.style.display = "none"; });
+    focusEl(box);
+    box.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); fpSkip(); });
+    emit("firstplayer", { open: true, mode: mode });
+    var pr = promise(function (res) { s.res0 = res; });
+    if (fpShort()) { fpLater(function () { fpFinal(s); }, 150); return pr; }
+    fpLater(function () { if (mode === "spin") fpSpin(s); else fpRound(s, 0); }, 380 * fpFactor());
+    return pr;
+  }
+  firstPlayer.resolve = fpResolve;
+  firstPlayer.skip = fpSkip;
+  firstPlayer.close = function () { if (fpS) fpClose(fpS); };
+  firstPlayer.isOpen = function () { return !!fpS; };
+  /* while the show is up it owns the keys: OK / Enter / Space / Back skip it, the arrows do nothing (a page's own handlers never see them) */
+  if (w.addEventListener) w.addEventListener("keydown", function (e) {
+    if (!fpS) return;
+    var k = e.key, c = e.keyCode;
+    if (k === "Enter" || k === " " || k === "Spacebar" || k === "Select" || c === 13 || c === 32 || c === 23 || isBackKey(e)) { e.preventDefault(); e.stopPropagation(); fpSkip(); return; }
+    if (dirOf(e)) { e.preventDefault(); e.stopPropagation(); }
+  }, true);
+
   /* ---------------- export ---------------- */
-  BGUI.version = "2.4.0";
+  BGUI.version = "2.5.0";
   BGUI.reducedMotion = reducedMotion;
   BGUI.setReducedMotion = setReducedMotion;
   BGUI.haptic = haptic;
@@ -1710,6 +2035,9 @@
   BGUI.setTV = setTV;
   BGUI.isTV = isTV;
   BGUI.mount = mount;
+  BGUI.names = names;
+  BGUI.hop = hop;
+  BGUI.firstPlayer = firstPlayer;
   BGUI.util = { $: $, $$: $$, esc: esc, isVisible: isVisible };
 
   function boot() {
