@@ -10,7 +10,9 @@
   "use strict";
   var LIST = [
     {id:"snakes", title:"Snakes and Ladders", n:"2-6", min:2, max:6, meta:"Climb and slide", colors:["red","blue","green","yellow","purple","teal"],
-     files:{tv:["../snakes/boards.js","../snakes/engine.js","../snakes/brain.js","../snakes/board.js","../ui/picker.js","games/snakes.js"], phone:["games/snakes-phone.js"]}}
+     files:{tv:["../snakes/boards.js","../snakes/engine.js","../snakes/brain.js","../snakes/board.js","../ui/picker.js","games/snakes.js"], phone:["games/snakes-phone.js"]}},
+    {id:"candy", title:"Candy Land", n:"2-4", min:2, max:4, meta:"Draw a colour, hop the road", colors:["red","blue","green","yellow"], pickColors:true,
+     files:{tv:["../candy/engine.js","../candy/brain.js","../candy/board.js","../ui/picker.js","games/candy.js"], phone:["../candy/board.js","games/candy-phone.js"]}}
   ];
   var tvDefs = {}, phoneDefs = {}, loaded = {}, loading = {};
   function get(id) { for (var i = 0; i < LIST.length; i++) if (LIST[i].id === id) return LIST[i]; return null; }

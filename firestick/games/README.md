@@ -136,3 +136,16 @@ attrs, color)` (a seat-coloured button), `api.afkHTML(id)` (the "computer is pla
 - Expose test hooks on `window.__<id>` (the order of what played, counters, a resync), never test-only behaviour: the tests
   (BG_audit/sprint/party2/sn_party.js) rig dice through the engine's own `G.rig` queue.
 
+
+## 6. Notes from the second plugin (Candy Land, games/candy.js)
+- Registry: `{id:"candy", ..., colors:["red","blue","green","yellow"], pickColors:true, files:{tv:["../candy/engine.js","../candy/brain.js",
+  "../candy/board.js","../ui/picker.js","games/candy.js"], phone:["../candy/board.js","games/candy-phone.js"]}}`. A phone may load the
+  game's art file too (the cards on the phone are candy/board.js's own `cardSVG`; the phone side falls back to a swatch without it).
+- A game with a real choice inside a turn ("draw two, choose one"): two `H.turn` asks in a row (`st.ask` "draw", then "pick" with the two
+  cards, their exact outcomes and the best one marked). The phone shows an ask only when `api.ask.st.step` AND `.phase` match the snapshot.
+- Picture of each Version in the lobby: build the board once into a detached element and cache its HTML (`preview()` in candy.js); take
+  out any text that would fall under the TV floor at thumbnail size. The picker then works as for Snakes (Back closes, OK picks).
+- The who-goes-first show in `layout:"peek"` hides its title: use the full layout when the title carries the rule ("The youngest player
+  goes first").
+- The phone keeps the line of the move BEFORE while the TV still animates the next one (the new log line would spoil it).
+- While a choice plays out, keep each card's outcome text from the moment of the choice (after `apply` the engine's state has moved on).
