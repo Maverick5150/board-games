@@ -11,6 +11,7 @@ This folder is the shared look for all seven games, the hub and Party Mode. It's
 |---|---|
 | `theme.css` | All tokens (custom properties), `@font-face`, the 8 per-game `[data-game]` themes, the 10 seats, TV scale (`html[data-tv]`), effects levels, reduced motion and every `bg-` component |
 | `ui.js` | `window.BGUI`: toast, sheet, win, celebrate, effects, hero, flip, tweenNumber, countdown, ambient, setTurn, stage (the game-page stage), back (the remote's Back on TV), focus (D-pad), dice, setTV, haptic, mark, trophy, mount.* |
+| `picker.js` | `BGUI.picker`: the Version picker with a BIG PREVIEW of the highlighted version (section 11). Load it after `ui.js`, only on the pages that use it; it brings its own CSS |
 | `icons.js` | `BGUI.icon(name)`: 39 original line icons as inline SVG (no `<text>`, no filters). Optional, but load it before `ui.js` if you want icons in helpers (stepper +/-, toast icons, CPU badge) |
 | `fonts/` | DM Serif Display regular (24.2 KB) and italic (24.0 KB), Manrope variable (24.3 KB): Latin WOFF2, SIL OFL 1.1 (`OFL-*.txt`). **Total 72.4 KB** (budget 150 KB) |
 | `tex/` | Pre-rendered images, so nothing is blurred or generated at runtime: `felt.webp` and `paper.webp` grain tiles (neutral alpha, they tint to any colour), `orb-gold.webp` and `orb-violet.webp` light orbs, `rays-core.webp` (one quadrant of the 20-ray win wheel). **Total 101 KB** (budget 150 KB) |
@@ -448,3 +449,44 @@ The art step added no new effect images: the core's `tex/orb-gold.webp`, `tex/or
 - `inst-fonts-luxe.py`: TTF copies of the shipped fonts for outlining.
 
 The core's checks are there too: `verify.js` (style guide at 390x844, 1366x768, 1920x1080 TV and 960x540 TV), `perf.js` (per-effect CPU), `contrast.js`, `accents.js`, `palette.js`, `seats.js` and `make-fx.js` (renders `tex/orb-*.webp` and `tex/rays-core.webp`).
+
+## 11. The Version picker with a big preview (`picker.js`, `BGUI.picker` 1.0)
+
+The CEO (2026-10-16): "in every single game, there should be previews of the board for different versions of the game." Wherever a game offers Versions, editions or boards, choosing one shows a BIG PREVIEW of the highlighted choice that changes as you move through the list. `BGUI.picker` is that sheet, shared; it grew out of the Snakes and Ladders board sheet (`snakes/game.js` `buildBoardSheet` / `showBig` / `atReadingLine` / `fitBig`, commit 5303971; Snakes still has its own copy and can move to this one later).
+
+**Load it** after `ui.js`, and add it to the page's `sw.js` ASSETS. Its CSS is injected once as `<style id="bg-picker-css">`; it adds no global but `BGUI.picker`, and every class starts with `bg-pk`.
+
+```html
+<script src="../ui/ui.js"></script>
+<script src="../ui/picker.js"></script>
+```
+
+```js
+BGUI.picker.open({
+  eyebrow: "Choose your board",                 // default "Choose a version"
+  title: "Every classic board, with its year",
+  sub: "Each picture is drawn from the board's own layout in our own art.",
+  groups: [{ head: "Britain", items: [
+    { id: "vic", name: "Victorian board", meta: "London, 1892", desc: "Plain squares, 8 ladders and 12 snakes.",
+      detail: "100 squares", tags: [{ text: "Official", kind: "official" }], small: svgString }
+  ] }],                                          // or items: [...] for one list with no heading
+  chosen: cfg.board,                             // marked "Chosen", focused, and the first big preview
+  aspect: 1,                                     // the preview's width / height: 4/3 for a card table, 0.75 for an upright sheet
+  render: id => bigSvg(id),                      // the BIG preview (string or Node); default: the item's small picture
+  info: id => ({ name, meta, note }),            // the caption: name, maker and year, one line on what is different
+  fit: (pic, id, { width, height, floor }) => {},  // optional: after each render and resize (show numbers only where they reach floor px)
+  pickLabel: "Play this board",                  // the button under the preview on a phone; keepLabel defaults to "Keep this board"
+  onPick: (id, item) => { cfg.board = id; drawSetup(); saveCfg(); },
+  onClose: reason => {}                          // "pick", "back", "scrim", "close", "replaced"
+});
+BGUI.picker.close(); BGUI.picker.isOpen(); BGUI.picker.preview(id); BGUI.picker.peek();
+```
+
+- **Items:** `name` (the label), `meta` (maker and year), `desc` (what is different), `detail` (a concrete detail chip), `tags` (strings, or `{text, kind}` with kind `official`, `house`, `accent`, `paper`, `new`), `small` (the list picture, string or Node), `disabled`. Tag house-rule choices `House`. The chosen one gets a `Chosen` tag and the `.is-best` frame.
+- **Layout:** phone upright = the big preview on top (it stays while the list scrolls under it, at most 30% of the height) and the pick button beside its caption; phone sideways (landscape, height up to 600 px), a wide desktop and TV = the preview on the left and the list on the right. Sideways the preview is fitted so the picture, the caption and the button all stay on screen.
+- **Phone:** a tap shows an entry large; a second tap on it, or the pick button, picks it. The preview follows a finger scroll (the entry at the reading line; only while a finger or the wheel moves the list). The click of the tap that opened the sheet is ignored by the scrim (BGUI 2.5.2) and by the list and the button (450 ms).
+- **TV:** the D-pad moves through the list (one column; neighbours 1.5rem apart) and the preview follows the focus; OK picks; there is no pick button. Back closes the sheet: it is a `BGUI.sheet`, so `window.__tvBack()` and the Back key take the `"sheet"` step. Focus and the ivory ring go back to the opener. The hint reads "Move to one to see it large. Press OK to choose it." (pass `hint` to change it, `false` for none).
+- **Floors:** all text uses the theme scale (12 px and up on a phone, 21 px and up at 1080p TV). Numbers drawn inside a preview are the game's job: use `fit` with `floor` (12 on a phone, `.875rem` in px on TV) and show them only where they reach it.
+- **Effects:** a short cross-fade (opacity and scale on a plain wrapper, 220 ms, one shot) when the preview changes; none under Reduce effects, reduced motion or a hidden page. No endless animation. Previews should be cheap static SVG or DOM.
+- **Party Mode:** the TV lobby's Version rows should get the same big preview (FOLLOWUPS).
+- **Tested** (`BG_audit/sprint/previews/picker-test.js` on `test.html`): phone 390x844 and 844x390 with real touch, TV 1920x1080 and 960x540 with real keys.
