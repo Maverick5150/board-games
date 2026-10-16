@@ -948,7 +948,7 @@ function pickComputerMove(color,moves,dry){
   const TB=window.TroubleBrain;
   if(TB&&TB.useFor&&TB.useFor[cpuSkill]){
     try{
-      const mv=TB.choose({color:color,moves:moves,pegs:pegs,players:players,START:START,skill:cpuSkill,brains:aiBrains,rnd:Math.random,name:""},{dry:!!dry});
+      const mv=TB.choose({color:color,moves:moves,pegs:pegs,players:players,START:START,skill:cpuSkill,brains:aiBrains,rnd:Math.random,name:"",rules:rules,die:die,sixStreak:sixStreak},{dry:!!dry});
       if(mv) return mv;
     }catch(e){ /* the old scorer below takes over */ }
   }
