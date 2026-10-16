@@ -33,7 +33,7 @@
   /* ---------- setup page (also the in-game Menu) ---------- */
   .rk-setup{display:flex; flex-direction:column; width:min(100%,40rem); margin:0 auto; padding:0 var(--gutter)}
   .rk-col{display:contents}
-  .rk-hero{order:1} .rk-sec--version{order:2} .rk-sec--mode{order:3} .rk-sec--players{order:4} .rk-sec--colors{order:5} .rk-sec--speed{order:6} .rk-sec--rules{order:7} .rk-sec--save{order:8} .rk-back{order:9} .rk-dock{order:10}
+  .rk-hero{order:1} .rk-sec--version{order:2} .rk-sec--mode{order:3} .rk-sec--players{order:4} .rk-sec--names{order:5} .rk-sec--colors{order:6} .rk-sec--speed{order:7} .rk-sec--rules{order:8} .rk-sec--save{order:9} .rk-back{order:10} .rk-dock{order:11}
   /* the hero art band on top, the title under it (ui README section 10, narrow hero); the art fades into the scene */
   .rk-hero{min-height:0; margin:0 calc(-1 * var(--gutter)); padding-top:46%; border-radius:0; background:transparent}
   .rk-hero .bg-hero__layer{bottom:auto; height:auto; aspect-ratio:16/9; border-radius:0; background-color:transparent;
@@ -343,6 +343,10 @@
         <div class="bg-section rk-skillhead"><h2 class="bg-eyebrow" id="skillHead" data-stage-text>Computer skill</h2></div>
         <div class="bg-seg bg-seg--text" id="skillSeg" role="group" aria-labelledby="skillHead"><button type="button" data-k="easy" aria-pressed="false">Easy</button><button type="button" data-k="normal" class="on" aria-pressed="true">Normal</button><button type="button" data-k="hard" aria-pressed="false">Hard</button></div>
       </section>
+      <section class="rk-sec rk-sec--names" aria-labelledby="namesHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="namesHead" data-stage-text>Names</h2></div>
+        <div class="bg-card rk-namecard" id="nameCard"><p class="bg-names-note">Your name is kept on this device for every game. The computers get their own names.</p></div>
+      </section>
       <section class="rk-sec rk-sec--rules" aria-labelledby="rulesHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="rulesHead" data-stage-text>Rules</h2></div>
         <div class="bg-rows">
@@ -427,7 +431,13 @@ function speedFactor(){ return ({slow:1.75, fast:0.5})[window.bgGameSpeed] || 1 
 function normSpeed(v){ return v==="slow"||v==="fast"?v:"medium"; }
 // step 10: Computer skill (easy / normal / hard; normal = the new brain, risk/brain.js): saved with the settings and the game; a change from the Menu applies at once; old saves = normal
 function normSkill(v){ return v==="easy"||v==="hard"?v:"normal"; }
-function cpuNames(n,human){ let a=[]; try{ if(window.Names&&n>0) a=window.Names.pick(n,human)||[]; }catch(e){} while(a.length<n) a.push("CPU "+(a.length+1)); return a; }
+function cpuNames(n,human){ let a=[]; try{ if(window.Names&&n>0) a=window.Names.pick(n,(human||[]).concat(["You"]))||[]; }catch(e){} while(a.length<n) a.push("CPU "+(a.length+1)); return a; }
+// step 10: the players' own names (BGUI.names: one device-wide name for every game, one field per human). A human without one keeps the
+// colour name (and "(you)" when alone), as every game did before; without ui.js nothing changes
+let nameUI=null;
+function humanNames(n){ const B=BG(); return nameUI&&B&&B.names?B.names.list(n,nameUI.values()):null; }
+function colorName(s){ return PCOLS.some(c=>c.name===s); }
+function mountNames(){ const B=BG(); if(!B||!B.names||nameUI) return; nameUI=B.names.mount("#nameCard",{count:cfg.humans,seat:i=>SEAT_OF_CI[seatColors()[i]]||(i+1),token:i=>tokenOf(PCOLS[seatColors()[i]].name),onChange:()=>{ drawSeats(); }}); }
 let cfg={version:"1959",over:{},mode:"classic",humans:1,cpus:2,speed:"medium",skill:"normal",tint:false,hcolors:[0]};
 let G=null,V=null,gen=0,handoffOk=null,board=null,ctrl=null,lastEv=0,aiTimer=null;
 const esc=R.Ctrl.esc;
@@ -533,7 +543,9 @@ function drawSeats(){
   // what the count means for the start (the head already says "N at the table")
   $("seatNote").textContent=tot===2?"Two-player rules: a third, neutral army defends its own territories":(o.setup!=="deal1"?E.startArmiesFor(tot)+" armies each":"One army on each dealt territory");
   // the seat preview: who sits at the table, in the seat colours of the strip
-  const cols=seatColors(), seats=cols.map((ci,i)=>({name:PCOLS[ci].name+(i<cfg.humans&&cfg.humans===1?" (you)":""),seat:SEAT_OF_CI[ci],tok:tokenOf(PCOLS[ci].name)}));
+  if(nameUI) nameUI.count(cfg.humans).refresh();
+  const cols=seatColors(), hn0=humanNames(cfg.humans), hn=hn0&&hn0.map((s,i)=>s==="You"||/^Player \d+$/.test(s)?null:s);
+  const seats=cols.map((ci,i)=>({name:i<cfg.humans&&hn&&hn[i]?hn[i]+" ("+PCOLS[ci].name+")":PCOLS[ci].name+(i<cfg.humans&&cfg.humans===1?" (you)":""),seat:SEAT_OF_CI[ci],tok:tokenOf(PCOLS[ci].name)}));
   if(tot===2) seats.push({name:"Neutral",seat:NEUTRAL_SEAT,tok:"N"});
   $("seatTokens").innerHTML=seats.map(s=>`<span class="bg-token" data-seat="${s.seat}" aria-hidden="true">${esc(s.tok)}</span>`).join("");
   $("seatHead").textContent=tot+" at the table";
@@ -700,12 +712,29 @@ function startGame(){
   const total=cfg.humans+cfg.cpus, used=cfg.hcolors.slice();
   while(used.length<cfg.humans){ for(let i=0;i<PCOLS.length;i++) if(used.indexOf(i)<0){ used.push(i); break; } }
   const colors=used.slice(); for(let i=0;i<PCOLS.length&&colors.length<total;i++) if(colors.indexOf(i)<0) colors.push(i);
-  const humans=[], names=[], hn=[]; for(let i=0;i<cfg.humans;i++) hn.push(PCOLS[colors[i]].name);
+  const humans=[], names=[], hn=[], typed=humanNames(cfg.humans);
+  for(let i=0;i<cfg.humans;i++){ const t=typed&&typed[i]; hn.push(t&&t!=="You"&&!/^Player \d+$/.test(t)?t:PCOLS[colors[i]].name); }   // no name typed: the colour name, as before
   const cn=cpuNames(total-cfg.humans,hn);   // step 10: fresh random names for the computers, stored in the game (and its save)
   for(let i=0;i<total;i++){ humans.push(i<cfg.humans); names.push(i<cfg.humans?hn[i]:cn[i-cfg.humans]); }
-  G=E.newGame({names:names,humans:humans,colors:colors,opts:curOpts(),skill:normSkill(cfg.skill)}); G.skill=normSkill(cfg.skill);
+  // step 10, who goes first (official rule): every player rolls a die, the highest places the first army and takes the first turn, a
+  // tie rolls again. The show (BGUI.firstPlayer) rolls the dice on the map and the winner's territories glow; without ui.js the engine
+  // picks at random, as before
+  const B=BG(), fp=B&&B.firstPlayer;
+  const res=fp?fp.resolve(total,()=>1+Math.floor(Math.random()*6)):null;
+  G=E.newGame(Object.assign({names:names,humans:humans,colors:colors,opts:curOpts(),skill:normSkill(cfg.skill)},res?{first:res.winner}:{})); G.skill=normSkill(cfg.skill);
   stats={ms:0,turns:0}; seenLog=0; clearTimeout(ui.winT); ui.winT=0; ui.winShown=-1; ui.result=false; ui.strip=""; ui.hoKey=""; ui.focusKey="";
-  handoffOk=null; startUI(); clockOn(); drive();
+  handoffOk=null; startUI(); clockOn();
+  if(!res){ drive(); return; }
+  const g=gen;
+  const pinTerr=i=>{ const own=G.terr.map((t,k)=>t.o===i?k:-1).filter(k=>k>=0); if(own.length) return own[Math.floor(own.length/2)]; const c=MP.continents[i%MP.continents.length]; return c.terrs[Math.floor(c.terrs.length/2)]; };
+  setTimeout(()=>{ if(g!==gen) return;   // after showSetup(false): the map is on screen under the show
+    fp({mode:"die",layout:"peek",title:"Roll for the first turn",rounds:res.rounds,winner:res.winner,
+      players:G.players.slice(0,total).map((pl,i)=>({name:pl.name,seat:seatOfP(pl,i),token:tokenOfP(pl,i)})),
+      pins:i=>{ const rt=board&&board.root&&board.root.getBoundingClientRect(); if(!rt||!rt.width) return null; const v=board.viewPoint(pinTerr(i)); return {x:rt.left+v[0]*rt.width,y:rt.top+v[1]*rt.height}; },
+      onWinner:w=>{ if(!board||!board.flash) return; const own=G.terr.map((t,k)=>t.o===w?k:-1).filter(k=>k>=0); (own.length?own:[pinTerr(w)]).forEach(t=>board.flash(t,"win",2600)); },
+      result:w=>({title:G.players[w].name+" goes first",sub:"The highest roll places the first army and takes the first turn."})
+    }).then(()=>{ if(g===gen&&G&&!G.over) drive(); });
+  },0);
 }
 function startUI(){
   Sound.music("risk");   // (the Luxe stage is set once, at load: calling Skins.apply again would rebuild it)
@@ -735,7 +764,7 @@ function refresh(){
   if(tvOn()) tvKeep();
 }
 // the player strip: a seat token, the name (+ the CPU badge), the territories and armies held; BGUI.setTurn every turn
-function stripName(p){ return p.name+(!p.neutral&&p.human&&humansIn()===1?" (you)":""); }
+function stripName(p){ return p.name+(!p.neutral&&p.human&&humansIn()===1&&colorName(p.name)?" (you)":""); }
 function metaOf(p){ return p.alive?`<span class="rk-m">${icon("flag")}<b>${p.terrs}</b><span class="bg-sr"> territories</span></span><span class="rk-m">${icon("pawn")}<b>${p.armies}</b><span class="bg-sr"> armies</span></span>`:"Out"; }
 function legend(){
   const el=$("legend"), B=BG();
@@ -869,7 +898,7 @@ function openWin(){
   const w=G.players[G.winner], ms=playMs(), min=Math.round(ms/60000), terrs=E.owned(G,G.winner).length, t=stats.turns;
   $("winEyebrow").textContent="Game over · "+(min<1?"under a minute":min===1?"1 minute":min+" minutes");
   $("winTitle").textContent=w.human?"Victory":w.name+" wins";
-  $("winSub").innerHTML=`<b>${esc(w.name)}</b> ${w.human&&humansIn()===1?"(you) ":""}wins. ${esc(winText(w))}`;
+  $("winSub").innerHTML=`<b>${esc(w.name)}</b> ${w.human&&humansIn()===1&&colorName(w.name)?"(you) ":""}wins. ${esc(winText(w))}`;
   $("winStats").innerHTML=`<li class="bg-stat"><b>${t}</b><span>${t===1?"turn":"turns"}</span></li><li class="bg-stat"><b>${terrs}</b><span>${terrs===1?"territory":"territories"}</span></li><li class="bg-stat"><b>${fmtTime(ms)}</b><span>time</span></li>`;
   if(ctrl&&ctrl.closeSheets) ctrl.closeSheets(); closeHandoff();
   $("winBox").classList.add("show");
@@ -1002,6 +1031,7 @@ document.addEventListener("visibilitychange",()=>{ if(document.hidden) clockOff(
 // ui/ui.js is deferred: it arrives after this script. Then the icons go in, the Luxe panel, sheets, toasts and Victory take over from the
 // fallbacks, and the map's marks pulse in beats
 document.addEventListener("DOMContentLoaded",()=>{
+  mountNames(); drawSeats();
   const B=BG();
   if(B&&B.back) B.back.on(backStep);
   else window.__tvBack=()=>{   // no ui.js: the same steps, without the Luxe layers

@@ -78,6 +78,7 @@ function newGame(cfg){
     fortLeft:0,occ:null,noAttack:false,pending:null,sub:null,initLeft:[],claimIdx:0,hqPicked:[],seq:0};
   if(G.two){ G.players.push({id:2,name:"Neutral",human:false,ci:-1,alive:true,cards:[],neutral:true,mission:null,hq:null}); }
   if(cfg.skill) G.skill=cfg.skill;   // the computers' skill (brain.js), known before a random setup places their armies
+  if(cfg.first!=null&&cfg.first>=0&&cfg.first<n) G.first=cfg.first;   // step 10: the roll-off's winner (the page's who-goes-first show) places first and plays first
   buildDeck(G); setup(G);
   return G;
 }
@@ -96,25 +97,25 @@ function setup(G){
     // 2-player rules: three piles of 14 (you, your opponent, neutral), 40 armies each
     shuffle(terrCards,G.rnd);
     for(i=0;i<MP.n;i++){ G.terr[terrCards[i]]={o:Math.floor(i/14),a:1}; }
-    G.initLeft=[26,26,26]; G.phase="setup2p"; G.turn=Math.floor(G.rnd()*2); G.sub={n:0,neutral:0};
+    G.initLeft=[26,26,26]; G.phase="setup2p"; G.turn=G.first!=null?G.first:Math.floor(G.rnd()*2); G.sub={n:0,neutral:0};
     ev(G,"setup",{text:"Two-player game: cards dealt into three piles of 14 (you, your opponent and a neutral army of 14)."});
     afterSetupPrep(G); return;
   }
   if(o.setup==="deal1"){
-    shuffle(terrCards,G.rnd); var d=Math.floor(G.rnd()*np);
+    shuffle(terrCards,G.rnd); var d=G.first!=null?(G.first-1+np)%np:Math.floor(G.rnd()*np);
     for(i=0;i<MP.n;i++){ G.terr[terrCards[i]]={o:(d+1+i)%np,a:1}; }
     ev(G,"setup",{text:"All 42 territory cards are dealt; every player puts one army on each of their territories."});
     G.initLeft=G.players.map(function(){ return 0; });
     G.turn=(d+1)%np; beginSetupDone(G);
   } else if(o.setup==="dealPlace"){
-    shuffle(terrCards,G.rnd); var d2=Math.floor(G.rnd()*np);
+    shuffle(terrCards,G.rnd); var d2=G.first!=null?G.first:Math.floor(G.rnd()*np);
     for(i=0;i<MP.n;i++){ G.terr[terrCards[i]]={o:(d2+i)%np,a:1}; }
     var sa=startArmiesOf(G); G.initLeft=G.players.map(function(p,pi){ return sa-owned(G,pi).length; });
     G.phase="deploy"; G.turn=(d2)%np; if(G.turn<0) G.turn=0; G.deployStart=G.turn;   // whoever places the first army takes the first turn
     ev(G,"setup",{text:"Territories are dealt; players now place the rest of their starting armies one at a time."});
   } else {
     G.initLeft=G.players.map(function(){ return startArmiesOf(G); });
-    G.phase="claim"; G.turn=Math.floor(G.rnd()*np); G.deployStart=G.turn;   // whoever places the first army takes the first turn
+    G.phase="claim"; G.turn=G.first!=null?G.first:Math.floor(G.rnd()*np); G.deployStart=G.turn;   // whoever places the first army takes the first turn
     ev(G,"setup",{text:pn(G,G.turn)+" rolls highest and claims first. Take turns claiming an empty territory."});
   }
   afterSetupPrep(G);
