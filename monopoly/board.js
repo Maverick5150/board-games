@@ -7,7 +7,7 @@
    - Phone zoom (pinch, double-tap, wheel, one-finger pan, "Fit") moves ONE transform on the stage; it is crisp at rest because the
      layer is re-rastered when the gesture ends.
    - TV: the board takes the D-pad (focus it, then the arrows walk the squares in order, OK opens the square).
-   API: var mb = MonoBoard.mount(host, {squares, center, zoom, dpad, onTap, onOpen, onFocus, start});  mb.update(state);  mb.fit();  mb.destroy()
+   API: var mb = MonoBoard.mount(host, {squares, center, zoom, dpad, onTap, onOpen, onFocus, start});  mb.update(state);  mb.fit();  mb.hop(id, ms);  mb.destroy()
    state = {own:[seat|0 x40], houses:[0..5 x40], mort:[bool x40], toks:[{id,i,seat,tok,cur,title,jail}], amt:{4:"PAY $200",38:"PAY $100"}, hl:i}
    Also: MonoBoard.tokenSVG(name, seat, px), .icon(name, px), .card(i, info), .SEATS, .NAMES, .GROUPS, .plateHTML() */
 (function (g) {
@@ -323,7 +323,7 @@
     // compositor (no left/top: transform only); at rest the box is drawn 1:1, as the pulse's layer expects (no scale)
     ".mb-pos{position:absolute;left:0;top:0;z-index:3}.mb-anim .mb-pos{transition:transform var(--mb-hop,.15s) linear}" +
     "html[data-effects=reduced] .mb-pos,html[data-motion=reduce] .mb-pos{transition:none !important}" +
-    ".mb-pos .tkp,.mb-pos .tk{display:block;width:100%;height:100%}.mb-pos .tk{filter:drop-shadow(0 0 1px var(--pc,#000)) drop-shadow(0 .06em .08em #0009)}.mb-pos .mb-tkv{display:block;width:100%;height:100%;overflow:visible}" +
+    ".mb-pos .mb-hw,.mb-pos .tkp,.mb-pos .tk{display:block;width:100%;height:100%}.mb-pos .tk{filter:drop-shadow(0 0 1px var(--pc,#000)) drop-shadow(0 .06em .08em #0009)}.mb-pos .mb-tkv{display:block;width:100%;height:100%;overflow:visible}" +
     ".mb-hl,.mb-fs{position:absolute;box-sizing:border-box;pointer-events:none;display:none}" +
     ".mb-hl{border:calc(var(--mb-u,4px)*.55) solid #ffe3a0;box-shadow:0 0 0 calc(var(--mb-u,4px)*.2) #0b0e1a,0 0 calc(var(--mb-u,4px)*2.2) calc(var(--mb-u,4px)*.6) rgba(255,214,120,.8),inset 0 0 calc(var(--mb-u,4px)*2.4) rgba(255,214,120,.55);z-index:2}" +
     ".mb-fs{border:calc(var(--mb-u,4px)*.8) solid #fbf6ea;box-shadow:0 0 0 calc(var(--mb-u,4px)*.5) #0b0e1a,0 0 calc(var(--mb-u,4px)*3) calc(var(--mb-u,4px)*1) rgba(255,228,160,.9);z-index:4}" +
@@ -424,7 +424,7 @@
         var sig = t.tok + "|" + t.seat + "|" + (t.cur ? 1 : 0) + "|" + (t.title || "");
         if (el._sig !== sig) {
           var wasCur = el._cur; el._sig = sig; el._cur = !!t.cur;
-          el.innerHTML = '<span class="tkp' + (t.cur ? " cur" : "") + '"><span class="tk" style="--pc:' + (SEATS[t.seat] || SEATS[1]).c + '"' + (t.title ? ' title="' + esc(t.title).replace(/"/g, "&quot;") + '"' : "") + ">" + tokenSVG(t.tok, t.seat) + "</span></span>";
+          el.innerHTML = '<span class="mb-hw"><span class="tkp' + (t.cur ? " cur" : "") + '"><span class="tk" style="--pc:' + (SEATS[t.seat] || SEATS[1]).c + '"' + (t.title ? ' title="' + esc(t.title).replace(/"/g, "&quot;") + '"' : "") + ">" + tokenSVG(t.tok, t.seat) + "</span></span></span>";   // .mb-hw: the plain wrapper a hop lifts (step 10)
         }
         place(el, t.i, idx, grp.length, t.cur, t.i === 10 ? (t.jail ? "j" : "v") : "");
       });
@@ -432,6 +432,13 @@
       if (first && list && list.length) { void host.offsetWidth; host.classList.add("mb-anim"); }   // the first placement jumps, every later one glides
     }
     function box(el, i) { var r = RECTS[i]; el.style.left = pct(r.x); el.style.top = pct(r.y); el.style.width = pct(r.w); el.style.height = pct(r.h); el.style.display = "block"; }
+    /* step 10, the CEO's step-by-step rule: one visible hop of piece id (the game moves it one space per hop): BGUI.hop lifts the plain
+       .mb-hw wrapper (transform only, one shot; nothing under Reduce effects / reduced motion) while .mb-pos glides one space */
+    inst.hop = function (id, ms) {
+      var el = tokEls[id], hw = el && el.firstChild, B = g.BGUI;
+      if (!hw || !B || typeof B.hop !== "function") return null;
+      return B.hop(hw, { ms: ms || 170, lift: Math.max(3, Math.round((el.offsetHeight || 20) * 0.4)) });
+    };
     inst.update = function (s) {
       s = s || {}; if (s.amt) amt = s.amt;
       st = s;
