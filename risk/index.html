@@ -52,6 +52,7 @@
   .rk-vdesc b{color:var(--text-1); font-weight:var(--fw-ui-strong)}
   .rk-modes > button{white-space:normal; line-height:1.2; padding-block:.5rem}
   .rk-tint{margin-top:.875rem}
+  .rk-skillhead{margin-top:1.25rem}
   .rk-card{display:grid; gap:.75rem}
   .rk-field{display:grid; gap:.15rem}
   .rk-field .bg-row__desc{margin-top:0}
@@ -339,6 +340,8 @@
         <div class="bg-section"><h2 class="bg-eyebrow" id="speedHead" data-stage-text>Speed and map</h2></div>
         <div class="bg-seg bg-seg--text" id="speedSeg" role="group" aria-label="Game speed"><button type="button" data-s="slow" aria-pressed="false">Slow</button><button type="button" data-s="medium" class="on" aria-pressed="true">Medium</button><button type="button" data-s="fast" aria-pressed="false">Fast</button></div>
         <div class="bg-rows rk-tint"><label class="bg-row"><span class="bg-row__main"><span class="bg-row__title">Tint territories by owner</span><span class="bg-row__desc">Easier to read who holds what</span></span><input type="checkbox" class="bg-toggle" id="tintCb"></label></div>
+        <div class="bg-section rk-skillhead"><h2 class="bg-eyebrow" id="skillHead" data-stage-text>Computer skill</h2></div>
+        <div class="bg-seg bg-seg--text" id="skillSeg" role="group" aria-labelledby="skillHead"><button type="button" data-k="easy" aria-pressed="false">Easy</button><button type="button" data-k="normal" class="on" aria-pressed="true">Normal</button><button type="button" data-k="hard" aria-pressed="false">Hard</button></div>
       </section>
       <section class="rk-sec rk-sec--rules" aria-labelledby="rulesHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="rulesHead" data-stage-text>Rules</h2></div>
@@ -422,8 +425,10 @@ const $=id=>document.getElementById(id);
 /* step 10: Game speed (slow / medium / fast): the base computer delay is 650 ms (medium, as before) times speedFactor(); the saved key "normal" reads as medium */
 function speedFactor(){ return ({slow:1.75, fast:0.5})[window.bgGameSpeed] || 1 }
 function normSpeed(v){ return v==="slow"||v==="fast"?v:"medium"; }
+// step 10: Computer skill (easy / normal / hard; normal = the new brain, risk/brain.js): saved with the settings and the game; a change from the Menu applies at once; old saves = normal
+function normSkill(v){ return v==="easy"||v==="hard"?v:"normal"; }
 function cpuNames(n,human){ let a=[]; try{ if(window.Names&&n>0) a=window.Names.pick(n,human)||[]; }catch(e){} while(a.length<n) a.push("CPU "+(a.length+1)); return a; }
-let cfg={version:"1959",over:{},mode:"classic",humans:1,cpus:2,speed:"medium",tint:false,hcolors:[0]};
+let cfg={version:"1959",over:{},mode:"classic",humans:1,cpus:2,speed:"medium",skill:"normal",tint:false,hcolors:[0]};
 let G=null,V=null,gen=0,handoffOk=null,board=null,ctrl=null,lastEv=0,aiTimer=null;
 const esc=R.Ctrl.esc;
 function curOpts(){ const o=E.versionOpts(cfg.version,cfg.over); if(cfg.over.mode===undefined) o.mode=cfg.mode||"classic"; return o; }
@@ -576,6 +581,9 @@ function syncRules(){
 $("rulesToggle").addEventListener("click",()=>{ ui.rulesOpen=!ui.rulesOpen; syncRules(); });
 function setSpeedSeg(){ cfg.speed=normSpeed(cfg.speed); window.bgGameSpeed=cfg.speed; $("speedSeg").querySelectorAll("button").forEach(x=>{ const on=x.dataset.s===cfg.speed; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
 $("speedSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.speed=b.dataset.s; setSpeedSeg(); if(G&&!G.over){ const pk=packG(); if(pk) Saves.auto("risk",pk); } }));   // applies at once; the running game's save keeps it
+function setSkillSeg(){ cfg.skill=normSkill(cfg.skill); if(G) G.skill=cfg.skill; $("skillSeg").querySelectorAll("button").forEach(x=>{ const on=x.dataset.k===cfg.skill; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
+$("skillSeg").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ cfg.skill=b.dataset.k; setSkillSeg(); if(G&&!G.over){ const pk=packG(); if(pk) Saves.auto("risk",pk); } }));   // applies at once; the running game's save keeps it
+setSkillSeg();
 setSpeedSeg();
 $("tintCb").addEventListener("change",e=>{ cfg.tint=e.target.checked; if(board) board.setTint(cfg.tint); });
 // the copy follows the device: "Players on this TV" and "the remote" on the TV, the phone wording elsewhere
@@ -646,6 +654,7 @@ function packG(){ if(!G) return null; const c=JSON.parse(JSON.stringify(G,(k,v)=
 function loadSaved(d){
   gen++; clearTimeout(aiTimer); clearTimeout(ui.winT); ui.winT=0; ui.defA=null;
   G=d.G; G.rnd=Math.random; Object.assign(cfg,d.cfg||{}); handoffOk=null; setSpeedSeg();   // an old save's "normal" reads as medium
+  cfg.skill=normSkill((d.cfg||{}).skill||G.skill); G.skill=cfg.skill; if(R.Brain&&R.Brain.afterLoad) R.Brain.afterLoad(G); setSkillSeg();   // old saves = Normal
   stats=readStats(d.stats); seenLog=G.log.length; ui.winShown=-1; ui.result=false; ui.strip=""; ui.hoKey=""; ui.focusKey="";
   $("setup").classList.remove("show"); $("winBox").classList.remove("show"); closeWin(); Sound.skip();
   drawSetup();   // the New game page shows the loaded game's settings
@@ -667,9 +676,9 @@ if(window.MutationObserver){
   new MutationObserver(()=>{ const B=BG(), m=$("svtoast").textContent; if(luxe()&&B.toast&&m) B.toast(m,{icon:"save",ms:2400}); }).observe($("svtoast"),{childList:true,characterData:true,subtree:true});
 }
 const saveBar=Saves.bar({game:"risk",el:$("svbar"),snapNote:"exactly as it is now",saveToast:"Game saved",
-  getSettings:()=>({version:cfg.version,over:cfg.over,mode:cfg.mode,humans:cfg.humans,cpus:cfg.cpus,speed:cfg.speed,tint:cfg.tint,hcolors:cfg.hcolors}),
-  applySettings:s=>{ cfg.version=s.version||"1959"; cfg.over=s.over||{}; cfg.mode=s.mode||"classic"; cfg.humans=s.humans||1; cfg.cpus=s.cpus!=null?s.cpus:2; cfg.speed=normSpeed(s.speed); cfg.tint=!!s.tint; cfg.hcolors=s.hcolors||[0]; setSpeedSeg(); drawSetup(); },
-  standard:()=>{ cfg={version:"1959",over:{},mode:"classic",humans:1,cpus:2,speed:"medium",tint:false,hcolors:[0]}; setSpeedSeg(); drawSetup(); },
+  getSettings:()=>({version:cfg.version,over:cfg.over,mode:cfg.mode,humans:cfg.humans,cpus:cfg.cpus,speed:cfg.speed,skill:cfg.skill,tint:cfg.tint,hcolors:cfg.hcolors}),
+  applySettings:s=>{ cfg.version=s.version||"1959"; cfg.over=s.over||{}; cfg.mode=s.mode||"classic"; cfg.humans=s.humans||1; cfg.cpus=s.cpus!=null?s.cpus:2; cfg.speed=normSpeed(s.speed); cfg.skill=normSkill(s.skill); cfg.tint=!!s.tint; cfg.hcolors=s.hcolors||[0]; setSpeedSeg(); setSkillSeg(); drawSetup(); },
+  standard:()=>{ cfg={version:"1959",over:{},mode:"classic",humans:1,cpus:2,speed:"medium",skill:"normal",tint:false,hcolors:[0]}; setSpeedSeg(); setSkillSeg(); drawSetup(); },
   getSnapshot:()=>(G&&!G.over)?packG():null,
   loadSnapshot:loadSaved});
 $("menuBtn").addEventListener("click",()=>{
@@ -694,7 +703,7 @@ function startGame(){
   const humans=[], names=[], hn=[]; for(let i=0;i<cfg.humans;i++) hn.push(PCOLS[colors[i]].name);
   const cn=cpuNames(total-cfg.humans,hn);   // step 10: fresh random names for the computers, stored in the game (and its save)
   for(let i=0;i<total;i++){ humans.push(i<cfg.humans); names.push(i<cfg.humans?hn[i]:cn[i-cfg.humans]); }
-  G=E.newGame({names:names,humans:humans,colors:colors,opts:curOpts()});
+  G=E.newGame({names:names,humans:humans,colors:colors,opts:curOpts(),skill:normSkill(cfg.skill)}); G.skill=normSkill(cfg.skill);
   stats={ms:0,turns:0}; seenLog=0; clearTimeout(ui.winT); ui.winT=0; ui.winShown=-1; ui.result=false; ui.strip=""; ui.hoKey=""; ui.focusKey="";
   handoffOk=null; startUI(); clockOn(); drive();
 }
@@ -1013,7 +1022,7 @@ document.addEventListener("DOMContentLoaded",()=>{
 Skins.apply("risk"); Sound.mountButton(); Sound.music("risk");
 deviceCopy(); drawSetup(); saveBar.refresh(); showSetup(true);
 if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
-window.__risk={get G(){ return G; },get V(){ return V; },cfg:cfg,send:send,get ctrl(){ return ctrl; },get board(){ return board; },startGame:startGame,get stats(){ return stats; },ui:ui,refresh:()=>{ if(G) refresh(); }};
+window.__risk={get G(){ return G; },get V(){ return V; },cfg:cfg,skill:()=>cfg.skill,send:send,get ctrl(){ return ctrl; },get board(){ return board; },startGame:startGame,get stats(){ return stats; },ui:ui,refresh:()=>{ if(G) refresh(); }};
 })();
 </script>
 </body>
