@@ -83,7 +83,8 @@ function turnsOf(G){ return (G.stats&&G.stats.turns)||0; }
 function skillOf(G,p){ return SKILL[p&&p.skill]||SKILL[G&&G.skill]||SKILL.normal; }
 function rivals(G,id){ var a=[]; G.players.forEach(function(q){ if(q.id!==id&&!q.bankrupt) a.push(q); }); return a; }
 function arr(x){ return Array.isArray(x)?x.slice():(x&&typeof x.forEach==="function"?Array.from(x):[]); }
-function init(c){ C={BOARD:c.BOARD,GROUPS:c.GROUPS,RR_IDX:c.RR_IDX,UTIL_IDX:c.UTIL_IDX}; PREM={H:-1}; TAB=null; }
+// editions (2026-10-16): the page calls init again with each edition's board; RR_RENT / UTIL_MULT / JAIL are that edition's numbers (the classic ones when absent)
+function init(c){ C={BOARD:c.BOARD,GROUPS:c.GROUPS,RR_IDX:c.RR_IDX,UTIL_IDX:c.UTIL_IDX,RR:c.RR_RENT||[25,50,100,200],UT:c.UTIL_MULT||[4,10],JAIL:c.JAIL||50}; PREM={H:-1}; TAB=null; }
 function tune(o){ for(var k in o) P[k]=o[k]; PREM={H:-1}; }   // tests: change tuning constants (the set premiums are worked out again)
 function on(G,p){ return !!C&&!!G&&!!p&&!p.human&&!p.bankrupt&&p.skill!=="legacy"; }
 
@@ -110,8 +111,8 @@ function rentAt(G,own,i,h,anyway){   // the rent deed i takes for its owner in o
   var s=C.BOARD[i], o=own[i]; if(o<0||(G.mort[i]&&!anyway)) return 0;
   if(h==null) h=G.houses[i];
   if(s.t==="prop") return h>0?s.rent[h]:(full(own,o,s.g)?2*s.rent[0]:s.rent[0]);
-  if(s.t==="rr") return 25*Math.pow(2,cnt(own,o,C.RR_IDX)-1);
-  if(s.t==="util") return 7*(cnt(own,o,C.UTIL_IDX)===2?10:4);
+  if(s.t==="rr") return C.RR[cnt(own,o,C.RR_IDX)-1]||0;
+  if(s.t==="util") return 7*(cnt(own,o,C.UTIL_IDX)===2?C.UT[1]:C.UT[0]);
   return 0;
 }
 function rateOf(G,own,id){ var r=0; for(var i=0;i<40;i++) if(own[i]===id) r+=PL[i]*rentAt(G,own,i); return r; }
@@ -334,12 +335,12 @@ function holdAt4(G,p){   // the housing shortage: few houses left in the bank an
    pays by the rule). Early, while deeds are for sale, it gets out; late, when the rivals' rents are high, it stays in and collects. */
 function jail(G,p){
   var b=brain(G,p), sk=skillOf(G,p), own=G.owner;
-  if(!sk.jail) return p.jokers>0?"card":(p.jailTurns<2&&p.cash<300)?"roll":p.cash>=50?"pay":"roll";   // easy: the old way
+  if(!sk.jail) return p.jokers>0?"card":(p.jailTurns<2&&p.cash<300)?"roll":p.cash>=C.JAIL?"pay":"roll";   // easy: the old way
   var rr=rivalRate(G,own,p.id), free=freeDeeds(G);
   var stay=rr*(1+.5*Math.max(0,b.B))>P.jailRate||(free===0&&rr>P.jailRate*.4);
   if(stay) return "roll";
   if(p.jokers>0) return "card";
-  return p.cash-50>=Math.max(P.jailPay*resMul(G,p,b),floorCash(G,p,b))&&p.jailTurns<2?"pay":"roll";   // on its last try a roll is never worse: a miss pays the same $50
+  return p.cash-C.JAIL>=Math.max(P.jailPay*resMul(G,p,b),floorCash(G,p,b))&&p.jailTurns<2?"pay":"roll";   // on its last try a roll is never worse: a miss pays the same $50
 }
 /* the value of a trade to pl (partner = the other side's player id). The page accepts at >= -10, so this is the gain less its margin,
    minus 10; -1e9 = never (it would be left owing, or hand over a set for too little). */
@@ -440,7 +441,21 @@ function gameOver(G){
   if(any){ t.games++; writeTable(t); TAB=t; }
 }
 
-g.MonoBrain={ init:init, on:on, buy:buy, bidMax:bidMax, nextManage:nextManage, nextRaise:nextRaise, jail:jail, tradeValue:tradeValue,
+/* editions: "Pay a $10 fine or take a Chance" (1935 US, UK 1936-2007). deck = the Chance cards ({fx, a}). Easy: a coin flip. Normal: pays
+   when the cash stays above half its floor. Hard: also weighs the deck's money (the mean of its gain / pay / pay-each / repairs cards for
+   its own buildings, and a trip to Jail): it draws only when the deck is worth more than the fine. Well under a millisecond. */
+function fineOrChance(G,p,amt,deck){
+  var b=brain(G,p), sk=skillOf(G,p);
+  if(sk===SKILL.easy) return rnd(b)<.5?"pay":"chance";
+  if(p.cash-amt<floorCash(G,p,b)*.5) return "chance";
+  if(sk!==SKILL.hard||!deck||!deck.length) return "pay";
+  var h=0,ht=0,n=rivals(G,p.id).length,ev=0; for(var i=0;i<40;i++) if(G.owner[i]===p.id&&C.BOARD[i].t==="prop"){ if(G.houses[i]===5) ht++; else h+=G.houses[i]; }
+  deck.forEach(function(c){ var a=c.a;
+    if(c.fx==="gain") ev+=a; else if(c.fx==="pay") ev-=a; else if(c.fx==="payeach") ev-=a*n; else if(c.fx==="collecteach") ev+=a*n;
+    else if(c.fx==="repairs"&&a) ev-=h*a[0]+ht*a[1]; else if(c.fx==="jail") ev-=C.JAIL; else if(c.fx==="joker") ev+=C.JAIL*.5; });
+  return ev/deck.length>-amt?"chance":"pay";
+}
+g.MonoBrain={ init:init, fineOrChance:fineOrChance, on:on, buy:buy, bidMax:bidMax, nextManage:nextManage, nextRaise:nextRaise, jail:jail, tradeValue:tradeValue,
   propose:propose, heard:heard, gameOver:gameOver, setStore:setStore, table:table, tune:tune, SKILL:SKILL, P:P, KEY:KEY, VER:VER,
   mood:function(G,p){ return brain(G,p).mood; }, get ready(){ return !!C; },
   _floor:function(G,p){ return floorCash(G,p,brain(G,p)); }, _posVal:posVal, _prem:function(G,gn){ return prem(G,gn); } };

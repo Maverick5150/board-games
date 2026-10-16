@@ -34,6 +34,27 @@
   function esc(s) { return plain(s).replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
   var uid = 0;
 
+  /* editions (2026-10-16): each mount draws ONE edition (mount option `edition`, built by monopoly/edition.js engine().board): its names
+     as printed, its group colours and names, its money, the GO salary, the deck names and the railroad / utility numbers. The module's
+     working variables (NAMES, GROUPS, the fitted name sizes, BUY, NB ...) belong to the mount being drawn: use(ctx) swaps them in, so a
+     picker preview and the game's board can show two editions at once. No edition = the classic US board exactly as before (Party Mode
+     mounts with none). */
+  var DEFNAMES = NAMES, DEFGROUPS = GROUPS, MONEY0 = function (n) { return "$" + n; }, DECKS0 = { chance: "CHANCE", chest: "COMMUNITY CHEST" };
+  var SFX = "", MOUNTS = 0;   // the SVG gradient ids of each mount (two boards on one page, one of them hidden, must not share ids)
+  var MONEY = MONEY0, SALARY = 200, DECKS = DECKS0, RRR = [25, 50, 100, 200], UTILM = [4, 10], RRW = "railroad", CUR = null;
+  function makeCtx(e) {
+    e = e || {}; var gr = DEFGROUPS, k;
+    if (e.groups) { gr = {}; for (k in DEFGROUPS) gr[k] = { c: (e.groups[k] && e.groups[k].c) || DEFGROUPS[k].c, n: (e.groups[k] && e.groups[k].n) || DEFGROUPS[k].n }; }
+    return { names: e.names && e.names.length === 40 ? e.names.slice() : DEFNAMES, groups: gr, money: e.money || MONEY0, salary: e.salary || 200, decks: e.decks || DECKS0,
+      rr: e.rr || [25, 50, 100, 200], util: e.util || [4, 10], rrWord: e.rrWord || "railroad", SIZES: null, SIGW: 0, NB: [], BUY: {} };
+  }
+  function use(c) {
+    if (CUR === c) return;
+    if (CUR) { CUR.SIZES = SIZES; CUR.SIGW = SIGW; }
+    CUR = c; SFX = c.sfx || ""; NAMES = c.names; GROUPS = c.groups; SIZES = c.SIZES; SIGW = c.SIGW; NB = c.NB; BUY = c.BUY;
+    MONEY = c.money; SALARY = c.salary; DECKS = c.decks; RRR = c.rr; UTILM = c.util; RRW = c.rrWord;
+  }
+
   /* ---------------- geometry (units) ---------------- */
   function rectOf(i) {   // the square's rectangle on the board, its turn (the angle its text is set at) and its centre
     var r;
@@ -158,9 +179,18 @@
     "Wheelbarrow": function (F) { return '<path d="M9 21L5 42" stroke="' + K + '" stroke-width="5.4" stroke-linecap="round"/><path d="M9 21L5 42" stroke="#c9ced9" stroke-width="3" stroke-linecap="round"/><path d="M20 38L16 56" stroke="' + K + '" stroke-width="5" stroke-linecap="round"/><path d="M20 38L16 56" stroke="#c9ced9" stroke-width="2.8" stroke-linecap="round"/><path d="M38 38L36 56" stroke="' + K + '" stroke-width="5" stroke-linecap="round"/><path d="M38 38L36 56" stroke="#c9ced9" stroke-width="2.8" stroke-linecap="round"/><path d="M42 33L50 44" stroke="' + K + '" stroke-width="5" stroke-linecap="round"/><path d="M42 33L50 44" stroke="#c9ced9" stroke-width="2.8" stroke-linecap="round"/><path d="M7 17H47L41 39H15z" fill="' + F + '" stroke="' + K + '" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 21H45" stroke="#fff" stroke-width="2.4" stroke-linecap="round" opacity=".55"/><path d="M13 29L16 36" stroke="#101426" stroke-width="1.6" opacity=".4"/><circle cx="52" cy="46" r="9" fill="#101426" stroke="' + K + '" stroke-width="1.6"/><circle cx="52" cy="46" r="3.6" fill="#c8cfdc"/>'; },
     "Horse & Rider": function (F) { return '<path d="M12 31Q3 33 4 46Q8 40 14 40z" fill="#1a1f36" stroke="' + K + '" stroke-width="1.4" stroke-linejoin="round"/><path d="M18 41L16 57M26 44L26 57M38 44L40 57M46 40L51 57" stroke="' + K + '" stroke-width="7" stroke-linecap="round"/><path d="M18 41L16 57M26 44L26 57M38 44L40 57M46 40L51 57" stroke="' + F + '" stroke-width="4.2" stroke-linecap="round"/><ellipse cx="30" cy="38" rx="19" ry="9.5" fill="' + F + '" stroke="' + K + '" stroke-width="1.8"/><path d="M41 34L44 20L47 12L56 14L61 22L55 24L52 38z" fill="' + F + '" stroke="' + K + '" stroke-width="1.8" stroke-linejoin="round"/><path d="M45 14L40 24L43 36" fill="none" stroke="#1a1f36" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="54.5" cy="17.5" r="1.5" fill="' + K + '"/><path d="M22 14L23 29L35 29L36 14z" fill="#1a1f36" stroke="' + K + '" stroke-width="1.4" stroke-linejoin="round"/><circle cx="29" cy="9.5" r="5" fill="' + F + '" stroke="' + K + '" stroke-width="1.6"/><path d="M24 7Q29 2 34 7" fill="#1a1f36" stroke="' + K + '" stroke-width="1"/><path d="M20 35Q30 31 41 35" stroke="#fff" stroke-width="2.4" stroke-linecap="round" opacity=".5" fill="none"/>'; }
   };
+  /* editions: the other objects of the editions' token sets, drawn the same way (generic objects in our own style, never a copy of a
+     licensed sculpt). Keyed by the edition files' token ids; the classic eight answer to their ids too (TOKID) */
+  TOKART["iron"] = function (F) { return '<path d="M26 31V21Q26 13 34 13H44Q52 13 52 21V31" fill="none" stroke="' + K + '" stroke-width="7.4" stroke-linecap="round"/><path d="M26 31V21Q26 13 34 13H44Q52 13 52 21V31" fill="none" stroke="' + F + '" stroke-width="4.2" stroke-linecap="round"/><path d="M3 51L15 35Q18 31 23 31H55Q61 31 61 37V51z" fill="' + F + '" stroke="' + K + '" stroke-width="1.8" stroke-linejoin="round"/><path d="M3 51H61V54Q61 57 58 57H6Q3 57 3 54z" fill="#1a1f36" stroke="' + K + '" stroke-width="1.2"/><path d="M17 38Q20 35 25 35H52" stroke="#fff" stroke-width="2.6" stroke-linecap="round" opacity=".5" fill="none"/><path d="M31 17Q35 16 44 16" stroke="#fff" stroke-width="1.6" stroke-linecap="round" opacity=".45" fill="none"/>'; };
+  TOKART["cannon"] = function (F) { return '<path d="M30 46L7 56" stroke="' + K + '" stroke-width="7" stroke-linecap="round"/><path d="M30 46L7 56" stroke="#8a6a3a" stroke-width="4" stroke-linecap="round"/><g transform="rotate(-22 34 38)"><path d="M15 32.5H51Q55 33 55 36V40Q55 43 51 43.5H15Q10 43 10 38Q10 33 15 32.5z" fill="' + F + '" stroke="' + K + '" stroke-width="1.8"/><rect x="51" y="31" width="7" height="14" rx="2" fill="' + F + '" stroke="' + K + '" stroke-width="1.6"/><circle cx="9" cy="38" r="4" fill="' + F + '" stroke="' + K + '" stroke-width="1.6"/><path d="M17 35.5H49" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity=".5"/></g><circle cx="30" cy="46" r="12" fill="none" stroke="' + K + '" stroke-width="5.6"/><circle cx="30" cy="46" r="12" fill="none" stroke="#8a6a3a" stroke-width="3"/><path d="M30 35V57M19 46H41M22.2 38.2L37.8 53.8M37.8 38.2L22.2 53.8" stroke="#8a6a3a" stroke-width="2.2"/><circle cx="30" cy="46" r="3.4" fill="' + F + '" stroke="' + K + '" stroke-width="1.4"/>'; };
+  TOKART["long-cannon"] = function (F) { return '<path d="M32 46L3 55" stroke="' + K + '" stroke-width="6.4" stroke-linecap="round"/><path d="M32 46L3 55" stroke="#5d6a52" stroke-width="3.6" stroke-linecap="round"/><g transform="rotate(-13 30 37)"><rect x="4" y="33" width="58" height="7.5" rx="3" fill="' + F + '" stroke="' + K + '" stroke-width="1.7"/><rect x="14" y="40" width="22" height="5" rx="2" fill="#1a1f36" stroke="' + K + '" stroke-width="1.1"/><rect x="58" y="31.5" width="5" height="10.5" rx="1.5" fill="' + F + '" stroke="' + K + '" stroke-width="1.4"/><path d="M8 35.6H56" stroke="#fff" stroke-width="1.8" stroke-linecap="round" opacity=".5"/></g><path d="M18 30L26 26L26 40L18 42z" fill="' + F + '" stroke="' + K + '" stroke-width="1.4" stroke-linejoin="round"/><circle cx="28" cy="47" r="10" fill="#101426" stroke="' + K + '" stroke-width="1.6"/><circle cx="28" cy="47" r="7" fill="none" stroke="' + F + '" stroke-width="2.4"/><circle cx="28" cy="47" r="2.8" fill="#c8cfdc"/>'; };
+  TOKART["car-1935"] = function (F) { return '<circle cx="5.5" cy="36" r="5" fill="#101426" stroke="' + K + '" stroke-width="1.4"/><path d="M6 45V38Q6 35 10 34L22 32L27 26Q28.5 24.5 31 24.5H35L37 32H54Q60 32 61 37L62 45z" fill="' + F + '" stroke="' + K + '" stroke-width="1.8" stroke-linejoin="round"/><path d="M37 32L41 21" stroke="' + K + '" stroke-width="2.6" stroke-linecap="round"/><path d="M37.4 31L40.6 22" stroke="#d6ecff" stroke-width="1.2" stroke-linecap="round"/><path d="M7 45Q8 37 16 37Q24 37 25 45" fill="#1a1f36" stroke="' + K + '" stroke-width="1.2"/><path d="M41 45Q42 37 50 37Q58 37 59 45" fill="#1a1f36" stroke="' + K + '" stroke-width="1.2"/><circle cx="16" cy="47" r="7" fill="#101426" stroke="' + K + '" stroke-width="1.5"/><circle cx="16" cy="47" r="3" fill="#c8cfdc"/><circle cx="50" cy="47" r="7" fill="#101426" stroke="' + K + '" stroke-width="1.5"/><circle cx="50" cy="47" r="3" fill="#c8cfdc"/><path d="M47 33.6V36.4M51 33.6V36.4M55 33.6V36.4" stroke="#101426" stroke-width="1.2" opacity=".55"/><path d="M12 36.5L22 34.6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" opacity=".6"/><rect x="60" y="33" width="3" height="10" rx="1" fill="#c8cfdc" stroke="' + K + '" stroke-width="1"/>'; };
+  TOKART["lantern"] = function (F) { return '<path d="M24 15Q24 5 32 5Q40 5 40 15" fill="none" stroke="' + K + '" stroke-width="5"/><path d="M24 15Q24 5 32 5Q40 5 40 15" fill="none" stroke="' + F + '" stroke-width="2.6"/><path d="M20 20L24 13H40L44 20z" fill="' + F + '" stroke="' + K + '" stroke-width="1.8" stroke-linejoin="round"/><rect x="18" y="20" width="28" height="4" rx="1.5" fill="' + F + '" stroke="' + K + '" stroke-width="1.4"/><path d="M20 24H44Q48 36 44 48H20Q16 36 20 24z" fill="#ffe28a" stroke="' + K + '" stroke-width="1.6"/><path d="M32 30Q28 36 32 42Q36 36 32 30z" fill="#f08a2c" stroke="#b9791b" stroke-width="1"/><path d="M21 24V48M43 24V48" stroke="' + F + '" stroke-width="2.6"/><path d="M24 28Q22 36 24 44" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity=".6" fill="none"/><rect x="16" y="48" width="32" height="7" rx="2" fill="' + F + '" stroke="' + K + '" stroke-width="1.8"/>'; };
+  TOKART["purse"] = function (F) { return '<path d="M10 30Q10 24 16 24H48Q54 24 54 30L57 50Q57 56 51 56H13Q7 56 7 50z" fill="' + F + '" stroke="' + K + '" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 26Q32 18 52 26" fill="none" stroke="' + K + '" stroke-width="4.6" stroke-linecap="round"/><path d="M12 26Q32 18 52 26" fill="none" stroke="#f1cd6f" stroke-width="2.4" stroke-linecap="round"/><circle cx="29" cy="17.5" r="3.4" fill="#f1cd6f" stroke="' + K + '" stroke-width="1.3"/><circle cx="35" cy="17.5" r="3.4" fill="#f1cd6f" stroke="' + K + '" stroke-width="1.3"/><path d="M14 34Q13 44 15 50" stroke="#fff" stroke-width="2.6" stroke-linecap="round" opacity=".5" fill="none"/><path d="M10 40H54" stroke="#1a1f36" stroke-width="1.4" opacity=".35"/>'; };
+  var TOKID = { "top-hat": "Top Hat", "race-car": "Race Car", "scottie-dog": "Dog", "battleship": "Battleship", "boot": "Boot", "shoe": "Boot", "thimble": "Thimble", "wheelbarrow": "Wheelbarrow", "horse-rider": "Horse & Rider" };
   var TOKEN_NAMES = ["Top Hat", "Race Car", "Dog", "Battleship", "Boot", "Thimble", "Wheelbarrow", "Horse & Rider"];
   function tokenSVG(name, seat, px, cls) {
-    var art = TOKART[name] || TOKART["Top Hat"], s = SEATS[seat] || SEATS[1], id = "mbg" + (++uid);
+    var art = TOKART[name] || TOKART[TOKID[name]] || TOKART["Top Hat"], s = SEATS[seat] || SEATS[1], id = "mbg" + (++uid);
     return '<svg class="mb-tkv' + (cls ? " " + cls : "") + '" viewBox="0 0 64 64"' + (px ? ' width="' + px + '" height="' + px + '"' : "") + ' aria-hidden="true" focusable="false"><defs><linearGradient id="' + id + '" x1=".1" y1="0" x2=".9" y2="1"><stop offset="0" stop-color="' + s.hi + '"/><stop offset=".48" stop-color="' + s.c + '"/><stop offset="1" stop-color="' + s.lo + '"/></linearGradient></defs><ellipse cx="32" cy="58.5" rx="21" ry="3.2" fill="#000" opacity=".3"/>' + art("url(#" + id + ")") + "</svg>";
   }
 
@@ -181,8 +211,9 @@
   function cornerArt(i) {
     var inner = "", f1, f2;
     if (i === 0) {   // GO: the board's outer edges are its right and bottom sides (the rim), so the lines stay within 118 units
-      f1 = fitSize("COLLECT $200", 118, 17); f2 = fitSize("SALARY AS YOU PASS", 118, 13);
-      inner += capText("COLLECT $200", f1, D / 2, 11 + f1 * 0.37, 0) + capText("SALARY AS YOU PASS", f2, D / 2, 16 + f1 * 0.74 + f2 * 0.37, 0);
+      var col = "COLLECT " + MONEY(SALARY);
+      f1 = fitSize(col, 118, 17); f2 = fitSize("SALARY AS YOU PASS", 118, 13);
+      inner += capText(col, f1, D / 2, 11 + f1 * 0.37, 0) + capText("SALARY AS YOU PASS", f2, D / 2, 16 + f1 * 0.74 + f2 * 0.37, 0);
       inner += '<text class="mb-go" x="' + D / 2 + '" y="98" text-anchor="middle" font-size="62" fill="#c1272d">GO</text>';
       inner += '<g transform="translate(24 107) scale(1.31 .4)">' + ICONS.arrow + '</g>';
     } else if (i === 10) {   // as on the real board: the cell (In Jail) toward the middle, "Just" down the left strip and "Visiting" along the
@@ -200,16 +231,16 @@
   function deckSpot(x, y, rot, kind) {   // a card place in the middle as on the real board: a dashed tray with the deck's icon and name
     var w = 196, h = 124, ch = kind === "chance";
     return '<g class="mb-deck" transform="translate(' + x + " " + y + ") rotate(" + rot + ')"><rect x="' + (-w / 2) + '" y="' + (-h / 2) + '" width="' + w + '" height="' + h + '" rx="12" fill="' + (ch ? "#fde5cc" : "#dbe7fb") + '" fill-opacity=".72" stroke="' + INK + '" stroke-opacity=".42" stroke-width="2" stroke-dasharray="8 6"/>' +
-      iconAt(ch ? "chance" : "chest", -27, -41, 54) + capText(ch ? "CHANCE" : "COMMUNITY CHEST", 18, 0, 30, 0) + "</g>";
+      iconAt(ch ? "chance" : "chest", -27, -41, 54) + capText(ch ? DECKS.chance : DECKS.chest, DECKS === DECKS0 ? 18 : Math.min(18, fitSize(ch ? DECKS.chance : DECKS.chest, w - 16, 18)), 0, 30, 0) + "</g>";
   }
   function staticSVG(amt) {
     var sz = sizes(), out = "", i, r, f, pr, nb, y, nm;
     out += '<svg class="mb-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + S + " " + S + '" preserveAspectRatio="xMidYMid meet" text-rendering="geometricPrecision" role="img" aria-label="The Monopoly board">';
-    out += '<defs><radialGradient id="mbFld" cx="50%" cy="46%" r="75%"><stop offset="0" stop-color="#e3f2e4"/><stop offset=".6" stop-color="' + FIELD + '"/><stop offset="1" stop-color="#b6d6bd"/></radialGradient>' +
-      '<linearGradient id="mbSq" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".5" stop-color="' + PAPER + '"/><stop offset="1" stop-color="#e8f1e1"/></linearGradient>' +
-      '<linearGradient id="mbSh" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".42"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".16"/></linearGradient>' +
-      '<pattern id="mbHatch" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3.2" height="10" fill="#0b0e1a" opacity=".26"/></pattern></defs>';
-    out += '<rect width="' + S + '" height="' + S + '" fill="url(#mbFld)"/>';
+    out += '<defs><radialGradient id="mbFld' + SFX + '" cx="50%" cy="46%" r="75%"><stop offset="0" stop-color="#e3f2e4"/><stop offset=".6" stop-color="' + FIELD + '"/><stop offset="1" stop-color="#b6d6bd"/></radialGradient>' +
+      '<linearGradient id="mbSq' + SFX + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".5" stop-color="' + PAPER + '"/><stop offset="1" stop-color="#e8f1e1"/></linearGradient>' +
+      '<linearGradient id="mbSh' + SFX + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".42"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".16"/></linearGradient>' +
+      '<pattern id="mbHatch' + SFX + '" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3.2" height="10" fill="#0b0e1a" opacity=".26"/></pattern></defs>';
+    out += '<rect width="' + S + '" height="' + S + '" fill="url(#mbFld' + SFX + ')"/>';
     // the middle: fine gold guilloche rings and a soft glow behind the plate (the plate itself is HTML)
     for (i = 0; i < 6; i++) out += '<rect x="' + (D + 14 + i * 22) + '" y="' + (D + 14 + i * 22) + '" width="' + (9 * W - 28 - i * 44) + '" height="' + (9 * W - 28 - i * 44) + '" rx="' + (26 - i * 3) + '" fill="none" stroke="' + GOLD + '" stroke-width="1.4" opacity="' + r2(0.22 - i * 0.025) + '"/>';
     // the two card places of the real board, turned to face their corners: Community Chest up-left, Chance down-right
@@ -217,12 +248,12 @@
     for (i = 0; i < 40; i++) {
       r = RECTS[i]; out += '<g class="sp msp" data-i="' + i + '" transform="' + sqXf(i) + '">';
       if (r.corner) {
-        out += '<rect width="' + D + '" height="' + D + '" fill="url(#mbSq)" stroke="' + LINE + '" stroke-width="1.8"/>' + cornerArt(i) + "</g>"; continue;
+        out += '<rect width="' + D + '" height="' + D + '" fill="url(#mbSq' + SFX + ')" stroke="' + LINE + '" stroke-width="1.8"/>' + cornerArt(i) + "</g>"; continue;
       }
-      out += '<rect width="' + W + '" height="' + D + '" fill="url(#mbSq)" stroke="' + LINE + '" stroke-width="1.8"/>';
+      out += '<rect width="' + W + '" height="' + D + '" fill="url(#mbSq' + SFX + ')" stroke="' + LINE + '" stroke-width="1.8"/>';
       f = sz[r.side];
       if (isBand(i)) {
-        out += '<rect class="mb-band" data-band="' + i + '" width="' + W + '" height="30" fill="#888"/><rect width="' + W + '" height="30" fill="url(#mbSh)"/><path d="M0 30H' + W + '" stroke="' + K + '" stroke-opacity=".55" stroke-width="1.6"/>';
+        out += '<rect class="mb-band" data-band="' + i + '" width="' + W + '" height="30" fill="#888"/><rect width="' + W + '" height="30" fill="url(#mbSh' + SFX + ')"/><path d="M0 30H' + W + '" stroke="' + K + '" stroke-opacity=".55" stroke-width="1.6"/>';
         nb = nameBlock(i, f, 37); out += nb.svg; NB[i] = 37 + nb.h;
       } else {
         nb = nameBlock(i, f, 11); out += nb.svg; NB[i] = 11 + nb.h;
@@ -251,11 +282,11 @@
     var s = BUY[i], r = RECTS[i], own = st.own && st.own[i], sc = own ? (SEATS[own] || SEATS[1]) : null, h = st.houses ? st.houses[i] | 0 : 0, mo = st.mort && st.mort[i], out = "", k, x0;
     if (r.corner) return "";
     var f = sizes()[r.side], pf = Math.min(19, f * 1.45), top = D - STRIP, fill = sc ? "#0b0a12" : INK;
-    if (mo) out += '<rect class="mb-mort" width="' + W + '" height="' + top + '" fill="url(#mbHatch)"/>';
+    if (mo) out += '<rect class="mb-mort" width="' + W + '" height="' + top + '" fill="url(#mbHatch' + SFX + ')"/>';
     if (s || amtTxt) {
       if (sc) out += '<rect class="mb-own" y="' + top + '" width="' + W + '" height="' + STRIP + '" fill="' + sc.c + '"/><path d="M0 ' + top + 'H' + W + '" stroke="' + K + '" stroke-opacity=".55" stroke-width="1.4"/>';
-      else if (mo) out += '<rect class="mb-mort" y="' + top + '" width="' + W + '" height="' + STRIP + '" fill="url(#mbHatch)"/>';
-      out += amtTxt ? amtSVG(amtTxt, pf, fill) : priceText("$" + s.price, pf, D - 12.5, fill);
+      else if (mo) out += '<rect class="mb-mort" y="' + top + '" width="' + W + '" height="' + STRIP + '" fill="url(#mbHatch' + SFX + ')"/>';
+      out += amtTxt ? amtSVG(amtTxt, pf, fill) : priceText(MONEY(s.price), MONEY === MONEY0 ? pf : Math.min(pf, fitSize(MONEY(s.price), (W - 2 * PAD) * SX, pf)), D - 12.5, fill);
     }
     if (isBand(i) && h > 0) {
       if (h === 5) out += '<g transform="translate(' + (W / 2 - 22) + " 4) scale(" + r2(44 / 64) + " " + r2(22 / 64) + ')">' + ICONS.hotel + "</g>";
@@ -280,7 +311,7 @@
   }
 
   /* ---------------- the inspector card (a square, large) ---------------- */
-  function money(n) { return "$" + n; }
+  function money(n) { return MONEY(n); }
   function card(i, o) {   // o = {sq, owner:{name,seat}|null, houses, mort, now, desc}: HTML for the phone sheet and the TV column
     o = o || {}; var tag = o.tag || "h3", s = o.sq || {}, grp = GROUPS[s.g], r = RECTS[i], nm = plain(NAMES[i]), ic = iconFor(i), h = "";
     h += '<div class="mbi' + (grp ? "" : " mbi--plain") + '"' + (grp ? ' style="--grp:' + grp.c + '"' : "") + '><div class="mbi__head">' + (ic ? '<span class="mbi__ic">' + icon(ic, 40) + "</span>" : "") + '<' + tag + ' class="mbi__name"' + (o.id ? ' id="' + o.id + '"' : "") + '>' + esc(nm) + "</" + tag + "></div>";
@@ -293,8 +324,8 @@
       h += '<dl class="mbi__rents"><div><dt>Rent</dt><dd>' + money(s.rent[0]) + "</dd></div>";
       for (var k = 1; k <= 4; k++) h += "<div><dt>" + k + (k === 1 ? " house" : " houses") + "</dt><dd>" + money(s.rent[k]) + "</dd></div>";
       h += "<div><dt>Hotel</dt><dd>" + money(s.rent[5]) + "</dd></div><div><dt>House cost</dt><dd>" + money(s.house) + "</dd></div><div><dt>Mortgage</dt><dd>" + money(s.mort) + "</dd></div></dl>";
-    } else if (s.t === "rr") h += '<dl class="mbi__rents"><div><dt>1 railroad</dt><dd>$25</dd></div><div><dt>2 railroads</dt><dd>$50</dd></div><div><dt>3 railroads</dt><dd>$100</dd></div><div><dt>4 railroads</dt><dd>$200</dd></div><div><dt>Mortgage</dt><dd>$100</dd></div></dl>';
-    else if (s.t === "util") h += '<p class="mbi__desc">One utility: rent is 4 times the dice. Both: 10 times the dice.</p><dl class="mbi__rents"><div><dt>Mortgage</dt><dd>$75</dd></div></dl>';
+    } else if (s.t === "rr") { h += '<dl class="mbi__rents">'; for (var q = 0; q < 4; q++) h += "<div><dt>" + (q + 1) + " " + RRW + (q ? "s" : "") + "</dt><dd>" + money(RRR[q]) + "</dd></div>"; h += "<div><dt>Mortgage</dt><dd>" + money(s.mort) + "</dd></div></dl>"; }
+    else if (s.t === "util") h += '<p class="mbi__desc">One utility: rent is ' + UTILM[0] + ' times the dice. Both: ' + UTILM[1] + ' times the dice.</p><dl class="mbi__rents"><div><dt>Mortgage</dt><dd>' + money(s.mort) + '</dd></div></dl>';
     else if (o.desc) h += '<p class="mbi__desc">' + esc(o.desc) + "</p>";
     var st = [];
     if (s.price) {
@@ -359,7 +390,8 @@
   function mount(host, o) {
     o = o || {}; injectCSS();
     var sq = o.squares || [], zoomOn = o.zoom !== false, inst = {}, st = {}, amt = { 4: "PAY $200", 38: "PAY $100" }, last = [], tokEls = {}, selI = -1, zoom = 1, tx = 0, ty = 0, gestureT = 0, tapT = 0, lastTap = { t: 0, x: 0, y: 0 };
-    BUY = {}; sq.forEach(function (s, i) { if (s && s.price) BUY[i] = s; });
+    var ctx = makeCtx(o.edition); ctx.sfx = MOUNTS++ ? "-" + MOUNTS : ""; use(ctx);   // editions: this mount's own names, colours, money and sizes
+    ctx.BUY = BUY = {}; sq.forEach(function (s, i) { if (s && s.price) BUY[i] = s; });
     var dpad = o.dpad !== false;   // dpad:false (Party Mode's TV host, where the board is only shown): not a focus stop
     host.classList.add("mb");
     if (dpad) { host.setAttribute("tabindex", "0"); host.setAttribute("role", "group"); host.setAttribute("aria-label", "Monopoly board. Press OK, then the arrow keys to move between the squares."); }
@@ -377,13 +409,13 @@
     inst.host = host; inst.stage = stage; inst.center = center; inst.toks = toks;
 
     function drawStatic() {
-      sizes(); svgBox.innerHTML = staticSVG(); paintBands(svgBox, sq);
+      use(ctx); sizes(); svgBox.innerHTML = staticSVG(); paintBands(svgBox, sq);
       inst.svg = svgBox.firstChild; inst.dyn = svgBox.querySelector("#mbDyn"); last = [];
       if (st.own || st.houses) paintDyn(true);
       if (st.toks) setToks(st.toks);   // a redraw (the font arrived) can move the free room under a name: the pieces follow
     }
     function paintDyn(all) {
-      var i, changed = false;
+      use(ctx); var i, changed = false;
       for (i = 0; i < 40; i++) {
         var key2 = (st.own ? st.own[i] | 0 : 0) + "|" + (st.houses ? st.houses[i] | 0 : 0) + "|" + (st.mort && st.mort[i] ? 1 : 0) + "|" + (amt[i] || "");
         if (all || last[i] !== key2) { last[i] = key2; changed = true; }
@@ -404,7 +436,7 @@
     drawStatic();
     // the font arrives after the first draw: lay the names out again if the measured widths changed
     if (document.fonts && document.fonts.load) {
-      var again = function () { var was = SIGW; SIZES = null; wcache = {}; cxTried = false; cx = null; sizes(); if (Math.abs(SIGW - was) > 0.5) drawStatic(); else SIZES = SIZES; };
+      var again = function () { use(ctx); var was = SIGW; SIZES = null; wcache = {}; cxTried = false; cx = null; sizes(); if (Math.abs(SIGW - was) > 0.5) drawStatic(); else SIZES = SIZES; };
       document.fonts.load("800 20px Manrope", "ABC").then(again, function () { });
     }
 
@@ -422,7 +454,7 @@
       el.style.transform = "translate(calc(var(--mb-u,4px)*" + r2(pt.x / S * 100) + "),calc(var(--mb-u,4px)*" + r2(pt.y / S * 100) + ")) translate(-50%,-50%)";
     }
     function setToks(list) {
-      var by = {}, n, k, seen = {}, first = !host.classList.contains("mb-anim");
+      use(ctx); var by = {}, n, k, seen = {}, first = !host.classList.contains("mb-anim");
       function key(t) { return t.i === 10 ? (t.jail ? "10j" : "10v") : t.i; }   // the jail corner holds two groups: in jail, visiting
       (list || []).forEach(function (t) { var kk = key(t); (by[kk] = by[kk] || []).push(t); });
       (list || []).forEach(function (t) {
@@ -455,12 +487,19 @@
       if (s.hl >= 0 && s.hl != null) box(hl, s.hl); else hl.style.display = "none";
     };
     inst.select = function (i) {   // the D-pad's square
-      selI = i; if (i < 0) { fs.style.display = "none"; live.textContent = ""; return; }
+      use(ctx); selI = i; if (i < 0) { fs.style.display = "none"; live.textContent = ""; return; }
       box(fs, i); live.textContent = plain(NAMES[i]);
       if (o.onFocus) o.onFocus(i);
     };
     inst.selected = function () { return selI; };
-    inst.names = NAMES; inst.rects = RECTS;
+    inst.names = ctx.names; inst.groups = ctx.groups; inst.rects = RECTS;
+    inst.card = function (i, info) { use(ctx); return card(i, info); };   // the inspector card in this board's edition
+    // editions: draw another edition on this board (the picker's big preview, a new game in another edition); null = the classic board
+    inst.setEdition = function (e, s2) {
+      if (s2) sq = s2; var sx = ctx.sfx; ctx = makeCtx(e); ctx.sfx = sx; use(ctx); ctx.BUY = BUY = {}; sq.forEach(function (s, i) { if (s && s.price) BUY[i] = s; });
+      inst.names = ctx.names; inst.groups = ctx.groups; drawStatic();
+      if (selI >= 0) { fs.style.display = "none"; selI = -1; }
+    };
 
     /* ---- zoom and pan (phone and mouse) ---- */
     function size() { return host.clientWidth || 1; }
@@ -560,10 +599,30 @@
     }
     inst.destroy = function () { host.classList.remove("mb", "is-zoomed", "is-gesture", "mb-anim"); host.innerHTML = ""; };
     inst.redraw = function () { drawStatic(); };
-    inst.setSquares = function (s2) { sq = s2 || sq; BUY = {}; sq.forEach(function (s, i) { if (s && s.price) BUY[i] = s; }); paintBands(svgBox, sq); last = []; paintDyn(true); };
+    inst.setSquares = function (s2) { use(ctx); sq = s2 || sq; ctx.BUY = BUY = {}; sq.forEach(function (s, i) { if (s && s.price) BUY[i] = s; }); paintBands(svgBox, sq); last = []; paintDyn(true); };
     return inst;
   }
 
-  g.MonoBoard = { mount: mount, tokenSVG: tokenSVG, icon: icon, card: card, plateHTML: plateHTML, SEATS: SEATS, NAMES: NAMES, GROUPS: GROUPS, TOKENS: TOKEN_NAMES, rects: RECTS, walk: walk, hit: hit, iconFor: iconFor, S: S, SX: SX, LS: LS, ROOM: W - 2 * PAD, RIM: RIM,
+  /* editions: a small picture of a board (the setup page's Edition row, the picker's list): the squares, the colour bands, the corners,
+     no text (cheap: one SVG of plain rectangles). sq = the edition's spaces ({t, g}); e = its board options (group colours) */
+  function mini(sq, e) {
+    var gr = (e && e.groups) || {}, out = '<svg class="mb-mini" viewBox="0 0 ' + S + " " + S + '" aria-hidden="true" focusable="false"><rect width="' + S + '" height="' + S + '" rx="24" fill="' + FIELD + '"/>', i, r, t, c;
+    for (i = 0; i < 40; i++) {
+      r = RECTS[i]; t = (sq && sq[i]) || {};
+      out += '<g transform="' + sqXf(i) + '"><rect width="' + (r.corner ? D : W) + '" height="' + D + '" fill="' + PAPER + '" stroke="' + LINE + '" stroke-width="6"/>';
+      if (t.t === "prop") { c = (gr[t.g] && gr[t.g].c) || (DEFGROUPS[t.g] ? DEFGROUPS[t.g].c : "#888"); out += '<rect width="' + W + '" height="46" fill="' + c + '"/>'; }
+      else if (t.t === "rr") out += '<rect x="28" y="56" width="44" height="40" rx="6" fill="#1d3a2a"/>';
+      else if (t.t === "chance") out += '<circle cx="50" cy="76" r="22" fill="#e0662a"/>';
+      else if (t.t === "cc") out += '<circle cx="50" cy="76" r="22" fill="#2a4aa8"/>';
+      else if (t.t === "util" || t.t === "tax") out += '<circle cx="50" cy="76" r="20" fill="#9aa3b5"/>';
+      else if (r.corner) out += '<circle cx="70" cy="70" r="36" fill="' + (i === 0 ? "#c1272d" : i === 10 ? "#f08a2c" : "#2a54b8") + '"/>';
+      out += "</g>";
+    }
+    out += '<rect x="' + (D + 150) + '" y="' + (D + 330) + '" width="' + (9 * W - 300) + '" height="240" rx="40" fill="#0d5a35" stroke="' + GOLD + '" stroke-width="8"/>';
+    return out + '<rect x="4" y="4" width="' + (S - 8) + '" height="' + (S - 8) + '" rx="22" fill="none" stroke="#0f3d24" stroke-width="8"/></svg>';
+  }
+  var DEFCTX = makeCtx(null); use(DEFCTX);
+  function cardDefault(i, o) { use(DEFCTX); return card(i, o); }
+  g.MonoBoard = { mount: mount, tokenSVG: tokenSVG, icon: icon, card: cardDefault, plateHTML: plateHTML, SEATS: SEATS, NAMES: DEFNAMES, GROUPS: DEFGROUPS, mini: mini, hasToken: function (k) { return !!(TOKART[k] || TOKART[TOKID[k]]); }, TOKENS: TOKEN_NAMES, rects: RECTS, walk: walk, hit: hit, iconFor: iconFor, S: S, SX: SX, LS: LS, ROOM: W - 2 * PAD, RIM: RIM,
     measure: function () { return { sizes: sizes(), sigw: SIGW }; } };
 })(window);
