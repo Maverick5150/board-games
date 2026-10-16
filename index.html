@@ -165,6 +165,9 @@
   /* Candy Land (wave 1): strawberry frosting on a raspberry-cocoa night, the same block as candy/index.html */
   [data-game="candy"]{--accent:#ffc8cc; --accent-bright:#ffe3e5; --accent-deep:#402028; --accent-ink:#2a0c12; --accent-text:#ffc8cc; --accent-paper:#8a2434;
     --accent-glow:rgba(255, 200, 204, .24); --felt:#3a1c26; --felt-deep:#160a0f; --felt-lite:#5a2c3a; --board:#402028; --board-lite:#5a3040}
+  /* Motocross War: steel grey on a dirt-brown night, the same block as mxwar/index.html */
+  [data-game="mxwar"]{--accent:#a0a0a8; --accent-bright:#d2d2da; --accent-deep:#2c2830; --accent-ink:#101014; --accent-text:#bdbdc6; --accent-paper:#46464f;
+    --accent-glow:rgba(176, 176, 190, .26); --felt:#3b2a1b; --felt-deep:#120c07; --felt-lite:#5e4329; --board:#3b2a1b; --board-lite:#5e4329}
   .hb-party-sheet .bg-sheet__sub{margin:.25rem 0 1.25rem}
   .hb-party-acts{display:grid; gap:.75rem; margin-bottom:.75rem}
 
@@ -255,6 +258,10 @@
       <span class="bg-tile__art"><img src="ui/art/thumb-candy.svg" alt="" width="320" height="240" decoding="async"><span class="bg-tile__badge" aria-hidden="true"><span data-hb-icon="user"></span>2-4</span></span>
       <span class="bg-tile__label"><span class="bg-tile__seal" data-hb-seal="candy" aria-hidden="true"></span><span class="bg-tile__name">Candy Land</span><span class="bg-tile__meta">Draw and hop</span></span>
     </a>
+    <a class="bg-tile" data-game="mxwar" href="mxwar/index.html" aria-label="Motocross War, 1 or more riders against the pros. Every race is a game of War: heats, the LCQ and the Main, every Supercross and Motocross season.">
+      <span class="bg-tile__art"><img src="ui/art/thumb-mxwar.svg" alt="" width="320" height="240" decoding="async"><span class="bg-tile__badge" aria-hidden="true"><span data-hb-icon="user"></span>1-4</span></span>
+      <span class="bg-tile__label"><span class="bg-tile__seal" data-hb-seal="mxwar" aria-hidden="true"></span><span class="bg-tile__name">Motocross War</span><span class="bg-tile__meta">Race the pros</span></span>
+    </a>
   </nav>
 
   <section class="hb-soon" id="hbSoon" aria-labelledby="hbSoonLabel" hidden>
@@ -296,8 +303,8 @@
   var doc = document, root = doc.documentElement;
   var $ = function (s, r) { return (r || doc).querySelector(s); }, $$ = function (s, r) { return Array.prototype.slice.call((r || doc).querySelectorAll(s)); };
   var isTV = function () { return root.hasAttribute("data-tv"); };
-  var ORDER = ["trouble", "sorry", "monopoly", "rummy500", "risk", "uno", "scatter", "war", "snakes", "candy", "party"];
-  var NAME = { trouble: "Trouble", sorry: "Sorry!", monopoly: "Monopoly", rummy500: "500 Rummy", risk: "Risk", uno: "Uno", scatter: "Scattergories", war: "War", snakes: "Snakes and Ladders", candy: "Candy Land", party: "Party Mode" };
+  var ORDER = ["trouble", "sorry", "monopoly", "rummy500", "risk", "uno", "scatter", "war", "snakes", "candy", "mxwar", "party"];
+  var NAME = { trouble: "Trouble", sorry: "Sorry!", monopoly: "Monopoly", rummy500: "500 Rummy", risk: "Risk", uno: "Uno", scatter: "Scattergories", war: "War", snakes: "Snakes and Ladders", candy: "Candy Land", mxwar: "Motocross War", party: "Party Mode" };
   var INFO = {
     trouble: ["Pop · move · bump", "Pop the die and race your pegs home."],
     sorry: ["Slide · bump · sorry", "Draw cards, slide and bump home."],
@@ -308,6 +315,7 @@
     scatter: ["One letter · twelve lists", "Roll a letter, beat the clock, be unique."],
     war: ["Flip · battle · declare war", "Everyone flips at once, the high card takes them all."],
     snakes: ["Roll · climb · slide", "Climb the ladders, dodge the snakes, first to 100 wins."],
+    mxwar: ["Gate · holeshot · checkered flag", "Every race is a game of War. Race the pros, every season since 1972."],
     candy: ["Draw · match · hop", "Draw a colour, hop along the sweet road, first to the spire wins."],
     party: ["Play together", "Host on the TV, everyone joins from a phone."]
   };
@@ -319,7 +327,7 @@
   function info(g) { return (isTV() && INFO_TV[g]) || INFO[g]; }
   /* pre-rendered backdrops: 1920 on a 1080p TV, 960 everywhere else (phone, desktop, 960x540 TV WebView) */
   function heroSrc(g) {
-    if (g === "war" || g === "snakes" || g === "candy") return "ui/art/hero-" + g + ".svg";   /* the new games ship their poster as one SVG */
+    if (g === "war" || g === "snakes" || g === "candy" || g === "mxwar") return "ui/art/hero-" + g + ".svg";   /* the new games ship their poster as one SVG */
     return "ui/art/hero-" + g + "-" + (isTV() && innerWidth * (devicePixelRatio || 1) > 1280 ? 1920 : 960) + ".webp";
   }
   function setText(g) {
@@ -532,6 +540,8 @@
       /* Candy Land's seal: its lollipop (the same glyph candy/game.js registers) */
       if (b.icon.add) b.icon.add("lolly", '<circle cx="12" cy="9" r="6"/><path d="M12 15v7"/><path d="M12 9a1.4 1.4 0 1 1 1.4 1.4A3 3 0 1 1 9 8.6a4.4 4.4 0 1 1 6.6 3.4"/>');
       if (b.icon.seal && b.icon.seal.set) b.icon.seal.set("candy", "lolly");
+      if (b.icon.add) b.icon.add("helmet", '<path d="M4 14a8 8 0 0 1 16-1.5V15h-6.5L12 18H6.5A2.5 2.5 0 0 1 4 15.5z"/><path d="M13.5 12.5H20"/><path d="M8 8.5l3 1"/>');
+      if (b.icon.seal && b.icon.seal.set) b.icon.seal.set("mxwar", "helmet");
       $$("[data-hb-icon]").forEach(function (el) { el.innerHTML = b.icon(el.getAttribute("data-hb-icon")); });
       $$("[data-hb-seal]").forEach(function (el) { el.innerHTML = b.icon(b.icon.seal(el.getAttribute("data-hb-seal"))); });
     }
@@ -607,7 +617,7 @@
 
     /* NEW on every game the player has not opened yet (localStorage "bg_hub_seen", guarded). The first time, everything on screen
        counts as seen except the newest games, so War, Snakes and Ladders and Candy Land show NEW; a game's chip goes once it is opened (its tile or Continue). */
-    var SEEN = "bg_hub_seen", FIRST_NEW = ["war", "snakes", "candy"];
+    var SEEN = "bg_hub_seen", FIRST_NEW = ["war", "snakes", "candy", "mxwar"];
     function seenList() { try { var a = JSON.parse(localStorage.getItem(SEEN)); return Array.isArray(a) ? a : null; } catch (e) { return null; } }
     function saveSeen(a) { try { localStorage.setItem(SEEN, JSON.stringify(a)); } catch (e) { } }
     function markNew() {
