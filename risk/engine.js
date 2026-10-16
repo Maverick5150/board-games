@@ -77,6 +77,7 @@ function newGame(cfg){
     deck:[],discard:[],setsTraded:0,turn:0,phase:"setup",reserve:0,conquered:false,returnTo:"attack",
     fortLeft:0,occ:null,noAttack:false,pending:null,sub:null,initLeft:[],claimIdx:0,hqPicked:[],seq:0};
   if(G.two){ G.players.push({id:2,name:"Neutral",human:false,ci:-1,alive:true,cards:[],neutral:true,mission:null,hq:null}); }
+  if(cfg.skill) G.skill=cfg.skill;   // the computers' skill (brain.js), known before a random setup places their armies
   buildDeck(G); setup(G);
   return G;
 }
@@ -492,7 +493,7 @@ function checkWin(G,events){
     var np=realPlayers(G).length, need=np<=3?np-1:(np===4?2:3);
     live.forEach(function(p){ if(win!=null) return; if(G.terr[p.hq].o!==p.id) return; var t=(p.hqTaken||[]).filter(function(v){ return G.terr[G.players[v].hq].o===p.id; }).length; if(t>=Math.min(need,np-1)) win=p.id; });
   }
-  if(win!=null){ G.over=true; G.winner=win; G.phase="over"; events.push(ev(G,"win",{p:win,text:pn(G,win)+" wins the game!"})); }
+  if(win!=null){ G.over=true; G.winner=win; G.phase="over"; events.push(ev(G,"win",{p:win,text:pn(G,win)+" wins the game!"})); if(Risk.Brain){ try{ Risk.Brain.finish(G); }catch(e){} } }
 }
 
 /* ======================= computer player ======================= */
@@ -602,7 +603,14 @@ function aiAttackPlan(G){
   }
   return best;
 }
+/* the computer's move: the brain (brain.js, G.skill easy|normal|hard, missing = normal) decides; if it is missing, declines or throws, the old code below does */
 function aiAction(G){
+  if(G.over) return null;
+  var B=Risk.Brain, a=null;
+  if(B){ try{ a=B.decide(G); }catch(e){ a=null; } }
+  return a||aiActionLegacy(G);
+}
+function aiActionLegacy(G){
   if(G.over) return null;
   var p=G.turn, pl=G.players[p];
   switch(G.phase){
@@ -709,9 +717,13 @@ function playerStats(G,p){ var t=owned(G,p), a=0; t.forEach(function(i){ a+=G.te
 
 Risk.Engine={ensureDeployStart:ensureDeployStart,snapshot:snapshot,nextSetValue:nextSetValue,VERSIONS:VERSIONS,GAMEMODES:GAMEMODES,HOUSE:HOUSE,HOUSE_OFFICIAL:HOUSE_OFFICIAL,defaultOpts:defaultOpts,mergeOpts:mergeOpts,versionOpts:versionOpts,
   newGame:newGame,cur:cur,owned:owned,realPlayers:realPlayers,claimTerr:claimTerr,deployOne:deployOne,setup2p:setup2p,pickHq:pickHq,chooseMode:chooseMode,
-  tradeCards:tradeCards,place:place,attack:attack,occupy:occupy,endAttack:endAttack,fortify:fortify,endTurn:endTurn,applyAction:applyAction,aiAction:aiAction,
+  tradeCards:tradeCards,place:place,attack:attack,occupy:occupy,endAttack:endAttack,fortify:fortify,endTurn:endTurn,applyAction:applyAction,aiAction:aiAction,aiActionLegacy:aiActionLegacy,
   findSets:findSets,validSet:validSet,setValue:setValue,forcedNow:forcedNow,fortifyTargets:fortifyTargets,targetsFrom:targetsFrom,anyAttack:anyAttack,canFortifyAny:canFortifyAny,
   terrArmies:terrArmies,contBonus:contBonus,missionText:missionText,missionDone:missionDone,winProb:winProb,autoFinishSetup:autoFinishSetup,playerStats:playerStats,
   endReinforce:endReinforce,hasRoom:hasRoom,startArmiesOf:startArmiesOf,startArmiesFor:startArmiesFor,enemyAdj:enemyAdj,shuffle:shuffle};
 if(typeof module!=="undefined"&&module.exports) module.exports=Risk.Engine;
+/* browsers: bring in the brain right after this file (the page, the Party TV and the Party phones all load engine.js, so all get it); a failed load = the old code */
+if(typeof document!=="undefined"&&document.currentScript&&document.currentScript.src&&document.readyState==="loading"&&!Risk.Brain){
+  try{ document.write('<script src="'+document.currentScript.src.replace(/engine\.js(\?.*)?$/,"brain.js")+'"><\/script>'); }catch(e){}
+}
 })(typeof window!=="undefined"?window:globalThis);
