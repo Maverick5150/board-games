@@ -1,5 +1,5 @@
 // Offline cache for War (bump VERSION to force update)
-const VERSION = "war-v1";
+const VERSION = "war-v2";
 const PREFIX = VERSION.replace(/v[0-9]+$/, "");   // every game shares one origin (one CacheStorage): only ever delete THIS game's old caches
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "../sound.js", "../skins.js", "../saves.js", "../names.js", "./engine.js", "./brain.js", "./cards.js", "./game.js",
   "../ui/theme.css", "../ui/ui.js", "../ui/icons.js",
