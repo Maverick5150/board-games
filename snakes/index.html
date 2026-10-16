@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en" data-game="snakes">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#080a15">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Snakes and Ladders</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="../ui/art/icon-snakes-192.png">
+<link rel="apple-touch-icon" href="../ui/art/icon-snakes-maskable-512.png">
+<script>/* before first paint: TV for ?tv=1 or the Fire TV bridge, and the stored effects level */
+(function (h) {
+  if (/[?&]tv=1(&|$)/.test(location.search) || window.AndroidTV) h.setAttribute("data-tv", "");
+  try { if (localStorage.getItem("bgui.effects") === "reduced") h.setAttribute("data-effects", "reduced"); } catch (e) { }
+})(document.documentElement);</script>
+<link rel="stylesheet" href="../ui/theme.css">
+<link rel="preload" href="../ui/fonts/manrope-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../ui/fonts/dmserifdisplay-latin.woff2" as="font" type="font/woff2" crossorigin>
+<script src="../ui/icons.js" defer></script>
+<script src="../ui/ui.js" defer></script>
+<style>
+  /* Snakes and Ladders on the shared Midnight Luxe system (ui/theme.css). Page layout only (sn- prefix); every control is a bg- class; the
+     board is snakes/board.js. Accent (wave 1): viper lime on an aubergine night. ui/theme.css has no [data-game="snakes"] block, so the page
+     brings it (BGUI.stage.register in game.js). Checked with BG_audit/games/war/page/accent.js (+ War's sage): CIEDE2000 to every shipped
+     accent >= 19.0 (Monopoly 19.0, Trouble 19.2, War 19.2); deeps >= 12.2 (Scattergories 12.2, Sorry! 12.8, Party 13.3; the low-chroma
+     aubergine sits under Scattergories' saturated violet); accent text 14.3:1 on the page and 10.8:1 on a lit panel, ink on the accent
+     13.1:1, accent on paper 5.6:1, ivory on the deep 13.9:1. Search scripts: BG_audit/games/snakes/page/accent-search.js, deep-search.js. */
+  [data-game="snakes"] { --accent: #94f434; --accent-bright: #c4fa86; --accent-deep: #2c1d38; --accent-ink: #0b1a05; --accent-text: #94f434; --accent-paper: #2a5010;
+    --accent-glow: rgba(148, 244, 52, .26); --felt: #241830; --felt-deep: #0d0814; --felt-lite: #3e2a52; --board: #2a1c38; --board-lite: #433056; }
+  *, *::before, *::after{box-sizing:border-box}
+  [hidden]{display:none !important}
+  html{scroll-padding-bottom:6.5rem}
+  html[data-tv]{scroll-padding-bottom:0}
+  body.bg-app{overflow-x:hidden; touch-action:manipulation}
+  .bg-topbar__title .bg-eyebrow{white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  body.bg-app--scene [data-stage-text], body.bg-app--felt [data-stage-text]{text-shadow:0 0 .15em rgba(4,5,12,.95), 0 0 .45em rgba(4,5,12,.8), 0 0 1em rgba(4,5,12,.55)}
+  body.bg-app--scene .bg-section > [data-stage-text]{text-shadow:0 0 .1em rgba(4,5,12,1), 0 0 .3em rgba(4,5,12,.95), 0 0 .7em rgba(4,5,12,.8), 0 0 1.3em rgba(4,5,12,.5)}
+
+  /* ---------- setup page (also the in-game Menu) ---------- */
+  .sn-setup{display:flex; flex-direction:column; width:min(100%,40rem); margin:0 auto; padding:0 var(--gutter)}
+  .sn-col{display:contents}
+  .sn-hero{order:1} .sn-sec--version{order:2} .sn-sec--players{order:3} .sn-sec--names{order:4} .sn-sec--speed{order:5}
+  .sn-sec--rules{order:6} .sn-sec--save{order:7} .sn-back{order:8} .sn-dock{order:9}
+  .sn-hero{position:relative; min-height:0; margin:0 calc(-1 * var(--gutter)); padding-top:46%; border-radius:0; background:transparent}
+  .sn-hero .bg-hero__layer{bottom:auto; height:auto; aspect-ratio:16/9; border-radius:0; background-color:transparent;
+    background-image:url("../ui/art/hero-snakes.svg"); background-size:100% auto; background-position:100% 0;
+    -webkit-mask-image:linear-gradient(180deg,#000 58%,rgba(0,0,0,0) 100%); mask-image:linear-gradient(180deg,#000 58%,rgba(0,0,0,0) 100%)}
+  .sn-hero .bg-hero__shade{display:none}
+  .sn-hero .bg-hero__body{max-width:none; padding:0 var(--gutter) .25rem}
+  .sn-hero .bg-hero__pitch{max-width:30rem}
+  .sn-sec{min-width:0}
+  .sn-subhead{margin-top:1.25rem}
+  #versions{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #versions .bg-version{min-height:4.75rem; justify-content:center}
+  #versions .bg-version__title{font-size:var(--fs-lg)}
+  .sn-vdesc{margin:.875rem 0 0; padding:.75rem .875rem; border-radius:var(--r-md); background:var(--ink-2); box-shadow:var(--well-edge);
+    font:var(--fw-body) var(--fs-sm)/1.45 var(--font-ui); color:var(--text-2)}
+  .sn-vdesc b{color:var(--text-1); font-weight:var(--fw-ui-strong)}
+  .sn-card{display:grid; gap:.75rem}
+  .sn-field{display:grid; gap:.15rem}
+  .sn-field .bg-row__desc{margin-top:0}
+  .sn-step{gap:.75rem}
+  .sn-step .bg-stepper__val{min-width:3.25rem}
+  .sn-seats{display:flex; flex-wrap:wrap; align-items:center; gap:.625rem .875rem; padding:.625rem .875rem; border-radius:var(--r-md); background:var(--ink-2); box-shadow:var(--well-edge)}
+  .sn-seats__tokens{display:flex; flex:none; padding-left:.4rem}
+  .sn-seats__tokens .bg-token{width:2rem; height:2rem; margin-left:-.4rem; font-size:var(--fs-micro)}
+  .sn-seats__txt{display:grid; gap:.1rem; flex:1 1 10rem; min-width:0; font:var(--fw-ui) var(--fs-xs)/1.3 var(--font-ui); color:var(--text-2)}
+  .sn-seats__txt b{font:var(--fw-ui-strong) var(--fs-sm)/1.25 var(--font-ui); color:var(--text-1)}
+  .sn-colseg{grid-template-columns:repeat(6,minmax(0,1fr)); margin-top:.5rem}
+  .sn-colseg button{padding-inline:.15rem; min-width:0}
+  .sn-cdot{display:inline-block; width:1rem; height:1rem; border-radius:50%; background:radial-gradient(circle at 35% 30%,var(--seat-hi),var(--seat) 50%,var(--seat-lo)); box-shadow:0 0 0 2px rgba(8,10,21,.8)}
+  .sn-colseg .bg-sr{position:absolute}
+  .sn-disclose .sn-chev{display:inline-grid; place-items:center; flex:none; width:1.5rem; height:1.5rem; color:var(--gold-200); transition:transform var(--dur-fast) var(--ease-out)}
+  .sn-disclose[aria-expanded="true"] .sn-chev{transform:rotate(90deg)}
+  .sn-sec--rules .bg-rows{grid-template-columns:minmax(0,1fr)}
+  .sn-rules{margin-top:.75rem}
+  .sn-rules .bg-row--static{cursor:default; flex-wrap:wrap}
+  .sn-rules .bg-row--static .bg-row__main{flex:1 1 9rem}
+  .sn-rules .bg-select{flex:0 1 auto; max-width:100%}
+  .sn-legend{margin:.75rem 0 0; font:var(--fw-body) var(--fs-xs)/1.7 var(--font-ui); color:var(--text-2)}
+  .sn-boardline{margin:.75rem 0 0}
+  #svbar.svbar{margin:0; padding:var(--sp-3); border:0; border-radius:var(--r-lg); background:var(--panel-fill); box-shadow:var(--panel-edge),var(--elev-1)}
+  #svbar h4{display:none}
+  #svbar .r{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,8.5rem),1fr)); gap:.5rem; margin:0 0 .5rem}
+  #svbar .r:last-child{margin-bottom:0}
+  #svbar button{display:grid; grid-template-columns:auto minmax(0,auto); align-items:center; justify-content:center; gap:.15rem .45rem; min-width:0; min-height:var(--tap); margin:0;
+    padding:.45rem .625rem; border:0; border-radius:var(--r-md); color:var(--text-1); background:var(--control-fill);
+    box-shadow:inset 0 0 0 1px var(--line-2), inset 0 1px 0 rgba(255,255,255,.08); font:var(--fw-ui-strong) var(--fs-sm)/1.15 var(--font-ui); white-space:normal; text-align:center}
+  #svbar button:active{background:var(--ink-5)}
+  #svbar button:focus{outline:none}
+  #svbar button[disabled]{opacity:.42}
+  #svbar button .bg-ico{width:1.1em; height:1.1em; color:var(--gold-200)}
+  #svbar button small{grid-column:1 / -1; margin:0; font:var(--fw-ui) var(--fs-micro)/1.2 var(--font-ui); color:var(--text-3); opacity:1}
+  .sn-back{margin-top:var(--sp-6)}
+  .sn-dock{position:sticky; bottom:0; z-index:5; display:flex; gap:.625rem; margin:0 calc(-1 * var(--gutter)); padding:1rem var(--gutter) calc(env(safe-area-inset-bottom,0px) + .875rem);
+    background:linear-gradient(180deg,rgba(8,10,21,0),var(--ink-1) 32%)}
+  .sn-dock #startBtn{flex:1 1 0; min-width:0}
+  .sn-dock.has-resume #startBtn{padding-inline:.75rem}
+  .sn-resume{flex:1 1 0; min-width:0; padding:.5rem .75rem; border-radius:var(--r-lg)}
+  .sn-resume > span{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.2rem; min-height:2.75rem}
+  .sn-resume.bg-btn--secondary .bg-btn__sub, .sn-dock #startBtn.bg-btn--secondary .bg-btn__sub{color:var(--text-2)}
+  .sn-nw{white-space:nowrap}
+
+  /* ---------- in game: the board is the hero; standings on top (phone) or beside it (TV) ---------- */
+  .sn-game{display:flex; flex-direction:column; align-items:center; width:min(100%,40rem); margin:0 auto; padding:0 var(--gutter) 1rem}
+  body.sn-in-setup .sn-game{display:none !important}
+  .sn-stand{align-self:stretch; padding:.625rem 0 .5rem}
+  .sn-stand .bg-player{padding-right:.6rem}
+  .sn-stand .sn-rk{flex:none; min-width:1.1rem; font:var(--fw-caps) var(--fs-micro)/1 var(--font-ui); color:var(--gold-100); text-align:center}
+  .sn-stand .sn-bar{position:absolute; left:.9rem; right:.9rem; bottom:.2rem; height:.1875rem; border-radius:2px; background:rgba(255,255,255,.08); overflow:hidden}
+  .sn-stand .sn-bar > i{display:block; height:100%; background:var(--seat); transform-origin:0 50%; transform:scaleX(0); transition:transform var(--dur-med,.35s) var(--ease-out)}
+  html:not([data-tv]) .sn-game.is-multi .sn-stand{grid-template-columns:repeat(3,minmax(0,1fr)); gap:.35rem}
+  html:not([data-tv]) .sn-game.is-multi .sn-stand .bg-player{gap:.3rem; padding:.35rem .45rem .5rem .4rem; border-radius:var(--r-md)}
+  html:not([data-tv]) .sn-game.is-multi .sn-stand .bg-player__cpu{display:none}
+  html:not([data-tv]) .sn-game.is-multi .sn-stand .bg-token{width:1.6rem; height:1.6rem; font-size:var(--fs-micro)}
+  /* the board: a gilt frame round the art; the pieces ride an HTML layer over the SVG */
+  .sn-boardwrap{--bw:min(calc(100vw - 2 * var(--gutter)), 34rem); flex:none}
+  .sn-board{position:relative; width:var(--bw); padding:.3rem; border-radius:1rem; background:linear-gradient(145deg,#f6e2ac,#b88a45 40%,#e9cb87 62%,#7d5523); box-shadow:0 .75rem 2rem rgba(0,0,0,.55)}
+  .sn-art{position:relative; width:100%; aspect-ratio:1000 / 1070; border-radius:.75rem; overflow:hidden; background:#0b0a12; touch-action:manipulation; user-select:none; -webkit-user-select:none}
+  .sn-art .sn-svg{position:absolute; inset:0; width:100%; height:100%; display:block; will-change:transform}   /* its own layer: the moving pieces and banners above it never make the big board repaint */
+  .sn-svg .sn-num{font-family:var(--font-ui); font-weight:800; fill:#f8efd8; stroke:#0b0a12; stroke-opacity:.72; stroke-width:5px; paint-order:stroke; stroke-linejoin:round}
+  .sn-svg .sn-num.is-100{fill:#3a2408; stroke:#fff3cf; stroke-opacity:.5}
+  .sn-svg .sn-railtxt{font-family:var(--font-ui); font-weight:800; letter-spacing:.06em; text-transform:uppercase; fill:#e7ca90; text-anchor:end}
+  .sn-spin text{font-family:var(--font-ui); font-weight:800; font-size:19px; fill:#f8efd8; text-anchor:middle; dominant-baseline:central}
+  .sn-toks{position:absolute; inset:0; pointer-events:none}
+  .sn-tok{position:absolute; aspect-ratio:1; z-index:2; will-change:transform}
+  .sn-tok.is-turn{z-index:4}
+  .sn-tok.is-moving{z-index:5}
+  .sn-hopw{position:absolute; inset:0}
+  .sn-tok .bg-token{width:100%; height:100%; font-size:max(var(--fs-micro), calc(var(--tw, 24px) * .44)); box-shadow:inset 0 -3px 6px rgba(0,0,0,.35), 0 0 0 2px #0b0a12, 0 .2rem .45rem rgba(0,0,0,.6)}
+  .sn-tok.is-turn .bg-token{box-shadow:inset 0 -3px 6px rgba(0,0,0,.35), 0 0 0 2px #0b0a12, 0 0 0 4px var(--seat), 0 0 0 6px #fff3d1}
+  .sn-tok.is-done .bg-token{box-shadow:inset 0 -3px 6px rgba(0,0,0,.35), 0 0 0 2px #0b0a12, 0 0 0 4px #e2bd72}
+  .sn-banner{position:absolute; left:50%; top:46%; z-index:8; display:grid; justify-items:center; gap:.3rem; width:max-content; max-width:88%; padding:.6rem 1.4rem .75rem; transform:translate(-50%,-50%);
+    border-radius:var(--r-lg); background:linear-gradient(180deg,rgba(18,14,32,.95),rgba(8,10,21,.95)); box-shadow:inset 0 0 0 1.5px var(--gold-200), 0 .8rem 2rem rgba(0,0,0,.6);
+    text-align:center; pointer-events:none; opacity:0; visibility:hidden}
+  .sn-banner.is-on{opacity:1; visibility:visible}
+  .sn-banner b{font:400 var(--fs-3xl)/1.05 var(--font-display); color:var(--gold-100)}
+  .sn-banner span{font:var(--fw-ui-strong) var(--fs-sm)/1.3 var(--font-ui); color:#f6e9cf}
+  .sn-banner.is-snake{background:linear-gradient(180deg,rgba(70,12,22,.95),rgba(22,6,10,.95))}
+  .sn-banner.is-snake b{color:#ffc2b4}
+  .sn-banner.is-ladder{background:linear-gradient(180deg,rgba(16,48,24,.95),rgba(6,18,10,.95))}
+  .sn-banner.is-ladder b{color:#d6fa9c}
+  .sn-banner.is-win{background:linear-gradient(180deg,rgba(74,52,14,.96),rgba(26,18,4,.96))}
+  .sn-side{display:grid; gap:.5rem; align-self:stretch; margin-top:.6rem}
+  .sn-stat{margin:0; text-align:center; font:var(--fw-ui-strong) var(--fs-sm)/1.4 var(--font-ui); color:var(--text-1); min-height:1.4em}
+  .sn-say{display:flex; align-items:center; justify-content:center; gap:.45rem; margin:0; min-height:1.75rem; font:italic 400 var(--fs-md)/1.3 var(--font-display); color:var(--text-2)}
+  .sn-say:empty{visibility:hidden}
+  .sn-say .bg-token{width:1.5rem; height:1.5rem; font:var(--fw-caps) var(--fs-micro)/1 var(--font-ui)}
+  .sn-acts{display:flex; align-items:center; justify-content:center; gap:.875rem; margin:0 calc(-1 * var(--focus-room)); padding:var(--focus-room)}
+  .sn-dice{flex:none; display:flex; align-items:center; justify-content:center; gap:.4rem; min-width:3.5rem; min-height:3.5rem; cursor:pointer}
+  .sn-dice .bg-die{width:3.25rem; height:3.25rem}
+  .sn-dice .sn-spin{width:4.25rem; height:4.25rem; display:block}
+  .sn-dice .sn-arrow{transform-origin:50px 50px; transform-box:view-box}
+  #rollBtn{flex:1 1 10rem; max-width:20rem; min-width:0; min-height:3.5rem; flex-direction:column; gap:.1rem; padding-block:.4rem; font-size:var(--fs-xl)}
+  #rollBtn .bg-btn__sub:empty{display:none}
+  #rollBtn .bg-btn__sub{font-size:var(--fs-xs)}
+  .sn-meta{display:flex; flex-wrap:wrap; justify-content:center; gap:.4rem .6rem}
+  .sn-chip{display:inline-flex; align-items:center; gap:.35rem; padding:.25rem .65rem; border-radius:var(--r-pill); background:var(--ink-3); box-shadow:inset 0 0 0 1px var(--line-1);
+    font:var(--fw-ui-strong) var(--fs-micro)/1.3 var(--font-ui); color:var(--text-1); font-variant-numeric:tabular-nums}
+  .sn-chip:empty{display:none}
+  .sn-chip.is-hot{box-shadow:inset 0 0 0 1.5px var(--accent); color:var(--accent-text)}
+  .sn-log{margin:0; padding:0; list-style:none; display:grid; gap:.15rem; text-align:center; font:var(--fw-body) var(--fs-xs)/1.4 var(--font-ui); color:var(--text-2)}
+  .sn-log li:last-child{color:var(--text-1)}
+  .sn-log li:nth-last-child(n+3){display:none}
+  html:not([data-tv]) .sn-hints{display:none}
+  /* the who-goes-first show (American): each lane's card is a little spinner pointing at the spin */
+  .sn-fpspin{position:relative; display:grid; place-items:center; width:100%; height:100%}
+  .sn-fpspin svg{width:88%; height:auto; display:block}
+  .sn-fpspin b{position:absolute; left:50%; bottom:.15rem; transform:translateX(-50%); font:400 var(--fs-lg)/1 var(--font-display); color:#1d1a2a}
+  .sn-fpspin--back svg{width:80%}
+  .bg-fp__face .sn-fpspin svg{width:74%; margin-top:-.9rem}
+  .sn-final{display:grid; gap:.35rem; margin:.25rem auto .9rem; padding:0; list-style:none; width:min(100%,24rem); text-align:left}
+  .sn-final li{display:flex; align-items:center; gap:.55rem; padding:.35rem .6rem; border-radius:var(--r-md); background:var(--ink-3); box-shadow:inset 0 0 0 1px var(--line-1);
+    font:var(--fw-ui-strong) var(--fs-sm)/1.25 var(--font-ui); color:var(--text-1)}
+  .sn-final li.is-lead{box-shadow:inset 0 0 0 1.5px var(--gold-200)}
+  .sn-final .bg-token{width:1.6rem; height:1.6rem; font-size:var(--fs-micro); flex:none}
+  .sn-final .sn-fn{flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .sn-final .sn-fc{flex:none; color:var(--gold-100); font-variant-numeric:tabular-nums}
+  .sn-final .sn-fr{flex:none; min-width:1.2rem; color:var(--text-2)}
+  .sn-final.is-grid{grid-template-columns:repeat(2,minmax(0,1fr)); width:min(100%,32rem)}
+  .sn-winhome{margin-top:.75rem}
+  /* fallbacks when ui/ui.js is missing */
+  .sn-toast{position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom,0px) + 90px); transform:translateX(-50%); max-width:90vw; padding:10px 16px; border-radius:12px; z-index:90;
+    background:#000c; color:#fff; font:700 14px system-ui,sans-serif; text-align:center; opacity:0; pointer-events:none; transition:opacity .2s}
+  .sn-toast.show{opacity:1}
+  .sn-svtoast{position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom,0px) + 7rem); transform:translateX(-50%); max-width:90vw; padding:10px 16px; border-radius:12px; z-index:100000;
+    background:#000d; color:#fff; font:700 14px system-ui,sans-serif; text-align:center; opacity:0; pointer-events:none; transition:opacity .2s}
+  .sn-svtoast.show{opacity:1}
+  html.sn-luxe .sn-toast, html.sn-luxe .sn-svtoast{display:none}
+  /* reduced effects / reduced motion: nothing endless here; the one-shot moves are skipped in script */
+  html[data-effects="reduced"] .sn-stand .sn-bar > i, html[data-motion="reduce"] .sn-stand .sn-bar > i{transition:none}
+  @media (prefers-reduced-motion: reduce){ .sn-stand .sn-bar > i, .sn-disclose .sn-chev{transition:none} }
+
+  /* ---------- TV (html[data-tv], 1rem = 24px at 1080p) ---------- */
+  html[data-tv] .sn-setup{display:grid; grid-template-columns:minmax(0,32rem) minmax(0,34rem); column-gap:3.5rem; justify-content:center; align-items:start; width:auto; padding:0 var(--gutter) 2rem}
+  html[data-tv] .sn-col{display:block; min-width:0}
+  html[data-tv] .sn-hero{margin:1.5rem 0 0; border-radius:var(--r-xl); padding-top:34%}
+  html[data-tv] .sn-hero .bg-hero__layer{border-radius:var(--r-xl) var(--r-xl) 0 0;
+    -webkit-mask-image:linear-gradient(90deg,rgba(0,0,0,0),#000 8%,#000 96%,rgba(0,0,0,0)),linear-gradient(180deg,rgba(0,0,0,0),#000 9%,#000 58%,rgba(0,0,0,0));
+    -webkit-mask-composite:source-in;
+    mask-image:linear-gradient(90deg,rgba(0,0,0,0),#000 8%,#000 96%,rgba(0,0,0,0)),linear-gradient(180deg,rgba(0,0,0,0),#000 9%,#000 58%,rgba(0,0,0,0));
+    mask-composite:intersect}
+  html[data-tv] .sn-hero .bg-hero__body{padding:0}
+  html[data-tv] #versions{gap:1.5rem}
+  html[data-tv] .sn-rules .bg-row{min-height:0; padding:.5rem .875rem}
+  html[data-tv] .sn-col--b{display:flex; flex-direction:column}
+  html[data-tv] .sn-sec--players{order:1} html[data-tv] .sn-dock{order:2} html[data-tv] .sn-sec--save{order:3} html[data-tv] .sn-back{order:4}
+  html[data-tv] .sn-dock{position:static; gap:1.75rem; margin:0; padding:1.5rem 0 0; background:none}
+  html[data-tv] #humanSeg, html[data-tv] #cpuSeg, html[data-tv] #speedSeg, html[data-tv] #skillSeg, html[data-tv] .sn-colseg{gap:1.5rem}
+  html[data-tv] .sn-step{gap:1.5rem}
+  html[data-tv] .sn-colseg{grid-template-columns:repeat(3,minmax(0,1fr)); row-gap:1.5rem}
+  html[data-tv] .bg-topbar__end{gap:1.5rem}
+  html[data-tv] #svbar button{grid-template-columns:minmax(0,1fr); justify-items:center; align-content:center; row-gap:.3rem; padding:.625rem .5rem}
+  html[data-tv] #svbar button .bg-ico{width:1.25em; height:1.25em}
+  html[data-tv] #svbar .r{gap:1.5rem}
+  html[data-tv] #svbar .r:not(:last-child){margin-bottom:1.5rem}
+  /* TV in game: the board takes the full height on the left; standings, whose turn, the die and Roll, the log and the remote's keys on the right */
+  html[data-tv] .sn-game{display:grid; --bw:calc((100vh - 4.75rem - 1.75rem - .6rem) * 1000 / 1070 + .6rem); grid-template-columns:var(--bw) minmax(0,40rem); grid-template-rows:auto minmax(0,1fr);
+    grid-template-areas:"board stand" "board side"; column-gap:3rem; justify-content:center; align-items:start; width:auto; height:calc(100vh - 4.75rem); padding:.5rem var(--gutter) 1.25rem}
+  html[data-tv] .sn-boardwrap{grid-area:board; --bw:inherit}
+  html[data-tv] .sn-stand{grid-area:stand; grid-template-columns:minmax(0,1fr); gap:.75rem; padding:.75rem 0 1rem}
+  html[data-tv] .sn-game.is-multi .sn-stand{grid-template-columns:repeat(2,minmax(0,1fr))}
+  html[data-tv] .sn-stand .bg-player{padding:.55rem .9rem .7rem .5rem}
+  html[data-tv] .sn-stand .bg-token{width:2.25rem; height:2.25rem}
+  html[data-tv] .sn-stand .bg-player__cpu{left:2.75rem}
+  html[data-tv] .sn-side{grid-area:side; display:flex; flex-direction:column; gap:1rem; margin:0; min-height:0; height:100%}
+  html[data-tv] .sn-stat{text-align:left; font-size:var(--fs-lg)}
+  html[data-tv] .sn-say{justify-content:flex-start}
+  html[data-tv] .sn-acts{justify-content:flex-start; gap:2rem}
+  html[data-tv] .sn-dice .bg-die{width:4.5rem; height:4.5rem}
+  html[data-tv] .sn-dice .sn-spin{width:6rem; height:6rem}
+  html[data-tv] #rollBtn{flex:1 1 auto; max-width:22rem}
+  html[data-tv] .sn-meta{justify-content:flex-start}
+  html[data-tv] .sn-log{flex:1; min-height:0; overflow:hidden; align-content:end; text-align:left}
+  html[data-tv] .sn-log li:nth-last-child(n+3){display:block}
+  html[data-tv] .sn-log li:nth-last-child(n+7){display:none}
+  html[data-tv] .sn-hints{justify-content:flex-start; margin:0}
+  html[data-tv] .sn-banner b{font-size:var(--fs-4xl)}
+  html[data-tv] .sn-banner span{font-size:var(--fs-lg)}
+  html[data-tv] body:not(.sn-in-setup) .bg-toast{left:calc(100vw - var(--gutter) - 20rem); max-width:30rem}
+  html[data-tv] #winSub{font-size:var(--fs-md); line-height:1.4; margin-bottom:.5rem}   /* the standings list makes the card taller: All games stays on the 1080p screen */
+  html[data-tv] .sn-winhome{margin-top:.5rem}
+  html[data-tv] .sn-final{width:min(100%,28rem)}
+  html[data-tv] .sn-final.is-grid{width:min(100%,40rem)}
+
+  /* ---------- phone upright (step 11): the board nearly edge to edge (8 px gutters; the gilt frame is inside the box); only a narrow
+     upright screen, so tablets and desktops keep the 34rem cap ---------- */
+  @media (orientation: portrait) and (max-width: 36em){
+    html:not([data-tv]) .sn-game{padding-inline:.5rem}
+    html:not([data-tv]) .sn-boardwrap{--bw:calc(100vw - 1rem)}
+    html:not([data-tv]) .sn-acts{margin-inline:-.5rem; padding-inline:.5rem}   /* the ring (7 px) fits the 8 px gutter: nothing pokes past the screen */
+  }
+
+  /* ---------- phone sideways (step 11): the TV's split, phone sized. A slim top bar, the board on the left at the full height (pinned),
+     the standings, whose turn, the die and Roll and the log on the right in their own scroll area; the page never scrolls ---------- */
+  @media (orientation: landscape) and (max-height: 31.25em){
+    html:not([data-tv]){--ls-bar:3.25rem; --ls-h:100vh; --ls-pad:.5rem;
+      --ls-game:calc(var(--ls-h) - var(--ls-bar) - env(safe-area-inset-top,0px) - 2 * var(--ls-pad))}
+    @supports (height:100dvh){ html:not([data-tv]){--ls-h:100dvh} }
+    html:not([data-tv]) .bg-topbar{height:calc(var(--ls-bar) + env(safe-area-inset-top,0px)); padding-top:calc(env(safe-area-inset-top,0px) + .25rem); padding-bottom:.25rem}
+    html:not([data-tv]) .sn-game{display:grid; --bw:calc((var(--ls-game) - .6rem) * 1000 / 1070 + .6rem); grid-template-columns:var(--bw) minmax(0,1fr); grid-template-rows:max-content max-content 1fr;
+      grid-template-areas:"board stand" "board side" "board ."; column-gap:1rem; align-items:start; align-content:start; width:auto;
+      height:calc(var(--ls-h) - var(--ls-bar) - env(safe-area-inset-top,0px)); overflow:hidden auto; overscroll-behavior:contain;
+      padding:var(--ls-pad) max(var(--gutter), env(safe-area-inset-right,0px)) var(--ls-pad) max(var(--ls-pad), env(safe-area-inset-left,0px))}
+    html:not([data-tv]) .sn-boardwrap{grid-area:board; position:sticky; top:0; --bw:inherit}
+    html:not([data-tv]) .sn-stand{grid-area:stand; grid-template-columns:minmax(0,1fr); gap:.375rem; padding:.625rem 0 .25rem}
+    html:not([data-tv]) .sn-game.is-multi .sn-stand{grid-template-columns:repeat(2,minmax(0,1fr))}
+    html:not([data-tv]) .sn-side{grid-area:side; margin-top:.25rem}
+    html:not([data-tv]) .sn-stat{text-align:left}
+    html:not([data-tv]) .sn-say{justify-content:flex-start}
+    html:not([data-tv]) .sn-acts{justify-content:flex-start}
+    html:not([data-tv]) .sn-meta{justify-content:flex-start}
+    html:not([data-tv]) .sn-log{text-align:left}
+    html:not([data-tv]) body:not(.sn-in-setup) .bg-toast{left:calc(var(--bw) + (100vw - var(--bw)) / 2); max-width:calc(100vw - var(--bw) - 2rem)}
+    /* Victory: the trophy beside the result (two columns), so Play again shows on the first screen; the same rays, confetti and trophy */
+    html:not([data-tv]) .bg-win__card{display:grid; grid-template-columns:10rem minmax(0,1fr); column-gap:1.5rem; align-items:center; width:min(100%,44rem)}
+    html:not([data-tv]) .bg-win__card > *{grid-column:2}
+    html:not([data-tv]) .bg-win__card > .bg-win__medal{grid-column:1; grid-row:1 / span 7; margin:0 auto}
+    html:not([data-tv]) .bg-win__title{margin:.25rem 0 0}
+    html:not([data-tv]) .bg-win__sub{margin:.25rem 0 .5rem}
+    html:not([data-tv]) .bg-win__stats{margin:.5rem 0 0}
+    html:not([data-tv]) .bg-win__actions{margin-top:.5rem}
+    html:not([data-tv]) .bg-win__rays{left:calc(50vw - min(50vw - var(--gutter), 22rem) + 5rem)}
+    html:not([data-tv]) .sn-final{margin:.25rem 0 .5rem; width:100%}
+    html:not([data-tv]) .sn-final.is-grid{width:100%}
+    /* Snakes adds the sorted standings to the card: the stat pills move under the trophy (two by two), so Play again stays on screen */
+    html:not([data-tv]) .bg-win__card{grid-template-columns:10rem minmax(0,1fr); align-items:start; max-height:calc(var(--ls-h) - .5rem); overflow:hidden auto; padding:.25rem .5rem 0 0}
+    html:not([data-tv]) #winEyebrow{grid-row:1} html:not([data-tv]) #winTitle{grid-row:2; font-size:var(--fs-4xl)} html:not([data-tv]) #winSub{grid-row:3; font-size:var(--fs-xs); line-height:1.35}
+    html:not([data-tv]) #winList{grid-row:4} html:not([data-tv]) .bg-win__actions{grid-row:5} html:not([data-tv]) .sn-winhome{grid-row:6; margin-top:.5rem}
+    html:not([data-tv]) .bg-win__card > .bg-win__medal{grid-row:1 / span 3; align-self:center; width:8rem; height:6.8rem}
+    html:not([data-tv]) #winStats{grid-column:1; grid-row:4 / span 3; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.35rem; align-self:start; margin:.25rem 0 0}
+    html:not([data-tv]) #winStats .bg-stat{min-width:0; padding:.3rem .25rem}
+    html:not([data-tv]) .sn-final li{padding:.25rem .55rem}
+    /* setup and Menu: a lower art band (the same art, cropped to the band); the Start dock stays sticky at the bottom */
+    html:not([data-tv]) .sn-hero{padding-top:5.5rem}
+    html:not([data-tv]) .sn-hero .bg-hero__layer{bottom:0; aspect-ratio:auto; background-size:cover; background-position:50% 40%}
+  }
+</style>
+<script src="../sound.js"></script>
+<script src="../skins.js"></script>
+<script src="../saves.js"></script>
+<script src="../names.js"></script>
+<script>window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
+<script>/* a no-op Sound with every method this page uses, in case sound.js fails to load */
+window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){},closePanel:function(){},panelOpen:function(){return false;},addStyle:function(){return false;},hasStyle:function(){return false;}};
+window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";}};</script>
+</head>
+<body class="bg-app bg-app--scene sn-in-setup">
+  <header class="bg-topbar">
+    <div class="bg-topbar__start"><a class="bg-btn bg-btn--icon" id="homeBtn" href="../index.html" aria-label="All games" data-icon="back"></a></div>
+    <div class="bg-topbar__title"><span class="bg-eyebrow" id="barEyebrow">New game</span><span class="bg-topbar__name">Snakes and Ladders</span></div>
+    <div class="bg-topbar__end">
+      <button class="bg-btn bg-btn--icon" id="menuBtn" type="button" aria-label="Menu" data-icon="menu" hidden></button>
+    </div>
+  </header>
+
+  <main class="sn-setup" id="setup" aria-label="New game">
+    <div class="sn-col sn-col--a">
+      <section class="bg-hero sn-hero" aria-labelledby="setupTitle">
+        <div class="bg-hero__layer is-on"></div>
+        <div class="bg-hero__shade"></div>
+        <div class="bg-hero__body">
+          <span class="bg-eyebrow bg-eyebrow--accent" data-stage-text="strong">Roll · climb · slide</span>
+          <h1 class="bg-hero__title" id="setupTitle" data-stage-text>Snakes and Ladders</h1>
+          <p class="bg-hero__pitch" data-stage-text>Race from the start to square 100. Land at the foot of a ladder and climb it; land on a snake's head and slide down.</p>
+        </div>
+      </section>
+      <section class="sn-sec sn-sec--version" aria-labelledby="versionHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="versionHead" data-stage-text>Version</h2></div>
+        <div class="bg-versions" id="versions" role="radiogroup" aria-labelledby="versionHead"></div>
+        <p class="sn-vdesc" id="versionDesc" aria-live="polite"></p>
+      </section>
+      <section class="sn-sec sn-sec--names" aria-labelledby="namesHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="namesHead" data-stage-text>Names and colours</h2></div>
+        <div class="bg-card sn-namecard" id="nameCard"><p class="bg-names-note" id="namesNote">Your name is kept on this device for every game. Pick a colour; the computers take the others.</p></div>
+      </section>
+      <section class="sn-sec sn-sec--speed" aria-labelledby="speedHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="speedHead" data-stage-text>Game speed</h2></div>
+        <div class="bg-seg bg-seg--text" id="speedSeg" role="group" aria-labelledby="speedHead"><button type="button" data-s="slow" aria-pressed="false">Slow</button><button type="button" data-s="medium" class="on" aria-pressed="true">Medium</button><button type="button" data-s="fast" aria-pressed="false">Fast</button></div>
+        <div class="bg-section sn-subhead"><h2 class="bg-eyebrow" id="skillHead" data-stage-text>Computer skill</h2></div>
+        <div class="bg-seg bg-seg--text" id="skillSeg" role="group" aria-labelledby="skillHead"><button type="button" data-k="easy" aria-pressed="false">Easy</button><button type="button" data-k="normal" class="on" aria-pressed="true">Normal</button><button type="button" data-k="hard" aria-pressed="false">Hard</button></div>
+        <p class="sn-legend" id="skillNote" data-stage-text></p>
+      </section>
+      <section class="sn-sec sn-sec--rules" aria-labelledby="rulesHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="rulesHead" data-stage-text>Rules</h2></div>
+        <div class="bg-rows">
+          <button class="bg-row sn-disclose" id="rulesToggle" type="button" aria-expanded="false" aria-controls="houseRules">
+            <span class="bg-row__main"><span class="bg-row__title">Rules and house rules</span><span class="bg-row__desc" id="rulesDesc"></span></span>
+            <span class="sn-chev" data-icon="chevron" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div class="bg-rows sn-rules" id="houseRules" hidden></div>
+        <p class="sn-legend" id="rulesLegend" data-stage-text hidden><span class="bg-tag bg-tag--official">official</span> from the rule sources (Hasbro's printed rules, Jaques, Bigjigs) · <span class="bg-tag bg-tag--house">house</span> a popular home rule</p>
+        <p class="sn-vdesc sn-boardline" id="boardLine" aria-live="polite"></p>
+      </section>
+    </div>
+    <div class="sn-col sn-col--b">
+      <section class="sn-sec sn-sec--players" aria-labelledby="playersHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="playersHead" data-stage-text>Players</h2></div>
+        <div class="bg-card sn-card">
+          <div class="sn-field"><span class="bg-row__title" id="humansTitle">Players on this phone</span><span class="bg-row__desc" id="humansDesc">0 = watch the computers play.</span></div>
+          <div class="bg-stepper sn-step" id="humanSeg" role="group" aria-label="Players on this phone"></div>
+          <div class="sn-field"><span class="bg-row__title">Computer players</span><span class="bg-row__desc" id="cpuDesc">2 to 4 players in all (the official count).</span></div>
+          <div class="bg-stepper sn-step" id="cpuSeg" role="group" aria-label="Computer players"></div>
+          <div class="sn-seats" id="seatPreview"><span class="sn-seats__tokens" id="seatTokens"></span><span class="sn-seats__txt"><b id="seatHead"></b><span id="seatNote"></span></span></div>
+        </div>
+      </section>
+      <section class="sn-sec sn-sec--save" aria-labelledby="saveHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="saveHead" data-stage-text>Save and load</h2></div>
+        <div id="svbar"></div>
+      </section>
+      <a href="../index.html" class="bg-btn bg-btn--ghost bg-btn--block sn-back" id="backHub" data-icon="home" data-stage-text>Back to all games</a>
+      <div class="sn-dock" id="startDock" data-toast-avoid>
+        <button class="bg-btn bg-btn--secondary sn-resume" id="resumeBtn" type="button" style="display:none"><span><span class="bg-btn__label" id="resumeLabel">Resume</span><span class="bg-btn__sub" id="resumeSub">Back to the game</span></span></button>
+        <button class="bg-btn bg-btn--primary bg-btn--cta" id="startBtn" type="button"><span class="bg-btn__label" id="startLabel">Start the game</span><span class="bg-btn__sub" id="startSub">2 players</span></button>
+      </div>
+    </div>
+  </main>
+
+  <main class="sn-game" id="game" aria-label="Snakes and Ladders board">
+    <ul class="bg-players sn-stand" id="sstand" aria-label="Standings, leader first"></ul>
+    <div class="sn-boardwrap"><div class="sn-board" id="sboard" data-stage-solid>
+      <div class="sn-art" id="sart" role="img" aria-label="The board">
+        <div class="sn-svghost" id="ssvg"></div>
+        <div class="sn-toks" id="stoks"></div>
+        <div class="sn-banner" id="sbanner" aria-live="polite"><b id="sbannerT"></b><span id="sbannerS"></span></div>
+      </div>
+    </div></div>
+    <div class="sn-side">
+      <p class="sn-stat" id="sstat" data-stage-text aria-live="polite"></p>
+      <p class="sn-say" id="ssay" data-stage-text></p>
+      <div class="sn-acts" id="sacts" data-toast-avoid>
+        <div class="sn-dice" id="sdice" data-focus="off" aria-hidden="true"></div>
+        <button class="bg-btn bg-btn--primary bg-btn--lg" id="rollBtn" type="button" data-focus-first><span class="bg-btn__label" id="rollLabel">Roll</span><span class="bg-btn__sub" id="rollSub"></span></button>
+      </div>
+      <div class="sn-meta"><span class="sn-chip" id="sneed"></span><span class="sn-chip" id="sround"></span></div>
+      <ol class="sn-log" id="slog" aria-label="What happened" data-stage-text></ol>
+      <div class="bg-hintbar sn-hints" data-stage-text><span><span class="bg-key">OK</span> <span id="hintOk">Roll</span></span><span><span class="bg-key">Back</span> Close a list, or the Menu</span></div>
+    </div>
+  </main>
+
+  <div class="bg-win" id="winBox" aria-labelledby="winTitle">
+    <div class="bg-win__scrim"></div>
+    <div class="bg-win__rays"></div>
+    <div class="bg-win__card">
+      <div class="bg-win__medal"></div>
+      <p class="bg-eyebrow" id="winEyebrow">Game over</p>
+      <h2 class="bg-win__title" id="winTitle">Victory</h2>
+      <p class="bg-win__sub" id="winSub"></p>
+      <ol class="sn-final" id="winList" aria-label="Final standings, leader first"></ol>
+      <ul class="bg-stats bg-win__stats" id="winStats"></ul>
+      <div class="bg-win__actions">
+        <button class="bg-btn bg-btn--secondary bg-btn--lg" type="button" id="winMenu">Menu</button>
+        <button class="bg-btn bg-btn--primary bg-btn--lg" type="button" id="winAgain" data-icon="play">Play again</button>
+      </div>
+      <a class="bg-btn bg-btn--ghost bg-btn--block sn-winhome" href="../index.html" id="winHome">All games</a>
+    </div>
+  </div>
+
+  <div class="sn-toast" id="toast" aria-hidden="true"></div>
+  <div class="sn-svtoast" id="svtoast" aria-hidden="true"></div>
+
+<script src="engine.js"></script>
+<script src="board.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
