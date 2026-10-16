@@ -1215,7 +1215,7 @@ function showSetup(on){
   if(y) window.scrollTo(0,0);
   pulseRefresh(); barTitle();
   if(!on){
-    if(armed&&players.length&&!gameOver) setTurnChip(players[turn]);   // the board is back: the strip pulses whose turn it is
+    if(armed&&players.length&&!gameOver&&!fpShow) setTurnChip(players[turn]);   // the board is back: the strip pulses whose turn it is (not while the show still rolls)
     if(armed&&gameOver&&ui.winShown!==gen) scheduleWin();              // the game ended while the Menu was up: its Victory screen now
     focusTV(domeBtn);
     const B=BG(); if(armed&&B&&B.back) B.back.arm();                    // TV browsers: the remote's Back now stays on this page
@@ -1305,10 +1305,12 @@ function drawCpuSeg(){
   syncStart();
 }
 function setHumanSeg(){ document.querySelectorAll("#humanSeg button").forEach(x=>{ const on=+x.dataset.n===humanCount; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
-document.querySelectorAll("#speedSeg button").forEach(b=>b.addEventListener("click",()=>setSpeed(b.dataset.speed)));
+// step 10 review: a change from the Menu mid-game also goes into the running game's last save, so a reload + Continue keeps it
+function keepInSave(){ if(armed&&!gameOver&&lastSnap){ lastSnap.speed=gameSpeed; lastSnap.skill=cpuSkill; Saves.auto("trouble",lastSnap); } }
+document.querySelectorAll("#speedSeg button").forEach(b=>b.addEventListener("click",()=>{ setSpeed(b.dataset.speed); keepInSave(); }));
 // Computer skill (easy / normal / hard; normal = the brain's default): saved with the settings and the game; a change applies at once
 function setSkill(v){ cpuSkill=normSkill(v); document.querySelectorAll("#skillSeg button").forEach(x=>{ const on=x.dataset.k===cpuSkill; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
-document.querySelectorAll("#skillSeg button").forEach(b=>b.addEventListener("click",()=>setSkill(b.dataset.k)));
+document.querySelectorAll("#skillSeg button").forEach(b=>b.addEventListener("click",()=>{ setSkill(b.dataset.k); keepInSave(); }));
 setSkill(cpuSkill);
 document.querySelectorAll("#humanSeg button").forEach(b=>{
   b.addEventListener("click",()=>{ humanCount=+b.dataset.n; setHumanSeg(); drawCpuSeg(); });
@@ -1466,13 +1468,14 @@ function startGame(humans, cpus, rollOff){
         `<span class="bg-sr">: `+ro.rounds.map(r=>r.map(x=>esc(pn(x[0]))+" "+x[1]).join(", ")).join(" · tie, pop again: ")+`</span> — <b>${esc(pn(ro.first))} goes first</b>`);
       rollOffChips(ro);
     };
-    busy=true; buildBoard(); takeSnap();
     const B=BG(), fp=B&&B.firstPlayer;
+    fpShow=!!fp;   // step 10 review: set before the board is built, so the strip's TURN badge never shows the winner while the show still rolls
+    busy=true; buildBoard(); takeSnap();
     if(!fp){ firstPop(); Sound.sfx("dice"); later(beginTurn, 1800); return; }   // without ui.js: the old start
     // step 10, the who-goes-first show: everyone pops the dome at once and the dice tumble; the highest pop goes first and a tie
     // pops again (the rounds are ro's: the game is already set up with its result). Game speed paces it; a tap / OK / Back skips
     // it; Reduce effects gives the short version. The first turn starts when it closes.
-    const g=gen; fpShow=true; renderPegs(); setStatus(`<span class="dot" style="background:${CSSCOL[ro.first]}"></span> Popping for the first turn…`);
+    const g=gen; fpShow=true; renderPegs(); setStatus(`<span class="dot" style="background:var(--gold-300)"></span> Popping for the first turn…`);   // a neutral dot: the winner's colour would give the result away
     const fpRounds=ro.rounds.map(r=>{ const vals={}, hi=Math.max(...r.map(x=>x[1]));
       r.forEach(x=>{ vals[players.indexOf(x[0])]=x[1]; });
       return {who:r.map(x=>players.indexOf(x[0])),vals:vals,top:r.filter(x=>x[1]===hi).map(x=>players.indexOf(x[0]))}; });
