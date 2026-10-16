@@ -276,6 +276,66 @@
   html[data-tv] .rm-tip{display:none}
   /* TV toasts in game sit in the right-hand column (over the log at worst), never on the table */
   html[data-tv] body:not(.rm-in-setup) .bg-toast{left:calc(100vw - var(--gutter) - 13.5rem); max-width:26rem}
+  /* ---------- phone upright (step 11): the table runs nearly edge to edge (8 px a side) and the felt takes the screen's spare height, so
+     the piles sit low and the hand right under them; only a narrow upright screen (a phone), so tablets and desktops are unchanged ---------- */
+  @media (orientation: portrait) and (max-width: 36em){
+    html:not([data-tv]) .rm-game{padding-inline:.5rem; min-height:calc(100vh - 3.75rem - env(safe-area-inset-top,0px))}
+    @supports (height:100dvh){ html:not([data-tv]) .rm-game{min-height:calc(100dvh - 3.75rem - env(safe-area-inset-top,0px))} }
+    html:not([data-tv]) #rtable{display:flex; flex-direction:column; flex:1 0 auto}
+    html:not([data-tv]) #pilesRow{margin-top:auto}
+  }
+
+  /* ---------- phone sideways (step 11): a short landscape screen (a phone on its side; not the TV, not a tablet) gets the TV's table
+     layout: a slimmer top bar, the felt table on the left with the melds and, beside them, the stock and the discard pile; the hand on one
+     line under the table; on the right the players (one scrolling row), whose turn, the actions and the log in their own scroll area.
+     The table and the hand are pinned (sticky in one grid area), so only the right-hand column ever scrolls; the page never scrolls ---------- */
+  @media (orientation: landscape) and (max-height: 31.25em){
+    html:not([data-tv]){--ls-bar:3.25rem; --ls-h:100vh; --ls-pad:.5rem; --ls-panel:clamp(15rem,34vw,18rem); --ls-hand:6rem;
+      --ls-game:calc(var(--ls-h) - var(--ls-bar) - env(safe-area-inset-top,0px) - 2 * var(--ls-pad))}
+    @supports (height:100dvh){ html:not([data-tv]){--ls-h:100dvh} }
+    html:not([data-tv]) .bg-topbar{height:calc(var(--ls-bar) + env(safe-area-inset-top,0px)); padding-top:calc(env(safe-area-inset-top,0px) + .25rem); padding-bottom:.25rem}
+    /* the panel rows are max-content (an auto row holding a scroll container would shrink under its content); the table's area spans
+       every row, so it is always the full height of the scrolling grid and its pinned table and hand never scroll away */
+    html:not([data-tv]) .rm-game{display:grid; grid-template-columns:minmax(0,1fr) var(--ls-panel); grid-template-rows:max-content max-content max-content max-content 1fr;
+      grid-template-areas:"table strip" "table status" "table actions" "table log" "table ."; column-gap:1rem; align-items:start; align-content:start;
+      height:calc(var(--ls-h) - var(--ls-bar) - env(safe-area-inset-top,0px)); overflow:hidden auto; overscroll-behavior:contain;
+      padding:var(--ls-pad) max(var(--gutter), env(safe-area-inset-right,0px)) var(--ls-pad) max(var(--ls-pad), env(safe-area-inset-left,0px))}
+    html:not([data-tv]) #rtable{grid-area:table; position:sticky; top:0; display:flex; width:auto; height:calc(var(--ls-game) - var(--ls-hand)); min-height:0; margin:0; padding:6px}
+    html:not([data-tv]) #meldsArea{flex:1 1 0; min-width:0; min-height:0; max-height:none; overflow-y:auto}
+    html:not([data-tv]) #pilesRow{flex:none; flex-direction:column; justify-content:center; gap:4px; width:8.5rem; margin:0 0 0 6px; padding:4px 2px 4px 10px; border-top:0; border-left:1px solid rgba(230,201,143,.26)}
+    html:not([data-tv]) #stock{--cw:44px}
+    html:not([data-tv]) #stock .pc{margin-bottom:.375rem}
+    html:not([data-tv]) #discard{--cw:44px; flex:none; width:100%; min-height:0; padding:10px 6px 4px 4px}
+    html:not([data-tv]) #discard .pc{margin-left:-24px} html:not([data-tv]) #discard .pc:first-child{margin-left:0}
+    /* the hand: one line right under the table (same area, pinned below it); a long hand overlaps more, so it still fits the line */
+    html:not([data-tv]) #hand{grid-area:table; position:sticky; top:calc(var(--ls-game) - var(--ls-hand)); --cw:50px; flex-wrap:nowrap; justify-content:center; width:auto;
+      height:var(--ls-hand); min-height:0; margin-top:calc(var(--ls-game) - var(--ls-hand)); padding:20px 24px 4px 4px}
+    html:not([data-tv]) #hand .pc{margin-right:-20px}
+    html:not([data-tv]) #hand:has(.pc:nth-child(14)) .pc{margin-right:-28px}
+    html:not([data-tv]) #hand:has(.pc:nth-child(19)) .pc{margin-right:-34px}
+    html:not([data-tv]) #hand:has(.pc:nth-child(25)){justify-content:flex-start; overflow:auto hidden; scrollbar-width:none}   /* a huge hand (most of the pile taken) scrolls along its line */
+    html:not([data-tv]) #hand .rm-wait{padding:24px 0 0}
+    html:not([data-tv]) #legend{grid-area:strip; width:auto; padding:.625rem 0 .375rem}
+    html:not([data-tv]) .rm-status{grid-area:status; width:auto; margin:0; padding:.5rem .75rem; font-size:var(--fs-sm); justify-content:flex-start; text-align:left}
+    html:not([data-tv]) .rm-actions{grid-area:actions; width:auto; justify-content:flex-start; margin:.5rem 0 0}
+    html:not([data-tv]) .rm-log{grid-area:log; width:auto; min-height:0; margin:.5rem 0 0; text-align:left}
+    html:not([data-tv]) .rm-tip{display:none}   /* the how-to line stays upright; sideways the hand needs its row */
+    /* toasts in game sit over the right-hand column (centred on it), clear of the table and the hand, as on the TV */
+    html:not([data-tv]) body:not(.rm-in-setup) .bg-toast{left:calc(100vw - max(var(--gutter), env(safe-area-inset-right,0px)) - var(--ls-panel) / 2); max-width:calc(var(--ls-panel) + 1rem)}
+    /* Victory: the trophy beside the result (two columns), so Play again shows on the first screen; the same rays, confetti and trophy */
+    html:not([data-tv]) .bg-win__card{display:grid; grid-template-columns:10rem minmax(0,1fr); column-gap:1.5rem; align-items:center; width:min(100%,44rem)}
+    html:not([data-tv]) .bg-win__card > *{grid-column:2}
+    html:not([data-tv]) .bg-win__card > .bg-win__medal{grid-column:1; grid-row:1 / span 7; margin:0 auto}
+    html:not([data-tv]) .bg-win__title{margin:.25rem 0 0}
+    html:not([data-tv]) .bg-win__sub{margin:.25rem 0 .5rem}
+    html:not([data-tv]) .bg-win__stats{margin:.5rem 0 0}
+    html:not([data-tv]) .bg-win__actions{margin-top:.5rem}
+    html:not([data-tv]) .bg-win__rays{left:calc(50vw - min(50vw - var(--gutter), 22rem) + 5rem)}
+    /* setup and Menu: a lower art band (the same art, cropped to the band), so the first settings show on the first screen; the Start dock
+       stays sticky at the bottom */
+    html:not([data-tv]) .rm-hero{padding-top:5.5rem}
+    html:not([data-tv]) .rm-hero .bg-hero__layer{bottom:0; aspect-ratio:auto; background-size:cover; background-position:50% 40%}
+  }
 </style>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
@@ -848,13 +908,18 @@ function viewerHand(){
   if(cfg.humans===1) return G.players[0];
   return null;
 }
+/* step 11: a phone on its side shows the players as one scrolling row (the panel beside the table is narrow; ui.js scrolls it to whose
+   turn it is); turning the phone lays the strip out again and brings the newest discard back into view */
+const sidewaysMQ=window.matchMedia?window.matchMedia("(orientation: landscape) and (max-height: 31.25em)"):null;
+function phoneSideways(){ return !onTV()&&!!(sidewaysMQ&&sidewaysMQ.matches); }
+if(sidewaysMQ){ const relay=()=>{ ui.strip=""; if(G){ renderStrip(); const d=$("discard"); if(d) d.scrollLeft=1e5; } }; if(sidewaysMQ.addEventListener) sidewaysMQ.addEventListener("change",relay); else if(sidewaysMQ.addListener) sidewaysMQ.addListener(relay); }
 // the player strip: a seat token, the name (+ the CPU badge), the side's score and the cards in hand; BGUI.setTurn every turn
 function renderStrip(){
   const el=$("legend"), B=BG();
   const key=gen+"|"+G.players.map(p=>p.name+(p.human?"H":"C")).join(",")+"|"+(G.o.teams?"T":"")+"|"+(icon("cpu")?"i":"");
   if(key!==ui.strip||el.children.length!==G.players.length){
     const old=[].slice.call(el.children);
-    el.classList.toggle("bg-players--scroll",G.players.length>4);
+    el.classList.toggle("bg-players--scroll",G.players.length>4||phoneSideways());
     el.innerHTML=G.players.map((p,i)=>`<li class="bg-player chip" data-seat="${seatOf(i)}" data-p="${i}"><span class="bg-token" aria-hidden="true">${initials(p.name)}</span>`+
       (p.human?"":`<span class="bg-player__cpu" aria-hidden="true">${icon("cpu")}</span>`)+
       `<span class="bg-player__txt"><span class="bg-player__name">${esc(p.name)}</span><span class="bg-player__meta"></span></span></li>`).join("");
