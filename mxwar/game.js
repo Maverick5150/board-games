@@ -65,7 +65,7 @@ if(window.Sound&&Sound.addStyle&&!(Sound.hasStyle&&Sound.hasStyle(GAME))){
 /* ================= state ================= */
 var DEF_WAR={version:"three",onlyTied:true,outLoses:false,noDown:false,deucesWild:false,acesWild:false,jokersWild:false,wildAs:"top",form:false,cards:26};
 var cfg={series:"sx",sid:null,humans:1,length:"standard",speed:"medium",skill:"normal",auto:false,others:"ask",fill:"full",nonTitle:true,war:{}};
-var G=null, gen=0, timer=null, busy=false, intent=0;
+var G=null, gen=0, timer=null, busy=false, intent=0, skipQ=false;   /* skipQ: "Sim to the flag" tapped while a battle plays (never lost) */
 var ui={view:"season",rc:null,finished:-1,winShown:-1,result:false,rulesOpen:false,cont:false,order:[],lap:0,lastCards:{},bikes:{},sayN:0,
   pendRound:null,pendSeason:null,lastDone:null,showAll:false,shown:false,sheetGo:null,log:[],flipBusy:false,newOk:false};
 var disp=null;   // the counts on show while a battle plays (they follow the cards, not the engine)
@@ -372,6 +372,7 @@ function showSetup(on,resume){
     if(!G.race&&ui.view==="race") ui.view="season";
     setView(ui.view);
     if(resume&&ui.result){ ui.result=false; setTimeout(function(){ if(G&&G.over&&!setupShown()) openWin(); },250); }
+    else if(ui.pendRound){ setTimeout(function(){ if(G&&ui.pendRound&&!busy&&!ui.lastDone&&!setupShown()&&!sheetUp()) openPodium(); },250); }   /* the Menu shut the results sheet: the podium is still due */
     armBack();
     if(!busy) drive();
   }
@@ -404,7 +405,7 @@ function save(){ if(!G) return; if(G.over&&ui.finished===gen){ Saves.del(GAME,"a
 function loadSaved(d){
   if(!d||!d.G||d.G.id!=="mxwar"||d.G.v!==S.VER) throw new Error("not a Motocross War save");
   var bad=S.check(d.G); if(bad.length) throw new Error("save fails its check: "+bad[0]);
-  gen++; clearTimeout(timer); busy=false; intent=0;
+  gen++; clearTimeout(timer); busy=false; intent=0; skipQ=false;
   G=d.G; var c=d.cfg||{}; for(var k in c) if(Object.prototype.hasOwnProperty.call(cfg,k)) cfg[k]=c[k];
   cfg.speed=normSpeed(cfg.speed); setSpeedSeg(); cfg.skill=normSkill((G.o&&G.o.skill)||cfg.skill); setSkillSeg(); setAuto(cfg.auto);
   resetUI();
@@ -480,7 +481,7 @@ function confirmNew(){
 }
 function startSeason(){
   fixSeason();
-  var id=cfg.sid, my=++gen; clearTimeout(timer); busy=false; intent=0;
+  var id=cfg.sid, my=++gen; clearTimeout(timer); busy=false; intent=0; skipQ=false;
   if(!id){ toast("Pick a season first."); return; }
   var d=DATA[id];
   if(!d) toast("Loading the "+seasonInfo(id).year+" season...",{ms:1600});
@@ -589,7 +590,7 @@ function raceLabel(){ if(!G||!G.round) return ""; var k=G.rkey; var r=G.round.ra
 function enterRace(){
   if(!G||G.over) return;
   if(!G.race){ S.startRace(G); }
-  ui.rc=G.race; ui.rmap=G.rmap.slice(); ui.label=raceLabel(); ui.hs=null; ui.lap=0; ui.lastWin=null; disp=null; ui.lastCards={}; ui.bikes={}; ui.order=[]; ui.flagged=false;
+  skipQ=false; ui.rc=G.race; ui.rmap=G.rmap.slice(); ui.label=raceLabel(); ui.hs=null; ui.lap=0; ui.lastWin=null; disp=null; ui.lastCards={}; ui.bikes={}; ui.order=[]; ui.flagged=false;
   $("lane").innerHTML="";
   save();
   setView("race");
@@ -646,9 +647,12 @@ function placeBikes(atGate){
     if(atGate){ var col=Math.floor(k/GEO.lanes), ln=k%GEO.lanes; x=GEO.gateX-(col+1)*GEO.mw*.82-rem*.15; y=rem*.25+ln*GEO.mh; }
     else { var ord2=ui.order.indexOf(s), rk=ord2<0?k:ord2, ln2=rk%GEO.lanes, spread=1-Math.min(rk,ids.length-1)/Math.max(1,ids.length-1), share=clamp(counts[s]/max,0,1);
       x=rc.r[s].out?back:back+(front-back)*(.85*spread+.15*share); y=rem*.25+ln2*GEO.mh; }
+    /* a 3-digit plate makes a bike wider than the lane's step: the leader is never cut off at the arena's edge (measured once per size) */
+    if(b._wr!==rem||!b._w){ b._w=b.offsetWidth; b._wr=rem; }
+    if(b._w) x=Math.min(x,GEO.W-b._w-rem*.3);
     b.style.transform="translate("+Math.round(x)+"px,"+Math.round(y)+"px)";
     b.classList.toggle("is-out",!!rc.r[s].out);
-    b.style.zIndex=String(100-k);
+    b.style.zIndex=String(rc.r[s].human?200:100-k);   /* your bike is never hidden behind a pro's */
   });
   Object.keys(ui.bikes).forEach(function(s){ if(!keep[s]){ ui.bikes[s].remove(); delete ui.bikes[s]; } });
 }
@@ -761,7 +765,8 @@ function syncControls(){
   $("flipLabel").textContent=lbl; $("flipSub").textContent=sub; $("flipSub").hidden=!sub;
   f.disabled=false;
   var t="";
-  if(rc.over) t="Checkered flag.";
+  if(skipQ&&!rc.over) t="Simming to the flag...";
+  else if(rc.over) t="Checkered flag.";
   else if(!hs.length) t=G.humans.length?"You're not in this race: watch it, or sim to the flag.":"Watching the pros.";
   else if(gate) t=cfg.auto?"The gate drops by itself (Auto).":"Riders ready: drop the gate.";
   else if(!alive.length) t="Out of cards: the race runs on without you. Sim to the flag?";
@@ -779,7 +784,7 @@ $("flipBtn").addEventListener("click",function(){
   intent=1;
   if(!busy) drive(); else syncControls();
 });
-$("skipBtn").addEventListener("click",function(){ if(!G||!ui.rc||ui.rc.over||busy) return; simNow(); });
+$("skipBtn").addEventListener("click",function(){ if(!G||!ui.rc||ui.rc.over) return; if(busy){ skipQ=true; syncControls(); return; } simNow(); });
 $("arena").addEventListener("click",function(){ if(ui.rc&&!ui.rc.over&&raceHumans().length&&!busy&&(ui.rc.phase==="gate"||RC.need(ui.rc).length)){ intent=1; drive(); } });
 
 /* ================= the turn: queue the person's flip, pace the field ================= */
@@ -829,6 +834,7 @@ function act(m){
   playBatch(my,ev).then(null,function(e){ try{ console.warn("mxwar: animation",e); }catch(x){} }).then(function(){
     if(my!==gen) return;
     busy=false;
+    if(skipQ){ skipQ=false; if(ui.rc&&!ui.rc.over&&!G.over){ disp=null; simNow(); return; } }
     if(ui.rc&&!ui.rc.over){ disp=null; renderRace(); }
     afterBatch();
     drive();
@@ -1002,9 +1008,11 @@ function simNow(){
   if(done) openResults(done,true);
   if(!wasLive&&ui.view==="season") renderSeason();
 }
+/* the finals of the round this race belonged to (1976 Anaheim ran heats and a Main in a season of three motos) */
+function roundFinals(e){ try{ return S.calFormat(G,G.cal[e.ri]).finals.kind; }catch(x){ return G.formats[G.fmt].finals.kind; } }
 function resultTags(e,id,p){
   var t="";
-  if(e.toMain&&e.toMain.indexOf(id)>=0) t='<span class="mx-tag mx-tag--main">'+(e.kind==="lcq"||e.kind==="heat"||e.kind==="semi"||e.kind==="qual"?"to the "+(G.formats[G.fmt].finals.kind==="moto"?"motos":"Main"):"Main")+"</span>";
+  if(e.toMain&&e.toMain.indexOf(id)>=0) t='<span class="mx-tag mx-tag--main">'+(e.kind==="lcq"||e.kind==="heat"||e.kind==="semi"||e.kind==="qual"?"to the "+(roundFinals(e)==="moto"?"motos":"Main"):"Main")+"</span>";
   else if(e.toNext&&e.toNext.indexOf(id)>=0) t='<span class="mx-tag mx-tag--next">to the '+esc(nextStageName(e))+"</span>";
   else if(e.out&&e.out.indexOf(id)>=0) t='<span class="mx-tag mx-tag--out">out</span>';
   var pts=racePoints(e,p); if(pts) t+='<span class="mx-tag mx-tag--pts">+'+pts+"</span>";
@@ -1041,7 +1049,10 @@ function openResults(e,simmed){
     box.insertAdjacentHTML("beforeend",'<button class="bg-btn bg-btn--ghost bg-btn--lg" id="resSeason" type="button">Season</button>');
   }
   var B=BG(); if(B&&B.icon) box.querySelectorAll("[data-icon]").forEach(function(el){ el.insertAdjacentHTML("afterbegin",B.icon(el.getAttribute("data-icon"))); });
-  sheetOpen($("resBox"),{focus:"#resNext, #resSim",onClose:function(reason){ if(reason!=="go"){ ui.rc=null; ui.pendRound=null; if(!setupShown()){ setView("season"); drive(); } } }});
+  sheetOpen($("resBox"),{focus:"#resNext, #resSim",onClose:function(reason){ if(reason!=="go"){ ui.rc=null;
+    /* closed with Back (or the scrim) after the round's last race: the podium still comes (the CEO's podium after every Main / overall) */
+    if(ui.pendRound&&!setupShown()){ setView("season"); setTimeout(function(){ if(ui.pendRound&&!setupShown()&&!sheetUp()) openPodium(); },60); return; }
+    ui.pendRound=null; if(!setupShown()){ setView("season"); drive(); } } }});
   if(simmed&&!reduced()) $("resSheet").querySelectorAll(".mx-res li").forEach(function(li,i){ if(i<14&&li.animate) try{ li.animate([{opacity:0,transform:"translateX(1.5rem)"},{opacity:1,transform:"none"}],{duration:sp(260),delay:dl(i*55),easing:"ease-out",fill:"backwards"}); }catch(x){} });
   function go(fn){ return function(){ sheetClose($("resBox"),"go"); fn(); }; }
   var n1=$("resNext"), s1=$("resSim"), se=$("resSeason");
@@ -1112,8 +1123,21 @@ function closeSheets(){ ["resBox","podBox","fullBox","newBox"].forEach(function(
 function hintSync(){
   var B=BG();
   if(luxe()) ["resBox","podBox","fullBox","newBox"].forEach(function(id){ var el=$(id); if(el&&el.classList.contains("show")&&!B.sheet.isOpen(el)) el.classList.remove("show"); });
+  /* a sheet closed by Back on the TV (the podium, All riders): the ring goes back to the main action, never left on the page body */
+  if(!onTV()) return;
+  var tries=0;
+  (function again(){
+    if(tries++>6) return;
+    setTimeout(function(){
+      if(!G||setupShown()) return;
+      if(sheetUp()||busy) return again();   /* a sheet still closing, or the next one opening: look again */
+      var a=document.activeElement, shut=a&&a.closest&&a.closest("#resBox,#podBox,#fullBox,#newBox,#winBox");
+      var fine=a&&a!==document.body&&a.isConnected&&!a.hidden&&!shut&&a.getClientRects().length&&(!a.checkVisibility||a.checkVisibility({visibilityProperty:true}));
+      if(!fine) focusTV(mainControl());
+    },tries===1?260:180);
+  })();
 }
-document.addEventListener("bgui:sheet",hintSync);
+document.addEventListener("bgui:sheet",hintSync); document.addEventListener("bgui:win",function(e){ if(e.detail&&!e.detail.open) hintSync(); });
 
 /* ================= keys, the remote's Back ================= */
 function backStep(){

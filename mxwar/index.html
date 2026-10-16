@@ -230,8 +230,8 @@
   .mx-mid span{font:var(--fw-ui-strong) var(--fs-micro)/1.3 var(--font-ui); color:var(--text-2)}
   .mx-war{position:absolute; inset:.4rem .5rem .5rem; display:flex; justify-content:center; align-items:stretch; gap:.5rem}
   .mx-war:empty{display:none}
-  .mx-fight{position:relative; flex:1 1 0; max-width:9rem; min-width:0; display:grid; grid-template-rows:auto minmax(0,1fr) auto; justify-items:center; gap:.2rem; text-align:center}
-  .mx-fight__who{display:flex; align-items:center; gap:.25rem; max-width:100%; font:var(--fw-ui-strong) var(--fs-micro)/1.2 var(--font-ui); color:var(--text-1); white-space:nowrap}
+  .mx-fight{position:relative; flex:1 1 0; max-width:9rem; min-width:0; display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr) auto; justify-items:center; gap:.2rem; text-align:center}
+  .mx-fight__who{display:flex; align-items:center; gap:.25rem; max-width:100%; overflow:hidden; font:var(--fw-ui-strong) var(--fs-micro)/1.2 var(--font-ui); color:var(--text-1); white-space:nowrap}
   .mx-fight__who .mx-sn{min-width:0; overflow:hidden; text-overflow:ellipsis}
   .mx-fight__pile{position:relative; width:var(--cw); height:calc(var(--cw) * 1.4); margin-left:calc(var(--cw) * .3)}
   .mx-fight__pile .mx-card{position:absolute; left:0; top:0}
