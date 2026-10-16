@@ -375,17 +375,24 @@ function settle(G,ev){
     G.tb=[]; return endBattle(G,-1,ev);
   }
   var fighters=(o.onlyTied&&!forced)?best:part.slice();
-  /* every tied player is out of cards: their last cards stay up for the war (Pagat), so this tie can never break. With 3+ players
-     "everyone joins" would replay it war after war until every stack is empty (found on a 12-player table: 45 wars, then a draw).
-     It is a deadlock, as when every fighter is out (Pagat: "a draw"): the cards on the table are set aside, the battle ends, and the
-     players with no cards are out; the others play on */
-  if(best.length>1&&best.every(function(s){ return avail(G,s)===0; })) return deadlock(G,best,ev,true);
+  /* every tied player is out of cards: their last cards stay up for the war (Pagat), so the tied players can never break this tie.
+     When no other fighter can lay a card, or no card in the game beats the tied cards (Aces; wild cards), "everyone joins" would replay
+     it war after war until every stack is empty (found on a 12-player table: 45 wars, then a draw). It is a deadlock, as when every
+     fighter is out (Pagat: "a draw"): the cards on the table are set aside, the battle ends, the players with no cards are out and the
+     others play on. (16-player review: when the others still have cards and a card CAN beat the tied ones, everyone joins the war as
+     before: the others' new cards may take the pot, so a 3-4 player game plays exactly as the original engine) */
+  if(best.length>1&&best.every(function(s){ return avail(G,s)===0; })){
+    var rest=fighters.filter(function(s){ return best.indexOf(s)<0&&avail(G,s)>0; });
+    if(!rest.length||!canBeat(G,G.cur[best[0]])) return deadlock(G,best,ev,true);
+  }
   if(!fighters.some(function(s){ return avail(G,s)>0; })){
     if(best.length===1) return win(G,best[0],ev);
     return deadlock(G,best,ev);
   }
   startWar(G,fighters,best,forced&&best.length===1,ev);
 }
+/* can any card in this game beat card c? (the tied cards held by players who are out of cards) */
+function canBeat(G,c){ var d=buildDeck(G.o), seen={}; for(var i=0;i<d.length;i++){ var b=base(d[i]); if(seen[b]) continue; seen[b]=1; if(beats(G,d[i],c)>0) return true; } return false; }
 /* what the tied cards were, for the log: "Kings", "wild cards", "Aces and a wild card" */
 function tieWord(G,best){
   var nat=best.filter(function(s){ return !isWild(G,G.cur[s]); }), wl=best.length-nat.length;
