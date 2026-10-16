@@ -1,0 +1,1065 @@
+/* WAR — the page controller (setup, the table, the pacing of every flip, sheets, saves, the Menu, TV, the Victory screen).
+   The rules live in engine.js (pure, no DOM) and the computers' choices in brain.js; this file only drives and shows them.
+   - Simultaneous play (Bicycle, Pagat): nobody goes first. Each player pushes their top card face down into the battle, then every card
+     turns at once. The opening show is the deal, one card at a time round the table (engine firstPlayer(): rule "none", show "deal").
+   - Every computer move is paced by Game speed (speedFactor); the person's Flip, a hand card or a prisoner is queued at once and played the
+     moment the table is free, so a tap is never lost. Auto-play flips for the people too.
+   - A war: the "I declare war" banner and a red-gold flash, the face-down cards slide out one by one, a drum-roll pause, then the deciding
+     flip in slow motion with a zoom; the pot flies to the winner card by card and the count ticks up. Moves are one-shot Web Animations on
+     transform only (the flip is one rotateY of a face/back pair); reduced motion places them at once and keeps the pace.
+   - The engine's events (apply().ev) are played in order; after each batch the table is drawn again from G, so a reload or a Continue shows
+     exactly the same table. Saves after every action (Saves.auto "war"). */
+(function(){
+"use strict";
+var W=window.War, E=W.Engine, C=W.Cards;
+var $=function(id){ return document.getElementById(id); };
+var GAME="war";
+/* Game speed (SPEED-TASK.md): every computer delay and every move animation x speedFactor(); animations never under 120 ms. The time limit
+   is a rule clock and is never scaled. */
+function speedFactor(){ return ({slow:1.75, fast:0.5})[window.bgGameSpeed] || 1 }
+function sp(ms){ return Math.max(120,Math.round(ms*speedFactor())); }
+function dl(ms){ return Math.round(ms*speedFactor()); }
+function sleep(ms){ return new Promise(function(r){ setTimeout(r,Math.max(0,ms)); }); }
+function normSpeed(v){ return v==="slow"||v==="fast"?v:"medium"; }
+function normSkill(v){ return v==="easy"||v==="hard"?v:"normal"; }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+function BG(){ return window.BGUI||null; }
+function luxe(){ var B=BG(); return !!(B&&B.sheet&&B.effects&&document.documentElement.classList.contains("wr-luxe")); }
+function onTV(){ return document.documentElement.hasAttribute("data-tv"); }
+function icon(n){ var B=BG(); return B&&B.icon?B.icon(n):""; }
+function reduced(){ var B=BG(); return document.documentElement.getAttribute("data-motion")==="reduce"||!!(B&&B.reducedMotion&&B.reducedMotion()); }
+function remPx(){ return parseFloat(getComputedStyle(document.documentElement).fontSize)||16; }
+function clamp(x,a,b){ return x<a?a:x>b?b:x; }
+function initials(name){ var m=/^(You|Player|CPU)\s*(\d*)$/.exec(String(name)); return m?(m[1]==="You"?"Y":m[1].charAt(0)+m[2]):String(name).charAt(0).toUpperCase(); }
+function listNames(a){ return a.length<=2?a.join(" and "):a.slice(0,-1).join(", ")+" and "+a[a.length-1]; }
+function plural(n,w){ return n+" "+w+(n===1?"":"s"); }
+
+/* ================= registration: the new-game hooks (commit ae99bbe) ================= */
+var GLYPHS={
+  swords:'<path d="M4.5 4.5L15 15M13 17l4-4M15 15l3.2 3.2M19.5 4.5L9 15M11 17l-4-4M9 15l-3.2 3.2"/><circle cx="19.2" cy="19.2" r="1" fill="currentColor"/><circle cx="4.8" cy="19.2" r="1" fill="currentColor"/>',
+  shield:'<path d="M12 3.5l7 2.5v5.5c0 4.3-3 7.6-7 9-4-1.4-7-4.7-7-9V6z"/><path d="M12 7.5v9M8.5 11h7"/>',
+  spade:'<path d="M12 4c2.5 3 7 5.8 7 9.3a3.4 3.4 0 0 1-5.8 2.4c.2 1.8.8 3 1.8 4.3H9c1-1.3 1.6-2.5 1.8-4.3A3.4 3.4 0 0 1 5 13.3C5 9.8 9.5 7 12 4z"/>'
+};
+var registered=false;
+function register(){
+  var B=BG(); if(!B||registered) return; registered=true;
+  if(B.icon&&B.icon.add){ Object.keys(GLYPHS).forEach(function(k){ B.icon.add(k,GLYPHS[k]); }); if(B.icon.seal&&B.icon.seal.set) B.icon.seal.set(GAME,"swords"); }
+  if(B.stage&&B.stage.register) B.stage.register(GAME,{motifs:["swords","spade","shield","cards"]});
+}
+/* the music: a marching minor style with its own 10 original song titles (Sound.addStyle, sound.js) */
+if(window.Sound&&Sound.addStyle&&!(Sound.hasStyle&&Sound.hasStyle(GAME))){
+  Sound.addStyle(GAME,{ scales:["minor","dorian","minor"], bpm:[100,128], swing:0, sev:false, leadVol:0.08, waves:["square","triangle","sawtooth"], bassKind:"pulse",
+    progs:[[0,5,6,4],[0,3,4,0],[0,6,5,4],[0,4,5,3],[0,2,6,4],[0,5,3,4],[0,6,3,4],[0,3,6,4]],
+    bridge:[[5,6,4,4],[3,4,0,0],[2,3,4,4],[6,5,4,0]],
+    rhythms:[[1,0,1,1,1,0,1,1],[1,1,0,1,1,0,1,0],[1,0,0,1,1,0,1,1],[1,0,1,0,1,1,0,1]],
+    chordSteps:[0,3,6],
+    drums:[{kick:[1,0,0,0,1,0,0,0],snare:[0,0,1,0,0,1,1,1],sv:0.09,hat:[1,0,1,0,1,0,1,0],hv:0.04},{kick:[1,0,0,1,1,0,0,0],snare:[0,0,1,0,0,0,1,0],sv:0.08,hat:[1,1,1,1,1,1,1,1],hv:0.03},{kick:[1,0,1,0,1,0,1,0],snare:[0,1,0,1,0,1,1,1],sv:0.07,hat:[0,1,0,1,0,1,0,1],hv:0.04}],
+    titles:["I Declare War","Three Cards Down","The Deciding Flip","Aces in Reserve","Double War March","Peace Treaty Waltz","Battle of the Kings","Sweep the Table","Fifty-Two Strong","Drum Roll, Please"] },
+    {wave:"square",reg:-1});
+}
+
+/* ================= state ================= */
+var cfg={version:"classic",over:{},humans:1,cpus:1,speed:"medium",skill:"normal",auto:false,length:"end",limit:0,shortTie:"sudden"};
+var G=null, gen=0, timer=null, busy=false, intent=[], hurry=false, viewer=-1;
+var ui={dealing:false,dealSkip:false,winShown:-1,result:false,rulesOpen:false,finished:-1,claimPr:undefined,claimKey:"",hoKey:"",needSync:false,lastTurn:-1,handKey:""};
+var stats={ms:0}, clock0=0;
+var seatEls=[], standEls=[], disp=[], GEO=null, tab={}, extra=[], carryEls=[], kittyEls=[];
+var SHORT={classic:"Classic",three:"Three-card",peace:"Peace",hand:"Hand War",razboi:"Război",tod:"Tod und Leben",drunkard:"Drunkard"};
+var LEN_SHORT={end:"To the end",time:"Time limit",battles:"Battle limit",onepass:"One pass"};
+
+function nPlayers(){ return cfg.humans+cfg.cpus; }
+function rawOpts(){ var x={}; for(var k in cfg.over) x[k]=cfg.over[k]; x.length=cfg.length; x.limit=cfg.limit; x.shortTie=cfg.shortTie; return E.versionOpts(cfg.version,x); }
+function curOpts(){ return E.normalize(rawOpts(),nPlayers()); }
+function versionOf(id){ return E.VERSIONS.filter(function(v){ return v.id===id; })[0]||E.VERSIONS[0]; }
+function locked(key){ var v=versionOf(cfg.version); return (v.lock||[]).indexOf(key)>=0; }
+function isHuman(s){ return !!(G&&G.players[s]&&G.players[s].human); }
+function nHumans(){ return G?G.players.filter(function(p){ return p.human; }).length:0; }
+function liveGame(){ return !!(G&&!G.over); }
+function setupShown(){ return $("setup").style.display!=="none"; }
+function paused(){ return liveGame()&&setupShown(); }
+function deckN(){ return G?E.buildDeck(G.o).length:52; }
+function nm(s){ return G.players[s].name; }
+
+/* the play clock (the Victory's time, and the rule clock of a time limit): it runs while the table is on screen */
+function clockOn(){ clock0=(liveGame()&&!document.hidden&&!setupShown()&&!ui.dealing)?Date.now():0; }
+function clockOff(){ if(clock0){ stats.ms+=Math.max(0,Date.now()-clock0); clock0=0; } }
+function playMs(){ return stats.ms+(clock0?Math.max(0,Date.now()-clock0):0); }
+function fmtTime(ms){ var s=Math.max(0,Math.round(ms/1000)), h=Math.floor(s/3600), m=Math.floor(s/60)%60, x=s%60; return (h?h+":"+String(m).padStart(2,"0"):String(m))+":"+String(x).padStart(2,"0"); }
+
+function toast(m,o){
+  var t=$("toast"); t.textContent=m; var B=BG();
+  if(luxe()&&B.toast){ B.toast(m,Object.assign({icon:"info",ms:2600},o||{})); return; }
+  t.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(function(){ t.classList.remove("show"); },2200);
+}
+function focusIn(el){ var B=BG(); if(!el) return; if(B&&B.focus&&B.focus.enabled) B.focus.set(el); else { try{ el.focus({preventScroll:true}); }catch(e){ el.focus(); } } }
+function focusTV(el){ var B=BG(); if(el&&B&&B.focus&&B.focus.enabled&&onTV()) setTimeout(function(){ if(el.isConnected&&!el.hidden&&el.getClientRects().length&&!el.disabled) B.focus.set(el); },0); }
+function armBack(){ var B=BG(); if(B&&B.back&&B.back.arm) B.back.arm(); }
+function hubHref(){ var B=BG(); return B&&B.back&&B.back.hub?B.back.hub():"../index.html"; }
+
+/* ================= names ================= */
+var nameUI=null;
+function humanNames(n){ var B=BG(); if(!n) return []; return nameUI&&B&&B.names?B.names.list(n,nameUI.values()):null; }
+function mountNames(){ var B=BG(); if(!B||!B.names||nameUI) return; nameUI=B.names.mount("#nameCard",{count:Math.max(1,cfg.humans),seat:function(i){ return (i%10)+1; },onChange:function(){ drawSeats(); }}); }
+function cpuNames(n,human){ var a=[]; try{ if(window.Names&&n>0) a=window.Names.pick(n,(human||[]).concat(["You"]))||[]; }catch(e){} while(a.length<n) a.push("CPU "+(a.length+1)); return a; }
+function seatNames(){
+  var hn=humanNames(cfg.humans), out=[], i;
+  for(i=0;i<cfg.humans;i++) out.push(hn?hn[i]:cfg.humans===1?"You":"Player "+(i+1));
+  for(i=0;i<cfg.cpus;i++) out.push("Computer "+(i+1));
+  return out;
+}
+
+/* ================= setup page (also the in-game Menu) ================= */
+function keepFocus(box,attr,fn){
+  var a=document.activeElement, k=(a&&a!==document.body&&box.contains(a))?a.getAttribute(attr):null;
+  fn();
+  if(k===null) return;
+  focusIn(box.querySelector("["+attr+'="'+k+'"]:not([disabled])')||box.querySelector("button.on:not([disabled])")||box.querySelector("button:not([disabled]), select, input"));
+}
+function segHTML(items,cur,attr){ return items.map(function(it){ var on=String(it[0])===String(cur); return '<button type="button" '+attr+'="'+esc(it[0])+'" class="'+(on?"on":"")+'" aria-pressed="'+on+'"'+(it[2]?" disabled":"")+'>'+esc(it[1])+'</button>'; }).join(""); }
+function drawVersions(){
+  var vs=$("versions");
+  if(!vs.querySelector(".bg-version")){
+    vs.innerHTML=E.VERSIONS.map(function(v){ return '<button type="button" class="bg-version" role="radio" data-value="'+v.id+'" data-v="'+v.id+'" aria-checked="false"><span class="bg-version__title">'+esc(v.name)+'</span><span class="bg-version__meta">'+esc(v.tag)+'</span></button>'; }).join("");
+    vs.querySelectorAll(".bg-version").forEach(function(d){ d.addEventListener("click",function(){ if(cfg.version!==d.dataset.v){ cfg.version=d.dataset.v; cfg.over={}; } drawSetup(); }); });
+  }
+  vs.querySelectorAll(".bg-version").forEach(function(d){ var on=cfg.version===d.dataset.v; d.classList.toggle("on",on); d.setAttribute("aria-checked",String(on)); });
+  var v=versionOf(cfg.version);
+  $("versionDesc").innerHTML="<b>"+esc(v.name)+".</b> "+esc(v.desc)+(v.id==="peace"?" (Peace has a one-line source; its wars are played as in Classic.)":"");
+}
+function clampSeats(){
+  cfg.humans=clamp(cfg.humans|0,0,4); cfg.cpus=clamp(cfg.cpus|0,0,4);
+  if(cfg.humans+cfg.cpus<2) cfg.cpus=2-cfg.humans;
+  if(cfg.humans+cfg.cpus>4) cfg.cpus=4-cfg.humans;
+}
+function drawSeats(){
+  clampSeats();
+  var hs=$("humanSeg"), cs=$("cpuSeg");
+  keepFocus(hs,"data-n",function(){
+    hs.innerHTML=segHTML([0,1,2,3,4].map(function(n){ return [n,String(n)]; }),cfg.humans,"data-n");
+    hs.querySelectorAll("button").forEach(function(b){ b.addEventListener("click",function(){ cfg.humans=+b.dataset.n; clampSeats(); drawSetup(); }); });
+  });
+  keepFocus(cs,"data-n",function(){
+    cs.innerHTML=segHTML([0,1,2,3,4].map(function(n){ var t=cfg.humans+n; return [n,String(n),t<2||t>4]; }),cfg.cpus,"data-n");
+    cs.querySelectorAll("button:not([disabled])").forEach(function(b){ b.addEventListener("click",function(){ cfg.cpus=+b.dataset.n; drawSetup(); }); });
+  });
+  if(nameUI) nameUI.count(Math.max(0,cfg.humans));
+  $("nameCard").closest("section").hidden=cfg.humans===0;
+  var o=curOpts(), n=nPlayers(), names=seatNames(), dn=E.buildDeck(o).length, per=Math.floor(dn/n), left=dn-per*n;
+  if(o.jokers==="each") { per=Math.floor((dn-2)/n); left=dn-2-per*n; }
+  $("seatTokens").innerHTML=names.map(function(nmx,i){ return '<span class="bg-token" data-seat="'+((i%10)+1)+'" aria-hidden="true">'+esc(initials(nmx))+"</span>"; }).join("");
+  $("seatHead").textContent=n+" at the table"+(cfg.humans===0?" · watch mode":"");
+  $("seatNote").textContent=dn+" cards: "+per+" each"+(o.jokers==="each"?" plus a joker each":"")+(left?", "+left+" left over"+(o.leftover==="remove"?" (set aside)":" (to the first war's winner)"):"")+(o.colourDeal?" · dealt by colour":"");
+  $("autoRow").setAttribute("aria-checked",String(!!cfg.auto)); $("autoRow").hidden=cfg.humans===0;
+  syncStart();
+}
+function drawLength(){
+  var o=curOpts(), lk=locked("length");
+  var ls=$("lengthSeg");
+  keepFocus(ls,"data-l",function(){
+    ls.innerHTML=segHTML(E.LENGTHS.map(function(L){ return [L.id,LEN_SHORT[L.id],lk&&L.id!==o.length]; }),o.length,"data-l");
+    ls.querySelectorAll("button:not([disabled])").forEach(function(b){ b.addEventListener("click",function(){ cfg.length=b.dataset.l; var L=E.LENGTHS.filter(function(x){ return x.id===cfg.length; })[0]; cfg.limit=L&&L.limits?(L.limits.indexOf(cfg.limit)>=0?cfg.limit:L.limits[1]):0; drawSetup(); }); });
+  });
+  var L=E.LENGTHS.filter(function(x){ return x.id===o.length; })[0]||E.LENGTHS[0], lim=$("limitSeg");
+  lim.hidden=!L.limits;
+  if(L.limits) keepFocus(lim,"data-m",function(){
+    lim.innerHTML=segHTML(L.limits.map(function(m){ return [m,m+" "+(L.unit==="min"?"min":"battles")]; }),o.limit,"data-m");
+    lim.setAttribute("aria-label",L.unit==="min"?"Minutes":"Battles");
+    lim.querySelectorAll("button").forEach(function(b){ b.addEventListener("click",function(){ cfg.limit=+b.dataset.m; drawSetup(); }); });
+  });
+  var tie=$("tieSeg");
+  if(!tie){ tie=document.createElement("div"); tie.className="bg-seg bg-seg--text"; tie.id="tieSeg"; tie.setAttribute("role","group"); tie.setAttribute("aria-label","Tied at the limit"); lim.parentNode.insertBefore(tie,lim.nextSibling); }
+  tie.hidden=!L.limits;
+  if(L.limits) keepFocus(tie,"data-t",function(){
+    tie.innerHTML=segHTML([["sudden","Tie: sudden death"],["draw","Tie: a draw"]],o.shortTie,"data-t");
+    tie.querySelectorAll("button").forEach(function(b){ b.addEventListener("click",function(){ cfg.shortTie=b.dataset.t; drawSetup(); }); });
+  });
+  var d=L.desc;
+  if(o.length==="time") d="At the bell the battle in play (and its wars) finishes; then the most cards wins. The clock stops while the Menu is open.";
+  if(o.length==="battles") d="After "+o.limit+" battles the most cards wins.";
+  if(lk) d+=" "+versionOf(cfg.version).name+" is always played once through.";
+  if(o.length==="end") d+=" War can run long (often 300 battles or more): a time limit, a battle limit or one pass keeps it short."+(o.hand?" Hand War played to the end between careful players can take thousands of battles.":"");
+  if(L.limits) d+=" Equal leaders at the limit: "+(o.shortTie==="draw"?"the game is a draw.":"sudden death, the next battle that breaks the tie wins.");
+  $("lengthDesc").textContent=d;
+}
+function drawHouse(){
+  var o=curOpts(), n=nPlayers(), box=$("houseRules");
+  keepFocus(box,"data-k",function(){
+    box.innerHTML="";
+    E.HOUSE.forEach(function(h){
+      if(!E.houseFor(h,o.version,n)) return;
+      if(h[0]==="deck"&&locked("deck")) return;
+      var key=h[0], tag=h[4]?'<span class="bg-tag bg-tag--house">house</span>':'<span class="bg-tag bg-tag--official">official</span>', row;
+      if(h[2]==="bool"){
+        row=document.createElement("label"); row.className="bg-row";
+        row.innerHTML='<span class="bg-row__main"><span class="bg-row__title">'+esc(h[1])+" "+tag+'</span></span><input type="checkbox" class="bg-toggle" data-k="'+key+'"'+(o[key]?" checked":"")+">";
+        row.querySelector("input").addEventListener("change",function(e){ cfg.over[key]=e.target.checked; drawSetup(); });
+      } else {
+        row=document.createElement("div"); row.className="bg-row bg-row--static";
+        row.innerHTML='<span class="bg-row__main"><span class="bg-row__title">'+esc(h[1])+" "+tag+'</span></span><select class="bg-select" data-k="'+key+'" aria-label="'+esc(h[1])+'">'+h[3].map(function(c){ return '<option value="'+esc(c[0])+'"'+(String(o[key])===String(c[0])?" selected":"")+">"+esc(c[1])+"</option>"; }).join("")+"</select>";
+        row.querySelector("select").addEventListener("change",function(e){ var m=h[3].filter(function(c){ return String(c[0])===e.target.value; })[0]; cfg.over[key]=m?m[0]:e.target.value; drawSetup(); });
+      }
+      box.appendChild(row);
+    });
+  });
+  syncRules();
+}
+function changedRules(){ var base=E.normalize(E.versionOpts(cfg.version,{}),nPlayers()), o=curOpts(); return E.HOUSE.filter(function(h){ return E.houseFor(h,o.version,nPlayers())&&String(o[h[0]])!==String(base[h[0]]); }).length; }
+function syncRules(){
+  var n=changedRules(), v=versionOf(cfg.version), open=ui.rulesOpen;
+  $("rulesDesc").textContent=n?n+(n===1?" rule":" rules")+" changed from "+v.name:"As in "+v.name+". Open it to change any rule.";
+  $("rulesToggle").setAttribute("aria-expanded",String(open)); $("houseRules").hidden=!open; $("rulesLegend").hidden=!open;
+}
+function skillNote(){
+  var o=curOpts(), dec=W.Brain&&W.Brain.hasDecisions?W.Brain.hasDecisions(o):!!(o.hand||o.prisoners||o.arrange);
+  $("skillNote").textContent=dec?"Skill changes how the computers choose"+(o.hand?" which card to play (they count the cards that have been played)":"")+(o.prisoners?(o.hand?" and":"")+" which prisoner to take and when to play it":"")+(o.arrange?" and how they arrange the cards they win":"")+".":
+    "In "+versionOf(cfg.version).name+" the shuffle decides every battle: nobody has a choice to make, so skill changes nothing here. It matters in Hand War and with prisoners.";
+}
+function drawSetup(){ clampSeats(); drawVersions(); drawSeats(); drawLength(); drawHouse(); skillNote(); syncStart(); }
+$("rulesToggle").addEventListener("click",function(){ ui.rulesOpen=!ui.rulesOpen; syncRules(); });
+function setSpeedSeg(){ cfg.speed=normSpeed(cfg.speed); window.bgGameSpeed=cfg.speed; $("speedSeg").querySelectorAll("button").forEach(function(x){ var on=x.dataset.s===cfg.speed; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
+$("speedSeg").querySelectorAll("button").forEach(function(b){ b.addEventListener("click",function(){ cfg.speed=b.dataset.s; setSpeedSeg(); save(); }); });
+function setSkillSeg(){ cfg.skill=normSkill(cfg.skill); if(G) G.skill=cfg.skill; $("skillSeg").querySelectorAll("button").forEach(function(x){ var on=x.dataset.k===cfg.skill; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
+$("skillSeg").querySelectorAll("button").forEach(function(b){ b.addEventListener("click",function(){ cfg.skill=b.dataset.k; setSkillSeg(); save(); }); });
+function setAuto(on){ cfg.auto=!!on; $("autoRow").setAttribute("aria-checked",String(cfg.auto)); $("autoBtn").setAttribute("aria-checked",String(cfg.auto)); }
+$("autoRow").addEventListener("click",function(){ setAuto(!cfg.auto); save(); });
+$("autoBtn").addEventListener("click",function(){ setAuto(!cfg.auto); save(); toast(cfg.auto?"Auto-play on: your flips go on by themselves":"Auto-play off: you flip",{ms:1800}); syncControls(); drive(); });
+setSpeedSeg();
+function deviceCopy(){
+  var tv=onTV(), t=tv?"Players on this TV":"Players on this phone";
+  $("humansTitle").textContent=t; $("humanSeg").setAttribute("aria-label",t);
+  $("humansDesc").textContent="0 = watch the computers play. Two or more share the "+(tv?"remote":"phone")+".";
+  syncControls();
+}
+function subParts(parts){ return parts.map(function(s,i){ return '<span class="wr-nw">'+esc(s)+(i<parts.length-1?" ·":"")+"</span>"; }).join(" "); }
+function lengthWords(o){ return o.length==="time"?o.limit+" min":o.length==="battles"?o.limit+" battles":o.length==="onepass"?"one pass":"to the end"; }
+function syncStart(){
+  var o=curOpts(), rb=$("resumeBtn"), sb=$("startBtn"), resumable=rb.style.display!=="none";
+  $("startLabel").textContent=resumable?"New game":"Start War";
+  var parts=[nPlayers()+" players",SHORT[cfg.version]||"War"];
+  if(!resumable){ parts.push(lengthWords(o)); if(changedRules()) parts.push("custom rules"); }
+  $("startSub").innerHTML=subParts(parts);
+  $("startDock").classList.toggle("has-resume",resumable);
+  sb.classList.toggle("bg-btn--primary",!resumable); sb.classList.toggle("bg-btn--secondary",resumable);
+  rb.classList.toggle("bg-btn--primary",resumable); rb.classList.toggle("bg-btn--secondary",!resumable);
+}
+function resultDue(){ var B=BG(); return !!(G&&G.over&&ui.winShown!==gen&&B&&B.win&&luxe()); }
+function resumeText(){
+  if(ui.result) return;
+  var s="Back to the game";
+  if(G&&!G.over) s="Battle "+(G.battle+1)+(G.phase==="war"?" · war":"")+" · "+(G.n)+" players";
+  $("resumeLabel").textContent="Resume"; $("resumeSub").textContent=s;
+}
+function menuResult(){
+  if(!resultDue()) return;
+  ui.result=true; $("resumeBtn").style.display="block";
+  $("resumeLabel").textContent="See the result"; $("resumeSub").textContent=G.winner>=0?nm(G.winner)+(nm(G.winner)==="You"?" win":" wins"):"A draw";
+  saveBar.refresh(); syncStart(); barTitle();
+}
+function showSetup(on,resume){
+  var s=$("setup"), b=document.body, se=document.scrollingElement||document.documentElement, y=se.scrollTop;
+  if(on) clockOff();
+  s.style.display=on?"":"none";
+  b.classList.toggle("wr-in-setup",on); b.classList.toggle("bg-app--scene",on); b.classList.toggle("bg-app--felt",!on);
+  $("menuBtn").hidden=on;
+  if(on){ closeSheets(); closeWin(); syncStart(); }
+  if(y) se.scrollTop=0;
+  if(!on&&G){
+    if(!busy&&!ui.dealing) sync(); else ui.needSync=true;
+    clockOn();
+    if(resume){
+      if(ui.result){ ui.result=false; setTimeout(function(){ if(G&&G.over&&!setupShown()) openWin(); },250); }
+      else drive();
+    }
+    armBack();
+    focusTV(mainControl());
+  }
+  barTitle();
+  var B=BG(); if(luxe()&&B.toast&&B.toast.place) B.toast.place();
+}
+function barTitle(){
+  var e=$("barEyebrow"); if(!e) return;
+  var t=paused()?"Paused":setupShown()?(liveGame()?"Game in progress":(ui.result?"Game over":"New game")):(!G?"New game":G.over?"Game over":ui.dealing?"The deal":"Battle "+(G.battle+1));
+  if(e.textContent!==t) e.textContent=t;
+}
+
+/* ================= saving ================= */
+function pack(){ if(!G) return null; return {G:JSON.parse(JSON.stringify(G)),cfg:JSON.parse(JSON.stringify(cfg)),stats:{ms:Math.round(playMs())}}; }
+function save(){ if(!G) return; if(G.over){ Saves.del(GAME,"auto"); return; } var pk=pack(); if(pk) Saves.auto(GAME,pk); }
+function loadSaved(d){
+  if(!d||!d.G||d.G.id!=="war"||d.G.v!==E.VER) throw new Error("not a War save");
+  var bad=E.check(d.G); if(bad.length) throw new Error("save fails its check: "+bad[0]);
+  gen++; clearTimeout(timer); busy=false; intent=[]; hurry=false; viewer=-1;
+  G=d.G; var c=d.cfg||{}; for(var k in c) if(Object.prototype.hasOwnProperty.call(cfg,k)) cfg[k]=c[k];
+  cfg.speed=normSpeed(cfg.speed); setSpeedSeg(); cfg.skill=normSkill(c.skill||G.skill); G.skill=cfg.skill; setSkillSeg(); setAuto(cfg.auto);
+  stats={ms:Math.max(0,+((d.stats||{}).ms)||0)}; clock0=0;
+  ui.winShown=-1; ui.result=false; ui.finished=-1; ui.dealing=false; ui.claimPr=undefined; ui.handKey="";
+  closeSheets(); closeWin();
+  startUI(); showSetup(false); drawSetup(); clockOn(); armBack(); drive();
+}
+function dressSaveBar(){
+  var B=BG(), IC={ss:"save",ls:"load",std:"reset",sg:"save",lg:"load",au:"resume"};
+  document.querySelectorAll("#svbar button[data-a]").forEach(function(b){
+    if(b.getAttribute("data-lux")) return; b.setAttribute("data-lux","1");
+    var t=b.firstChild; if(t&&t.nodeType===3) t.nodeValue=t.nodeValue.replace(/^[^A-Za-z]+/,"");
+    b.classList.add("bg-btn","bg-btn--secondary");
+    if(B&&B.icon) b.insertAdjacentHTML("afterbegin",B.icon(IC[b.getAttribute("data-a")]||"save"));
+  });
+}
+if(window.MutationObserver){
+  new MutationObserver(dressSaveBar).observe($("svbar"),{childList:true});
+  new MutationObserver(function(){ var B=BG(), m=$("svtoast").textContent; if(luxe()&&B.toast&&m) B.toast(m,{icon:"save",ms:2400}); }).observe($("svtoast"),{childList:true,characterData:true,subtree:true});
+}
+function applySettings(s){
+  s=s||{}; cfg.version=versionOf(s.version).id; cfg.over=s.over||{}; cfg.humans=s.humans!=null?s.humans:1; cfg.cpus=s.cpus!=null?s.cpus:1;
+  cfg.speed=normSpeed(s.speed); cfg.skill=normSkill(s.skill); cfg.auto=!!s.auto; cfg.length=s.length||"end"; cfg.limit=+s.limit||0; cfg.shortTie=s.shortTie==="draw"?"draw":"sudden";
+  setSpeedSeg(); setSkillSeg(); setAuto(cfg.auto); drawSetup();
+}
+var saveBar=Saves.bar({game:GAME,el:$("svbar"),version:1,snapNote:"exactly as it is now",saveToast:"Game saved",
+  getSettings:function(){ return JSON.parse(JSON.stringify(cfg)); },
+  applySettings:applySettings,
+  standard:function(){ applySettings({}); },
+  getSnapshot:function(){ return (G&&!G.over)?pack():null; },loadSnapshot:loadSaved});
+
+/* ================= Menu, Resume, Start ================= */
+$("menuBtn").addEventListener("click",function(){
+  var result=resultDue();
+  saveBar.refresh(); $("resumeBtn").style.display=((G&&!G.over)||result)?"block":"none";
+  ui.result=false; resumeText();
+  drawSetup(); showSetup(true);
+  if(result) menuResult();
+  focusTV($("resumeBtn").style.display!=="none"?$("resumeBtn"):$("startBtn"));
+});
+$("resumeBtn").addEventListener("click",function(){ showSetup(false,true); });
+// the new game is dealt before the table shows, so the old game never flashes back
+$("startBtn").addEventListener("click",function(){ Sound.skip(); closeSheets(); closeWin(); startGame(); showSetup(false); armBack(); dealShow(gen); });
+
+/* ================= a new game ================= */
+function startGame(){
+  gen++; clearTimeout(timer); clampSeats(); busy=false; intent=[]; hurry=false; viewer=-1;
+  var n=nPlayers(), hn=humanNames(cfg.humans)||[], i;
+  for(i=hn.length;i<cfg.humans;i++) hn.push(cfg.humans===1?"You":"Player "+(i+1));
+  var cn=cpuNames(cfg.cpus,hn), players=[];
+  for(i=0;i<n;i++){ var h=i<cfg.humans; players.push({name:h?hn[i]:cn[i-cfg.humans],human:h}); }
+  G=E.newGame(rawOpts(),players); G.skill=normSkill(cfg.skill);
+  stats={ms:0}; clock0=0; ui.winShown=-1; ui.result=false; ui.finished=-1; ui.claimPr=undefined; ui.handKey=""; ui.lastTurn=-1;
+  ui.dealing=true; ui.dealSkip=false;
+  startUI(); save();
+}
+function startUI(){
+  Sound.music(GAME);
+  C.injectCSS();
+  buildTable();
+}
+
+/* ================= the table: seats, geometry, cards ================= */
+var POS={2:["bottom","top"],3:["bottom","topleft","topright"],4:["bottom","left","top","right"]};
+function buildTable(){
+  var t=$("wtable"), cards=$("wtCards");
+  seatEls.forEach(function(el){ el.remove(); }); seatEls=[]; cards.innerHTML=""; tab={}; extra=[]; carryEls=[]; kittyEls=[];
+  disp=G.players.map(function(p,s){ return ui.dealing?0:E.total(G,s); });
+  G.players.forEach(function(p,s){
+    var el=document.createElement("div"); el.className="wr-seat"; el.setAttribute("data-s",s); el.setAttribute("data-seat",(s%10)+1); el.setAttribute("data-pos",POS[G.n][s]);
+    el.innerHTML='<div class="wr-pk" aria-hidden="true"></div><div class="wr-plate"><span class="wr-tk"><span class="bg-token" data-seat="'+((s%10)+1)+'" aria-hidden="true">'+esc(initials(p.name))+"</span>"+
+      (p.human?"":'<span class="bg-player__cpu" title="Computer">'+icon("cpu")+"</span>")+"</span>"+
+      '<span class="wr-name">'+esc(p.name)+'</span><span class="wr-cnt"><b class="wr-n">0</b><span class="wr-nl">cards</span></span><span class="wr-sub"></span><span class="wr-tag"></span></div>';
+    el.querySelector(".wr-pk").addEventListener("click",function(){ tapSeat(s); });
+    t.insertBefore(el,cards); seatEls.push(el);
+  });
+  $("game").classList.toggle("has-hand",!!G.o.hand); $("game").classList.toggle("is-multi",G.n>2);
+  buildStand();
+}
+function layoutSeats(){
+  var t=$("wtable"), Wd=t.clientWidth, H=t.clientHeight; if(!G||!Wd||!H) return false;
+  var n=G.n, tv=onTV(), rem=remPx(), pad=Math.round(rem*(tv?.9:.6)), gap=Math.round(rem*(tv?.8:.5));
+  var ch=H*(n===2?.255:n===3?.23:.19), cw=Math.min(ch/1.42,Wd*(n===2?.24:n===3?.18:.14));
+  cw=Math.round(Math.max(cw,tv?3.6*rem:44)); ch=Math.round(cw*1.42);
+  var pw=Math.round(cw*.74), ph=Math.round(pw*1.42);
+  t.style.setProperty("--cw",cw+"px");
+  var seats=[];
+  seatEls.forEach(function(el,s){
+    var pos=POS[n][s], side=pos==="left"||pos==="right", pk=el.querySelector(".wr-pk"), pl=el.querySelector(".wr-plate");
+    pk.style.width=pw+"px"; pk.style.height=ph+"px"; pk.style.setProperty("--cw",pw+"px");
+    pl.style.maxWidth=(side?rem*(tv?9:5):n===3?Math.max(rem*4.5,Wd/2-pad*1.5-pw-gap):Math.min(rem*(tv?16:10),Wd-2*pad-pw-gap))+"px";
+    el.style.left="0px"; el.style.top="0px";
+    var sw=el.offsetWidth, sh=el.offsetHeight, x, y, slot;
+    if(!side){
+      var cx=pos==="topleft"?Wd*.27:pos==="topright"?Wd*.73:Wd/2;
+      x=clamp(cx-sw/2,pad,Wd-pad-sw); y=pos==="bottom"?H-pad-sh:pad;
+      slot={x:cx,y:pos==="bottom"?y-gap-ch/2:y+sh+gap+ch/2,axis:"x",room:Wd-2*pad};
+    } else {
+      x=pos==="left"?pad:Wd-pad-sw; y=(H-sh)/2;
+      slot={x:pos==="left"?x+sw+gap+cw/2:x-gap-cw/2,y:H/2,axis:"y",room:H/2};
+    }
+    el.style.left=Math.round(x)+"px"; el.style.top=Math.round(y)+"px";
+    seats.push({pos:pos,x:x,y:y,w:sw,h:sh,slot:slot});
+  });
+  var mid={x:Wd/2,y:H/2};
+  if(n===2) seats.forEach(function(q){   // the battle cards meet near the middle of the table, never over a seat
+    if(q.slot.axis!=="x") return;
+    var c0=Math.max(gap*1.3,rem*.9);   // half the gap between the two battle rows (room for the war cards' tilt)
+    if(q.pos==="bottom") q.slot.y=Math.min(q.y-gap-ch/2,H/2+ch/2+c0);
+    else q.slot.y=Math.max(q.y+q.h+gap+ch/2,H/2-ch/2-c0);
+  });
+  if(n===2){ var r2=Wd-2*(pad+pw+gap); seats.forEach(function(q){ q.slot.room=r2; }); mid={x:pad+pw/2+4,y:H/2}; }
+  if(n===3){ seats[1].slot.room=seats[2].slot.room=Wd/2-pad*1.5; mid={x:Wd/2,y:(seats[1].slot.y+ch/2+seats[0].slot.y-ch/2)/2}; }
+  if(n===4){ var tb=seats[2].slot.y+ch/2+gap, bb=seats[0].slot.y-ch/2-gap; seats[1].slot.room=seats[3].slot.room=Math.max(ch,bb-tb); }
+  GEO={W:Wd,H:H,cw:cw,ch:ch,pw:pw,ph:ph,pad:pad,gap:gap,seats:seats,mid:mid};
+  var m=$("wtMid"); m.style.left=Math.round(mid.x)+"px"; m.style.top=Math.round(mid.y+ph/2+rem*.9)+"px";
+  m.style.transform=n===2?"translate(-"+Math.round(pw/2+4)+"px,-50%)":"translate(-50%,-50%)"; m.style.justifyItems=n===2?"start":"center";
+  return true;
+}
+function T(p){ return "translate("+p.x.toFixed(1)+"px,"+p.y.toFixed(1)+"px) rotate("+(p.r||0)+"deg) scale("+(p.k==null?1:p.k)+")"; }
+function place(el,p){ el._p=p; el.style.transform=T(p); }
+var zTop=10;
+function move(el,p,ms,o){
+  o=o||{}; var from=el._p||p; place(el,p);
+  if(o.front) el.style.zIndex=++zTop;
+  if(reduced()||!el.animate||!ms) return Promise.resolve();
+  var kf=[{transform:T(from)},{transform:T(p)}];
+  if(o.lift){ var m={x:(from.x+p.x)/2,y:(from.y+p.y)/2-(GEO?GEO.ch*.12:10),r:p.r,k:(p.k==null?1:p.k)*1.06}; kf=[{transform:T(from)},{transform:T(m),offset:.5},{transform:T(p)}]; }
+  try{ var a=el.animate(kf,{duration:ms,delay:o.delay||0,easing:o.ease||"cubic-bezier(.22,.7,.2,1)",fill:"backwards"}); return a.finished.then(function(){},function(){}); }catch(e){ return Promise.resolve(); }
+}
+function flipUp(el,id,ms,zoom){
+  if(id!=null) C.setFace(el,id);
+  el.classList.add("is-up"); el._pend=false;
+  if(reduced()||!el.animate) return Promise.resolve();
+  var inn=el.firstElementChild, ps=[];
+  try{ ps.push(inn.animate([{transform:"rotateY(180deg)"},{transform:"rotateY(0deg)"}],{duration:ms,easing:"cubic-bezier(.3,.6,.25,1)"}).finished); }catch(e){}
+  if(zoom&&el._p){ var p=el._p, z={x:p.x,y:p.y,r:0,k:(p.k==null?1:p.k)*1.28}; try{ ps.push(el.animate([{transform:T(p)},{transform:T(z),offset:.45},{transform:T(z),offset:.7},{transform:T(p)}],{duration:Math.round(ms*1.5),easing:"ease-in-out"}).finished); }catch(e){} }
+  return Promise.all(ps).then(function(){},function(){});
+}
+function newCard(id,up,pose){ var el=C.tableCard(id,up); el.style.zIndex=++zTop; $("wtCards").appendChild(el); place(el,pose); return el; }
+function slotPose(s,i,m,up){
+  var g=GEO.seats[s].slot, cw=GEO.cw, ch=GEO.ch, step=m>1?Math.min(cw*.42,Math.max(cw*.12,(g.room-cw)/(m-1))):0, off=(i-(m-1)/2)*step;
+  var x=(g.axis==="x"?g.x+off:g.x)-cw/2, y=(g.axis==="y"?g.y+off:g.y)-ch/2;
+  return {x:x,y:y,r:up?0:(i%2?3:-3),k:1};
+}
+function rectPose(r){   // a viewport rect (a packet, a hand card) as a card pose in table space
+  var tr=$("wtable").getBoundingClientRect(), k=r.width/GEO.cw;
+  return {x:r.left-tr.left+r.width/2-GEO.cw/2,y:r.top-tr.top+r.height/2-GEO.ch/2,r:0,k:k};
+}
+function packetPose(s){ var pk=seatEls[s]&&seatEls[s].querySelector(".wr-pk"); return pk?rectPose(pk.getBoundingClientRect()):midPose(0); }
+function platePose(s){ var pl=seatEls[s].querySelector(".wr-plate").getBoundingClientRect(), tr=$("wtable").getBoundingClientRect(); return {x:pl.left-tr.left+pl.width/2-GEO.cw/2,y:pl.top-tr.top+pl.height/2-GEO.ch/2,r:0,k:.5}; }
+function midPose(i){ var k=GEO.pw/GEO.cw; return {x:GEO.mid.x-GEO.cw/2+(i||0)*GEO.cw*.1,y:GEO.mid.y-GEO.ch/2-(i||0)*1.5,r:0,k:k}; }
+function layoutSeat(s,ms){ var a=tab[s]||[], m=a.length; a.forEach(function(el,i){ var p=slotPose(s,i,m,el.classList.contains("is-up")); if(ms) move(el,p,ms); else place(el,p); }); }
+function addToSeat(s,el,ms){ (tab[s]=tab[s]||[]).push(el); var a=tab[s], m=a.length, last=null;
+  a.forEach(function(x,i){ var p=slotPose(s,i,m,x.classList.contains("is-up")); if(x===el) last=move(x,p,ms,{lift:true}); else move(x,p,sp(200)); });
+  return last||Promise.resolve(); }
+
+/* the whole table drawn from G (after every batch of moves, a load, a resize) */
+function renderCards(){
+  var box=$("wtCards"); box.innerHTML=""; tab={}; extra=[]; carryEls=[]; kittyEls=[]; zTop=10;
+  if(!G||!GEO) return;
+  var s, i;
+  if(G.phase==="war"||G.phase==="claim") G.tb.forEach(function(e){ var el=newCard(e.up?e.c:null,e.up,{x:0,y:0}); (tab[e.s]=tab[e.s]||[]).push(el); });
+  if(!G.over&&(G.phase==="flip"||G.phase==="war")) Object.keys(G.pick).forEach(function(k){
+    s=+k; var add=[];
+    if(G.phase==="flip") add.push(newCard(null,false,{x:0,y:0}));
+    else { var a=E.avail(G,s); if(a>0){ var nd=Math.min(G.down,a-1); for(i=0;i<nd;i++) add.push(newCard(null,false,{x:0,y:0})); add.push(newCard(null,false,{x:0,y:0})); } }
+    if(add.length) add[add.length-1]._pend=true;
+    tab[s]=(tab[s]||[]).concat(add);
+  });
+  for(s=0;s<G.n;s++) layoutSeat(s,0);
+  if(G.phase==="claim"&&G.pend){ var w=G.pend.w, lw=(tab[w]||[]).filter(function(el){ return el.classList.contains("is-up"); }).pop(); if(lw) lw.classList.add("is-win"); }
+  G.carry.forEach(function(c,j){ var el=newCard(c,true,carryPose(j)); carryEls.push(el); });
+  for(i=0;i<G.kitty.length;i++) kittyEls.push(newCard(null,false,midPose(i)));
+  midNote();
+}
+function carryPose(j){ var p=midPose(0); return {x:p.x+j*GEO.cw*.16,y:p.y,r:(j%2?4:-4),k:p.k}; }
+function midNote(){
+  var t="";
+  if(G&&ui.dealing) t=onTV()?"Press OK to skip the deal":"Tap the table to skip the deal";
+  else if(G&&G.kitty.length) t=plural(G.kitty.length,"card")+" left over: to the first war's winner";
+  else if(G&&G.carry.length) t=G.carry.length+" tied cards: to the next battle's winner";
+  else if(G&&G.aside.length) t=G.aside.length+" set aside";
+  $("wtMidNote").textContent=t;
+}
+function paintPacket(s,count){
+  var pk=seatEls[s]&&seatEls[s].querySelector(".wr-pk"); if(!pk) return;
+  var L=count>0?Math.min(6,Math.ceil(count/7)):0;
+  if(pk._L===L) return; pk._L=L;
+  var h=""; for(var i=0;i<L;i++) h+=C.backHTML({attrs:'style="transform:translate('+(-i*1.6)+"px,"+(-i*1.6)+'px)"'});
+  pk.innerHTML=h; pk.classList.toggle("is-empty",L===0);
+}
+function setCount(s,v,tween){
+  var el=seatEls[s]&&seatEls[s].querySelector(".wr-n"); if(!el) return;
+  var from=disp[s]; disp[s]=v;
+  var B=BG();
+  if(tween&&B&&B.tweenNumber&&!reduced()&&from!==v) B.tweenNumber(el,from,v,sp(420)); else el.textContent=String(v);
+  seatEls[s].querySelector(".wr-nl").textContent=v===1?"card":"cards";
+  var p=G.players[s]; paintPacket(s,G.o.length==="onepass"?Math.max(0,v-p.won.length):Math.max(0,v-p.pr.length-p.hand.length));
+}
+function updateSeats(){
+  if(!G) return;
+  var todo=needTodo();
+  G.players.forEach(function(p,s){
+    var el=seatEls[s]; if(!el) return;
+    if(!ui.dealing&&!busy) disp[s]=E.total(G,s);   // mid-animation the counts follow the cards on the table
+    el.querySelector(".wr-n").textContent=String(disp[s]); el.querySelector(".wr-nl").textContent=disp[s]===1?"card":"cards";
+    if(!busy) paintPacket(s,ui.dealing?disp[s]:p.pk.length);
+    var sub=[];
+    if(G.o.hand&&!p.out) sub.push("Hand "+p.hand.length);
+    if(G.o.length==="onepass") sub.push("Won "+p.won.length+" · "+(p.pk.length+p.hand.length)+" to play");
+    if(p.pr.length) sub.push((p.pr.length>1?"Prisoners ":"Prisoner ")+p.pr.map(E.shortName).join(" "));
+    el.querySelector(".wr-sub").innerHTML=C.pipText(esc(sub.join(" · ")));
+    var tag=p.out?"Out":(ui.dealing&&s===G.dealer)?"Dealer":(!G.over&&G.pick[s]&&!busy)?"Ready":"";
+    el.querySelector(".wr-tag").textContent=tag;
+    el.classList.toggle("is-out",!!p.out);
+    el.classList.toggle("is-need",!ui.dealing&&!G.over&&todo.indexOf(s)>=0);
+    el.classList.toggle("is-win",!!(G.over&&G.winner===s));
+    el.querySelector(".wr-pk").style.cursor=(p.human&&!G.o.hand)?"pointer":"default";
+  });
+}
+
+/* ---------- the standings rail: always sorted, leader first ---------- */
+function buildStand(){
+  var ul=$("wstand"); ul.innerHTML=""; standEls=[];
+  G.players.forEach(function(p,s){
+    var li=document.createElement("li"); li.className="bg-player"; li.setAttribute("data-seat",(s%10)+1); li.setAttribute("data-s",s);
+    li.innerHTML='<span class="wr-rk"></span><span class="bg-token" aria-hidden="true">'+esc(initials(p.name))+"</span>"+(p.human?"":'<span class="bg-player__cpu" title="Computer">'+icon("cpu")+"</span>")+
+      '<span class="bg-player__txt"><span class="bg-player__name">'+esc(p.name)+'</span><span class="bg-player__meta"></span></span><span class="wr-bar" aria-hidden="true"><i></i></span>';
+    ul.appendChild(li); standEls.push(li);
+  });
+}
+function renderStand(){
+  if(!G||!standEls.length) return;
+  var rows, all=deckN();
+  if(!busy&&!ui.dealing) rows=E.standings(G);
+  else { rows=G.players.map(function(p,s){ return {s:s,count:disp[s],out:p.out}; }); rows.sort(function(a,b){ return (a.out!==b.out?(a.out?1:-1):0)||(b.count-a.count)||(a.s-b.s); }); rows.forEach(function(r,i){ var pv=rows[i-1]; r.place=pv&&pv.count===r.count&&pv.out===r.out?pv.place:i+1; }); }
+  var ul=$("wstand"), B=BG(), before=standEls.map(function(li){ return li.getBoundingClientRect(); }), moved=false;
+  rows.forEach(function(r,i){
+    var li=standEls[r.s], c=r.count;
+    li.querySelector(".wr-rk").textContent=String(r.place);
+    li.querySelector(".bg-player__meta").textContent=G.players[r.s].out?"Out":(!onTV()&&G.n>2)?String(c):c+(c===1?" card":" cards")+(onTV()?" · "+Math.round(100*c/all)+"%":"");
+    li.querySelector(".wr-bar > i").style.transform="scaleX("+(all?Math.min(1,c/all):0).toFixed(3)+")";
+    li.classList.toggle("is-out",!!G.players[r.s].out);
+    if(ul.children[i]!==li){ ul.insertBefore(li,ul.children[i]||null); moved=true; }
+  });
+  if(moved&&B&&B.flip&&!reduced()) standEls.forEach(function(li,s){ B.flip(li,before[s],{ms:sp(320)}); });
+  var turn=focusSeat();
+  if(B&&B.setTurn&&turn>=0){ B.setTurn(standEls[turn],{pulse:turn!==ui.lastTurn&&!setupShown()&&!document.hidden}); ui.lastTurn=turn; }
+  else if(turn<0) standEls.forEach(function(li){ li.classList.remove("is-turn"); });
+}
+function needTodo(){ if(!G||G.over) return []; if(G.phase==="claim") return G.pend?[G.pend.w]:[]; return E.need(G).filter(function(s){ return !G.pick[s]; }); }
+function focusSeat(){ var t=needTodo(); var h=t.filter(isHuman); return h.length?h[0]:t.length?t[0]:-1; }
+
+/* ---------- the log (suit symbols drawn as the cards' own pips) ---------- */
+function youFix(t){
+  return String(t).replace(/(^|[.!?:] )You's/g,"$1Your").replace(/You's/g,"your").replace(/ from You\b/g," from you").replace(/(\bYou\b[^.]*?) and (takes|steals)\b/g,function(m,a,v){ return a+" and "+(v==="takes"?"take":"steal"); })
+    .replace(/\bYou (wins|takes|deals|has|is|captures|doesn't|loses|steals)\b/g,function(m,v){ return "You "+({wins:"win",takes:"take",deals:"deal",has:"have",is:"are",captures:"capture","doesn't":"don't",loses:"lose",steals:"steal"})[v]; });
+}
+function renderLog(){
+  var ul=$("wlog"); if(!G){ ul.innerHTML=""; return; }
+  var L=G.log.slice(-6); ul.innerHTML=L.map(function(e){ return "<li>"+C.pipText(esc(youFix(e.t)))+"</li>"; }).join("");
+}
+
+/* ---------- Hand War: the hand of the person at the screen ---------- */
+function handSeat(){ if(!G||!G.o.hand) return -1; var hs=G.players.map(function(p,s){ return p.human?s:-1; }).filter(function(s){ return s>=0; }); if(hs.length===1) return hs[0]; return viewer; }
+function renderHand(){
+  var box=$("whand");
+  if(!G||!G.o.hand||!nHumans()){ box.hidden=true; box.innerHTML=""; ui.handKey=""; return; }
+  box.hidden=false;
+  var s=handSeat(), tv=onTV();
+  if(s<0){ var k0="hidden"; if(ui.handKey!==k0){ box.innerHTML='<span class="wr-hand__lbl">Hands stay hidden until the next player takes the '+(tv?"remote":"phone")+"</span>"; ui.handKey=k0; } return; }
+  var p=G.players[s], can=!ui.dealing&&!G.over&&G.phase==="flip"&&E.need(G).indexOf(s)>=0&&!G.pick[s]&&!cfg.auto&&!intent.some(function(m){ return m.s===s; });   // live while the table animates too: a pick is queued
+  var cards=p.hand.map(function(c){ return {c:c,pr:false}; }).concat(p.pr.map(function(c){ return {c:c,pr:true}; }));
+  var key=s+"|"+cards.map(function(x){ return x.c; }).join(",")+"|"+can+"|"+G.battle+"|"+G.phase;
+  if(ui.handKey===key) return;
+  var best=can&&cfg.skill!=="hard"?suggest(s):null;   // the brain's pick is marked "suggested" (not on Hard: no help there)
+  var a=document.activeElement, fc=(a&&box.contains(a))?a.getAttribute("data-c"):null;
+  ui.handKey=key;
+  box.innerHTML='<span class="wr-hand__lbl">'+esc(G.players.filter(function(q){ return q.human; }).length>1?p.name+"'s hand":"Your hand")+"</span>"+cards.map(function(x){
+    var cn=E.cardName(x.c);
+    return '<button type="button" class="bg-focus wr-hcard'+(x.pr?" is-pr":"")+(best&&best.c===x.c?" is-best":"")+'" data-c="'+x.c+'"'+(can?"":" disabled")+' aria-label="Play the '+esc(cn)+(x.pr?" (prisoner)":"")+(best&&best.c===x.c?", suggested":"")+'">'+C.faceHTML(x.c)+"</button>";
+  }).join("");
+  box.querySelectorAll(".wr-hcard").forEach(function(b){ b.addEventListener("click",function(){ if(b.disabled) return; queue({t:"pick",s:s,c:+b.dataset.c},b); }); });
+  if(fc!=null){ var again=box.querySelector('[data-c="'+fc+'"]:not([disabled])'); if(again) focusIn(again); }
+}
+/* the brain's pick for the person (Auto-play, and the "suggested" mark): on a copy of G, so the computers' own brains and the device's
+   learning table never see the person's seat */
+function suggest(s){
+  try{ if(!W.Brain) return null; var tmp=JSON.parse(JSON.stringify(G)); var m=W.Brain.decide(tmp,s); return m&&m.t==="pick"?m:null; }catch(e){ return null; }
+}
+
+/* ---------- status line, the action buttons, chips ---------- */
+function mainControl(){
+  var fb=$("flipBtn");
+  if(!fb.hidden&&!fb.disabled) return fb;
+  var hc=$("whand").querySelector(".wr-hcard:not([disabled])"); if(hc) return hc;
+  if(!$("autoBtn").hidden) return $("autoBtn");
+  return $("menuBtn");
+}
+function syncControls(){
+  if(!G){ return; }
+  var todo=needTodo(), hs=todo.filter(isHuman), cs=todo.filter(function(s){ return !isHuman(s); }), tv=onTV(), nh=nHumans();
+  var fb=$("flipBtn"), lbl=$("flipLabel"), st="", hint="Flip";
+  var handPhase=G.o.hand&&G.phase==="flip";
+  fb.hidden=!nh||G.over||(handPhase&&!ui.dealing);
+  fb.disabled=ui.dealing||!hs.length||G.phase==="claim";
+  if(G.phase==="war"&&hs.length){ var s0=hs[0], a=E.avail(G,s0), nd=a>0?Math.min(G.down,a-1):0; lbl.textContent=a>0?(nd?"War! Lay "+nd+" down, flip 1":"War! Flip"):"War!"; hint="Lay your war cards"; }
+  else lbl.textContent=ui.dealing?"Dealing":(hs.length>1?"Flip all":"Flip");
+  if(handPhase) hint="Play a card";
+  $("autoBtn").hidden=!nh||G.over;
+  // the prisoners a person may play instead of the top card
+  var pb=$("wprs"), h="";
+  if(!G.o.hand&&G.phase==="flip"&&hs.length&&!ui.dealing) hs.forEach(function(s){ G.players[s].pr.forEach(function(c){ h+='<button type="button" class="bg-btn bg-btn--secondary bg-btn--lg wr-prbtn" data-s="'+s+'" data-c="'+c+'">'+(hs.length>1?esc(nm(s))+": ":"")+"Play prisoner "+C.pipText(esc(E.shortName(c)))+"</button>"; }); });
+  if(pb._h!==h){ pb._h=h; pb.innerHTML=h; pb.querySelectorAll(".wr-prbtn").forEach(function(b){ b.addEventListener("click",function(){ queue({t:"flip",s:+b.dataset.s,pr:+b.dataset.c},b); }); }); }
+  // the status line: what the table waits for
+  var bn="Battle "+(G.battle+1);
+  if(ui.dealing) st=nm(G.dealer)+" deals "+deckN()+" cards, one at a time. Everyone flips at once: nobody goes first.";
+  else if(G.over) st=G.winner>=0?nm(G.winner)+(nm(G.winner)==="You"?" win":" wins")+"!":"The game is a draw.";
+  else if(G.phase==="claim"){ var w=G.pend?G.pend.w:-1; st=w>=0&&isHuman(w)&&!cfg.auto?(nm(w)==="You"?"You win":nm(w)+" wins")+" the battle: choose what to take":w>=0?nm(w)+" is collecting the cards":""; }
+  else if(busy&&!hs.length) st=G.phase==="war"?"War!":bn;
+  else if(hs.length&&!cfg.auto){
+    if(G.phase==="war") st="War! "+(nh>1?listNames(hs.map(nm))+": lay your war cards":"Lay your war cards")+(cs.length?" · "+listNames(cs.map(nm))+(cs.length>1?" are":" is")+" laying theirs":"");
+    else if(handPhase) st=bn+" · "+(nh>1?nm(hs[0])+", choose a card":"Choose a card to play")+(cs.length?" · waiting for "+listNames(cs.map(nm)):"");
+    else if(nh>1&&hs.length<nh&&G.need.filter(isHuman).length>hs.length) st=bn+" · "+listNames(hs.map(nm))+": "+(tv?"press OK to flip":"tap Flip, or your own stack");
+    else st=bn+" · "+(tv?"Press OK to flip":nh>1?"Tap Flip, or tap your own stack":"Tap Flip, or tap your stack")+(cs.length?" · "+listNames(cs.map(nm))+(cs.length>1?" are":" is")+" ready":"");
+  }
+  else if(cs.length) st=bn+" · Waiting for "+listNames(cs.map(nm));
+  else if(hs.length&&cfg.auto) st=bn+" · Auto-play is on";
+  else st=bn;
+  if(!nh&&!G.over&&!ui.dealing) st=bn+" · Watching "+G.n+" computers";
+  if(ui.dealing) hint="Skip the deal";
+  else if(!nh||G.over) hint="Open the Menu";
+  $("wstat").textContent=st; $("hintOk").textContent=hint;
+  chips(); updateSeats(); renderHand(); barTitle();
+}
+function chips(){
+  if(!G) return;
+  var c=$("wclock"), b=$("wbattle"), o=G.o, t="";
+  if(G.sudden) t="Sudden death";
+  else if(o.length==="time"){ var left=Math.max(0,o.limit*60000-playMs()); t=G.bell?"Time is up":"Time left "+fmtTime(left); c.classList.toggle("is-hot",!G.bell&&left<60000); }
+  else if(o.length==="battles") t="Battle "+Math.min(G.battle+1,o.limit)+" of "+o.limit;
+  else if(o.length==="onepass"){ var pl=0; G.players.forEach(function(p){ pl+=p.pk.length+p.hand.length; }); t="One pass · "+pl+" to play"; }
+  if(c.textContent!==t) c.textContent=t;
+  var wars=G.stats.wars+(G.stats.wars===1?" war":" wars"), bt=o.length==="battles"?wars:G.battle+(G.battle===1?" battle":" battles")+" · "+wars;
+  if(b.textContent!==bt) b.textContent=bt;
+}
+function sync(){
+  if(!G) return;
+  if(!layoutSeats()) return;
+  renderCards(); updateSeats(); renderStand(); renderLog(); syncControls();
+}
+
+/* ================= the turn: queue the person's move, pace the computers ================= */
+function queue(m,srcEl){
+  if(!G||G.over||ui.dealing) return;
+  if(intent.some(function(x){ return x.s===m.s; })) return;
+  m._src=srcEl&&srcEl.getBoundingClientRect?srcEl.getBoundingClientRect():null;
+  intent.push(m);
+  if(G.o.hand&&nHumans()>1&&m.t==="pick") viewer=-1;   // hot seat: the hand hides once chosen
+  if(needTodo().some(function(s){ return !isHuman(s); })) hurry=true;
+  if(!busy) drive();
+  else syncControls();
+}
+$("flipBtn").addEventListener("click",function(){
+  if(!G||G.over||ui.dealing) return;
+  needTodo().filter(isHuman).forEach(function(s){ queue({t:"flip",s:s}); });
+});
+function tapSeat(s){
+  if(ui.dealing){ skipDeal(); return; }
+  if(!G||G.over||!isHuman(s)||G.o.hand) return;
+  if(needTodo().indexOf(s)>=0&&(G.phase==="flip"||G.phase==="war")) queue({t:"flip",s:s});
+}
+function later(my,fn,ms){
+  clearTimeout(timer);
+  timer=setTimeout(function tick(){
+    if(my!==gen||!G||G.over) return;
+    if(paused()){ barTitle(); timer=setTimeout(tick,250); return; }
+    if(busy){ timer=setTimeout(tick,60); return; }
+    fn();
+  },Math.max(0,ms));
+}
+function cpuMove(s){ var m=null; try{ if(W.Brain) m=W.Brain.decide(G,s); }catch(e){ m=null; } return m||E.defaultMove(G,s); }
+function autoMove(s){
+  if(G.phase==="flip"&&G.o.hand){ var m=suggest(s); if(m&&E.legal(G,s).some(function(x){ return x.t===m.t&&x.c===m.c; })) return m; }
+  return E.defaultMove(G,s);
+}
+function drive(){
+  clearTimeout(timer);
+  if(!G||busy||ui.dealing){ if(G) syncControls(); return; }
+  if(G.over){ syncControls(); finishGame(); return; }
+  var my=gen;
+  if(paused()){ timer=setTimeout(function(){ if(my===gen) drive(); },300); return; }
+  syncControls();
+  if(G.phase==="claim"&&G.pend){
+    var w=G.pend.w;
+    if(isHuman(w)&&!cfg.auto){ openClaim(w); return; }
+    later(my,function(){ act(isHuman(w)?E.defaultMove(G,w):cpuMove(w)); },dl(isHuman(w)?420:700)); return;
+  }
+  var todo=needTodo();
+  while(intent.length){ var m=intent.shift(); if(todo.indexOf(m.s)>=0){ act(m); return; } }
+  var hs=todo.filter(isHuman), cs=todo.filter(function(s){ return !isHuman(s); });
+  if(cs.length){
+    var first=Object.keys(G.pick).length===0;
+    later(my,function(){ act(cpuMove(cs[0])); },hurry?dl(110):first?dl(G.phase==="war"?260:420):dl(250)); return;
+  }
+  hurry=false;
+  if(!hs.length) return;
+  if(cfg.auto){ later(my,function(){ act(autoMove(hs[0])); },dl(G.phase==="war"?360:480)); return; }
+  if(G.o.hand&&G.phase==="flip"&&nHumans()>1&&viewer!==hs[0]){ showHandoff(hs[0]); return; }
+  if(G.o.hand&&G.phase==="flip") { viewer=hs[0]; renderHand(); }
+  var mc=mainControl(); if(onTV()&&mc&&document.activeElement!==mc&&!(document.activeElement&&$("game").contains(document.activeElement)&&!document.activeElement.disabled)) focusTV(mc);
+}
+/* one move: apply it, save, then play its events in order; the next move waits for the table */
+function planOf(m){
+  if(m.t==="flip"&&G.phase==="flip") return {kind:"flip",s:m.s,from:m.pr!=null?"plate":"packet",src:m._src};
+  if(m.t==="pick") return {kind:"flip",s:m.s,from:G.players[m.s].pr.indexOf(m.c)>=0?"plate":"hand",src:m._src};
+  if(m.t==="flip"&&G.phase==="war"){ var a=E.avail(G,m.s); return {kind:"war",s:m.s,nd:a>0?Math.min(G.down,a-1):0,up:a>0}; }
+  return null;
+}
+function act(m){
+  if(!G||G.over||busy||!m) return false;
+  var plan=planOf(m), mv={}; for(var k in m) if(k!=="_src"&&k!=="_fb") mv[k]=m[k];
+  var r=E.apply(G,mv);
+  if(!r.ok){
+    // a refused computer move falls back to the engine's own default, so a computer never strands the table
+    if(!isHuman(mv.s)&&!m._fb){ var d=E.defaultMove(G,mv.s); if(d){ d._fb=1; return act(d); } }
+    if(isHuman(mv.s)) toast(youFix(r.msg));
+    syncControls(); setTimeout(drive,0); return false;
+  }
+  save();
+  var my=gen; busy=true; syncControls();
+  playBatch(my,plan,r.ev).then(null,function(e){ try{ console.warn("war: animation",e); }catch(x){} }).then(function(){
+    if(my!==gen) return;
+    busy=false; ui.needSync=false; sync(); drive();
+  });
+  return true;
+}
+
+/* ================= the show: every event, paced ================= */
+async function playBatch(my,plan,evs){
+  if(!GEO) layoutSeats();
+  if(plan) await animPlan(my,plan);
+  for(var i=0;i<evs.length;i++){ if(my!==gen) return; await animEvent(my,evs[i]); }
+}
+function source(plan){
+  if(plan.src&&GEO) return Object.assign(rectPose(plan.src),{k:plan.src.width/GEO.cw});
+  if(plan.from==="plate") return platePose(plan.s);
+  return packetPose(plan.s);
+}
+async function animPlan(my,plan){
+  var s=plan.s;
+  if(plan.kind==="flip"){
+    var el=newCard(null,false,source(plan)); el._pend=true;
+    Sound.sfx("draw");
+    setCount(s,Math.max(0,disp[s]-1));
+    await addToSeat(s,el,sp(300));
+    return;
+  }
+  if(plan.kind==="war"){
+    for(var i=0;i<plan.nd;i++){
+      if(my!==gen) return;
+      var b=newCard(null,false,packetPose(s)); setCount(s,Math.max(0,disp[s]-1));
+      addToSeat(s,b,sp(260)); Sound.sfx("click");
+      await sleep(dl(plan.nd>4?110:190));
+    }
+    if(plan.up){ var u=newCard(null,false,packetPose(s)); u._pend=true; setCount(s,Math.max(0,disp[s]-1)); await addToSeat(s,u,sp(300)); }
+    else await sleep(dl(200));
+  }
+}
+function pendingOf(s){ var a=tab[s]||[]; for(var i=a.length-1;i>=0;i--) if(a[i]._pend) return a[i]; return null; }
+function lastUp(s){ var a=tab[s]||[]; for(var i=a.length-1;i>=0;i--) if(a[i].classList.contains("is-up")) return a[i]; return null; }
+async function banner(title,sub,ms,calm){
+  var b=$("wtBanner"); $("wtBannerT").textContent=title; $("wtBannerS").textContent=sub||""; b.classList.toggle("is-calm",!!calm);
+  b.classList.add("is-on");
+  if(!reduced()&&b.animate){
+    try{ await b.animate([{opacity:0,transform:"translate(-50%,-50%) scale(.55)"},{opacity:1,transform:"translate(-50%,-50%) scale(1.07)",offset:.18},{opacity:1,transform:"translate(-50%,-50%) scale(1)",offset:.3},{opacity:1,transform:"translate(-50%,-50%) scale(1)",offset:.85},{opacity:0,transform:"translate(-50%,-50%) scale(.96)"}],{duration:ms,easing:"ease-out"}).finished; }catch(e){ await sleep(ms); }
+  } else await sleep(ms);
+  b.classList.remove("is-on");
+}
+function flash(){ var f=$("wtFlash"); if(reduced()||!f.animate) return; try{ f.animate([{opacity:0},{opacity:1,offset:.25},{opacity:0}],{duration:sp(750),easing:"ease-out"}); }catch(e){} }
+async function sweep(to,dest,cards){
+  var els=[]; for(var s in tab) els=els.concat(tab[s]); els=els.concat(carryEls,kittyEls,extra);
+  tab={}; carryEls=[]; kittyEls=[]; extra=[];
+  Sound.sfx("slide");
+  var pose=dest==="won"?wonPose(to):packetPose(to), ps=[], st=dl(els.length>12?28:45);
+  els.forEach(function(el,i){ el.style.zIndex=++zTop; ps.push(move(el,{x:pose.x,y:pose.y,r:0,k:pose.k},sp(400),{delay:i*st}).then(function(){ el.remove(); })); });
+  await Promise.all(ps);
+  setCount(to,disp[to]+cards,true);
+}
+function wonPose(s){ var p=packetPose(s); return {x:p.x+GEO.pw*.35,y:p.y-GEO.ph*.1,r:8,k:p.k}; }
+async function animEvent(my,e){
+  var s, el, i;
+  switch(e.e){
+    case "reveal":{
+      var flips=[], war=e.w>0;
+      if(war) await sleep(dl(520));   // the drum roll before the deciding flip
+      e.cards.forEach(function(x){
+        if(war&&x.held){ var hu=lastUp(x.s); if(hu) hu.classList.remove("is-lose"); return; }
+        el=pendingOf(x.s);
+        if(!el){ el=newCard(null,false,packetPose(x.s)); addToSeat(x.s,el,0); }
+        flips.push(flipUp(el,x.c,war?sp(820):sp(430),war));
+      });
+      Sound.sfx(war?"dice":"card");
+      await Promise.all(flips);
+      e.cards.forEach(function(x){ layoutSeat(x.s,sp(160)); });
+      await sleep(dl(war?260:120));
+      return;
+    }
+    case "war":{
+      var tied=e.tied.map(nm), sub;
+      e.tied.forEach(function(x){ var u=lastUp(x); if(u) u.classList.add("is-win"); });
+      sub=e.forced?(G.o.twos?"A 2 declares war":"A joker declares war"):listNames(tied)+" tie";
+      sub+=e.down?": "+e.down+" face down, then one up":": the next cards decide";
+      Sound.sfx("cannon"); flash();
+      await banner(e.n>1?(e.n===2?"Double war!":e.n===3?"Triple war!":"War again!"):"I declare war!",sub,dl(1500));
+      for(s in tab) tab[s].forEach(function(x){ x.classList.remove("is-win"); });
+      return;
+    }
+    case "short": await banner("Out of cards",listNames(e.seats.map(nm))+(e.seats.length>1?" can't finish the war and lose":" can't finish the war and loses"),dl(1500)); return;
+    case "underdog": Sound.sfx("bump"); await banner("Underdog!",nm(e.s)+" has a Jack face down and steals the war from "+nm(e.from),dl(1600)); return;
+    case "carry":{
+      var all=[]; for(s in tab) all=all.concat(tab[s]); tab={};
+      var base=carryEls.length, ps=[];
+      all.forEach(function(x,j){ x.classList.remove("is-win","is-lose"); carryEls.push(x); ps.push(move(x,carryPose(base+j),sp(380),{delay:j*dl(40),front:true})); });
+      await Promise.all(ps); await banner("A tie","The "+e.n+" cards go to the next battle's winner",dl(1100),true); return;
+    }
+    case "deadlock":{
+      var dd=[]; for(s in tab) dd=dd.concat(tab[s]); tab={};
+      await banner("Deadlock",listNames(e.seats.map(nm))+" tie with their last cards",dl(1500),true);
+      await Promise.all(dd.map(function(x,j){ return move(x,midPose(j%3),sp(380),{delay:j*dl(30)}).then(function(){ x.remove(); }); }));
+      return;
+    }
+    case "kitty": kittyEls.forEach(function(x){ x.style.zIndex=++zTop; }); return;
+    case "pay":{
+      el=newCard(null,false,packetPose(e.s)); extra.push(el); setCount(e.s,Math.max(0,disp[e.s]-1));
+      var tp=slotPose(e.to,0,1,true); await move(el,{x:tp.x+GEO.cw*.25,y:tp.y,r:6,k:1},sp(320),{lift:true}); return;
+    }
+    case "win":{
+      for(s in tab){ var u=lastUp(+s); if(u) u.classList.toggle("is-win",+s===e.s), u.classList.toggle("is-lose",+s!==e.s); }
+      seatEls.forEach(function(se,q){ se.classList.toggle("is-win",q===e.s); });
+      if(e.war) Sound.sfx("conquer");
+      await sleep(dl(e.war?950:600));
+      return;
+    }
+    case "claim": return;
+    case "prisoner":{
+      var src=null; for(s in tab){ if(+s===e.s) continue; var a=tab[s]; for(i=0;i<a.length;i++) if(!a[i].classList.contains("is-up")){ src=a[i]; a.splice(i,1); break; } if(src) break; }
+      if(!src){ seatEls[e.s].classList.add("is-win"); return; }
+      await flipUp(src,e.c,sp(360),false);
+      await move(src,platePose(e.s),sp(420),{lift:true,front:true}); src.remove();
+      toast(nm(e.s)+" takes the "+E.cardName(e.c)+" prisoner",{ms:2000});
+      return;
+    }
+    case "collect":{
+      await sweep(e.s,e.to,e.cards.length);
+      seatEls.forEach(function(se){ se.classList.remove("is-win"); });
+      await sleep(dl(170));
+      return;
+    }
+    case "out": Sound.sfx("lose"); seatEls[e.s].classList.add("is-out"); toast(nm(e.s)+(nm(e.s)==="You"?" are":" is")+" out of cards",{ms:2200}); await sleep(dl(450)); return;
+    case "sudden": Sound.sfx("bell"); await banner("Sudden death",listNames(e.seats.map(nm))+" are tied: the next battle that breaks the tie wins",dl(1700),true); return;
+    case "over": return;
+    default: return;
+  }
+}
+
+/* ================= the deal: the opening show (War has no first player) ================= */
+function skipDeal(){ if(ui.dealing) ui.dealSkip=true; }
+async function dealShow(my){
+  if(!G) return;
+  await sleep(30);   // the table is laid out on screen first
+  if(my!==gen) return;
+  ui.dealing=true; ui.dealSkip=false;
+  layoutSeats(); renderCards(); disp=G.players.map(function(){ return 0; }); G.players.forEach(function(p,s){ setCount(s,0); }); renderStand(); syncControls();
+  var deck=newCard(null,false,midPose(0)), seq=G.dealSeq.slice(), flights=[], left=seq.length;
+  var deckLbl=$("wtMidNote");
+  if(!reduced()){
+    for(var i=0;i<seq.length;i++){
+      if(my!==gen) return;
+      if(ui.dealSkip) break;
+      var s=seq[i], el=newCard(null,false,midPose(0));
+      (function(el,s){ flights.push(move(el,s>=0?packetPose(s):midPose(1),sp(300)).then(function(){ el.remove(); if(s>=0&&!ui.dealSkip&&my===gen) setCount(s,disp[s]+1); })); })(el,s);
+      left--; if(left===0) deck.remove();
+      if(i%4===0) Sound.sfx("deal");
+      await sleep(dl(seq.length>40?40:60));
+    }
+    await Promise.all(flights);
+  } else await sleep(dl(700));
+  if(my!==gen) return;
+  if(deck.parentNode) deck.remove();
+  $("wtCards").querySelectorAll(".wcard").forEach(function(x){ x.remove(); });
+  ui.dealing=false; ui.dealSkip=false; deckLbl.textContent="";
+  sync(); clockOn(); save();
+  focusTV(mainControl());
+  drive();
+}
+
+/* ================= sheets: the spoils (prisoners, arranging) and the hot-seat hand-off ================= */
+function sheetOpen(el,o){ var B=BG(); el.classList.add("show"); if(luxe()&&!B.sheet.isOpen(el)) B.sheet.open(el,o); }
+function sheetClose(el){ var B=BG(); el.classList.remove("show"); if(B&&B.sheet&&B.sheet.isOpen(el)) B.sheet.close(el); }
+function closeSheets(){ sheetClose($("claimBox")); sheetClose($("handoff")); }
+function optHTML(id,label,desc,detail,best){ return '<button type="button" class="bg-sheet__option'+(best?" is-best":"")+'" data-o="'+esc(id)+'"><span class="bg-sheet__text"><span class="bg-sheet__label">'+label+(best?' <span class="bg-tag bg-tag--ok">best</span>':"")+'</span>'+(desc?'<span class="bg-sheet__desc">'+desc+"</span>":"")+(detail?'<span class="bg-sheet__detail">'+detail+"</span>":"")+'</span>'+icon("chevron")+"</button>"; }
+function pct(c){ return Math.round(100*E.strength(G,c)); }
+function orderOf(kind,rest){
+  var a=rest.slice().sort(function(x,y){ return E.strength(G,y)-E.strength(G,x); });
+  if(kind==="weak") return a.reverse();
+  if(kind==="spread"){ var o=[], i=0, j=a.length-1; while(i<=j){ o.push(a[i++]); if(i<=j) o.push(a[j--]); } return o; }
+  return a;
+}
+function openClaim(w,step){
+  var pd=G.pend; if(!pd) return;
+  var key=gen+":"+G.battle+":"+w;
+  if(!step&&ui.claimKey===key&&$("claimBox").classList.contains("show")) return;   // already asking
+  if(ui.claimKey!==key){ ui.claimKey=key; ui.claimPr=undefined; }
+  var el=$("claimBox"), h, who=nm(w)==="You"?"You":nm(w);
+  if(pd.prOk.length&&ui.claimPr===undefined){
+    var bestC=pd.prOk.slice().sort(function(a,b){ return E.strength(G,b)-E.strength(G,a); })[0];
+    h='<div class="bg-sheet__grip" aria-hidden="true"></div><div class="wr-shead"><span class="bg-eyebrow bg-eyebrow--accent">Prisoners of War · house rule</span><h2 class="bg-sheet__title" id="claimTitle">'+esc(who)+(who==="You"?" win":" wins")+' the war: take a prisoner?</h2><p class="bg-sheet__sub">A prisoner stays face up beside your stack. Play it in any battle instead of your top card; if it loses, you pay one more card.</p></div><div class="bg-sheet__options">'+
+      pd.prOk.map(function(c){ return optHTML("p"+c,"Take the "+C.pipText(esc(E.cardName(c))),"","Beats about "+pct(c)+"% of the deck",c===bestC); }).join("")+
+      optHTML("none","No prisoner","All "+pd.pot.length+" cards go under your stack","",false)+"</div>";
+  } else {
+    var rest=pd.pot.slice(); if(ui.claimPr!=null) rest.splice(rest.indexOf(ui.claimPr),1);
+    if(!G.o.arrange||rest.length<2){ finishClaim(w,null); return; }
+    var lst=function(k){ return C.pipText(esc(orderOf(k,rest).map(E.shortName).join(", "))); };
+    h='<div class="bg-sheet__grip" aria-hidden="true"></div><div class="wr-shead"><span class="bg-eyebrow bg-eyebrow--accent">Winner arranges · house rule</span><h2 class="bg-sheet__title" id="claimTitle">Arrange the '+rest.length+' cards you won</h2><p class="bg-sheet__sub">They go under your stack in this order: the first comes back to you first.</p></div><div class="bg-sheet__options">'+
+      optHTML("spread","Spread them out","Strong, weak, strong: a steady supply of strong cards",lst("spread"),true)+
+      optHTML("strong","Strongest first","Your best cards come back soonest",lst("strong"),false)+
+      optHTML("weak","Weakest first","Save the strong cards for later",lst("weak"),false)+
+      optHTML("shuffle","Shuffle them","A random order, as in the official game","",false)+"</div>";
+  }
+  $("claimSheet").innerHTML=h;
+  var B=BG(); if(luxe()&&B.sheet.isOpen(el)) sheetClose(el);
+  sheetOpen(el,{dismissible:false,focus:".bg-sheet__option"});
+  el.querySelectorAll(".bg-sheet__option").forEach(function(b){ b.addEventListener("click",function(){
+    var o=b.getAttribute("data-o");
+    if(o==="none"){ ui.claimPr=null; openClaim(w,true); return; }
+    if(o.charAt(0)==="p"){ ui.claimPr=+o.slice(1); openClaim(w,true); return; }
+    var rest2=pd.pot.slice(); if(ui.claimPr!=null) rest2.splice(rest2.indexOf(ui.claimPr),1);
+    finishClaim(w,o==="shuffle"?null:orderOf(o,rest2));
+  }); });
+  hintSync();
+}
+function finishClaim(w,order){
+  sheetClose($("claimBox"));
+  var m={t:"claim",s:w,pr:ui.claimPr==null?null:ui.claimPr}; if(order) m.order=order;
+  ui.claimPr=undefined; ui.claimKey="";
+  act(m); hintSync();
+}
+function showHandoff(s){
+  var key=gen+":"+G.battle+":"+s;
+  if(ui.hoKey===key&&$("handoff").classList.contains("show")) return;
+  ui.hoKey=key;
+  var tv=onTV(), p=G.players[s];
+  $("handoffSheet").innerHTML='<div class="bg-sheet__grip" aria-hidden="true"></div><div class="wr-ho"><span class="bg-eyebrow bg-eyebrow--accent">Battle '+(G.battle+1)+' · hot seat</span>'+
+    '<h2 class="bg-sheet__title" id="hoTitle">Pass the '+(tv?"remote":"phone")+"</h2>"+
+    '<p class="wr-ho__to"><span class="bg-token" data-seat="'+((s%10)+1)+'" aria-hidden="true">'+esc(initials(p.name))+"</span><span>to <b>"+esc(p.name)+"</b></span></p>"+
+    '<button class="bg-btn bg-btn--primary bg-btn--lg bg-btn--block" id="hoBtn" type="button" data-autofocus>I\'m '+esc(p.name)+": show my hand</button></div>";
+  sheetOpen($("handoff"),{dismissible:false,focus:"#hoBtn"});
+  $("hoBtn").addEventListener("click",function(){ viewer=s; ui.handKey=""; sheetClose($("handoff")); renderHand(); syncControls(); var hc=$("whand").querySelector(".wr-hcard:not([disabled])"); if(hc) focusIn(hc); hintSync(); });
+  hintSync();
+}
+function hintSync(){
+  var B=BG(), t=B&&B.sheet&&B.sheet.top?B.sheet.top():null, h=document.querySelector(".wr-hints");
+  if(h) h.classList.toggle("is-held",!!t&&(t.id==="handoff"||t.id==="claimBox"));
+}
+document.addEventListener("bgui:sheet",hintSync);
+
+/* ================= the end: Victory with real numbers and the sorted standings ================= */
+function finishGame(){
+  if(ui.finished===gen) return; ui.finished=gen;
+  try{ if(W.Brain&&W.Brain.finish) W.Brain.finish(G); }catch(e){}
+  Saves.del(GAME,"auto"); clockOff();
+  var hw=G.winner>=0&&isHuman(G.winner);
+  Sound.sfx(hw||!nHumans()?"win":G.winner<0?"bell":"lose");
+  syncControls(); renderStand();
+  var my=gen;
+  setTimeout(function(){ if(my!==gen) return; if(setupShown()){ menuResult(); return; } openWin(); },dl(900));
+}
+function whyText(){
+  var w=G.winner, c=w>=0?E.total(G,w):0;
+  if(w<0){ var d=(G.draw||[]).map(nm); return G.why==="deadlock"?listNames(d)+" tied with their last cards: a draw.":listNames(d)+" finish level"+(d.length&&G.draw[0]!=null?" with "+E.total(G,G.draw[0])+" cards each":"")+": a draw."; }
+  var who=nm(w), v=who==="You"?"":"s", mid=who==="You"?"you":who;
+  if(G.why==="all") return who+" win"+v+" every card ("+c+").";
+  if(G.why==="joker") return who+" capture"+v+" the other joker and win"+v+".";
+  if(G.why==="sudden") return who+" win"+v+" the sudden-death battle with "+c+" cards.";
+  if(G.why==="onepass") return "One pass through the deck: "+mid+" won the most cards ("+c+").";
+  if(G.why==="battles") return "After "+plural(G.battle,"battle")+", "+mid+" "+(who==="You"?"have":"has")+" the most cards ("+c+").";
+  if(G.why==="time") return "At the bell, "+mid+" "+(who==="You"?"have":"has")+" the most cards ("+c+").";
+  return who+" "+(who==="You"?"have":"has")+" the most cards ("+c+").";
+}
+function openWin(){
+  var B=BG(); if(!B||!B.win||!G||!G.over||!luxe()) return;
+  ui.winShown=gen; ui.result=false; clockOff();
+  var w=G.winner, ms=playMs(), min=Math.round(ms/60000), single=nHumans()===1;
+  $("winEyebrow").textContent="Game over · "+(min<1?"under a minute":min===1?"1 minute":min+" minutes");
+  $("winTitle").textContent=w<0?"A draw":(isHuman(w)&&single)?"Victory":nm(w)+(nm(w)==="You"?" win":" wins");
+  var ac=w>=0?G.stats.aces[w]:0;
+  var chain=G.stats.chain, cw2=chain>=4?chain+" wars in a row":chain===3?"a triple war":chain===2?"a double war":"";
+  $("winSub").innerHTML=esc(whyText())+(w>=0&&ac?" "+esc(nm(w)==="You"?"You":nm(w))+" captured "+plural(ac,"Ace")+".":"")+(cw2?" The longest war was "+cw2+".":"")+(G.stats.lead?" The lead changed "+(G.stats.lead===1?"once":G.stats.lead+" times")+".":"");
+  var rows=E.standings(G);
+  $("winList").innerHTML=rows.map(function(r){ return '<li class="'+(r.place===1&&w>=0?"is-lead":"")+'"><span class="wr-fr">'+r.place+'</span><span class="bg-token" data-seat="'+((r.s%10)+1)+'" aria-hidden="true">'+esc(initials(r.name))+'</span><span class="wr-fn">'+esc(r.name)+(r.out?" · out":"")+'</span><span class="wr-fc">'+plural(r.count,"card")+"</span></li>"; }).join("");
+  $("winStats").innerHTML='<li class="bg-stat"><b>'+G.battle+"</b><span>"+(G.battle===1?"battle":"battles")+'</span></li><li class="bg-stat"><b>'+G.stats.wars+"</b><span>"+(G.stats.wars===1?"war":"wars")+"</span></li>"+
+    '<li class="bg-stat"><b>'+G.stats.pot+"</b><span>biggest pot</span></li>"+'<li class="bg-stat"><b>'+fmtTime(ms)+"</b><span>time</span></li>";
+  $("winList").classList.toggle("is-grid",rows.length>2);
+  closeSheets();
+  B.win.open($("winBox"),{focus:"#winAgain"});
+  if(B.celebrate&&(w<0||isHuman(w)||!nHumans())) B.celebrate();
+  barTitle();
+}
+function closeWin(){ var B=BG(); if(B&&B.win&&B.win.isOpen()) B.win.close($("winBox")); }
+$("winAgain").addEventListener("click",function(){ closeWin(); $("startBtn").click(); });
+$("winMenu").addEventListener("click",function(){ closeWin(); $("menuBtn").click(); });
+document.addEventListener("keydown",function(e){
+  var B=BG(); if(!B||!B.win||!B.win.isOpen()) return;
+  if(e.key==="Escape"||e.key==="GoBack"||e.key==="BrowserBack"||e.keyCode===27||e.keyCode===4){ e.preventDefault(); closeWin(); }
+});
+
+/* ================= keys, the remote's Back, the clock ================= */
+// the deal show takes OK / Enter / Space / Back (one press skips it); a tap on the table does the same
+window.addEventListener("keydown",function(e){
+  if(!ui.dealing||setupShown()) return;
+  var k=e.key;
+  if(k==="Enter"||k===" "||k==="Escape"||k==="GoBack"||k==="BrowserBack"||e.keyCode===13||e.keyCode===32||e.keyCode===27||e.keyCode===4||e.keyCode===23){ e.preventDefault(); e.stopPropagation(); skipDeal(); }
+},true);
+$("wtable").addEventListener("click",function(){ if(ui.dealing) skipDeal(); });
+function backStep(){
+  if(ui.dealing&&!setupShown()){ skipDeal(); return "deal"; }
+  if(!setupShown()){ $("menuBtn").click(); return "menu"; }
+  if($("resumeBtn").style.display!=="none"){ $("resumeBtn").click(); return "resume"; }
+  return false;
+}
+function tick(){
+  if(!G||G.over||setupShown()||ui.dealing) return;
+  chips();
+  if(G.o.length==="time"&&!G.bell&&playMs()>=G.o.limit*60000){
+    var ev=E.ringBell(G); save(); Sound.sfx("bell");
+    toast("Time! The battle in play finishes, then the most cards wins",{ms:2600});
+    renderLog(); chips();
+    if(ev.length&&G.over&&!busy) drive();
+  }
+}
+setInterval(tick,1000);
+document.addEventListener("visibilitychange",function(){ if(document.hidden) clockOff(); else clockOn(); });
+var rsz=0;
+window.addEventListener("resize",function(){ clearTimeout(rsz); rsz=setTimeout(function(){ if(!G||setupShown()) return; if(busy||ui.dealing) ui.needSync=true; else sync(); },120); });
+
+document.addEventListener("DOMContentLoaded",function(){
+  register();
+  mountNames(); drawSeats();
+  var B=BG();
+  if(B&&B.stage) B.stage(GAME,{frames:"#wtable"}); else Skins.apply(GAME);
+  if(B&&B.back) B.back.on(backStep);
+  else window.__tvBack=function(){
+    if(window.Sound&&Sound.panelOpen&&Sound.panelOpen()){ Sound.closePanel(); return "panel"; }
+    var r=backStep(); if(r) return r;
+    location.href=$("homeBtn").getAttribute("href"); return "hub";
+  };
+  if(!B||!B.effects) return;
+  document.documentElement.classList.add("wr-luxe");
+  if(B.icon) document.querySelectorAll("[data-icon]").forEach(function(el){ if(!el.querySelector("svg")) el.insertAdjacentHTML("afterbegin",B.icon(el.getAttribute("data-icon"))); });
+  var hub=hubHref(); ["homeBtn","backHub","winHome"].forEach(function(id){ var a=$(id); if(a) a.setAttribute("href",hub); });
+  saveBar.refresh(); deviceCopy();
+  document.addEventListener("bgui:tv",function(){ deviceCopy(); syncStart(); if(G&&!setupShown()&&!busy&&!ui.dealing) sync(); });
+});
+
+C.injectCSS();
+Sound.mountButton(); Sound.music(GAME);
+deviceCopy(); drawSetup(); saveBar.refresh(); showSetup(true);
+if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(function(){}); }
+window.__war={get G(){ return G; },cfg:cfg,act:act,drive:drive,startGame:startGame,skipDeal:skipDeal,queue:queue,sync:function(){ if(!busy&&!ui.dealing) sync(); },
+  addMs:function(ms){ stats.ms+=+ms||0; },   // tests: move the play clock on (the time-limit bell)
+  state:function(){ return {busy:busy,dealing:ui.dealing,intent:intent.length,viewer:viewer,gen:gen,ms:playMs(),winShown:ui.winShown,finished:ui.finished}; }};
+})();

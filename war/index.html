@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en" data-game="war">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#080a15">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<title>War</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="../ui/art/icon-war-192.png">
+<link rel="apple-touch-icon" href="../ui/art/icon-war-maskable-512.png">
+<script>/* before first paint: TV for ?tv=1 or the Fire TV bridge, and the stored effects level */
+(function (h) {
+  if (/[?&]tv=1(&|$)/.test(location.search) || window.AndroidTV) h.setAttribute("data-tv", "");
+  try { if (localStorage.getItem("bgui.effects") === "reduced") h.setAttribute("data-effects", "reduced"); } catch (e) { }
+})(document.documentElement);</script>
+<link rel="stylesheet" href="../ui/theme.css">
+<link rel="preload" href="../ui/fonts/manrope-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../ui/fonts/dmserifdisplay-latin.woff2" as="font" type="font/woff2" crossorigin>
+<script src="../ui/icons.js" defer></script>
+<script src="../ui/ui.js" defer></script>
+<style>
+  /* War on the shared Midnight Luxe system (ui/theme.css). Page layout only (wr- prefix); every control is a bg- class; the cards are
+     war/cards.js. War's accent (wave 1): field sage on an olive-drab deep. ui/theme.css has no [data-game="war"] block, so the page brings it
+     (BGUI.stage.register). Checked with BG_audit/games/war/page/accent.js against the 8 shipped accents: CIEDE2000 >= 19.1 to every accent
+     (Trouble 19.6, Monopoly 19.1), >= 11.1 between the deeps; accent text 12.6:1 on the page, ink on the accent 11.7:1, ivory on the deep 13.1:1. */
+  [data-game="war"] { --accent: #c8d4a4; --accent-bright: #e4ecc8; --accent-deep: #232b12; --accent-ink: #11160a; --accent-text: #c8d4a4; --accent-paper: #46512a;
+    --accent-glow: rgba(200, 212, 164, .28); --felt: #27310f; --felt-deep: #0c1004; --felt-lite: #43531f; --board: #2b3613; --board-lite: #45552a; }
+  *, *::before, *::after{box-sizing:border-box}
+  [hidden]{display:none !important}
+  html{scroll-padding-bottom:6.5rem}
+  html[data-tv]{scroll-padding-bottom:0}
+  body.bg-app{overflow-x:hidden; touch-action:manipulation}
+  .bg-topbar__title .bg-eyebrow{white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  body.bg-app--scene [data-stage-text], body.bg-app--felt [data-stage-text]{text-shadow:0 0 .15em rgba(4,5,12,.95), 0 0 .45em rgba(4,5,12,.8), 0 0 1em rgba(4,5,12,.55)}
+  body.bg-app--scene .bg-section > [data-stage-text]{text-shadow:0 0 .1em rgba(4,5,12,1), 0 0 .3em rgba(4,5,12,.95), 0 0 .7em rgba(4,5,12,.8), 0 0 1.3em rgba(4,5,12,.5)}
+
+  /* ---------- setup page (also the in-game Menu) ---------- */
+  .wr-setup{display:flex; flex-direction:column; width:min(100%,40rem); margin:0 auto; padding:0 var(--gutter)}
+  .wr-col{display:contents}
+  .wr-hero{order:1} .wr-sec--version{order:2} .wr-sec--players{order:3} .wr-sec--names{order:4} .wr-sec--length{order:5} .wr-sec--speed{order:6}
+  .wr-sec--rules{order:7} .wr-sec--save{order:8} .wr-back{order:9} .wr-dock{order:10}
+  .wr-hero{position:relative; min-height:0; margin:0 calc(-1 * var(--gutter)); padding-top:46%; border-radius:0; background:transparent}
+  .wr-hero .bg-hero__layer{bottom:auto; height:auto; aspect-ratio:16/9; border-radius:0; background-color:transparent;
+    background-image:url("../ui/art/hero-war.svg"); background-size:100% auto; background-position:100% 0;
+    -webkit-mask-image:linear-gradient(180deg,#000 58%,rgba(0,0,0,0) 100%); mask-image:linear-gradient(180deg,#000 58%,rgba(0,0,0,0) 100%)}
+  .wr-hero .bg-hero__shade{display:none}
+  .wr-hero .bg-hero__body{max-width:none; padding:0 var(--gutter) .25rem}
+  .wr-hero .bg-hero__pitch{max-width:30rem}
+  .wr-sec{min-width:0}
+  .wr-subhead{margin-top:1.25rem}
+  #versions{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #versions .bg-version{min-height:4.75rem; justify-content:center}
+  #versions .bg-version__title{font-size:var(--fs-lg)}
+  .wr-vdesc{margin:.875rem 0 0; padding:.75rem .875rem; border-radius:var(--r-md); background:var(--ink-2); box-shadow:var(--well-edge);
+    font:var(--fw-body) var(--fs-sm)/1.45 var(--font-ui); color:var(--text-2)}
+  .wr-vdesc b{color:var(--text-1); font-weight:var(--fw-ui-strong)}
+  .wr-card{display:grid; gap:.75rem}
+  .wr-field{display:grid; gap:.15rem}
+  .wr-field .bg-row__desc{margin-top:0}
+  #lengthSeg{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .wr-seats{display:flex; flex-wrap:wrap; align-items:center; gap:.625rem .875rem; padding:.625rem .875rem; border-radius:var(--r-md); background:var(--ink-2); box-shadow:var(--well-edge)}
+  .wr-seats__tokens{display:flex; flex:none; padding-left:.4rem}
+  .wr-seats__tokens .bg-token{width:2rem; height:2rem; margin-left:-.4rem; font-size:var(--fs-micro)}
+  .wr-seats__txt{display:grid; gap:.1rem; flex:1 1 10rem; min-width:0; font:var(--fw-ui) var(--fs-xs)/1.3 var(--font-ui); color:var(--text-2)}
+  .wr-seats__txt b{font:var(--fw-ui-strong) var(--fs-sm)/1.25 var(--font-ui); color:var(--text-1)}
+  .wr-autorow{margin-top:.25rem}
+  .wr-disclose .wr-chev{display:inline-grid; place-items:center; flex:none; width:1.5rem; height:1.5rem; color:var(--gold-200); transition:transform var(--dur-fast) var(--ease-out)}
+  .wr-disclose[aria-expanded="true"] .wr-chev{transform:rotate(90deg)}
+  .wr-sec--rules .bg-rows{grid-template-columns:minmax(0,1fr)}
+  .wr-rules{margin-top:.75rem}
+  .wr-rules .bg-row--static{cursor:default; flex-wrap:wrap}
+  .wr-rules .bg-row--static .bg-row__main{flex:1 1 9rem}
+  .wr-rules .bg-select{flex:0 1 auto; max-width:100%}
+  .wr-legend{margin:.75rem 0 0; font:var(--fw-body) var(--fs-xs)/1.7 var(--font-ui); color:var(--text-2)}
+  #svbar.svbar{margin:0; padding:var(--sp-3); border:0; border-radius:var(--r-lg); background:var(--panel-fill); box-shadow:var(--panel-edge),var(--elev-1)}
+  #svbar h4{display:none}
+  #svbar .r{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,8.5rem),1fr)); gap:.5rem; margin:0 0 .5rem}
+  #svbar .r:last-child{margin-bottom:0}
+  #svbar button{display:grid; grid-template-columns:auto minmax(0,auto); align-items:center; justify-content:center; gap:.15rem .45rem; min-width:0; min-height:var(--tap); margin:0;
+    padding:.45rem .625rem; border:0; border-radius:var(--r-md); color:var(--text-1); background:var(--control-fill);
+    box-shadow:inset 0 0 0 1px var(--line-2), inset 0 1px 0 rgba(255,255,255,.08); font:var(--fw-ui-strong) var(--fs-sm)/1.15 var(--font-ui); white-space:normal; text-align:center}
+  #svbar button:active{background:var(--ink-5)}
+  #svbar button:focus{outline:none}
+  #svbar button[disabled]{opacity:.42}
+  #svbar button .bg-ico{width:1.1em; height:1.1em; color:var(--gold-200)}
+  #svbar button small{grid-column:1 / -1; margin:0; font:var(--fw-ui) var(--fs-micro)/1.2 var(--font-ui); color:var(--text-3); opacity:1}
+  .wr-back{margin-top:var(--sp-6)}
+  .wr-dock{position:sticky; bottom:0; z-index:5; display:flex; gap:.625rem; margin:0 calc(-1 * var(--gutter)); padding:1rem var(--gutter) calc(env(safe-area-inset-bottom,0px) + .875rem);
+    background:linear-gradient(180deg,rgba(8,10,21,0),var(--ink-1) 32%)}
+  .wr-dock #startBtn{flex:1 1 0; min-width:0}
+  .wr-dock.has-resume #startBtn{padding-inline:.75rem}
+  .wr-resume{flex:1 1 0; min-width:0; padding:.5rem .75rem; border-radius:var(--r-lg)}
+  .wr-resume > span{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.2rem; min-height:2.75rem}
+  .wr-resume.bg-btn--secondary .bg-btn__sub, .wr-dock #startBtn.bg-btn--secondary .bg-btn__sub{color:var(--text-2)}
+  .wr-nw{white-space:nowrap}
+
+  /* ---------- in game: the felt table is the hero; the standings rail on top (phone) or beside it (TV) ---------- */
+  .wr-game{display:flex; flex-direction:column; align-items:stretch; width:min(100%,40rem); margin:0 auto; padding:0 var(--gutter) 1rem}
+  body.wr-in-setup .wr-game{display:none !important}
+  .wr-stand{padding:.625rem 0 .5rem; counter-reset:none}
+  .wr-stand .bg-player{padding-right:.6rem}
+  .wr-stand .wr-rk{flex:none; min-width:1.1rem; font:var(--fw-caps) var(--fs-micro)/1 var(--font-ui); color:var(--gold-100); text-align:center}
+  .wr-stand .wr-bar{position:absolute; left:.9rem; right:.9rem; bottom:.2rem; height:.1875rem; border-radius:2px; background:rgba(255,255,255,.08); overflow:hidden}
+  .wr-stand .wr-bar > i{display:block; height:100%; background:var(--seat); transform-origin:0 50%; transform:scaleX(0); transition:transform var(--dur-med,.35s) var(--ease-out)}
+  .wr-table{position:relative; height:clamp(22rem,calc(100svh - 23.5rem),36rem); border-radius:var(--r-xl); overflow:hidden; touch-action:manipulation; user-select:none; -webkit-user-select:none}
+  html:not([data-tv]) .wr-game.has-hand .wr-table{height:clamp(19rem,calc(100svh - 31rem),32rem)}
+  /* 3-4 players on the phone: one compact row of standings (place, name, count), still sorted */
+  html:not([data-tv]) .wr-game.is-multi .wr-stand{grid-template-columns:repeat(4,minmax(0,1fr)); gap:.35rem}
+  html:not([data-tv]) .wr-game.is-multi .wr-stand .bg-player{gap:.3rem; padding:.35rem .45rem .5rem .4rem; border-radius:var(--r-md)}
+  html:not([data-tv]) .wr-game.is-multi .wr-stand .bg-token, html:not([data-tv]) .wr-game.is-multi .wr-stand .bg-player__cpu, html:not([data-tv]) .wr-game.is-multi .wr-stand .wr-rk{display:none}
+  html:not([data-tv]) .wr-game.is-multi .wr-stand .bg-player__meta{font:400 var(--fs-lg)/1.1 var(--font-display); color:var(--gold-100)}
+  html:not([data-tv]) .wr-game.is-multi .wr-stand .wr-bar{left:.4rem; right:.4rem}
+  .wr-cards{position:absolute; inset:0; pointer-events:none; z-index:3}
+  .wr-seat{position:absolute; display:flex; align-items:center; gap:.6rem; z-index:2}
+  .wr-seat[data-pos="left"], .wr-seat[data-pos="right"]{flex-direction:column; gap:.4rem}
+  .wr-pk{position:relative; flex:none; cursor:pointer}
+  .wr-pk > .wf{position:absolute; left:0; top:0}
+  .wr-pk.is-empty{border-radius:calc(var(--cw)*.115); box-shadow:inset 0 0 0 2px rgba(231,202,144,.28)}
+  .wr-plate{position:relative; display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; column-gap:.45rem; row-gap:.1rem; min-width:0;
+    padding:.4rem .65rem .45rem .45rem; border-radius:var(--r-md); background:rgba(8,10,4,.62); box-shadow:inset 0 0 0 1px rgba(231,202,144,.18)}
+  .wr-seat.is-need .wr-plate{background:linear-gradient(180deg,var(--seat-tint),rgba(8,10,4,.8) 130%); box-shadow:inset 0 0 0 2px var(--seat-ring), 0 0 0 1px rgba(0,0,0,.4)}
+  .wr-seat.is-win .wr-plate{box-shadow:inset 0 0 0 2px var(--gold-200), 0 0 1.4rem .2rem rgba(231,202,144,.35)}
+  .wr-seat.is-out{opacity:.62}
+  .wr-tk{position:relative; display:block; grid-row:span 2; align-self:center}
+  .wr-plate .bg-token{width:1.9rem; height:1.9rem; font-size:var(--fs-micro)}
+  .wr-plate .bg-player__cpu{left:auto; right:-.4rem; bottom:-.3rem; top:auto}
+  .wr-name{min-width:0; font:var(--fw-ui-strong) var(--fs-sm)/1.2 var(--font-ui); color:var(--text-1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .wr-cnt{display:flex; align-items:baseline; gap:.3rem; white-space:nowrap}
+  .wr-n{font:400 var(--fs-2xl)/1 var(--font-display); color:var(--gold-100); font-variant-numeric:tabular-nums}
+  .wr-nl{font:var(--fw-ui) var(--fs-micro)/1 var(--font-ui); color:var(--text-2)}
+  .wr-sub{grid-column:1 / -1; font:var(--fw-ui) var(--fs-micro)/1.25 var(--font-ui); color:var(--text-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .wr-sub:empty{display:none}
+  .wr-tag{position:absolute; right:-.35rem; top:-.6rem; padding:.1rem .45rem; border-radius:var(--r-pill); font:var(--fw-caps) var(--fs-micro)/1.3 var(--font-ui); letter-spacing:.04em;
+    color:var(--seat-ink); background:var(--seat); box-shadow:0 0 0 2px rgba(8,10,4,.9)}
+  .wr-tag:empty{display:none}
+  .wr-seat[data-pos="left"] .wr-plate, .wr-seat[data-pos="right"] .wr-plate{grid-template-columns:minmax(0,1fr); justify-items:center; text-align:center; padding:.35rem .4rem}
+  .wr-seat[data-pos="left"] .wr-tk, .wr-seat[data-pos="right"] .wr-tk{display:none}
+  .wr-seat[data-pos="left"] .wr-name, .wr-seat[data-pos="right"] .wr-name{max-width:100%}
+  .wr-mid{position:absolute; z-index:1; display:grid; justify-items:center; gap:.2rem; transform:translate(-50%,-50%); pointer-events:none; text-align:center}
+  .wr-midnote{font:var(--fw-ui-strong) var(--fs-micro)/1.3 var(--font-ui); color:var(--text-2); white-space:nowrap}
+  .wr-midnote:empty{display:none}
+  .wr-banner{position:absolute; left:50%; top:50%; z-index:6; display:grid; justify-items:center; gap:.3rem; width:max-content; max-width:92%; padding:.6rem 1.4rem .75rem; transform:translate(-50%,-50%);
+    border-radius:var(--r-lg); background:linear-gradient(180deg,rgba(60,14,10,.94),rgba(22,6,6,.94)); box-shadow:inset 0 0 0 1.5px var(--gold-200), 0 .8rem 2rem rgba(0,0,0,.6);
+    text-align:center; pointer-events:none; opacity:0; visibility:hidden}
+  .wr-banner.is-on{opacity:1; visibility:visible}
+  .wr-banner b{font:400 var(--fs-4xl)/1 var(--font-display); color:#ffe2a8; letter-spacing:.01em}
+  .wr-banner span{font:var(--fw-ui-strong) var(--fs-sm)/1.3 var(--font-ui); color:#f6e9cf}
+  .wr-banner.is-calm{background:linear-gradient(180deg,rgba(14,17,33,.95),rgba(8,10,21,.95))}
+  .wr-banner.is-calm b{font-size:var(--fs-3xl); color:var(--gold-100)}
+  .wr-flash{position:absolute; inset:0; z-index:5; pointer-events:none; opacity:0;
+    background:radial-gradient(60% 55% at 50% 50%,rgba(255,196,120,.55),rgba(214,60,40,.28) 45%,rgba(120,10,10,0) 75%)}
+  .wcard.is-win .wf-in > .wf-face{box-shadow:0 0 0 3px #f0d48a,0 0 0 5px #0b0a12,0 .6rem 1.4rem rgba(0,0,0,.6)}
+  .wcard.is-lose{opacity:.78}
+  .wr-hand{display:flex; justify-content:center; align-items:flex-end; gap:.6rem; margin:.6rem calc(-1 * var(--focus-room)) 0; padding:var(--focus-room); min-height:0}
+  .wr-hand__lbl{align-self:center; font:var(--fw-ui-strong) var(--fs-micro)/1.3 var(--font-ui); color:var(--text-2); max-width:5.5rem}
+  .wr-hcard{position:relative; display:block; padding:0; border:0; background:none; color:inherit; border-radius:calc(var(--cw)*.115); --cw:3.9rem; cursor:pointer}
+  .wr-hcard .wf{pointer-events:none}
+  .wr-hcard[disabled]{cursor:default}
+  .wr-hcard[disabled] .wf{filter:none; opacity:.55}
+  .wr-hcard.is-pr::after{content:"Prisoner"; position:absolute; left:50%; bottom:-.35rem; transform:translateX(-50%); padding:0 .35rem; border-radius:var(--r-pill);
+    font:var(--fw-caps) var(--fs-micro)/1.35 var(--font-ui); color:var(--accent-ink); background:var(--accent); white-space:nowrap}
+  .wr-hcard.is-best .wf{box-shadow:0 0 0 2px var(--gold-200),0 2px 5px #0009}
+  .wr-side{display:grid; gap:.5rem; margin-top:.6rem}
+  .wr-stat{margin:0; text-align:center; font:var(--fw-ui-strong) var(--fs-sm)/1.4 var(--font-ui); color:var(--text-1); min-height:1.4em}
+  .wr-acts{display:flex; flex-wrap:wrap; justify-content:center; align-items:stretch; gap:.625rem; margin:0 calc(-1 * var(--focus-room)); padding:var(--focus-room)}
+  #flipBtn{flex:1 1 11rem; min-width:0; min-height:3.5rem; font-size:var(--fs-xl)}
+  #flipBtn .bg-btn__sub{font-size:var(--fs-xs)}
+  .wr-auto{flex:0 0 auto; width:auto; min-height:3.5rem; padding:.4rem .9rem; gap:.75rem; border-radius:var(--r-lg); background:var(--panel-fill); box-shadow:var(--panel-edge),var(--elev-1)}
+  .wr-auto .bg-row__title{font-size:var(--fs-md)}
+  .wr-prs{display:contents}
+  .wr-meta{display:flex; flex-wrap:wrap; justify-content:center; gap:.4rem .6rem}
+  .wr-chip{display:inline-flex; align-items:center; gap:.35rem; padding:.25rem .65rem; border-radius:var(--r-pill); background:var(--ink-3); box-shadow:inset 0 0 0 1px var(--line-1);
+    font:var(--fw-ui-strong) var(--fs-micro)/1.3 var(--font-ui); color:var(--text-1); font-variant-numeric:tabular-nums}
+  .wr-chip:empty{display:none}
+  .wr-chip.is-hot{box-shadow:inset 0 0 0 1.5px var(--gold-200); color:var(--gold-100)}
+  .wr-log{margin:0; padding:0; list-style:none; display:grid; gap:.15rem; text-align:center; font:var(--fw-body) var(--fs-xs)/1.4 var(--font-ui); color:var(--text-2)}
+  .wr-log li:last-child{color:var(--text-1)}
+  .wr-log li:nth-last-child(n+3){display:none}
+  html:not([data-tv]) .wr-hints{display:none}
+  .wr-hints.is-held{visibility:hidden}
+
+  /* ---------- sheets ---------- */
+  .wr-shead{display:grid; gap:.25rem; margin-bottom:1rem}
+  .wr-shead .bg-sheet__sub{margin:0}
+  .wr-mini{display:inline-flex; align-items:center; gap:.2rem; font:var(--fw-ui-strong) var(--fs-md)/1 var(--font-ui)}
+  .wr-ho{display:grid; justify-items:center; gap:.75rem; padding:.25rem 0 .5rem; text-align:center}
+  .wr-ho__to{display:flex; align-items:center; gap:.625rem; margin:0; font:var(--fw-ui) var(--fs-xl)/1.3 var(--font-ui); color:var(--text-2)}
+  .wr-ho__to b{color:var(--text-1)}
+  .wr-ho .bg-token{width:2.75rem; height:2.75rem; font-size:var(--fs-sm)}
+  .wr-winhome{margin-top:.75rem}
+  .wr-final{display:grid; gap:.35rem; margin:.25rem auto .9rem; padding:0; list-style:none; width:min(100%,22rem); text-align:left}
+  .wr-final li{display:flex; align-items:center; gap:.55rem; padding:.35rem .6rem; border-radius:var(--r-md); background:var(--ink-3); box-shadow:inset 0 0 0 1px var(--line-1);
+    font:var(--fw-ui-strong) var(--fs-sm)/1.25 var(--font-ui); color:var(--text-1)}
+  .wr-final li.is-lead{box-shadow:inset 0 0 0 1.5px var(--gold-200)}
+  .wr-final .bg-token{width:1.6rem; height:1.6rem; font-size:var(--fs-micro); flex:none}
+  .wr-final .wr-fn{flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .wr-final .wr-fc{flex:none; color:var(--gold-100); font-variant-numeric:tabular-nums}
+  .wr-final .wr-fr{flex:none; min-width:1.2rem; color:var(--text-2)}
+  .wr-final.is-grid{grid-template-columns:repeat(2,minmax(0,1fr)); width:min(100%,30rem)}
+  html[data-tv] .wr-final{width:min(100%,24rem)}
+  html[data-tv] .wr-final.is-grid{width:min(100%,34rem)}
+  /* fallbacks when ui/ui.js is missing */
+  .wr-toast{position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom,0px) + 90px); transform:translateX(-50%); max-width:90vw; padding:10px 16px; border-radius:12px; z-index:90;
+    background:#000c; color:#fff; font:700 14px system-ui,sans-serif; text-align:center; opacity:0; pointer-events:none; transition:opacity .2s}
+  .wr-toast.show{opacity:1}
+  .wr-svtoast{position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom,0px) + 7rem); transform:translateX(-50%); max-width:90vw; padding:10px 16px; border-radius:12px; z-index:100000;
+    background:#000d; color:#fff; font:700 14px system-ui,sans-serif; text-align:center; opacity:0; pointer-events:none; transition:opacity .2s}
+  .wr-svtoast.show{opacity:1}
+  html.wr-luxe .wr-toast, html.wr-luxe .wr-svtoast{display:none}
+  html:not(.wr-luxe) .bg-sheet.show{transform:none; visibility:visible; z-index:70}
+  /* reduced effects / reduced motion: nothing endless here; the one-shot moves are skipped in script (BGUI.reducedMotion) */
+  html[data-effects="reduced"] .wr-stand .wr-bar > i, html[data-motion="reduce"] .wr-stand .wr-bar > i{transition:none}
+  @media (prefers-reduced-motion: reduce){ .wr-stand .wr-bar > i, .wr-disclose .wr-chev{transition:none} }
+
+  /* ---------- TV (html[data-tv], 1rem = 24px at 1080p) ---------- */
+  html[data-tv] .wr-setup{display:grid; grid-template-columns:minmax(0,32rem) minmax(0,34rem); column-gap:3.5rem; justify-content:center; align-items:start; width:auto; padding:0 var(--gutter) 2rem}
+  html[data-tv] .wr-col{display:block; min-width:0}
+  html[data-tv] .wr-hero{margin:1.5rem 0 0; border-radius:var(--r-xl); padding-top:34%}
+  html[data-tv] .wr-hero .bg-hero__layer{border-radius:var(--r-xl) var(--r-xl) 0 0;
+    -webkit-mask-image:linear-gradient(90deg,rgba(0,0,0,0),#000 8%,#000 96%,rgba(0,0,0,0)),linear-gradient(180deg,rgba(0,0,0,0),#000 9%,#000 58%,rgba(0,0,0,0));
+    -webkit-mask-composite:source-in;
+    mask-image:linear-gradient(90deg,rgba(0,0,0,0),#000 8%,#000 96%,rgba(0,0,0,0)),linear-gradient(180deg,rgba(0,0,0,0),#000 9%,#000 58%,rgba(0,0,0,0));
+    mask-composite:intersect}
+  html[data-tv] .wr-hero .bg-hero__body{padding:0}
+  html[data-tv] #versions{gap:1.5rem}
+  html[data-tv] #lengthSeg{grid-template-columns:repeat(4,minmax(0,1fr))}
+  html[data-tv] .wr-rules .bg-row{min-height:0; padding:.5rem .875rem}
+  html[data-tv] .wr-col--b{display:flex; flex-direction:column}
+  html[data-tv] .wr-sec--players{order:1} html[data-tv] .wr-dock{order:2} html[data-tv] .wr-sec--save{order:3} html[data-tv] .wr-back{order:4}
+  html[data-tv] .wr-dock{position:static; gap:1.75rem; margin:0; padding:1.5rem 0 0; background:none}
+  html[data-tv] #humanSeg, html[data-tv] #cpuSeg, html[data-tv] #speedSeg, html[data-tv] #skillSeg, html[data-tv] #lengthSeg, html[data-tv] #limitSeg{gap:1.5rem}
+  html[data-tv] .bg-topbar__end{gap:1.5rem}
+  html[data-tv] #svbar button{grid-template-columns:minmax(0,1fr); justify-items:center; align-content:center; row-gap:.3rem; padding:.625rem .5rem}
+  html[data-tv] #svbar button .bg-ico{width:1.25em; height:1.25em}
+  html[data-tv] #svbar .r{gap:1.5rem}
+  html[data-tv] #svbar .r:not(:last-child){margin-bottom:1.5rem}
+  html[data-tv] .wr-autorow{margin-top:.75rem}
+  /* TV in game: the table fills the left of the stage; the standings, the status, the actions, the clock, the log and the remote's keys
+     stand in a column on the right. Exactly one screen tall */
+  html[data-tv] .wr-game{display:grid; grid-template-columns:minmax(0,1fr) 27rem; grid-template-rows:auto minmax(0,1fr) auto; grid-template-areas:"table stand" "table side" "hand side";
+    column-gap:2rem; width:auto; height:calc(100vh - 4.75rem); padding:.75rem var(--gutter) 1rem}
+  html[data-tv] .wr-tablewrap{grid-area:table; min-height:0; display:flex}
+  html[data-tv] .wr-table{flex:1; height:auto}
+  html[data-tv] .wr-hand{grid-area:hand; margin-top:.5rem}
+  html[data-tv] .wr-hcard{--cw:5.25rem}
+  html[data-tv] .wr-side{grid-area:side; display:flex; flex-direction:column; gap:1rem; margin:0; min-height:0}
+  html[data-tv] .wr-stand{grid-area:stand; grid-template-columns:minmax(0,1fr); gap:.75rem; padding:0 0 1rem}
+  html[data-tv] .wr-stand .bg-player{padding:.55rem .9rem .7rem .5rem}
+  html[data-tv] .wr-stand .bg-token{width:2.25rem; height:2.25rem}
+  html[data-tv] .wr-stand .bg-player__cpu{left:2.75rem}
+  html[data-tv] .wr-stat{text-align:left; font-size:var(--fs-md)}
+  html[data-tv] .wr-acts{justify-content:flex-start; gap:1.5rem}
+  html[data-tv] #flipBtn{flex:1 1 100%}
+  html[data-tv] .wr-auto{flex:1 1 100%}
+  html[data-tv] .wr-meta{justify-content:flex-start}
+  html[data-tv] .wr-log{flex:1; min-height:0; overflow:hidden; align-content:end; text-align:left}
+  html[data-tv] .wr-log li:nth-last-child(n+3){display:block}
+  html[data-tv] .wr-log li:nth-last-child(n+6){display:none}
+  html[data-tv] .wr-hints{justify-content:flex-start; margin:0}
+  html[data-tv] .wr-plate{padding:.5rem .9rem .6rem .55rem}
+  html[data-tv] .wr-plate .bg-token{width:2.4rem; height:2.4rem}
+  html[data-tv] .wr-plate .bg-player__cpu{right:-.45rem; bottom:-.3rem}
+  html[data-tv] .wr-n{font-size:var(--fs-3xl)}
+  html[data-tv] .wr-banner b{font-size:var(--fs-5xl)}
+  html[data-tv] .wr-banner span{font-size:var(--fs-lg)}
+  html[data-tv] body:not(.wr-in-setup) .bg-toast{left:calc(100vw - var(--gutter) - 13.5rem); max-width:26rem}
+</style>
+<script src="../sound.js"></script>
+<script src="../skins.js"></script>
+<script src="../saves.js"></script>
+<script src="../names.js"></script>
+<script>window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
+<script>/* a no-op Sound with every method this page uses, in case sound.js fails to load */
+window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){},closePanel:function(){},panelOpen:function(){return false;},addStyle:function(){return false;},hasStyle:function(){return false;}};
+window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";}};</script>
+</head>
+<body class="bg-app bg-app--scene wr-in-setup">
+  <header class="bg-topbar">
+    <div class="bg-topbar__start"><a class="bg-btn bg-btn--icon" id="homeBtn" href="../index.html" aria-label="All games" data-icon="back"></a></div>
+    <div class="bg-topbar__title"><span class="bg-eyebrow" id="barEyebrow">New game</span><span class="bg-topbar__name">War</span></div>
+    <div class="bg-topbar__end">
+      <button class="bg-btn bg-btn--icon" id="menuBtn" type="button" aria-label="Menu" data-icon="menu" hidden></button>
+    </div>
+  </header>
+
+  <main class="wr-setup" id="setup" aria-label="New game">
+    <div class="wr-col wr-col--a">
+      <section class="bg-hero wr-hero" aria-labelledby="setupTitle">
+        <div class="bg-hero__layer is-on"></div>
+        <div class="bg-hero__shade"></div>
+        <div class="bg-hero__body">
+          <span class="bg-eyebrow bg-eyebrow--accent" data-stage-text="strong">Flip · battle · declare war</span>
+          <h1 class="bg-hero__title" id="setupTitle" data-stage-text>War</h1>
+          <p class="bg-hero__pitch" data-stage-text>Everyone turns a card at once and the highest takes them all. A tie means war. Win every card.</p>
+        </div>
+      </section>
+      <section class="wr-sec wr-sec--version" aria-labelledby="versionHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="versionHead" data-stage-text>Version</h2></div>
+        <div class="bg-versions" id="versions" role="radiogroup" aria-labelledby="versionHead"></div>
+        <p class="wr-vdesc" id="versionDesc" aria-live="polite"></p>
+      </section>
+      <section class="wr-sec wr-sec--names" aria-labelledby="namesHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="namesHead" data-stage-text>Names</h2></div>
+        <div class="bg-card wr-namecard" id="nameCard"><p class="bg-names-note" id="namesNote">Your name is kept on this device for every game. The computers get their own names.</p></div>
+      </section>
+      <section class="wr-sec wr-sec--length" aria-labelledby="lengthHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="lengthHead" data-stage-text>Game length</h2></div>
+        <div class="bg-card wr-card">
+          <div class="bg-seg bg-seg--text" id="lengthSeg" role="group" aria-labelledby="lengthHead"></div>
+          <div class="bg-seg bg-seg--text" id="limitSeg" role="group" aria-label="Limit"></div>
+          <p class="wr-vdesc" id="lengthDesc" aria-live="polite" style="margin:0"></p>
+        </div>
+      </section>
+      <section class="wr-sec wr-sec--speed" aria-labelledby="speedHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="speedHead" data-stage-text>Game speed</h2></div>
+        <div class="bg-seg bg-seg--text" id="speedSeg" role="group" aria-labelledby="speedHead"><button type="button" data-s="slow" aria-pressed="false">Slow</button><button type="button" data-s="medium" class="on" aria-pressed="true">Medium</button><button type="button" data-s="fast" aria-pressed="false">Fast</button></div>
+        <div class="bg-section wr-subhead"><h2 class="bg-eyebrow" id="skillHead" data-stage-text>Computer skill</h2></div>
+        <div class="bg-seg bg-seg--text" id="skillSeg" role="group" aria-labelledby="skillHead"><button type="button" data-k="easy" aria-pressed="false">Easy</button><button type="button" data-k="normal" class="on" aria-pressed="true">Normal</button><button type="button" data-k="hard" aria-pressed="false">Hard</button></div>
+        <p class="wr-legend" id="skillNote" data-stage-text></p>
+      </section>
+      <section class="wr-sec wr-sec--rules" aria-labelledby="rulesHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="rulesHead" data-stage-text>Rules</h2></div>
+        <div class="bg-rows">
+          <button class="bg-row wr-disclose" id="rulesToggle" type="button" aria-expanded="false" aria-controls="houseRules">
+            <span class="bg-row__main"><span class="bg-row__title">Rules and house rules</span><span class="bg-row__desc" id="rulesDesc"></span></span>
+            <span class="wr-chev" data-icon="chevron" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div class="bg-rows wr-rules" id="houseRules" hidden></div>
+        <p class="wr-legend" id="rulesLegend" data-stage-text hidden><span class="bg-tag bg-tag--official">official</span> from the rule sources (Bicycle, Pagat) · <span class="bg-tag bg-tag--house">house</span> a popular home rule</p>
+      </section>
+    </div>
+    <div class="wr-col wr-col--b">
+      <section class="wr-sec wr-sec--players" aria-labelledby="playersHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="playersHead" data-stage-text>Players</h2></div>
+        <div class="bg-card wr-card">
+          <div class="wr-field"><span class="bg-row__title" id="humansTitle">Players on this phone</span><span class="bg-row__desc" id="humansDesc">0 = watch the computers play.</span></div>
+          <div class="bg-seg" id="humanSeg" role="group" aria-label="Players on this phone"></div>
+          <div class="wr-field"><span class="bg-row__title">Computer players</span><span class="bg-row__desc" id="cpuDesc">2 to 4 players in all. Two is the classic game.</span></div>
+          <div class="bg-seg" id="cpuSeg" role="group" aria-label="Computer players"></div>
+          <div class="wr-seats" id="seatPreview"><span class="wr-seats__tokens" id="seatTokens"></span><span class="wr-seats__txt"><b id="seatHead"></b><span id="seatNote"></span></span></div>
+          <div class="bg-rows wr-autorow">
+            <button class="bg-row" id="autoRow" type="button" role="switch" aria-checked="false">
+              <span class="bg-row__main"><span class="bg-row__title">Auto-play</span><span class="bg-row__desc">Your flips go on by themselves at the game speed. Switch it off any time.</span></span>
+              <span class="bg-toggle" aria-hidden="true"></span>
+            </button>
+          </div>
+        </div>
+      </section>
+      <section class="wr-sec wr-sec--save" aria-labelledby="saveHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="saveHead" data-stage-text>Save and load</h2></div>
+        <div id="svbar"></div>
+      </section>
+      <a href="../index.html" class="bg-btn bg-btn--ghost bg-btn--block wr-back" id="backHub" data-icon="home" data-stage-text>Back to all games</a>
+      <div class="wr-dock" id="startDock" data-toast-avoid>
+        <button class="bg-btn bg-btn--secondary wr-resume" id="resumeBtn" type="button" style="display:none"><span><span class="bg-btn__label" id="resumeLabel">Resume</span><span class="bg-btn__sub" id="resumeSub">Back to the game</span></span></button>
+        <button class="bg-btn bg-btn--primary bg-btn--cta" id="startBtn" type="button"><span class="bg-btn__label" id="startLabel">Start War</span><span class="bg-btn__sub" id="startSub">2 players</span></button>
+      </div>
+    </div>
+  </main>
+
+  <main class="wr-game" id="game" aria-label="War table">
+    <ul class="bg-players wr-stand" id="wstand" aria-label="Standings, most cards first"></ul>
+    <div class="wr-tablewrap"><div class="wr-table bg-surface--felt" id="wtable" data-stage-solid aria-label="The table">
+      <div class="wr-mid" id="wtMid"><span class="wr-midnote" id="wtMidNote"></span></div>
+      <div class="wr-cards" id="wtCards"></div>
+      <div class="wr-flash" id="wtFlash" aria-hidden="true"></div>
+      <div class="wr-banner" id="wtBanner" aria-live="polite"><b id="wtBannerT"></b><span id="wtBannerS"></span></div>
+    </div></div>
+    <div class="wr-hand" id="whand" hidden></div>
+    <div class="wr-side">
+      <p class="wr-stat" id="wstat" data-stage-text aria-live="polite"></p>
+      <div class="wr-acts" id="wacts" data-toast-avoid>
+        <button class="bg-btn bg-btn--primary bg-btn--lg" id="flipBtn" type="button" data-focus-first><span class="bg-btn__label" id="flipLabel">Flip</span></button>
+        <span class="wr-prs" id="wprs"></span>
+        <button class="bg-row wr-auto" id="autoBtn" type="button" role="switch" aria-checked="false"><span class="bg-row__main"><span class="bg-row__title">Auto</span></span><span class="bg-toggle" aria-hidden="true"></span></button>
+      </div>
+      <div class="wr-meta"><span class="wr-chip" id="wclock"></span><span class="wr-chip" id="wbattle"></span></div>
+      <ol class="wr-log" id="wlog" aria-label="What happened" data-stage-text></ol>
+      <div class="bg-hintbar wr-hints" data-stage-text><span><span class="bg-key">OK</span> <span id="hintOk">Flip</span></span><span><span class="bg-key">Back</span> Close a list, or the Menu</span></div>
+    </div>
+  </main>
+
+  <section class="bg-sheet" id="claimBox" aria-labelledby="claimTitle"><div id="claimSheet"></div></section>
+  <section class="bg-sheet" id="handoff" aria-labelledby="hoTitle"><div id="handoffSheet"></div></section>
+
+  <div class="bg-win" id="winBox" aria-labelledby="winTitle">
+    <div class="bg-win__scrim"></div>
+    <div class="bg-win__rays"></div>
+    <div class="bg-win__card">
+      <div class="bg-win__medal"></div>
+      <p class="bg-eyebrow" id="winEyebrow">Game over</p>
+      <h2 class="bg-win__title" id="winTitle">Victory</h2>
+      <p class="bg-win__sub" id="winSub"></p>
+      <ol class="wr-final" id="winList" aria-label="Final standings"></ol>
+      <ul class="bg-stats bg-win__stats" id="winStats"></ul>
+      <div class="bg-win__actions">
+        <button class="bg-btn bg-btn--secondary bg-btn--lg" type="button" id="winMenu">Menu</button>
+        <button class="bg-btn bg-btn--primary bg-btn--lg" type="button" id="winAgain" data-icon="play">Play again</button>
+      </div>
+      <a class="bg-btn bg-btn--ghost bg-btn--block wr-winhome" href="../index.html" id="winHome">All games</a>
+    </div>
+  </div>
+
+  <div class="wr-toast" id="toast" aria-hidden="true"></div>
+  <div class="wr-svtoast" id="svtoast" aria-hidden="true"></div>
+
+<script src="engine.js"></script>
+<script src="cards.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
