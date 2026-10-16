@@ -47,8 +47,7 @@ var HOUSE=[
   ["judge","Doubtful answers","choice",[["vote","Players can challenge & vote"],["auto","Accept anything that fits the letter"]],1],
   ["stopRule","Stop when someone finishes","bool",null,0],
   ["tieRound","Tie → extra round","bool",null,1,"letter"],
-  ["cpuSkill","Computer players","choice",[["easy","Easy"],["normal","Normal"],["hard","Hard"]],0]
-];
+];   // the computer skill is its own row next to Game speed (ui: cfg.skill -> o.cpuSkill)
 function versionOpts(id,extra){ var v=VERSIONS.filter(function(x){ return x.id===id; })[0]||VERSIONS[0]; var o={}; for(var k in v.opts) o[k]=v.opts[k]; for(var k2 in (extra||{})) o[k2]=extra[k2]; return mergeOpts(o); }
 
 /* ---------------- text helpers ---------------- */
@@ -150,7 +149,8 @@ function beginReview(G){ if(G.phase!=="write") return; cpuFillAll(G); G.phase="r
 function cpuChallenges(G){
   var out=[]; if(G.o.judge!=="vote") return out;
   evaluate(G).entries.forEach(function(e){
-    if(e.status!=="ok"||!G.players[e.p].human||!madeUp(e.raw)) return;
+    var B=g.Scatter&&g.Scatter.Brain, mine=B&&B.wantsChallenge?B.wantsChallenge(G,e):false;   // the brain also challenges an answer the vote threw out before (this device)
+    if(e.status!=="ok"||!G.players[e.p].human||!(madeUp(e.raw)||mine)) return;
     var by=G.players.filter(function(c){ return !c.human; })[0]; if(!by) return;
     var r=openChallenge(G,by.id,e.slot,e.p,e.k); if(r.ok){ resolveChallenge(G,r.ch,false); out.push(r.ch); }
   });
@@ -176,7 +176,9 @@ function cpuAnswers(G,p){
   });
   return out;
 }
-function cpuFillAll(G){ G.players.forEach(function(p){ if(!p.human&&inPlay(G,p.id)) setAnswers(G,p.id,cpuAnswers(G,p.id)); }); }
+/* the computers' answers: the brain (brain.js, step 10) decides; if it is missing, declines or throws, the old code does */
+function brainAnswers(G,p){ var B=g.Scatter&&g.Scatter.Brain; if(B&&B.decide){ var a=null; try{ a=B.decide(G,p); }catch(e){ a=null; } if(a) return a; } return cpuAnswers(G,p.id); }
+function cpuFillAll(G){ G.players.forEach(function(p){ if(!p.human&&inPlay(G,p.id)) setAnswers(G,p.id,brainAnswers(G,p)); }); }
 /* a tie-break round is played only by the tied leaders; everyone else sits it out */
 function inPlay(G,id){ return !G.tieActive||G.tieActive.indexOf(id)>=0; }
 
@@ -288,7 +290,8 @@ function openChallenge(G,by,slot,p,k){
   if(by===p&&false) return {ok:false};
   var votes={}; // computers vote immediately (cpuJudge: answers they know or real words yes, made-up words no)
   var s=G.slots[slot], raw=((G.answers[p][slot]||[])[k])||"";
-  G.players.forEach(function(pl){ if(pl.human) return; votes[pl.id]=cpuJudge(G,s,raw); });
+  var B=g.Scatter&&g.Scatter.Brain;
+  G.players.forEach(function(pl){ if(pl.human) return; var bv=B&&B.vote?B.vote(G,slot,raw):undefined; votes[pl.id]=bv===undefined?cpuJudge(G,s,raw):bv; });
   G.challenges[slot][key]={by:by,p:p,k:k,slot:slot,votes:votes,state:"open"};
   return {ok:true,ch:G.challenges[slot][key]};
 }
@@ -310,6 +313,11 @@ function pendingVoters(G,ch){ return G.players.filter(function(p){ return ch.vot
 
 /* ---------------- finishing ---------------- */
 function finishRound(G){
+  var r=finishRoundCore(G), B=g.Scatter&&g.Scatter.Brain;
+  if(B){ try{ B.learnRound(G); B.finish(G); }catch(e){} }   // the brain remembers this round (and the game, when it ends)
+  return r;
+}
+function finishRoundCore(G){
   var ev=evaluate(G), t=totals(G,ev);
   G.players.forEach(function(p){ var on=inPlay(G,p.id); p.score+=on?t[p.id]:0; p.roundScores.push(on?t[p.id]:null); });   // null = sat out the tie-break ("—")
   G.result={entries:ev.entries,totals:t,letter:G.letter,keyword:G.keyword};
