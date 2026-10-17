@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "about": "Six fixed views of ONE race, the same for every specialist and for the before / after comparison. The race is the real game engine (mxwar/demo-engine.js, the same drive as game.js) through the 3D view on the harness page (mxwar/demo.html): the 2026 Supercross season, round 1 Anaheim, the Main with 22 riders, the person 'YOU' among them (seat 12), the red plate on seat 0, engine seed 22. t is race seconds after the gate drop (the view's clock T; t < 0 = at the gate, before the drop); the harness steps whole 1/60 s ticks on a virtual clock with a seeded Math.random, so the same plan gives the same frames. Cameras: a rider rig {seat, back, up, side, aim, fov} (metres along / across the rider's heading, + side = the rider's right, up above the dirt; seat 'you' | 'lead' | 'crash' | N | {rank:k}) or a world pose {eye, target, fov} (x east, y up, z south; the stadium floor is x -67.5..67.5, z -32..44; the whoops lane is z -5, the big jump z 19, the gate (-54.6, 33)). Run them with tools/shots.js; every tool is documented in tools/README.md.",
+  "about": "Six fixed views of ONE race, the same for every specialist and for the before / after comparison. The race is the real game engine (mxwar/demo-engine.js, the same drive as game.js) through the 3D view on the harness page (mxwar/demo.html): the 2026 Supercross season, round 1 Anaheim, the Main with 22 riders, the person 'YOU' among them (seat 12), the red plate on seat 0, engine seed 22. t is race seconds after the gate drop (the view's clock T; t < 0 = at the gate, before the drop); the harness steps whole 1/60 s ticks on a virtual clock with a seeded Math.random, so the same plan gives the same frames. Cameras: a rider rig {seat, back, up, side, aim, fov} (metres along / across the rider's heading, + side = the rider's right, up above the dirt; seat 'you' | 'lead' | 'crash' | N | {rank:k}) or a world pose {eye, target, fov} (x east, y up, z south; the stadium floor is x -67.5..67.5, z -32..44; the whoops lane is z -5, the big jump z 19, the gate (-54.6, 33)). Run them with tools/shots.js; every tool is documented in tools/README.md. [2026-10-17 integrate:merge: B2, B2b and R2 moved out of the stands (director note D2); the previous plan is bookmarks.v1-before-D2.json]",
   "race": {
     "season": "sx-2026",
     "round": 1,
@@ -43,19 +43,49 @@
       "id": "B2",
       "name": "stadium wide",
       "t": 125,
-      "why": "High in the south grandstand: the whole course and all 22 riders, spread over lap 3 (Reference_Crops/broadcast_overview). FOV 50 (the stadium_aerial preset).",
+      "why": "An elevated broadcast view from the lower stands (south-east corner, 6.7 m above the seats): the whole course and the pack across the floor, the far packed stands and the light rigs in the top half (Reference_Crops/broadcast_overview). FOV 48. (MOVED from the eye (0,33,92), which sits inside the new upper deck: see \"moved\".)",
       "cam": {
         "eye": [
-          0,
-          33,
-          92
+          22,
+          18,
+          63
         ],
         "target": [
+          -6,
           0,
-          0,
-          4
+          2
         ],
-        "fov": 50
+        "fov": 48
+      },
+      "moved": {
+        "was": {
+          "eye": [
+            0,
+            33,
+            92
+          ],
+          "target": [
+            0,
+            0,
+            4
+          ],
+          "fov": 50
+        },
+        "now": {
+          "eye": [
+            22,
+            18,
+            63
+          ],
+          "target": [
+            -6,
+            0,
+            2
+          ],
+          "fov": 48
+        },
+        "when": "2026-10-17 integrate:merge",
+        "why": "D2: the old eye (0,33,92) is INSIDE the new south upper deck (bowlY = 32.4 there): a black band over the lower 40% of the frame. The new eye stands 6.7 m above the seats under it (bowlY(22,63) = 11.3), oblique over the floor like the CEO broadcast reference crop. The BEFORE frame was re-captured from the base commit ac4b1bf with this same pose."
       }
     },
     {
@@ -176,19 +206,47 @@
       "id": "B2b",
       "name": "stadium wide, oblique",
       "t": 125,
-      "why": "The same wide from the south-west corner (the near stand clips the lens at the bottom: a known limit of this pose).",
+      "why": "The same wide from the south-west side (MOVED: the old eye was inside the near stand).",
       "cam": {
         "eye": [
-          -28,
-          34,
-          95
+          -16,
+          17,
+          62
         ],
         "target": [
-          8,
+          4,
           0,
-          3
+          2
         ],
-        "fov": 50
+        "fov": 46
+      },
+      "moved": {
+        "was": {
+          "eye": [
+            -28,
+            34,
+            95
+          ],
+          "target": [
+            8,
+            0,
+            3
+          ],
+          "fov": 50
+        },
+        "now": {
+          "eye": [
+            -16,
+            17,
+            62
+          ],
+          "target": [
+            4,
+            0,
+            2
+          ],
+          "fov": 46
+        }
       }
     },
     {
@@ -335,29 +393,45 @@
       "t0": 120,
       "seconds": 10,
       "fps": 30,
-      "why": "The high south-grandstand broadcast camera (stadium_aerial, FOV 50) panning with the race leader for 5 s, then a cut to the view's own director (its trackside / chase / jump cameras): what a viewer of the real game is shown.",
+      "why": "The elevated south-east broadcast camera (FOV 48, 6.7 m above the seats) panning with the race leader for 5 s, then a cut to the view's own director (its trackside / chase / jump cameras): what a viewer of the real game is shown.",
       "cuts": [
         {
           "at": 0,
           "cam": {
             "eye": [
-              0,
-              33,
-              92
+              22,
+              18,
+              63
             ],
             "follow": {
               "seat": "lead",
               "up": 1,
               "damp": 0.9
             },
-            "fov": 50
+            "fov": 48
           }
         },
         {
           "at": 5,
           "cam": null
         }
-      ]
+      ],
+      "moved": {
+        "was": {
+          "eye": [
+            0,
+            33,
+            92
+          ]
+        },
+        "now": {
+          "eye": [
+            22,
+            18,
+            63
+          ]
+        }
+      }
     }
   ]
 }
