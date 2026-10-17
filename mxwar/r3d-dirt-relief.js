@@ -130,6 +130,8 @@ export function buildRelief(C,o){
   };
   /* delta(s, lat): the ground the wheels follow (the mesh's heights; zero outside the track, and fading to zero at the finish line so the painted line lies flat) */
   Rl.delta=function(s,lat){ if(lat>=LATR||lat<=-LATR) return 0; return Rl.at(phys,s,lat); };
+  /* lineAt(s): the racing line's lateral offset (m, + right) the ruts lie on: the outside of a corner at 0.36 of the half width, smoothed (race3d.js's riders aim at the same, unsmoothed) */
+  Rl.lineAt=function(s){ s%=L; if(s<0) s+=L; const x=s/ds, i0=Math.floor(x), f=x-i0, a=rows.line[i0%ns], b=rows.line[(i0+1)%ns]; return a+(b-a)*f; };
   Rl.fine=(nt,nv)=>fineMap(Rl,nt,nv);
   return Rl;
 }
@@ -151,12 +153,12 @@ function fineMap(Rl,nt,nv){
       d=(lat-gC1)/gw; if(d*d<1){ const t=1-d*d; f-=0.03*gA1*gk*t*t; }
       d=(lat-gC2)/gw; if(d*d<1){ const t=1-d*d; f-=0.036*gA2*gk*t*t; }
       /* braking bumps: ripples across the line, slightly slanted (phase shears with lat), strongest on the line */
-      if(bk>0.01){ const en=Math.exp(-Math.pow((lat-line*0.5)/1.8,2)); f+=bk*0.05*en*Math.cos(ph+lat*1.9); }
+      if(bk>0.01){ const en=Math.exp(-Math.pow((lat-line*0.5)/1.8,2))*(0.55+0.9*K.n2(s*0.8+3,lat*0.7)); f+=bk*0.05*en*Math.cos(ph+lat*1.9+(K.n2(s*0.6,lat*0.5+7)-0.5)*2.2); }
       /* roost ripples where the bikes dig out of a corner */
-      if(ac>0.01){ const en=Math.exp(-Math.pow((lat-line*0.5)/1.1,2)); f+=ac*0.02*en*Math.cos(aph+lat*2.4); }
+      if(ac>0.01){ const en=Math.exp(-Math.pow((lat-line*0.5)/1.1,2))*(0.55+0.9*K.n2(s*0.7+11,lat*0.8)); f+=ac*0.02*en*Math.cos(aph+lat*2.4+(K.n2(s*0.5,lat*0.4)-0.5)*2.2); }
       /* the landing: a scoop with scuffs across it, a pile of loose dirt just ahead */
       const ld=rows.land[i], pl=rows.pile[i];
-      if(ld>0.02||pl>0.02){ const en=Math.exp(-Math.pow(lat/1.9,2)), sc=0.5+0.5*Math.cos(s*21+lat*3.7); f-=ld*en*(0.022+0.012*sc); f+=pl*en*0.028*(0.6+0.4*K.n2(s*4,lat*3)); }
+      if(ld>0.02||pl>0.02){ const en=Math.exp(-Math.pow(lat/1.9,2)), sc=0.5+0.5*Math.cos(s*17+lat*3.7+K.n2(s*1.3,lat*1.1)*5); f-=ld*en*(0.02+0.014*sc*K.n2(s*0.9,lat*0.6+4)); f+=pl*en*0.028*(0.6+0.4*K.n2(s*4,lat*3)); }
       /* whoops: chopped scallops down the faces */
       if(wh>0){ const fs=rows.Fs[i]; if(fs<-0.04){ f+=0.03*Math.cos(s*12.2+lat*2.1+Math.floor(s/3.75)*1.7)*clamp(-fs*3,0,1)*sstep(0.1,0.7,1-Math.abs(lat)/hw); } }
       /* clods and crumbs: more of them at the edges and where the dirt is loose */
