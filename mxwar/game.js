@@ -925,7 +925,7 @@ function syncControls(){
   else if(!need.length) t=intent?"Your flip is queued for the next lap.":"";
   else if(need.length) t=cfg.auto?"Auto: your card turns by itself.":(rc.phase==="war"?"War! Lay 3 down and turn the 4th.":(G.humans.length>1?G.riders[seatId(need[0])].name+": turn your card.":"Turn your card."));
   stat.textContent=t;
-  $("hintOk").textContent=gate&&hs.length?"Drop the gate":need.length?"Flip":!skip.hidden?"Sim to the flag":"Flip";
+  $("hintOk").textContent=gate&&hs.length?"Drop the gate":need.length?"Flip":is3d()?"Choose":!skip.hidden?"Sim to the flag":"Flip";
   if(onTV()&&!busy){ var mc=mainControl(), a=document.activeElement; if(mc&&!mc.hidden&&(a===document.body||!a||(a.disabled)||a.hidden||!$("race").contains(a))&&!sheetUp()) focusTV(mc); }
 }
 function sheetUp(){ var B=BG(); return !!(B&&B.sheet&&B.sheet.top&&B.sheet.top())||!!(B&&B.win&&B.win.isOpen&&B.win.isOpen()); }

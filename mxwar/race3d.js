@@ -132,7 +132,7 @@ function create(host,opt){
   var gl=R.gl;
   var V={is3d:true,host:host,canvas:canvas,R:R,C:null,key:"",riders:[],by:{},T:-3,phase:"idle",lap:0,len:30,shots:[],shot:null,flag:null,flagT:0,
     run:false,want:false,raf:0,last:0,frames:0,ms:0,msN:0,frozen:false,scale:1,W:0,H:0,dpr:1,banners:opt.onBanner||function(){},waiters:[],lapEndT:{},
-    yellow:null,marshals:[],red:-1,fxMode:"full",half:false,costs:[],lastShotKind:"",rot:0};
+    yellow:null,marshals:[],red:-1,fxMode:"full",half:false,costs:[],ucosts:[],lastShotKind:"",rot:0};
   var M={}, TEX={}, IB={}, SC=null;   // meshes, textures, instance buffers, the scene of the current course
   var VP=GL.m4(), PROJ=GL.m4(), VIEW=GL.m4(), IVP=GL.m4();
   var CAM={eye:[0,30,60],tgt:[0,0,0],fov:0.9,se:null,st:null};
@@ -1009,15 +1009,18 @@ function create(host,opt){
     var dt=(V.last?Math.min(0.1,(t-V.last)/1000):0.016)*(V.timeScale||1);   /* timeScale: tests only (the race view is real time) */
     if((mo==="reduced"||V.half)&&V.last&&t-V.last<31){ V.raf=requestAnimationFrame(tick); return; }
     V.last=t;
-    var c0=now();
-    try{ update(dt); camera(dt); draw(dt); }catch(e){ V.err=String(e&&e.stack||e); try{ console.warn("mxwar 3d:",e); }catch(x){} }
+    var c0=now(), c1=c0;
+    try{ update(dt); camera(dt); c1=now(); draw(dt); }catch(e){ V.err=String(e&&e.stack||e); try{ console.warn("mxwar 3d:",e); }catch(x){} }
     var cost=now()-c0; V.frames++; V.ms+=cost; V.msN++;
     V.costs.push(cost); if(V.costs.length>120) V.costs.shift();
-    /* a device that can't keep up (frames over 22 ms of our own work for 3 s) drops to 30 fps and a smaller canvas */
-    if(!V.half&&V.msN>=90){ if(V.ms/V.msN>22) V.half=true; V.ms=0; V.msN=0; }
+    V.ucosts.push(c1-c0); if(V.ucosts.length>120) V.ucosts.shift();
+    /* a device that can't keep up (our own work over 22 ms a frame, or frames coming slower than 24 a second, a busy GPU, for 3 s) drops
+       to 30 fps and a canvas 0.8 x the size */
+    V.dtS=(V.dtS||0)+(V.lastT?t-V.lastT:16); V.lastT=t;
+    if(!V.half&&V.msN>=90){ if(V.ms/V.msN>22||V.dtS/V.msN>42) V.half=true; V.ms=0; V.msN=0; V.dtS=0; }
     V.raf=requestAnimationFrame(tick);
   }
-  V.start=function(){ if(V.run||document.hidden) return; if(motion()==="off"){ renderStill(); return; } V.run=true; V.last=0; V.raf=requestAnimationFrame(tick); };
+  V.start=function(){ if(V.run||document.hidden) return; if(motion()==="off"){ renderStill(); return; } V.run=true; V.last=0; V.lastT=0; V.dtS=0; V.ms=0; V.msN=0; V.raf=requestAnimationFrame(tick); };
   V.stop=function(){ V.run=false; if(V.raf){ cancelAnimationFrame(V.raf); V.raf=0; } };
   V.show=function(on){ V.want=!!on; if(on) V.start(); else V.stop(); };
   document.addEventListener("visibilitychange",function(){ if(document.hidden) V.stop(); else if(V.want) V.start(); });
@@ -1029,7 +1032,7 @@ function create(host,opt){
   V.timeFor=function(type){ var sp=SC.secs.filter(function(x){ return x.F&&x.F.type===type; })[0]; return sp?{lip:sp.F.lip!=null?leadTimeAt(sp.F.lip,(V.lap>1?lapEnd(V.lap-1):0)):null,s0:leadTimeAt(sp.F.s0,(V.lap>1?lapEnd(V.lap-1):0)),F:{type:sp.F.type,s0:sp.F.s0,s1:sp.F.s1,lip:sp.F.lip,tgt:sp.F.tgt}}:null; };
   V.setT=function(t){ V.T=t; };
   V.stats=function(){ var cs=V.costs.slice().sort(function(a,b){ return a-b; }); return {draws:V.stat?V.stat.draws:0,tris:V.stat?V.stat.tris:0,w:V.W,h:V.H,scale:+V.dpr.toFixed(2),webgl2:R.v2,
-    jsMs:cs.length?+(cs.reduce(function(a,b){ return a+b; },0)/cs.length).toFixed(2):0,jsP95:cs.length?+cs[Math.floor(cs.length*0.95)].toFixed(2):0,frames:V.frames,half:V.half,riders:V.riders.length,parts:counts.part}; };
+    jsMs:cs.length?+(cs.reduce(function(a,b){ return a+b; },0)/cs.length).toFixed(2):0,jsP95:cs.length?+cs[Math.floor(cs.length*0.95)].toFixed(2):0,updMs:V.ucosts.length?+(V.ucosts.reduce(function(a,b){ return a+b; },0)/V.ucosts.length).toFixed(2):0,updP95:V.ucosts.length?+(V.ucosts.slice().sort(function(a,b){ return a-b; })[Math.floor(V.ucosts.length*0.95)]).toFixed(2):0,frames:V.frames,half:V.half,riders:V.riders.length,parts:counts.part}; };
   V.state=function(){ return {T:+V.T.toFixed(2),lap:V.lap,resLap:V.resLap,cuts:V.cuts|0,phase:V.phase,shot:V.shot?V.shot.kind:null,shotEl:V.shot?+V.shot.el.toFixed(2):0,flag:V.flag,yellow:V.yellow?{lap:V.yellow.lap,seat:V.yellow.seat}:null,
     waiting:V.waiters.length,lapT:V.lapT?+V.lapT.toFixed(2):null,track:V.trackName,status:V.trackStatus,lead:V.leadS,err:V.err||null,
     order:poses.filter(function(p){ return !p.parked; }).map(function(p){ return p.r.s; }),crashes:V.riders.filter(function(r){ return r.crash; }).map(function(r){ return {s:r.s,kind:r.crash.kind,T0:+r.crash.T0.toFixed(2)}; }),
