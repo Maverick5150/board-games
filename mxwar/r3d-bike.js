@@ -68,19 +68,20 @@ function bikeMaterial(lo){
   const m=std?new THREE.MeshStandardMaterial({vertexColors:true,roughness:1,metalness:0,envMap:T.env,envMapIntensity:1.7}):new THREE.MeshLambertMaterial({vertexColors:true});
   m.userData.keepMaps=true;
   m.onBeforeCompile=sh=>{
-    sh.uniforms.uLiv={value:T.liv}; sh.uniforms.uMudCol={value:new THREE.Vector3(0.20,0.105,0.045)};
+    sh.uniforms.uLiv={value:T.liv}; sh.uniforms.uMudCol={value:new THREE.Vector3(0.115,0.066,0.032)};
     sh.vertexShader=sh.vertexShader
-      .replace("#include <common>","#include <common>\nattribute vec4 aMat;\nattribute vec3 aAccent;\nattribute vec2 aMud;\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec2 vMud;\nvarying vec3 vLoc;\nvarying vec2 vLiv;")
-      .replace("#include <color_vertex>","#include <color_vertex>\n{ float wl=step(7.5,aMat.z); float tn=aMat.z-8.0*wl; vec3 tint=tn<0.5?vec3(1.0):(tn<1.5?instanceColor.rgb:aAccent); vColor.rgb=color.rgb*tint; }\nvMat=aMat; vAcc=aAccent; vMud=aMud; vLoc=position; vLiv=uv;");
-    let fs=sh.fragmentShader.replace("#include <common>","#include <common>\nuniform sampler2D uLiv;\nuniform vec3 uMudCol;\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec2 vMud;\nvarying vec3 vLoc;\nvarying vec2 vLiv;\n"+(std?GLSL_NOISE:""));
+      .replace("#include <common>","#include <common>\nattribute vec4 aMat;\nattribute vec3 aAccent;\nattribute vec3 aMud;\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec3 vMud;\nvarying vec3 vLoc;\nvarying vec2 vLiv;")
+      .replace("#include <color_vertex>","#include <color_vertex>\n{ float wl=step(7.5,aMat.z); float tn=aMat.z-8.0*wl; tn-=4.0*step(3.5,tn); vec3 tint=tn<0.5?vec3(1.0):(tn<1.5?instanceColor.rgb:aAccent); vColor.rgb=color.rgb*tint; }\nvMat=aMat; vAcc=aAccent; vMud=aMud; vLoc=position; vLiv=uv;");
+    let fs=sh.fragmentShader.replace("#include <common>","#include <common>\nuniform sampler2D uLiv;\nuniform vec3 uMudCol;\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec3 vMud;\nvarying vec3 vLoc;\nvarying vec2 vLiv;\n"+(std?GLSL_NOISE:""));
     fs=fs.replace("#include <color_fragment>",
       "#include <color_fragment>\n"+
-      "float bkWl=step(7.5,vMat.z); float bkTn=vMat.z-8.0*bkWl;\n"+
+      "float bkWl=step(7.5,vMat.z); float bkTn=vMat.z-8.0*bkWl; float bkSp=step(3.5,bkTn); bkTn-=4.0*bkSp;\n"+
+      "if(bkSp>0.5&&vMud.z>0.02){ if(fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453)<vMud.z) discard; }\n"+
       "{ float lk=step(0.5,bkTn)*(1.0-step(1.5,bkTn)); vec3 lv=texture2D(uLiv,vLiv).rgb; float sty=vMud.y; vec3 b0=diffuseColor.rgb; vec3 cA=vAcc, cB=vec3(0.010), cC=vec3(0.80);\n"+
       "  if(sty>0.5&&sty<1.5){ cA=vec3(0.010); cB=vAcc; } else if(sty>1.5&&sty<2.5){ cA=vec3(0.80); cC=vAcc; } else if(sty>2.5){ cA=vAcc; cB=vec3(0.80); cC=vec3(0.010); }\n"+
       "  b0=mix(b0,cA,lv.r*lk); b0=mix(b0,cB,lv.g*lk); b0=mix(b0,cC,lv.b*lk); diffuseColor.rgb=b0; }\n"+
       "float mudK=0.0;\n"+
-      (std?"if(vMud.x>0.002){ float hm=mix(1.0-smoothstep(0.28,0.80,vLoc.y),0.66,bkWl); float nz=bkNoise(vLoc*(bkWl>0.5?34.0:30.0))*0.60+bkNoise(vLoc*95.0+7.3)*0.40; float thr=1.0-vMud.x*(0.38+1.30*hm); mudK=smoothstep(thr-0.17,thr+0.17,nz); diffuseColor.rgb=mix(diffuseColor.rgb,uMudCol*(0.62+0.75*nz),mudK); }\n"
+      (std?"if(vMud.x>0.002){ float hm=mix(1.0-smoothstep(0.28,0.80,vLoc.y),0.46,bkWl); float nz=bkNoise(vLoc*(bkWl>0.5?34.0:30.0))*0.60+bkNoise(vLoc*95.0+7.3)*0.40; float thr=1.0-vMud.x*(0.38+1.30*hm); mudK=smoothstep(thr-0.17,thr+0.17,nz); diffuseColor.rgb=mix(diffuseColor.rgb,uMudCol*(0.62+0.75*nz),mudK); }\n"
           :"if(vMud.x>0.002){ float hm=mix(1.0-smoothstep(0.28,0.80,vLoc.y),0.62,bkWl); mudK=clamp(vMud.x*(0.30+1.2*hm)*1.1-0.12,0.0,1.0)*0.85; diffuseColor.rgb=mix(diffuseColor.rgb,uMudCol*1.2,mudK); }\n"));
     if(std){
       fs=fs.replace("#include <roughnessmap_fragment>","float roughnessFactor=mix(vMat.y,0.94,mudK);").replace("#include <metalnessmap_fragment>","float metalnessFactor=vMat.x*(1.0-mudK);");
@@ -106,7 +107,7 @@ function instGeo(src,S){
 export function createBike(n,lo,mk,q){
   q=q||{}; const mat=bikeMaterial(lo), M={}, sets=[], d2=lo?null:buildBike(2), d1=buildBike(1);
   const mkSet=(lod,src,far)=>{
-    const S={lod:lod,cnt:0,meshes:[],parts:{},far:null,col:new THREE.InstancedBufferAttribute(new Float32Array(n*3).fill(1),3),acc:new THREE.InstancedBufferAttribute(new Float32Array(n*3).fill(1),3),mud:new THREE.InstancedBufferAttribute(new Float32Array(n*2),2)};
+    const S={lod:lod,cnt:0,meshes:[],parts:{},far:null,col:new THREE.InstancedBufferAttribute(new Float32Array(n*3).fill(1),3),acc:new THREE.InstancedBufferAttribute(new Float32Array(n*3).fill(1),3),mud:new THREE.InstancedBufferAttribute(new Float32Array(n*3),3)};
     S.col.setUsage(THREE.DynamicDrawUsage); S.acc.setUsage(THREE.DynamicDrawUsage); S.mud.setUsage(THREE.DynamicDrawUsage);
     const one=(name,geo)=>{ const m=mk(instGeo(geo,S),n,mat); m.instanceColor=S.col; m.castShadow=true; m.count=0; m.visible=false; M["bk"+lod+"_"+name]=m; S.meshes.push(m); return m; };
     if(far) S.far=one("far",src); else PARTS.forEach(k=>{ S.parts[k]=one(k,src[k]); });
@@ -115,7 +116,7 @@ export function createBike(n,lo,mk,q){
   if(!lo) mkSet(0,d2); mkSet(1,d1); mkSet(2,buildFarBike(),true);
   M.bk={n:n,lo:!!lo,sets:sets,cur:new Int8Array(n).fill(-1),lastI:1e9,pc:new Float32Array(n*3).fill(1),ac:new Float32Array(n*3).fill(1),
     /* the distances at which a bike leaves one set for the next (m): hysteresis of 8% */
-    th:lo?[11]:[12,38],steerGain:0.6};
+    th:lo?[8]:[9.5,36],sp:new Float32Array(n*2)};
   return M;
 }
 /* the team colours of rider i's bike: the plastics in the team colour, the graphics in the accent colour (written into the sets' instance attributes as the bikes are posed) */
@@ -151,6 +152,8 @@ export function steerMatrix(delta,out){
 }
 /* where a point of the bike's bars ends up when they are turned by delta (the grips: the rider's hands) */
 export function steerPoint(p,delta,out){ out=out||new THREE.Vector3(); return out.copy(p).applyMatrix4(steerMatrix(delta,_m3)); }
+BIKE.steerGain=0.6;   /* how much of the track's steering the bars show (the rider's hands must follow: steerOf) */
+export function steerOf(st){ return steerAngle(st)*BIKE.steerGain; }
 export function steerAngle(st){ if(st.steer!=null) return st.steer; const k=st.k||0; return clamp(Math.atan(BIKE.WB*k)*(st.air?0.25:1)*0.9,-BIKE.STEER_MAX,BIKE.STEER_MAX); }
 function lodOf(K,i,d){
   if(d==null||!isFinite(d)) return 0;
@@ -167,13 +170,16 @@ export function poseBike(M,i,B,st){
   const K=M.bk; newFrame(K,i);
   const li=lodOf(K,i,st.lodD); K.cur[i]=li;
   const S0=K.sets[li], slot=S0.cnt++, cf=st.compF||0, cr=st.compR||0;
+  /* how far the wheels turned since the last frame: past a spoke's spacing the spokes alias, so they fade (screen-door dither) as the wheel blurs */
+  const dsp=Math.max(Math.abs((st.spinR||0)-K.sp[i*2+1]),Math.abs((st.spinF||0)-K.sp[i*2])); K.sp[i*2]=st.spinF||0; K.sp[i*2+1]=st.spinR||0;
+  const blur=dsp>6?0:clamp((dsp-0.16)/0.5,0,0.9);
   for(const m of S0.meshes){ m.count=S0.cnt; m.visible=true; }
   /* this bike's colours and mud in its slot */
-  S0.col.setXYZ(slot,K.pc[i*3],K.pc[i*3+1],K.pc[i*3+2]); S0.acc.setXYZ(slot,K.ac[i*3],K.ac[i*3+1],K.ac[i*3+2]); S0.mud.setXY(slot,st.mud||0,i%4);
+  S0.col.setXYZ(slot,K.pc[i*3],K.pc[i*3+1],K.pc[i*3+2]); S0.acc.setXYZ(slot,K.ac[i*3],K.ac[i*3+1],K.ac[i*3+2]); S0.mud.setXYZ(slot,st.mud||0,i%4,blur);
   S0.col.needsUpdate=true; S0.acc.needsUpdate=true; S0.mud.needsUpdate=true;
   let delta=0;
   if(S0.far){ S0.far.setMatrixAt(slot,B); } else {
-    const P=S0.parts; delta=steerAngle(st)*K.steerGain;
+    const P=S0.parts; delta=steerOf(st);
     /* the steered frame S = B * steer; the lower fork slides up the fork axis by the compression */
     if(Math.abs(delta)>1e-4){ steerMatrix(delta,_m1); _S.multiplyMatrices(B,_m1); } else _S.copy(B);
     P.body.setMatrixAt(slot,B); P.steer.setMatrixAt(slot,_S);
