@@ -39,8 +39,8 @@ export const MAT={
   steel:K("#9a9da5",0.92,0.34), exh:K("#bdb7aa",0.93,0.28), muff:K("#cdced4",0.94,0.26), cap:K("#18191c",0.35,0.42),
   black:K("#111215",0.25,0.55), blackM:K("#0d0e10",0.0,0.82), seat:K("#0b0b0d",0.0,0.80), rubber:K("#0c0c0e",0.0,0.90), tread:K("#101012",0.0,0.88), side:K("#17171a",0.0,0.84),
   gold:K("#d8b050",0.94,0.26), upper:K("#dde0e6",1.0,0.12), anod:K("#17181c",0.85,0.38), anodG:K("#2a2c33",0.85,0.36),
-  rim:K("#c8cbd2",0.93,0.30), hub:K("#d8b050",0.92,0.28), spoke:K("#a9acb4",0.90,0.34), disc:K("#b4b8c0",0.92,0.30), discD:K("#4b4d54",0.8,0.45),
-  plastic:{c:[1,1,1],mt:0.0,rg:0.22,tint:1,ao:1}, accent:{c:[1,1,1],mt:0.0,rg:0.30,tint:2,ao:1}, grip:K("#1a1a1d",0.0,0.85), lever:K("#b6b9c0",0.9,0.35), bolt:K("#8c8f97",0.9,0.4),
+  rim:K("#c8cbd2",0.93,0.30), hub:K("#d8b050",0.92,0.28), spoke:K("#a9acb4",0.90,0.34,4), disc:K("#b4b8c0",0.92,0.30), discD:K("#4b4d54",0.8,0.45),
+  plastic:{c:[1,1,1],mt:0.0,rg:0.17,tint:1,ao:1}, accent:{c:[1,1,1],mt:0.0,rg:0.26,tint:2,ao:1}, grip:K("#1a1a1d",0.0,0.85), lever:K("#b6b9c0",0.9,0.35), bolt:K("#8c8f97",0.9,0.4),
   spring:{c:[1,1,1],mt:0.55,rg:0.35,tint:2,ao:1}, shockB:K("#17181c",0.8,0.38), chain:K("#8a8272",0.85,0.42), rad:K("#4a4d55",0.75,0.5), slit:K("#050506",0.0,0.9)
 };
 
@@ -57,7 +57,7 @@ Builder.prototype.add=function(g,o){
     if(uvm==="side") this.U.push((_v.x+1.2)/1.8,0.5+0.5*clamp((_v.y-0.45)/0.75,0,1));
     else if(uvm==="top") this.U.push((_v.x+1.2)/1.8,0.5*clamp(0.5+_v.z*2.6,0,1));
     else this.U.push(0,0);
-    this.A.push(mt,rg,tn,ao0*(grad?0.74+0.26*sstep(0.2,0.8,_v.y):1));
+    this.A.push(mt,rg,tn,ao0*(grad?0.62+0.38*sstep(0.18,0.85,_v.y):1));
   }
   const ix=g.index;
   if(ix){ for(let i=0;i<ix.count;i+=3){ const a=ix.getX(i)+base, b=ix.getX(i+1)+base, d=ix.getX(i+2)+base; if(flip) this.I.push(a,d,b); else this.I.push(a,b,d); } }
@@ -178,22 +178,22 @@ function wheelBuild(d,rear){
   else if(d===1){ const zs=rear?0.030:0.024; addKnobs(B,ty,rear?18:20,[[0,0,0],[zs,0.5,0.25],[-zs,0.5,-0.25]],MAT.tread,rear?0.019:0.017,rear?0.0135:0.0125,true); }
   /* the rim: bead seat, lips, barrel */
   const rb=rear?0.2413:0.2667, rl=rear?0.2535:0.2755, rw=rear?0.0273:0.0203, ri=rb-0.012;
-  const rimPts=[[ri,-rw],[rl,-rw],[rl,-rw+0.0045],[rb,-rw+0.011],[rb,rw-0.011],[rl,rw-0.0045],[rl,rw],[ri,rw]]; const rim=lathe(rimPts,seg); rim.applyMatrix4(Zaxis); B.add(rim,withMat(MAT.rim,{uv:"none",noGrad:true}));
+  const rimPts=d>=2?[[ri,-rw],[rl,-rw],[rl,-rw+0.0045],[rb,-rw+0.011],[rb,rw-0.011],[rl,rw-0.0045],[rl,rw],[ri,rw]]:[[rl,-rw],[rb,-rw+0.011],[rb,rw-0.011],[rl,rw]]; const rim=lathe(rimPts,seg); rim.applyMatrix4(Zaxis); B.add(rim,withMat(MAT.rim,{uv:"none",noGrad:true}));
   /* hub: shell, flanges, end caps */
   const hubW=rear?0.052:0.044, hubPts=[[0.012,-hubW-0.016],[0.026,-hubW-0.016],[0.026,-hubW],[0.050,-hubW],[0.050,-hubW+0.007],[0.030,-hubW+0.012],[0.030,hubW-0.012],[0.050,hubW-0.007],[0.050,hubW],[0.026,hubW],[0.026,hubW+0.016],[0.012,hubW+0.016]];
-  const hub=lathe(hubPts,d>=2?16:8); hub.applyMatrix4(Zaxis); B.add(hub,withMat(MAT.hub,{uv:"none",noGrad:true}));
+  const hub=lathe(d>=2?hubPts:[[0.012,-hubW-0.016],[0.050,-hubW],[0.030,-hubW+0.012],[0.030,hubW-0.012],[0.050,hubW],[0.012,hubW+0.016]],d>=2?16:8); hub.applyMatrix4(Zaxis); B.add(hub,withMat(MAT.hub,{uv:"none",noGrad:true}));
   /* spokes: 36 laced in two sets (d2), 16 (d1) */
   const nsp=d>=2?18:d===1?6:0;
   for(let k=0;k<nsp;k++) for(const sd of [-1,1]){ const th=k/nsp*TAU+(sd>0?PI/nsp:0), off=(sd>0?1:-1)*0.5, a=V(Math.cos(th)*0.046,Math.sin(th)*0.046,sd*hubW*0.9), th2=th+off*0.62, b=V(Math.cos(th2)*(ri-0.003),Math.sin(th2)*(ri-0.003),sd*rw*0.35);
     B.add(rod(a,b,0.0016,0.0016,d>=2?3:3,true),withMat(MAT.spoke,{uv:"none",noGrad:true})); }
   /* brake disc (right, +z): wave rotor and its carrier; the rear has the sprocket on the left */
-  if(d>=1){ const R=rear?0.119:0.133, zd=rear?0.052:0.047, ring=[]; const nw=d>=2?48:24, P=[], I=[];
+  if(d>=1){ const R=rear?0.119:0.133, zd=rear?0.052:0.047, ring=[]; const nw=d>=2?48:16, P=[], I=[];
     for(let i=0;i<nw;i++){ const t=i/nw*TAU, ro=R+0.0045*Math.cos(t*(rear?10:12)); P.push(Math.cos(t)*ro,Math.sin(t)*ro,zd+0.0025,Math.cos(t)*(R-0.030),Math.sin(t)*(R-0.030),zd+0.0025,Math.cos(t)*ro,Math.sin(t)*ro,zd-0.0025,Math.cos(t)*(R-0.030),Math.sin(t)*(R-0.030),zd-0.0025); }
     for(let i=0;i<nw;i++){ const j=(i+1)%nw, a=i*4, b=j*4; I.push(a,b,a+1,b,b+1,a+1, a+2,a+3,b+2,b+2,a+3,b+3, a,a+2,b,b,a+2,b+2, a+1,b+1,a+3,b+1,b+3,a+3); }
     orient(P,I); B.add(makeGeo(P,I),withMat(MAT.disc,{uv:"none",noGrad:true}));
     if(d>=2){ const car=lathe([[0.03,zd-0.004],[R-0.028,zd-0.004],[R-0.028,zd+0.004],[0.03,zd+0.004]],24); car.applyMatrix4(Zaxis); B.add(car,withMat(MAT.discD,{uv:"none",noGrad:true})); }
     if(rear){ /* the sprocket (left): a toothed ring on a carrier */
-      const nt=d>=2?36:20, ro=0.1005, ri2=0.0955, zS=-0.056, SP=[], SI=[];
+      const nt=d>=2?36:14, ro=0.1005, ri2=0.0955, zS=-0.056, SP=[], SI=[];
       for(let i=0;i<nt*2;i++){ const t=i/(nt*2)*TAU, r=(i%2?ri2:ro); SP.push(Math.cos(t)*r,Math.sin(t)*r,zS+0.0035,Math.cos(t)*0.07,Math.sin(t)*0.07,zS+0.0035,Math.cos(t)*r,Math.sin(t)*r,zS-0.0035,Math.cos(t)*0.07,Math.sin(t)*0.07,zS-0.0035); }
       const nn=nt*2; for(let i=0;i<nn;i++){ const j=(i+1)%nn, a=i*4, b=j*4; SI.push(a,b,a+1,b,b+1,a+1, a+2,a+3,b+2,b+2,a+3,b+3, a,a+2,b,b,a+2,b+2); }
       orient(SP,SI); B.add(makeGeo(SP,SI),withMat(MAT.steel,{uv:"none",noGrad:true})); } }
@@ -207,7 +207,7 @@ function bodyBuild(d){
   const B=new Builder(), sg=S(d,8,5,4), per=S(d,3,1,1);
   /* ---- the aluminium twin-spar frame: chunky beams from the head tube round the engine to the swingarm pivot ---- */
   const spar=[V(0.392,0.985,0.040),V(0.30,0.953,0.060),V(0.19,0.922,0.082),V(0.07,0.882,0.100),V(-0.03,0.805,0.108),V(-0.10,0.69,0.108),V(-0.15,0.56,0.102),V(-0.17,0.46,0.096)];
-  B.addM(sweep(spar,t=>[0.037-0.011*t,0.024],sg+3,{per:per,caps:true}),withMat(MAT.alu,{ao:0.95}));
+  B.addM(sweep(spar,t=>[0.037-0.011*t,0.024],S(d,11,6,5),{per:per,caps:true}),withMat(MAT.alu,{ao:0.95}));
   B.add(rod(axisPt(0.622),axisPt(0.735),0.040,0.040,S(d,14,8,6)),withMat(MAT.alu,{ao:0.9}));                  /* the head tube */
   if(d>=1) B.addM(rod(V(0.40,0.915,0.040),V(0.388,0.985,0.052),0.021,0.021,6),withMat(MAT.alu));              /* gusset */
   /* the cradle under the engine: two steel tubes */
@@ -274,7 +274,7 @@ function bodyBuild(d){
   const hdr=[V(0.298,0.700,0.046),V(0.345,0.600,0.092),V(0.338,0.505,0.150),V(0.262,0.462,0.172),V(0.150,0.528,0.168),V(0.030,0.600,0.172),V(-0.110,0.668,0.178),V(-0.250,0.735,0.186)];
   B.add(sweep(hdr,t=>0.0185-0.003*t,S(d,10,5,4),{per:S(d,3,1,1),caps:true}),withMat(MAT.exh,{ao:0.9}));
   { const md=V(-0.968,0.250,-0.012).normalize(), mp=V(-0.30,0.748,0.212), mq=new THREE.Quaternion().setFromUnitVectors(V(0,1,0),md), Lm=0.52, me=mp.clone().addScaledVector(md,Lm);
-    B.add(lathe([[0.001,0.0],[0.040,0.0],[0.049,0.03],[0.0535,0.10],[0.0545,0.24],[0.0545,0.42],[0.050,0.48],[0.040,0.508],[0.034,Lm],[0.001,Lm]],S(d,24,10,8)),
+    B.add(lathe(d>=2?[[0.001,0.0],[0.040,0.0],[0.049,0.03],[0.0535,0.10],[0.0545,0.24],[0.0545,0.42],[0.050,0.48],[0.040,0.508],[0.034,Lm],[0.001,Lm]]:[[0.001,0.0],[0.049,0.03],[0.0545,0.24],[0.0545,0.42],[0.034,Lm],[0.001,Lm]],S(d,24,8,6)),
       withMat(MAT.muff,{m:new THREE.Matrix4().compose(mp,mq,V(1,1,1)),uv:"none",ao:1}));                                                  /* the muffler: along -X, rising */
     B.add(lathe([[0.001,0.0],[0.036,0.0],[0.036,0.022],[0.001,0.022]],S(d,14,8,6)),withMat(MAT.cap,{m:new THREE.Matrix4().compose(me,mq,V(1,1,1)),uv:"none"}));   /* the end cap */
     B.add(rod(V(-0.250,0.735,0.186),V(-0.300,0.748,0.212),0.0175,0.034,S(d,8,6,4)),withMat(MAT.exh,{ao:0.9}));                          /* the mid-pipe joins header and muffler */
