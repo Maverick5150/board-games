@@ -104,8 +104,9 @@ function newSeason(season,index,opts,humans,seed){
     if(!r.title&&!o.nonTitle) return;
     if(r.format) need(r.format);
     G.cal.push({n:r.n,date:r.date,city:r.city,state:r.state,country:r.country,venue:r.venue,name:r.name,stage:r.stage||null,title:!!r.title,tc:!!r.tc,mult:r.mult||1,motos:r.motos||null,format:r.format||null,winner:r.winner||null,
-      entry:(r.entry||[]).map(function(k){ return "r"+k; })});
+      entry:(r.entry||[]).map(function(k){ return "r"+k; }),tm:r.tm?clone(r.tm):null});   /* mxtimewire: that night's researched races (round.js raceInfo) */
   });
+  G.tmv=1;
   if(!G.cal.length) throw new Error("No rounds to race.");
   /* SMX: the 20 seeds start from the seed points (seed 1 = 25 ... seed 20 = 1); the human riders take the last seeds (20, 19 ...) and the
      real riders they displace race the LCQ */
@@ -175,13 +176,43 @@ function seedPos(G,id){ var r=G.riders[id]; return r.kind==="human"?20:r.kind===
 function next(G){
   if(G.over) return {t:"over"};
   var cal=G.cal[G.ri], RG=G.round, r, ent;
-  if(G.race) return {t:"race",live:true,ri:G.ri,round:cal,key:G.rkey,label:raceLabel(G),kind:G.race.kind,len:G.race.o.len,lapS:lapOf(G),n:G.race.n,humanIn:G.rmap.some(isHuman.bind(null,G))};
-  if(!RG){ var F=calFormat(G,cal), lapS=Round.lapTime(G.series,G.year,cal); r=F.qual.length?{label:F.qual[0].label+(F.qual[0].races>1?" 1":""),kind:F.qual[0].kind}:{label:F.finals.races>1?F.finals.label+" 1":F.finals.label,kind:F.finals.kind}; r.len=Round.raceLen(F,r.kind,0,G.o,lapS,G.year); return {t:"race",live:false,ri:G.ri,round:cal,key:null,label:r.label,kind:r.kind,len:r.len,lapS:lapS,n:null,humanIn:true,newRound:true}; }
+  if(G.race){ var lr=RG&&RG.races.filter(function(x){ return x.key===G.rkey; })[0];
+    return {t:"race",live:true,ri:G.ri,round:cal,key:G.rkey,label:raceLabel(G),kind:G.race.kind,i:lr?lr.i:0,len:G.race.o.len,lapS:lapOf(G),fl:G.race.fl||0,src:(lr&&lr.src)||"rule",lsrc:(lr&&lr.lsrc)||"venue",b:(lr&&lr.b)||0,bs:(lr&&lr.bs)||"",real:lr?Round.realRace(cal,RG.F,lr.kind,lr.i):null,n:G.race.n,humanIn:G.rmap.some(isHuman.bind(null,G))}; }
+  if(!RG){ var F=calFormat(G,cal), lapS=Round.nightLap(cal)||Round.lapTime(G.series,G.year,cal); r=F.qual.length?{label:F.qual[0].label+(F.qual[0].races>1?" 1":""),kind:F.qual[0].kind}:{label:F.finals.races>1?F.finals.label+" 1":F.finals.label,kind:F.finals.kind};
+    var inf=Round.raceInfo(F,r.kind,0,G.o,lapS,G.year,cal);
+    return {t:"race",live:false,ri:G.ri,round:cal,key:null,label:r.label,kind:r.kind,i:0,len:inf.len,lapS:inf.lap,fl:inf.fl,src:inf.src,lsrc:inf.lsrc,b:inf.base||0,bs:inf.bsrc||"",real:inf.R,n:null,humanIn:true,newRound:true}; }
   r=Round.current(RG); ent=Round.entrants(RG)||[];
-  return {t:"race",live:false,ri:G.ri,round:cal,key:r.key,label:r.label,kind:r.kind,len:r.len,lapS:lapOf(G),n:ent.length,humanIn:ent.some(isHuman.bind(null,G))};
+  return {t:"race",live:false,ri:G.ri,round:cal,key:r.key,label:r.label,kind:r.kind,i:r.i,len:r.len,lapS:r.lap>0?r.lap:lapOf(G),fl:r.fl||0,src:r.src||"rule",lsrc:r.lsrc||"venue",b:r.b||0,bs:r.bs||"",real:Round.realRace(cal,RG.F,r.kind,r.i),n:ent.length,humanIn:ent.some(isHuman.bind(null,G))};
+}
+/* mxtimewire: every race of a round, the game's length and lap next to that night's research: [{label, kind, len, lap, fl, src, lsrc, real}]
+   (the round under way: its races as built; a round not started yet: as it will be built) */
+function roundRaces(G,ri){
+  var cal=G.cal[ri==null?G.ri:ri]; if(!cal) return [];
+  var RG=G.round&&G.round.ri===(ri==null?G.ri:ri)?G.round:null, F=RG?RG.F:calFormat(G,cal), out=[];
+  if(RG) RG.races.forEach(function(r){ var live=G.race&&G.rkey===r.key;
+    out.push({key:r.key,label:r.label,kind:r.kind,len:live?G.race.o.len:r.len,lap:live&&G.race.lapS>0?G.race.lapS:(r.lap>0?r.lap:RG.lapS),fl:live?(G.race.fl||0):(r.fl||0),src:r.src||"rule",lsrc:r.lsrc||"venue",b:r.b||0,bs:r.bs||"",real:Round.realRace(cal,F,r.kind,r.i),done:!!r.res,live:!!live,rule:Round.realSpec(F,r.kind,r.i,G.year)}); });
+  else {
+    var lapS=Round.nightLap(cal)||Round.lapTime(G.series,G.year,cal);
+    function add(label,kind,i){ var inf=Round.raceInfo(F,kind,i,G.o,lapS,G.year,cal); out.push({key:null,label:label,kind:kind,len:inf.len,lap:inf.lap,fl:inf.fl,src:inf.src,lsrc:inf.lsrc,b:inf.base||0,bs:inf.bsrc||"",real:inf.R,done:false,live:false,rule:inf.rule}); }
+    F.qual.forEach(function(st){ for(var i=0;i<st.races;i++) add(st.label+(st.races>1?" "+(i+1):""),st.kind,i); });
+    var f=F.finals; for(var i=0;i<f.races;i++) add(f.races===1&&f.kind!=="moto"?f.label:(F.isTC?"Main "+(i+1):f.label+" "+(i+1)),f.kind,i);
+  }
+  return out;
+}
+/* the first lap of the race on now (s; 0 = none researched: the track's own start) */
+function firstLapOf(G){ return G&&G.race&&G.race.fl>0?G.race.fl:0; }
+/* mxtimewire: a save made before the per-round timing: its calendar gets each round's research from the season file (matched by round
+   number and date), and the round under way its races still to run recounted (round.js upgrade, lv 3); returns the rounds attached */
+function attachTiming(G,season){
+  if(!G||!season||!season.rounds) return 0;
+  var n=0;
+  G.cal.forEach(function(c){ if(c.tm!==undefined) return; var r=season.rounds.filter(function(x){ return x.n===c.n&&x.date===c.date; })[0]; c.tm=r&&r.tm?clone(r.tm):null; if(c.tm) n++; });
+  G.tmv=1;
+  upgrade(G);
+  return n;
 }
 /* the lap time of the round on now (seconds; mxlaps): the race's, the round's, else the track's */
-function lapOf(G){ if(G.race&&G.race.lapS>0) return G.race.lapS; if(G.round&&G.round.lapS>0) return G.round.lapS; var c=G.cal[Math.min(G.ri,G.cal.length-1)]; return Round.lapTime(G.series,G.year,c); }
+function lapOf(G){ if(G.race&&G.race.lapS>0) return G.race.lapS; var cr=G.round&&!G.round.done?Round.current(G.round):null; if(cr&&cr.lap>0) return cr.lap; if(G.round&&G.round.lapS>0) return G.round.lapS; var c=G.cal[Math.min(G.ri,G.cal.length-1)]; return Round.lapTime(G.series,G.year,c); }
 /* an old save (before real lengths): the options' length mapped (short -> half, standard / long -> real), the round gets its lap time and
    its races still to run their real lengths; a race under way keeps its laps run and ends at its real length (never before the lap on now).
    A save from the first real-length build (round lv < 2: timed races one lap short): the races still to run are counted again; the race
@@ -191,10 +222,12 @@ function upgrade(G){
   G.o.length=Round.MODE_OF[G.o.length]||"real";
   if(G.round&&!(G.round.lapS>0&&G.round.lv>=2)){
     var battles=!(G.round.lapS>0), live=G.race&&!G.race.over?Round.current(G.round):null;
-    Round.upgrade(G.round,G.o,{series:G.series,year:G.year,cal:G.cal[G.ri]});
+    Round.upgrade(G.round,G.o,{series:G.series,year:G.year,cal:G.cal[G.ri],live:live?live.key:null});
     if(live&&G.race){ G.race.o.len=battles?Math.max(G.race.battle+1,live.len):G.race.o.len; live.len=G.race.o.len; }
   }
   if(G.race&&!(G.race.lapS>0)&&G.round) G.race.lapS=G.round.lapS;
+  /* mxtimewire: the races still to run get that night's real laps and lap times (the race under way keeps its own) */
+  if(G.round&&G.round.lv<3) Round.upgrade(G.round,G.o,{series:G.series,year:G.year,cal:G.cal[G.ri],live:G.race&&!G.race.over?G.rkey:null});
   return G;
 }
 function isHuman(G,id){ return G.riders[id]&&G.riders[id].kind==="human"; }
@@ -209,9 +242,9 @@ function startRace(G){
   var o=clone(G.o.war); o.len=r.len;
   var list=ent.map(function(id){ var R=G.riders[id]; return {id:id,name:R.name,human:R.kind==="human",edge:R.edge|0}; });
   G.race=Race.newRace(o,list,Math.floor(rnd(G)*4294967296));
-  G.race.kind=r.kind; G.race.lapS=RG.lapS||lapOf(G); G.rmap=ent.slice(); G.rkey=r.key;
-  var cal=G.cal[G.ri];
-  log(G,(cal.city||cal.venue)+" "+r.label+": "+ent.length+" riders, "+r.len+" laps (a lap about "+G.race.lapS+" s).","race");
+  G.race.kind=r.kind; G.race.lapS=r.lap>0?r.lap:(RG.lapS||lapOf(G)); G.race.fl=r.fl>0?r.fl:0; G.rmap=ent.slice(); G.rkey=r.key;
+  var cal=G.cal[G.ri], R=Round.realRace(cal,RG.F,r.kind,r.i);
+  log(G,(cal.city||cal.venue)+" "+r.label+": "+ent.length+" riders, "+r.len+" laps (a lap "+(Math.round(G.race.lapS*10)/10)+" s"+((r.src==="real"||r.src==="time")&&R&&R.w&&R.t?"; in real life won in "+R.t.replace(/\.\d+$/,"")+" by "+R.w+(r.src==="time"?", the laps worked out from that time":""):r.src==="rule"?"; no research for this race: the era's rule":"")+").","race");
   return [{e:"race",ri:G.ri,key:r.key,label:r.label,kind:r.kind,n:ent.length,len:r.len,riders:ent.slice()}];
 }
 function fail(msg){ return {ok:false,msg:msg,ev:[]}; }
@@ -324,7 +357,7 @@ function snapshot(G,seat){
   return {v:G.v,id:"mxwar",sid:G.sid,name:G.name,series:G.series,seriesName:G.seriesName,year:G.year,cls:G.cls,status:G.status,o:G.o,me:seat,meId:me,
     cal:G.cal.map(function(c,i){ return {n:c.n,date:c.date,city:c.city,state:c.state,country:c.country,venue:c.venue,name:c.name,stage:c.stage,mult:c.mult,title:c.title,tc:c.tc,done:i<G.ri,next:i===G.ri,winner:G.results[i]?G.results[i].winner:null}; }),
     ri:G.ri,next:next(G),base:G.base||{},
-    round:RG?{fmt:RG.fmt,tc:RG.tc,cur:RG.cur,lapS:RG.lapS||null,mode:RG.mode||G.o.length,races:RG.races.map(function(r){ return {key:r.key,label:r.label,kind:r.kind,len:r.len,done:!!r.res,res:r.res,hs:r.hs,n:(r.st<0?RG.fin:r.ent)?(r.st<0?RG.fin:r.ent).length:null}; })}:null,
+    round:RG?{fmt:RG.fmt,tc:RG.tc,cur:RG.cur,lapS:RG.lapS||null,mode:RG.mode||G.o.length,races:RG.races.map(function(r){ return {key:r.key,label:r.label,kind:r.kind,len:r.len,lap:r.lap||null,fl:r.fl||null,src:r.src||"rule",done:!!r.res,res:r.res,hs:r.hs,n:(r.st<0?RG.fin:r.ent)?(r.st<0?RG.fin:r.ent).length:null}; })}:null,
     race:G.race?Race.snapshot(G.race,rs):null,lapS:lapOf(G),rmap:G.rmap?G.rmap.slice():null,raceSeat:rs,
     standings:L,red:L.length&&L[0].pts>0?L[0].id:null,riders:riders,last:G.last,over:G.over,log:G.log.slice(-8).map(function(e){ return e.t; })};
 }
@@ -349,7 +382,7 @@ function check(G){
   return err;
 }
 
-MX.Season={upgrade:upgrade,lapOf:lapOf,VER:VER,MAXH:MAXH,defaultOpts:defaultOpts,normalize:normalize,newSeason:newSeason,next:next,startRound:startRound,startRace:startRace,apply:apply,step:step,simRace:simRace,
+MX.Season={upgrade:upgrade,lapOf:lapOf,firstLapOf:firstLapOf,roundRaces:roundRaces,attachTiming:attachTiming,VER:VER,MAXH:MAXH,defaultOpts:defaultOpts,normalize:normalize,newSeason:newSeason,next:next,startRound:startRound,startRace:startRace,apply:apply,step:step,simRace:simRace,
   standings:standings,redPlate:redPlate,snapshot:snapshot,check:check,raceSeat:raceSeat,humanSeats:humanSeats,rider:rider,calFormat:calFormat};
 if(typeof module!=="undefined"&&module.exports) module.exports=MX.Season;
 })(typeof window!=="undefined"?window:globalThis);
