@@ -11,6 +11,8 @@ import * as THREE_NS from "../ui/vendor/three-0.160.0.module.min.js";
 const THREE=THREE_NS;
 import {lin,mixc,clamp,sstep,fbm,pfbm,canvas,tex,rngf,merge,paint,xf,clear,getAniso} from "./r3d-util.js";
 import {SOIL,dirtMaps,padMaps,trackMaterial,addTrack} from "./r3d-track.js";
+import {stadium as stadiumBowl,glowSprites} from "./r3d-stadium-bowl.js";
+import {glowSheet,BRAND} from "./r3d-stadium-art.js";
 const MXG=(typeof window!=="undefined"?window:globalThis).MXWar;
 const CO=()=>MXG.Course;
 
@@ -55,22 +57,6 @@ function crowdTex(lo,night){
   }
   if(night) for(let i=0;i<(lo?16:50);i++){ x.fillStyle="rgba(255,250,232,"+(0.7+R()*0.3)+")"; x.beginPath(); x.arc(R()*W,R()*H,lo?0.8:1.3,0,7); x.fill(); }
   const t=tex(c,true); t.anisotropy=getAniso(); return t;
-}
-/* the suites between the decks: a band of lit windows (warm at night) */
-function suitesTex(night){
-  const W=512, H=64, c=canvas(W,H), x=c.getContext("2d"), R=rngf(31);
-  x.fillStyle="#121218"; x.fillRect(0,0,W,H);
-  for(let i=0;i<32;i++){ const lit=R()<0.82, px=i*16;
-    x.fillStyle=lit?(night?["#f6dca0","#ffe8b8","#e8c890","#fff2d0"][Math.floor(R()*4)]:"#9fb4c8"):"#23232c"; x.fillRect(px+2,14,12,30);
-    x.fillStyle="rgba(0,0,0,.35)"; x.fillRect(px+2,36,12,8); }
-  x.fillStyle="#2a2a34"; x.fillRect(0,0,W,8); x.fillRect(0,52,W,12);
-  return tex(c,true);
-}
-function wallTex(){
-  const c=canvas(256,32), x=c.getContext("2d");
-  const cols=["#1b2a4a","#24365c","#1b2a4a","#2c2c34"];
-  for(let i=0;i<8;i++){ x.fillStyle=cols[i%cols.length]; x.fillRect(i*32,0,32,32); x.fillStyle="rgba(255,255,255,.55)"; x.fillRect(i*32,25,32,2); x.fillStyle="rgba(240,212,138,.6)"; x.fillRect(i*32+2,5,28,2); }
-  return tex(c,true);
 }
 function glowTex(){
   const c=canvas(64,64), x=c.getContext("2d"), g=x.createRadialGradient(32,32,0,32,32,32);
@@ -171,77 +157,7 @@ export function flagTex(kind){
   return tex(c,false);
 }
 
-/* ---------------- stadium: floor, wall, a bowl of stands with the crowd, light rings, the big screen ---------------- */
-function stadium(C,look,q,root,ctx){
-  const [x0,x1,z0,z1]=C.layout.floor||[-66,66,-48,32], cx=(x0+x1)/2, cz=(z0+z1)/2, W=x1-x0, D=z1-z0;
-  const night=true, dome=look.around==="stadium-dome";
-  /* the dirt floor */
-  const fm=dirtMaps(look.soil,q.lo,true); fm.map.repeat.set(W/7,D/7); fm.normal.repeat.set(W/7,D/7);
-  const Sx=SOIL[look.soil]||SOIL["stadium-dirt"], fc=mixc(lin(Sx[0]),lin(Sx[2]),0.6);
-  const floor=new THREE.Mesh(new THREE.PlaneGeometry(W+4,D+4),new THREE.MeshLambertMaterial({map:fm.map,normalMap:fm.normal,normalScale:new THREE.Vector2(0.8,0.8),color:new THREE.Color().setRGB(fc[0]*0.86,fc[1]*0.86,fc[2]*0.86)}));
-  floor.rotation.x=-Math.PI/2; floor.position.set(cx,-0.16,cz); floor.receiveShadow=true; root.add(floor);   /* under the deepest rut of the track, so it never shows through the dirt */
-  /* the padded wall round the floor */
-  const wt=wallTex(); wt.repeat.set((W+D)*2/14,1);
-  const wallG=[]; const h=1.4;
-  [[cx,z0-0.3,W+1.2,0],[cx,z1+0.3,W+1.2,0],[x0-0.3,cz,D+1.2,Math.PI/2],[x1+0.3,cz,D+1.2,Math.PI/2]].forEach(w=>{ const g=new THREE.BoxGeometry(w[2],h,0.5); g.rotateY(w[3]); g.translate(w[0],h/2,w[1]); wallG.push(g); });
-  const wall=new THREE.Mesh(merge(wallG),new THREE.MeshLambertMaterial({map:wt})); root.add(wall);
-  /* the bowl: a rounded rectangle lofted up and back (lower bowl, a concourse, the upper deck) */
-  const ring=[], rx=W/2+1.5, rz=D/2+1.5, rad=Math.min(rx,rz)*0.42, segs=q.lo?40:72;
-  for(let i=0;i<segs;i++){ const a=i/segs*Math.PI*2, ca=Math.cos(a), sa=Math.sin(a);
-    /* a superellipse: square-ish corners */
-    const e=4, px=Math.sign(ca)*Math.pow(Math.abs(ca),2/e)*rx, pz=Math.sign(sa)*Math.pow(Math.abs(sa),2/e)*rz; const nx=Math.sign(ca)*Math.pow(Math.abs(ca),e/2-1)*0+ca, nz=sa;
-    const L=Math.hypot(nx,nz)||1; ring.push([cx+px,cz+pz,nx/L,nz/L]); }
-  const prof=[[0,h+0.2],[2,h+1.6],[30,18],[31,18.4],[32,22.5],[34,23],[62,42],[64,44]];   /* distance back, height: the lower bowl, the suites, the upper deck */
-  /* the crowd's rows follow the slope (a row 0.85 m up it, a seat 0.55 m along it); under the lights the lower bowl is bright and the
-     upper deck falls away into the dark */
-  const slopeV=[0]; for(let j=1;j<prof.length;j++) slopeV.push(slopeV[j-1]+Math.hypot(prof[j][0]-prof[j-1][0],prof[j][1]-prof[j-1][1]));
-  const shadeJ=night?[0.95,1,0.66,0.2,0.2,0.56,0.34,0.22]:[1,1,0.88,0.3,0.3,0.84,0.72,0.5];
-  const pos=[], uv=[], col=[], idx=[], spos=[], suv=[]; let uAcc=0;
-  for(let i=0;i<=segs;i++){ const r=ring[i%segs], rp=ring[(i+segs-1)%segs]; if(i) uAcc+=Math.hypot(r[0]-rp[0],r[1]-rp[1]);
-    prof.forEach((p,j)=>{ pos.push(r[0]+r[2]*p[0],p[1],r[1]+r[3]*p[0]); uv.push(uAcc/(CROWD.cols*CROWD.seat),slopeV[j]/(CROWD.rows*CROWD.row)); const sh=shadeJ[j]; col.push(sh,sh*0.96,sh*0.92); });
-    /* the suites' windows: a band just in front of the face between the decks */
-    [[30.86,18.6],[31.86,22.4]].forEach((p,j)=>{ spos.push(r[0]+r[2]*p[0],p[1],r[1]+r[3]*p[0]); suv.push(uAcc/48,j); }); }
-  const np=prof.length; for(let i=0;i<segs;i++) for(let j=0;j<np-1;j++){ const a=i*np+j, b=a+1, c2=a+np, d=c2+1; idx.push(a,b,c2,b,d,c2); }
-  const bg=new THREE.BufferGeometry(); bg.setAttribute("position",new THREE.Float32BufferAttribute(pos,3)); bg.setAttribute("uv",new THREE.Float32BufferAttribute(uv,2)); bg.setAttribute("color",new THREE.Float32BufferAttribute(col,3)); bg.setIndex(idx); bg.computeVertexNormals();
-  const ct=crowdTex(q.lo,night);
-  const bowl=new THREE.Mesh(bg,new THREE.MeshLambertMaterial({map:ct,vertexColors:true,side:THREE.DoubleSide})); root.add(bowl);
-  const si=[]; for(let i=0;i<segs;i++){ const a=i*2; si.push(a,a+1,a+2,a+1,a+3,a+2); }
-  const sg=new THREE.BufferGeometry(); sg.setAttribute("position",new THREE.Float32BufferAttribute(spos,3)); sg.setAttribute("uv",new THREE.Float32BufferAttribute(suv,2)); sg.setIndex(si);
-  const sTex=suitesTex(night); sTex.wrapT=THREE.ClampToEdgeWrapping;
-  root.add(new THREE.Mesh(sg,new THREE.MeshBasicMaterial({map:sTex,side:THREE.DoubleSide,color:night?0xd8d0c0:0x9a9aa0})));
-  /* the rim and the light banks: glows round the top of the bowl, a few truss bars over the floor */
-  const glows=[]; for(let i=0;i<segs;i+=q.lo?4:2){ const r=ring[i]; glows.push([r[0]+r[2]*63,46,r[1]+r[3]*63,7]); }
-  if(dome){ /* a dome roof: dark, with the light rig hanging from it */
-    const roof=new THREE.Mesh(new THREE.SphereGeometry(Math.max(rx,rz)+70,24,10,0,Math.PI*2,0,Math.PI*0.32),new THREE.MeshLambertMaterial({color:0x1a1a22,side:THREE.BackSide}));
-    roof.scale.set(1,0.35,(rz+64)/(rx+64)); roof.position.set(cx,20,cz); root.add(roof);
-  }
-  for(let i=0;i<6;i++){ const x=x0+W*(i+0.5)/6; glows.push([x,38,z0-6,9]); glows.push([x,38,z1+6,9]); }
-  ctx.glow(glows,0xfff1d6);
-  /* light beams: soft cones from the light banks down to the floor (the haze of a stadium night under the lights); full quality only */
-  if(!q.lo){
-    const g=new THREE.CylinderGeometry(0.9,7.5,1,14,1,true); g.translate(0,-0.5,0);
-    const mat=new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,uniforms:{col:{value:new THREE.Color(0xfff0d0)}},
-      vertexShader:"varying float vF; varying float vE; void main(){ vF=1.0+position.y; vec4 mv=modelViewMatrix*instanceMatrix*vec4(position,1.0); vec3 n=normalize(mat3(modelViewMatrix*instanceMatrix)*normal); vE=abs(dot(n,normalize(-mv.xyz))); gl_Position=projectionMatrix*mv; }",
-      fragmentShader:"uniform vec3 col; varying float vF; varying float vE; void main(){ float a=0.07*pow(vF,1.6)*pow(vE,1.4); gl_FragColor=vec4(col*a,a); }"});
-    const n=8, m=new THREE.InstancedMesh(g,mat,n), M=new THREE.Matrix4(), Q=new THREE.Quaternion(), up=new THREE.Vector3(0,-1,0), d=new THREE.Vector3(), pos=new THREE.Vector3(), sc=new THREE.Vector3();
-    for(let i=0;i<n;i++){ const r=ring[Math.floor(i*segs/n+segs/16)%segs]; pos.set(r[0]+r[2]*60,44,r[1]+r[3]*60);
-      const tx=cx+(((i*37)%11)/11-0.5)*W*0.6, tz=cz+(((i*53)%7)/7-0.5)*D*0.5; d.set(tx-pos.x,0.2-pos.y,tz-pos.z); const len=d.length(); d.normalize();
-      Q.setFromUnitVectors(up,d); sc.set(1,len,1); M.compose(pos,Q,sc); m.setMatrixAt(i,M); }
-    m.instanceMatrix.needsUpdate=true; m.frustumCulled=false; m.renderOrder=6; root.add(m);
-  }
-  /* the big screen at the west end: the lap and the leader's number (redrawn each lap) */
-  const sc=canvas(256,128), sx=sc.getContext("2d"), st=tex(sc,false);
-  const screen=new THREE.Mesh(new THREE.PlaneGeometry(22,11),new THREE.MeshBasicMaterial({map:st}));
-  screen.position.set(x0-20,30,cz); screen.rotation.y=Math.PI/2; root.add(screen);
-  const frame=new THREE.Mesh(new THREE.BoxGeometry(1,12.4,23.4),new THREE.MeshLambertMaterial({color:0x15151a})); frame.position.set(x0-20.6,30,cz); root.add(frame);
-  ctx.screen=function(lap,len,num){ sx.fillStyle="#0b0e1a"; sx.fillRect(0,0,256,128); sx.fillStyle="#f0d48a"; sx.font="800 30px Manrope, system-ui, sans-serif"; sx.textAlign="center";
-    sx.fillText(len?(lap>0?("LAP "+lap+" / "+len):(len+" LAPS")):"",128,52); sx.fillStyle="#ffffff"; sx.font="800 44px Manrope, system-ui, sans-serif"; sx.fillText(num!=null?("#"+num):"",128,104); st.needsUpdate=true; };
-  ctx.screen(0,0,null);
-  /* the night sky (open stadiums) */
-  ctx.sky(0x05060c,0x141a30,0x24233a);
-  ctx.fog(0x0b0b12,150,420);
-  return {cx:cx,cz:cz};
-}
+/* (the stadium itself - floor, wall, the bowl and its crowd, the light towers, the video boards - is r3d-stadium-bowl.js) */
 
 /* ---------------- outdoors: terrain carved round the track, trees, spectators, the paddock, far hills, a day sky ---------------- */
 function terrainHeightFn(C,look){
@@ -444,13 +360,11 @@ export function buildWorld(C,look,q){
   const root=new THREE.Group(), ctx={};
   const tm=trackMaterial(look,q), matTrack=tm.mat; ctx.dirt=tm.dirt;
   ctx.glowTex=glowTex();
+  /* the lights' glow (outdoor night lights, the speedway): instanced camera-facing soft lights, additive; list = [x, y, z, size] (r3d-stadium-bowl.js glowSprites: the same sprite shader as the stadium's towers) */
   ctx.glow=function(list,color){
     if(q.lo) list=list.filter((g,i)=>i%2===0);
-    const geo=new THREE.PlaneGeometry(1,1), mat=new THREE.ShaderMaterial({uniforms:{map:{value:ctx.glowTex},col:{value:new THREE.Color(color)}},transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,
-      vertexShader:"varying vec2 vUv; void main(){ vUv=uv; vec4 c=modelViewMatrix*instanceMatrix*vec4(0.,0.,0.,1.); float s=length(instanceMatrix[0].xyz); c.xy+=position.xy*s; gl_Position=projectionMatrix*c; }",
-      fragmentShader:"uniform sampler2D map; uniform vec3 col; varying vec2 vUv; void main(){ vec4 t=texture2D(map,vUv); gl_FragColor=vec4(col*t.rgb*t.a*1.1,t.a); }"});
-    const m=new THREE.InstancedMesh(geo,mat,list.length), M=new THREE.Matrix4(); list.forEach((g,i)=>{ M.makeScale(g[3],g[3],g[3]); M.setPosition(g[0],g[1],g[2]); m.setMatrixAt(i,M); });
-    m.instanceMatrix.needsUpdate=true; m.frustumCulled=false; m.renderOrder=5; root.add(m); ctx.glowMesh=m;
+    const c=new THREE.Color(color), L=list.map(g=>({x:g[0],y:g[1],z:g[2],s:g[3],r:c.r,g:c.g,b:c.b,k:0,a:1.15}));
+    const m=glowSprites(glowSheet(),L,{uTime:{value:0}}); root.add(m); ctx.glowMesh=m;
   };
   ctx.sky=function(top,mid,hor,sun){
     const g=new THREE.SphereGeometry(2600,24,12), P=g.attributes.position, c=new Float32Array(P.count*3), t=lin("#"+top.toString(16).padStart(6,"0")), m=lin("#"+mid.toString(16).padStart(6,"0")), h=lin("#"+hor.toString(16).padStart(6,"0"));
@@ -474,12 +388,12 @@ export function buildWorld(C,look,q){
     m.instanceMatrix.needsUpdate=true; m.frustumCulled=false; m.renderOrder=-5; root.add(m);
   };
   let info;
-  if(C.kind==="stadium") info=stadium(C,look,q,root,ctx);
+  if(C.kind==="stadium") info=stadiumBowl(C,look,q,root,ctx);
   else if(look.around==="beach-speedway"||C.kind==="hybrid") info=speedway(C,look,q,root,ctx);
   else info=outdoorWorld(C,look,q,root,ctx);
   const dirt=addTrack(C,look,q,root,matTrack), track=dirt.track;   /* the track surface (r3d-track.js) joins the scene where it always did */
   const fin=finishBuild(C,look); root.add(fin.grp);
-  return {root,ctx,track,fin,info,matTrack,dirt,frame:null};   /* frame(dt, tw, cam): optional per-frame work for the surroundings (race3d.js calls it if set) */
+  return {root,ctx,track,fin,info,matTrack,dirt,frame:(info&&info.frame)||null};   /* frame(dt, tw, cam): optional per-frame work for the surroundings (race3d.js calls it if set) */
 }
 
 /* the helpers the old one-file module exported: still importable from here (they live in r3d-util.js now) */
