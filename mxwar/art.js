@@ -112,6 +112,16 @@ function wflag(){
     '<path d="M8 4C20 1 30 9 42 5C47 3.5 51 3 54 4V28C51 27 47 27.5 42 29C30 33 20 25 8 28Z" fill="#fbfaf5" stroke="#22222a" stroke-width="1.2"/></svg>';
 }
 
+/* mxcrash: the yellow flag (a crash: no passing there) and the card window's grow / shrink glyph (original line art) */
+function yflag(){
+  return '<svg class="mx-flag mx-yflag" viewBox="0 0 60 40" aria-hidden="true" focusable="false"><rect x="4" y="2" width="3" height="37" rx="1.5" fill="#c99f5e"/>'+
+    '<path d="M8 4C20 1 30 9 42 5C47 3.5 51 3 54 4V28C51 27 47 27.5 42 29C30 33 20 25 8 28Z" fill="#ffd21f" stroke="#22222a" stroke-width="1.2"/></svg>';
+}
+function pipIcon(grow){
+  var d=grow?"M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7":"M19 10h-5V5M14 10l6-6M5 14h5v5M10 14l-6 6";
+  return '<svg class="bg-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="'+d+'"/></svg>';
+}
+
 /* ---------------- cards ---------------- */
 var SUIT={
   S:'<path fill="currentColor" d="M50 5C50 5 13 38 13 62C13 76 24 85 36 85C42 85 47 82 49 79C48 89 44 94 35 97H65C56 94 52 89 51 79C53 82 58 85 64 85C76 85 87 76 87 62C87 38 50 5 50 5Z"/>',
@@ -133,6 +143,6 @@ function chip(id){ if(id==null) return ""; var c=info(id); return '<span class="
 function chipRed(id){ return id!=null&&info(id).red; }
 function short(id){ var c=info(id); return rankLabel(c.r)+({S:"♠",H:"♥",D:"♦",C:"♣",J:""}[c.s]); }
 
-MX.Art={MK:MK,MODERN:MODERN,mk:mk,mkStyle:mkStyle,bike:bike,track:track,gate:gate,flag:flag,wflag:wflag,suit:suit,info:info,rankLabel:rankLabel,face:face,cardInner:cardInner,chip:chip,chipRed:chipRed,short:short};
+MX.Art={MK:MK,MODERN:MODERN,mk:mk,mkStyle:mkStyle,bike:bike,track:track,gate:gate,flag:flag,wflag:wflag,yflag:yflag,pipIcon:pipIcon,suit:suit,info:info,rankLabel:rankLabel,face:face,cardInner:cardInner,chip:chip,chipRed:chipRed,short:short};
 if(typeof module!=="undefined"&&module.exports) module.exports=MX.Art;
 })(typeof window!=="undefined"?window:globalThis);

@@ -59,15 +59,18 @@ Course.prototype.feature=function(s){
 
 /* a stadium track (Supercross): 4 rows joined by 180-degree turns, the return straight on the left; the venue seeds the row lengths and
    which row gets the whoops, the triple and the rhythm */
-function stadium(W,H,key){
+function stadium(W,H,key,hole){
   var R=rng(hash("sx|"+key)), C=new Course();
   var stands=Math.round(H*0.15), mB=Math.max(6,H*0.05), m=Math.max(8,W*0.03);
-  var tw=clamp(Math.round((H-stands-mB)*0.1),8,30);
-  var y0=stands+tw*0.9, y3=H-mB-tw*0.6, gap=(y3-y0)/3, r=gap/2, q=Math.min(gap*0.45,W*0.05);
-  var y1=y0+gap, y2=y1+gap;
-  var xV=m+tw*0.6, xL=xV+q, xLi=xV+tw*1.15+r+Math.max(2,W*0.008);
-  var xMax=W-m-tw*0.6-r;
+  /* the card window sits over the bottom-right corner: on a wide arena rows 2 and 3 (and the turn between them) end short of it; where
+     that would leave them too short (a phone upright) the whole course rides above it (the band beside it holds the pits) */
+  var tw, y0, y3, gap, r, q, y1, y2, xV, xL, xLi, xMax, lim=0, side=false;
+  function geo(mb){ tw=clamp(Math.round((H-stands-mb)*0.1),8,30); y0=stands+tw*0.9; y3=H-mb-tw*0.6; gap=(y3-y0)/3; r=gap/2; q=Math.min(gap*0.45,W*0.05);
+    y1=y0+gap; y2=y1+gap; xV=m+tw*0.6; xL=xV+q; xLi=xV+tw*1.15+r+Math.max(2,W*0.008); xMax=W-m-tw*0.6-r; }
+  geo(mB);
+  if(hole&&hole.w>0&&hole.w<W*0.5){ lim=W-hole.w-r-tw*1.1-4; if(lim-xLi>=W*0.22) side=true; else { mB=Math.max(mB,hole.h+2); geo(mB); } }
   var xR0=xMax-R()*W*0.07, xR2=xMax-R()*W*0.07;
+  if(side) xR2=Math.min(xR2,lim);
   C.line(xL,y0,xR0,y0);              // row 0: the start straight, the gate, the finish line
   var e0=C.s[C.s.length-1];
   C.arc(xR0,y0+r,r,-PI/2,PI/2);      // the first turn
@@ -99,9 +102,10 @@ function stadium(W,H,key){
 }
 /* an outdoor national (Pro Motocross): a longer winding loop over the land; hills, big tabletops and rollers; the start straight at the
    bottom of the loop, run left to right */
-function outdoor(W,H,key){
+function outdoor(W,H,key,hole){
   var R=rng(hash("mx|"+key)), C=new Course();
   var sky=Math.round(H*0.16), m=Math.max(8,W*0.03), mB=Math.max(6,H*0.05);
+  if(hole&&hole.w>0&&hole.w>=W*0.36&&hole.w<W*0.5) mB=Math.max(mB,hole.h+2);   /* a narrow arena: the loop rides above the card window */
   var tw=clamp(Math.round((H-sky-mB)*0.085),7,26);
   var cx=W/2, cy=(sky+tw+H-mB)/2, rx=W/2-m-tw, ry=(H-mB-sky-tw)/2-tw*0.4;
   var N=11, pts=[];
@@ -111,6 +115,9 @@ function outdoor(W,H,key){
   }
   /* a flat start straight: the bottom point becomes a straight run */
   var p0=pts[0]; pts[0]=[p0[0]-rx*0.32,cy+ry]; pts.unshift([p0[0]+rx*0.32,cy+ry]);
+  /* the card window sits over the bottom-right corner: the start straight ends short of it and the loop's points there move up */
+  if(hole&&hole.w>0&&hole.w<W*0.5&&hole.w<W*0.36){ var hx=W-hole.w-tw*1.6, hy=H-hole.h-tw*1.4;
+    pts.forEach(function(pt,ix){ if(pt[0]>hx&&pt[1]>hy){ if(ix<=1) pt[0]=Math.min(pt[0],hx-tw); else pt[1]=Math.max(sky+tw,hy-tw*0.6); } }); }
   pts.reverse();   // run left to right along the bottom
   var n=pts.length, seg=24, j, k2;
   function cr(a,b,c,d,t){ var t2=t*t, t3=t2*t; return 0.5*((2*b)+(-a+c)*t+(2*a-5*b+4*c-d)*t2+(-a+3*b-3*c+d)*t3); }
@@ -139,7 +146,7 @@ function strokeCourse(ctx,C,from,to){
   if(from==null){ ctx.moveTo(C.x[0],C.y[0]); for(var i=1;i<C.x.length;i++) ctx.lineTo(C.x[i],C.y[i]); ctx.closePath(); }
   else { C.at(from,p); ctx.moveTo(p.x,p.y); for(s=from+step;s<to;s+=step){ C.at(s,p); ctx.lineTo(p.x,p.y); } C.at(to,p); ctx.lineTo(p.x,p.y); }
 }
-function drawBackground(ctx,C,W,H){
+function drawBackground(ctx,C,W,H,fs){
   var R=rng(hash(C.kind+"|bg|"+W+"x"+H)), i, p={}, F;
   if(C.kind==="stadium"){
     var bg=ctx.createLinearGradient(0,0,0,H); bg.addColorStop(0,"#0a0810"); bg.addColorStop(0.3,"#1a1219"); bg.addColorStop(1,"#120d0c");
@@ -193,8 +200,29 @@ function drawBackground(ctx,C,W,H){
   /* the start: the gate's footing across the track (the steel gate itself is the page's #gate while the riders wait) */
   C.at(C.gate,p); nx=-Math.sin(p.a); ny=Math.cos(p.a);
   ctx.strokeStyle="rgba(201,159,94,.75)"; ctx.lineWidth=Math.max(1.5,tw*0.12); ctx.beginPath(); ctx.moveTo(p.x-nx*tw*0.6,p.y-ny*tw*0.6); ctx.lineTo(p.x+nx*tw*0.6,p.y+ny*tw*0.6); ctx.stroke();
+  /* the CEO (20:06): "I wanna see the whoop section and jumps": the sections are named on the infield (a dark pill, light text) */
+  if(fs>0) labelSections(ctx,C,W,H,fs);
   /* a soft vignette */
   var vg=ctx.createRadialGradient(W/2,H*0.55,Math.min(W,H)*0.3,W/2,H*0.55,Math.max(W,H)*0.75); vg.addColorStop(0,"rgba(0,0,0,0)"); vg.addColorStop(1,"rgba(0,0,0,.45)"); ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
+}
+
+function labelSections(ctx,C,W,H,fs){
+  var p={}, done={}, list=[];
+  C.f.forEach(function(F){ var name=F.k==="whoops"?"Whoops":F.k==="rollers"?"Rollers":null;
+    if(F.k==="jump"){ var big=C.f.filter(function(x){ return x.k==="jump"; }).sort(function(a,b){ return b.h-a.h; })[0]; if(F===big) name=C.kind==="stadium"?"Triple":"Big jump"; }
+    if(name&&!done[name]){ done[name]=1; list.push([name,F]); } });
+  ctx.save(); ctx.font="700 "+fs+"px Manrope, system-ui, sans-serif"; ctx.textBaseline="middle"; ctx.textAlign="center";
+  list.forEach(function(it){
+    var F=it[1]; C.at((F.s0+F.s1)/2,p);
+    var tw=Math.ceil(ctx.measureText(it[0]).width)+fs*0.9, th=Math.round(fs*1.45), x=p.x, below=p.y+C.tw*0.5+th*0.5+fs*0.35, above=p.y-C.tw*0.5-th*0.5-fs*0.35;
+    /* a stadium names its sections above their row (the bottom row below it), so two names never meet; outdoors under the track */
+    var low=C.rowY?p.y>=C.rowY[3]-2:false, y=C.kind==="stadium"&&!low?above:below;
+    if(y+th/2>H-2) y=above; if(y-th/2<C.stands) y=below;
+    x=clamp(x,tw/2+2,W-tw/2-2);
+    ctx.fillStyle="rgba(10,8,6,.74)"; ctx.beginPath(); var r=th/2; ctx.moveTo(x-tw/2+r,y-th/2); ctx.arcTo(x+tw/2,y-th/2,x+tw/2,y+th/2,r); ctx.arcTo(x+tw/2,y+th/2,x-tw/2,y+th/2,r); ctx.arcTo(x-tw/2,y+th/2,x-tw/2,y-th/2,r); ctx.arcTo(x-tw/2,y-th/2,x+tw/2,y-th/2,r); ctx.closePath(); ctx.fill();
+    ctx.fillStyle="#f3e6c8"; ctx.fillText(it[0],x,y+fs*0.04);
+  });
+  ctx.restore();
 }
 
 /* ---------------- sprites ---------------- */
@@ -244,42 +272,69 @@ function shadow(){
 }
 
 /* ---------------- the view ---------------- */
+/* mxcrash (the CEO, 2026-10-16 20:06: "riders are moving so fucking fast ... the results of the cards is what moves the driver ... if they
+   lose a war double war the rider crashes and gets back up. If they lose a triple war they crash and dont return ... When a rider crashes
+   the yellow flag comes out"):
+   - PACE: the leader rides one lap in V.exp ms (the Game speed's lap: game.js LAP_MS, Medium 10 s: about a third of v2's speed, a real
+     rider's pace for the size of the bikes) at a steady speed. A lap's cards are turned as the leader STARTS that lap (ready() says when),
+     and the field then rides the result round the lap (passes are ride-ups over the lap). The leader never crosses the line that ends a
+     lap whose cards are not turned yet: he eases to it (a person thinking). The riding is logic (advance) apart from the drawing, so the
+     race keeps its clock while the board covers the track; it pauses with the Menu (setLive).
+   - CRASHES: crash(s, kind) tumbles the bike where the rider is (the rider is thrown, gets up, picks the bike up and rides on for a
+     "remount", the field passing; for an "out" the bike ends off the track with an OUT tag for the rest of the race).
+   - YELLOW FLAG: setYellow(lap) at the crash: a flagger waves yellow beside that section (it glows yellow) and nobody changes places in it
+     until the leader ends lap \`lap\` (the engine's yellow lap). */
+function outSprite(dpr,fs){
+  var font="800 "+fs+"px Manrope, system-ui, sans-serif", mc=canvas(4,4).getContext("2d"); mc.font=font;
+  var tw=Math.ceil(mc.measureText("OUT").width), w=tw+Math.round(fs*0.7), h=Math.round(fs*1.32), c=canvas(w*dpr,h*dpr), x=c.getContext("2d");
+  x.scale(dpr,dpr); x.fillStyle="#b3121e"; x.beginPath(); x.moveTo(3,0); x.lineTo(w-3,0); x.quadraticCurveTo(w,0,w,3); x.lineTo(w,h-3); x.quadraticCurveTo(w,h,w-3,h); x.lineTo(3,h); x.quadraticCurveTo(0,h,0,h-3); x.lineTo(0,3); x.quadraticCurveTo(0,0,3,0); x.closePath(); x.fill();
+  x.strokeStyle="rgba(255,255,255,.7)"; x.lineWidth=1; x.stroke(); x.fillStyle="#ffffff"; x.font=font; x.textBaseline="middle"; x.textAlign="center"; x.fillText("OUT",w/2,h/2+fs*0.05);
+  c._w=w; c._h=h; return c;
+}
 function create(host,opt){
   opt=opt||{};
   var bgC=document.createElement("canvas"), fgC=document.createElement("canvas");
   bgC.className="mx-trk__bg"; fgC.className="mx-trk__fg"; bgC.setAttribute("aria-hidden","true"); fgC.setAttribute("aria-hidden","true");
   host.appendChild(bgC); host.appendChild(fgC);
   var bx=bgC.getContext("2d"), fx=fgC.getContext("2d");
-  var V={host:host,kind:"stadium",key:"",W:0,H:0,dpr:1,C:null,riders:[],by:{},phase:"gate",X:0,laps:0,lapT:now(),exp:2200,lapsN:30,
-    run:false,raf:0,last:0,flag:null,flagT:0,mode:"full",tvScale:1,dirty:true,pFin:0,pGate:0,stillX:null};
-  var P={};
+  var V={host:host,kind:"stadium",key:"",W:0,H:0,dpr:1,C:null,riders:[],by:{},phase:"gate",X:0,laps:0,lapT:now(),exp:10000,lapsN:30,
+    run:false,raf:0,last:0,flag:null,flagT:0,mode:"full",tvScale:1,dirty:true,pFin:0,pGate:0,stillX:null,
+    live:false,lt:0,lapSeen:0,yel:null,hole:null,onLap:null,onYellow:null};
+  var P={}, Q={};
   function motion(){ var B=g.BGUI; if(document.documentElement.getAttribute("data-motion")==="reduce"||(B&&B.reducedMotion&&B.reducedMotion())) return "off";
     return document.documentElement.getAttribute("data-effects")==="reduced"?"reduced":"full"; }
   /* layout: the host's size; the course and the background drawn again when it changes */
   V.resize=function(force){
-    var W=Math.round(host.clientWidth), H=Math.round(host.clientHeight), dpr=Math.min(2,g.devicePixelRatio||1);
+    var W=Math.round(host.clientWidth), H=Math.round(host.clientHeight), dpr=Math.min(2,g.devicePixelRatio||1), hk=V.hole?V.hole.w+"x"+V.hole.h:"";
     if(!W||!H) return false;
-    if(!force&&W===V.W&&H===V.H&&dpr===V.dpr&&V.C&&V.C.kind===V.kind&&V.C._key===V.key) return true;
+    if(!force&&W===V.W&&H===V.H&&dpr===V.dpr&&V.C&&V.C.kind===V.kind&&V.C._key===V.key&&V.C._hole===hk) return true;
+    var keepX=V.C?V.X-V.pFin:null;
     V.W=W; V.H=H; V.dpr=dpr;
     [bgC,fgC].forEach(function(c){ c.width=Math.round(W*dpr); c.height=Math.round(H*dpr); c.style.width=W+"px"; c.style.height=H+"px"; });
-    V.C=V.kind==="outdoor"?outdoor(W,H,V.key):stadium(W,H,V.key); V.C._key=V.key;
-    bx.setTransform(dpr,0,0,dpr,0,0); drawBackground(bx,V.C,W,H);
+    V.C=V.kind==="outdoor"?outdoor(W,H,V.key,V.hole):stadium(W,H,V.key,V.hole); V.C._key=V.key; V.C._hole=hk;
     var rem=parseFloat(getComputedStyle(document.documentElement).fontSize)||16, tv=document.documentElement.hasAttribute("data-tv");
     V.bw=clamp(Math.round(V.C.tw*(V.kind==="outdoor"?2.1:1.9)),18,tv?46:34); V.bh=Math.round(V.bw*2/3);
     V.fs=Math.round(tv?Math.max(14,rem*0.72):Math.max(10,Math.min(12,rem*0.72)));
+    V.lfs=tv?Math.max(10,Math.round(rem*0.875)):12;   /* the section names: the text floors (12 px phone; TV 21 px at 1080, 10.5 at 540) */
+    bx.setTransform(dpr,0,0,dpr,0,0); drawBackground(bx,V.C,W,H,V.lfs);
+    var oldFin=V.pFin;
     V.pFin=V.C.fin/V.C.L; V.pGate=V.C.gate/V.C.L; if(V.pGate<V.pFin) V.pGate+=1;
+    if(keepX!=null&&V.phase!=="gate"){ V.X=V.pFin+keepX; V.riders.forEach(function(r){ if(r.cr) r.cr.at=r.cr.at-oldFin+V.pFin; }); if(V.yel){ V.yel.c=V.yel.c-oldFin+V.pFin; V.yel.until=V.yel.until-oldFin+V.pFin; } }
     V.unit=V.bw*1.05/V.C.L;
     V.riders.forEach(function(r){ r.spr=null; r.plate=null; });
-    V.dirty=true; drawFrame(0,true);
+    V.outS=null;
+    V.dirty=true; drawFrame(true);
     return true;
   };
   V.setLayout=function(kind,key){ kind=kind==="outdoor"?"outdoor":"stadium"; key=String(key||""); if(kind!==V.kind||key!==V.key){ V.kind=kind; V.key=key; V.resize(true); } };
+  /* the card window's corner (CSS px, bottom right): the course keeps clear of it */
+  V.setHole=function(h){ V.hole=h&&h.w>0?{w:Math.round(h.w),h:Math.round(h.h)}:null; };
   /* the riders of this race: [{s, color, accent, plate, red, me}] in gate order */
   V.setRiders=function(list){
     V.riders=list.map(function(o,k){ return {s:o.s,k:k,color:o.color,accent:o.accent,num:o.plate,red:!!o.red,me:!!o.me,out:false,off:0,offT:0,lane:0,laneT:0,
-      base:((k*7919)%11-5)/5*0.22,face:1,spr:null,sprL:null,plate:null,place:k}; });
-    V.by={}; V.riders.forEach(function(r){ V.by[r.s]=r; bikeImage(r.color,r.accent,function(){ r.spr=null; V.dirty=true; if(!V.run) drawFrame(0,true); }); });
-    V.dirty=true;
+      base:((k*7919)%11-5)/5*0.22,face:1,spr:null,sprL:null,plate:null,place:k,cr:null,slowT:0}; });
+    V.by={}; V.riders.forEach(function(r){ V.by[r.s]=r; bikeImage(r.color,r.accent,function(){ r.spr=null; V.dirty=true; if(!V.run) drawFrame(true); }); });
+    V.yel=null; V.dirty=true;
   };
   /* the gate: the riders lined up behind it in gate order (lanes across the start straight, rows back from the gate) */
   V.gate=function(on){
@@ -287,100 +342,163 @@ function create(host,opt){
     var C=V.C; if(!C) return;
     var n=V.riders.length, lanes=n>30?5:n>12?4:3, cols=Math.ceil(n/lanes);
     var room=(C.gate-C.gateLine)/C.L, step=Math.min(V.unit*0.9,room/Math.max(1,cols));
-    V.riders.forEach(function(r){ var c=Math.floor(r.k/lanes), l=r.k%lanes; r.gx=V.pGate-(c+0.6)*step; r.gl=(l-(lanes-1)/2)/Math.max(1,(lanes-1)/2)*0.85; if(on){ r.off=V.pGate-r.gx; r.offT=r.off; r.lane=r.gl; r.laneT=r.gl; } });
-    if(on){ V.X=V.pGate; V.laps=0; V.lapT=now(); V.flag=null; }
-    else { V.X=V.pGate; V.lapT=now(); V.riders.forEach(function(r){ r.off=V.pGate-r.gx; r.lane=r.gl; }); }
-    V.dirty=true; if(!V.run) drawFrame(0,true);
+    V.riders.forEach(function(r){ var c=Math.floor(r.k/lanes), l=r.k%lanes; r.gx=V.pGate-(c+0.6)*step; r.gl=(l-(lanes-1)/2)/Math.max(1,(lanes-1)/2)*0.85; if(on){ r.off=V.pGate-r.gx; r.offT=r.off; r.lane=r.gl; r.laneT=r.gl; r.cr=null; } });
+    V.X=V.pGate; V.lapT=now(); V.lt=now();
+    if(on){ V.laps=0; V.flag=null; V.yel=null; V.lapSeen=0; }
+    else { V.riders.forEach(function(r){ r.off=V.pGate-r.gx; r.lane=r.gl; }); laneCheck(); }
+    V.dirty=true; if(!V.run) drawFrame(true);
   };
   /* where the steel gate stands (CSS px in the host): for the page's #gate and its dust */
   V.gateRect=function(){ var C=V.C; if(!C) return null; C.at(C.gate,P); var h=C.tw*1.9; return {x:P.x,y:P.y-h*0.62,h:h,w:Math.max(5,C.tw*0.32)}; };
-  /* the standings after a lap (or a change): order = seats by place; cnt = cards held; out = seats out of cards */
+  /* the standings after a lap (or a change): order = seats by place; cnt = cards held; out = seats out of the race */
   V.update=function(order,cnt,outs){
     var C=V.C; if(!C) return;
-    var max=0; order.forEach(function(s){ if(cnt[s]>max) max=cnt[s]; });
+    advance(now());
     var alive=order.filter(function(s){ return !(outs&&outs[s]); });
     var raw=[0], minGap=V.unit*1.35, kc=V.unit*0.08, i;   /* riders level on cards still ride a bike and a third apart (v1 leftover: crowded bikes) */
     for(i=1;i<alive.length;i++) raw.push(raw[i-1]+minGap+kc*Math.max(0,(cnt[alive[i-1]]||0)-(cnt[alive[i]]||0)));
     var tot=raw[raw.length-1]||0, lim=0.84, sc=tot>lim?lim/tot:1;
     alive.forEach(function(s,i){ var r=V.by[s]; if(!r) return; r.offT=raw[i]*sc; r.out=false; r.place=i; });
     order.forEach(function(s,i){ var r=V.by[s]; if(r&&outs&&outs[s]){ if(!r.out){ r.out=true; r.parkT=now(); } r.place=i; } });
-    V.dirty=true; if(!V.run) drawFrame(0,true);
+    V.dirty=true; if(!V.run) drawFrame(true);
   };
-  /* a lap is decided (battle n done): the leader is due at the finish line; the lap time learnt for the pace */
+  /* a lap's cards are turned (battle n decided): the leader may ride on to the end of lap n (reduced motion: drawn where they stand) */
   V.lap=function(n,len){
-    var t=now(), d=t-V.lapT;
-    if(n>V.laps&&V.laps>0&&d>200&&d<20000) V.exp=clamp(V.exp*0.6+d*0.4,400,12000);
-    if(n>V.laps){ V.laps=n; V.lapT=t; }
+    advance(now());
+    if(n>V.laps){ V.laps=n; V.lapT=now(); }
     if(len) V.lapsN=len;
     if(motion()==="off"){ V.X=V.pFin+V.laps+0.5; }
-    V.dirty=true; if(!V.run) drawFrame(0,true);
+    V.dirty=true; if(!V.run) drawFrame(true);
   };
-  V.setLaps=function(n,len){ V.laps=n; V.lapsN=len||V.lapsN; V.lapT=now(); V.X=n>0?V.pFin+n:V.pGate; V.riders.forEach(function(r){ r.off=r.offT; r.lane=r.laneT; }); };
-  V.setPace=function(ms){ if(ms>0) V.exp=clamp(ms,400,12000); };
-  V.setFlag=function(f){ V.flag=f||null; V.flagT=now(); if(f==="checkered") V.phase="over"; V.dirty=true; if(!V.run) drawFrame(0,true); };
+  /* a race picked up again (Continue, a new screen): n laps decided; the leader rides the last of them */
+  V.setLaps=function(n,len){ V.laps=n; V.lapsN=len||V.lapsN; V.lapT=now(); V.lt=now(); V.X=n>0?Math.max(V.pGate,V.pFin+n-0.3):V.pGate; laneCheck(true); V.riders.forEach(function(r){ if(!r.cr){ r.off=r.offT; r.lane=r.laneT; } }); };
+  V.setPace=function(ms){ if(ms>0) V.exp=clamp(ms,1500,30000); };
+  V.setFlag=function(f){ V.flag=f||null; V.flagT=now(); if(f==="checkered") V.phase="over"; V.dirty=true; if(!V.run) drawFrame(true); };
   V.setRed=function(s){ V.riders.forEach(function(r){ var on=r.s===s; if(on!==r.red){ r.red=on; r.plate=null; } }); V.dirty=true; };
+  /* the race clock runs while the race is on screen or only covered by the board (the Menu pauses it) */
+  V.setLive=function(on){ on=!!on; if(on&&!V.live) V.lt=now(); V.live=on; };
+  function timed(){ return !!V.C&&V.live&&motion()!=="off"; }
+  /* ms until the leader starts the lap whose cards are next (0 = now; -1 = no riding clock: reduced motion, no track, paused) */
+  V.ready=function(){
+    advance(now());
+    if(!timed()) return -1;
+    if(V.phase==="gate") return 0;
+    var line=V.pFin+V.laps;
+    if(V.X<line-1.02){ V.X=Math.max(V.X,line-0.3); V.riders.forEach(function(r){ if(!r.cr) r.off=r.offT; }); laneCheck(true); }   /* the race ran on unwatched: catch up */
+    var need=line-V.X; return need<=0?0:Math.round(need*V.exp)+30;
+  };
+  /* ms until the leader reaches the line that ends lap k (the checkered flag waits for it) */
+  V.untilLine=function(k){ advance(now()); if(!timed()||V.phase==="gate") return 0; var d=V.pFin+k-V.X; return d<=0?0:Math.round(d*V.exp)+30; };
+  V.leaderLap=function(){ return V.phase==="gate"?0:Math.floor(V.X-V.pFin+1e-9)+1; };
+  /* a crash: kind "remount" | "out" (CRASH-CONTRACT.md); where the rider is now */
+  V.crash=function(s,kind){
+    var r=V.by[s]; if(!r||!V.C) return;
+    advance(now());
+    var f=clamp(V.exp/10000,0.6,1.4);
+    r.cr={t0:now(),kind:kind==="out"?"out":"remount",at:V.X-r.off,dur:Math.round(2600*f),side:r.lane>=0?1:-1,lane0:r.lane};
+    if(r.cr.kind==="out") r.out=true;
+    V.dirty=true; if(!V.run) drawFrame(true);
+  };
+  /* a rider out of the race by a crash, picked up again (Continue): off the track at that point of the lap (0..1 from the line) */
+  V.park=function(s,sector){ var r=V.by[s]; if(!r) return; r.out=true; r.cr={t0:-1e9,kind:"out",at:V.pFin+clamp(+sector||0.5,0,1),dur:1,side:1,lane0:0}; };
+  /* the yellow flag at the last crash, until the leader ends lap \`lap\`; null = down */
+  V.setYellow=function(lap,s,sector){
+    if(lap==null){ V.yel=null; V.dirty=true; return; }
+    advance(now());
+    var r=s!=null?V.by[s]:null, c=r&&r.cr?r.cr.at:sector!=null?V.pFin+clamp(+sector,0,1):(V.yel?V.yel.c:V.X-0.1);
+    V.yel={c:c,until:V.pFin+lap,t0:now()};
+    V.dirty=true; if(!V.run) drawFrame(true);
+  };
+  V.yellowOn=function(){ advance(now()); return !!V.yel; };
+  function laneCheck(silent){ var k=V.leaderLap(); if(k>V.lapSeen){ V.lapSeen=k; if(!silent&&V.onLap) try{ V.onLap(k); }catch(e){} } }
+  function inYellow(r){ if(!V.yel) return false; var p=V.X-r.off, d=p-V.yel.c; d=d-Math.round(d); return Math.abs(d)<0.075; }
+  /* the riding (logic only; the drawing reads it): dt ms at time t */
+  function logic(dt,t){
+    var simple=motion()!=="full";
+    var to=V.pFin+V.laps+1, v=1/V.exp;
+    if(V.phase==="over") v*=0.6;
+    else v*=clamp((to-V.X)/0.16,0,1);                 /* never over the line of a lap whose cards are still to turn: ease to it */
+    var dX=Math.max(0,v*dt); V.X+=dX;
+    var k=1-Math.exp(-dt/(simple?420:650)), kl=1-Math.exp(-dt/260);
+    V.riders.forEach(function(r){
+      if(r.cr){
+        r.off=V.X-r.cr.at;                            /* down on the track: the field rides on past */
+        if(r.cr.kind==="remount"&&t-r.cr.t0>=r.cr.dur){ r.cr=null; r.slowT=t+V.exp*0.6; r.lane=r.laneT; }
+        return;
+      }
+      if(r.out) return;
+      var d=r.offT-r.off, st=d*k, up=r.slowT&&t<r.slowT?0.3:1;
+      /* never backwards, never a zoom: the gap grows by at most 85% of the leader's progress and shrinks by at most the leader's progress
+         (a rider back on the bike after a crash rejoins calmly: 30%) */
+      if(st>dX*0.85) st=dX*0.85; else if(st<-dX*up) st=-dX*up;
+      if(V.yel&&inYellow(r)) st=0;                    /* yellow flag: nobody changes places in that section */
+      r.off+=st;
+      r.laneT=r.base+clamp(d/(V.unit*1.4),-1,1)*-0.85;   // the rider moving up (the gap shrinking) swings to the inside to pass
+      r.lane+=(r.laneT-r.lane)*kl;
+    });
+    if(V.yel&&V.X>=V.yel.until){ V.yel=null; if(V.onYellow) try{ V.onYellow(false); }catch(e){} }
+    laneCheck();
+  }
+  function advance(t){
+    if(!V.C||!V.live||V.phase==="gate"||motion()==="off"){ V.lt=t; return; }
+    var dt=t-(V.lt||t); V.lt=t; if(dt<=0) return; if(dt>20000) dt=20000;
+    while(dt>0){ var d=Math.min(dt,40); logic(d,t-dt+d); dt-=d; }
+  }
   /* the loop */
   function tick(t){
     V.raf=0; if(!V.run) return;
     if(document.hidden){ V.run=false; return; }
     var mo=motion();
-    if(mo==="off"){ V.run=false; drawFrame(0,true); return; }
+    if(mo==="off"){ V.run=false; drawFrame(true); return; }
     var dt=V.last?Math.min(100,t-V.last):16;
     if((mo==="reduced"||V.half)&&V.last&&t-V.last<31){ V.raf=requestAnimationFrame(tick); return; }
     /* a device that can't keep up (frames late, or a frame costing over 8 ms) rides at 30 frames a second: the same look, half the work */
-    var c0=now(); V.last=t; drawFrame(dt,false); var cost=now()-c0;
+    var c0=now(); V.last=t; drawFrame(false); var cost=now()-c0;
     if(!V.half&&mo==="full"){ V.fs2=(V.fs2||0)+1; V.ft=(V.ft||0)+dt; V.fc=(V.fc||0)+cost; if(V.fs2>=90){ if(V.ft/V.fs2>22||V.fc/V.fs2>8) V.half=true; V.fs2=0; V.ft=0; V.fc=0; } }
     V.raf=requestAnimationFrame(tick);
   }
-  V.start=function(){ if(V.run) return; if(document.hidden) return; if(motion()==="off"){ drawFrame(0,true); return; } V.run=true; V.last=0; V.raf=requestAnimationFrame(tick); };
+  V.start=function(){ if(V.run) return; if(document.hidden) return; if(motion()==="off"){ drawFrame(true); return; } V.run=true; V.last=0; V.raf=requestAnimationFrame(tick); };
   V.stop=function(){ V.run=false; if(V.raf){ cancelAnimationFrame(V.raf); V.raf=0; } };
   document.addEventListener("visibilitychange",function(){ if(document.hidden) V.stop(); else if(V.want) V.start(); });
   V.want=false;
   V.show=function(on){ V.want=!!on; if(on) V.start(); else V.stop(); };
-  V.state=function(){ return {half:!!V.half,run:V.run,riders:V.riders.length,laps:V.laps,X:+V.X.toFixed(3),exp:Math.round(V.exp),kind:V.kind,key:V.key,W:V.W,H:V.H,flag:V.flag,phase:V.phase,mode:motion(),frames:V.frames|0}; };
-  V.positions=function(){ var C=V.C, out=[]; if(!C) return out; V.riders.forEach(function(r){ var s=(V.X-r.off)*C.L; C.at(s,P); out.push({s:r.s,x:Math.round(P.x),y:Math.round(P.y),off:+r.off.toFixed(4),offT:+r.offT.toFixed(4),out:r.out,place:r.place}); }); return out; };
+  V.state=function(){ return {half:!!V.half,run:V.run,live:V.live,riders:V.riders.length,laps:V.laps,X:+(V.X-V.pFin).toFixed(3),lap:V.leaderLap(),exp:Math.round(V.exp),kind:V.kind,key:V.key,W:V.W,H:V.H,flag:V.flag,phase:V.phase,mode:motion(),frames:V.frames|0,
+    yellow:V.yel?{c:+(V.yel.c-V.pFin).toFixed(3),until:+(V.yel.until-V.pFin).toFixed(3)}:null,crashed:V.riders.filter(function(r){ return r.cr; }).map(function(r){ return {s:r.s,kind:r.cr.kind}; }),hole:V.hole}; };
+  V.positions=function(){ var C=V.C, out=[]; if(!C) return out; V.riders.forEach(function(r){ var s=(V.X-r.off)*C.L; C.at(s,P); out.push({s:r.s,x:Math.round(P.x),y:Math.round(P.y),off:+r.off.toFixed(4),offT:+r.offT.toFixed(4),out:r.out,place:r.place,cr:r.cr?r.cr.kind:null}); }); return out; };
   V.frames=0;
 
-  /* advance the riders and draw one frame (dt ms; still = draw where they stand) */
-  function drawFrame(dt,still){
+  /* draw one frame (still = draw where they stand, no riding) */
+  function drawFrame(still){
     var C=V.C; if(!C||!V.W) return;
     var mo=motion(), simple=mo!=="full", W=V.W, H=V.H, dpr=V.dpr, t=now();
-    if(!still&&dt>0&&V.phase!=="gate"){
-      /* the leader's pace (from = this lap's start, to = the line that ends it). Review fix: the leader is due a little SHORT of the line
-         (lag) as the lap is decided and crosses it just after, so a lap that runs late (a person thinking, a long war) never sees the
-         leader ride past the line uncounted: inside the last stretch the pace eases in proportion to the room left, a smooth slow-down
-         that never reaches the line until the lap is decided. The pace itself is learnt from the real laps (V.lap). */
-      /* the schedule aims a little slower than the learnt lap (x1.15): a lap decided early is caught up smoothly, a late one rarely
-         reaches the slow-down */
-      var E=V.exp*1.15, from=V.laps===0?V.pGate:V.pFin+V.laps, to=V.pFin+V.laps+1, span=Math.max(0.05,to-from), lag=Math.min(0.18,span*0.25), el=(t-V.lapT)/E;
-      var start=V.laps===0?V.pGate:from-lag;
-      var want=start+(to-lag-start)*Math.min(1,Math.max(0,el)), cruise=1/E;
-      if(V.phase==="over") want=V.X+0.25;
-      var v=cruise*clamp(1+2.2*(want-V.X)/span,V.phase==="over"?0.4:0.55,1.9);
-      if(V.phase!=="over") v*=clamp((to-V.X)/lag,0,1);
-      var dX=Math.max(0,v*dt); V.X+=v*dt;
-      var k=1-Math.exp(-dt/(simple?420:650)), kl=1-Math.exp(-dt/260);
-      V.riders.forEach(function(r){
-        /* review fix: never backwards, never a zoom: the gap grows by at most 85% of the leader's progress this frame and shrinks by at
-           most the leader's progress: a pass takes a second or two; a rider losing places slows and is passed */
-        var d=r.offT-r.off, st=d*k; if(st>dX*0.85) st=dX*0.85; else if(st<-dX) st=-dX; r.off+=st;
-        r.laneT=r.base+clamp(d/(V.unit*1.4),-1,1)*-0.85;   // the rider moving up (the gap shrinking) swings to the inside to pass
-        r.lane+=(r.laneT-r.lane)*kl;
-      });
-    } else if(still&&mo==="off"&&V.phase!=="gate"){
-      V.riders.forEach(function(r){ r.off=r.offT; r.lane=r.base; });
-    }
+    if(!still) advance(t);
+    else if(mo==="off"&&V.phase!=="gate"){ V.riders.forEach(function(r){ if(!r.cr) { r.off=r.offT; r.lane=r.base; } }); }
     fx.setTransform(1,0,0,1,0,0); fx.clearRect(0,0,fgC.width,fgC.height);
     var tw=C.tw, bw=V.bw, bh=V.bh, list=V.riders.slice();
+    /* the yellow flag: the section glows yellow, a flagger waves it beside the track */
+    if(V.yel){
+      var yc=V.yel.c*C.L, half=C.L*0.075;
+      fx.setTransform(dpr,0,0,dpr,0,0); fx.lineJoin="round"; fx.lineCap="round";
+      strokeCourse(fx,C,yc-half,yc+half); fx.strokeStyle="rgba(255,206,40,.26)"; fx.lineWidth=tw*1.5; fx.stroke();
+      fx.strokeStyle="rgba(255,214,60,.55)"; fx.lineWidth=Math.max(1.5,tw*0.12); fx.setLineDash([tw*0.5,tw*0.4]); fx.stroke(); fx.setLineDash([]);
+      C.at(yc,Q); var ynx=-Math.sin(Q.a), yny=Math.cos(Q.a), side=(Q.y+yny*tw>H-4||Q.x+ynx*tw<2||Q.x+ynx*tw>W-2)?-1:1;
+      var fxp=Q.x+ynx*side*tw*1.25, fyp=Q.y+yny*side*tw*1.25, fhh=Math.max(14,tw*1.2), wv=simple?0:Math.sin((t-V.yel.t0)/110), fw2=fhh*0.7;
+      fx.fillStyle="#2a2a32"; fx.fillRect(fxp-1,fyp-fhh,2,fhh);                                    // the flag's pole
+      fx.fillStyle="#1d1b22"; fx.beginPath(); fx.arc(fxp-fw2*0.2,fyp-fhh*0.18,fhh*0.12,0,TAU); fx.fill();     // the flagger
+      fx.fillRect(fxp-fw2*0.2-fhh*0.07,fyp-fhh*0.08,fhh*0.14,fhh*0.3);
+      fx.fillStyle="#ffd21f"; fx.beginPath(); fx.moveTo(fxp,fyp-fhh); fx.quadraticCurveTo(fxp+fw2*0.5,fyp-fhh+wv*fhh*0.18,fxp+fw2,fyp-fhh+wv*fhh*0.1); fx.lineTo(fxp+fw2,fyp-fhh*0.5+wv*fhh*0.1); fx.quadraticCurveTo(fxp+fw2*0.5,fyp-fhh*0.5+wv*fhh*0.18,fxp,fyp-fhh*0.5); fx.closePath(); fx.fill();
+      fx.strokeStyle="rgba(0,0,0,.55)"; fx.lineWidth=1; fx.stroke();
+    }
     list.sort(function(a,b){ return ((a.me?2:0)+(a.red?1:0))-((b.me?2:0)+(b.red?1:0))||b.place-a.place; });   // the back of the field first; the red plate, then the people, on top
     /* the riders out of cards: parked in the pits (bottom right), dimmed */
-    var parked=0;
+    var parked=0; V.tags=[];
     list.forEach(function(r){
-      if(r.out){
-        fx.globalAlpha=0.38; var spr=sprite(r,1); var px=W-8-bw*0.7*(++parked), py=H-4;
+      if(r.out&&!r.cr){
+        fx.globalAlpha=0.38; var spr=sprite(r,1); var px=(V.hole?W-V.hole.w-8:W-8)-bw*0.7*(++parked), py=H-4;
         if(spr) { fx.setTransform(dpr*0.7,0,0,dpr*0.7,dpr*px,dpr*(py-bh*0.7)); fx.drawImage(spr,0,0,bw,bh); }
         fx.globalAlpha=1; return;
       }
+      if(r.cr){ drawCrash(r,t,simple); return; }
       var s=(V.phase==="gate"?r.gx:(V.X-r.off))*C.L;
       C.at(s,P);
       var ca=Math.cos(P.a), sa=Math.sin(P.a);
@@ -397,15 +515,10 @@ function create(host,opt){
       fx.setTransform(dpr*c2,dpr*s2,-dpr*s2,dpr*c2,dpr*x,dpr*(y-lift));
       if(spr) fx.drawImage(spr,-bw/2,-bh*0.92,bw,bh);
       else { fx.fillStyle=r.color; fx.fillRect(-bw/2,-bh*0.6,bw,bh*0.45); }
-      /* the plate floats above the rider, upright */
-      var pl=plate(r);
-      /* neighbours' plates are staggered (every other place a plate higher) so a close pack's numbers stay readable */
-      /* review fix: on a steep or vertical stretch the riders stack up the screen, so a raised plate would sit on the next bike: there the
-         every-other plate steps sideways towards the infield instead */
-      if(pl){ fx.setTransform(dpr,0,0,dpr,0,0); var pw=pl._w, phh=pl._h, steep=Math.abs(ca)<0.5, odd=r.place%2===1;
-        var top=y-lift-bh*depth*0.98-phh*0.92-(odd&&!steep?phh*0.8:0), left=x-pw/2+(odd&&steep?(x<W/2?1:-1)*(pw*0.5+bw*0.45):0);
-        fx.drawImage(pl,Math.round(clamp(left,1,W-pw-1)),Math.round(Math.max(1,top)),pw,phh); }
+      drawPlate(r,x,y-lift,depth,ca);
     });
+    /* the OUT tags over the field (a rider passing never hides one) */
+    if(V.tags.length){ fx.setTransform(dpr,0,0,dpr,0,0); V.tags.forEach(function(g2){ fx.drawImage(g2[0],g2[1],g2[2],g2[0]._w,g2[0]._h); }); }
     /* the flagger: the white flag (last lap) or the checkered flag, waving at the finish line */
     if(V.flag&&C.flagAt){
       var fa=C.flagAt, fw=tw*1.5, fh=tw*1.0, wave=simple?0:Math.sin((t-V.flagT)/120)*fh*0.18, x0=fa.x, y0=fa.y-tw*1.6;
@@ -417,14 +530,59 @@ function create(host,opt){
     fx.setTransform(1,0,0,1,0,0);
     V.frames=(V.frames|0)+1; V.dirty=false;
   }
+  /* the plate floats above the rider, upright; neighbours' plates are staggered (every other place a plate higher) so a close pack's
+     numbers stay readable; on a steep or vertical stretch the raised plate steps sideways towards the infield instead */
+  function drawPlate(r,x,y,depth,ca,tag){
+    var pl=tag||plate(r); if(!pl) return;
+    var W=V.W, dpr=V.dpr, bh=V.bh, bw=V.bw;
+    fx.setTransform(dpr,0,0,dpr,0,0); var pw=pl._w, phh=pl._h, steep=Math.abs(ca)<0.5, odd=!tag&&r.place%2===1;
+    var top=y-bh*depth*0.98-phh*0.92-(odd&&!steep?phh*0.8:0), left=x-pw/2+(odd&&steep?(x<W/2?1:-1)*(pw*0.5+bw*0.45):0);
+    fx.drawImage(pl,Math.round(clamp(left,1,W-pw-1)),Math.round(Math.max(1,top)),pw,phh);
+  }
+  /* a crash: the bike tumbles (spins, slides off the line, a puff of dirt), lies on its side while the rider gets up; a remount stands it
+     up and rides on; an out leaves it off the track with an OUT tag */
+  function drawCrash(r,t,simple){
+    var C=V.C, c=r.cr, dpr=V.dpr, tw=C.tw, bw=V.bw, bh=V.bh, el=t-c.t0, u=clamp(el/c.dur,0,1), out=c.kind==="out";
+    var tumble=clamp(u/0.3,0,1), down=u>0.3, rise=out?0:clamp((u-0.78)/0.22,0,1);
+    var slide=(1-Math.pow(1-tumble,2))*0.012*C.L, s=c.at*C.L+slide;
+    C.at(s,P); var ca=Math.cos(P.a), sa=Math.sin(P.a), nx=-sa, ny=ca;
+    var latK=out?(c.lane0*(1-tumble)+c.side*2.1*tumble):(c.lane0*(1-tumble)+c.side*1.15*tumble)*(1-rise)+c.lane0*rise;
+    var x=P.x+nx*latK*tw*0.38*(out?1.6:1), y=P.y+ny*latK*tw*0.38*(out?1.6:1);
+    var depth=0.92, face=r.face||1;
+    /* dirt puff */
+    if(!simple&&tumble<1&&el>=0){ fx.setTransform(dpr,0,0,dpr,0,0); fx.globalAlpha=0.5*(1-tumble); fx.fillStyle="#c9a77c";
+      for(var i=0;i<4;i++){ var a=i*1.7+0.4, rr=tw*(0.3+tumble*0.9); fx.beginPath(); fx.arc(x+Math.cos(a)*rr*0.8,y-bh*0.2+Math.sin(a)*rr*0.35,tw*(0.25+tumble*0.4),0,TAU); fx.fill(); } fx.globalAlpha=1; }
+    var rot, sy, hop=0;
+    if(!down){ rot=(simple?1:2.4)*PI*tumble*c.side*face; sy=1; hop=simple?0:Math.sin(PI*tumble)*bh*0.6; }
+    else { rot=(PI*0.5*c.side*face)*(1-rise)*0.18; sy=1-0.55*(1-rise); }
+    var spr=sprite(r,face), alpha=out&&down?0.72:1;
+    fx.globalAlpha=alpha;
+    var cr=Math.cos(rot)*depth, sr=Math.sin(rot)*depth;
+    fx.setTransform(dpr*cr,dpr*sr,-dpr*sr*sy,dpr*cr*sy,dpr*x,dpr*(y-hop));
+    if(spr) fx.drawImage(spr,-bw/2,-bh*0.6,bw,bh); else { fx.fillStyle=r.color; fx.fillRect(-bw/2,-bh*0.5,bw,bh*0.45); }
+    fx.globalAlpha=1;
+    /* the rider: thrown clear, gets up (standing beside the bike), then back on it */
+    if(down&&rise<1){
+      var gu=clamp((u-0.38)/0.3,0,1), hx=x+c.side*face*bw*0.55, hy=y, body=bh*0.62;
+      fx.setTransform(dpr,0,0,dpr,0,0); fx.strokeStyle=r.color; fx.lineWidth=Math.max(2,bw*0.1); fx.lineCap="round";
+      var ang=(1-gu)*PI*0.5*c.side;     /* lying (sideways) to standing */
+      var tx=hx+Math.sin(ang)*body, ty=hy-Math.cos(ang)*body;
+      fx.beginPath(); fx.moveTo(hx,hy); fx.lineTo(tx,ty); fx.stroke();
+      fx.fillStyle="#f2f2f6"; fx.beginPath(); fx.arc(tx+Math.sin(ang)*bw*0.1,ty-Math.cos(ang)*bw*0.1,Math.max(2.5,bw*0.13),0,TAU); fx.fill();
+      fx.strokeStyle="rgba(0,0,0,.55)"; fx.lineWidth=1; fx.stroke();
+    }
+    drawPlate(r,x,y-hop,depth,ca);
+    if(out&&down){ if(!V.outS||V.outS._fs!==V.fs||V.outS._dpr!==V.dpr){ V.outS=outSprite(V.dpr,V.fs); V.outS._fs=V.fs; V.outS._dpr=V.dpr; }
+      var o=V.outS; V.tags.push([o,Math.round(clamp(x-o._w/2,1,V.W-o._w-1)),Math.round(Math.min(V.H-o._h-1,y+bh*0.25))]); }
+  }
   function sprite(r,dir){
     if(!r.spr||r._bw!==V.bw||r._dpr!==V.dpr){ r.spr=bikeSprite(r.color,r.accent,V.bw,V.bh,V.dpr,1); r.sprL=r.spr?bikeSprite(r.color,r.accent,V.bw,V.bh,V.dpr,-1):null; r._bw=V.bw; r._dpr=V.dpr; }
     return dir<0?r.sprL:r.spr;
   }
-  /* plates: every rider on TV and in a gate of up to 22 on a phone; a 40-rider gate on a phone: the top 12, the people and the red plate
-     (the tower lists them all); neighbours' plates are staggered so they stay readable */
+  /* plates: every rider on TV and in a gate of up to 22 on a phone; a 40-rider gate on a phone: the top 12, the people, the red plate and
+     a rider down (the tower lists them all) */
   function plate(r){
-    var n=V.riders.length, tv=document.documentElement.hasAttribute("data-tv"), show=r.me||r.red||tv||n<=22||r.place<12;
+    var n=V.riders.length, tv=document.documentElement.hasAttribute("data-tv"), show=r.me||r.red||tv||n<=22||r.place<12||!!r.cr;
     if(!show) return null;
     if(!r.plate||r._fs!==V.fs||r._pdpr!==V.dpr){ r.plate=plateSprite(r.num,{red:r.red,me:r.me,color:r.color},V.dpr,V.fs); r._fs=V.fs; r._pdpr=V.dpr; }
     return r.plate;

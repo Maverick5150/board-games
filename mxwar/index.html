@@ -215,7 +215,8 @@
     font:var(--fw-ui-strong) var(--fs-micro)/1.3 var(--font-ui); color:var(--text-1); font-variant-numeric:tabular-nums; white-space:nowrap}
   .mx-chip:empty{display:none}
   .mx-chip.is-hot{box-shadow:inset 0 0 0 1.5px var(--gold-200); color:var(--gold-100)}
-  .mx-arena{position:relative; height:clamp(17rem,calc(100svh - 33rem),27rem); border-radius:var(--r-xl); overflow:hidden; user-select:none; -webkit-user-select:none;
+  /* mxcrash: the race is the show: the track fills the arena (taller now that the cards live in a corner window) */
+  .mx-arena{position:relative; height:clamp(18rem,calc(100svh - 27rem),30rem); border-radius:var(--r-xl); overflow:hidden; user-select:none; -webkit-user-select:none;
     background:#2a1d12; box-shadow:inset 0 0 0 1px rgba(231,202,144,.22)}
   .mx-track{position:absolute; inset:0; z-index:0}
   .mx-track svg{display:block; width:100%; height:100%}
@@ -233,7 +234,28 @@
   .mx-gate svg{display:block; width:100%; height:100%}
   .mx-dust{position:absolute; top:4%; height:var(--lane-h,38%); width:30%; z-index:3; pointer-events:none; opacity:0;
     background:radial-gradient(50% 50% at 30% 60%,rgba(214,180,140,.55),rgba(214,180,140,0))}
-  .mx-table{position:absolute; left:0; right:0; bottom:0; top:var(--lane-h,38%); z-index:4}
+  /* the card window (the CEO, 20:06: "wars will be in a tiny box window ... Put it in a corner"): small in the bottom-right corner, a tap /
+     OK makes it bigger and smaller again; its size and the cards' size come from layoutArena (--pip-w / --pip-h / --cw) */
+  .mx-table{position:absolute; right:var(--pip-e,.75rem); bottom:var(--pip-e,.75rem); width:var(--pip-w,10rem); height:var(--pip-h,7.5rem); z-index:5;
+    border-radius:var(--r-lg); background:linear-gradient(180deg,rgba(16,13,20,.9),rgba(8,7,11,.93)); box-shadow:inset 0 0 0 1.5px rgba(231,202,144,.5), 0 .5rem 1.4rem rgba(0,0,0,.55); transform-origin:100% 100%}
+  .mx-table.is-pip .mx-sn, .mx-table.is-pip .mx-you, .mx-table.is-pip .mx-fight__tie{display:none}
+  .mx-table.is-pip .mx-slot{gap:.15rem}
+  .mx-table.is-pip .mx-mid{display:none}
+  .mx-table.is-pip .mx-slot__who, .mx-table.is-pip .mx-fight__who{padding:0; background:none}
+  .mx-table.is-pip .mx-war{inset:1.5rem .3rem .3rem; gap:.3rem}
+  .mx-table.is-big .mx-war{inset:2rem .5rem .5rem}
+  .mx-pipbtn{position:absolute; inset:0; z-index:6; margin:0; padding:0; border:0; border-radius:inherit; background:transparent; color:var(--gold-100); cursor:pointer; -webkit-tap-highlight-color:transparent}
+  .mx-pipbtn__ic{position:absolute; right:.3rem; top:.3rem; display:grid; place-items:center; width:1.6rem; height:1.6rem; border-radius:50%; background:rgba(8,6,4,.82); box-shadow:inset 0 0 0 1px rgba(231,202,144,.5)}
+  .mx-pipbtn__ic .bg-ico{width:1rem; height:1rem}
+  .mx-table.is-big .mx-pipbtn{inset:auto; right:.35rem; top:.35rem; width:2.75rem; height:2.75rem; border-radius:50%}
+  .mx-table.is-big .mx-pipbtn__ic{inset:0; width:auto; height:auto}
+  .mx-table.is-big .mx-pipbtn__ic .bg-ico{width:1.25rem; height:1.25rem}
+  .mx-pipnote{position:absolute; left:50%; top:.25rem; z-index:5; transform:translateX(-50%); padding:.1rem .6rem; border-radius:var(--r-pill); background:#4a1210; box-shadow:inset 0 0 0 1px #f0b48a;
+    font:var(--fw-caps) var(--fs-micro)/1.3 var(--font-ui); color:#ffe6cf; white-space:nowrap; opacity:0; visibility:hidden; pointer-events:none}
+  .mx-pipnote.is-on{opacity:1; visibility:visible}
+  .mx-pipnote.is-hot{background:#7c160f; color:#ffffff}
+  .mx-table.is-pip .mx-pipnote span{display:none}
+  .mx-table.is-big .mx-pipnote{top:.5rem; font-size:var(--fs-sm)}
   .mx-slot{position:absolute; display:grid; justify-items:center; gap:.3rem; transform:translateX(-50%); text-align:center}
   .mx-slot__who{display:flex; align-items:center; gap:.3rem; max-width:100%; font:var(--fw-ui-strong) var(--fs-xs)/1.2 var(--font-ui); color:var(--text-1); white-space:nowrap}
   .mx-slot__who .mx-sn{min-width:0; overflow:hidden; text-overflow:ellipsis}
@@ -275,7 +297,7 @@
   .mx-card.is-win .mx-cf{box-shadow:0 0 0 3px #f0d48a,0 0 0 5px #0b0a12,0 .5rem 1.2rem rgba(0,0,0,.6)}
   .mx-card.is-empty .mx-cb, .mx-card.is-empty .mx-cf{background:rgba(0,0,0,.25); box-shadow:inset 0 0 0 2px rgba(231,202,144,.28)}
   .mx-card.is-empty .mx-cf > *{display:none}
-  .mx-banner{position:absolute; left:50%; top:50%; z-index:8; display:grid; justify-items:center; gap:.3rem; width:max-content; max-width:92%; padding:.6rem 1.4rem .75rem; transform:translate(-50%,-50%);
+  .mx-banner{position:absolute; left:50%; top:.6rem; z-index:8; display:grid; justify-items:center; gap:.3rem; width:max-content; max-width:92%; padding:.6rem 1.4rem .75rem; transform:translate(-50%,0);
     border-radius:var(--r-lg); background:linear-gradient(180deg,rgba(60,14,10,.95),rgba(22,6,6,.95)); box-shadow:inset 0 0 0 1.5px var(--gold-200), 0 .8rem 2rem rgba(0,0,0,.6);
     text-align:center; pointer-events:none; opacity:0; visibility:hidden}
   .mx-banner.is-on{opacity:1; visibility:visible}
@@ -285,10 +307,20 @@
   .mx-banner.is-calm b{color:var(--gold-100)}
   .mx-banner.is-flag{background:linear-gradient(180deg,rgba(16,16,20,.96),rgba(6,6,8,.96))}
   .mx-banner.is-white b{color:#fffdf6}
+  /* the yellow flag (a crash): yellow on black, as the flag */
+  .mx-banner.is-yellow{background:linear-gradient(180deg,rgba(46,38,4,.97),rgba(18,14,2,.97)); box-shadow:inset 0 0 0 2px #ffd21f, 0 .8rem 2rem rgba(0,0,0,.6)}
+  .mx-banner.is-yellow b{color:#ffd84a}
+  .mx-chip.is-yellow{box-shadow:inset 0 0 0 1.5px #ffd21f; color:#ffe17a; background:#241d04}
+  .mx-tag--dnf{background:#5a1410; color:#ffe6cf}
+  .mx-tag--cr{background:#3a3006; color:#ffe17a}
+  .mx-bd__cr{color:#ffe17a}
   .mx-chip .mx-flag{width:1.6em; height:1.05em; margin-right:.05rem; flex:none}
   .mx-chip.is-white{box-shadow:inset 0 0 0 1.5px #fffdf6; color:#fffdf6}
-  .mx-banner .mx-flag{width:3.6rem; height:2.4rem}
-  .mx-flash{position:absolute; inset:0; z-index:7; pointer-events:none; opacity:0;
+  .mx-banner .mx-flag{width:2.7rem; height:1.8rem}
+  /* mxcrash: the banners sit at the top of the track, compact, so the race stays in view */
+  html:not([data-tv]) .mx-banner{padding:.4rem 1rem .5rem; gap:.15rem}
+  html:not([data-tv]) .mx-banner b{font-size:var(--fs-2xl)}
+  .mx-flash{position:absolute; inset:0; z-index:4; border-radius:inherit; pointer-events:none; opacity:0;
     background:radial-gradient(60% 55% at 50% 60%,rgba(255,214,150,.5),rgba(214,120,40,.22) 45%,rgba(120,40,10,0) 75%)}
   .mx-acts{display:flex; flex-wrap:wrap; align-items:stretch; gap:.625rem; margin:.5rem calc(-1 * var(--focus-room)) 0; padding:var(--focus-room)}
   #flipBtn{flex:1 1 11rem; min-width:0; min-height:3.5rem; font-size:var(--fs-xl)}
@@ -470,7 +502,7 @@
   html[data-tv] .mx-next__t{font-size:var(--fs-xl)}
   html[data-tv] .mx-next__acts{gap:1.5rem}
   /* TV: the race. The arena on the left, the timing tower (two columns for a big gate) on the right; exactly one screen tall */
-  html[data-tv] .mx-race{display:grid; grid-template-columns:minmax(0,1fr) 42rem; grid-template-rows:auto minmax(0,1fr) auto auto auto; grid-template-areas:"head tower" "arena tower" "acts tower" "stat tower" "log tower";
+  html[data-tv] .mx-race{display:grid; grid-template-columns:minmax(0,1fr) var(--tw-col,30rem); grid-template-rows:auto minmax(0,1fr) auto auto auto; grid-template-areas:"head tower" "arena tower" "acts tower" "stat tower" "log tower";
     column-gap:1.75rem; width:auto; height:calc(100vh - 4.75rem); padding:.5rem var(--gutter) 1rem}
   html[data-tv] .mx-rhead{grid-area:head}
   html[data-tv] .mx-arena{grid-area:arena; height:auto}
@@ -503,8 +535,14 @@
   html[data-tv] .mx-tw li{grid-template-columns:1.6rem auto minmax(0,1fr) 2.6rem 2.2rem 2.4rem}
   html[data-tv] #flipBtn{flex:1 1 0}
   html[data-tv] #skipBtn{flex:1 1 0}
-  html[data-tv] .mx-banner b{font-size:var(--fs-5xl)}
+  html[data-tv] .mx-banner b{font-size:var(--fs-3xl)}
   html[data-tv] .mx-banner span{font-size:var(--fs-lg)}
+  html[data-tv] .mx-table.is-pip .mx-war{inset:2.2rem .5rem .5rem}
+  html[data-tv] .mx-table.is-big .mx-war{inset:3rem .75rem .75rem}
+  html[data-tv] .mx-pipbtn__ic{width:2.4rem; height:2.4rem; right:.4rem; top:.4rem}
+  html[data-tv] .mx-pipbtn__ic .bg-ico{width:1.4rem; height:1.4rem}
+  html[data-tv] .mx-table.is-big .mx-pipbtn{width:3rem; height:3rem}
+  html[data-tv] .mx-pipnote{top:.4rem}
   html[data-tv] .mx-bike svg{width:2.6rem; height:1.7rem}
   html[data-tv] body:not(.mx-in-setup) .bg-toast{left:calc(100vw - var(--gutter) - 21rem); max-width:30rem}
   html[data-tv] .mx-sacts, html[data-tv] #fullBox .bg-sheet__options{gap:1.5rem}
@@ -726,19 +764,22 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
       <span class="mx-chip is-hot" id="lapChip"></span>
       <span class="mx-chip" id="hsChip"></span>
       <span class="mx-chip" id="fieldChip"></span>
+      <span class="mx-chip mx-ychip" id="yelChip"></span>
     </div>
     <div class="mx-arena" id="arena" data-stage-solid aria-label="The track">
       <div class="mx-track" id="trackArt" aria-hidden="true"></div>
       <div class="mx-lane" id="lane" aria-hidden="true"></div>
       <div class="mx-dust" id="dust" aria-hidden="true"></div>
       <div class="mx-gate" id="gate" aria-hidden="true"></div>
-      <div class="mx-table" id="table">
+      <div class="mx-table is-pip" id="table">
         <div class="mx-slot" id="youSlot"><span class="mx-slot__lab" id="youLab">Your card</span><div class="mx-card" id="youCard"></div><span class="mx-slot__who" id="youWho"></span></div>
         <div class="mx-mid" id="midNote"><b id="midBig"></b><span id="midSmall"></span></div>
         <div class="mx-slot" id="topSlot"><span class="mx-slot__lab" id="topLab">Top card</span><div class="mx-card" id="topCard"></div><span class="mx-slot__who" id="topWho"></span></div>
         <div class="mx-war" id="warRow"></div>
+        <div class="mx-flash" id="flash" aria-hidden="true"></div>
+        <span class="mx-pipnote" id="pipNote"></span>
+        <button class="mx-pipbtn" id="pipBtn" type="button" aria-expanded="false" aria-label="Show the cards bigger"><span class="mx-pipbtn__ic" id="pipIc"></span></button>
       </div>
-      <div class="mx-flash" id="flash" aria-hidden="true"></div>
       <div class="mx-banner" id="banner" aria-live="polite"><b id="bannerT"></b><span id="bannerS"></span></div>
     </div>
     <div class="mx-acts" id="acts" data-toast-avoid>
