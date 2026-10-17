@@ -103,6 +103,69 @@ function focusTV(el){ var B=BG(); if(el&&B&&B.focus&&B.focus.enabled&&onTV()&&el
 function armBack(){ var B=BG(); if(B&&B.back&&B.back.arm) B.back.arm(); }
 function hubHref(){ var B=BG(); return B&&B.back&&B.back.hub?B.back.hub():"../index.html"; }
 
+/* ================= the announcers (mxwar/booth.js = MXWar.Booth; mxwar/announce.js is the commentator, ui/voice.js the voice) =================
+   The booth is fed the SAME event arrays this page plays (startRace, step / apply, simRace) and says what the commentator decides, one line at a time,
+   with captions in the band under the track (on top, over a sheet or the season). The Menu (setup) pauses it; the battle board and the other
+   sheets that are not part of the show silence it; a save keeps its memory. The race view tells it what is on screen through ONE function,
+   annShown: the 2D view calls it for the crash, the holeshot and the flag, the 3D view will call it for a pass and a lapped rider too.
+   Settings (On / Captions only / Off, Chatter, volume, the two voices) are kept on this device; Off adds nothing to the page and slows nothing. */
+var BOOTH=null, QUIET_BOXES=["boardBox","fullBox","newBox","lineBox","skipBox","timesBox"], capEls=null;
+function annOn(){ return !!(BOOTH&&BOOTH.callsRace()); }
+function annFeed(ev){ if(BOOTH&&G) try{ BOOTH.feed(G,ev); }catch(e){} }
+function annShown(kind,info){ if(BOOTH) try{ BOOTH.shown(kind,info); }catch(e){} }
+function annNew(st){ if(ui.gate){ try{ ui.gate.d.cancel(); }catch(e){} ui.gate=null; } if(BOOTH) try{ BOOTH.newSeason(st||null); }catch(e){} }
+function annTrack(layout,sectionAt){ if(BOOTH) try{ BOOTH.setTrack({layout:layout||null,sectionAt:sectionAt||null}); }catch(e){} }
+function sheetIsOpen(id){ var B=BG(), el=$(id); if(!el) return false; if(luxe()&&B.sheet.isOpen) return B.sheet.isOpen(el); return el.classList.contains("show"); }
+function quietUp(){ for(var i=0;i<QUIET_BOXES.length;i++) if(sheetIsOpen(QUIET_BOXES[i])) return true; return false; }
+/* asked on every tick: the Menu pauses the booth, a sheet that is not the show silences it; and where the captions show: in the band under the
+   track while the race is on screen, on top (just above the open sheet, or under the top bar) otherwise */
+function annCtx(){
+  var hold=!!G&&setupShown(), quiet=!hold&&quietUp(), B=BG();
+  var top=!setupShown()&&(ui.view!=="race"||sheetUp());   /* never over the Menu (its "Hear the announcers" shows its line in the page itself) */
+  if(top!==ui.capTop){ ui.capTop=top; document.body.classList.toggle("mx-capfix-on",top); }
+  if(top&&capEls&&capEls.top){
+    var st=B&&B.sheet&&B.sheet.top?B.sheet.top():null, r=st?st.getBoundingClientRect():null, off=r&&r.top>0?Math.round(window.innerHeight-r.top+8):"";
+    var el=capEls.top.el; if(el.getAttribute("data-b")!==String(off)){ el.setAttribute("data-b",String(off)); if(off!=="") el.style.setProperty("--cap-bot",off+"px"); else el.style.removeProperty("--cap-bot"); }
+    if(st!==ui.capSheet){ ui.capSheet=st; el.classList.toggle("is-over-sheet",!!st); }
+  }
+  return {hold:hold,quiet:quiet};
+}
+function annSync(){ if(BOOTH) try{ BOOTH.tick(annCtx()); }catch(e){} }
+/* the page's mode: html[data-ann] adds the caption band under the track (Off leaves the page exactly as it was) */
+function annMode(){
+  var on=annOn(), h=document.documentElement;
+  if(on!==h.hasAttribute("data-ann")){ if(on) h.setAttribute("data-ann",""); else h.removeAttribute("data-ann"); if(G&&!setupShown()&&ui.view==="race"&&ui.rc) setTimeout(function(){ layoutArena(); if(!busy) renderRace(); },0); }
+}
+/* the people's own spelling of how to say their name: typed in the rider card, kept by name on this device */
+function annNames(){ var m={}, a=MX.Booth?MX.Booth.say.all():{}; for(var k in a) m[k]=a[k]; return m; }
+/* the start procedure at the gate (booth.js): a person's tap runs it, watching or Auto lets it run by itself; null = the announcers are Off */
+function annGate(rc,hs){
+  if(!annOn()) { if(ui.gate){ try{ ui.gate.d.cancel(); }catch(e){} ui.gate=null; } return false; }
+  var key=gen+"|"+G.rkey, people=hs.length>0&&!cfg.auto, my=gen;
+  if(!ui.gate||ui.gate.key!==key||ui.gate.d.state().cancelled){
+    var d=BOOTH.gate({G:G,label:ui.label,people:people,
+      drop:function(){ if(my!==gen||!G||ui.rc!==rc||rc.phase!=="gate"||rc.over) return true; if(busy||setupShown()||ui.view!=="race") return false; var ok=act({t:"drop"}); if(ok) ui.gate=null; return !!ok; },
+      stage:function(name){ if(my!==gen) return;
+        if(name==="board") banner("30-second board","The riders are on the gate",dl(1700),"is-calm");
+        else if(name==="side") banner("Board sideways","The gate drops any moment",dl(1500),"is-calm");
+        syncControls(); }});
+    if(!d) return false;
+    ui.gate={d:d,key:key};
+  }
+  ui.gate.d.people(people);
+  if(intent){ intent=0; ui.gate.d.go(); }
+  else if(people) focusTV($("flipBtn"));
+  syncControls();
+  return true;
+}
+function annGateText(gs,people){
+  if(gs&&gs.stage==="board") return "The 30-second board is up. Tap again to drop the gate now.";
+  if(gs&&gs.stage==="side") return "The board is sideways: the gate drops any moment.";
+  if(gs&&gs.stage==="drop") return "The gate drops!";
+  return people?"Riders ready: drop the gate.":"The show is opening (Auto): tap Start now to skip ahead.";
+}
+function annGateStage(){ var g0=ui.gate&&ui.gate.d?ui.gate.d.state():null; return g0&&!g0.done&&!g0.cancelled?g0:null; }
+
 /* ================= the season files (one per year, loaded on demand; sw.js caches each on first use) ================= */
 var loading={};
 function loadSeason(id){
@@ -134,14 +197,17 @@ function bikeOptions(cur){
 }
 function mountNames(){
   var B=BG(); if(!B||!B.names||nameUI) return;
-  nameUI=B.names.mount("#nameCard",{count:Math.max(1,cfg.humans),seat:function(i){ return i+1; },onChange:function(){ syncStart(); },
+  nameUI=B.names.mount("#nameCard",{count:Math.max(1,cfg.humans),seat:function(i){ return i+1; },onChange:function(){ syncStart(); syncSay(); },
     label:function(i,n){ return n>1?"Rider "+(i+1)+" name":"Your name"; },
     extra:function(i){ var r=rx(i); return '<div class="mx-rx"><label>Team<select class="bg-select" data-rx="bike" data-i="'+i+'">'+bikeOptions(r.bike)+"</select></label>"+
       '<label>Number<input class="bg-input" type="text" inputmode="numeric" maxlength="3" autocomplete="off" data-rx="num" data-i="'+i+'" value="'+esc(r.num)+'" placeholder="Any"></label></div>'+
-      '<p class="mx-numst" data-rx="st" data-i="'+i+'" aria-live="polite"></p><div class="mx-free" data-rx="free" data-i="'+i+'"></div>'; }});
+      '<p class="mx-numst" data-rx="st" data-i="'+i+'" aria-live="polite"></p><div class="mx-free" data-rx="free" data-i="'+i+'"></div>'+
+      '<label class="mx-saylab">How should the announcers say your name?<input class="bg-input" type="text" maxlength="30" autocomplete="off" data-rx="say" data-i="'+i+'" value="'+esc(annSay(i))+'" placeholder="As typed"></label>'; }});
   var nc=$("nameCard");
   nc.addEventListener("input",function(e){ var t=e.target; if(!t.getAttribute||t.getAttribute("data-rx")!=="num") return; var v=cleanNum(t.value); if(v!==t.value) t.value=v; rx(+t.getAttribute("data-i")).num=v; writeRiders(); syncNums(); });
-  nc.addEventListener("change",function(e){ var t=e.target, k=t.getAttribute&&t.getAttribute("data-rx"); if(!k||k==="st"||k==="free") return; var r=rx(+t.getAttribute("data-i")); if(k==="bike") r.bike=t.value; else r.num=cleanNum(t.value); writeRiders(); syncNums(); });
+  nc.addEventListener("change",function(e){ var t=e.target, k=t.getAttribute&&t.getAttribute("data-rx"); if(!k||k==="st"||k==="free") return;
+    if(k==="say"){ var nm=humanNames(cfg.humans)[+t.getAttribute("data-i")]; if(nm&&MX.Booth){ MX.Booth.say.set(nm,t.value); t.value=MX.Booth.say.get(nm); } return; }   /* the announcers' spelling of the name, kept by name */
+    var r=rx(+t.getAttribute("data-i")); if(k==="bike") r.bike=t.value; else r.num=cleanNum(t.value); writeRiders(); syncNums(); });
   nc.addEventListener("click",function(e){ var b=e.target.closest&&e.target.closest("button[data-free]"); if(!b) return; var i=+b.getAttribute("data-i"), n=b.getAttribute("data-free"); rx(i).num=n; writeRiders();
     var inp=nc.querySelector('input[data-rx="num"][data-i="'+i+'"]'); if(inp) inp.value=n; syncNums(); focusIn(inp); });
 }
@@ -293,7 +359,7 @@ function drawRiders(){
   cfg.humans=clamp(cfg.humans|0,0,S.MAXH||8);
   stepper($("humanSeg"),onTV()?"riders on this TV":"riders on this phone",function(){ return cfg.humans; },function(v){ cfg.humans=clamp(v,0,S.MAXH||8); },0,S.MAXH||8);
   if(nameUI) nameUI.count(Math.max(1,cfg.humans));
-  syncNums();
+  syncNums(); syncSay();
   $("nameCard").closest("section").hidden=cfg.humans===0;
   var si=seasonInfo(cfg.sid), F=si&&IDX.formats[si.format], field=F?RD.fieldSize(F):0;
   $("fieldDesc").textContent=si?(cfg.humans?(cfg.humans===1?"You race":"Your "+cfg.humans+" riders race")+" every round of "+si.year+" against the real riders of that season ("+si.riders+" in the research); a night needs "+field+" riders"+(si.riders+cfg.humans<field?", so labelled privateers fill the gate.":"."):
@@ -475,8 +541,8 @@ function syncRules(){
   $("rulesToggle").setAttribute("aria-expanded",String(open)); $("houseRules").hidden=!open; $("rulesLegend").hidden=!open;
 }
 $("rulesToggle").addEventListener("click",function(){ ui.rulesOpen=!ui.rulesOpen; syncRules(); });
-function drawSetup(){ fixSeason(); drawSeries(); drawSeasonCard(); drawRiders(); drawLength(); drawRules(); $("skillNote").textContent=BR.skillNote; syncStart(); }
-function setSpeedSeg(){ cfg.speed=normSpeed(cfg.speed); window.bgGameSpeed=cfg.speed; $("speedSeg").querySelectorAll("button").forEach(function(x){ var on=x.dataset.s===cfg.speed; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
+function drawSetup(){ fixSeason(); drawSeries(); drawSeasonCard(); drawRiders(); drawLength(); drawRules(); drawAnn(); $("skillNote").textContent=BR.skillNote; syncStart(); }
+function setSpeedSeg(){ cfg.speed=normSpeed(cfg.speed); window.bgGameSpeed=cfg.speed; if(BOOTH) BOOTH.setSpeed(cfg.speed); $("speedSeg").querySelectorAll("button").forEach(function(x){ var on=x.dataset.s===cfg.speed; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
 $("speedSeg").querySelectorAll("button").forEach(function(b){ b.addEventListener("click",function(){ cfg.speed=b.dataset.s; setSpeedSeg(); save(); drawLength(); }); });
 function setSkillSeg(){ cfg.skill=normSkill(cfg.skill); if(G&&G.o) G.o.skill=cfg.skill; $("skillSeg").querySelectorAll("button").forEach(function(x){ var on=x.dataset.k===cfg.skill; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
 $("skillSeg").querySelectorAll("button").forEach(function(b){ b.addEventListener("click",function(){ cfg.skill=b.dataset.k; setSkillSeg(); save(); }); });
@@ -485,6 +551,56 @@ $("autoRow").addEventListener("click",function(){ setAuto(!cfg.auto); save(); })
 $("autoBtn").addEventListener("click",function(){ setAuto(!cfg.auto); save(); syncControls(); drive(); });
 $("seasonCard").addEventListener("click",openYearPicker);
 setSpeedSeg();
+/* ================= the announcers' settings (the setup page, also the in-game Menu) =================
+   Announcers: On (voices and captions) / Captions only / Off; Chatter: Less / Normal / More; Volume: Soft / Medium / Loud; the two voices when
+   this device has several to choose from; "Hear the announcers". All kept on this device (booth.js). */
+function annSeg(boxId,attr,items,cur,onPick){
+  var box=$(boxId); if(!box) return;
+  keepFocus(box,attr,function(){
+    box.innerHTML=segHTML(items,cur,attr);
+    box.querySelectorAll("button").forEach(function(b){ b.addEventListener("click",function(){ onPick(b.getAttribute(attr)); }); });
+  });
+}
+function annVoiceSelect(id,list,cur,def){
+  var el=$(id); if(!el) return;
+  var names=list.map(function(v){ return v.name; }), pick=cur&&names.indexOf(cur)>=0?cur:"";
+  el.innerHTML='<option value="">Automatic'+(def?" ("+esc(def)+")":"")+"</option>"+list.map(function(v){ return '<option value="'+esc(v.name)+'"'+(v.name===pick?" selected":"")+">"+esc(v.name+(v.lang?" · "+v.lang:""))+"</option>"; }).join("");
+}
+function drawAnn(){
+  var sec=$("annSec"); if(!sec) return;
+  if(!BOOTH||!BOOTH.available()){ sec.hidden=true; return; }
+  sec.hidden=false;
+  var s=BOOTH.settings(), v=BOOTH.voices(), off=s.mode==="off";
+  annSeg("annSeg","data-an",[["voice","On"],["captions","Captions only"],["off","Off"]],s.mode,function(x){ BOOTH.set("mode",x); annMode(); drawAnn(); });
+  $("annMore").hidden=off;
+  annSeg("annChat","data-ch",[["less","Less"],["normal","Normal"],["more","More"]],s.chatter,function(x){ BOOTH.set("chatter",x); drawAnn(); });
+  var vol=[0.45,0.75,1].reduce(function(b,x){ return Math.abs(x-s.vol)<Math.abs(b-s.vol)?x:b; },1);
+  annSeg("annVol","data-vo",[["0.45","Soft"],["0.75","Medium"],["1","Loud"]],String(vol),function(x){ BOOTH.set("vol",+x); drawAnn(); });
+  var pick=v.engine==="speech"&&v.list.length>1&&s.mode==="voice";
+  $("annVoices").hidden=!pick||off;
+  if(pick){ annVoiceSelect("annVa",v.list,s.a,v.a); annVoiceSelect("annVb",v.list,s.b,v.b); }
+  $("annVol").parentNode.hidden=s.mode!=="voice";
+  $("annHear").hidden=off;
+  var note;
+  if(off) note="The announcers are off: the race runs in silence.";
+  else if(s.mode==="captions") note="Captions only: Wes Calloway and Hutch Bramlett are shown on screen, nothing is spoken.";
+  else if(!v.ready) note="Looking for the voices on this device...";
+  else if(v.engine==="captions") note="No English voice is available on this device, so Wes Calloway and Hutch Bramlett show as captions.";
+  else note="Wes Calloway calls the race and Hutch Bramlett adds the colour, out loud and in captions"+(v.engine==="speech"&&v.a?" (voices: "+v.a+(v.b&&v.b!==v.a?" and "+v.b:"")+")":v.native?" (the app's own voices)":"")+".";
+  $("annNote").textContent=note;
+}
+if(!drawAnn.bound){
+  drawAnn.bound=true;
+  $("annVa").addEventListener("change",function(e){ if(BOOTH){ BOOTH.set("a",e.target.value); drawAnn(); } });
+  $("annVb").addEventListener("change",function(e){ if(BOOTH){ BOOTH.set("b",e.target.value); drawAnn(); } });
+  $("annHear").addEventListener("click",function(){
+    if(!BOOTH) return;
+    var a=BOOTH.sample("a"), b=BOOTH.sample("b",true);
+    $("annHearNote").textContent=(a||"")+(b?" "+b:"");
+  });
+}
+function annSay(i){ var nm=humanNames(cfg.humans)[i]; return nm&&MX.Booth?MX.Booth.say.get(nm):""; }
+function syncSay(){ document.querySelectorAll('#nameCard input[data-rx="say"]').forEach(function(inp){ var v=annSay(+inp.getAttribute("data-i")); if(document.activeElement!==inp&&inp.value!==v) inp.value=v; }); }
 function deviceCopy(){
   var tv=onTV(), t=tv?"Riders on this TV":"Riders on this phone";
   $("humansTitle").textContent=t; $("humanSeg").setAttribute("aria-label",t);
@@ -531,7 +647,7 @@ function showSetup(on,resume){
     armBack();
     if(!busy) drive();
   }
-  barTitle(); trackShow();
+  barTitle(); trackShow(); annSync();
   var B=BG(); if(luxe()&&B.toast&&B.toast.place) B.toast.place();
 }
 function setView(v,keepBody){
@@ -556,7 +672,7 @@ function barTitle(){
 }
 
 /* ================= saving ================= */
-function pack(){ if(!G) return null; return {G:JSON.parse(JSON.stringify(G)),cfg:JSON.parse(JSON.stringify(cfg)),view:ui.view}; }
+function pack(){ if(!G) return null; var pk={G:JSON.parse(JSON.stringify(G)),cfg:JSON.parse(JSON.stringify(cfg)),view:ui.view}; var as=BOOTH?BOOTH.state():null; if(as) pk.ann=as; return pk; }   /* ann: the announcers' variety memory (plain JSON; a save without it loads as before) */
 function save(){ if(!G) return; if(G.over&&ui.finished===gen){ Saves.del(GAME,"auto"); return; } var pk=pack(); if(pk) Saves.auto(GAME,pk); }
 function loadSaved(d){
   if(!d||!d.G||d.G.id!=="mxwar"||d.G.v!==S.VER) throw new Error("not a Motocross War save");
@@ -564,6 +680,7 @@ function loadSaved(d){
   var bad=S.check(d.G); if(bad.length) throw new Error("save fails its check: "+bad[0]);
   gen++; clearTimeout(timer); busy=false; intent=0; skipQ=false;
   G=d.G; var c=d.cfg||{}; for(var k in c) if(Object.prototype.hasOwnProperty.call(cfg,k)) cfg[k]=c[k];
+  annNew(d.ann&&d.ann.v===1?d.ann:null);   /* the announcers: a fresh commentator with the memory this save kept (an older save has none) */
   cfg.length=RD.MODE_OF[cfg.length]||"real";
   cfg.speed=normSpeed(cfg.speed); setSpeedSeg(); cfg.skill=normSkill((G.o&&G.o.skill)||cfg.skill); setSkillSeg(); setAuto(cfg.auto);
   resetUI();
@@ -678,7 +795,7 @@ function startSeason(){
     if(my!==gen) return;
     var B=BG(); if(B&&B.toast&&B.toast.hide) B.toast.hide();
     try{ G=S.newSeason(D,IDX,seasonOpts(),humanList()); }catch(e){ toast("This season can't be raced: "+e.message); return; }
-    resetUI(); ui.view="season";
+    resetUI(); ui.view="season"; annNew(null);
     Sound.music(GAME);
     save(); showSetup(false); setView("season"); armBack();
     focusTV($("goBtn"));
@@ -784,7 +901,8 @@ $("fullBtn").addEventListener("click",function(){
 function raceLabel(){ if(!G||!G.round) return ""; var k=G.rkey; var r=G.round.races.filter(function(x){ return x.key===k; })[0]; return r?r.label:""; }
 function enterRace(){
   if(!G||G.over) return;
-  if(!G.race){ S.startRace(G); }
+  if(!G.race){ var ev0=S.startRace(G); annFeed(ev0); }   /* the race event opens the show: the welcome, the intros, the engines */
+  if(ui.gate){ try{ ui.gate.d.cancel(); }catch(e){} ui.gate=null; }
   skipQ=false; ui.rc=G.race; ui.rmap=G.rmap.slice(); ui.label=raceLabel(); ui.hs=null; ui.lap=0; ui.lastWin=null; disp=null; ui.lastCards={}; ui.bikes={}; ui.order=[]; ui.flagged=false; ui.trkKey=null; ui.lapAt=0;
   save();
   setView("race");
@@ -817,8 +935,9 @@ function pipSize(W,H){
   var h=tv?Math.round(rem*8.4):Math.round(Math.max(rem*7.4,Math.min(w*0.78,H*0.36)));
   return {w:w,h:h};
 }
+function capBandH(){ var el=$("capBand"); return el&&document.documentElement.hasAttribute("data-ann")?el.offsetHeight:0; }
 function layoutArena(){
-  var ar=$("arena"), W=ar.clientWidth, H=ar.clientHeight; if(!W||!H) return false;
+  var ar=$("arena"), capH=capBandH(), W=ar.clientWidth, H=ar.clientHeight-capH; if(!W||H<=0) return false;   /* the announcers' caption band is under the lane (the lane and the cards window sit above it) */
   var rem=remPx(), tv=onTV(), big=pipBig(), tb=$("table");
   ar.style.setProperty("--lane-h",H+"px");
   var small=pipSize(W,H), edge=Math.round(rem*(tv?1:.75));
@@ -879,6 +998,7 @@ function trackRiders(){
   ui.trkKey=key;
   var c=G.cal[Math.min(G.ri,G.cal.length-1)], red=redId();
   T.setLayout(G.series==="mx"?"outdoor":"stadium",(c.venue||"")+"|"+(c.city||"")+"|"+G.year);
+  annTrack(T.layout&&T.layout.features?T.layout:null,typeof T.sectionAt==="function"?T.sectionAt:null);   /* the round's sections for "crash in the whoops": the 2D track has none, the 3D track hands its layout over here */
   T.setRiders(rc.r.map(function(p,s){ var R=G.riders[seatId(s)], m=A.mk(R.bike); return {s:s,color:m[0],accent:m[0]==="#f2f4f8"?"#183a8c":"#f2f2f6",plate:R.plate,red:R.id===red,me:R.kind==="human"}; }));
   T.setPace(lapGuess()); if(T.setFirst) T.setFirst(firstMs());
   if(rc.phase==="gate") T.gate(true);
@@ -1010,12 +1130,14 @@ function syncControls(){
   var rc=ui.rc, f=$("flipBtn"), auto=$("autoBtn"), skip=$("skipBtn"), stat=$("stat");
   if(!G||ui.view!=="race"||!rc){ return; }
   var hs=raceHumans(), alive=humansAlive(), need=rc.over?[]:RC.need(rc);
-  var gate=rc.phase==="gate";
-  f.hidden=!hs.length||rc.over||(!gate&&!alive.length);
+  var gate=rc.phase==="gate", proc=gate&&annOn(), gs=proc?annGateStage():null;   /* proc: the announcers run the start procedure (booth.js) */
+  f.hidden=(!hs.length&&!proc)||rc.over||(!gate&&!alive.length);
   auto.hidden=!hs.length||rc.over;
   skip.hidden=!!rc.over;   /* mxlaps: Skip to the finish on every race (it asks first) */
   var lbl="Flip", sub="";
-  if(gate){ lbl="Drop the gate"; sub=hs.length>1?"then every rider turns a card":""; }
+  if(gate){ lbl="Drop the gate"; sub=hs.length>1?"then every rider turns a card":"";
+    if(proc&&!hs.length){ lbl="Start now"; sub="skip the introduction"; }
+    else if(proc&&gs&&gs.stage!=="open"){ lbl="Drop now"; sub=""; } }
   else if(rc.phase==="war"&&need.length){ lbl="War: 3 down, flip the 4th"; }
   if(need.length&&(G.humans.length>1)){ var R=G.riders[seatId(need[0])]; sub=R.name+" · #"+R.plate; }
   $("flipLabel").textContent=lbl; $("flipSub").textContent=sub; $("flipSub").hidden=!sub;
@@ -1024,7 +1146,7 @@ function syncControls(){
   if(skipQ&&!rc.over) t="Skipping to the finish...";
   else if(rc.over) t="Checkered flag.";
   else if(!hs.length) t=G.humans.length?"You're not in this race: watch it, or skip to the finish.":"Watching the pros.";
-  else if(gate) t=cfg.auto?"The gate drops by itself (Auto).":"Riders ready: drop the gate.";
+  else if(gate) t=proc?annGateText(gs,hs.length>0&&!cfg.auto):cfg.auto?"The gate drops by itself (Auto).":"Riders ready: drop the gate.";
   else if(!alive.length) t=hs.some(function(s){ return rc.r[s].dnf&&rc.r[s].dnf.why==="crash"; })?"Crashed out: the race runs on without you. Skip to the finish?":"Out of cards: the race runs on without you. Skip to the finish?";
   else if(need.length&&intent&&ui.queued) t=(G.humans.length>1?G.riders[seatId(need[0])].name+"'s card is in":"Your card is in")+": it turns as the leader starts lap "+Math.min(rc.battle+1,rc.o.len)+".";
   else if(busy) t=need.length?"Next: "+(G.humans.length>1?G.riders[seatId(need[0])].name+" flips":"your flip"):"";
@@ -1032,7 +1154,7 @@ function syncControls(){
   else if(!need.length) t=intent?"Your flip is queued for the next lap.":"";
   else if(need.length) t=cfg.auto?"Auto: your card turns by itself.":(rc.phase==="war"?"War! Lay 3 down and turn the 4th.":(G.humans.length>1?G.riders[seatId(need[0])].name+": turn your card.":"Turn your card."));
   stat.textContent=t;
-  $("hintOk").textContent=gate&&hs.length?"Drop the gate":need.length?"Flip":f.hidden&&!skip.hidden?"Skip to the finish":"Flip";
+  $("hintOk").textContent=gate&&(hs.length||proc)?(proc&&!hs.length?"Start now":"Drop the gate"):need.length?"Flip":f.hidden&&!skip.hidden?"Skip to the finish":"Flip";
   if(onTV()&&!busy){ var mc=mainControl(), a=document.activeElement; if(mc&&!mc.hidden&&(a===document.body||!a||(a.disabled)||a.hidden||!$("race").contains(a))&&!sheetUp()) focusTV(mc); }
 }
 function sheetUp(){ var B=BG(); return !!(B&&B.sheet&&B.sheet.top&&B.sheet.top())||!!(B&&B.win&&B.win.isOpen&&B.win.isOpen()); }
@@ -1054,7 +1176,7 @@ function confirmSkip(){
 }
 $("pipIc").innerHTML=A.pipIcon(true);
 $("pipBtn").addEventListener("click",function(ev){ ev.stopPropagation(); setPip(!pipBig(),true); });
-$("arena").addEventListener("click",function(ev){ if(ev.target&&ev.target.closest&&ev.target.closest("#table")) return; if(ui.rc&&!ui.rc.over&&raceHumans().length&&!busy&&(ui.rc.phase==="gate"||RC.need(ui.rc).length)){ intent=1; drive(); } });
+$("arena").addEventListener("click",function(ev){ if(ev.target&&ev.target.closest&&ev.target.closest("#table")) return; if(ui.rc&&!ui.rc.over&&raceHumans().length&&!busy&&(ui.rc.phase==="gate"||RC.need(ui.rc).length)){ intent=1; drive(); } else if(ui.rc&&ui.rc.phase==="gate"&&!ui.rc.over&&!busy&&annGateStage()){ intent=1; drive(); } });
 
 /* ================= the turn: queue the person's flip, pace the field ================= */
 function later(my,fn,ms){
@@ -1076,6 +1198,7 @@ function drive(){
   var my=gen, hs=raceHumans();
   syncControls();
   if(rc.phase==="gate"){
+    if(annGate(rc,hs)) return;   /* the announcers are on: the booth runs the start procedure (the opening, the 30-second board, sideways) and drops the gate */
     if(hs.length&&!cfg.auto){ if(intent){ intent=0; act({t:"drop"}); } else focusTV($("flipBtn")); return; }
     later(my,function(){ act({t:"drop"}); },dl(hs.length?900:1300)); return;
   }
@@ -1104,6 +1227,7 @@ function act(m){
   else if(m.t==="flipAll"){ RC.need(rc).slice().forEach(function(s){ var r=S.apply(G,{t:"flip",s:s}); if(r.ok) ev=ev.concat(r.ev); }); }
   else { var r=S.apply(G,m); if(!r.ok){ syncControls(); setTimeout(drive,0); return false; } ev=r.ev; }
   try{ BR.observe(G,ev); }catch(e){}
+  annFeed(ev);   /* the booth hears the SAME events the page now plays (the commentator reads G after the batch) */
   save();
   var my=gen; busy=true; disp={cnt:pre}; syncControls();
   playBatch(my,ev).then(null,function(e){ try{ console.warn("mxwar: animation",e); }catch(x){} }).then(function(){
@@ -1193,6 +1317,7 @@ async function animEvent(my,e){
       if(e.kind==="out") disp.cnt[e.s]=0;
       ui.crashQ=(ui.crashQ||[]).concat([{s:e.s,kind:e.kind,depth:e.depth}]);
       if(T5) T5.crash(e.s,e.kind);
+      annShown("crash",{s:e.s});   /* the bike is down on screen: the call lands with the picture */
       Sound.sfx(e.kind==="out"?"lose":"bump");
       var you=Rc.kind==="human"&&/^you$/i.test(Rc.name);
       logLine("Crash! #"+Rc.plate+" "+Rc.name+(e.kind==="out"?(you?" lose the ":" loses the ")+warWordP(e.depth).toLowerCase()+(you?" and are out of the race.":" and is out of the race."):(you?" lose the double war, go down and remount.":" loses the double war, goes down and remounts.")));
@@ -1232,7 +1357,7 @@ async function animEvent(my,e){
       return;
     }
     case "holeshot": {
-      ui.hs=e.s; chips(); Sound.sfx("bell");
+      ui.hs=e.s; chips(); Sound.sfx("bell"); annShown("holeshot",{s:e.s});
       var hl=null; try{ hl=BR.react(G,e); }catch(x){} logLine(hl||"Holeshot: "+nm(e.s)+"!");
       var R=G.riders[seatId(e.s)];
       await banner("Holeshot!","#"+R.plate+" "+R.name+(R.bike?" · "+R.bike:""),dl(1100),"is-calm");
@@ -1254,6 +1379,7 @@ async function animEvent(my,e){
       else if(ui.lapAt&&!skipQ){ $("stat").textContent="Last lap: the riders ride to the flag."; for(var gj=0;gj<2400;gj++){ await hold(my); if(my!==gen) return; if(skipQ) break; var mc=ui.lapAt+lapMs()-Date.now(); if(mc<=0) break; await sleep(Math.min(mc,250)); } }
       ui.lap=Math.min(e.b,rc.o.len); chips();
       var T4=track(); if(T4){ T4.lap(e.b,rc.o.len); T4.setFlag("checkered"); }
+      annShown("checkered",{s:e.order[0]});
       var w=e.order[0], hw=isHumanId(seatId(w));
       ui.order=e.order.slice(); renderTower({win:w});
       Sound.sfx(hw?"win":"conquer");
@@ -1336,6 +1462,8 @@ function simNow(){
   if(!G||G.over||busy) return;
   var wasLive=!!G.race, ev=S.simRace(G);
   try{ BR.observe(G,ev); }catch(x){}
+  if(ui.gate){ try{ ui.gate.d.cancel(); }catch(e){} ui.gate=null; }
+  annFeed(ev);   /* a race run at once is told in a few lines ("Quick look at ..." / "Fast forward to the flag") */
   var done=null; ev.forEach(function(e){ if(e.e==="raceDone") done=e; if(e.e==="roundDone") ui.pendRound=e; if(e.e==="seasonOver") ui.pendSeason=e; });
   save();
   if(ui.view==="race"&&ui.rc){ ui.rc=null; }
@@ -1559,6 +1687,9 @@ function backStep(){
   return false;
 }
 document.addEventListener("visibilitychange",function(){ if(!document.hidden&&G&&!busy) drive(); });
+/* the caption band is measured from the arena's height: when the arena changes size by itself (the TV's log fills up, a sheet's scrollbar) the lane follows;
+   only with the announcers on (Off leaves the page's own layout exactly as it was) */
+if(window.ResizeObserver){ try{ var roT=0, roH=-1; new ResizeObserver(function(){ var a=$("arena"), h=a?a.clientHeight:0; if(h===roH) return; roH=h; if(!G||setupShown()||ui.view!=="race"||!ui.rc||!capBandH()) return; cancelAnimationFrame(roT); roT=requestAnimationFrame(function(){ if(capBandH()) layoutArena(); }); }).observe($("arena")); }catch(e){} }
 var rsz=0;
 window.addEventListener("resize",function(){ clearTimeout(rsz); rsz=setTimeout(function(){ if(!G||setupShown()) return; if(ui.view==="race"&&ui.rc){ layoutArena(); if(!busy) renderRace(); else trackSync(ui.rc.phase==="gate"); } else if(ui.view==="season") renderSeason(); },140); });
 
@@ -1584,9 +1715,20 @@ document.addEventListener("DOMContentLoaded",function(){
 
 readRiders();
 (function(){ var st=null; try{ st=Saves.get?Saves.get(GAME,"settings"):null; }catch(e){} if(st&&st.data) try{ applySettings(st.data); }catch(e){} })();
+/* the announcers: the booth, its captions (the band under the track; one on top for the sheets and the season) and its mode on the page */
+if(MX.Booth&&MX.Announce&&window.BGVoice){
+  try{
+    BOOTH=MX.Booth.create({speed:function(){ return cfg.speed; },ctx:annCtx,sayNames:annNames,onChange:annMode});
+    capEls=BOOTH.attach({band:$("capBand"),top:document.body})||null;
+    if(capEls&&capEls.top) capEls.top.el.classList.add("mx-capfix");
+    if(capEls&&capEls.band){ var idle=document.createElement("span"); idle.className="mx-capidle"; idle.textContent="Calloway and Bramlett on the call"; $("capBand").appendChild(idle); }
+    window.BGVoice.onReady(function(){ drawAnn(); });
+    annMode();
+  }catch(e){ BOOTH=null; try{ console.warn("mxwar: announcers off:",e&&e.message); }catch(x){} }
+}
 Sound.mountButton(); Sound.music(GAME);
 deviceCopy(); drawSetup(); saveBar.refresh(); showSetup(true); contOffer();
 if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(function(){}); }
-window.__mxwar={get G(){ return G; },toSeason:function(){ ui.rc=null; setView("season"); drive(); },cfg:cfg,ui:ui,drive:drive,act:act,simNow:simNow,enterRace:enterRace,startSeason:startSeason,loadSeason:loadSeason,
+window.__mxwar={get G(){ return G; },get booth(){ return BOOTH; },toSeason:function(){ ui.rc=null; setView("season"); drive(); },cfg:cfg,ui:ui,drive:drive,act:act,simNow:simNow,enterRace:enterRace,startSeason:startSeason,loadSeason:loadSeason,
   state:function(){ return {busy:busy,gen:gen,view:ui.view,intent:intent,phase:ui.rc?ui.rc.phase:null,battle:ui.rc?ui.rc.battle:null,over:G?G.over:null,finished:ui.finished,winShown:ui.winShown}; }};
 })();

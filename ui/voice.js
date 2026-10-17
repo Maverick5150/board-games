@@ -309,7 +309,7 @@ var api={
   onEnd:function(fn){ if(typeof fn==="function") S.ends.push(fn); },
   onReady:function(fn){ if(typeof fn!=="function") return; S.readyFns.push(fn); if(S.ready) try{ fn(api.ready()); }catch(e){} },
   ready:function(){ init(); return {ready:S.ready,engine:S.engine,voices:S.engine==="speech"?S.list.filter(function(v){ return score(v)>=0; }).length:S.engine==="native"?S.list.length:0,unlocked:S.unlocked,mode:S.mode}; },
-  voices:function(){ if(S.engine==="speech") return {a:info(S.chosen.a),b:info(S.chosen.b),same:S.same}; if(S.engine==="native") return {a:{name:"app",lang:"",local:true},b:{name:"app",lang:"",local:true},list:S.list}; return {a:null,b:null}; },
+  voices:function(){ if(S.engine==="speech") return {a:info(S.chosen.a),b:info(S.chosen.b),same:S.same,list:S.list.filter(function(v){ return score(v)>=0; }).sort(function(x,y){ return score(y)-score(x); }).map(info)}; if(S.engine==="native") return {a:{name:"app",lang:"",local:true},b:{name:"app",lang:"",local:true},list:S.list}; return {a:null,b:null}; },
   speaking:function(){ return !!S.cur; },
   queued:function(){ return S.q.length; },
   useClips:function(fn){ S.clips=typeof fn==="function"?fn:null; },

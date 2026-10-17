@@ -52,4 +52,4 @@ html[data-tv] .bgv-cap {
 html[data-tv] .bgv-cap__who { font-size: .875rem; }
 html[data-tv] .bgv-cap__text { font-size: 1.25rem; line-height: 1.28; -webkit-line-clamp: 2; }
 @media (prefers-reduced-motion: reduce) { .bgv-cap { transition: none; transform: none; } }
-html[data-motion="reduce"] .bgv-cap { transition: none; transform: none; }
+html[data-motion="reduce"] .bgv-cap, html[data-effects="reduced"] .bgv-cap { transition: none; transform: none; }
