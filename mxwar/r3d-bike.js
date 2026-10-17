@@ -169,6 +169,7 @@ function newFrame(K,i){ if(i<=K.lastI){ for(const S of K.sets){ S.cnt=0; for(con
 /* the bike's pose: B = the bike's world matrix; st = the per-frame state (compF, compR, spinF, spinR, lodD, mud, steer, k) */
 export function poseBike(M,i,B,st){
   const K=M.bk; newFrame(K,i);
+  if(st.lodCut) K.cur[i]=-1;
   const li=lodOf(K,i,st.lodD); K.cur[i]=li;
   const S0=K.sets[li], slot=S0.cnt++, cf=st.compF||0, cr=st.compR||0;
   /* how far the wheels turned since the last frame: past a spoke's spacing the spokes alias, so they fade (screen-door dither) as the wheel blurs */
