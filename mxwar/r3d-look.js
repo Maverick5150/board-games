@@ -101,6 +101,8 @@ export function createLook(renderer,opts){
       post.setFlags({bloom:F.bloom,dof:F.post==="full"&&F.dof,motionBlur:F.post==="full"?F.motionBlur:0,haze:F.post==="full"?F.haze:0,hazeI:F.hazeI,aa:F.aa,grade:F.grade,vignette:F.vignette,grain:F.grain,exposure:null});
       L.post=post; L._mine=post;
     } else if(L.post&&L.post===L._mine){ L.post=null; L._mine=null; }
+    /* the stadium's glow sprites are written in HDR units: 2.5x when the chain's bloom is on (the floodlights bloom and star), 1x on the plain frame (no clipped white blobs on the TV tier) */
+    { const gm=L._world&&L._world.ctx&&L._world.ctx.glowMesh; if(gm&&gm.material&&gm.material.uniforms&&gm.material.uniforms.uHdr) gm.material.uniforms.uHdr.value=(wantPost&&F.bloom>0)?2.5:1; }
     /* the fog */
     if(scene.fog&&L._fogOn) applyFog();
     cssVigOn(!!F.cssVig&&!L.post&&opts.host);

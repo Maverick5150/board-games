@@ -247,9 +247,10 @@ export function createCams(VIEW){
   function wideSpot(side){
     const C=VIEW.C, F=C.layout.floor;
     if(C.kind==="stadium"&&F){
-      const a=[PI/2,PI*1.5,PI*0.72,PI*0.28][side%4], d=[46,46,38,38][side%4], cx=(F[0]+F[1])/2, cz=(F[2]+F[3])/2, rx=(F[1]-F[0])/2+1.5, rz=(F[3]-F[2])/2+1.5, ca=Math.cos(a), sa=Math.sin(a), e=4;
+      const BY=VIEW.world&&VIEW.world.ctx&&VIEW.world.ctx.bowlY;   /* the stadium's own stands (r3d-stadium-bowl.js bowlY(x, z) -> {y, d}): the eye stands 2.8 m above the seats under it, in the lower tiers like a TV's main camera */
+      const a=[PI/2,PI*1.5,PI*0.72,PI*0.28][side%4], d=BY?[20,20,18,18][side%4]:[46,46,38,38][side%4], cx=(F[0]+F[1])/2, cz=(F[2]+F[3])/2, rx=(F[1]-F[0])/2+1.5, rz=(F[3]-F[2])/2+1.5, ca=Math.cos(a), sa=Math.sin(a), e=4;
       const P=(VIEW.world&&VIEW.world.ctx&&VIEW.world.ctx.bowl&&VIEW.world.ctx.bowl.prof)||BOWL; let hS=P[P.length-1][1]; for(let i=1;i<P.length;i++){ if(d<=P[i][0]){ hS=lerp(P[i-1][1],P[i][1],(d-P[i-1][0])/(P[i][0]-P[i-1][0])); break; } }
-      const at=aa=>{ const c1=Math.cos(aa), s1=Math.sin(aa); return new THREE.Vector3(cx+Math.sign(c1)*Math.pow(Math.abs(c1),2/e)*rx+c1*d,hS+2.8,cz+Math.sign(s1)*Math.pow(Math.abs(s1),2/e)*rz+s1*d); };   /* the bowl's own parametrisation (r3d-world stadium()): a point on the stands */
+      const at=aa=>{ const c1=Math.cos(aa), s1=Math.sin(aa), px=cx+Math.sign(c1)*Math.pow(Math.abs(c1),2/e)*rx+c1*d, pz=cz+Math.sign(s1)*Math.pow(Math.abs(s1),2/e)*rz+s1*d; return new THREE.Vector3(px,BY?Math.max(BY(px,pz).y,0)+2.8:hS+2.8,pz); };   /* the bowl's own parametrisation (r3d-world stadium()): a point on the stands */
       return {a:a,d:d,at:at,pos:at(a),mid:new THREE.Vector3(cx,0,cz-2),stadium:true};
     }
     let x0=1e9,x1=-1e9,z0=1e9,z1=-1e9; for(let i=0;i<C.N;i+=4){ x0=Math.min(x0,C.x[i]); x1=Math.max(x1,C.x[i]); z0=Math.min(z0,C.z[i]); z1=Math.max(z1,C.z[i]); }
@@ -508,9 +509,18 @@ export function createCams(VIEW){
     const ch=[]; let total=0;
     roots.forEach(root=>root.traverse(o=>{
       if(o===root) return;
-      if(o.isInstancedMesh){ const a=o.instanceMatrix.array; ch.push({o:o,k:"im",a:a,len:a.length,off:total}); total+=a.length; }
+      if(o.isInstancedMesh){ const a=o.instanceMatrix.array; ch.push({o:o,k:"im",a:a,len:a.length,off:total}); total+=a.length;
+        if(o.instanceColor){ const ca=o.instanceColor.array; ch.push({o:o,k:"imc",a:ca,len:ca.length,off:total}); total+=ca.length; }   /* (the bikes' team colours are per slot, and the slots are packed by level of detail every frame) */
+        ch.push({o:o,k:"cnt",len:2,off:total}); total+=2; }   /* visible, count (the bikes are packed into the first slots of their level of detail's set) */
       else if(o.isPoints||o.isLine){ for(const nm in o.geometry.attributes){ const at=o.geometry.attributes[nm]; if(!at.array||at.isInterleavedBufferAttribute) continue; ch.push({o:o,k:"at",nm:nm,a:at.array,len:at.array.length,off:total}); total+=at.array.length; } }
+      else if(o.isMesh&&o.geometry&&o.geometry.isInstancedBufferGeometry){
+        /* a mesh drawn from per-instance attributes: the skinned riders (r3d-riders.js: the rider, his colours, his mud) are recorded (with the bone matrices below); the particle sprites and the lens flecks
+           (r3d-fx.js: about 190 KB a frame) are NOT: their clones stay hidden in a replay */
+        if(root===R.grp){ for(const nm in o.geometry.attributes){ const at=o.geometry.attributes[nm]; if(!at.isInstancedBufferAttribute||!at.array) continue; ch.push({o:o,k:"ib",nm:nm,a:at.array,len:at.array.length,off:total}); total+=at.array.length; }
+          ch.push({o:o,k:"icnt",len:2,off:total}); total+=2; } }
       else { ch.push({o:o,k:"xf",len:11,off:total}); total+=11; } }));
+    /* the skinned riders' bone matrices (a float data texture the riders' shader reads: one row a rider): the replay writes the recorded rows into it, the live frame rewrites them every step */
+    if(R.bones&&R.boneTex){ ch.push({o:null,k:"bones",a:R.bones,len:R.bones.length,off:total}); total+=R.bones.length; }
     const ghOff=total; total+=VIEW.rs.length*GH;
     return {R:R,FX:FXv,roots:roots,ch:ch,total:total,ghOff:ghOff,Q:[],lastT:-1e9,clones:null,nRs:VIEW.rs.length};
   }
@@ -524,12 +534,14 @@ export function createCams(VIEW){
     const T=VIEW.T;
     if(!REC||REC.R!==VIEW.R||REC.FX!==VIEW.FX||REC.nRs!==VIEW.rs.length){ recDispose(); REC=recBuild(); if(!REC) return; }
     if(T<REC.lastT) REC.Q.length=0;   /* the clock went back (a new gate): start again */
-    if(T-REC.lastT<1/62) return;
+    if(T-REC.lastT<1/31) return;   /* (30 Hz at most: a 7 s ring of the riders' state is about 30 MB at 60 Hz) */
     REC.lastT=T;
     let e; if(REC.Q.length&&T-REC.Q[0].T>REPLAY_SECS) e=REC.Q.shift(); else e={T:0,b:new Float32Array(REC.total)};
     e.T=T; const b=e.b, ch=REC.ch;
     for(let i=0;i<ch.length;i++){ const c=ch[i];
       if(c.k==="xf"){ const o=c.o, q=o.quaternion; let k=c.off; b[k++]=o.position.x; b[k++]=o.position.y; b[k++]=o.position.z; b[k++]=q.x; b[k++]=q.y; b[k++]=q.z; b[k++]=q.w; b[k++]=o.scale.x; b[k++]=o.scale.y; b[k++]=o.scale.z; b[k]=o.visible?1:0; }
+      else if(c.k==="cnt"){ b[c.off]=c.o.visible?1:0; b[c.off+1]=c.o.count; }
+      else if(c.k==="icnt"){ b[c.off]=c.o.visible?1:0; b[c.off+1]=c.o.geometry.instanceCount; }
       else b.set(c.a,c.off); }
     let k=REC.ghOff;
     for(let i=0;i<VIEW.rs.length;i++){ const r=VIEW.rs[i], p=r.pos;
@@ -542,7 +554,9 @@ export function createCams(VIEW){
     const out=[];
     REC.roots.forEach(root=>{
       const c=root.clone(true), A=[], B=[]; root.traverse(o=>A.push(o)); c.traverse(o=>B.push(o));
-      B.forEach(o=>{ if(o.isPoints||o.isLine) o.geometry=o.geometry.clone(); });
+      B.forEach((o,i)=>{ if(o.isPoints||o.isLine) o.geometry=o.geometry.clone();
+        else if(o.isMesh&&o.geometry&&o.geometry.isInstancedBufferGeometry){ o.geometry=o.geometry.clone(); const src=A[i]; if(src.customDepthMaterial) o.customDepthMaterial=src.customDepthMaterial;   /* (the skinned riders' own shadow pass material: Mesh.copy does not carry it) */
+          if(root!==VIEW.R.grp) o.visible=false; } });   /* the particle sprites and lens flecks are not recorded: hidden in a replay */
       const idx=new Map(); A.forEach((o,i)=>idx.set(o,i));
       REC.ch.forEach(ch=>{ const i=idx.get(ch.o); if(i!==undefined){ ch.c=ch.c||{}; ch.c[root.id]=B[i]; } });
       if(VIEW.R&&root===VIEW.R.grp&&VIEW.R.M&&VIEW.R.M.tag){ const i=idx.get(VIEW.R.M.tag); if(i!==undefined) B[i].visible=false; }   /* no number tags in a replay (they are placed for the live camera) */
@@ -586,7 +600,12 @@ export function createCams(VIEW){
     REC.clones.forEach(cl=>{ REC.ch.forEach(c=>{ const o=c.c&&c.c[cl.src.id]; if(!o) return;
       if(c.k==="im"){ const a=o.instanceMatrix.array, off=c.off; for(let k=0;k<c.len;k++) a[k]=b0[off+k]+(b1[off+k]-b0[off+k])*f; o.instanceMatrix.needsUpdate=true; }
       else if(c.k==="at"){ const at=o.geometry.attributes[c.nm], a=at.array, off=c.off; for(let k=0;k<c.len;k++) a[k]=b0[off+k]+(b1[off+k]-b0[off+k])*f; at.needsUpdate=true; }
+      else if(c.k==="imc"){ const a=o.instanceColor.array, off=c.off; for(let k=0;k<c.len;k++) a[k]=b0[off+k]; o.instanceColor.needsUpdate=true; }   /* (colours and counts are the earlier frame's: no blending of slots) */
+      else if(c.k==="cnt"){ o.visible=b0[c.off]>0.5&&b0[c.off+1]>0; o.count=b0[c.off+1]|0; }
+      else if(c.k==="ib"){ const at=o.geometry.attributes[c.nm], a=at.array, off=c.off; for(let k=0;k<c.len;k++) a[k]=b0[off+k]; at.needsUpdate=true; }
+      else if(c.k==="icnt"){ o.visible=b0[c.off]>0.5&&b0[c.off+1]>0; o.geometry.instanceCount=b0[c.off+1]|0; }
       else { const off=c.off, L=k=>b0[off+k]+(b1[off+k]-b0[off+k])*f; o.position.set(L(0),L(1),L(2)); rpq.set(L(3),L(4),L(5),L(6)).normalize(); o.quaternion.copy(rpq); o.scale.set(L(7),L(8),L(9)); o.visible=f<0.5?b0[off+10]>0.5:b1[off+10]>0.5; } }); });
+    { const bc=REC.ch[REC.ch.length-1]; if(bc&&bc.k==="bones"&&VIEW.R&&VIEW.R.bones===bc.a){ const a=bc.a, off=bc.off; for(let k=0;k<bc.len;k++) a[k]=b0[off+k]+(b1[off+k]-b0[off+k])*f; VIEW.R.boneTex.needsUpdate=true; } }   /* the riders' recorded bone matrices into the live bone texture (the clones read it; the live frame rewrites it at the next step) */
     ghostsFrom(b0,b1,f);
     /* the cameras: a low 3/4 rear chase, then (at the event) a low side view from the track's edge, a long lens panning with the rider */
     const g=P.gh[P.subj], second=P.ev!=null?P.tp>=P.ev-0.45:P.tp>=P.ts+(P.te-P.ts)*0.55;
@@ -612,7 +631,7 @@ export function createCams(VIEW){
   function camera(dt){
     if(!shot) return;
     const sh=shot.type, off=motion()==="off";
-    if(!RP&&VIEW.mode==="race"&&!off&&VIEW.R) record();
+    if(!RP&&VIEW.mode==="race"&&!off&&VIEW.R&&VIEW.replayOK!==false) record();
     let snap=camS.snap||dt<=0;
     const j=shot.subj>=0?shot.subj:VIEW.leaderIdx();
     const r=j>=0?VIEW.rs[j]:null, have=!!(r&&r.pos);
@@ -637,6 +656,8 @@ export function createCams(VIEW){
     camS.fov=FS.x;
     /* never inside the dirt, a berm or a wall: the fixed spots are kept above the grid's dirt, the followers above the exact ground under them */
     if(!RG.follow){ safeCam(E,RG.clr); if(VIEW.C.kind==="stadium"&&sh!=="wide"&&sh!=="heli") inFloor(E); }
+    /* never inside the stands (the stadium's real seats, not the base profile): at least 2.5 m above whatever the bowl has under the eye; on the floor (d < 0) nothing changes */
+    { const BY=VIEW.world&&VIEW.world.ctx&&VIEW.world.ctx.bowlY; if(BY){ const b=BY(E.x,E.z); if(b&&b.d>-0.5&&E.y<b.y+2.5) E.y=b.y+2.5; } }
     cTarget.copy(T);
     cam.position.copy(E); cam.lookAt(T);
     if(RG.roll) cam.rotateZ(-ROLL.x);

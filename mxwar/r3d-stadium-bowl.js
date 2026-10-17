@@ -121,12 +121,12 @@ float rnd(uvec2 p,uint k){ return float(pcg(p.x*1973u+p.y*9277u+k*26699u+1u))*(1
    twinkle. Tone mapping and the colour space are the frame's own (so the glow looks the same drawn directly or through a post chain). */
 export function glowSprites(sheet,list,U){
   const geo=new THREE.PlaneGeometry(1,1), n=list.length, kind=new Float32Array(n), amp=new Float32Array(n), ph=new Float32Array(n);
-  const mat=new THREE.ShaderMaterial({uniforms:{map:{value:sheet},uTime:U.uTime},transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,fog:false,
+  const mat=new THREE.ShaderMaterial({uniforms:{map:{value:sheet},uTime:U.uTime,uHdr:{value:1}},transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,fog:false,
     vertexShader:`attribute float aKind; attribute float aAmp; attribute float aPh; varying vec2 vUv; varying vec3 vCol; varying float vK; varying float vI; uniform float uTime;
 void main(){ vUv=uv; vK=aKind; vCol=instanceColor; vI=aAmp*(0.86+0.14*sin(uTime*(3.0+aPh*5.0)+aPh*40.0));
   vec4 c=modelViewMatrix*instanceMatrix*vec4(0.,0.,0.,1.); float s=length(instanceMatrix[0].xyz); c.xy+=position.xy*s; c.z+=min(s*0.35,2.0); gl_Position=projectionMatrix*c; }`,
-    fragmentShader:`uniform sampler2D map; varying vec2 vUv; varying vec3 vCol; varying float vK; varying float vI;
-void main(){ vec2 uv=vec2(vUv.x*0.5+0.5*vK,vUv.y); vec4 t=texture2D(map,uv); gl_FragColor=vec4(vCol*t.rgb*t.a*vI*1.5,t.a);
+    fragmentShader:`uniform sampler2D map; uniform float uHdr; varying vec2 vUv; varying vec3 vCol; varying float vK; varying float vI;
+void main(){ vec2 uv=vec2(vUv.x*0.5+0.5*vK,vUv.y); vec4 t=texture2D(map,uv); gl_FragColor=vec4(vCol*t.rgb*t.a*vI*1.5*uHdr,t.a);   /* uHdr: 1 = the plain frame, 2.5 = the HDR chain is on (r3d-look.js sets it): the glows rise above the bloom threshold */
 #include <tonemapping_fragment>
 #include <colorspace_fragment>
 }`});
