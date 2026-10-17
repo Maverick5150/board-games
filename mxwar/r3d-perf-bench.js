@@ -50,6 +50,7 @@ export function createBench(Q,view){
     return d;
   }
   function hide(){ if(B.ui){ B.ui.remove(); B.ui=null; } }
+  const wrap=(t,n)=>{ const out=[]; let line=""; String(t).split(" ").forEach(w=>{ if((line+" "+w).trim().length>n){ out.push(line); line=w; } else line=(line+" "+w).trim(); }); if(line) out.push(line); return out; };
   const g=(c,v)=>'<span style="color:'+c+'">'+v+"</span>";
   const GOLD="#ecb967", RED="#f72d2e", GREEN="#7ee08f", DIM="#9aa3b2";
   function draw(){
@@ -80,7 +81,7 @@ export function createBench(Q,view){
     L.push("gpu     "+esc(R.gpu.string.slice(0,70))+g(DIM,"  ["+esc(R.gpu.family)+"]  probe "+(R.gpu.probeMs!=null?R.gpu.probeMs+" ms":"n/a")));
     L.push("device  "+(R.device.tv?"TV ":"")+(R.device.mobile?"mobile ":"")+"dpr "+R.device.dpr+"  cores "+(R.device.cores||"?")+"  mem "+(R.device.mem||"?")+" GB"+g(DIM,"   "+new Date(R.when).toISOString().slice(0,19)+"Z"));
     L.push("");
-    L.push(g(col,R.verdict.text));
+    wrap(R.verdict.text,72).forEach(l=>L.push(g(col,esc(l))));
     L.push(g(DIM,"OK / tap: run again    Esc / Back: close    ?bench=sweep: all four tiers"));
     d.innerHTML=L.join("\n");
   }
@@ -100,7 +101,18 @@ export function createBench(Q,view){
     let st={}; try{ st=view.V.stats(); }catch(e){}
     callsA.push(st.calls||0); trisA.push(st.tris||0);
   }
+  /* ?fps=1: a one-line live counter in the corner (any time, any race): fps, frame ms, size, tier, rung, calls, triangles */
+  let hud=null, hudT=0, ring=[];
+  function fpsHud(dt){
+    ring.push(dt); if(ring.length>45) ring.shift(); hudT+=dt; if(hudT<0.5) return; hudT=0;
+    if(!hud){ hud=document.createElement("div"); hud.id="mx-fps"; hud.style.cssText="position:fixed;left:6px;top:6px;z-index:2147482999;padding:3px 8px;border-radius:5px;background:rgba(6,9,15,.72);color:#f0f1f3;font:600 clamp(11px,1.9vh,20px)/1.3 ui-monospace,Menlo,Consolas,monospace;white-space:pre;pointer-events:none"; document.body.appendChild(hud); }
+    let sum=0,mx=0; for(let i=0;i<ring.length;i++){ sum+=ring[i]; if(ring[i]>mx) mx=ring[i]; }
+    const fps=ring.length/sum, S=Q.summary(); let st={}; try{ st=view.V.stats(); }catch(e){}
+    hud.textContent=fps.toFixed(0)+" fps  "+(sum/ring.length*1000).toFixed(1)+" ms (max "+(mx*1000).toFixed(0)+")  "+Q.renderer.domElement.width+"x"+Q.renderer.domElement.height+"  "+S.label+" r"+S.rung+"/"+(S.rungs-1)+"  "+(st.calls||0)+" calls "+Math.round((st.tris||0)/1000)+"k tris";
+  }
+  const hudOn=param("fps")==="1"||param("fps")==="true";
   B.frame=function(dt,ms,work){
+    if(hudOn) fpsHud(dt);
     if(B.state==="armed"){
       armT+=dt; if(view.mode()==="race"&&view.T()>0.4) B.state="running";
       if(B.state==="armed"){ if(Math.floor(armT*4)!==Math.floor((armT-dt)*4)) draw(); return; }
