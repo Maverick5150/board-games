@@ -29,7 +29,7 @@ function clone(x){ return JSON.parse(JSON.stringify(x)); }
 
 function defaultOpts(){
   return {
-    length:"standard",   // short | standard | long (round.js LEN, v2: heat 15/30/50, semi + LCQ 12/25/40, Main 40/80/150, moto 30/60/100 laps)
+    length:"real",       // real | half (mxlaps: the year's real race lengths at real lap times, round.js REAL; old saves short -> half, standard / long -> real)
     len:{},              // per race kind overrides {heat, semi, lcq, main, moto}
     war:{},              // race.js options (Version, House rows, cards per rider, Real form)
     fill:"full",         // full: the era's full program (privateers fill a short roster) | roster: smaller races, real riders only
@@ -40,7 +40,7 @@ function defaultOpts(){
 function normalize(o){
   var d=defaultOpts(), k; o=o||{};
   for(k in d) if(o[k]!==undefined) d[k]=o[k];
-  if(!Round.LEN[d.length]) d.length="standard";
+  d.length=Round.MODE_OF[d.length]||"real";
   d.len=(d.len&&typeof d.len==="object")?clone(d.len):{};
   d.war=Race.mergeOpts(d.war||{}); delete d.war.len;
   d.fill=d.fill==="roster"?"roster":"full";
@@ -164,7 +164,7 @@ function startRound(G){
     entry.sort(function(a,b){ return (G.pts[b]||0)-(G.pts[a]||0)||seedPos(G,a)-seedPos(G,b)||idx[a]-idx[b]; });
   }
   var team={}; entry.forEach(function(id){ team[id]=G.riders[id].bike||"Privateer"; });
-  G.round=Round.newRound(F,G.ri,entry,G.o,team);
+  G.round=Round.newRound(F,G.ri,entry,G.o,team,{series:G.series,year:G.year,cal:cal});
   log(G,"Round "+(G.ri+1)+": "+(cal.city||cal.venue)+(cal.title?"":" (no points)")+".","round");
   return G.round;
 }
@@ -175,10 +175,25 @@ function seedPos(G,id){ var r=G.riders[id]; return r.kind==="human"?20:r.kind===
 function next(G){
   if(G.over) return {t:"over"};
   var cal=G.cal[G.ri], RG=G.round, r, ent;
-  if(G.race) return {t:"race",live:true,ri:G.ri,round:cal,key:G.rkey,label:raceLabel(G),kind:G.race.kind,len:G.race.o.len,n:G.race.n,humanIn:G.rmap.some(isHuman.bind(null,G))};
-  if(!RG){ var F=calFormat(G,cal), L=Round.lengths(G.o); r=F.qual.length?{label:F.qual[0].label+(F.qual[0].races>1?" 1":""),kind:F.qual[0].kind,len:L[F.qual[0].kind]}:{label:F.finals.races>1?F.finals.label+" 1":F.finals.label,kind:F.finals.kind,len:Math.round(L[F.finals.kind]*(F.finals.lenF||1))}; return {t:"race",live:false,ri:G.ri,round:cal,key:null,label:r.label,kind:r.kind,len:r.len,n:null,humanIn:true,newRound:true}; }
+  if(G.race) return {t:"race",live:true,ri:G.ri,round:cal,key:G.rkey,label:raceLabel(G),kind:G.race.kind,len:G.race.o.len,lapS:lapOf(G),n:G.race.n,humanIn:G.rmap.some(isHuman.bind(null,G))};
+  if(!RG){ var F=calFormat(G,cal), lapS=Round.lapTime(G.series,G.year,cal); r=F.qual.length?{label:F.qual[0].label+(F.qual[0].races>1?" 1":""),kind:F.qual[0].kind}:{label:F.finals.races>1?F.finals.label+" 1":F.finals.label,kind:F.finals.kind}; r.len=Round.raceLen(F,r.kind,0,G.o,lapS,G.year); return {t:"race",live:false,ri:G.ri,round:cal,key:null,label:r.label,kind:r.kind,len:r.len,lapS:lapS,n:null,humanIn:true,newRound:true}; }
   r=Round.current(RG); ent=Round.entrants(RG)||[];
-  return {t:"race",live:false,ri:G.ri,round:cal,key:r.key,label:r.label,kind:r.kind,len:r.len,n:ent.length,humanIn:ent.some(isHuman.bind(null,G))};
+  return {t:"race",live:false,ri:G.ri,round:cal,key:r.key,label:r.label,kind:r.kind,len:r.len,lapS:lapOf(G),n:ent.length,humanIn:ent.some(isHuman.bind(null,G))};
+}
+/* the lap time of the round on now (seconds; mxlaps): the race's, the round's, else the track's */
+function lapOf(G){ if(G.race&&G.race.lapS>0) return G.race.lapS; if(G.round&&G.round.lapS>0) return G.round.lapS; var c=G.cal[Math.min(G.ri,G.cal.length-1)]; return Round.lapTime(G.series,G.year,c); }
+/* an old save (before real lengths): the options' length mapped (short -> half, standard / long -> real), the round gets its lap time and
+   its races still to run their real lengths; a race under way keeps its laps run and ends at its real length (never before the lap on now) */
+function upgrade(G){
+  if(!G||!G.o) return G;
+  G.o.length=Round.MODE_OF[G.o.length]||"real";
+  if(G.round&&!(G.round.lapS>0)){
+    var live=G.race&&!G.race.over?Round.current(G.round):null;
+    Round.upgrade(G.round,G.o,{series:G.series,year:G.year,cal:G.cal[G.ri]});
+    if(live&&G.race){ G.race.o.len=Math.max(G.race.battle+1,live.len); live.len=G.race.o.len; }
+  }
+  if(G.race&&!(G.race.lapS>0)&&G.round) G.race.lapS=G.round.lapS;
+  return G;
 }
 function isHuman(G,id){ return G.riders[id]&&G.riders[id].kind==="human"; }
 function raceLabel(G){ var RG=G.round; if(!RG) return ""; var r=RG.races.filter(function(x){ return x.key===G.rkey; })[0]; return r?r.label:""; }
@@ -192,9 +207,9 @@ function startRace(G){
   var o=clone(G.o.war); o.len=r.len;
   var list=ent.map(function(id){ var R=G.riders[id]; return {id:id,name:R.name,human:R.kind==="human",edge:R.edge|0}; });
   G.race=Race.newRace(o,list,Math.floor(rnd(G)*4294967296));
-  G.race.kind=r.kind; G.rmap=ent.slice(); G.rkey=r.key;
+  G.race.kind=r.kind; G.race.lapS=RG.lapS||lapOf(G); G.rmap=ent.slice(); G.rkey=r.key;
   var cal=G.cal[G.ri];
-  log(G,(cal.city||cal.venue)+" "+r.label+": "+ent.length+" riders, "+r.len+" laps.","race");
+  log(G,(cal.city||cal.venue)+" "+r.label+": "+ent.length+" riders, "+r.len+" laps (a lap about "+G.race.lapS+" s).","race");
   return [{e:"race",ri:G.ri,key:r.key,label:r.label,kind:r.kind,n:ent.length,len:r.len,riders:ent.slice()}];
 }
 function fail(msg){ return {ok:false,msg:msg,ev:[]}; }
@@ -307,8 +322,8 @@ function snapshot(G,seat){
   return {v:G.v,id:"mxwar",sid:G.sid,name:G.name,series:G.series,seriesName:G.seriesName,year:G.year,cls:G.cls,status:G.status,o:G.o,me:seat,meId:me,
     cal:G.cal.map(function(c,i){ return {n:c.n,date:c.date,city:c.city,state:c.state,country:c.country,venue:c.venue,name:c.name,stage:c.stage,mult:c.mult,title:c.title,tc:c.tc,done:i<G.ri,next:i===G.ri,winner:G.results[i]?G.results[i].winner:null}; }),
     ri:G.ri,next:next(G),base:G.base||{},
-    round:RG?{fmt:RG.fmt,tc:RG.tc,cur:RG.cur,races:RG.races.map(function(r){ return {key:r.key,label:r.label,kind:r.kind,len:r.len,done:!!r.res,res:r.res,hs:r.hs,n:(r.st<0?RG.fin:r.ent)?(r.st<0?RG.fin:r.ent).length:null}; })}:null,
-    race:G.race?Race.snapshot(G.race,rs):null,rmap:G.rmap?G.rmap.slice():null,raceSeat:rs,
+    round:RG?{fmt:RG.fmt,tc:RG.tc,cur:RG.cur,lapS:RG.lapS||null,mode:RG.mode||G.o.length,races:RG.races.map(function(r){ return {key:r.key,label:r.label,kind:r.kind,len:r.len,done:!!r.res,res:r.res,hs:r.hs,n:(r.st<0?RG.fin:r.ent)?(r.st<0?RG.fin:r.ent).length:null}; })}:null,
+    race:G.race?Race.snapshot(G.race,rs):null,lapS:lapOf(G),rmap:G.rmap?G.rmap.slice():null,raceSeat:rs,
     standings:L,red:L.length&&L[0].pts>0?L[0].id:null,riders:riders,last:G.last,over:G.over,log:G.log.slice(-8).map(function(e){ return e.t; })};
 }
 
@@ -332,7 +347,7 @@ function check(G){
   return err;
 }
 
-MX.Season={VER:VER,MAXH:MAXH,defaultOpts:defaultOpts,normalize:normalize,newSeason:newSeason,next:next,startRound:startRound,startRace:startRace,apply:apply,step:step,simRace:simRace,
+MX.Season={upgrade:upgrade,lapOf:lapOf,VER:VER,MAXH:MAXH,defaultOpts:defaultOpts,normalize:normalize,newSeason:newSeason,next:next,startRound:startRound,startRace:startRace,apply:apply,step:step,simRace:simRace,
   standings:standings,redPlate:redPlate,snapshot:snapshot,check:check,raceSeat:raceSeat,humanSeats:humanSeats,rider:rider,calFormat:calFormat};
 if(typeof module!=="undefined"&&module.exports) module.exports=MX.Season;
 })(typeof window!=="undefined"?window:globalThis);
