@@ -317,6 +317,8 @@ frame (the view's blob shadows and shadow box read the previous tick's camera), 
 
 Camera specs (`DEMO.camera(spec)`, a plan's `cam`): a rider rig `{seat: "you" | "lead" | "crash" | N | {rank: k}, back, up, side, aim: 8 | {ahead, up, side}, fov, damp}` (metres along / across the rider's heading, + side = the rider's right; `damp` 0 = rigid) or a world pose
 `{eye: [x, y, z] | at: {s, lat, h}, target: [x, y, z] | look: {s, lat, h} | follow: {seat, up, damp}, fov}` (`at` / `look`: course distance s in metres, lat across, h above the dirt); `null` = the view's own director. The view applies it through `V.camHook` (section 4, zone `harness`).
+Known limits: a camera inside the stadium bowl clips the near stands (a dark band; the extra `B2b` is such a pose, the plan's `B2` is clear); `DEMO.step(0, true)` (a redraw) moves the clock by one microsecond, so use it to grab a frame, not inside a plan;
+the runner's CPU cap makes frame TIMES noisy, never the pictures.
 
 ### 9.3 Your cycle, with the exact commands
 
