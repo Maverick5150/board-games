@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en" data-game="mxwar" data-demo>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#090c12">
+<title>Motocross War: in-engine demo</title>
+<!-- MOTOCROSS WAR: the in-engine DEMO page (mxwar/demo.js). It runs a LIVE race with the game's own engine (race.js, season.js and the 2026 Supercross
+     season data: the real Anaheim 1 Main Event field, 22 riders, on the real traced Anaheim 1 layout) in the 3D view, with the look and camera
+     the CEO asked for, and a stepping hook (DEMO.step) so a run can be recorded frame by frame at a fixed time step.
+     ?demo=chase | broadcast | grandstand | onboard | replay   the camera preset the clip is about (default chase)
+     ?q=performance | balanced | quality | auto                the graphics quality (default quality)
+     ?hud=0   no overlay      ?you=0   no human rider      ?seed=N   the race seed      ?tv=1   TV scale
+     Everything here is original art: no logos, sponsor marks, photos or likenesses. -->
+<style>
+  :root{ --night:#090c12; --panel:#0d111b; --war:#f72d2e; --dust:#7b4a2b; --dirt:#b6824c; --gold:#ecb967; --white:#f0f1f3; --mute:#aeb5bf; }
+  *{box-sizing:border-box}
+  html,body{margin:0; height:100%; background:#000; overflow:hidden; color:var(--white); font:600 14px/1.2 Manrope, "Segoe UI", system-ui, sans-serif}
+  #stage{position:absolute; inset:0; background:var(--night)}
+  #host{position:absolute; inset:0}
+  #host canvas{display:block}
+  #hud{position:absolute; inset:0; pointer-events:none; font-variant-numeric:tabular-nums}
+  html[data-nohud] #hud{display:none}
+  /* the timing tower (top-left) */
+  #tower{position:absolute; left:2.2%; top:3.4%; width:min(21%,300px); background:linear-gradient(180deg,rgba(9,12,18,.86),rgba(9,12,18,.74)); border-radius:6px; overflow:hidden; box-shadow:0 0 0 1px rgba(255,255,255,.08),0 6px 22px rgba(0,0,0,.5)}
+  #tower .hd{display:flex; justify-content:space-between; align-items:baseline; padding:.45em .7em .4em; background:linear-gradient(90deg,#1a0d0e,#2a0f12); border-bottom:2px solid var(--war)}
+  #tower .hd b{font:800 1.05em/1 "Arial Narrow","Bahnschrift",Impact,sans-serif; letter-spacing:.06em; text-transform:uppercase}
+  #tower .hd span{color:var(--mute); font-size:.78em; letter-spacing:.06em}
+  #tower ol{list-style:none; margin:0; padding:2px 0}
+  #tower li{display:grid; grid-template-columns:1.5em 2.6em 1fr auto; align-items:center; gap:.35em; padding:0 .55em 0 .4em; height:var(--rowh,1.55em); font-size:.88em}
+  #tower li .p{font-weight:800; text-align:right; color:var(--mute)}
+  #tower li .n{display:block; text-align:center; font-weight:800; font-size:.88em; line-height:1.35; border-radius:3px; color:#101015; background:#f4f1e8; box-shadow:inset .32em 0 0 var(--mk,#555); padding-left:.3em}
+  #tower li.red .n{background:#c8101c; color:#fff}
+  #tower li .m{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:700; text-transform:uppercase; letter-spacing:.03em}
+  #tower li .g{color:var(--mute); font-size:.9em}
+  #tower li.me{background:linear-gradient(90deg,rgba(236,185,103,.28),rgba(236,185,103,.06))}
+  #tower li.me .m{color:var(--gold)}
+  #tower li.out{opacity:.55}
+  #tower li.out .g{color:#ff8a7a}
+  #tower li:nth-child(1) .p{color:var(--gold)}
+  /* the track card (top-right) */
+  #card{position:absolute; right:2.2%; top:3.4%; width:min(19%,270px); background:rgba(9,12,18,.8); border-radius:6px; box-shadow:0 0 0 1px rgba(255,255,255,.08),0 6px 22px rgba(0,0,0,.5); padding:.5em .7em .6em}
+  #card b{display:block; font:800 1.25em/1.05 "Arial Narrow","Bahnschrift",Impact,sans-serif; letter-spacing:.04em; text-transform:uppercase}
+  #card span{display:block; color:var(--mute); font-size:.78em; letter-spacing:.08em; text-transform:uppercase; margin-bottom:.35em}
+  #card canvas{display:block; width:100%; height:auto}
+  /* the camera chip and the YOU readout */
+  #cam{position:absolute; left:50%; top:3.4%; transform:translateX(-50%); padding:.35em 1em; border-radius:99px; background:rgba(9,12,18,.72); box-shadow:0 0 0 1px rgba(255,255,255,.1); font:800 .85em/1 Manrope,sans-serif; letter-spacing:.14em; text-transform:uppercase; color:var(--gold); transition:opacity .6s}
+  #cam.fade{opacity:0}
+  #you{position:absolute; left:2.2%; bottom:3.4%; display:flex; gap:.8em; align-items:flex-end}
+  #you .big{font:800 2.7em/0.9 "Arial Narrow","Bahnschrift",Impact,sans-serif; text-shadow:0 2px 12px rgba(0,0,0,.7)}
+  #you .big small{font-size:.42em; margin-left:.12em; color:var(--mute); letter-spacing:.05em}
+  #you .lbl{font-size:.72em; letter-spacing:.14em; text-transform:uppercase; color:var(--gold); text-shadow:0 1px 6px #000}
+  #you .gp{font-size:.9em; color:var(--white); text-shadow:0 1px 6px #000}
+  #spd{position:absolute; left:50%; bottom:3.4%; transform:translateX(-50%); text-align:center; text-shadow:0 2px 10px rgba(0,0,0,.8)}
+  #spd b{font:800 2.2em/1 "Arial Narrow","Bahnschrift",Impact,sans-serif}
+  #spd small{display:block; font-size:.62em; letter-spacing:.2em; color:var(--mute)}
+  /* the WAR window (bottom-right): a tiny corner box, the cards run in the background */
+  #war{position:absolute; right:2.2%; bottom:3.4%; width:min(19%,270px); background:rgba(9,12,18,.82); border-radius:6px; box-shadow:0 0 0 1px rgba(255,255,255,.08),0 6px 22px rgba(0,0,0,.5); padding:.4em .6em .5em}
+  #war .t{display:flex; justify-content:space-between; font-size:.7em; letter-spacing:.12em; text-transform:uppercase; color:var(--mute)}
+  #war .t b{color:var(--white)}
+  #war .cards{display:flex; gap:.4em; margin-top:.35em; align-items:center}
+  #war .cd{width:2.1em; height:2.9em; border-radius:4px; background:#f6f3ea; color:#14141a; display:grid; place-items:center; font:800 .95em/1 Manrope,sans-serif; box-shadow:0 2px 6px rgba(0,0,0,.5)}
+  #war .cd.r{color:#c8101c}
+  #war .vs{font-size:.75em; color:var(--mute); flex:1; line-height:1.25}
+  #war .vs b{color:var(--white); text-transform:uppercase}
+  #war.flash{box-shadow:0 0 0 2px var(--war),0 0 26px rgba(247,45,46,.55)}
+  #war.flash .t b{color:var(--war)}
+  /* banners: the holeshot, the crash and the yellow flag */
+  #banner{position:absolute; left:50%; top:17%; transform:translateX(-50%); padding:.5em 1.6em .6em; border-radius:6px; background:rgba(9,12,18,.86); text-align:center; box-shadow:0 0 0 1px rgba(255,255,255,.1),0 10px 30px rgba(0,0,0,.6); opacity:0; transition:opacity .25s}
+  #banner.on{opacity:1}
+  #banner b{display:block; font:800 1.9em/1 "Arial Narrow","Bahnschrift",Impact,sans-serif; letter-spacing:.06em; text-transform:uppercase}
+  #banner span{display:block; margin-top:.25em; color:var(--mute); font-size:.9em}
+  #banner.yellow{background:linear-gradient(180deg,rgba(84,66,6,.95),rgba(40,30,4,.95)); box-shadow:inset 0 0 0 2px #ffd84a,0 10px 30px rgba(0,0,0,.6)}
+  #banner.yellow b{color:#ffe27a}
+  #banner.war b{color:var(--war)}
+  #lbl{position:absolute; left:50%; bottom:1.6%; transform:translateX(-50%); font-size:.62em; letter-spacing:.14em; color:rgba(240,241,243,.55); text-transform:uppercase}
+  #fatal{position:absolute; inset:0; display:none; place-items:center; background:#090c12; font-size:1.4em}
+</style>
+</head>
+<body>
+<div id="stage"><div id="host"></div>
+  <div id="hud">
+    <div id="tower"><div class="hd"><b id="lapTxt">Lap 1 / 18</b><span>Main event</span></div><ol id="rows"></ol></div>
+    <div id="card"><span id="cardSub">Angel Stadium</span><b id="cardName">Anaheim 1</b><canvas id="mini" width="260" height="190"></canvas></div>
+    <div id="cam"></div>
+    <div id="banner"><b></b><span></span></div>
+    <div id="you"><div><div class="lbl" id="youLbl">You</div><div class="big" id="youPos">-</div></div><div class="gp" id="youGap"></div></div>
+    <div id="spd"><b id="spdN">0</b><small>MPH</small></div>
+    <div id="war"><div class="t"><span id="warT">Lap 1 &middot; cards</span><b id="warB"></b></div><div class="cards" id="warC"></div></div>
+    <div id="lbl">Motocross War &middot; in-engine demo &middot; live engine, real 2026 Anaheim 1 field</div>
+  </div>
+  <div id="fatal">WebGL is not available here.</div>
+</div>
+<script>/* before first paint: TV scale for ?tv=1, no overlay for ?hud=0 */
+(function (h) { var s = location.search; if (/[?&]tv=1(&|$)/.test(s)) h.setAttribute("data-tv", ""); if (/[?&]hud=0(&|$)/.test(s)) h.setAttribute("data-nohud", ""); })(document.documentElement);</script>
+<script src="data/index.js"></script>
+<script src="data/sx-2026.js"></script>
+<script src="race.js"></script>
+<script src="round.js"></script>
+<script src="season.js"></script>
+<script src="art.js"></script>
+<script src="gl3d.js"></script>
+<script src="models3d.js"></script>
+<script src="data/tracks.js"></script>
+<script src="data/trk-sx-2026.js"></script>
+<script src="tracks3d.js"></script>
+<script src="race3d.js"></script>
+<script src="demo.js"></script>
+</body>
+</html>

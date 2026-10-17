@@ -270,6 +270,14 @@ function build(layout,o){
   var tmp=new Float32Array(N); smooth(C.berm,tmp,10); C.berm=tmp;
   var oc=C.feats.filter(function(F){ return F.type==="offcamber"; });
   C.camb=new Float32Array(N); oc.forEach(function(F){ for(var s3=F.s0;s3<F.s1;s3+=DS){ var ii=((Math.round(s3/DS))%N+N)%N; C.camb[ii]=-0.13*Math.sin(PI*(s3-F.s0)/F.len)*(C.k[ii]>=0?1:-1); } });
+  /* the RUTS (the CEO: "deep dirt ruts"): tyre grooves along the racing lines (the inside line of every turn, the middle of the straights),
+     a second groove up each berm, a ridge of thrown dirt beside the main one; their depth varies along the lap. ground() takes them out of
+     the surface (none across jumps, whoops or rhythm), so the strip's mesh carries them and a wheel in a rut rides lower */
+  C.rutU=new Float32Array(N); C.rutD=new Float32Array(N); C.rutB=new Float32Array(N);
+  for(i=0;i<N;i++){ var kk2=C.k[i], s4=i*DS, flat=clamp(1-C.F[i]*1.6,0,1), vary=0.62+0.38*Math.sin(s4*0.061+1.3)*Math.sin(s4*0.0173+0.4);
+    C.rutU[i]=clamp(kk2*10,-0.52,0.52); C.rutD[i]=(0.05+0.1*clamp(Math.abs(kk2)*12,0,1))*vary*flat*(outdoor?1.1:1)*(s4<C.startLen*0.3?0.4:1);
+    C.rutB[i]=clamp(Math.abs(C.berm[i])/1.1,0,1)*flat*0.14*vary*(C.berm[i]>=0?1:-1); }
+  smooth(C.rutU,C.rutU,10); smooth(C.rutD,C.rutD,6); smooth(C.rutB,C.rutB,6);
   profile(C,o);
   return C;
 }
@@ -309,12 +317,18 @@ function smooth(src,dst,r){ var N=src.length, out=new Float32Array(N), acc=0, i;
 
 /* the ground height at track position s (metres, wraps) and lateral offset lat (metres, + = right of the centre line) */
 function idx(C,s){ var f=((s%C.L)+C.L)%C.L/C.DS, i=Math.floor(f); return [i%C.N,(i+1)%C.N,f-i]; }
-function ground(C,s,lat){
+function ground(C,s,lat,norut){
   var q=idx(C,s), i=q[0], j=q[1], f=q[2];
   var base=C.E[i]+(C.E[j]-C.E[i])*f+C.F[i]+(C.F[j]-C.F[i])*f;
-  if(!lat) return base;
-  var hw=C.hw[i], bm=C.berm[i]+(C.berm[j]-C.berm[i])*f, u=lat/hw, side=bm>=0?1:-1, w=Math.max(0,u*side);
-  return base+Math.abs(bm)*Math.pow(Math.min(w,1.25),1.7)+(C.camb[i]||0)*lat;
+  var hw=C.hw[i], h=base;
+  if(lat){ var bm=C.berm[i]+(C.berm[j]-C.berm[i])*f, u=lat/hw, side=bm>=0?1:-1, w=Math.max(0,u*side); h+=Math.abs(bm)*Math.pow(Math.min(w,1.25),1.7)+(C.camb[i]||0)*lat; }
+  if(C.rutD&&!norut){
+    var d=C.rutD[i]+(C.rutD[j]-C.rutD[i])*f;
+    if(d>0.002){ var uc=(C.rutU[i]+(C.rutU[j]-C.rutU[i])*f)*hw, dx=(lat-uc)/0.36, ax=(Math.abs(lat-uc)-0.66)/0.26; h-=d*Math.exp(-dx*dx); h+=d*0.38*Math.exp(-ax*ax); }
+    var rb=C.rutB[i]+(C.rutB[j]-C.rutB[i])*f;
+    if(rb>0.002||rb<-0.002){ var bx=(lat-(rb>0?1:-1)*0.74*hw)/0.38; h-=(rb>0?rb:-rb)*Math.exp(-bx*bx); }
+  }
+  return h;
 }
 /* polish 2: the shaped features over each 0.5 m sample (fh asked only those: a course builds several times faster, which a Fire TV feels at
    every round's start) */

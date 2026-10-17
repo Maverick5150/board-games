@@ -29,6 +29,11 @@ function sstep(x){ x=clamp(x,0,1); return x*x*(3-2*x); }
 function hash(s){ var h=2166136261>>>0; s=String(s||""); for(var i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619)>>>0; } return h>>>0; }
 function rng(seed){ var t=seed>>>0; return function(){ t=(t+0x6D2B79F5)>>>0; var x=Math.imul(t^(t>>>15),t|1); x^=x+Math.imul(x^(x>>>7),x|61); return ((x^(x>>>14))>>>0)/4294967296; }; }
 function now(){ return (g.performance&&performance.now)?performance.now():Date.now(); }
+/* the demo / capture clock: a VIRTUAL time (ms) that only moves when a frame is stepped (V.step), and a seeded random source, so a recorded run is
+   exactly repeatable; in the game both are the real clock and Math.random */
+var VCLK={on:false,ms:0}, RNG={f:null};
+function vnow(){ return VCLK.on?VCLK.ms:now(); }
+function rand(){ return RNG.f?RNG.f():Math.random(); }
 function hex(c){ c=String(c||"#888888").replace("#",""); if(c.length===3) c=c[0]+c[0]+c[1]+c[1]+c[2]+c[2]; var n=parseInt(c,16); return [((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255]; }
 
 /* ---------------- textures made in code ---------------- */
@@ -39,94 +44,48 @@ function vnoise(W,cell,seed){ /* tileable value noise, W x W, lattice every cell
     out[y*W+x]=lerp(lerp(lat[y0*n+x0],lat[y0*n+x1],tx),lerp(lat[y1*n+x0],lat[y1*n+x1],tx),ty); }
   return out;
 }
-function dirtTexture(seed){
-  var W=256, c=document.createElement("canvas"); c.width=c.height=W; var x=c.getContext("2d"), im=x.createImageData(W,W), d=im.data;
-  var n1=vnoise(W,32,seed), n2=vnoise(W,8,seed+1), n3=vnoise(W,64,seed+2), n4=vnoise(W,4,seed+3), R=rng(seed+9), i, px, py;
-  /* ruts: grooves along v (the track direction): lines across u that wander slowly; tyre marks: thin dashed lines */
-  var ruts=new Float32Array(W*W), lines=[];
-  for(i=0;i<9;i++) lines.push({u:0.12+R()*0.76,w:0.012+R()*0.03,a:0.4+R()*0.6,ph:R()*TAU,amp:0.01+R()*0.02});
-  for(py=0;py<W;py++) for(px=0;px<W;px++){ var u=px/W, v=py/W, r=0;
-    /* polish 2: the ruts run straight down a tile (they used to zigzag twice every 7 m); the strip drifts them slowly across the line instead */
-    for(var k=0;k<lines.length;k++){ var L=lines[k], cu=L.u+Math.sin(v*TAU+L.ph)*L.amp*0.3, dd=Math.abs(u-cu)/L.w; if(dd<1) r=Math.max(r,L.a*(1-dd*dd)); }
-    var knob=(Math.sin(v*TAU*48)>0.3&&Math.abs(u-0.5)<0.42)?0.12:0; ruts[py*W+px]=Math.min(1,r+knob*n2[py*W+px]); }
-  for(i=0;i<W*W;i++){
-    var base=0.32+0.34*n1[i]+0.22*n2[i]+0.12*n4[i], clod=R()<0.012?(R()<0.5?-0.25:0.3):0;
-    d[i*4]=clamp((base+clod)*255,0,255); d[i*4+1]=clamp(ruts[i]*255,0,255); d[i*4+2]=clamp((0.25+0.75*n3[i]*0.7+0.3*n1[i]*0.3)*255,0,255); d[i*4+3]=255;
+/* the track strip texture (u across the track, v along it, tiles every ~7 m): R light and dark patches, G the ruts (grooves along v), B a slow
+   pattern, A the tyre TREAD printed in the ruts (a herringbone of knobs) */
+function dirtTexture(seed,W){
+  W=W||512; var out=new Uint8Array(W*W*4);
+  var n1=vnoise(W,W/8,seed), n2=vnoise(W,W/32,seed+1), n3=vnoise(W,W/4,seed+2), n4=vnoise(W,W/64,seed+3), R=rng(seed+9), i, px, py;
+  var lines=[];
+  for(i=0;i<11;i++) lines.push({u:0.1+R()*0.8,w:0.012+R()*0.026,a:0.45+R()*0.55,ph:R()*TAU,amp:0.01+R()*0.02,tr:R()<0.7});
+  for(py=0;py<W;py++) for(px=0;px<W;px++){
+    var u=px/W, v=py/W, r=0, tr=0, o=(py*W+px)*4, ii=py*W+px;
+    for(var k=0;k<lines.length;k++){ var L=lines[k], cu=L.u+Math.sin(v*TAU+L.ph)*L.amp*0.3, dd=Math.abs(u-cu)/L.w;
+      if(dd<1){ var a=L.a*(1-dd*dd); if(a>r) r=a; if(L.tr&&dd<0.85){ var ch=Math.abs(((v*22+(u-cu)/L.w*1.6)%1+1)%1-0.5)*2; tr=Math.max(tr,(ch>0.45?1:0.15)*a); } } }
+    var cl=R(), base=0.3+0.32*n1[ii]+0.22*n2[ii]+0.1*n4[ii]+0.06*n3[ii], clod=cl<0.01?(cl<0.005?-0.22:0.24):0;
+    out[o]=clamp((base+clod)*255,0,255); out[o+1]=clamp((r*(0.8+0.2*n2[ii]))*255,0,255); out[o+2]=clamp((0.25+0.5*n3[ii]+0.25*n1[ii])*255,0,255); out[o+3]=clamp(tr*255,0,255);
   }
-  x.putImageData(im,0,0); return c;
+  return out;
+}
+/* a tiling normal / height / albedo map of loose dirt: R,G = the slope of the surface along world x and z (0.5 = flat), B = height, A = a
+   brightness pattern. kind 0 = coarse (clods, cracks, pebbles, about 2 m a tile), 1 = fine grain (a few cm; the close-up under the lens) */
+function detailTexture(seed,W,kind){
+  var h=new Float32Array(W*W), R=rng(seed), i, x, y;
+  var f1=vnoise(W,W/8,seed), f2=vnoise(W,W/16,seed+1), f3=vnoise(W,W/32,seed+2), f4=vnoise(W,W/64,seed+3), f5=vnoise(W,Math.max(2,W/128),seed+4);
+  for(i=0;i<W*W;i++){ var r1=1-Math.abs(2*f2[i]-1);
+    h[i]=kind===0?0.34*f1[i]+0.26*r1*r1+0.18*f3[i]+0.14*f4[i]+0.08*f5[i]:0.32*f3[i]+0.3*f4[i]+0.38*f5[i]; }
+  function bump(cx,cy,rad,amp,pow){ var r2=Math.ceil(rad); for(var dy=-r2;dy<=r2;dy++) for(var dx=-r2;dx<=r2;dx++){ var d=Math.hypot(dx,dy)/rad; if(d>=1) continue; var xx=((cx+dx)%W+W)%W, yy=((cy+dy)%W+W)%W; h[yy*W+xx]+=amp*Math.pow(1-d*d,pow); } }
+  var nClod=kind===0?Math.round(W*W/3600):Math.round(W*W/2600), nPeb=kind===0?Math.round(W*W/520):Math.round(W*W/260);
+  for(i=0;i<nClod;i++) bump(Math.floor(R()*W),Math.floor(R()*W),(kind===0?W/55:W/60)*(0.6+R()*1.2),0.34*(0.5+R()),1.6);
+  for(i=0;i<nPeb;i++){ var rr=(kind===0?W/260:W/150)*(0.7+R()*1.3); bump(Math.floor(R()*W),Math.floor(R()*W),rr,0.5*(0.4+R()*0.9),1.2); }
+  var mn=1e9, mx=-1e9; for(i=0;i<W*W;i++){ if(h[i]<mn) mn=h[i]; if(h[i]>mx) mx=h[i]; }
+  var out=new Uint8Array(W*W*4), S=kind===0?W/42:W/30;
+  for(y=0;y<W;y++) for(x=0;x<W;x++){ var ii=y*W+x, hl=h[y*W+(x+W-1)%W], hr=h[y*W+(x+1)%W], hu=h[((y+W-1)%W)*W+x], hd=h[((y+1)%W)*W+x];
+    var sx=clamp((hl-hr)*S,-0.5,0.5), sz=clamp((hu-hd)*S,-0.5,0.5), hv=(h[ii]-mn)/(mx-mn), o=ii*4;
+    out[o]=Math.round((0.5+sx)*255); out[o+1]=Math.round((0.5+sz)*255); out[o+2]=Math.round(hv*255); out[o+3]=Math.round(clamp(0.25+0.9*hv-0.2*f1[ii]+0.2*f5[ii],0,1)*255); }
+  return out;
+}
+/* four channels of smooth tiling noise: mud masks, cloth wrinkles, the dust's wisps */
+function smoothTexture(seed,W){
+  var a=vnoise(W,W/8,seed), b=vnoise(W,W/16,seed+1), c=vnoise(W,W/4,seed+2), d=vnoise(W,W/32,seed+3), out=new Uint8Array(W*W*4);
+  for(var i=0;i<W*W;i++){ out[i*4]=Math.round(a[i]*255); out[i*4+1]=Math.round((0.6*b[i]+0.4*d[i])*255); out[i*4+2]=Math.round(c[i]*255); out[i*4+3]=Math.round(d[i]*255); }
+  return out;
 }
 
-/* ---------------- models (local axes: X forward, Y up, Z right; origin on the ground between the wheels) ---------------- */
-var K={black:[0.06,0.06,0.07,0],dark:[0.15,0.15,0.17,0],grey:[0.42,0.43,0.47,0],silver:[0.74,0.75,0.78,0],engine:[0.3,0.3,0.32,0],gold:[0.86,0.68,0.3,0],
-  team:[1,1,1,1],teamD:[0.62,0.62,0.62,1],acc:[1,1,1,3],white:[0.93,0.93,0.91,0],seat:[0.09,0.09,0.1,0],tire:[0.09,0.09,0.1,0],glove:[0.14,0.14,0.16,0],
-  boot:[0.9,0.9,0.88,0],lens:[0.2,0.32,0.5,0],skin:[0.82,0.63,0.5,0]};
-function bikeBody(){
-  var B=new GL.Builder(), z;
-  B.box(-0.22,0.3,-0.13,0.18,0.62,0.13,K.engine); B.box(-0.02,0.58,-0.1,0.2,0.74,0.1,[0.24,0.24,0.26,0]);
-  for(z=-1;z<=1;z+=2){
-    B.beam([0.5,0.98,0.06*z],[0.2,0.38,0.09*z],0.05,0.05,K.silver); B.beam([0.5,0.98,0.06*z],[-0.36,0.88,0.1*z],0.045,0.045,K.silver);
-    B.beam([-0.18,0.46,0.1*z],[-0.74,0.34,0.1*z],0.06,0.05,K.silver);
-    B.tube([0.53,1.02,0.085*z],[0.7,0.5,0.085*z],0.028,6,K.gold); B.tube([0.66,0.62,0.085*z],[0.745,0.36,0.085*z],0.037,6,K.dark);
-    B.beam([0.47,1.13,0.34*z],[0.47,1.13,0.43*z],0.045,0.045,K.black);
-  }
-  B.beam([-0.22,0.86,0],[-0.34,0.48,0],0.075,0.075,K.acc);
-  B.box(0.47,0.96,-0.12,0.58,1.03,0.12,K.silver);
-  B.beam([0.47,1.13,-0.4],[0.47,1.13,0.4],0.028,0.028,K.dark); B.box(0.45,1.02,-0.03,0.52,1.13,0.03,K.dark);
-  B.box(0.62,0.78,-0.075,1.1,0.83,0.075,K.team,0.55,0.75);
-  B.box(0.55,0.92,-0.135,0.6,1.17,0.135,K.team);
-  B.box(0.1,0.85,-0.13,0.5,1.04,0.13,K.team,0.8,0.72);
-  B.box(0.18,0.68,-0.225,0.56,1.0,0.225,K.team,0.72,0.86);
-  B.box(-0.64,0.93,-0.115,0.24,1.0,0.115,K.seat);
-  B.box(-0.56,0.64,-0.155,-0.1,0.92,0.155,K.team);
-  B.box(-1.04,0.87,-0.09,-0.46,0.94,0.09,K.team);
-  B.tube([0.06,0.52,0.15],[-0.26,0.72,0.17],0.034,6,K.silver); B.tube([-0.26,0.72,0.17],[-0.86,0.86,0.15],0.055,8,K.silver);
-  return B;
-}
-function ring(B,rO0,rI,w,n,col,knob){ /* an annulus about Z (a tyre or a rim); knob: the outer radius alternates (a knobby tyre) */
-  var s=B.v, k, a;
-  for(k=0;k<=n;k++){ a=k/n*TAU; var c=Math.cos(a), si=Math.sin(a), rO=knob&&(k%2)?rO0-knob:rO0;
-    B.vert(c*rO,si*rO,-w/2,c,si,0,col[0],col[1],col[2],col[3]); B.vert(c*rO,si*rO,w/2,c,si,0,col[0],col[1],col[2],col[3]);
-    B.vert(c*rI,si*rI,-w/2,-c,-si,0,col[0],col[1],col[2],col[3]); B.vert(c*rI,si*rI,w/2,-c,-si,0,col[0],col[1],col[2],col[3]);
-    B.vert(c*rO,si*rO,-w/2,0,0,-1,col[0],col[1],col[2],col[3]); B.vert(c*rI,si*rI,-w/2,0,0,-1,col[0],col[1],col[2],col[3]);
-    B.vert(c*rO,si*rO,w/2,0,0,1,col[0],col[1],col[2],col[3]); B.vert(c*rI,si*rI,w/2,0,0,1,col[0],col[1],col[2],col[3]); }
-  for(k=0;k<n;k++){ var o=s+k*8, p=o+8; B.quad(o,p,p+1,o+1); B.quad(o+2,o+3,p+3,p+2); B.quad(o+4,o+5,p+5,p+4); B.quad(o+6,p+6,p+7,o+7); }
-}
-function wheelMesh(){
-  var B=new GL.Builder(); ring(B,0.36,0.285,0.115,20,K.tire,0.014); ring(B,0.285,0.262,0.075,14,K.silver);
-  for(var k=0;k<3;k++){ var a=k/3*PI; B.beam([Math.cos(a)*0.26,Math.sin(a)*0.26,0],[-Math.cos(a)*0.26,-Math.sin(a)*0.26,0],0.012,0.012,K.grey); }
-  B.cylZ(0,0,0,0.055,0.14,6,K.silver); return B;
-}
-/* the rider: the upper body about the hip pivot; the thighs along +X from the hip; the shins along +X from the peg (boots at the peg) */
-var HIP=[-0.18,1.02], PEG=[-0.1,0.4], THIGH=0.44, SHIN=0.47;
-function riderUpper(){
-  var B=new GL.Builder(), z;
-  B.box(-0.1,-0.07,-0.16,0.12,0.12,0.16,K.acc);
-  B.tbeam([0.0,0.02,0],[0.24,0.5,0],0.3,0.2,0.44,0.25,K.team);
-  B.tbeam([0.17,0.5,0],[0.27,0.58,0],0.2,0.14,0.12,0.11,K.teamD);
-  B.ball(0.3,0.68,0,0.15,0.15,0.14,K.team,8);
-  B.box(0.36,0.73,-0.09,0.5,0.76,0.09,K.acc); B.box(0.37,0.56,-0.075,0.47,0.64,0.075,K.acc); B.box(0.4,0.63,-0.1,0.45,0.69,0.1,K.lens);
-  for(z=-1;z<=1;z+=2){
-    B.tbeam([0.22,0.46,0.19*z],[0.38,0.29,0.33*z],0.13,0.12,0.1,0.095,K.team); B.tbeam([0.38,0.29,0.33*z],[0.63,0.11,0.38*z],0.095,0.09,0.075,0.075,K.team);
-    B.box(0.6,0.07,0.33*z-0.05,0.69,0.15,0.33*z+0.05,K.glove);
-  }
-  return B;
-}
-/* polish: ONE leg per instance (two instances a rider, still one draw call for the whole field), so each leg can move on its own: the
-   inside foot off the peg in a flat turn, a stride when a crashed rider walks back to the bike */
-function riderThighs(){ var B=new GL.Builder(); B.tbeam([0,0,0],[THIGH,0,0],0.17,0.17,0.12,0.13,K.acc); B.ball(THIGH,0,0,0.075,0.075,0.075,K.acc,6); return B; }
-function riderShins(){ var B=new GL.Builder(); B.tbeam([0.02,0,0],[SHIN,0,0],0.14,0.13,0.12,0.12,K.boot); B.box(-0.13,-0.065,-0.065,0.15,0.065,0.065,K.boot); B.box(-0.13,-0.075,-0.066,0.15,-0.04,0.066,K.black); return B; }
-function personMesh(){ /* a standing person (flagger, marshal, spectators): origin at the feet, facing +X; the jacket in the instance colour.
-  polish 2: tapered legs and arms, shoulders, a cap with a brim (it was six boxes): about 200 triangles */
-  var B=new GL.Builder(), z;
-  for(z=-1;z<=1;z+=2){ B.tbeam([0,0.9,0.1*z],[0.02,0.09,0.11*z],0.16,0.17,0.11,0.12,K.dark); B.box(-0.07,0,0.11*z-0.06,0.17,0.09,0.11*z+0.06,K.black); }
-  B.tbeam([0,0.86,0],[0,1.44,0],0.36,0.22,0.44,0.25,K.team); B.ball(0,1.42,0,0.12,0.075,0.235,K.team,6);
-  B.beam([0,1.44,0],[0.01,1.54,0],0.08,0.08,K.skin); B.ball(0.01,1.62,0,0.1,0.12,0.1,K.skin,6);
-  B.box(-0.1,1.68,-0.105,0.1,1.76,0.105,K.team); B.box(0.08,1.68,-0.085,0.21,1.7,0.085,K.team);
-  B.tbeam([0,1.39,-0.25],[0.05,1.12,-0.29],0.1,0.1,0.085,0.085,K.team); B.tbeam([0.05,1.12,-0.29],[0.12,0.9,-0.27],0.085,0.085,0.07,0.07,K.skin);
-  B.tbeam([0,1.41,0.25],[0.09,1.63,0.3],0.1,0.1,0.085,0.085,K.team); B.tbeam([0.09,1.63,0.3],[0.16,1.86,0.3],0.085,0.085,0.07,0.07,K.skin);
-  return B;
-}
-function plateMesh(){ var B=new GL.Builder(); var w=0.15, h=0.11; B.p.push(0,-h,-w, 0,-h,w, 0,h,w, 0,h,-w); B.u.push(0,0, 1,0, 1,1, 0,1); B.n.push(1,0,0,1,0,0,1,0,0,1,0,0); B.c.push(1,1,1,0,1,1,1,0,1,1,1,0,1,1,1,0); B.v=4; B.i.push(0,1,2,0,2,3); return B; }
+/* ---------------- models: models3d.js (the bike, the rider, the people) ---------------- */
 
 /* ---------------- the view ---------------- */
 function create(host,opt){
@@ -150,18 +109,29 @@ function create(host,opt){
 
   /* ---------- GPU resources that don't depend on the course ---------- */
   function initModels(){
-    M.body=R.mesh(bikeBody(),"lit"); M.wheel=R.mesh(wheelMesh(),"lit"); M.upper=R.mesh(riderUpper(),"lit"); M.thigh=R.mesh(riderThighs(),"lit"); M.shin=R.mesh(riderShins(),"lit");
-    M.person=R.mesh(personMesh(),"lit"); M.plate=[{vb:R.vbuf(new Float32Array([0,-0.11,-0.15,0,0, 0,-0.11,0.15,1,0, 0,0.11,0.15,1,1, 0,0.11,-0.15,0,1]),[["aPos",3],["aUV",2]],false),ib:R.ibuf(new Uint16Array([0,1,2,0,2,3])),tris:2}];
+    var Md=MX.Models;
+    M.body=R.mesh(Md.body(0),"lit"); M.fork=R.mesh(Md.fork(0),"lit"); M.swing=R.mesh(Md.swing(0),"lit"); M.shock=R.mesh(Md.shock(0),"lit");
+    M.wheelF=R.mesh(Md.wheel(0,false),"lit"); M.wheelR=R.mesh(Md.wheel(0,true),"lit"); M.torso=R.mesh(Md.torso(0),"lit");
+    M.uarm=R.mesh(Md.uarm(0),"lit"); M.farm=R.mesh(Md.farm(0),"lit"); M.thigh=R.mesh(Md.thigh(0),"lit"); M.shin=R.mesh(Md.shin(0),"lit");
+    M.r1s=R.mesh(Md.rigid(0,1),"lit"); M.r1t=R.mesh(Md.rigid(1,1),"lit"); M.w1=R.mesh(Md.wheel(1,false),"lit"); M.r2s=R.mesh(Md.rigid(0,2),"lit"); M.r2t=R.mesh(Md.rigid(1,2),"lit");
+    M.person=R.mesh(Md.person(),"lit"); M.plate=[{vb:R.vbuf(new Float32Array([0,-0.11,-0.15,0,0, 0,-0.11,0.15,1,0, 0,0.11,0.15,1,1, 0,0.11,-0.15,0,1]),[["aPos",3],["aUV",2]],false),ib:R.ibuf(new Uint16Array([0,1,2,0,2,3])),tris:2}];
     var ispec=[["iA",4],["iB",4],["iC",4],["iTeam",4],["iAcc",4]];
-    IB.body=R.vbuf(new Float32Array(42*20),ispec,true); IB.wheel=R.vbuf(new Float32Array(84*20),ispec,true); IB.upper=R.vbuf(new Float32Array(42*20),ispec,true);
-    IB.thigh=R.vbuf(new Float32Array(84*20),ispec,true); IB.shin=R.vbuf(new Float32Array(84*20),ispec,true); IB.person=R.vbuf(new Float32Array(128*20),ispec,true);
+    PARTS.forEach(function(k){ IB[k]=R.vbuf(new Float32Array(CAP*20),ispec,true); });
+    IB.person=R.vbuf(new Float32Array(128*20),ispec,true);
     IB.gate=R.vbuf(new Float32Array(20),ispec,true);
-    IB.plate=R.vbuf(new Float32Array(172*16),[["iA",4],["iB",4],["iC",4],["iUV",4]],true);
+    IB.plate=R.vbuf(new Float32Array(240*16),[["iA",4],["iB",4],["iC",4],["iUV",4]],true);
     IB.part=R.vbuf(new Float32Array(400*8),[["iP",4],["iCol",4]],true);
     IB.label=R.vbuf(new Float32Array(90*12),[["iP",4],["iUV",4],["iS",4]],true);
     IB.decal=R.vbuf(new Float32Array(64*12),[["iP",4],["iD",4],["iN",4]],true);
     IB.flag=R.vbuf(new Float32Array(3000*10),[["aPos",3],["aNor",3],["aCol",4]],true);
-    TEX.dirt=R.tex(dirtTexture(7),{aniso:4});
+    IB.glow=R.vbuf(new Float32Array(48*8),[["iP",4],["iCol",4]],true);
+    IB.clump=R.vbuf(new Float32Array(300*12),[["iP",4],["iCol",4],["iV",4]],true);
+    /* the textures made in code (smaller on a device that starts at the lean level) */
+    var big=V.q>=1;
+    TEX.dirt=R.tex(dirtTexture(7,big?512:256),{aniso:4,w:big?512:256,h:big?512:256});
+    TEX.detA=R.tex(detailTexture(21,big?512:256,0),{aniso:4,w:big?512:256,h:big?512:256});
+    TEX.detB=R.tex(detailTexture(33,big?256:128,1),{aniso:2,w:big?256:128,h:big?256:128});
+    TEX.smooth=R.tex(smoothTexture(55,128),{w:128,h:128});
     /* polish: a 64 x 64 white-noise texture for the per-cell patterns (the crowd, the LED boards, the suites, the stars): a texture lookup
        instead of a sin() hash, which falls apart in the 16-bit mediump floats of a Fire TV's GPU */
     var nc=document.createElement("canvas"); nc.width=nc.height=64; var nx=nc.getContext("2d"), ni=nx.createImageData(64,64), Rn0=rng(1234);
@@ -171,8 +141,9 @@ function create(host,opt){
   }
   /* ---------- the plate / label atlas: 8 x 8 cells of 128 x 64 ---------- */
   var ATL={c:null,x:null,t:null,cells:{},dirty:false};
-  function atlasInit(){ ATL.c=document.createElement("canvas"); ATL.c.width=1024; ATL.c.height=1024; ATL.x=ATL.c.getContext("2d"); ATL.t=R.tex(ATL.c,{clamp:true}); ATL.dirty=true; }
-  function cellUV(i){ var cx=(i%8)*128, cy=Math.floor(i/8)*64; return [(cx+2)/1024,1-(cy+62)/1024,(cx+126)/1024,1-(cy+2)/1024]; }
+  function atlasInit(){ ATL.c=document.createElement("canvas"); ATL.c.width=1024; ATL.c.height=2048; ATL.x=ATL.c.getContext("2d"); ATL.t=R.tex(ATL.c,{clamp:true}); ATL.dirty=true; }
+  function cellUV(i){ var cx=(i%8)*128, cy=Math.floor(i/8)*64; return [(cx+2)/1024,1-(cy+62)/2048,(cx+126)/1024,1-(cy+2)/2048]; }
+  function jerseyUV(k){ var cx=(k%8)*128, cy=1024+Math.floor(k/8)*128; return [(cx+3)/1024,1-(cy+125)/2048,(cx+125)/1024,1-(cy+3)/2048]; }
   function rr(x,X,Y,W,H,r){ x.beginPath(); x.moveTo(X+r,Y); x.lineTo(X+W-r,Y); x.quadraticCurveTo(X+W,Y,X+W,Y+r); x.lineTo(X+W,Y+H-r); x.quadraticCurveTo(X+W,Y+H,X+W-r,Y+H); x.lineTo(X+r,Y+H); x.quadraticCurveTo(X,Y+H,X,Y+H-r); x.lineTo(X,Y+r); x.quadraticCurveTo(X,Y,X+r,Y); x.closePath(); }
   function drawCell(i,num,o){
     var x=ATL.x, cx=(i%8)*128, cy=Math.floor(i/8)*64; x.clearRect(cx,cy,128,64);
@@ -189,7 +160,18 @@ function create(host,opt){
   function drawOut(k,num){ var x=ATL.x, i=64+k, cx=(i%8)*128, cy=Math.floor(i/8)*64; x.clearRect(cx,cy,128,64); x.fillStyle="#1a1a1f"; rr(x,cx+4,cy+6,120,52,10); x.fill(); x.strokeStyle="#e8584a"; x.lineWidth=4; rr(x,cx+4,cy+6,120,52,10); x.stroke();
     x.textBaseline="middle"; x.textAlign="left"; x.fillStyle="#c9c9d2"; x.font="800 30px Manrope, 'Segoe UI', system-ui, sans-serif"; x.fillText(String(num==null?"-":num),cx+12,cy+33);
     x.textAlign="right"; x.fillStyle="#ff8a7a"; x.font="800 26px Manrope, 'Segoe UI', system-ui, sans-serif"; x.fillText("OUT",cx+118,cy+33); ATL.dirty=true; }
-  function atlasRedraw(){ V.riders.forEach(function(r){ drawCell(r.k,r.plate,{red:r.red,me:r.me,color:r.hex}); drawOut(r.k,r.plate); }); }
+  /* the print on the jersey's back: the surname above and the number big (no background: it is printed on the cloth), in white on a dark jersey,
+     in near black on a light one, with a thin outline of the other for readability */
+  function drawJersey(r){
+    var x=ATL.x, k=r.k, cx=(k%8)*128, cy=1024+Math.floor(k/8)*128, c=r.col, lum=0.299*c[0]+0.587*c[1]+0.114*c[2], dark=lum<0.55;
+    x.clearRect(cx,cy,128,128); x.textAlign="center"; x.textBaseline="middle";
+    var fill=dark?"#f4f1ea":"#15151a", edge=dark?"rgba(0,0,0,.55)":"rgba(255,255,255,.45)", t=String(r.plate==null?"-":r.plate), nm=String(r.name||"").split(" ").slice(-1)[0].toUpperCase().slice(0,10);
+    x.lineJoin="round"; x.lineWidth=5; x.strokeStyle=edge; x.fillStyle=fill;
+    var fs=t.length>2?64:84; x.font="900 "+fs+"px Manrope, 'Arial Black', Impact, sans-serif"; x.strokeText(t,cx+64,cy+84); x.fillText(t,cx+64,cy+84);
+    var nf=nm.length>7?19:23; x.font="800 "+nf+"px Manrope, 'Arial Narrow', Impact, sans-serif"; x.lineWidth=3; x.strokeText(nm,cx+64,cy+22); x.fillText(nm,cx+64,cy+22);
+    ATL.dirty=true;
+  }
+  function atlasRedraw(){ V.riders.forEach(function(r){ drawCell(r.k,r.plate,{red:r.red,me:r.me,color:r.hex}); drawOut(r.k,r.plate); drawJersey(r); }); }
   if(document.fonts&&document.fonts.ready) document.fonts.ready.then(function(){ if(ATL.x){ atlasRedraw(); } });
 
   /* ---------- the scene for a course ---------- */
@@ -198,17 +180,27 @@ function create(host,opt){
     for(var j=0;j<C.N;j+=3){ var along=Math.min(Math.abs(j-i),C.N-Math.abs(j-i))*C.DS; if(along<d*2.2) continue; var q=Math.hypot(C.x[j]-px,C.z[j]-pz)-C.hw[j]; if(q<best) best=q; }
     return best;
   }
+  /* split a builder's triangles in two by the colour code of their first vertex (the stands' patterns have their own shader) */
+  function splitBy(P,pred){
+    var A=new GL.Builder(), B2=new GL.Builder(), mA={}, mB={}, hasQ=P.q.length===P.v*4;
+    for(var t=0;t<P.i.length;t+=3){ var i0=P.i[t], inB=pred(Math.round(P.c[i0*4+3])), dst=inB?B2:A, map=inB?mB:mA;
+      for(var q=0;q<3;q++){ var v=P.i[t+q], m=map[v];
+        if(m==null){ m=map[v]=dst.v; dst.p.push(P.p[v*3],P.p[v*3+1],P.p[v*3+2]); dst.n.push(P.n[v*3],P.n[v*3+1],P.n[v*3+2]); dst.c.push(P.c[v*4],P.c[v*4+1],P.c[v*4+2],P.c[v*4+3]);
+          if(hasQ) dst.q.push(P.q[v*4],P.q[v*4+1],P.q[v*4+2],P.q[v*4+3]); else dst.q.push(0.25,0.35,0,1); dst.v++; }
+        dst.i.push(m); } }
+    return [A,B2];
+  }
   function buildScene(C){
     var S={C:C,meshes:[],spots:{},night:true,cols:{}}, sur=C.layout.surroundings||(C.outdoor?"hills-trees":"stadium-open"), Rn=rng(hash(C.id)+C.variant);
     S.sur=sur; S.night=!C.outdoor; S.sandy=C.layout.soil==="sand";
     /* colours of the ground */
-    S.cols.dirt=C.outdoor?[0.5,0.36,0.25]:S.sandy?[0.68,0.55,0.4]:[0.5,0.36,0.25]; S.cols.sand=[0.82,0.72,0.53]; S.cols.grass=[0.23,0.36,0.15];
+    S.cols.dirt=C.outdoor?[0.5,0.36,0.25]:S.sandy?[0.68,0.55,0.4]:[0.41,0.29,0.2]; S.cols.sand=[0.82,0.72,0.53]; S.cols.grass=[0.23,0.36,0.15];
     /* polish 2: every real track its own ground: the soil the researcher found (loam dark, clay red-brown, hard-pack pale, sand) and the
        country round it (the desert's dry brush, farmland's greener grass) */
     if(C.outdoor){ var SOIL={loam:[0.43,0.31,0.21],clay:[0.55,0.34,0.22],hardpack:[0.6,0.49,0.37],sand:[0.7,0.58,0.42]}; if(SOIL[C.layout.soil]) S.cols.dirt=SOIL[C.layout.soil];
       if(sur==="desert") S.cols.grass=[0.44,0.4,0.27]; else if(sur==="farmland") S.cols.grass=[0.25,0.39,0.15]; }
     /* 1. the track strip: 9 columns (foot, 7 across the surface, foot), every 0.5 m on features, coarser on the flat */
-    var T=new GL.Builder(), rows=[], U=[-1,-0.62,-0.26,0,0.26,0.62,1], i=0, step=C.outdoor?3:2;
+    var T=new GL.Builder(), rows=[], ncol=V.q>=2?27:V.q===1?19:13, U=[], i=0, step=C.outdoor?3:2; for(var uc0=0;uc0<ncol;uc0++) U.push(-1+2*uc0/(ncol-1)); var MIDC=(ncol-1)>>1;
     var minx=1e9,maxx=-1e9,minz=1e9,maxz=-1e9;
     while(i<C.N){
       rows.push(i);
@@ -228,7 +220,7 @@ function create(host,opt){
     rows.forEach(function(ii){
       var s=ii*C.DS, cx=C.x[ii], cz=C.z[ii], nx=-C.tz[ii], nz=C.tx[ii], hw=C.hw[ii], off=C.off[ii], E=C.E[ii];
       var ys=U.map(function(u){ return TK.ground(C,s,u*hw); });
-      var lineU=Math.abs(C.k[ii])>0.02?(C.k[ii]>0?0.3:-0.3):0, sand=C.sand[ii], hiF=C.F[ii], dk=C.bridges.length?deckAt(s):null, wu=wander(s);
+      var lineU=C.rutU?C.rutU[ii]:0, rutD0=C.rutD?C.rutD[ii]:0, sand=C.sand[ii], hiF=C.F[ii], dk=C.bridges.length?deckAt(s):null, wu=wander(s);
       /* polish: cavity light: a crest or a lip above its surroundings lighter, a trough or the foot of a landing darker (the whoops and the
          jumps read at a glance, even under flat light) */
       var avg=0; for(var q=-5;q<=5;q++) avg+=C.F[(ii+q+C.N)%C.N]; avg/=11; var cav=clamp(1+(hiF-avg)*0.34,0.72,1.14);
@@ -236,7 +228,7 @@ function create(host,opt){
         var u, lat, y, tint=1, groove=0;
         if(c===0||c===nc-1){ var e=c===0?0:U.length-1, he=ys[e]-E; lat=off+(c===0?-1:1)*(hw+0.35+Math.max(0,he)*0.95); y=E-0.06; u=c===0?-1.25:1.25; tint=0.66*(0.5+0.5*cav);
           if(dk){ lat=off+(c===0?-1:1)*(hw+0.3); y=ys[e]-0.55; tint=0.5; } }
-        else { u=U[c-1]; lat=off+u*hw; y=ys[c-1]; groove=Math.max(0,1-Math.abs(u-lineU)*2.3); tint=(1+0.06*Math.max(0,(ys[c-1]-ys[3])))*cav*(0.94+0.06*Math.cos(u*1.4)); if(hiF>0.3) tint*=0.95;
+        else { u=U[c-1]; lat=off+u*hw; y=ys[c-1]; var gdu=(u-lineU)*hw/0.5; groove=clamp(Math.exp(-gdu*gdu)*(0.35+rutD0*7),0,1); tint=(1+0.06*Math.max(0,(ys[c-1]-ys[MIDC])))*cav*(0.94+0.06*Math.cos(u*1.4)); if(hiF>0.3) tint*=0.95;
           /* polish 2: the start funnel's extra width sits a few cm low, so where it overlaps another part of the lap (the built-in stadium's last
              turn) that lane wins instead of the two fighting in the depth buffer (dark jagged streaks in the gate shot) */
           if(s<C.startLen+1){ var ext=Math.abs(lat)-(W0+0.4); if(ext>0) y-=Math.min(0.05,ext*0.03); } }
@@ -296,7 +288,9 @@ function create(host,opt){
     finish(C,P,S);
     gateStatic(C,P,S);
     if(C.outdoor) outdoorSet(C,P,Rn,S); else if(sur==="beach-speedway") speedwaySet(C,P,Rn,S); else stadiumSet(C,P,Rn,S);
-    S.props=R.mesh(P,"lit");
+    var sp=splitBy(P,function(code){ return code===4||code===5||code===7||code===8; });
+    S.props=R.mesh(sp[0],"lit"); S.stands=sp[1].v?R.mesh(sp[1],"lit"):null;
+    var ev=S.banks&&S.banks.length?S.banks:(S.lights||[]), pick=[]; for(var li=0;li<4&&ev.length;li++) pick.push(ev[Math.floor(li*ev.length/4)]); S.envLights=pick;
     /* 4. the gate (it falls toward the riders when it drops) */
     S.gateMesh=R.mesh(gateMesh(C),"lit");
     /* 5. camera spots */
@@ -304,8 +298,7 @@ function create(host,opt){
     return S;
   }
   /* append builder Bb to A (positions, normals, colours, uv, material, indices) */
-  function mergeB(A,Bb){ var o=A.v, k; for(k=0;k<Bb.p.length;k++) A.p.push(Bb.p[k]); for(k=0;k<Bb.n.length;k++) A.n.push(Bb.n[k]); for(k=0;k<Bb.c.length;k++) A.c.push(Bb.c[k]);
-    for(k=0;k<Bb.u.length;k++) A.u.push(Bb.u[k]); for(k=0;k<Bb.m.length;k++) A.m.push(Bb.m[k]); for(k=0;k<Bb.i.length;k++) A.i.push(Bb.i[k]+o); A.v+=Bb.v; }
+  function mergeB(A,Bb){ A.add(Bb); }
   /* polish 2: the gate's frame: the start of the chute on a real Supercross layout, else the lap's start */
   function gateF(C){ if(C.Lc) return {x:C.cx[0],z:C.cz[0],tx:C.ctx[0],tz:C.ctz[0],hw:C.chw[0],off:C.coff[0],E:C.cE}; return {x:C.x[0],z:C.z[0],tx:C.tx[0],tz:C.tz[0],hw:C.hw[0],off:C.off[0],E:C.E[0]}; }
   function chuteI(C,D){ return clamp(Math.round((D+C.Lc)/C.DS),0,C.Nc); }
@@ -368,12 +361,14 @@ function create(host,opt){
   }
   /* a tuff block (polish): 1.2 x 0.42 x 0.56 m with its top edges chamfered, so the light rolls over it instead of a hard white box */
   function tuff(P,col,top){
+    P.mat(0.6,0.55,0.15,1);
     var x0=-0.6, x1=0.6, z0=-0.28, z1=0.28, h=0.42, b=0.075, m=h-b;
     faceOut(P,[[x0,0,z0],[x1,0,z0],[x1,m,z0],[x0,m,z0]],col,0,0.2,0); faceOut(P,[[x0,0,z1],[x1,0,z1],[x1,m,z1],[x0,m,z1]],col,0,0.2,0);
     faceOut(P,[[x0,0,z0],[x0,0,z1],[x0,m,z1],[x0,m,z0]],col,0,0.2,0); faceOut(P,[[x1,0,z0],[x1,0,z1],[x1,m,z1],[x1,m,z0]],col,0,0.2,0);
     faceOut(P,[[x0,m,z0],[x1,m,z0],[x1-b,h,z0+b],[x0+b,h,z0+b]],top,0,0.2,0); faceOut(P,[[x0,m,z1],[x1,m,z1],[x1-b,h,z1-b],[x0+b,h,z1-b]],top,0,0.2,0);
     faceOut(P,[[x0,m,z0],[x0,m,z1],[x0+b,h,z1-b],[x0+b,h,z0+b]],top,0,0.2,0); faceOut(P,[[x1,m,z0],[x1,m,z1],[x1-b,h,z1-b],[x1-b,h,z0+b]],top,0,0.2,0);
     faceOut(P,[[x0+b,h,z0+b],[x1-b,h,z0+b],[x1-b,h,z1-b],[x0+b,h,z1-b]],top,0,0.2,0);
+    P.mat(0.25,0.35,0,1);
   }
   /* tuff blocks (stadium) or stakes with a tape line between them (outdoors) along both edges, outside the jump sides; outdoors, straw bales
      beside the jump faces and the landings */
@@ -384,7 +379,7 @@ function create(host,opt){
       if(!C.outdoor&&last&&Math.hypot(px-last[0],pz-last[1])<1.12) return false;
       var v0=P.v;
       if(C.outdoor) P.box(-0.05,0,-0.05,0.05,1.1,0.05,(idx%2)?[0.9,0.9,0.88,0]:[0.95,0.45,0.15,0]);
-      else { var blue=(idx%5)===0; tuff(P,blue?[0.17,0.29,0.6,0]:[0.8,0.8,0.79,0],blue?[0.22,0.36,0.7,0]:[0.86,0.86,0.85,0]); }
+      else { var cc=idx%6, TC=[[0.66,0.66,0.64],[0.78,0.58,0.1],[0.66,0.66,0.64],[0.6,0.1,0.1],[0.66,0.66,0.64],[0.1,0.2,0.5]][cc]; tuff(P,[TC[0],TC[1],TC[2],0],[TC[0]*1.08,TC[1]*1.08,TC[2]*1.08,0]); }
       P.xform(v0,GL.local(M12,px,y,pz,0,yaw,0,1)); last=[px,pz]; return true;
     }
     for(side=-1;side<=1;side+=2){
@@ -489,8 +484,22 @@ function create(host,opt){
       P.face([[b[0]+b[2]*41.6,35.2,b[1]+b[3]*41.6],[a[0]+a[2]*41.6,35.2,a[1]+a[3]*41.6],[a[0]+a[2]*28,37,a[1]+a[3]*28],[b[0]+b[2]*28,37,b[1]+b[3]*28]],[0.12,0.12,0.14,6]); }
     band(P,path,27.95,36.1,37.6,[0.16,0.16,0.19,6]);
     for(k=0;k<path.length;k+=4){ var q=path[k]; P.beam([q[0]+q[2]*41.4,33.9,q[1]+q[3]*41.4],[q[0]+q[2]*28.4,36.2,q[1]+q[3]*28.4],0.45,0.7,[0.2,0.2,0.23,6]); }
-    S.lights=[];
-    for(k=1;k<path.length;k+=3){ var t=path[k], lx=t[0]+t[2]*28.6, lz=t[1]+t[3]*28.6; P.box(-1.7,-0.32,-0.6,1.7,0.32,0.6,[1.7,1.65,1.5,2]); P.xform(P.v-24,GL.local(M12,lx,35.55,lz,0,-Math.atan2(t[3],t[2])+PI/2,0,1)); S.lights.push([lx,35.2,lz,5.4]); }
+    S.lights=[]; S.banks=[];
+    /* the floodlight banks: a dark frame with a 5 x 3 grid of hot bulbs, hung under the canopy's edge and facing the floor; each bank also
+       gets a glow (the star-burst flare) */
+    var nbk=Math.max(10,Math.round(path.length/8)), stp=Math.max(1,Math.round(path.length/nbk));
+    for(k=2;k<path.length;k+=stp){ var t=path[k], nx=t[2], nz=t[3], tx=-nz, tz=nx, cxx=t[0]+nx*29.2, czz=t[1]+nz*29.2, hy=35.4;
+      P.beam([cxx-tx*2.8,hy,czz-tz*2.8],[cxx+tx*2.8,hy,czz+tz*2.8],0.5,3.0,[0.07,0.07,0.08,6]);
+      for(var bi=-2;bi<=2;bi++) for(var bj=-1;bj<=1;bj++){ var bx=cxx-nx*0.45+tx*bi*1.0, bz=czz-nz*0.45+tz*bi*1.0, by=hy+bj*0.85;
+        P.box(bx-0.34,by-0.3,bz-0.34,bx+0.34,by+0.3,bz+0.34,[2.7,2.6,2.3,2]); }
+      S.lights.push([cxx-nx*1.2,hy,czz-nz*1.2,6.0]); S.banks.push([cxx-nx*1.2,hy,czz-nz*1.2]); }
+    /* a lit strip along the canopy's lower edge */
+    band(P,path,27.9,35.95,36.1,[1.5,1.35,1.1,2]);
+    /* the skyline beyond the stands: dark towers with lit windows, some with a red beacon; fogged by the distance */
+    var cx0=(x0+x1)/2, cz0=(z0+z1)/2, rad0=Math.max(x1-x0,z1-z0)/2+60, nsk=90;
+    for(k=0;k<nsk;k++){ var ang=k/nsk*TAU+Rn()*0.05, rr=rad0+55+Rn()*150, w=14+Rn()*30, dd=14+Rn()*30, h=40+Math.pow(Rn(),1.6)*170, sx=cx0+Math.cos(ang)*rr*(0.9+Rn()*0.2)*1.15, sz=cz0+Math.sin(ang)*rr*(0.9+Rn()*0.2), v0=P.v;
+      P.box(-w/2,0,-dd/2,w/2,h,dd/2,[0.3,0.3,0.3,7]); P.xform(v0,GL.local(M12,sx,-2,sz,0,ang+PI/2+(Rn()-0.5)*0.5,0,1));
+      if(h>90&&Rn()<0.7){ P.box(sx-0.5,h-1,sz-0.5,sx+0.5,h+1,sz+0.5,[2.6,0.25,0.2,2]); S.lights.push([sx,h,sz,2.2]); } }
     /* two big boards over the ends (the short sides): a dark frame and an LED face */
     var ends=[0,0]; path.forEach(function(p,i){ if(p[0]<path[ends[0]][0]) ends[0]=i; if(p[0]>path[ends[1]][0]) ends[1]=i; });
     ends.forEach(function(ei){ var e=path[ei], bx=e[0]+e[2]*31, bz=e[1]+e[3]*31, yaw=-Math.atan2(e[3],e[2]), v0=P.v;
@@ -677,12 +686,16 @@ function create(host,opt){
      the horizon haze */
   function light(S){
     var beach=S.sur==="beach-speedway";
-    if(S.night) return {sun:norm3([0.62,0.66,0.3]),sunCol:[1.04,1.0,0.93],fill:norm3([-0.5,0.55,-0.62]),fillCol:[0.26,0.29,0.38],sky:[0.3,0.31,0.38],gnd:[0.24,0.2,0.16],
-      fog:[0.03,0.032,0.05],fogR:[220,700,beach?0.0016:0.0026],haze:beach?[0.2,0.16,0.16]:[0.19,0.175,0.17],expo:1.0,wet:0.12,
-      top:[0.012,0.018,0.05],hor:beach?[0.2,0.12,0.13]:[0.1,0.09,0.13],nightK:1,clouds:0,clear:[0.03,0.03,0.05],spot:[S.centre[0],S.centre[2],S.radius*1.05,1]};
-    return {sun:norm3([0.5,0.66,0.32]),sunCol:[0.98,0.92,0.79],fill:norm3([-0.45,0.5,-0.6]),fillCol:[0.13,0.15,0.19],sky:[0.38,0.44,0.56],gnd:[0.26,0.23,0.17],
-      fog:[0.68,0.75,0.84],fogR:[320,1900,0.00045],haze:[0.72,0.78,0.86],expo:1.0,wet:0.035,
-      top:[0.22,0.4,0.74],hor:[0.72,0.8,0.9],nightK:0,clouds:fx?0:0.85,clear:[0.7,0.77,0.86],spot:[0,0,1,0]};
+    /* LINEAR light (the shaders square the authored colours and tone map with ACES at the end): a strong warm key and a stronger warm rim from
+       the floodlights, a cool sky bounce and a warm ground bounce, the lit dust haze; by day the sun, the sky and a pale haze */
+    if(S.night) return {sun:norm3([0.62,0.66,0.3]),sunCol:[2.1,1.95,1.7],fill:norm3([-0.5,0.55,-0.62]),fillCol:[1.9,1.3,0.82],sky:[0.06,0.075,0.14],gnd:[0.05,0.035,0.025],
+      fog:[0.008,0.01,0.022],fogR:[240,820,beach?0.0020:0.0030],haze:beach?[0.1,0.06,0.05]:[0.07,0.05,0.04],expo:0.62,wet:0.2,
+      top:[0.1,0.13,0.26],hor:beach?[0.4,0.26,0.26]:[0.3,0.25,0.26],nightK:1,clouds:0,clear:[0.008,0.01,0.02],spot:[S.centre[0],S.centre[2],S.radius*1.05,1],
+      bloomK:1.0,bloomT:1.25,vig:1.0,sat:1.16};
+    return {sun:norm3([0.5,0.66,0.32]),sunCol:[3.1,2.8,2.3],fill:norm3([-0.45,0.5,-0.6]),fillCol:[0.55,0.62,0.8],sky:[0.5,0.62,0.9],gnd:[0.3,0.25,0.17],
+      fog:[0.42,0.52,0.7],fogR:[320,1900,0.00045],haze:[0.45,0.55,0.72],expo:0.85,wet:0.05,
+      top:[0.3,0.5,0.85],hor:[0.75,0.85,0.95],nightK:0,clouds:fx?0:0.85,clear:[0.45,0.55,0.75],spot:[0,0,1,0],
+      bloomK:0.7,bloomT:1.1,vig:0.55,sat:1.08};
   }
   function norm3(v){ var l=Math.hypot(v[0],v[1],v[2])||1; return [v[0]/l,v[1]/l,v[2]/l]; }
 
@@ -703,7 +716,7 @@ function create(host,opt){
     V.riders=list.map(function(o,k){ var c=hex(o.color), a=hex(o.accent||"#f2f2f6");
       return {s:o.s,k:k,hex:o.color,col:c,acc:a,plate:o.plate,red:!!o.red,me:!!o.me,name:o.name||"",segs:[],lag0:0,lane:((k*7919)%13-6)/6*0.55,lat:0,latV:0,D:0,
         crash:null,out:false,dnf:null,pull:null,park:null,spin:0,place:k,hold:null,whip:((((k*2654435761)>>>0)%7)-3)*0.09}; });
-    V.by={}; V.riders.forEach(function(r){ V.by[r.s]=r; drawCell(r.k,r.plate,{red:r.red,me:r.me,color:r.hex}); drawOut(r.k,r.plate); });
+    V.by={}; V.riders.forEach(function(r){ V.by[r.s]=r; r.mudJit=(rand()-0.5)*0.2; drawCell(r.k,r.plate,{red:r.red,me:r.me,color:r.hex}); drawOut(r.k,r.plate); drawJersey(r); });
     V.n=V.riders.length;
   };
   V.setRed=function(s){ V.riders.forEach(function(r){ var on=r.s===s; if(on!==r.red){ r.red=on; drawCell(r.k,r.plate,{red:r.red,me:r.me,color:r.hex}); } }); };
@@ -772,7 +785,7 @@ function create(host,opt){
       var cur=lagAt(r,Tb), want=tg[r.s];
       if(r.crash&&Tb<r.crash.T0+r.crash.dur+0.5){ if(r.crash.kind==="out"||want==null) return; var ls=r.segs[r.segs.length-1]; if(ls) r.segs.push({t0:ls.t1,t1:Math.max(ls.t1+3,t1end),l0:ls.l1,l1:Math.max(want,ls.l1-0.15*Math.max(3,t1end-ls.t1))}); return; }
       r.segs=r.segs.filter(function(q){ return q.t0<Tb; }).map(function(q){ if(q.t1>Tb){ var l=segLag(r,Tb); return {t0:q.t0,t1:Tb,l0:q.l0,l1:l,lin:true}; } return q; });
-      if(outs[r.s]&&!crashes.some(function(c){ return c.s===r.s; })){ r.pull={T0:Tb+2+Math.random()*3}; r.segs.push({t0:Tb,t1:Tb+0.1,l0:cur,l1:cur}); return; }
+      if(outs[r.s]&&!crashes.some(function(c){ return c.s===r.s; })){ r.pull={T0:Tb+2+rand()*3}; r.segs.push({t0:Tb,t1:Tb+0.1,l0:cur,l1:cur}); return; }
       if(want==null) want=cur;
       var q={t0:Tb+0.5,t1:first?Math.max(3,turnT-0.6):t1end,l0:cur,l1:want};
       if(holdSec){ var w=secWindow(r,holdSec,cur); if(w){ q.y0=w[0]; q.y1=w[1]; } }
@@ -838,7 +851,7 @@ function create(host,opt){
     var lw=lagAt(w,Tb), p=null, pl=-1;
     V.riders.forEach(function(r){ if(r===w||r.out||r.park||r.crash&&r.crash.T0>=Tb-8||tg[r.s]==null) return; var l=lagAt(r,Tb); if(l<lw&&tg[r.s]>tg[w.s]&&l>pl){ pl=l; p=r; } });
     if(!p) return null;
-    var span=Tend-Tb, tp=Tb+Math.max(5,span*(0.3+Math.random()*0.25));
+    var span=Tend-Tb, tp=Tb+Math.max(5,span*(0.3+rand()*0.25));
     if(crashT!=null&&Math.abs(tp-crashT)<9) tp=crashT>Tb+span*0.5?Math.max(Tb+5,crashT-12):crashT+10;
     tp=clamp(tp,Tb+4,Math.max(Tb+4.5,Tend-8));
     /* w closes to just behind p by the window, gets by inside it (ahead by a third of a second at its end), then eases to its new place */
@@ -862,7 +875,7 @@ function create(host,opt){
   V.timeLeft=function(k){ return V.C?lapEnd(k==null?V.lap:k)-V.T:0; };
   V.lapTime=function(){ return V.C?V.C.Tlap:55; };
   function checkWaiters(){ for(var i=V.waiters.length-1;i>=0;i--){ var w=V.waiters[i]; if(V.T>=lapEnd(w.k)-0.02){ V.waiters.splice(i,1); try{ w.res(); }catch(e){} } } }
-  V.setFlag=function(f){ V.flag=f||null; V.flagT=now(); };
+  V.setFlag=function(f){ V.flag=f||null; V.flagT=vnow(); };
   V.flush=function(){ V.waiters.splice(0).forEach(function(w){ try{ w.res(); }catch(e){} }); };
   V.finishShow=function(){ V.phase="end"; };
 
@@ -890,11 +903,11 @@ function create(host,opt){
     S.secs.concat(S.turns).forEach(function(x){ var dt=leadTimeAt(x.s,T)-T; if(dt>0.9&&dt<Math.min(d,6.5)-0.7&&dt<best){ best=dt; sp=x; } });
     if(sp&&last!=="side") opts.push({kind:"side",spot:sp,d:Math.min(d,best+2.2),w:3.2});
     var pair=closePair(); if(pair&&last!=="battle") opts.push({kind:"battle",pair:pair,d:Math.min(d,4.6),w:2.4});
-    var you=meSeat(); opts.push({kind:"chase",focus:(you>=0&&Math.random()<0.45)?you:-1,d:Math.min(d,5.2),w:last==="chase"?0.5:2});
+    var you=meSeat(); opts.push({kind:"chase",focus:(you>=0&&rand()<0.45)?you:-1,d:Math.min(d,5.2),w:last==="chase"?0.5:2});
     var ws=null; S.secs.forEach(function(x){ var dt=leadTimeAt(x.s,T)-T; if(dt>0.4&&dt<4) ws=x; }); if(ws&&last!=="wide") opts.push({kind:"wide",spot:ws,d:Math.min(d,4.6),w:1.6});
     if(last!=="heli"&&(V.rot%6===5)) opts.push({kind:"heli",d:Math.min(d,4.2),w:1.4});
     V.rot++;
-    var tot=0; opts.forEach(function(o){ tot+=o.w; }); var r=Math.random()*tot;
+    var tot=0; opts.forEach(function(o){ tot+=o.w; }); var r=rand()*tot;
     for(var i=0;i<opts.length;i++){ r-=opts[i].w; if(r<=0) return opts[i]; } return opts[0];
   }
   function direct(){
@@ -907,18 +920,23 @@ function create(host,opt){
     var room=next?next.t0-T:99;
     if(sh&&sh.el<sh.d) return;
     if(sh&&room<2.4){ sh.d=sh.el+room+0.02; return; }
-    setShot(pickFiller(Math.min(room,4.2+Math.random()*2.6)));
+    setShot(pickFiller(Math.min(room,4.2+rand()*2.6)));
   }
   /* ---------- per frame: the riders' poses ---------- */
   var A12=new Float32Array(12), B12=new Float32Array(12), C12=new Float32Array(12), L12=new Float32Array(12);
-  var IBD={body:new Float32Array(42*20),wheel:new Float32Array(84*20),upper:new Float32Array(42*20),thigh:new Float32Array(84*20),shin:new Float32Array(84*20),plate:new Float32Array(172*16),
-    person:new Float32Array(128*20),label:new Float32Array(90*12),decal:new Float32Array(64*12),part:new Float32Array(400*8),gate:new Float32Array(20)};
-  var counts={body:0,wheel:0,upper:0,leg:0,plate:0,person:0,label:0,decal:0,part:0};
+  var PARTS=["body","fork","swing","shock","wheelF","wheelR","torso","uarm","farm","thigh","shin","r1s","r1t","w1","r2s","r2t"];
+  var NCNT={body:"body",fork:"fork",swing:"swing",shock:"shock",wheelF:"wheelF",wheelR:"wheelR",torso:"torso",uarm:"arm",farm:"arm",thigh:"leg",shin:"leg",r1s:"r1s",r1t:"r1t",w1:"w1",r2s:"r2s",r2t:"r2t"};
+  var SHCAST=["body","fork","swing","shock","wheelF","wheelR","torso","uarm","farm","thigh","shin","r1s","r1t","w1"];
+  var CAP=48;
+  var IBD={plate:new Float32Array(240*16),person:new Float32Array(128*20),label:new Float32Array(90*12),decal:new Float32Array(64*12),part:new Float32Array(400*8),gate:new Float32Array(20),glow:new Float32Array(48*8),clump:new Float32Array(300*12)};
+  PARTS.forEach(function(k){ IBD[k]=new Float32Array(CAP*20); });
+  var counts={body:0,fork:0,swing:0,shock:0,wheelF:0,wheelR:0,torso:0,arm:0,leg:0,r1s:0,r1t:0,w1:0,r2s:0,r2t:0,plate:0,person:0,label:0,decal:0,part:0,clump:0};
   var poses=[], LIST=[], RIDING=[], OBSL=[], UP=[0,1,0];
   function byD(a,b){ return b.D-a.D; }
-  function pose(r,x,y,z,tx,tz,v,air,D,crash,parked,out,fig){ var p=r._po||(r._po={r:r}); p.x=x; p.y=y; p.z=z; p.tx=tx; p.tz=tz; p.v=v; p.air=air; p.D=D; p.crash=crash; p.parked=parked; p.out=out; p.fig=fig; poses.push(p); return p; }
-  function putInst(arr,n,M,col,acc){ var o=n*20; arr[o]=M[0];arr[o+1]=M[1];arr[o+2]=M[2];arr[o+3]=M[3];arr[o+4]=M[4];arr[o+5]=M[5];arr[o+6]=M[6];arr[o+7]=M[7];arr[o+8]=M[8];arr[o+9]=M[9];arr[o+10]=M[10];arr[o+11]=M[11];
-    arr[o+12]=col[0];arr[o+13]=col[1];arr[o+14]=col[2];arr[o+15]=1;arr[o+16]=acc[0];arr[o+17]=acc[1];arr[o+18]=acc[2];arr[o+19]=1; }
+  function pose(r,x,y,z,tx,tz,v,air,D,crash,parked,out,fig,o){ var p=r._po||(r._po={r:r}); p.x=x; p.y=y; p.z=z; p.tx=tx; p.tz=tz; p.v=v; p.air=air; p.D=D; p.crash=crash; p.parked=parked; p.out=out; p.fig=fig;
+    if(o){ p.gl=o.gl; p.lean=o.lean||0; p.pitch=o.pitch||0; p.stand=o.stand||0; p.comp=o.comp||0; p.k=o.k||0; } poses.push(p); return p; }
+  function putInst(arr,n,M,col,acc,mud){ var o=n*20; arr[o]=M[0];arr[o+1]=M[1];arr[o+2]=M[2];arr[o+3]=M[3];arr[o+4]=M[4];arr[o+5]=M[5];arr[o+6]=M[6];arr[o+7]=M[7];arr[o+8]=M[8];arr[o+9]=M[9];arr[o+10]=M[10];arr[o+11]=M[11];
+    arr[o+12]=col[0];arr[o+13]=col[1];arr[o+14]=col[2];arr[o+15]=1;arr[o+16]=acc[0];arr[o+17]=acc[1];arr[o+18]=acc[2];arr[o+19]=(mud==null)?((arr===IBD.person||arr===IBD.gate)?0:V.mudAmt):mud; }
   function putPlate(n,M,uv){ var a=IBD.plate, o=n*16; for(var i=0;i<12;i++) a[o+i]=M[i]; a[o+12]=uv[0]; a[o+13]=uv[1]; a[o+14]=uv[2]; a[o+15]=uv[3]; }
   /* the pose of a riding bike at race distance D, lateral lat */
   function ridePose(D,lat,o){
@@ -928,7 +946,7 @@ function create(host,opt){
     o.chute=false;
     var tx=lerp(C.tx[i],C.tx[j],t), tz=lerp(C.tz[i],C.tz[j],t), l=Math.hypot(tx,tz)||1; tx/=l; tz/=l;
     var off=lerp(C.off[i],C.off[j],t), x=lerp(C.x[i],C.x[j],t)-tz*(lat+off), z=lerp(C.z[i],C.z[j],t)+tx*(lat+off);
-    var Y=lerp(C.Y[i],C.Y[j],t), air=C.air[i]||C.air[j], gc=TK.ground(C,s,0), gl=TK.ground(C,s,lat), y=Y+(gl-gc);
+    var Y=lerp(C.Y[i],C.Y[j],t), air=C.air[i]||C.air[j], gc=TK.ground(C,s,0,1), glB=TK.ground(C,s,lat,1), gl=TK.ground(C,s,lat), y=Y+(glB-gc);
     o.x=x; o.y=y; o.z=z; o.tx=tx; o.tz=tz; o.pitch=lerp(C.pitch[i],C.pitch[j],t); o.lean=lerp(C.lean[i],C.lean[j],t); o.stand=lerp(C.stand[i],C.stand[j],t);
     o.air=air; o.v=lerp(C.v[i],C.v[j],t); o.roost=C.roost[i]; o.comp=lerp(C.comp[i],C.comp[j],t); o.s=s; o.gl=gl; o.sand=C.sand[i]; o.k=lerp(C.k[i],C.k[j],t); return o;
   }
@@ -953,76 +971,171 @@ function create(host,opt){
     return A12;
   }
   function wheelOff(o,dx,lat,R0){ if(o.chute) return R0; var C=V.C, g2=TK.ground(C,o.s+dx,lat), fy=o.y+Math.sin(o.pitch)*dx; if(o.air) return R0-0.1; return clamp(g2+R0-fy,R0-0.12,R0+0.28); }
-  /* everything for one rider: body, wheels, the rider (IK legs), plates, label, shadow */
+  /* everything for one rider on or beside a bike. LEVEL OF DETAIL: the nearest riders (the quality level says how many, up to 26 m from the
+     lens, and always the one on screen) are built from the articulated parts of models3d.js: the body, the fork (its lowers slide up the gold
+     uppers by the wheel's travel), the swingarm (turns about its pivot), the shock (stretches between the frame and the swingarm), the wheels
+     (they spin), the torso, the arms and the legs (IK to the grips and the pegs): he stands in the whoops, drops his hips on a landing, puts a
+     foot out. The next riders (to 55 m) are one RIGID mesh each (seated or standing) with two spinning wheels; the rest one rigid mesh with the
+     wheels baked in. */
+  var Mo=MX.Models, MD=Mo.D;
+  var HERO_D2=26*26, MID_D2=55*55;
+  function lodOf(r,o,state){
+    if(state==="lying") return 0;
+    var Q=QUAL[V.q], d2=r._d2!=null?r._d2:1e9, hero=r._hero;
+    r._d2=(o.x-CAM.eye[0])*(o.x-CAM.eye[0])+(o.y-CAM.eye[1])*(o.y-CAM.eye[1])+(o.z-CAM.eye[2])*(o.z-CAM.eye[2]);
+    if(V.mode==="onboard"&&V.focusSeat()===r.s) return 0;
+    if(hero) return 0;
+    return d2<MID_D2?1:2;
+  }
+  var SW12=new Float32Array(12), SK12=new Float32Array(12);
   function emitRider(r,o,M,riderState){
-    var team=r.col, acc=r.acc, nb=counts.body;
-    putInst(IBD.body,nb,M,team,acc);
+    var team=r.col, acc=r.acc, mud=r.mud==null?V.mudAmt:r.mud;
     var spin=(r.spin=(r.spin+(o.v||0)*V.dtR/0.36)%TAU);
     var fo=riderState==="lying"?0.36:wheelOff(o,0.74,r.lat,0.36), ro=riderState==="lying"?0.34:wheelOff(o,-0.74,r.lat,0.34);
-    GL.amul(B12,M,GL.local(L12,0.74,fo,0,-spin,0,0,1)); putInst(IBD.wheel,counts.wheel++,B12,team,acc);
-    GL.amul(B12,M,GL.local(L12,-0.74,ro,0,-spin,0,0,0.945)); putInst(IBD.wheel,counts.wheel++,B12,team,acc);
-    /* plates: the front plate and the two side plates */
+    var lod=lodOf(r,o,riderState); r._lod=lod;
+    /* plates: the front plate and the two side plates (the page's number plates; the rider's colour stripe) */
     var fu=r.uvf||(r.uvf=(function(uv){ return [uv[2],uv[1],uv[0],uv[3]]; })(cellUV(r.k)));
-    GL.amul(B12,M,GL.local(L12,0.607,1.045,0,0.35,0,0,1)); putPlate(counts.plate++,B12,fu);
-    GL.amul(B12,M,GL.local(L12,-0.33,0.79,0.158,0,-PI/2,0,1)); putPlate(counts.plate++,B12,fu);
-    GL.amul(B12,M,GL.local(L12,-0.33,0.79,-0.158,0,PI/2,0,1)); putPlate(counts.plate++,B12,fu);
-    counts.body++;
+    if(lod<2&&counts.plate<168){
+      GL.amul(B12,M,GL.local(L12,0.612,1.04,0,0.3,0,0,1)); putPlate(counts.plate++,B12,fu);
+      GL.amul(B12,M,GL.local(L12,-0.3,0.8,0.178,0,-PI/2,0,1)); putPlate(counts.plate++,B12,fu);
+      GL.amul(B12,M,GL.local(L12,-0.3,0.8,-0.178,0,PI/2,0,1)); putPlate(counts.plate++,B12,fu);
+    }
+    if(lod===0){
+      var nb=counts.body; putInst(IBD.body,nb,M,team,acc,mud);
+      var cf=fo-0.36, cr=ro-0.34, sF=cf/MD.FORK_U[1], th=-cr/0.44, c=Math.cos(th), s=Math.sin(th), P=MD.PIVOT;
+      /* the fork and the front wheel: the axle slides up the fork's axis by the travel */
+      var ax=MD.FORK_A[0]+MD.FORK_U[0]*sF, ay=MD.FORK_A[1]+MD.FORK_U[1]*sF;
+      GL.amul(B12,M,GL.local(L12,ax,ay,0,0,0,0,1)); putInst(IBD.fork,counts.fork++,B12,team,acc,mud);
+      GL.amul(B12,M,GL.local(L12,ax,ay,0,-spin,0,0,1)); putInst(IBD.wheelF,counts.wheelF++,B12,team,acc,mud);
+      /* the swingarm turns about its pivot; the rear axle rides on its end */
+      GL.local(SW12,P[0],P[1],0,th,0,0,1); GL.amul(B12,M,SW12); putInst(IBD.swing,counts.swing++,B12,team,acc,mud);
+      var vx=-MD.WB-P[0], vy=0.34-P[1], axr=P[0]+vx*c-vy*s, ayr=P[1]+vx*s+vy*c;
+      GL.amul(B12,M,GL.local(L12,axr,ayr,0,-spin,0,0,1)); putInst(IBD.wheelR,counts.wheelR++,B12,team,acc,mud);
+      /* the shock: from the frame's mount to the swingarm's linkage point */
+      var bx=P[0]+(MD.SHOCK_BOT[0]-P[0])*c-(MD.SHOCK_BOT[1]-P[1])*s, by=P[1]+(MD.SHOCK_BOT[0]-P[0])*s+(MD.SHOCK_BOT[1]-P[1])*c, tp=MD.SHOCK_TOP, dx=bx-tp[0], dy=by-tp[1], sl=Math.hypot(dx,dy), ux=dx/sl, uy=dy/sl;
+      SK12[0]=ux*sl; SK12[1]=-uy; SK12[2]=0; SK12[3]=tp[0]; SK12[4]=uy*sl; SK12[5]=ux; SK12[6]=0; SK12[7]=tp[1]; SK12[8]=0; SK12[9]=0; SK12[10]=1; SK12[11]=0;
+      GL.amul(B12,M,SK12); putInst(IBD.shock,counts.shock++,B12,team,acc,mud);
+      counts.body++;
+    } else {
+      /* the rigid mesh (seated or standing: the page decides at the rider) and, for the middle level, the two spinning wheels */
+      var stand=o.stand>0.5||o.air, key=(lod===1?"r1":"r2")+(stand?"t":"s");
+      putInst(IBD[key],counts[key]++,M,team,acc,mud);
+      if(lod===1){
+        GL.amul(B12,M,GL.local(L12,0.74,fo,0,-spin,0,0,1)); putInst(IBD.w1,counts.w1++,B12,team,acc,mud);
+        GL.amul(B12,M,GL.local(L12,-0.74,ro,0,-spin,0,0,0.945)); putInst(IBD.w1,counts.w1++,B12,team,acc,mud);
+      }
+    }
   }
-  /* the rider on the bike: hips up and forward when standing, the torso over the bars; the legs by IK from the hip to the pegs */
-  var BK=new Float32Array(12), FT=new Float32Array(6);
-  /* foot = the foot-out amount in a flat turn (signed: + = the right foot, the inside of a right turn): seated and slow enough, the inside
-     foot comes off the peg, forward and out, skimming the dirt (its height allows for the lean) */
-  function emitRiderBody(r,M,stand,extraPitch,foot,lean){
-    var team=r.col, acc=r.acc, st=clamp(stand,0,1), hx=HIP[0]+0.06*st, hy=HIP[1]+0.22*st;
-    GL.amul(B12,M,GL.local(L12,hx,hy,0,-0.35*st+(extraPitch||0),0,0,1)); putInst(IBD.upper,counts.upper,B12,team,acc);
-    if(counts.plate<170){ GL.amul(BK,B12,GL.local(L12,0.005,0.33,0,0.47,PI,0,1.35)); putPlate(counts.plate++,BK,r.uvf||(r.uvf=(function(uv){ return [uv[2],uv[1],uv[0],uv[3]]; })(cellUV(r.k)))); }
-    FT[0]=PEG[0]; FT[1]=PEG[1]; FT[2]=-0.17; FT[3]=PEG[0]; FT[4]=PEG[1]; FT[5]=0.17;
+  /* the rider on the bike (the hero level only; the rigid meshes carry theirs): hips up and forward when standing, dropped on a landing, the
+     torso over the bars; the arms by IK from the shoulders to the grips; the legs from the hips to the pegs */
+  var BK=new Float32Array(12), FT=new Float32Array(6), SH=[0,0,0], GR=[0,0,0], HP=[0,0,0], AN=[0,0,0];
+  var HINT_A=[0.2,0.6,0.7], HINT_L=[1,0.3,0.22];
+  function emitRiderBody(r,M,stand,extraPitch,foot,lean,comp){
+    if(r._lod!==0) return;
+    var team=r.col, acc=r.acc, st=clamp(stand,0,1), mud=r.mud==null?V.mudAmt:r.mud, cmp=clamp((comp||0)/0.3,0,1);
+    var hx=MD.HIP[0]+0.06*st, hy=MD.HIP[1]+0.22*st-0.1*cmp*(1-0.5*st), pitch=-0.35*st+(extraPitch||0)+0.06*cmp;
+    GL.amul(B12,M,GL.local(L12,hx,hy,0,pitch,0,0,1)); putInst(IBD.torso,counts.torso,B12,team,acc,mud);
+    /* the number printed on the jersey's back (its own cell: the name above, the number big) */
+    if(counts.plate<170){ GL.amul(BK,B12,GL.local(L12,-0.045,0.385,0,0.34,PI,0,1.0)); putPlate(counts.plate++,BK,r.uvj||(r.uvj=(function(uv){ return [uv[2],uv[1],uv[0],uv[3]]; })(jerseyUV(r.k)))); }
+    counts.torso++;
+    /* the arms */
+    var cp=Math.cos(pitch), sp=Math.sin(pitch), sd, ar;
+    for(sd=-1;sd<=1;sd+=2){
+      SH[0]=MD.SHOULDER[0]*cp-MD.SHOULDER[1]*sp+hx; SH[1]=MD.SHOULDER[0]*sp+MD.SHOULDER[1]*cp+hy; SH[2]=MD.SHOULDER[2]*sd;
+      GR[0]=MD.GRIP[0]; GR[1]=MD.GRIP[1]; GR[2]=MD.GRIP[2]*sd; HINT_A[2]=0.7*sd;
+      ar=Mo.solve2(SH,GR,MD.UARM,MD.FARM,HINT_A);
+      GL.amul(B12,M,Mo.seg(L12,SH[0],SH[1],SH[2],ar.mid[0],ar.mid[1],ar.mid[2])); putInst(IBD.uarm,counts.arm,B12,team,acc,mud);
+      GL.amul(B12,M,Mo.seg(L12,ar.mid[0],ar.mid[1],ar.mid[2],ar.end[0],ar.end[1],ar.end[2])); putInst(IBD.farm,counts.arm,B12,team,acc,mud);
+      counts.arm++;
+    }
+    /* the feet: on the pegs (the ankle sits 0.1 above the peg), the inside one out in a flat turn */
+    var PEG=MD.PEG;
+    FT[0]=PEG[0]+0.02; FT[1]=PEG[1]+0.1; FT[2]=-0.17; FT[3]=PEG[0]+0.02; FT[4]=PEG[1]+0.1; FT[5]=0.17;
     if(foot){ var k=Math.min(1,Math.abs(foot)), o=foot>0?3:0, th=Math.min(0.75,Math.abs(lean||0)), fy=(0.14+0.44*Math.sin(th))/Math.cos(th);
-      FT[o]=lerp(PEG[0],0.5,k); FT[o+1]=lerp(PEG[1],Math.max(0.22,fy),k); FT[o+2]=(foot>0?1:-1)*lerp(0.17,0.44,k); }
-    legs(r,M,hx,hy,0.13,FT);
-    counts.upper++;
+      FT[o]=lerp(PEG[0],0.5,k); FT[o+1]=lerp(PEG[1]+0.1,Math.max(0.3,fy+0.1),k); FT[o+2]=(foot>0?1:-1)*lerp(0.17,0.44,k); }
+    legs(r,M,hx,hy,0.13,FT,mud);
   }
-  /* each leg by a 3D two-bone IK from its hip (hx, hy, -/+hz) to its foot (F = left xyz, right xyz in M's frame); the knee bends forward and a
-     little out; a foot out of reach is met by the straight leg */
-  function legs(r,M,hx,hy,hz,F){
+  /* each leg by a 3D two-bone IK from its hip (hx, hy, -/+hz) to its ankle (F = left xyz, right xyz in M's frame); the knee bends forward and a
+     little out; an ankle out of reach is met by the straight leg */
+  function legs(r,M,hx,hy,hz,F,mud){
     for(var sd=0;sd<2;sd++){
-      var o=sd*3, az=sd?hz:-hz, fx=F[o]-hx, fy=F[o+1]-hy, fz=F[o+2]-az, d=Math.hypot(fx,fy,fz)||1e-3, ux=fx/d, uy=fy/d, uz=fz/d;
-      var dd=clamp(d,0.12,THIGH+SHIN-0.004), a=(THIGH*THIGH-SHIN*SHIN+dd*dd)/(2*dd), hk=Math.sqrt(Math.max(0,THIGH*THIGH-a*a));
-      var px=1, py=0.3, pz=sd?0.22:-0.22, pd=px*ux+py*uy+pz*uz; px-=ux*pd; py-=uy*pd; pz-=uz*pd; var pl=Math.hypot(px,py,pz)||1;
-      var kx=hx+ux*a+px/pl*hk, ky=hy+uy*a+py/pl*hk, kz=az+uz*a+pz/pl*hk;
-      GL.amul(B12,M,seg(L12,hx,hy,az,kx,ky,kz)); putInst(IBD.thigh,counts.leg,B12,r.col,r.acc);
-      GL.amul(B12,M,seg(L12,hx+ux*dd,hy+uy*dd,az+uz*dd,kx,ky,kz)); putInst(IBD.shin,counts.leg,B12,r.col,r.acc);
+      var o=sd*3, az=sd?hz:-hz, TH=MD.THIGH, SN=MD.SHIN;
+      HP[0]=hx; HP[1]=hy; HP[2]=az; AN[0]=F[o]; AN[1]=F[o+1]; AN[2]=F[o+2]; HINT_L[2]=sd?0.22:-0.22;
+      var kn=Mo.solve2(HP,AN,TH,SN,HINT_L), kx=kn.mid[0], ky=kn.mid[1], kz=kn.mid[2], e=kn.end;
+      GL.amul(B12,M,Mo.seg(L12,hx,hy,az,kx,ky,kz)); putInst(IBD.thigh,counts.leg,B12,r.col,r.acc,mud);
+      GL.amul(B12,M,Mo.seg(L12,e[0],e[1],e[2],kx,ky,kz)); putInst(IBD.shin,counts.leg,B12,r.col,r.acc,mud);
       counts.leg++;
     }
   }
-  /* a limb segment's frame: X from a to b, Y = the lateral axis x X (never flips: the boot's sole stays under it), Z = X x Y */
-  function seg(o,ax,ay,az,bx,by,bz){
-    var X0=bx-ax, X1=by-ay, X2=bz-az, l=Math.hypot(X0,X1,X2)||1; X0/=l; X1/=l; X2/=l;
-    var Y0=-X1, Y1=X0; l=Math.hypot(Y0,Y1)||1; Y0/=l; Y1/=l;
-    var Z0=-X2*Y1, Z1=X2*Y0, Z2=X0*Y1-X1*Y0;
-    o[0]=X0; o[1]=Y0; o[2]=Z0; o[3]=ax; o[4]=X1; o[5]=Y1; o[6]=Z1; o[7]=ay; o[8]=X2; o[9]=0; o[10]=Z2; o[11]=az; return o;
-  }
+  var seg=Mo.seg;
   /* a rider off the bike (thrown, lying, sitting up, standing, walking, lifting): Mb = the hip frame (X = the way he faces, Y up), the
-     torso's pitch about the hips (0 = the riding lean, + = back), the feet in Mb's frame */
+     torso's pitch about the hips (0 = the riding lean, + = back), the ankles in Mb's frame; the arms hang, spread or fly with the torso */
+  var ARM_D=[0,0,0];
   function emitFigure(r,Mb,torso,F){
-    GL.amul(B12,Mb,GL.local(L12,0,0,0,torso,0,0,1)); putInst(IBD.upper,counts.upper,B12,r.col,r.acc);
-    legs(r,Mb,0,0,0.12,F); counts.upper++;
+    var mud=r.mud==null?V.mudAmt:r.mud, cp=Math.cos(torso), sp=Math.sin(torso), sd, t=clamp((torso-0.3)/1.6,0,1), fly=torso<-0.4?1:0;
+    GL.amul(B12,Mb,GL.local(L12,0,0,0,torso,0,0,1)); putInst(IBD.torso,counts.torso,B12,r.col,r.acc,mud);
+    if(counts.plate<170){ GL.amul(BK,B12,GL.local(L12,-0.045,0.385,0,0.34,PI,0,1.0)); putPlate(counts.plate++,BK,r.uvj||(r.uvj=(function(uv){ return [uv[2],uv[1],uv[0],uv[3]]; })(jerseyUV(r.k)))); }
+    counts.torso++;
+    for(sd=-1;sd<=1;sd+=2){
+      SH[0]=MD.SHOULDER[0]*cp-MD.SHOULDER[1]*sp; SH[1]=MD.SHOULDER[0]*sp+MD.SHOULDER[1]*cp; SH[2]=MD.SHOULDER[2]*sd;
+      /* the hand: hanging (down and a little forward), thrown out when he lies, up by the head when he tumbles */
+      ARM_D[0]=lerp(0.08,-0.25,t)+fly*0.25; ARM_D[1]=lerp(-0.5,-0.1,t)+fly*0.75; ARM_D[2]=sd*(lerp(0.06,0.42,t)+fly*0.2);
+      var dl=Math.hypot(ARM_D[0],ARM_D[1],ARM_D[2])||1, ln=0.5, hand=[SH[0]+ARM_D[0]/dl*ln,SH[1]+ARM_D[1]/dl*ln,SH[2]+ARM_D[2]/dl*ln];
+      HINT_A[0]=-0.3; HINT_A[1]=-0.2; HINT_A[2]=0.8*sd;
+      var ar=Mo.solve2(SH,hand,MD.UARM,MD.FARM,HINT_A);
+      GL.amul(B12,Mb,Mo.seg(L12,SH[0],SH[1],SH[2],ar.mid[0],ar.mid[1],ar.mid[2])); putInst(IBD.uarm,counts.arm,B12,r.col,r.acc,mud);
+      GL.amul(B12,Mb,Mo.seg(L12,ar.mid[0],ar.mid[1],ar.mid[2],ar.end[0],ar.end[1],ar.end[2])); putInst(IBD.farm,counts.arm,B12,r.col,r.acc,mud);
+      counts.arm++;
+    }
+    legs(r,Mb,0,0,0.12,F,mud);
   }
   function emitShadow(x,y,z,tx,tz,nrm,a,k){ if(counts.decal>=64) return; var n=counts.decal++, d=IBD.decal, o=n*12; d[o]=x; d[o+1]=y; d[o+2]=z; d[o+3]=0; d[o+4]=tx; d[o+5]=tz; d[o+6]=1.15*k; d[o+7]=0.5*k; d[o+8]=nrm[0]; d[o+9]=nrm[1]; d[o+10]=nrm[2]; d[o+11]=a; }
   function emitLabel(x,y,z,cell,grp,pxH,yoff){ if(counts.label>=90) return; var n=counts.label++, d=IBD.label, o=n*12, uv=cellUV(cell); d[o]=x; d[o+1]=y; d[o+2]=z; d[o+3]=grp; d[o+4]=uv[0]; d[o+5]=uv[1]; d[o+6]=uv[2]; d[o+7]=uv[3]; d[o+8]=pxH; d[o+9]=yoff||0; d[o+10]=0; d[o+11]=0; }
-  /* roost and dust */
-  var parts={n:0,p:new Float32Array(400*10)};
-  function spawn(x,y,z,vx,vy,vz,size,life,col){ if(parts.n>=400) return; var o=parts.n++*10, p=parts.p; p[o]=x;p[o+1]=y;p[o+2]=z;p[o+3]=vx;p[o+4]=vy;p[o+5]=vz;p[o+6]=size;p[o+7]=life;p[o+8]=life;p[o+9]=col; }
+  /* roost and dust. DUST: a few wide soft puffs, lit warm by the lights (the haze round a pack). CLUMPS: the roost proper: pellets of dirt
+     thrown up and back by the rear tyre, ballistic (g = 9.81), bouncing on the ground, drawn as small lit pellets stretched along their
+     velocity on screen; most of them near the lens (the quality level sets how many). */
+  var parts={n:0,p:new Float32Array(400*10)}, CLN=13, CL={n:0,p:new Float32Array(300*CLN)};
+  function spawn(x,y,z,vx,vy,vz,size,life,col){ if(parts.n>=QUAL[V.q].parts||parts.n>=400) return; var o=parts.n++*10, p=parts.p; p[o]=x;p[o+1]=y;p[o+2]=z;p[o+3]=vx;p[o+4]=vy;p[o+5]=vz;p[o+6]=size;p[o+7]=life;p[o+8]=life;p[o+9]=col; }
+  function spawnClump(x,y,z,vx,vy,vz,size,life,gy,sand){ if(CL.n>=QUAL[V.q].clumps||CL.n>=300) return; var o=CL.n++*CLN, p=CL.p; p[o]=x;p[o+1]=y;p[o+2]=z;p[o+3]=vx;p[o+4]=vy;p[o+5]=vz;p[o+6]=size;p[o+7]=life;p[o+8]=life;p[o+9]=gy;p[o+10]=0.55+rand()*0.6;p[o+11]=sand?1:0;p[o+12]=0; }
+  /* the dirt a rear tyre throws: clumps by the roost amount (the nearer the lens and the more it matters, the more), a puff now and then */
+  function roostFx(o,r,adv,boost){
+    var dx=o.x-CAM.eye[0], dz=o.z-CAM.eye[2], d2=dx*dx+dz*dz; if(d2>75*75||o.v<1.5) return;
+    var near=d2<16*16?1:d2<36*36?0.55:0.25, rate=o.roost*(34+120*boost)*near, n=rate*adv, k=Math.floor(n)+(rand()<n-Math.floor(n)?1:0), i;
+    var tx=o.tx, tz=o.tz, rx=-tz, rz=tx, rear=0.74+0.05, bx=o.x-tx*rear, bz=o.z-tz*rear, by=o.y+0.3, side=-clamp((o.k||0)*14,-1,1);
+    for(i=0;i<k;i++){
+      var back=2.2+rand()*7.0, up=1.2+rand()*4.2, sd=(rand()-0.5)*3.4+side*(1.2+rand()*2.2), big=rand()<0.08;
+      spawnClump(bx+(rand()-0.5)*0.22,by+rand()*0.12,bz+(rand()-0.5)*0.22,tx*(o.v*0.28-back)+rx*sd,up+(o.air?0:0),tz*(o.v*0.28-back)+rz*sd,big?0.1+rand()*0.06:0.028+rand()*0.06,0.9+rand()*1.0,o.gl,o.sand);
+    }
+    if(rand()<o.roost*adv*9*near) spawn(bx+(rand()-0.5)*0.4,o.y+0.2,bz+(rand()-0.5)*0.4,-tx*o.v*0.2+(rand()-0.5)*1.4,0.6+rand()*1.3,-tz*o.v*0.2+(rand()-0.5)*1.4,0.35+rand()*0.35,0.9+rand()*0.7,o.sand?1:0);
+  }
+  /* a burst where a bike lands, the rider hits the ground, a crash digs in */
+  function burstFx(x,y,z,gy,vx,vz,count,sand,power){
+    var i; for(i=0;i<count;i++){ var a=rand()*TAU, sp=(0.6+rand()*3.2)*power;
+      spawnClump(x+(rand()-0.5)*0.8,gy+0.1,z+(rand()-0.5)*0.8,Math.cos(a)*sp+vx,1.2+rand()*3.8*power,Math.sin(a)*sp+vz,0.03+rand()*0.075,0.8+rand()*0.9,gy,sand); }
+    for(i=0;i<Math.max(1,count>>2);i++) spawn(x+(rand()-0.5)*1.2,gy+0.15,z+(rand()-0.5)*1.2,(rand()-0.5)*2.4+vx*0.3,0.5+rand()*1.3,(rand()-0.5)*2.4+vz*0.3,0.4+rand()*0.5,1.0+rand()*0.7,sand?1:0);
+  }
   function stepParts(dt){
-    var p=parts.p, n=0;
-    for(var i=0;i<parts.n;i++){ var o=i*10; p[o+7]-=dt; if(p[o+7]<=0) continue;
-      p[o+4]-=9.81*dt*0.55; p[o+3]*=1-1.6*dt; p[o+5]*=1-1.6*dt; p[o]+=p[o+3]*dt; p[o+1]+=p[o+4]*dt; p[o+2]+=p[o+5]*dt; if(p[o+1]<0&&!V.C.outdoor) p[o+1]=0;
+    var p=parts.p, n=0, i;
+    for(i=0;i<parts.n;i++){ var o=i*10; p[o+7]-=dt; if(p[o+7]<=0) continue;
+      p[o+4]-=9.81*dt*0.3; p[o+3]*=1-1.8*dt; p[o+5]*=1-1.8*dt; p[o+4]*=1-0.6*dt; p[o]+=p[o+3]*dt; p[o+1]+=p[o+4]*dt; p[o+2]+=p[o+5]*dt; if(p[o+1]<0&&!V.C.outdoor) p[o+1]=0;
       if(n!==i) for(var k=0;k<10;k++) p[n*10+k]=p[o+k]; n++; }
     parts.n=n;
     var d=IBD.part, dirt=SC.cols.dirt, sand=SC.cols.sand;
-    for(i=0;i<n;i++){ var q=i*10, lf=p[q+7]/p[q+8], sz=p[q+6]*(1.6-lf*0.9), c=p[q+9]>0.5?sand:dirt;
-      d[i*8]=p[q]; d[i*8+1]=p[q+1]; d[i*8+2]=p[q+2]; d[i*8+3]=sz; d[i*8+4]=c[0]*1.25; d[i*8+5]=c[1]*1.2; d[i*8+6]=c[2]*1.15; d[i*8+7]=Math.min(1,lf*1.4)*0.62; }
+    for(i=0;i<n;i++){ var q=i*10, lf=p[q+7]/p[q+8], sz=p[q+6]*(1.5-lf*0.7), c=p[q+9]>0.5?sand:dirt;
+      d[i*8]=p[q]; d[i*8+1]=p[q+1]; d[i*8+2]=p[q+2]; d[i*8+3]=sz; d[i*8+4]=c[0]*c[0]*1.5; d[i*8+5]=c[1]*c[1]*1.4; d[i*8+6]=c[2]*c[2]*1.3; d[i*8+7]=Math.min(1,lf*1.6)*0.3; }
     counts.part=n;
+    /* the clumps */
+    var cp=CL.p, m=0, cd=IBD.clump;
+    for(i=0;i<CL.n;i++){ var u=i*CLN; cp[u+7]-=dt; if(cp[u+7]<=0) continue;
+      cp[u+4]-=9.81*dt; cp[u+3]*=1-0.25*dt; cp[u+5]*=1-0.25*dt; cp[u]+=cp[u+3]*dt; cp[u+1]+=cp[u+4]*dt; cp[u+2]+=cp[u+5]*dt;
+      var gyp=cp[u+9]; if(cp[u+1]<gyp+cp[u+6]*0.5&&cp[u+4]<0){ cp[u+1]=gyp+cp[u+6]*0.5; if(cp[u+12]>=2||-cp[u+4]<0.9){ cp[u+7]=Math.min(cp[u+7],0.2); cp[u+4]=0; cp[u+3]*=0.3; cp[u+5]*=0.3; } else { cp[u+4]=-cp[u+4]*0.34; cp[u+3]*=0.62; cp[u+5]*=0.62; cp[u+12]++; } }
+      if(m!==i) for(var k2=0;k2<CLN;k2++) cp[m*CLN+k2]=cp[u+k2]; m++; }
+    CL.n=m;
+    for(i=0;i<m;i++){ var w=i*CLN, c2=cp[w+11]>0.5?sand:dirt, br=cp[w+10], la=cp[w+7]/cp[w+8], o2=i*12;
+      cd[o2]=cp[w]; cd[o2+1]=cp[w+1]; cd[o2+2]=cp[w+2]; cd[o2+3]=cp[w+6];
+      cd[o2+4]=c2[0]*c2[0]*br*0.75; cd[o2+5]=c2[1]*c2[1]*br*0.75; cd[o2+6]=c2[2]*c2[2]*br*0.75; cd[o2+7]=Math.min(1,la*5)*0.95;
+      cd[o2+8]=cp[w+3]; cd[o2+9]=cp[w+4]; cd[o2+10]=cp[w+5]; cd[o2+11]=0.07; }
+    counts.clump=m;
   }
   /* ---------- crashes (polish) ----------
      THE BIKE digs its front wheel in, falls on its side and cartwheels a full turn with two bounces, and slides to rest; THE RIDER is thrown
@@ -1081,7 +1194,7 @@ function create(host,opt){
     /* dust where the bike bounces and where the rider lands */
     if(adv>0&&!fx&&V.fxMode==="full"){ var last=r.cLast==null||r.cLast>t?t-adv:r.cLast, hits=cp.P.hits;
       for(var hi=0;hi<hits.length;hi++){ var h=hits[hi]; if(!(last<h&&t>=h)) continue; var onB=hi<3||!r.fig, bx=onB?o.x:r.fig[0], bz=onB?o.z:r.fig[2], by=onB?o.gl:r.fig[3];
-        for(var q=0;q<(onB?9:7);q++) spawn(bx+(Math.random()-0.5)*0.8,by+0.2,bz+(Math.random()-0.5)*0.8,(Math.random()-0.5)*4,0.8+Math.random()*2.2,(Math.random()-0.5)*4,0.4+Math.random()*0.45,1.1+Math.random()*0.7,o.sand?1:0); } }
+        burstFx(bx,by+0.1,bz,by,0,0,onB?16:12,o.sand,1.4); } }
     r.cLast=t;
     if(cp.ph==="ride"){ emitRiderBody(r,M,0.2); r.fig=null; return o; }
     if(t>=5.8&&!out){ emitRiderBody(r,M,0); r.fig=null; return o; }
@@ -1149,7 +1262,11 @@ function create(host,opt){
     if(V.crashT!=null&&V.T>=V.crashT+0.35&&!V.crashBanner){ V.crashBanner=true; var yr=V.yellow&&V.by[V.yellow.seat]; V.banners({kind:"crash",seat:yr?yr.s:-1,out:!!(yr&&yr.crash&&yr.crash.kind==="out")}); }
     /* the riders */
     var T=V.T, fieldN=0;
-    counts.body=0; counts.wheel=0; counts.upper=0; counts.leg=0; counts.plate=0; counts.person=0; counts.label=0; counts.decal=0;
+    PARTS.forEach(function(k){ counts[NCNT[k]]=0; }); counts.plate=0; counts.person=0; counts.label=0; counts.decal=0;
+    /* the hero riders (the articulated models): the nearest few to the lens from the last frame, and the one on screen */
+    var Qh=QUAL[V.q].hero, ord=V.riders.slice().sort(function(a,b){ return (a._d2!=null?a._d2:1e9)-(b._d2!=null?b._d2:1e9); }), fseat=V._fseat;
+    for(var hi=0;hi<ord.length;hi++) ord[hi]._hero=(hi<Qh&&(ord[hi]._d2==null||ord[hi]._d2<HERO_D2))||ord[hi].s===fseat;
+    V.riders.forEach(function(r){ r.mud=clamp(V.mudAmt+0.022*Math.max(0,V.lap-1)+(r.crash?0.25:0)+(r.mudJit||0),0,1); });
     poses.length=0;
     /* polish: the frame's entries are pooled per rider (no garbage each frame: steadier frames on a Fire TV) */
     var list=LIST; list.length=0;
@@ -1189,23 +1306,22 @@ function create(host,opt){
         if(x.mode==="pull"){ var tp=Math.min(3,T-r.pull.T0), Dp=r.pull.D+8*tp-0.5*(8/3)*tp*tp; ridePose(Dp,r.pull.lat+(r.pull.lat>=0?1:-1)*sstep(tp/3)*4,o); o.v=8*(1-tp/3); }
         else ridePose(x.D,r.lat,o);
         var wy=0; if(o.air&&r.whip&&V.fxMode==="full"){ var fu=flightU(o.s); if(fu>=0){ var sw=Math.sin(PI*fu); wy=r.whip*sw; o.lean+=-r.whip*0.75*sw; } }
-        if(V.phase==="pre"||T<0){ o.pitch=0.02+(V.phase==="pre"?Math.sin(now()/90+r.k)*0.006:0); o.lean=0; o.stand=0; o.v=V.phase==="pre"?0:o.v; }
+        if(V.phase==="pre"||T<0){ o.pitch=0.02+(V.phase==="pre"?Math.sin(vnow()/90+r.k)*0.006:0); o.lean=0; o.stand=0; o.v=V.phase==="pre"?0:o.v; }
         var M=bikeMats(o,r,wy);
-        emitRider(r,o,M,"ride"); emitRiderBody(r,M,o.stand,o.air?-0.05:0,(V.phase==="pre"||T<0||o.air)?0:footOut(o),o.lean);
-        if(r.wasAir&&!o.air&&o.v>6&&adv>0&&!fx&&V.fxMode==="full"){ for(var dq=0;dq<5;dq++) spawn(o.x+(Math.random()-0.5)*1.4,o.gl+0.15,o.z+(Math.random()-0.5)*1.4,(Math.random()-0.5)*3+o.tx*o.v*0.15,0.8+Math.random()*1.6,(Math.random()-0.5)*3+o.tz*o.v*0.15,0.3+Math.random()*0.3,0.9+Math.random()*0.5,o.sand?1:0); }
+        emitRider(r,o,M,"ride"); emitRiderBody(r,M,o.stand,o.air?-0.05:0,(V.phase==="pre"||T<0||o.air)?0:footOut(o),o.lean,o.comp);
+        if(r.wasAir&&!o.air&&o.v>6&&adv>0&&!fx&&V.fxMode==="full") burstFx(o.x,o.y,o.z,o.gl,o.tx*o.v*0.15,o.tz*o.v*0.15,14,o.sand,1);
         r.wasAir=o.air;
         var h=o.y-o.gl, k=clamp(1-h/7,0.35,1);
         emitShadow(o.x,o.gl,o.z,o.tx,o.tz,UP,0.72*k,0.9+0.6*(1-k));
-        pose(r,o.x,o.y,o.z,o.tx,o.tz,o.v,o.air,x.D,false,false,false,null);
-        if(adv>0&&!fx&&V.fxMode==="full"&&o.roost>0.15&&!o.air){ var dx=o.x-camP[0], dz=o.z-camP[2]; if(dx*dx+dz*dz<90*90&&Math.random()<o.roost*adv*60*0.9){ var bx=o.x-o.tx*0.95, bz=o.z-o.tz*0.95;
-          spawn(bx+(Math.random()-0.5)*0.3,o.y+0.15,bz+(Math.random()-0.5)*0.3,-o.tx*o.v*0.35+(Math.random()-0.5)*2.2,1.5+Math.random()*2.6,-o.tz*o.v*0.35+(Math.random()-0.5)*2.2,0.22+Math.random()*0.22,0.7+Math.random()*0.5,o.sand?1:0); } }
-      } else if(x.mode==="crash"){ var oc=emitCrash(r,T,adv); pose(r,oc.x,oc.y,oc.z,oc.tx,oc.tz,0,false,r.crash.D,true,false,false,r.fig);
-        if(adv>0&&T-r.crash.T0<1.4&&!fx&&V.fxMode==="full"&&Math.random()<0.45) spawn(oc.x,oc.gl+0.2,oc.z,(Math.random()-0.5)*3,0.8+Math.random()*2,(Math.random()-0.5)*3,0.35+Math.random()*0.4,1.0+Math.random()*0.6,oc.sand?1:0); }
+        pose(r,o.x,o.y,o.z,o.tx,o.tz,o.v,o.air,x.D,false,false,false,null,o);
+        if(adv>0&&!fx&&V.fxMode==="full"&&o.roost>0.08&&!o.air) roostFx(o,r,adv,r.s===fseat?1:0);
+      } else if(x.mode==="crash"){ var oc=emitCrash(r,T,adv); pose(r,oc.x,oc.y,oc.z,oc.tx,oc.tz,0,false,r.crash.D,true,false,false,r.fig,oc);
+        if(adv>0&&T-r.crash.T0<1.4&&!fx&&V.fxMode==="full"&&rand()<0.45) burstFx(oc.x,oc.y,oc.z,oc.gl,0,0,6,oc.sand,1.3); }
       else if(x.mode==="park"){ var pk=r.park;
-        if(pk.crashed&&r.crash){ var op=emitCrash(r,r.crash.T0+r.crash.dur-0.01,0); pose(r,op.x,op.y,op.z,op.tx,op.tz,0,false,pk.D,false,true,true,null); return; }
+        if(pk.crashed&&r.crash){ var op=emitCrash(r,r.crash.T0+r.crash.dur-0.01,0); pose(r,op.x,op.y,op.z,op.tx,op.tz,0,false,pk.D,false,true,true,null,op); return; }
         ridePose(pk.D,pk.lat,o); o.air=false; o.y=TK.ground(C,o.s,pk.lat); o.lean=0; o.pitch=0; var Mp=bikeMats(o,r,0.5); emitRider(r,o,Mp,"lying");
         emitRiderBody(r,Mp,0); emitShadow(o.x,o.y,o.z,o.tx,o.tz,UP,0.45,1);
-        pose(r,o.x,o.y,o.z,o.tx,o.tz,0,false,pk.D,false,true,!!pk.crashed||r.out,null); }
+        pose(r,o.x,o.y,o.z,o.tx,o.tz,0,false,pk.D,false,true,!!pk.crashed||r.out,null,o); }
     });
     /* people: the flagger, the yellow-flag marshal */
     counts.person=0;
@@ -1222,7 +1338,7 @@ function create(host,opt){
     var gA=V.dropT==null||T<0?0:Math.min(1.45,sstep(T/0.32)*1.45+Math.sin(clamp(T/0.32,0,1)*PI)*0.05);
     var GF=gateF(C); GL.frame(A12,GF.x+GF.tx*1.2,GF.E,GF.z+GF.tz*1.2,GF.tx,0,GF.tz,0);
     GL.amul(B12,A12,GL.local(L12,0,0,GF.off,gA,0,0,1)); putInst(IBD.gate,0,B12,[1,1,1],[1,1,1]);
-    if(adv>0&&V.fxMode==="full"&&!fx) stepParts(adv); else if(adv>0){ parts.n=0; counts.part=0; }
+    if(adv>0&&V.fxMode==="full"&&!fx) stepParts(adv); else if(adv>0){ parts.n=0; counts.part=0; CL.n=0; counts.clump=0; }
     /* labels: the top of the field, you, the red plate, the fighters of a shown battle; OUT under a crashed-out rider */
     var showAll=CAM.close;
     poses.forEach(function(p){ var r=p.r;
@@ -1234,7 +1350,7 @@ function create(host,opt){
   }
   /* the flags: the flagger's (white / checkered) and the marshal's yellow, waving */
   function buildFlags(){
-    var d=IBDf, n=0, t=now()/1000;
+    var d=IBDf, n=0, t=vnow()/1000;
     function flag(px,py,pz,yaw,kind,phase){
       GL.local(C12,px,py,pz,0,yaw,0,1);
       var sw=Math.sin(t*6.2+phase)*0.7, cu=Math.cos(sw), su=Math.sin(sw), H=[0.16,1.86,0.3], T=[H[0],H[1]+1.15*cu,H[2]+1.15*su];
@@ -1262,7 +1378,98 @@ function create(host,opt){
   var EYE=[0,0,0], TGT=[0,0,0];
   function riderPos(s){ for(var i=0;i<poses.length;i++) if(poses[i].r.s===s) return poses[i]; return null; }
   function nearest(sp){ var b=null, bd=1e9; poses.forEach(function(p){ if(p.parked) return; var d=Math.hypot(p.x-sp.x,p.z-sp.z); if(d<bd){ bd=d; b=p; } }); return b; }
+  /* ---------- the camera presets (11_SKIN_DESIGN_TOKENS.json "camera_presets", 12_COPY_PASTE_PROMPT_FOR_CLAUDE_CODE.txt "CAMERAS") ----------
+     chase (the DEFAULT, the cover): 3.5 m behind and 1.5 m above the rider, 70 degrees vertical, damped follow, a soft landing shake;
+     broadcast: the TV director (trackside, 7 m up at 22 m, 48 degrees, smooth pans across passes, cuts to the featured moments);
+     grandstand: high in the stands, the whole course and every rider in true proportion, 50 degrees; onboard: the bars, 82 degrees,
+     stabilised; replay: low 3/4 rear and jump side profiles in slow motion (the race clock keeps running underneath). */
+  var DEG=PI/180;
+  var PRESET={chase:{name:"Cover chase",back:3.5,up:1.5,fov:70*DEG},broadcast:{name:"Broadcast trackside",h:7,dist:22,fov:48*DEG},grandstand:{name:"Grandstand",fov:50*DEG},onboard:{name:"Onboard",fov:82*DEG},replay:{name:"Replay",fov:48*DEG}};
+  V.PRESET=PRESET; V.mode="chase"; V.focus=-1;
+  var CH={init:false,f:-1,ex:0,ey:0,ez:0,tx:0,ty:0,tz:0,gy:0,roll:0,fov:70*DEG,shk:0,shT:9,lastY:0,wasAir:false,vy:0,dolly:1,cr:0,sx:0,sz:0,side:1,ph:0,snap:true};
+  V.setCamera=function(m){ if(!PRESET[m]) return false; if(V.mode!==m){ V.mode=m; CAM.se=null; CAM.st=null; V.cut=true; CH.init=false; if(m==="broadcast") V.shot=null; if(V.onCamera) try{ V.onCamera(m); }catch(e){} } return true; };
+  V.camera=function(){ return V.mode; };
+  V.cameraName=function(m){ return (PRESET[m||V.mode]||PRESET.chase).name; };
+  V.cycleCamera=function(dir){ var order=["chase","broadcast","grandstand","onboard","replay"], i=order.indexOf(V.mode); V.setCamera(order[(i+(dir<0?-1:1)+order.length)%order.length]); return V.mode; };
+  V.setFocus=function(s){ V.focus=(s==null?-1:s|0); CH.init=false; };
+  V.focusSeat=function(){ var f=focusPose(); return f?f.r.s:-1; };
+  /* who the follow cameras stay on: a chosen rider, else a person (You), else the best battle, a featured pass or a crash, else the leader */
+  var AF={s:-1,until:0};
+  function focusPose(){
+    var s=V.focus, p;
+    if(s>=0){ p=riderPos(s); if(p) return p; }
+    var you=meSeat(); if(you>=0){ p=riderPos(you); if(p&&!p.parked) return p; }
+    var T=V.T, want=-1;
+    if(V.pass&&T>=V.pass.t0-1.0&&T<V.pass.t1+2.2) want=V.pass.w;
+    V.riders.forEach(function(r){ if(want<0&&r.crash&&T>=r.crash.T0-0.4&&T<r.crash.T0+Math.min(r.crash.dur,7)) want=r.s; });
+    if(want>=0){ p=riderPos(want); if(p){ AF.s=want; AF.until=T+2.5; return p; } }
+    if(AF.s>=0&&T<AF.until){ p=riderPos(AF.s); if(p&&!p.parked) return p; }
+    var pair=closePair(); if(pair){ p=riderPos(pair[0]); if(p){ AF.s=pair[0]; AF.until=T+7; return p; } }
+    var best=null; poses.forEach(function(q){ if(!q.parked&&(!best||q.D>best.D)) best=q; });
+    if(best){ AF.s=best.r.s; AF.until=T+4; } return best;
+  }
+  /* the chase: on the track 3.5 m behind the rider (round the bends, not cutting them), 1.5 m up, aimed down the line ahead of him */
+  var CHP={}, CHQ={};
+  function chaseCam(dt){
+    var f=focusPose(); if(!f) return false; V._fseat=f.r.s;
+    var C=V.C, P=PRESET.chase, r=f.r, por=V.H>V.W*1.05, T=V.T, cr=!!f.crash, still=f.parked;
+    if(!CH.init||CH.f!==r.s){ CH.init=true; CH.f=r.s; CH.snap=true; }
+    var k=function(tau){ return CH.snap?1:1-Math.exp(-dt/tau); };
+    /* a crash: further back, higher, off the racing line so the pack goes by without passing through the lens */
+    CH.cr+=((cr||still?1:0)-CH.cr)*k(0.5);
+    if(V.phase==="pre"||T<0) CH.dolly=1+0.32*clamp(1-(T+3)/3,0,1)*(T>-3?1:0); else CH.dolly+=(1-CH.dolly)*k(0.6);
+    var back=(P.back*(por?1.16:1)*CH.dolly)+1.7*CH.cr, upH=P.up+0.35*CH.cr+(por?0.25:0);
+    var D=f.D, useD=D-back, o=CHP, gyc, ex, ez, tx0, tz0, lat=r.lat||0;
+    if(f.parked&&r.park){ D=r.park.D; useD=D-back; lat=r.park.lat; }
+    var hwC=C.hw[Math.round(((D%C.L)+C.L)%C.L/C.DS)%C.N]||4, latC=clamp(lat*0.9,-(hwC-1.3),hwC-1.3); if(CH.cr>0.01){ var edge=(C.hw[Math.round(((D%C.L)+C.L)%C.L/C.DS)%C.N]||4)+2.4; latC=lerp(latC,(lat>=0?1:-1)*edge,CH.cr*0.85); }
+    if(C.Lc&&useD<-C.Lc){ tx0=f.tx; tz0=f.tz; ex=f.x-tx0*back; ez=f.z-tz0*back; gyc=f.gl!=null?f.gl:f.y; }
+    else { ridePose(useD,latC,o); ex=o.x; ez=o.z; gyc=o.gl; tx0=o.tx; tz0=o.tz; }
+    /* the look-ahead: the line 9 m on (more at speed), so the view leans into the bend before the bike does */
+    var ahead=9+Math.min(f.v||0,22)*0.22, o2=CHQ, tgx, tgz, tgy;
+    if(cr){ var fg=f.fig, mx=fg?(f.x+fg[0])/2:f.x, mz=fg?(f.z+fg[2])/2:f.z, my=fg?(f.y+fg[3])/2:f.y; tgx=mx; tgz=mz; tgy=my+0.7; }
+    else if(C.Lc&&D+ahead<-C.Lc){ tgx=f.x+f.tx*ahead; tgz=f.z+f.tz*ahead; tgy=(f.gl!=null?f.gl:f.y)+0.9; }
+    else { ridePose(D+ahead,lat*0.8,o2); tgx=o2.x; tgz=o2.z; tgy=lerp(f.y,o2.gl,0.55)+0.85; if(f.air) tgy=f.y+0.2; }
+    /* heights: the ground under the camera is smoothed (whoops don't shake the view), a little of the bike's height in the air */
+    var airH=Math.max(0,f.y-(f.gl!=null?f.gl:f.y));
+    if(CH.snap) CH.gy=gyc; else CH.gy+=(gyc-CH.gy)*k(0.28);
+    var ey=CH.gy+upH+0.34*airH;
+    if(C.outdoor){ var gl2=landAt(SC,ex,ez)+0.7; if(ey<gl2) ey=gl2; }
+    /* the landing: a short soft shake (bounded) and a small push of the lens; a little vibration at speed (not with reduced motion) */
+    var vy=CH.snap?0:(f.y-CH.lastY)/Math.max(dt,1e-3); CH.lastY=f.y;
+    var mo=motion()==="full"&&!fx?1:0.25;
+    if(CH.wasAir&&!f.air&&!cr){ CH.shk=clamp(Math.max(0,-CH.vy)*0.0075,0.004,0.05)*mo; CH.shT=0; CH.sx=rand()*2-1; CH.sz=rand()*2-1; }
+    CH.wasAir=!!f.air; if(f.air) CH.vy=vy; else CH.vy=0;
+    CH.shT+=dt; var dec=Math.exp(-CH.shT*7.5), sk=CH.shk*dec*Math.sin(CH.shT*34);
+    var vib=(f.air||still?0:Math.min(1,(f.v||0)/20))*0.004*mo*Math.sin(T*61);
+    ey+=sk+vib; ex+=CH.sx*sk*0.7; ez+=CH.sz*sk*0.7;
+    /* smooth: horizontally tight (the path is already smooth), the look-at a little looser; a cut (a new rider) snaps */
+    var ke=k(0.07), kt=k(0.16);
+    if(CH.snap){ CH.ex=ex; CH.ey=ey; CH.ez=ez; CH.tx=tgx; CH.ty=tgy; CH.tz=tgz; } else {
+      CH.ex+=(ex-CH.ex)*ke; CH.ez+=(ez-CH.ez)*ke; CH.ey+=(ey-CH.ey)*k(0.1); CH.tx+=(tgx-CH.tx)*kt; CH.ty+=(tgy-CH.ty)*k(0.2); CH.tz+=(tgz-CH.tz)*kt; }
+    /* roll with the lean (a fraction, as a camera operator rolls into the bend), the field of view opening with speed and in the air */
+    var roll=clamp(-(f.lean||0)*0.14,-0.14,0.14)*mo, fov=(P.fov+(Math.min(f.v||0,24)/24)*2.2*DEG+(f.air?2.4*DEG:0)-(CH.shT<0.3?2.6*DEG*mo*Math.exp(-CH.shT*10)*Math.min(1,CH.shk*60):0))-6*DEG*CH.cr;
+    CH.roll+=(roll-CH.roll)*k(0.3); CH.fov+=(fov-CH.fov)*k(0.25);
+    CAM.eye=[CH.ex,CH.ey,CH.ez]; CAM.tgt=[CH.tx,CH.ty,CH.tz]; CAM.fov=CH.fov; CAM.close=true; CAM.roll=CH.roll; CAM.se=null; CAM.st=null;
+    CAM.focus=[f.x,(f.gl!=null?f.gl:f.y)+0.9,f.z]; CAM.sRad=13; CAM.dof=1;
+    var cx=CH.tx-CH.ex, cz=CH.tz-CH.ez, cl=Math.hypot(cx,cz)||1, rx=cz/cl, rz=-cx/cl;
+    CAM.up=[rx*Math.sin(CH.roll),Math.cos(CH.roll),rz*Math.sin(CH.roll)];
+    CH.snap=false; V.cut=false; return true;
+  }
+  /* the grandstand: high in the upper deck on the long side, the whole course in view (set up with the scene) */
+  function grandCam(dt){
+    var G0=SC.grand; if(!G0) return false;
+    var u=vnow()/1000*0.05;
+    CAM.eye=[G0.eye[0]+Math.sin(u)*G0.sway,G0.eye[1]+Math.sin(u*1.3)*0.25,G0.eye[2]+Math.cos(u*0.8)*G0.sway*0.4]; CAM.tgt=G0.tgt.slice(); CAM.fov=G0.fov; CAM.close=false; CAM.up=null; CAM.roll=0; CAM.se=null; CAM.st=null; CAM.focus=G0.tgt.slice(); CAM.sRad=0; CAM.dof=0;
+    return true;
+  }
   function camera(dt){
+    var done=false;
+    if(V.mode==="chase") done=chaseCam(dt);
+    else if(V.mode==="grandstand") done=grandCam(dt);
+    if(!done) directorCamera(dt);
+    if(V.free){ CAM.eye=V.free.eye; CAM.tgt=V.free.tgt; CAM.fov=V.free.fov||0.9; CAM.close=V.free.close!==false; CAM.up=V.free.up||null; CAM.roll=0; CAM.focus=V.free.focus||V.free.tgt; CAM.sRad=V.free.sRad!=null?V.free.sRad:12; CAM.dof=V.free.dof!=null?V.free.dof:0.5; }
+  }
+  function directorCamera(dt){
     var C=V.C, S=SC, sh=V.shot||{kind:"heli",el:0}, lead=riderPos(V.leadS)||poses.filter(function(p){ return !p.parked; })[0], fov=0.9, close=false;
     var focus=sh.focus!=null&&sh.focus>=0?riderPos(sh.focus):null; if(!focus) focus=lead;
     var u=sh.el||0;
@@ -1310,73 +1517,196 @@ function create(host,opt){
     /* smoothing inside a shot (reset on every cut) */
     if(!CAM.se||!CAM.st){ CAM.se=EYE.slice(); CAM.st=TGT.slice(); CAM.fv=fov; V.cut=true; }
     else { var ke=1-Math.exp(-dt/0.22), kt=1-Math.exp(-dt/0.12); for(var i=0;i<3;i++){ CAM.se[i]+=(EYE[i]-CAM.se[i])*ke; CAM.st[i]+=(TGT[i]-CAM.st[i])*kt; } CAM.fv+=(fov-CAM.fv)*ke; }
-    CAM.eye=CAM.se; CAM.tgt=CAM.st; CAM.fov=CAM.fv; CAM.close=close;
+    CAM.eye=CAM.se; CAM.tgt=CAM.st; CAM.fov=CAM.fv; CAM.close=close; CAM.up=null; CAM.roll=0;
+    CAM.focus=CAM.st.slice(); CAM.sRad=close?(sh.kind==='gate'?30:22):0; CAM.dof=close?0.6:0;
+  }
+
+  /* ---------- quality levels (the CEO: "adjustable graphics quality ... as close to the cover as the hardware allows") ----------
+     0 PERFORMANCE: the lean path for a Fire TV Stick: the canvas about 0.6 megapixels (960 x 540), the tone curve in the shaders, no post chain,
+                    no shadow map (blob shadows), plain dirt detail, one hero rider close up, a small particle budget, 30 frames a second.
+     1 BALANCED:    about 1 megapixel, the HDR post chain (bloom, FXAA, vignette, grade), one shadow map from the key light, the detail layers on
+                    the dirt, reflections and mud on the bikes, 3 hero riders, more particles.
+     2 QUALITY:     up to 1080p, 4x MSAA where WebGL2 has it, a 2048 shadow map, depth of field, the most particles and hero riders.
+     "auto" picks the level from the device and steps down when the measured frame time says so (and back up, once, when there is room). */
+  var QUAL=[
+    {name:"performance",px:0.62e6,post:false,shadow:0,env:false,mud:false,detail:false,bloom:0,dof:0,fxaa:false,msaa:false,hero:1,mid:5,parts:150,clumps:70,fps30:true,flare:false},
+    {name:"balanced",px:1.0e6,post:true,shadow:1024,env:true,mud:true,detail:true,bloom:0.32,dof:0,fxaa:true,msaa:false,hero:3,mid:9,parts:300,clumps:160,fps30:false,flare:true},
+    {name:"quality",px:2.15e6,post:true,shadow:2048,env:true,mud:true,detail:true,bloom:0.5,dof:0.6,fxaa:true,msaa:true,hero:6,mid:14,parts:480,clumps:260,fps30:false,flare:true}];
+  V.q=startLevel(); V.qAuto=true; V.qCap=2; V.QUAL=QUAL; V.qLog=[]; V.qDirty=true;
+  function startLevel(){
+    var ua=(navigator&&navigator.userAgent)||"", rd=(R.caps.renderer||"");
+    if(fx) return 0;
+    if(/AFT[A-Z0-9]|Fire ?TV|Silk/i.test(ua)) return 0;
+    if(/SwiftShader|llvmpipe|Basic Render|Mali-4|Mali-T|Mali-G31|Mali-G51|PowerVR|Adreno \(?[23]\d\d|Software/i.test(rd)) return 1;
+    return /Android|iPhone|iPad/i.test(ua)?1:2;
+  }
+  V.setQuality=function(l){
+    var i=typeof l==="number"?l:({performance:0,balanced:1,quality:2,auto:-1})[String(l).toLowerCase()];
+    if(i==null||isNaN(i)) return V.q;
+    if(i<0){ V.qAuto=true; V.q=Math.min(startLevel(),V.qCap); } else { V.qAuto=false; V.q=clamp(i|0,0,2); }
+    V.qLog.push([+V.T.toFixed(1),V.q,V.qAuto?"auto":"manual"]); V.qDirty=true; return V.q;
+  };
+  V.qualityName=function(){ return (V.qAuto?"Auto · ":"")+QUAL[V.q].name; };
+  /* the post chain, the shadow map and the programs this level needs (built when the level changes: a loading-screen cost, not a frame cost) */
+  function applyQuality(W,H){
+    var Q=QUAL[V.q]; V.qDirty=false;
+    if(Q.shadow&&R.caps.depthTex){ V.shadowOn=!!R.initShadow(Q.shadow); } else { R.freeShadow(); V.shadowOn=false; }
+    if(Q.post&&R.caps.halfRT||(Q.post&&R.caps.floatRT)){ V.postOn=!!R.initPost(W,H,{msaa:Q.msaa}); V.msaaOn=!!(R.post&&R.post.ms); } else { R.freePost(); V.postOn=false; V.msaaOn=false; }
+    V.postKey=W+"x"+H+"|"+V.q;
+    pickPrograms();
+  }
+  var PR={lit:null,dirt:null,stand:null};
+  function pickPrograms(){
+    var Q=QUAL[V.q], lf=[]; if(V.shadowOn) lf.push("SHADOW"); if(Q.env) lf.push("ENV"); if(Q.mud) lf.push("MUD");
+    PR.lit=R.litProgram(lf); PR.stand=R.standProgram(); PR.dirt=R.dirtProgram((Q.detail?["DETAIL"]:[]).concat(V.shadowOn?["SHADOW"]:[]));
+  }
+  /* the frame-time controller: the median frame interval and our JavaScript time over a window decide a step down (slow) or up (a lot of room) */
+  var AQ={n:0,sum:0,js:0,since:0,down:0};
+  function autoQuality(dtMs,jsMs){
+    if(!V.qAuto||V.frozen) return;
+    AQ.n++; AQ.sum+=dtMs; AQ.js+=jsMs; AQ.since+=dtMs;
+    var win=AQ.down?5000:2500;
+    if(AQ.n<45||AQ.since<win) return;
+    var avg=AQ.sum/AQ.n, js=AQ.js/AQ.n, tgt=QUAL[V.q].fps30?33.3:16.7;
+    if(avg>tgt*1.38&&V.q>0){ V.q--; V.qCap=Math.max(V.q,V.qCap>V.q+1?V.q+1:V.qCap); V.qDirty=true; AQ.down++; V.qLog.push([+V.T.toFixed(1),V.q,"down "+avg.toFixed(1)+"ms"]); }
+    else if(avg<tgt*0.78&&js<tgt*0.35&&V.q<V.qCap&&!AQ.down){ V.q++; V.qDirty=true; V.qLog.push([+V.T.toFixed(1),V.q,"up "+avg.toFixed(1)+"ms"]); }
+    AQ.n=0; AQ.sum=0; AQ.js=0; AQ.since=0;
   }
 
   /* ---------- draw ---------- */
   function resize(){
-    var w=Math.max(1,host.clientWidth), h=Math.max(1,host.clientHeight), tv=document.documentElement.hasAttribute("data-tv");
-    var dpr=Math.min(g.devicePixelRatio||1,tv?1.5:2), budget=(fx||V.fxMode!=="full")?0.55e6:tv?1.35e6:1.1e6;
-    var sc=Math.min(dpr,Math.sqrt(budget/(w*h)))*(V.half?0.8:1); sc=Math.max(0.5,sc);
+    var Q=QUAL[V.q], w=Math.max(1,host.clientWidth), h=Math.max(1,host.clientHeight), tv=document.documentElement.hasAttribute("data-tv");
+    var dpr=Math.min(g.devicePixelRatio||1,tv?2:2), budget=Q.px*(tv?1:(V.q===0?0.9:1));
+    var sc=Math.min(dpr,Math.sqrt(budget/(w*h)))*(V.half?0.8:1); sc=Math.max(0.4,sc);
     var W=Math.round(w*sc), H=Math.round(h*sc);
     if(W!==canvas.width||H!==canvas.height){ canvas.width=W; canvas.height=H; }
     canvas.style.width=w+"px"; canvas.style.height=h+"px"; V.W=W; V.H=H; V.dpr=sc; V.cssW=w; V.cssH=h;
   }
   V.resize=function(){ resize(); if(!V.run) draw(0); };
+  /* the light for this frame: at night a film-style rig relative to the camera (the key from behind and above on the camera side so the
+     riders and the dirt in front of the lens are lit and readable, a strong warm back / rim light from the far floodlights that rims the
+     riders and the crests; both turn slowly with the camera's heading), by day the fixed sun */
+  var LS={init:false,fx:1,fz:0}, LU={sun:[0,1,0],fill:[0,1,0],sunCol:[1,1,1],fillCol:[1,1,1],sky:[0,0,0],gnd:[0,0,0],fog:[0,0,0],haze:[0,0,0],fogR:[0,0,0],spot:[0,0,1,0],ld:new Float32Array(12),lc:new Float32Array(12),mud:[0.2,0.12,0.07],expo:1};
+  function n3(v){ var l=Math.hypot(v[0],v[1],v[2])||1; v[0]/=l; v[1]/=l; v[2]/=l; return v; }
+  function frameLight(dt){
+    var Lg=SC.L, ex=CAM.eye, tg=CAM.tgt, fx0=tg[0]-ex[0], fz0=tg[2]-ex[2], fl=Math.hypot(fx0,fz0)||1; fx0/=fl; fz0/=fl;
+    if(!LS.init||V.cut){ LS.fx=fx0; LS.fz=fz0; LS.init=true; } else { var k=1-Math.exp(-Math.min(dt,0.1)/1.4); LS.fx+=(fx0-LS.fx)*k; LS.fz+=(fz0-LS.fz)*k; var l2=Math.hypot(LS.fx,LS.fz)||1; LS.fx/=l2; LS.fz/=l2; }
+    var f0=LS.fx, f2=LS.fz, r0=-f2, r2=f0;   /* forward and right on the ground */
+    LU.sunCol=Lg.sunCol; LU.fillCol=Lg.fillCol; LU.sky=Lg.sky; LU.gnd=Lg.gnd; LU.fog=Lg.fog; LU.haze=Lg.haze; LU.fogR=Lg.fogR; LU.spot=Lg.spot; LU.expo=Lg.expo;
+    if(SC.night){ LU.sun=n3([-f0*0.40-r0*0.46,0.78,-f2*0.40-r2*0.46]); LU.fill=n3([f0*0.62+r0*0.40,0.58,f2*0.62+r2*0.40]); }
+    else { LU.sun=Lg.sun; LU.fill=Lg.fill; }
+    for(var li2=0;li2<3;li2++) LITD[li2]=LU.sky[li2]*0.5+LU.gnd[li2]*0.3+LU.sunCol[li2]*0.26+LU.fillCol[li2]*0.5;
+    /* the brightest floodlights as seen from where the action is: for the glints on plastics and helmets */
+    var L=SC.envLights||[], c=CAM.focus||tg, ld=LU.ld, lc=LU.lc;
+    for(var i=0;i<4;i++){ var q=L[i%Math.max(1,L.length)]; if(q){ var dx=q[0]-c[0], dy=q[1]-c[1], dz=q[2]-c[2], dl=Math.hypot(dx,dy,dz)||1; ld[i*3]=dx/dl; ld[i*3+1]=dy/dl; ld[i*3+2]=dz/dl; lc[i*3]=1.3; lc[i*3+1]=1.25; lc[i*3+2]=1.1; } else { ld[i*3]=0; ld[i*3+1]=1; ld[i*3+2]=0; lc[i*3]=lc[i*3+1]=lc[i*3+2]=0; } }
+  }
+  /* the shadow map: an orthographic box round the point of interest along the key light, its centre snapped to the texel grid */
+  var LVM=GL.m4(), LPM=GL.m4(), LVP=GL.m4(), SHP=new Float32Array(4);
+  function shadowSetup(){
+    var rad=CAM.sRad||0; if(!V.shadowOn||rad<=0){ V.shadowUse=false; return false; }
+    var Sz=R.shadow.size, c0=CAM.focus||CAM.tgt, ld=LU.sun, up=Math.abs(ld[1])>0.95?[0,0,1]:[0,1,0];
+    /* the texel grid in the light's own axes */
+    var rx=ld[2]*up[1]-ld[1]*up[2], ry=ld[0]*up[2]-ld[2]*up[0], rz=ld[1]*up[0]-ld[0]*up[1], rl=Math.hypot(rx,ry,rz)||1; rx/=rl; ry/=rl; rz/=rl;
+    var ux=ry*ld[2]-rz*ld[1], uy=rz*ld[0]-rx*ld[2], uz=rx*ld[1]-ry*ld[0];
+    var tex=2*rad/Sz, a=c0[0]*rx+c0[1]*ry+c0[2]*rz, b=c0[0]*ux+c0[1]*uy+c0[2]*uz, da=Math.round(a/tex)*tex-a, db=Math.round(b/tex)*tex-b;
+    var c=[c0[0]+rx*da+ux*db,c0[1]+ry*da+uy*db,c0[2]+rz*da+uz*db], D=70;
+    GL.lookAt(LVM,[c[0]+ld[0]*D,c[1]+ld[1]*D,c[2]+ld[2]*D],c,up); GL.ortho(LPM,-rad,rad,-rad,rad,4,D*2); GL.mul(LVP,LPM,LVM);
+    SHP[0]=1/Sz*1.25; SHP[1]=0.00045+rad*0.00003; SHP[2]=0.86; SHP[3]=0.02+tex*1.4;
+    V.shadowUse=true; return true;
+  }
+  var IDM=GL.m4();
   function draw(dt){
     var C=V.C; if(!C||!SC) return;
     resize();
-    var Lg=SC.L, W=V.W, H=V.H;
-    R.frame(); gl.viewport(0,0,W,H);
+    var W=V.W, H=V.H, Q=QUAL[V.q], Lg=SC.L;
+    if(V.qDirty||V.postKey!==W+"x"+H+"|"+V.q) applyQuality(W,H);
+    var post=V.postOn&&R.post, P0;
+    R.frame(); frameLight(dt);
+    /* camera matrices: CAM.fov is the vertical field of a 16:9 frame: a portrait screen keeps most of the width (a taller view), a very wide one a little less height */
+    var asp=W/H, kk=(16/9)/asp, fy=Math.min(1.4,2*Math.atan(Math.tan(CAM.fov/2)*(kk>1?Math.pow(kk,0.52):Math.pow(kk,0.35))));
+    var far=C.outdoor?2400:900;
+    GL.persp(PROJ,fy,asp,CAM.close?0.35:1.5,far); GL.lookAt(VIEW,CAM.eye,CAM.tgt,CAM.up||[0,1,0]); GL.mul(VP,PROJ,VIEW); GL.inv(IVP,VP);
+    var tSec=fx||V.fxMode!=="full"?0:(vnow()%600000)/1000;   /* the LED boards and the crowd hold still with Reduce effects */
+    /* every instance buffer is filled once, then used by the shadow pass and the main pass */
+    PARTS.forEach(function(k){ var n=counts[NCNT[k]]; if(n) R.update(IB[k],IBD[k],n); });
+    if(counts.person) R.update(IB.person,IBD.person,counts.person);
+    R.update(IB.gate,IBD.gate,1);
+    var useSh=shadowSetup();
+    if(useSh){
+      var Sh=R.shadow; R.bindPlain(Sh.T); gl.depthMask(true); gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LESS); gl.disable(gl.BLEND); gl.clear(gl.DEPTH_BUFFER_BIT);
+      gl.colorMask(false,false,false,false); gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1.5,3);
+      var PS0=R.progs.shadow; R.use(PS0); gl.uniformMatrix4fv(PS0.u.uLVP,false,LVP);
+      SHCAST.forEach(function(k){ var n=counts[NCNT[k]]; if(n) R.draw(PS0,M[k],IB[k],n); });
+      if(counts.person) R.draw(PS0,M.person,IB.person,counts.person);
+      gl.disable(gl.POLYGON_OFFSET_FILL); gl.colorMask(true,true,true,true);
+    }
+    /* the main pass */
+    if(post){ P0=R.post; R.bind(P0.scene); } else R.bind(null,W,H);
+    var TM=post?0:1, OUT=post?R.post.out:1;
     gl.clearColor(Lg.clear[0],Lg.clear[1],Lg.clear[2],1); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND); gl.depthMask(true);
-    /* CAM.fov is the vertical field of a 16:9 frame: a portrait screen keeps most of the width (a taller view), a very wide one a little less height */
-    var asp=W/H, kk=(16/9)/asp, fy=Math.min(1.4,2*Math.atan(Math.tan(CAM.fov/2)*(kk>1?Math.pow(kk,0.52):Math.pow(kk,0.35))));
-    /* polish 2: the near plane as far out as the shot allows (a 16-bit depth buffer, which some GPUs hand out, fought between the floor and the
-       track 2 cm above it from 20 m on: dark streaks beside the start straight) */
-    GL.persp(PROJ,fy,asp,CAM.close?0.5:1.5,C.outdoor?2400:900); GL.lookAt(VIEW,CAM.eye,CAM.tgt,[0,1,0]); GL.mul(VP,PROJ,VIEW); GL.inv(IVP,VP);
-    var tSec=fx||V.fxMode!=="full"?0:(now()%600000)/1000;   /* the LED boards hold still with Reduce effects */
+    /* the shared textures: 1 noise, 2 smooth noise, 3 shadow, 4 / 5 the dirt's detail */
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D,TEX.noise); gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D,TEX.smooth);
+    if(useSh){ gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D,R.shadow.tex); }
+    gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D,TEX.detA); gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D,TEX.detB); gl.activeTexture(gl.TEXTURE0);
     function u3(l,v){ if(l!=null) gl.uniform3fv(l,v); }
-    function common(P){ var u=P.u; gl.uniformMatrix4fv(u.uVP,false,VP);
-      u3(u.uSun,Lg.sun); u3(u.uSunCol,Lg.sunCol); u3(u.uFill,Lg.fill); u3(u.uFillCol,Lg.fillCol); u3(u.uSky,Lg.sky); u3(u.uGnd,Lg.gnd);
-      u3(u.uFog,Lg.fog); u3(u.uFogR,Lg.fogR); u3(u.uHaze,Lg.haze); u3(u.uCam,CAM.eye); if(u.uSpot!=null) gl.uniform4fv(u.uSpot,Lg.spot);
-      if(u.uExpo!=null) gl.uniform1f(u.uExpo,Lg.expo); if(u.uTime!=null) gl.uniform1f(u.uTime,tSec); if(u.uWet!=null) gl.uniform1f(u.uWet,Lg.wet); if(u.uNoise!=null) gl.uniform1i(u.uNoise,1); }
+    function common(Pg){ var u=Pg.u; gl.uniformMatrix4fv(u.uVP,false,VP);
+      u3(u.uSun,LU.sun); u3(u.uSunCol,LU.sunCol); u3(u.uFill,LU.fill); u3(u.uFillCol,LU.fillCol); u3(u.uSky,LU.sky); u3(u.uGnd,LU.gnd);
+      u3(u.uFog,LU.fog); u3(u.uFogR,LU.fogR); u3(u.uHaze,LU.haze); u3(u.uCam,CAM.eye); if(u.uSpot!=null) gl.uniform4fv(u.uSpot,LU.spot);
+      if(u.uExpo!=null) gl.uniform1f(u.uExpo,LU.expo); if(u.uTM!=null) gl.uniform1f(u.uTM,TM); if(u.uOut!=null) gl.uniform1f(u.uOut,OUT); if(u.uFar!=null) gl.uniform1f(u.uFar,far);
+      if(u.uTime!=null) gl.uniform1f(u.uTime,tSec); if(u.uNoise!=null) gl.uniform1i(u.uNoise,1); if(u.uSmooth!=null) gl.uniform1i(u.uSmooth,2);
+      if(u.uMudCol!=null) gl.uniform3fv(u.uMudCol,LU.mud); if(u.uLDir!=null) gl.uniform3fv(u.uLDir,LU.ld); if(u.uLCol!=null) gl.uniform3fv(u.uLCol,LU.lc);
+      if(u.uLVP!=null){ gl.uniformMatrix4fv(u.uLVP,false,LVP); } if(u.uShP!=null){ gl.uniform4fv(u.uShP,SHP); } if(u.uShadow!=null) gl.uniform1i(u.uShadow,3); }
     /* the sky */
-    var P=R.progs.sky; R.use(P); gl.depthMask(false); gl.uniformMatrix4fv(P.u.uIVP,false,IVP); gl.uniform3fv(P.u.uTop,Lg.top); gl.uniform3fv(P.u.uHor,Lg.hor); gl.uniform3fv(P.u.uSun,Lg.sun); gl.uniform3fv(P.u.uSunCol,Lg.sunCol); if(P.u.uExpo!=null) gl.uniform1f(P.u.uExpo,Lg.expo);
-    gl.uniform1f(P.u.uNight,Lg.nightK); gl.uniform1f(P.u.uClouds,Lg.clouds); gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D,TEX.noise); if(P.u.uNoise!=null) gl.uniform1i(P.u.uNoise,1);
-    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,TEX.dirt); gl.uniform1i(P.u.uTex,0); R.sky(P); gl.depthMask(true);
+    var Pg=R.progs.sky; R.use(Pg); gl.depthMask(false); gl.uniformMatrix4fv(Pg.u.uIVP,false,IVP); gl.uniform3fv(Pg.u.uTop,Lg.top); gl.uniform3fv(Pg.u.uHor,Lg.hor); gl.uniform3fv(Pg.u.uSun,Lg.sun); gl.uniform3fv(Pg.u.uSunCol,Lg.sunCol);
+    gl.uniform1f(Pg.u.uExpo,LU.expo); gl.uniform1f(Pg.u.uTM,TM); gl.uniform1f(Pg.u.uOut,OUT); gl.uniform1f(Pg.u.uNight,Lg.nightK); gl.uniform1f(Pg.u.uClouds,Lg.clouds);
+    gl.uniform1i(Pg.u.uNoise,1); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,TEX.dirt); gl.uniform1i(Pg.u.uTex,0); R.sky(Pg); gl.depthMask(true);
     /* the ground and the track */
-    P=R.progs.dirt; R.use(P); common(P); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,TEX.dirt); gl.uniform1i(P.u.uTex,0);
-    gl.uniform3fv(P.u.uDirt,SC.cols.dirt); gl.uniform3fv(P.u.uSand,SC.cols.sand); gl.uniform3fv(P.u.uGrass,SC.cols.grass);
-    R.draw(P,SC.floorMesh,null); R.draw(P,SC.track,null);
-    /* props */
-    P=R.progs.lit; R.use(P); common(P); R.draw(P,SC.props,null);
-    R.update(IB.gate,IBD.gate,1); R.draw(P,SC.gateMesh,IB.gate,1);
+    Pg=PR.dirt; R.use(Pg); common(Pg); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,TEX.dirt); gl.uniform1i(Pg.u.uTex,0);
+    if(Pg.u.uDetA!=null) gl.uniform1i(Pg.u.uDetA,4); if(Pg.u.uDetB!=null) gl.uniform1i(Pg.u.uDetB,5); if(Pg.u.uDetK!=null) gl.uniform3f(Pg.u.uDetK,0.52,2.9,0);
+    gl.uniform3fv(Pg.u.uDirt,SC.cols.dirt); gl.uniform3fv(Pg.u.uSand,SC.cols.sand); gl.uniform3fv(Pg.u.uGrass,SC.cols.grass); gl.uniform1f(Pg.u.uWet,Lg.wet);
+    R.draw(Pg,SC.floorMesh,null); R.draw(Pg,SC.track,null);
+    /* props, the gate, the stands */
+    Pg=PR.lit; R.use(Pg); common(Pg); R.draw(Pg,SC.props,null); R.draw(Pg,SC.gateMesh,IB.gate,1);
+    if(SC.stands){ var Ps=PR.stand; R.use(Ps); common(Ps); R.draw(Ps,SC.stands,null); }
     /* the bikes and riders: one draw per part for the whole field */
-    var nb=counts.body; if(nb){ R.update(IB.body,IBD.body,nb); R.draw(P,M.body,IB.body,nb); R.update(IB.wheel,IBD.wheel,counts.wheel); R.draw(P,M.wheel,IB.wheel,counts.wheel); }
-    if(counts.upper){ R.update(IB.upper,IBD.upper,counts.upper); R.draw(P,M.upper,IB.upper,counts.upper); }
-    if(counts.leg){ R.update(IB.thigh,IBD.thigh,counts.leg); R.draw(P,M.thigh,IB.thigh,counts.leg); R.update(IB.shin,IBD.shin,counts.leg); R.draw(P,M.shin,IB.shin,counts.leg); }
-    if(counts.person){ R.update(IB.person,IBD.person,counts.person); R.draw(P,M.person,IB.person,counts.person); }
-    var nf=buildFlags(); if(nf){ R.update(IB.flag,IBDf,nf); R.use(P); common(P); drawArraysLit(P,IB.flag,nf); }
+    Pg=PR.lit; R.use(Pg); common(Pg);
+    PARTS.forEach(function(k){ var n=counts[NCNT[k]]; if(n) R.draw(Pg,M[k],IB[k],n); });
+    if(counts.person) R.draw(Pg,M.person,IB.person,counts.person);
+    var nf=buildFlags(); if(nf){ R.update(IB.flag,IBDf,nf); R.use(Pg); common(Pg); drawArraysLit(Pg,IB.flag,nf); }
     /* plates */
     if(ATL.dirty){ R.retex(ATL.t,ATL.c); ATL.dirty=false; }
-    P=R.progs.plate; R.use(P); common(P); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,ATL.t); gl.uniform1i(P.u.uAtlas,0);
-    if(counts.plate){ R.update(IB.plate,IBD.plate,counts.plate); R.draw(P,M.plate,IB.plate,counts.plate); }
-    /* shadows, dust: blended */
-    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
+    Pg=R.progs.plate; R.use(Pg); common(Pg); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,ATL.t); gl.uniform1i(Pg.u.uAtlas,0);
+    if(counts.plate){ R.update(IB.plate,IBD.plate,counts.plate); R.draw(Pg,M.plate,IB.plate,counts.plate); }
+    /* shadows, dust: blended (the alpha channel keeps the depth the post chain reads) */
+    gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.ONE,gl.ONE_MINUS_SRC_ALPHA,gl.ZERO,gl.ONE); gl.depthMask(false);
     gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-2,-4);
-    P=R.progs.decal; if(counts.decal){ R.use(P); gl.uniformMatrix4fv(P.u.uVP,false,VP); R.update(IB.decal,IBD.decal,counts.decal); R.quads(P,IB.decal,counts.decal); }
+    Pg=R.progs.decal; if(counts.decal){ R.use(Pg); gl.uniformMatrix4fv(Pg.u.uVP,false,VP); R.update(IB.decal,IBD.decal,counts.decal); R.quads(Pg,IB.decal,counts.decal); }
     gl.disable(gl.POLYGON_OFFSET_FILL);
-    P=R.progs.part; if(counts.part){ R.use(P); gl.uniformMatrix4fv(P.u.uVP,false,VP); gl.uniform3fv(P.u.uRight,[VIEW[0],VIEW[4],VIEW[8]]); gl.uniform3fv(P.u.uUp,[VIEW[1],VIEW[5],VIEW[9]]); gl.uniform1f(P.u.uLit,SC.night?0.9:1.05); R.update(IB.part,IBD.part,counts.part); R.quads(P,IB.part,counts.part); }
-    /* the stadium light glows */
-    if(SC.lights&&SC.night){ var gd=IBD.part, gn=0; SC.lights.forEach(function(l){ if(gn<60){ gd[gn*8]=l[0]; gd[gn*8+1]=l[1]; gd[gn*8+2]=l[2]; gd[gn*8+3]=l[3]||7; gd[gn*8+4]=1.5; gd[gn*8+5]=1.45; gd[gn*8+6]=1.25; gd[gn*8+7]=0.5; gn++; } });
-      R.use(P); gl.uniformMatrix4fv(P.u.uVP,false,VP); gl.uniform3fv(P.u.uRight,[VIEW[0],VIEW[4],VIEW[8]]); gl.uniform3fv(P.u.uUp,[VIEW[1],VIEW[5],VIEW[9]]); gl.uniform1f(P.u.uLit,1.6); R.update(IB.part,gd,gn); R.quads(P,IB.part,gn); }
-    /* labels on top */
-    gl.disable(gl.DEPTH_TEST);
-    P=R.progs.label; if(counts.label){ R.use(P); gl.uniformMatrix4fv(P.u.uVP,false,VP); gl.uniform2fv(P.u.uPx,[1/W,1/H]); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,ATL.t); gl.uniform1i(P.u.uAtlas,0);
-      var nl=fixLabels(W,H); if(nl){ R.update(IB.label,LBL,nl); R.quads(P,IB.label,nl); } }
+    var rgt=[VIEW[0],VIEW[4],VIEW[8]], upv=[VIEW[1],VIEW[5],VIEW[9]];
+    Pg=R.progs.part; if(counts.part){ R.use(Pg); gl.uniformMatrix4fv(Pg.u.uVP,false,VP); gl.uniform3fv(Pg.u.uRight,rgt); gl.uniform3fv(Pg.u.uUp,upv); gl.uniform3fv(Pg.u.uLitCol,LITD); gl.uniform1f(Pg.u.uExpo,LU.expo); gl.uniform1f(Pg.u.uTM,TM); gl.uniform1f(Pg.u.uOut,OUT); gl.uniform1i(Pg.u.uSmooth,2); R.update(IB.part,IBD.part,counts.part); R.quads(Pg,IB.part,counts.part); }
+    if(counts.clump){ Pg=R.progs.clump; R.use(Pg); gl.uniformMatrix4fv(Pg.u.uVP,false,VP); gl.uniform3fv(Pg.u.uRight,rgt); gl.uniform3fv(Pg.u.uUp,upv); gl.uniform3fv(Pg.u.uLitCol,LITD);
+      gl.uniform3f(Pg.u.uKeyScr,VIEW[0]*LU.sun[0]+VIEW[4]*LU.sun[1]+VIEW[8]*LU.sun[2],VIEW[1]*LU.sun[0]+VIEW[5]*LU.sun[1]+VIEW[9]*LU.sun[2],VIEW[2]*LU.sun[0]+VIEW[6]*LU.sun[1]+VIEW[10]*LU.sun[2]);
+      gl.uniform1f(Pg.u.uExpo,LU.expo); gl.uniform1f(Pg.u.uTM,TM); gl.uniform1f(Pg.u.uOut,OUT); R.update(IB.clump,IBD.clump,counts.clump); R.quads(Pg,IB.clump,counts.clump); }
+    /* the stadium light glows (additive star-bursts) */
+    if(SC.lights&&SC.night&&Q.flare){ var gd=IBD.glow, gn=0; SC.lights.forEach(function(l){ if(gn<48){ gd[gn*8]=l[0]; gd[gn*8+1]=l[1]; gd[gn*8+2]=l[2]; gd[gn*8+3]=(l[3]||7)*2.6; gd[gn*8+4]=1.0; gd[gn*8+5]=0.93; gd[gn*8+6]=0.8; gd[gn*8+7]=1.0; gn++; } });
+      Pg=R.progs.glow; R.use(Pg); gl.blendFunc(gl.ONE,gl.ONE); gl.uniformMatrix4fv(Pg.u.uVP,false,VP); gl.uniform3fv(Pg.u.uRight,rgt); gl.uniform3fv(Pg.u.uUp,upv); gl.uniform1f(Pg.u.uExpo,LU.expo); gl.uniform1f(Pg.u.uTM,TM); gl.uniform1f(Pg.u.uOut,OUT); R.update(IB.glow,gd,gn); R.quads(Pg,IB.glow,gn);
+      gl.blendFuncSeparate(gl.ONE,gl.ONE_MINUS_SRC_ALPHA,gl.ZERO,gl.ONE); }
+    else if(SC.lights&&SC.night){ var gd2=IBD.part, gn2=0; SC.lights.forEach(function(l){ if(gn2<60){ gd2[gn2*8]=l[0]; gd2[gn2*8+1]=l[1]; gd2[gn2*8+2]=l[2]; gd2[gn2*8+3]=l[3]||7; gd2[gn2*8+4]=1.4; gd2[gn2*8+5]=1.35; gd2[gn2*8+6]=1.15; gd2[gn2*8+7]=0.5; gn2++; } });
+      Pg=R.progs.part; R.use(Pg); gl.uniformMatrix4fv(Pg.u.uVP,false,VP); gl.uniform3fv(Pg.u.uRight,rgt); gl.uniform3fv(Pg.u.uUp,upv); gl.uniform3fv(Pg.u.uLitCol,[1.6,1.6,1.6]); gl.uniform1f(Pg.u.uExpo,LU.expo); gl.uniform1f(Pg.u.uTM,TM); gl.uniform1f(Pg.u.uOut,OUT); R.update(IB.part,gd2,gn2); R.quads(Pg,IB.part,gn2); }
+    gl.depthMask(true); gl.disable(gl.BLEND);
+    /* the post chain: the scene (HDR) -> bloom, depth of field, the tone curve and the grade -> the canvas */
+    if(post){
+      var cam=CAM.eye, fc=CAM.focus||CAM.tgt, fd=Math.hypot(fc[0]-cam[0],fc[1]-cam[1],fc[2]-cam[2]);
+      var dofOn=Q.dof>0&&CAM.dof>0, tim=(vnow()%100000)/1000;
+      R.postEnd({p1:[Q.bloom*Lg.bloomK,Lg.bloomT,Lg.vig,fx?0:0.018],p2:[LU.expo,Lg.sat,tim,far],p3:[(Q.fxaa&&!V.msaaOn)?1:0,dofOn?Q.dof*CAM.dof:0,1,0],dof:[fd,fd*0.8,fd*3.0,fd*22]},W,H);
+    }
+    /* labels on top: fixed pixel size, after the tone curve */
+    gl.disable(gl.DEPTH_TEST); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
+    Pg=R.progs.label; if(counts.label){ R.use(Pg); gl.uniformMatrix4fv(Pg.u.uVP,false,VP); gl.uniform2fv(Pg.u.uPx,[1/W,1/H]); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,ATL.t); gl.uniform1i(Pg.u.uAtlas,0);
+      var nl=fixLabels(W,H); if(nl){ R.update(IB.label,LBL,nl); R.quads(Pg,IB.label,nl); } }
     gl.enable(gl.DEPTH_TEST); gl.depthMask(true); gl.disable(gl.BLEND);
-    V.stat={draws:R.draws,tris:R.tris};
+    V.stat={draws:R.draws,tris:R.tris,shadow:!!useSh,post:!!post,msaa:!!V.msaaOn,q:V.q};
   }
   /* label sizes: a label with a negative size is the OUT tag under its rider's plate */
   var LBL=new Float32Array(90*12);
@@ -1401,8 +1731,9 @@ function create(host,opt){
   }
   function drawArraysLit(P,vb,n){ R.use(P); var spec=vb.spec, off=0; gl.bindBuffer(gl.ARRAY_BUFFER,vb.b);
     spec.forEach(function(s){ var loc=P.a[s[0]]; if(loc!=null&&loc>=0){ gl.enableVertexAttribArray(loc); R.enabled[loc]=1; gl.vertexAttribPointer(loc,s[1],gl.FLOAT,false,vb.stride,off); } off+=s[1]*4; });
-    gl.vertexAttrib4f(P.a.iA,1,0,0,0); gl.vertexAttrib4f(P.a.iB,0,1,0,0); gl.vertexAttrib4f(P.a.iC,0,0,1,0); gl.vertexAttrib4f(P.a.iTeam,1,1,1,1); gl.vertexAttrib4f(P.a.iAcc,1,1,1,1);
+    gl.vertexAttrib4f(P.a.iA,1,0,0,0); gl.vertexAttrib4f(P.a.iB,0,1,0,0); gl.vertexAttrib4f(P.a.iC,0,0,1,0); gl.vertexAttrib4f(P.a.iTeam,1,1,1,1); gl.vertexAttrib4f(P.a.iAcc,1,1,1,0); if(P.a.aMat!=null&&P.a.aMat>=0) gl.vertexAttrib4f(P.a.aMat,0.1,0.2,0,1);
     gl.drawArrays(gl.TRIANGLES,0,n); R.draws++; R.tris+=n/3; }
+  var LITD=[1,1,1];
   function renderStill(){ if(!V.C) return; update(0); camera(0); draw(0); }
 
   /* ---------- the loop ---------- */
@@ -1412,7 +1743,7 @@ function create(host,opt){
     var mo=motion(); V.fxMode=mo;
     if(mo==="off"){ V.run=false; renderStill(); return; }
     var dt=(V.last?Math.min(0.1,(t-V.last)/1000):0.016)*(V.timeScale||1);   /* timeScale: tests only (the race view is real time) */
-    if((mo==="reduced"||V.half)&&V.last&&t-V.last<31){ V.raf=requestAnimationFrame(tick); return; }
+    if((mo==="reduced"||QUAL[V.q].fps30||V.half)&&V.last&&t-V.last<31){ V.raf=requestAnimationFrame(tick); return; }
     V.last=t;
     var c0=now(), c1=c0;
     try{ update(dt); camera(dt); c1=now(); draw(dt); }catch(e){ V.err=String(e&&e.stack||e); try{ console.warn("mxwar 3d:",e); }catch(x){} }
@@ -1421,8 +1752,7 @@ function create(host,opt){
     V.ucosts.push(c1-c0); if(V.ucosts.length>120) V.ucosts.shift();
     /* a device that can't keep up (our own work over 22 ms a frame, or frames coming slower than 24 a second, a busy GPU, for 3 s) drops
        to 30 fps and a canvas 0.8 x the size */
-    V.dtS=(V.dtS||0)+(V.lastT?t-V.lastT:16); V.lastT=t;
-    if(!V.half&&V.msN>=90){ if(V.ms/V.msN>22||V.dtS/V.msN>42) V.half=true; V.ms=0; V.msN=0; V.dtS=0; }
+    var dtMs=V.lastT?t-V.lastT:16; V.dtS=(V.dtS||0)+dtMs; V.lastT=t; autoQuality(dtMs,cost);
     V.raf=requestAnimationFrame(tick);
   }
   V.start=function(){ if(V.run||document.hidden) return; if(motion()==="off"){ renderStill(); return; } V.run=true; V.last=0; V.lastT=0; V.dtS=0; V.ms=0; V.msN=0; V.raf=requestAnimationFrame(tick); };
@@ -1430,9 +1760,15 @@ function create(host,opt){
   V.show=function(on){ V.want=!!on; if(on) V.start(); else V.stop(); };
   document.addEventListener("visibilitychange",function(){ if(document.hidden) V.stop(); else if(V.want) V.start(); });
   canvas.addEventListener("webglcontextlost",function(e){ e.preventDefault(); V.lost=true; V.stop(); V.waiters.splice(0).forEach(function(w){ try{ w.res(); }catch(x){} }); });
-  canvas.addEventListener("webglcontextrestored",function(){ V.lost=false; try{ R.programs(); initModels(); if(V.C){ SC=buildScene(V.C); SC.L=light(SC); atlasRedraw(); } if(V.want) V.start(); }catch(e){ V.err=String(e); } });
+  canvas.addEventListener("webglcontextrestored",function(){ V.lost=false; try{ R.progs={}; R.cur=null; R.shadow=null; R.post=null; V.qDirty=true; R.programs(); initModels(); if(V.C){ SC=buildScene(V.C); SC.L=light(SC); atlasRedraw(); } if(V.want) V.start(); }catch(e){ V.err=String(e); } });
   /* tests and tools */
   V.freeze=function(on){ V.frozen=!!on; };
+  /* capture / demo hooks: a seeded random source, a virtual clock, one deterministic frame (update + camera + draw at a fixed dt; draw=false
+     fast-forwards the same simulation without rendering) and a free camera for stills of a model or a spot */
+  V.seed=function(n){ RNG.f=(n==null)?null:rng(n>>>0); };
+  V.virtual=function(on){ VCLK.on=!!on; if(on) VCLK.ms=0; };
+  V.step=function(dt,doDraw){ if(VCLK.on) VCLK.ms+=dt*1000; update(dt); camera(dt); if(doDraw!==false) draw(dt); };
+  V.freeCam=function(o){ V.free=o||null; };
   V.debugShot=function(kind,o){ o=o||{}; V.res=[]; setShot({kind:kind,d:o.d||999,spot:o.spot||(kind==="side"||kind==="wide"?(SC.secs.filter(function(x){ return !o.type||x.F&&x.F.type===o.type; })[0]):null),focus:o.focus!=null?o.focus:-1,pair:o.pair}); };
   V.timeFor=function(type){ var sp=SC.secs.filter(function(x){ return x.F&&x.F.type===type; })[0]; return sp?{lip:sp.F.lip!=null?leadTimeAt(sp.F.lip,(V.lap>1?lapEnd(V.lap-1):0)):null,s0:leadTimeAt(sp.F.s0,(V.lap>1?lapEnd(V.lap-1):0)),F:{type:sp.F.type,s0:sp.F.s0,s1:sp.F.s1,lip:sp.F.lip,tgt:sp.F.tgt}}:null; };
   V.setT=function(t){ V.T=t; };
@@ -1449,6 +1785,21 @@ function create(host,opt){
     order:poses.filter(function(p){ return !p.parked; }).map(function(p){ return p.r.s; }),crashes:V.riders.filter(function(r){ return r.crash; }).map(function(r){ return {s:r.s,kind:r.crash.kind,T0:+r.crash.T0.toFixed(2)}; }),
     air:poses.filter(function(p){ return p.air; }).length,run:V.run}; };
   V.debugCam=function(){ var f=V.shot&&V.shot.focus>=0?riderPos(V.shot.focus):null; return {eye:CAM.eye.map(function(x){ return +x.toFixed(1); }),tgt:CAM.tgt.map(function(x){ return +x.toFixed(1); }),fov:+CAM.fov.toFixed(2),shot:V.shot&&V.shot.kind,spot:V.shot&&V.shot.spot?[+V.shot.spot.x.toFixed(1),+V.shot.spot.y.toFixed(1),+V.shot.spot.z.toFixed(1)]:null,focus:f?[+f.x.toFixed(1),+f.y.toFixed(1),+f.z.toFixed(1),!!f.crash]:null,marshal:V.marshal?[+V.marshal.x.toFixed(1),+V.marshal.z.toFixed(1)]:null}; };
+  /* the live timing board: every rider in track order with the gap in seconds to the leader (the time the leader needed from that rider's spot to
+     his own: a timing loop's gap), the riders out last (the later out ahead); for the page's tower and the demo's overlay */
+  V.board=function(){
+    var C=V.C; if(!C) return [];
+    var live=[], dead=[], T=V.T;
+    poses.forEach(function(p){ if(p.parked||p.r.out) dead.push(p); else live.push(p); });
+    live.sort(byD);
+    dead.sort(function(a,b){ var A=a.r.park?a.r.park.T:a.r.crash?a.r.crash.T0:0, B=b.r.park?b.r.park.T:b.r.crash?b.r.crash.T0:0; return B-A; });
+    var D0=live.length?live[0].D:0, t0=TK.timeAt(C,D0), rows=[];
+    live.forEach(function(p,i){ rows.push({s:p.r.s,place:i+1,gap:Math.max(0,t0-TK.timeAt(C,p.D)),out:false,crash:!!p.crash,air:!!p.air,D:p.D,v:p.v||0}); });
+    dead.forEach(function(p,i){ rows.push({s:p.r.s,place:live.length+i+1,gap:0,out:true,crash:!!p.crash,air:false,D:p.D,v:0}); });
+    return rows;
+  };
+  V.poseList=function(){ return poses.map(function(p){ return {s:p.r.s,x:p.x,y:p.y,z:p.z,tx:p.tx,tz:p.tz,gl:p.gl,air:!!p.air,parked:!!p.parked,v:p.v||0,lod:p.r._lod}; }); };
+  V.speedOf=function(s){ var p=s>=0?riderPos(s):null; return p&&!p.parked?(p.v||0):0; };
   V.order=function(){ return poses.filter(function(p){ return !p.parked; }).sort(function(a,b){ return b.D-a.D; }).map(function(p){ return p.r.s; }); };
   V.destroy=function(){ V.stop(); try{ canvas.remove(); }catch(e){} };
   initModels();
