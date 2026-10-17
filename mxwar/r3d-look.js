@@ -63,8 +63,14 @@ export function createLook(renderer,opts){
     lights(C,look,world);
     scene.fog=world.ctx.fogC?new THREE.Fog(world.ctx.fogC[0],world.ctx.fogC[1],world.ctx.fogC[2]):null;
   };
-  /* THE POST-PROCESSING SLOT (empty): set L.post={render(scene,cam),resize(W,H,pr)} to draw through a chain of passes */
-  L.render=function(sc,cam){ if(L.post&&L.post.render) L.post.render(sc,cam); else renderer.render(sc,cam); };
+  /* THE POST-PROCESSING SLOT (empty): set L.post={render(scene,cam),resize(W,H,pr)} to draw through a chain of passes.
+     THE FRAME'S COUNTERS (renderer.info.render: calls, triangles; V.stats(), the harness' DEMO.stats()) are the WHOLE frame: the shadow map pass + the scene + every pass of a
+     chain. three.js alone would show less: it resets the counters inside every renderer.render() call right AFTER drawing the shadow map (so the shadow pass is never counted: 12 calls and
+     78k of 199k triangles in the stadium with real shadows) and once per pass (a chain would show only its last pass). So the reset is ours: once per frame, here. */
+  L.render=function(sc,cam){
+    renderer.info.autoReset=false; renderer.info.reset();
+    if(L.post&&L.post.render) L.post.render(sc,cam); else renderer.render(sc,cam);
+  };
   L.resize=function(W,H,pr){ if(L.post&&L.post.resize) L.post.resize(W,H,pr); };
   return L;
 }

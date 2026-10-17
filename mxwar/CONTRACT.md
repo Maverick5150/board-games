@@ -1,10 +1,9 @@
 # Motocross War 3D — CONTRACT
 
-Who owns which file, what every module exposes, where each specialist plugs into `race3d.js`, and what data the view hands every frame.
-Written by the file-split step (2026-10-17, branch `mxvis-split`, base `mxvis` = commit 7dec470). The split changed no pixel: 84 captured
-frames over 10 scenarios (stadium, outdoor, speedway, a crash lap with a remount, a crash-out and the yellow flag, Reduce effects, reduced
-motion, a portrait phone, a TV, a restored race, three races in one view) are bit-identical before and after, with the same draw calls,
-triangles, state and shot choices (section 9).
+Who owns which file, what every module exposes, where each specialist plugs into `race3d.js`, what data the view hands every frame, and how to capture, prove and measure a change (section 9).
+Written by the file-split step (branch `mxvis-split`) and finished by the BASE step (2026-10-17, about 14:30), which joined the split and the capture harness into the branch `mxvis` with a linear history:
+`7dec470` (build B as the judges saw it) -> the split -> the harness (two commits) -> the base commit on top (`git log --oneline mxvis`). Neither step changed a pixel: the six bookmark frames at 1280x720 and 1920x1080
+drawn on the laptop's GPU are identical to the BEFORE set (0 differing pixels, 12 of 12), and the split's 84 software-GL frames over 10 scenarios are identical before the split, after it, and on the joined branch (section 9.8).
 
 The race renderer is three.js r160 (`ui/vendor/three-0.160.0.module.min.js`, ES modules, WebGL2). The race view is only these files:
 `race3d.js` and `r3d-*.js` in this folder. `game.js` creates it (`create(host, hooks)`) and talks to it through `V.*` (header of `race3d.js`).
@@ -12,40 +11,43 @@ Nothing in this contract changes how `game.js`, the engine (`race.js`, `round.js
 
 ## 1. Rules for every specialist
 
-- OWN WORKTREE: `git -C "C:/Users/Maverick/Documents/BG_mxV" worktree add "C:/Users/Maverick/Documents/BG_mxV-<role>" -b mxvis-<role> mxvis`
-  (or reuse it; `mxvis` is the branch the split commit is merged into: if it is not merged yet, start from `mxvis-split`). Work and commit only there. Never push, never touch tags, never edit the main repo or the other `BG_*` folders.
+- OWN WORKTREE: `git -C "C:/Users/Maverick/Documents/BG_mxV" worktree add "C:/Users/Maverick/Documents/BG_mxV-<role>" -b mxvis-<role> mxvis` (or reuse it). `mxvis` already holds the split, the harness and the
+  base: never start from another branch. Work and commit only there. Never push, never touch tags, never edit the main repo or the other `BG_*` folders.
 - EDIT ONLY YOUR FILES (section 2). In `race3d.js` edit only between the lines `// [hook:<your role>]` and `// [/hook:<your role>]`. Nothing
-  else in `race3d.js`, and no other module. New files: `r3d-<role>-*.js` or `mxwar/assets/<role>/...`; list a new `.js` in `sw.js` ASSETS only
-  through a REQUEST (the integrator owns `sw.js`).
+  else in `race3d.js`, and no other module. New files: `r3d-<role>-*.js` or `mxwar/assets/<role>/...`; list a new `.js`, a new asset or an import from `ui/vendor/three-addons/` in `sw.js` ASSETS only
+  through a REQUEST (`sw.js` belongs to the lead, applied by the integrator step).
 - NEED SOMETHING IN A FILE YOU DO NOT OWN? Work around it, and write it under REQUESTS in your report (file, what, why). The integrator applies it.
 - HOOK ZONES ARE YOURS ALONE: two specialists never edit the same lines, so the branches merge without conflicts. A zone may be empty (only
-  comments): add your lines between its markers.
+  comments): add your lines between its markers. The `harness` zones are frozen: nobody edits them.
 - ART: original art and code only. CC0 textures from ambientCG / Poly Haven are allowed (1K, converted to JPG / WebP, small); record each in
   `mxwar/assets/LICENSES.md` under your role (name, URL, CC0). Never: photos of people, crowds, brands or real venues, logos, sponsor marks,
   real liveries, third-party models, rider names or numbers as anything but plain text, makes as anything but team colours. Everything vendored,
   nothing loaded from a CDN at run time.
-- CPU: the 4-core laptop is shared (at most 90% sustained). Every browser run or long script goes through the runner:
+- VENDORED ADD-ONS: `ui/vendor/three-addons/` holds 56 three.js add-ons (section 3). Need another one? REQUEST it: do not download or vendor it yourself (two branches adding to that folder collide in its README.txt).
+- CPU: the 4-core laptop is shared (at most 90% sustained). Every browser run or long script goes through the runner (section 9.3 has `run()`):
   `powershell -NoProfile -ExecutionPolicy Bypass -File "C:/Users/Maverick/Documents/Board Games/.dev/run-one.ps1" -Cmd 'node "C:/full/path/script.js"' -TimeoutSec 300`
-  One browser per script (`kit/browser.js`), at most 3 pages, `await b.close()` in `finally`, never in the background, never a sub-agent.
-- EVIDENCE: judge your work only by captures from the running view (section 9: the same track, riders, seed, clock and cameras, so a
+  One browser per script, at most 3 pages, `await b.close()` in `finally`, never in the background, never a sub-agent.
+- EVIDENCE: judge your work only by captures from the running view (section 9: the same race, riders, seed, clock and cameras, so a
   before / after pair differs only by your change). Look at every capture next to the cover. Never call something finished that you have not
   seen working. Report failures and limits with numbers.
-- PRESERVE THE GAME (section 10). Reduce effects, reduced motion, the no-WebGL fallback, paused while hidden: all keep working.
+- DONE MEANS: lint clean; `shots.js` + `pixeldiff.js` + the pictures LOOKED AT next to the cover; `finish.js` passes (the whole race, no console error); numbers from `perf.js` against the base's rows; the report says what is still short of the cover.
+- PRESERVE THE GAME (section 8). Reduce effects, reduced motion, the no-WebGL fallback, paused while hidden: all keep working.
 - TIME: about 2 hours. Commit working steps early; a tested, committed improvement beats an unfinished big one.
 
 ## 2. Ownership
 
-| Role | Files | Hook zones in `race3d.js` | What it is |
-|---|---|---|---|
-| lead | `race3d.js` (everything outside the zones), `r3d-util.js`, `r3d-look.js`, `CONTRACT.md`, `sw.js` | none (it is the rest of the file) | the view: `create()`, the race state machine, rider motion and the cards sync, the crash scripts, the frame loop; shared helpers; renderer settings, light rig, fog, the post-processing slot |
-| dirt | `r3d-track.js`, `mxwar/assets/dirt/` | `dirt` | the track SURFACE: soil, dirt maps, the track ribbon (berms, jump faces, whoops, sand, the start path), its material, the lane-edge blocks |
-| stadium | `r3d-world.js`, `mxwar/assets/stadium/` | `stadium` | everything round the track: stands, crowd, suites, walls, light rigs and glow, the big screen, sky, start gate, finish line, flaggers and flags, outdoor terrain, trees, paddock, speedway infield; `buildWorld()` |
-| bike | `r3d-bike.js`, `mxwar/assets/bike/` | `bike` | the motorcycle: `BIKE` constants, part geometries, materials, instanced meshes, plates, the bike's pose |
-| rider | `r3d-riders.js`, `mxwar/assets/rider/` | `rider` | the rider: geometry, two-bone IK, poses (seated, standing, dab, crash body), the number atlas, blob shadows, number tags, the instancing glue |
-| fx | `r3d-fx.js`, `mxwar/assets/fx/` | `fx` | roost, dust, impacts: the particle system and when / how much to emit |
-| cams | `r3d-cams.js` | `cams` | the TV director, every camera rig, the sight tests, the camera itself |
-| perf | `r3d-quality.js` | `perf` | the quality tiers, the adaptive pixel-ratio ladder, weak-GPU detection, reduce-effects and TV flags, the options every builder receives |
-| qa | no code | none | compares real captures with the cover, rejects weak results |
+| Role | The CEO's title | Files | Hook zones in `race3d.js` | What it is |
+|---|---|---|---|---|
+| lead | Lead Graphics Engineer (the integrator step after the builders applies every REQUEST in these files) | `race3d.js` (everything outside the zones), `r3d-util.js`, `r3d-look.js`, `CONTRACT.md`, `sw.js` | none (it is the rest of the file) | the view: `create()`, the race state machine, rider motion and the cards sync, the crash scripts, the frame loop; shared helpers; renderer settings, light rig, fog, the post-processing slot and the frame's counters |
+| dirt | Environment Artist (the ground) | `r3d-track.js`, `mxwar/assets/dirt/` | `dirt` | the track SURFACE: soil, dirt maps, the track ribbon (berms, jump faces, whoops, sand, the start path), its material, the lane-edge blocks |
+| stadium | Environment Artist (the stadium) | `r3d-world.js`, `mxwar/assets/stadium/` | `stadium` | everything round the track: stands, crowd, suites, walls, light rigs and glow, the big screen, sky, start gate, finish line, flaggers and flags, outdoor terrain, trees, paddock, speedway infield; `buildWorld()` |
+| bike | Vehicle / Rider Specialist (the machine) | `r3d-bike.js`, `mxwar/assets/bike/` | `bike` | the motorcycle: `BIKE` constants, part geometries, materials, instanced meshes, plates, the bike's pose |
+| rider | Vehicle / Rider Specialist (the rider) | `r3d-riders.js`, `mxwar/assets/rider/` | `rider` | the rider: geometry, two-bone IK, poses (seated, standing, dab, crash body), the number atlas, blob shadows, number tags, the instancing glue |
+| fx | Effects Specialist | `r3d-fx.js`, `mxwar/assets/fx/` | `fx` | roost, dust, impacts: the particle system and when / how much to emit |
+| cams | Cinematic Camera Specialist | `r3d-cams.js` | `cams` | the TV director, every camera rig, the sight tests, the camera itself |
+| perf | Performance Engineer | `r3d-quality.js` | `perf` | the quality tiers, the adaptive pixel-ratio ladder, weak-GPU detection, reduce-effects and TV flags, the options every builder receives, `V.qualityNames()` / `V.setQuality()` |
+| qa | Quality Director | no code | none | runs section 9.3 steps 2-5 on each specialist's branch, compares the real captures with the cover, rejects what the pictures do not support |
+| base | the studio (done; frozen) | `mxwar/demo.html`, `demo.js`, `demo-engine.js`, `demo-bookmarks.json`, `ui/vendor/three-addons/`, `mxwar/assets/LICENSES.md` ("base" section), the tools in `BG_audit/sprint/mxvis/tools/` | `harness` (two frozen zones) | the capture harness, the vendored add-ons; the integrator adds an add-on or a tool option on REQUEST |
 
 Not part of the view, nobody edits them in this phase (the integrator does, at the game-integration step): `game.js`, `index.html`, `course.js`,
 `layouts.js`, `race.js`, `round.js`, `season.js`, `brain.js`, `art.js`, `track.js` (the 2D track), `data/`.
@@ -90,7 +92,11 @@ Every name below is exported. Arguments in order; `->` is the return value.
 `L.setShadows(on)`, `L.apply(C, look, world)` (a new race: the venue's lights, exposure, sun disc, then the fog from `world.ctx.fogC`),
 `L.fitShadow(cam, target)` (every frame while shadows are on: the shadow box follows the action, snapped to texels), `L.blobOp(x, y, z)` (0.42..1: how much blob
 shadow to keep where the real shadows fall), `L.render(scene, cam)` (the frame), `L.resize(W, H, pr)`.
-**`L.post = null` is the post-processing slot**: set it to `{render(scene, cam), resize(W, H, pr)}` and every frame is drawn through it (bloom, depth of field, SMAA).
+**`L.post = null` is the post-processing slot**: set it to `{render(scene, cam), resize(W, H, pr)}` and every frame is drawn through it (bloom, depth of field, SMAA; the add-ons are in `ui/vendor/three-addons/`;
+`tools/post-slot-check.js` builds an EffectComposer with RenderPass + UnrealBloomPass + OutputPass in the real view as a working template, and proves a resize reaches `post.resize`). With a chain on, tone mapping and the sRGB
+conversion belong to the chain's OutputPass (three.js applies `renderer.toneMapping` only when it draws to the screen). **`L.render` owns the frame's counters**: it sets `renderer.info.autoReset = false` and resets once per frame, so
+`renderer.info.render.calls / triangles` (= `V.stats().calls / tris`, the harness' `DEMO.stats()`) are the WHOLE frame: the shadow map pass + the scene + every pass of a chain. (three.js alone resets the counters inside every `renderer.render()`
+right AFTER it drew the shadow map, so it never counts the shadow pass, and a chain would show only its last pass.) A chain must not touch `renderer.info`.
 
 ### r3d-quality.js (perf)
 
@@ -177,12 +183,23 @@ Bike local axes: +X forward, +Y up, +Z right. Heading `th`: `rotation.y = -th`; 
 Tools for tests: `V.state()`, `V.stats()` (draw calls, triangles, frame times, pixel ratio, memory), `V.shot(name, o)`, `V.release()`, `V.advance(sec, noDraw)` (steps in 1/60 s; deterministic), `V.sweep(sec)`, `V.proj(seat)`,
 `V.renderNow()`, `V.camInfo()`, `V.setShadows(on)`, `V.fixPR(p)` / `V.prFixed` (freeze the pixel-ratio ladder), `V.timeScale`, `V._dbg` (`riders()`, `fx()`, `state()` = the per-rider state array, `gate()`, `world()`, `marshal()`, `target()`, `sees()`, `dirt()`, `hf()`, `yellow()`, `shot()`, `pos()`, `clearance()`).
 `V.renderer`, `V.scene`, `V.camera` are public. (`V._dbg.riders().part` is now `V._dbg.fx().part`.)
+`V.camHook` (null; the capture harness' camera: `function(dt, riders, T) -> null | {eye: [x, y, z], target: [x, y, z], fov}`, applied right after the director's camera; the game never sets it). `V._dbg` also has `look()` (the `createLook` object: `.post`,
+`.sun`, `.setShadows`), `quality()` (the `createQuality` object) and `cams()` (the cameras module), for experiments from the harness page (`__mxv3._dbg.look().post = ...`).
+
+### ui/vendor/three-addons (nobody edits; the integrator adds on REQUEST)
+
+56 files, the `examples/jsm` folder of three@0.160.0 (MIT, `LICENSE` and `README.txt` beside them), flat, imports rewritten (`../three-0.160.0.module.min.js` for the engine, `./X.js` for a sibling), so one ES module in `mxwar/` is enough:
+`import {EffectComposer} from "../ui/vendor/three-addons/EffectComposer.js";`. What is there: the composer and its passes (Render, TAARender, SSAARender, Shader, Mask, Clear, Texture, Save, UnrealBloom, Bokeh, SMAA, Film, LUT, Afterimage, GTAO, SSAO, SAO, Outline, Output),
+their shaders (Copy, LuminosityHighPass, Output, SMAA, FXAA, Bokeh, Vignette, GammaCorrection, Film, Afterimage, GTAO, PoissonDenoise, SSAO, SAO, DepthLimitedBlur), `GLTFLoader`, `RGBELoader`, `RoomEnvironment` (a PMREM environment for reflections),
+`BufferGeometryUtils`, `SkeletonUtils`, `RoundedBoxGeometry`, `DecalGeometry`, `ConvexGeometry` + `ConvexHull`, `Lensflare`, `Sky`, `Reflector`, `MeshSurfaceSampler`, `ImprovedNoise`, `SimplexNoise`, `GPUComputationRenderer`, `Timer`, `CCDIKSolver`,
+`WebGL` (capabilities), `SceneUtils`. Not there on purpose (REQUEST them): loaders that need a wasm decoder (KTX2, Draco, Meshopt), `RectAreaLightUniformsLib` (314 KB), SSR, volumetrics. `tools/addons-check.js` proves every file imports and every pass
+renders on the GPU. They are not in `sw.js` ASSETS yet: a module that imports one is listed there by the integrator (REQUEST). Prefer `SMAAPass` to `FXAAShader`: FXAA's `texture2D(t, p, -100.0)` makes Direct3D print the harmless warning X4713.
 
 ## 4. race3d.js: the frame, and the hook zones
 
 Every frame (`tick` -> `step(dt)` -> `render()`): the clock and the lap boundaries (the leader starts a lap: `hooks.onLap`) -> each rider's gap, position, racing line and passing room ->
 the flagger and the show moments -> **per rider `rider(i, r, dt)`**: speed, the two sprung axles, stance, the bike matrix, the per-rider state `st`, `poseRider`, the blob shadow, `FX.rider` ->
-`FX.step` -> `commit` -> `world.dirt.frame` -> flagger and marshal waves, `world.frame` -> `CAMS.director`, `CAMS.camera` -> the sky follows the lens, `LOOK.fitShadow` -> the number tags ->
+`FX.step` -> `commit` -> `world.dirt.frame` -> flagger and marshal waves, `world.frame` -> `CAMS.director`, `CAMS.camera` -> the harness' `V.camHook` (never in the game) -> the sky follows the lens, `LOOK.fitShadow` -> the number tags ->
 `LOOK.render` -> `QUAL.adapt`. A crashed rider goes through `crashPose` instead of the riding branch (a double-war loser tumbles, lies, gets up, lifts the bike, remounts; a triple-war loser walks off).
 
 Zones (find them with a search for `[hook:`); each role may change only its own lines:
@@ -207,6 +224,9 @@ Zones (find them with a search for `[hook:`); each role may change only its own 
 | bike | `rider()` | extra pose inputs for the bike (empty): compute any new `st.*` field `poseBike` needs, from the state above it |
 | rider | `rider()` | extra pose inputs for the rider (empty) |
 | rider | `step` | `commit(R)` |
+| harness | `create()`, right after the view object `V` | `V.camHook = null` (frozen: the capture harness' camera, section 9) |
+| harness | `step`, right after the cams zone | the `V.camHook` call: when the harness set a camera it replaces the director's position, look-at point (`CAMS.target`) and field of view; nothing happens in the game (frozen) |
+| perf | `create()`, after `V.fixPR` | empty: `V.qualityNames()` and `V.setQuality(name)` go here; the harness, `perf.js` and `finish.js` use them as soon as they exist (section 9.4) |
 
 Other lines that touch a module (lead's, ask for a change through REQUESTS): the shot tweaks in `V.drop`, `V.gate`, `V.standings`, `placeMarshalS` (uses `CAMS.shot`, `CAMS.sees`, `CAMS.terrainAt`), the sky / shadow-box lines after the cams zone, `tags()`
 (number tags: placement and size on screen), `crashPose` (the fall's trajectory and pose script), `surfY` / `trackXZ` (where the dirt is, for fallen riders).
@@ -263,26 +283,137 @@ loser crashes out and walks off, the marshal's yellow flag, no passing there the
 Reduce effects (`data-effects="reduced"`: a simpler world, no shadows, fewer particles, no antialiasing) and reduced motion (`data-motion="reduce"`: a still frame every 2 s, no camera moves); the no-WebGL fallback to the 2D track
 (`supported()`, a lost context -> `hooks.lost`); paused while the page is hidden (`visibilitychange` stops the loop); progress saving and the season (untouched).
 
-## 9. Testing and evidence
+## 9. How to capture, prove and measure (the harness, the tools, the GPU result)
 
-Everything is at `C:/Users/Maverick/Documents/BG_audit/sprint/mx3d-split/` (outside the repo).
+Written by the base step (2026-10-17). Everything runs the REAL game engine through the REAL view, in a browser that draws on this laptop's GPU. Nothing here is a mock-up.
 
-- **Lint (run it before every commit):** `node --expose-internals C:/Users/Maverick/Documents/BG_audit/sprint/mx3d-split/lint-modules.js mxwar/race3d.js mxwar/r3d-*.js` — reports an identifier that nothing declares, a name imported from a module that does not export it, a missing file. Exit 0 = clean. Light: run it directly.
-- **Deterministic captures** (`harness.html`, `cap.js`): a page with a seeded `Math.random`, a fake clock, no animation loop; `V.advance` steps in 1/60 s; laps are run by the driver with the real engine (`race.js`, seed 12345; riders: the 7 makes; "R5" is the person, "R3" has the red plate).
-  `node cap.js <set> [scenarios] [/path/to/tree]` writes `out/<set>/<scenario>-NN-<name>.png` (640 x 360 unless the scenario says otherwise, pixel ratio 1) and `summary.json` (draw calls, triangles, geometries, textures, `V.state()`, `V.camInfo()` per frame).
-  Scenarios: `S` stadium (the gate, the director, whoops, jump, rhythm, line, heli, chase, track, a battle), `O` outdoor (RedBud), `H` speedway hybrid (Daytona), `C` a crash lap (a double-war remount, the yellow lap, a triple-war crash-out),
-  `L` Reduce effects, `M` reduced motion, `P` portrait phone, `R` a restored race (`standings`, `setRed`, `hold`, flags, `markOut`, `skip`), `N` three races in one view, `T` a TV. The tree path is the folder holding `mxwar/` and `ui/vendor/` (default for set `after`: `/BG_mxV-split`;
-  give your worktree: `/BG_mxV-<role>`; the images of the base commit are in `out/before/`). Run it through the runner (section 1).
-  `node cmp.js before <set>` compares two sets pixel by pixel (differing pixels, the biggest channel difference, draw calls / triangles / state, a `DIFF-*.png` where red = changed): a before / after pair on the same track, riders, seed and cameras.
-  Frame times measured in software GL mean nothing; frame rates come from the GPU kit, on the device.
-- **The view's tool API** (`api-check.js`): runs `V.sweep`, `V.proj`, `V.camInfo`, `V.stats`, `V.order`, `V.setShadows`, `V.fixPR`, `V._dbg.*`, `V.dispose` on the base tree and on `/BG_mxV-split` and prints SAME / DIFF per call (a new `_dbg` key is a DIFF you expect).
-- **Real game flow:** `game-flow.js` (phone 390 x 844: setup -> season -> line-up -> the 3D gate -> the drop -> real-time laps -> the flag -> results; no console errors allowed).
-- **Engine tests** (copies of B's): `course_test.js`, `crash_test.js`, `season_test.js`, `timing_test.js`, `venues_test.js` in the same folder (node, light).
+### 9.1 What is where
 
-### What the split proved (2026-10-17)
+| thing | where |
+|---|---|
+| the capture page | `<worktree>/mxwar/demo.html` + `demo.js` (the harness) + `demo-engine.js` (the real engine driver: the same drive as `game.js`) + `demo-bookmarks.json` (a copy of the plan). Frozen. `window.DEMO` is documented in `demo.js` and in the tools' README. |
+| the plan: six bookmarks, extras, two recordings | `C:/Users/Maverick/Documents/BG_audit/sprint/mxvis/bookmarks.json` (the tools read THIS file; `--plan <file>` takes your own extra views; never edit the master) |
+| the tools and their README (every option) | `C:/Users/Maverick/Documents/BG_audit/sprint/mxvis/tools/` |
+| the BEFORE set | `C:/Users/Maverick/Documents/BG_audit/sprint/mxvis/before/`: 12 stills (6 views x 2 sizes), the clips `R1` / `R2`, before-next-to-the-cover `compare/`, `perf.md` (counts the scene pass only), `before-manifest-whole-frame.json` and `perf-whole-frame.md` (the same pixels with the whole-frame counters: compare against these) |
+| the base's own evidence | `C:/Users/Maverick/Documents/BG_audit/sprint/mxvis/base/` (`after/` stills, `finish/` whole-race frames, `game/` real-game screens, `post/` post-slot check, `perf-whole-frame.md`) |
+| the GPU browser | `C:/Users/Maverick/AppData/Local/Temp/jsdomtest/kit/browser-gpu.js` (the same API as `browser.js`; every tool uses it; `--soft` = the software kit: pictures only, its frame times mean nothing) |
+| the cover and the crops | `C:/Users/Maverick/Documents/BG_audit/games/mxwar/visual-pack/Motocross_War_3D_Visual_Pack/01_FINAL_COVER_Motocross_War.png`, `Reference_Crops/` |
 
-84 frames, 10 scenarios: 0 differing pixels, identical draw calls / triangles / geometries / textures / state / shot choices; the base commit captured twice also matches itself (the harness is deterministic).
-The real game page: one 8-lap heat from setup to the results sheet, places 1..20 unique, no console error or warning. Engine tests: all pass. `race3d.js` went from 876 to about 650 lines; the other code moved byte for byte except the places listed in the commit message.
+### 9.2 The race and the six fixed views
+
+One race for everybody: the 2026 Supercross season, round 1 Anaheim, the Main, 22 riders, the person "YOU" = seat 12, the red plate on seat 0, engine seed 22, 24 laps of 53.7 s on the generated stadium layout (`sx-modern-v832`, 518 m), driven
+through the view exactly as `game.js` drives it (the gate drop, the lap plans with the cards' results, the white flag, the yellow marshal), no menus, no HUD. The state is a pure function of the tick count: a virtual clock (`performance.now`, `Date.now`, timers) and a
+`Math.random` seeded again every tick (three.js draws object UUIDs from it while it builds or first renders: a render must never shift the next tick's random numbers). `t` = race seconds after the gate drop. A bookmark's camera is a rigid mount set 3 ticks before its
+frame (the view's blob shadows and shadow box read the previous tick's camera), so a frame never depends on what was drawn before it (`determinism.js` proves it). World: x east, y up, z south; the stadium floor is x -67.5..67.5, z -32..44; the whoops lane is z -5, the big jump z 19, the gate (-54.6, 33).
+
+| id | view | t (s) | camera | what it shows |
+|---|---|---|---|---|
+| B1 | cover chase | 41.5 | rig on seat 15: back 3.5, up 1.5, side 0.9, aim {ahead 10, up 1.2, side -0.4}, fov 70 | the cover's framing: low behind a rider, riders ahead, the stadium lights in frame |
+| B2 | stadium wide | 125 | eye [0, 33, 92] looking at [0, 0, 4], fov 50 | the whole course and all 22 riders (the broadcast / stadium_aerial target) |
+| B3 | whoops | 46 | eye [-8, 2, -12] at [8, 1, -5], fov 42 | the first-lap pack skimming the whoops head-on |
+| B4 | jump | 77.5 | eye [6, 1.1, 34] at [10, 3.2, 19], fov 45 | six riders in the air over the triple |
+| B5 | gate | 1.6 | eye [-60, 2.2, 24] at [-45, 0.9, 33], fov 50 | the launch from the start gate |
+| B6 | crash | 111.5 | eye [4, 3, -12.5] at [-2, 0.7, -6], fov 52 | a double-war loser thrown over the bars, dust, the yellow flag |
+
+Camera specs (`DEMO.camera(spec)`, a plan's `cam`): a rider rig `{seat: "you" | "lead" | "crash" | N | {rank: k}, back, up, side, aim: 8 | {ahead, up, side}, fov, damp}` (metres along / across the rider's heading, + side = the rider's right; `damp` 0 = rigid) or a world pose
+`{eye: [x, y, z] | at: {s, lat, h}, target: [x, y, z] | look: {s, lat, h} | follow: {seat, up, damp}, fov}` (`at` / `look`: course distance s in metres, lat across, h above the dirt); `null` = the view's own director. The view applies it through `V.camHook` (section 4, zone `harness`).
+
+### 9.3 Your cycle, with the exact commands
+
+```bash
+# once per Git Bash shell. <role> = your role name. Every browser run goes ONLY through the runner (never msedge by hand, never in the background).
+run() { powershell -NoProfile -ExecutionPolicy Bypass -File "C:/Users/Maverick/Documents/Board Games/.dev/run-one.ps1" -Cmd "$1" -TimeoutSec "${2:-600}"; }
+T=C:/Users/Maverick/Documents/BG_audit/sprint/mxvis/tools
+WT=C:/Users/Maverick/Documents/BG_mxV-<role>                    # your worktree: the folder that holds mxwar/ and ui/
+OUT=C:/Users/Maverick/Documents/BG_audit/sprint/mxvis/<role>     # your evidence folder (outside the repo)
+BEFORE=C:/Users/Maverick/Documents/BG_audit/sprint/mxvis/before
+```
+
+1. Lint (light, run it directly; exit 0): `cd "$WT" && node --expose-internals C:/Users/Maverick/Documents/BG_audit/sprint/mx3d-split/lint-modules.js mxwar/race3d.js mxwar/r3d-*.js`
+2. The six stills at 1280x720 and 1920x1080 (about 45 s): `run "node \"$T/shots.js\" --root \"$WT\" --out \"$OUT/after\" --tag after" 600`
+   (options: `--ids B1,B3`, `--sizes 1280x720`, `--quality high|medium|low|stick`, `--plan <your.json>`; writes `after-<id>-<name>-<size>.png` and `after-manifest.json` with the draw calls and triangles per frame).
+3. What did I change (light, directly): `node "$T/pixeldiff.js" --before "$BEFORE" --after "$OUT/after" --out "$OUT/diff"` (differing pixels per frame; `DIFF-*.png`: red = changed). The base itself differs from `before/` by 0 pixels, so every difference is yours.
+4. Next to the cover (ffmpeg only, directly): `node "$T/compare.js" --before "$BEFORE" --after "$OUT/after" --out "$OUT/compare" --sheet --label-after "AFTER: <what you changed>"` writes `cmp-B1.png` ... (before | after | THE COVER) and `cmp-sheet.jpg`.
+   Then LOOK at them (Read the PNGs) the way the CEO will: the cover is the target; a frame that still reads as a toy next to it is not done.
+5. The whole race to the checkered flag (about 1 minute; also with `--quality stick`): `run "node \"$T/finish.js\" --root \"$WT\" --size 960x540 --quality high --out \"$OUT/finish\"" 800`. Every check must PASS: both flags shown, the view's final order = the engine's standings,
+   no page or console error, no blank frame, no leak. It saves four frames (first lap, white flag, checkered flag, finish).
+6. Frame cost and budgets (about 3 minutes for 4 rows): `run "node \"$T/perf.js\" --root \"$WT\" --qualities high,stick --sizes 960x540,1920x1080 --seconds 8 --out \"$OUT/perf.md\" --tag after" 800`. Report your rows next to the base's (section 9.5); the JS calibration column says when the laptop was too busy to trust the times.
+7. Clips, for the final captures only (about 1 minute each): `run "node \"$T/record.js\" --root \"$WT\" --rec R1 --out \"$OUT/after-R1-cinematic-chase.mp4\"" 600`, the same with `--rec R2` (stadium broadcast, then the director). Before | after | cover:
+   `node "$T/compare.js" --videos "$BEFORE/before-R1-cinematic-chase.mp4,$OUT/after-R1-cinematic-chase.mp4" --out "$OUT/cmp-R1.mp4"`.
+8. If you touched anything per frame, random or timed: `run "node \"$T/determinism.js\" --root \"$WT\"" 600` (the six frames must be byte-identical alone in a fresh page and in one session).
+9. Once before you report, the REAL game page on a phone (3 minutes; no console error allowed): `run "node \"$T/game-flow.js\" --root \"$WT\" --out \"$OUT/game\"" 600`.
+10. Lead only: `run "node \"$T/post-slot-check.js\" --root \"$WT\" --out \"$OUT/post\"" 300` (a post chain in the real view, the counters, the resize). Integrator: `MX_ROOT="$WT" node "$T/engine-tests/run-engine-tests.js"` (10 s) and `run "node \"$T/addons-check.js\" --root \"$WT\"" 300`.
+
+Your own views and measurements (a node script; one browser per script):
+```js
+const L = require("C:/Users/Maverick/Documents/BG_audit/sprint/mxvis/tools/lib.js");
+const WT = "C:/Users/Maverick/Documents/BG_mxV-<role>", OUT = "C:/Users/Maverick/Documents/BG_audit/sprint/mxvis/<role>";
+(async () => {
+  const { b, info } = await L.openDemo({ root: WT, w: 1280, h: 720, plan: L.loadPlan(null), seed: 22 });   // the GPU browser + the demo page, booted (info.hook must say "native")
+  try {
+    await b.eval("DEMO.bookmark('B1',{draw:true});1");                                                    // or DEMO.camera({...spec, damp: 0}); DEMO.seek(t); DEMO.step(1/60, true)
+    const url = await b.eval("DEMO.step(0,true);DEMO.grab('image/png')");                                 // grab in the SAME eval as the draw: the drawing buffer is not preserved
+    L.saveDataUrl(OUT + "/mine.png", url);
+    console.log(await b.eval("JSON.stringify(DEMO.stats())"), await b.eval("JSON.stringify(DEMO.memory())"));   // calls, triangles, textures, programs, heap; texture and geometry bytes
+  } finally { await b.close(); }
+})();
+```
+`DEMO.seek(t)`, `DEMO.step(dt, draw)`, `DEMO.skip(s)`, `DEMO.quality(name)`, `DEMO.size(w, h, pr)`, `DEMO.bench(n)`, `DEMO.live(true)` (the view's own requestAnimationFrame loop on the real clock), `DEMO.scan(seconds, every)` (when is a rider in a feature, in the air; the crashes) are in `tools/README.md`.
+
+### 9.4 Quality tiers
+
+Today the harness makes the tiers itself (and `finish.js`, `perf.js`, `shots.js` take them with `--quality`): `high` = everything with real shadows; `medium` = real shadows off; `low` = Reduce effects (`data-effects="reduced"`: the simpler world and riders, 160 particles, no antialiasing, no shadows);
+`stick` = `low` + the TV flag (`data-tv`) at 960x540 (the TV pixel-ratio cap: at most 960 wide with Reduce effects). The perf engineer adds `V.qualityNames()` and `V.setQuality(name)` in the `perf` zone after `V.fixPR`; the tools then use the view's own names and tiers.
+
+### 9.5 The GPU result (this laptop, measured 2026-10-17 14:15, the base's pixels)
+
+- The laptop's GPU works headless: Edge started with `--use-angle=d3d11 --ignore-gpu-blocklist` renders WebGL2 on `ANGLE (Intel, Intel(R) UHD Graphics (0x000046D2) Direct3D11 vs_5_0 ps_5_0, D3D11)`: WebGL 2.0, max texture 16384, anisotropy 16, no GPU timer queries.
+  Stills and frame times from `browser-gpu.js` are real GPU output. The plain `browser.js` is the SwiftShader software rasteriser (its pictures are the same up to rasteriser differences, its frame times are meaningless).
+- The view today, per frame, at the race's lap-1 pack (22 riders; counters = the whole frame since the base step; `perf-whole-frame.md` has every column):
+
+| tier | canvas | calls | triangles | textures (MB) | geometry (MB) | programs | sim + draw + GPU sync, best 30 of 90 frames | live fps over 10 s (p50 / p95 frame ms) |
+|---|---|---|---|---|---|---|---|---|
+| high | 960x540 | 43 | 198,218 | 16 (8.9) | 5.7 | 25 | 21.1 ms (47 fps); mean 26.9 | 49.5 (17 / 37) |
+| high | 1920x1080 | 43 | 198,218 | 16 (8.9) | 5.7 | 25 | 23.8 ms (42 fps); mean 27.8 | 24.0 (27 / 64) |
+| medium | 960x540 | 31 | 120,338 | 16 (8.9) | 5.7 | 30 | 19.6 ms (51 fps); mean 21.0 | 64.4 (4.5 / 28.6) |
+| medium | 1920x1080 | 31 | 120,338 | 16 (8.9) | 5.7 | 30 | 20.2 ms (49 fps); mean 23.4 | 32.8 (20 / 39) |
+| low | 960x540 | 30 | 100,888 | 16 (3.2) | 3.1 | 20 | 14.0 ms (72 fps); mean 14.9 | 69.0 (9.4 / 25) |
+| low | 1920x1080 | 30 | 100,888 | 16 (3.2) | 3.1 | 20 | 26.3 ms (38 fps); mean 27.3 | 34.8 (16.6 / 48) |
+| stick | 960x540 | 30 | 100,888 | 16 (3.2) | 3.1 | 20 | 11.9 ms (84 fps); mean 13.1 | 66.4 (10.6 / 23) |
+| stick | 1920x1080 | 30 | 100,888 | 16 (3.2) | 3.1 | 20 | 19.2 ms (52 fps); mean 21.5 | 50.7 (14.7 / 26.5) |
+
+- How to read it. The simulation costs 0.3-0.5 ms per frame; everything else is drawing and waiting for the GPU. Real shadows add 12 draw calls and 78k triangles (39% of the frame's triangles) and about 1.5-6 ms here (the high rows minus the medium rows, noisy). The runs share the laptop (the runner caps this task at 22-54% of the CPU and
+  other agents use the GPU), so a row moves by up to 30% from run to run (high 960x540 measured 20 ms in one run and 27 ms in the next): trust ratios and the budget columns, and treat a row whose calibration says THROTTLED (under 150 Mit/s) as unreliable. `stick` at a 1920x1080 canvas
+  draws 960x540 internally (the TV cap) and is then scaled up, so it costs a little more than the 960x540 canvas. The JS heap stays between 11 and 33 MB; the textures hold 8.9 MB (3.2 MB with Reduce effects).
+- What it does NOT tell us: the Fire TV Stick has NOT been measured; no Stick was available to the studio. The harness author's estimate is a Mali-G31 MP2 GPU at roughly 1/10 to 1/20 of this laptop's and a CPU several times slower; if a frame that costs 12-14 ms here costs 5x (CPU-bound) to 20x (GPU-bound) there, today's cheapest tier would run at 4-15 fps on a Stick:
+  an extrapolation, not a measurement. `detectWeakGPU` already switches real shadows off on that GPU class. Until a Stick (or a throttled run: Chrome DevTools `Emulation.setCPUThrottlingRate` plus a GPU-only microbenchmark) is measured, nobody states a Stick frame rate as fact.
+  The first perf task is to find what the 12 ms of the cheapest tier is (JS draw submission, driver, GPU), then to budget against it.
+- Budgets to hold or lower (and report your delta against): the `stick` row (30 calls, 100.9k triangles, 16 textures / 3.2 MB, 3.1 MB geometry, 20 programs) and the `high` row (43 calls, 198k triangles, 8.9 MB textures, 5.7 MB geometry, 25 programs). Quality that costs more than that belongs in the `high` tier,
+  gated by `Q.options(LO)` and the adaptive ladder, never in `stick`.
+
+### 9.6 What counts as evidence
+
+- Only captures from the running view count. Concept art is never "gameplay"; the cover is the TARGET, so every judgement is a frame of yours next to the cover (step 4). A before / after pair is the same bookmark at the same size on the same race (step 3 shows exactly what moved).
+- A report carries: at least three real stills (absolute paths), `finish.js` PASS for `high` and `stick`, the `perf.js` rows against the base, the clips for the final captures, and a plain list of what is still short of the cover. A failing check or a missed target is reported with its numbers, not hidden.
+- The Quality Director runs steps 2-5 on each branch itself and judges the pictures, not the report. Fix the largest visible shortcoming first: the machines and riders before decoration, the dirt before the menus.
+
+### 9.7 The older scenario captures (software GL, 10 scenarios, 84 frames in 60 s)
+
+Everything is at `C:/Users/Maverick/Documents/BG_audit/sprint/mx3d-split/`. `node cap.js <TAG> S,O,H,C,L,M,P,R,N,T /BG_mxV-<role>` (through the runner; give the scenarios, then your tree relative to `C:/Users/Maverick/Documents`) captures a stadium lap (S), an outdoor track (O),
+a speedway hybrid (H), a crash lap with a remount, the yellow flag and a crash-out (C), Reduce effects (L), reduced motion (M), a portrait phone (P), a restored race with the game's helper calls (R), three races in one view (N) and a TV (T) with a seeded `Math.random` and a fake clock;
+`node cmp.js join <TAG>` compares your set with the reference `out/join` (the base, 84 frames) pixel by pixel and prints the state and shot choices too (`DIFF-*.png`). These scenarios are what proves "Reduce effects, reduced motion, portrait, outdoor, the restored race, a new race in the same view still work".
+`api-check.js` runs the view's test API (`V.sweep`, `V.proj`, `V.camInfo`, `V.stats`, `V.order`, `V.setShadows`, `V.fixPR`, `V._dbg.*`, `V.dispose`) on two trees and prints SAME / DIFF per call. Frame times in software GL mean nothing.
+
+### 9.8 What the base proved (2026-10-17)
+
+- The joined branch draws the BEFORE set: the six bookmarks at 1280x720 and 1920x1080 on the GPU, 12 of 12 frames with 0 differing pixels (`pixeldiff.js`); the same six frames are byte-identical alone in a fresh page and in one session (`determinism.js`, two browsers).
+- The split's 84 software-GL frames over 10 scenarios: 0 differing pixels against the split's own set, with the same state and shot choices (the draw-call and triangle counters differ by design: +12 calls and about +78k triangles where real shadows are on, the shadow pass now being counted).
+- The whole race on the GPU, `high` and `stick`: 24 laps (about 21.5 minutes of race time, about 40 s of wall time), 4 crashes with remounts, 4 yellow-flag laps, the white and checkered flags, the view's final order = the engine's standings, 22 places each once, 0 page errors, 0 console errors or warnings,
+  geometry and texture counts level off after the first laps (41 / 18 at 200 s, 41 / 19 at the end), no blank frame.
+- The real game page on a phone: setup -> season -> line-up -> the 3D gate -> the drop -> 8 real-time laps (clock 1.00) -> the flag -> the results sheet with places 1..20 once each; 0 console errors or warnings. The five engine test suites pass (fuzz of 300 races: 732 crashes, 670 remounts, 62 crash-outs).
+- The 56 vendored add-ons import and every pass renders (GTAO, SSAO, SAO, film, afterimage, outline, LUT, TAA, SSAA, bloom, bokeh, SMAA); an EffectComposer in the real view through `L.post` draws the frame (mean difference to the plain frame 2 of 255: the bloom only), the counters add up over the passes, a resize reaches the chain.
+- Lint: 10 modules, 0 undeclared identifiers, every import resolved. `record.js` writes H.264 clips through the native camera hook.
+- What the base did NOT prove: any frame rate on a Fire TV Stick or a phone (section 9.5); that the new look will fit the Stick's budget (nothing new exists yet); the game-integration step (menus, Party Mode, the HUD over the new look) beyond the one real heat above.
 
 ## 10. What the split changed in the code (for the integrator)
 
@@ -292,3 +423,10 @@ The real game page: one 8-lap heat from setup to the results sheet, places 1..20
 - `poseRider` is `poseBike` (bike) + the rider's pose. `hideRider` is `hideBike` + the rider's parts. Mesh casting flags are set where the meshes are made.
 - Per-rider state: `st` objects (section 5) replace the literal that `poseRider` used to get. New fields (`throttle`, `slip`, `roost`, `landed`, `impact`, `mud`) are derived values; nothing reads them yet except `FX.rider` (`roost`, `landed`).
 - Quality: `QUAL.options(LO)` replaces `{lo: LO}` at the three builders; `QUAL.pr` / `QUAL.prCap` / `QUAL.stats.prDrops` feed `V.stats()`.
+
+### What the base step changed (for the integrator)
+
+- `race3d.js`: the two `[hook:harness]` zones (`V.camHook`), an empty `[hook:perf]` zone after `V.fixPR` for `V.qualityNames()` / `V.setQuality()`, `V._dbg.look()` / `quality()` / `cams()`. Nothing else.
+- `r3d-look.js`: `L.render` resets `renderer.info` once per frame and leaves `autoReset` off, so calls and triangles are the whole frame (the shadow pass and every pass of a post chain). The pixels are unchanged.
+- New: `mxwar/demo.html`, `demo.js`, `demo-engine.js`, `demo-bookmarks.json` (the harness; not part of the game, not in `sw.js`), `ui/vendor/three-addons/` (56 files, MIT), the "base" section of `mxwar/assets/LICENSES.md`.
+- `sw.js` is unchanged (`mxwar-v7`): scripts are fetched network-first, so the service worker serves the new view without a version bump; bump it at release, and add every `three-addons` file a merged module imports.

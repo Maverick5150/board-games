@@ -61,6 +61,9 @@ export function create(host,hooks){
   const scene=LOOK.scene, SUN=LOOK.SUN;   /* SUN = the sun's direction (LOOK.apply updates it for each venue) */
   const cv=renderer.domElement; cv.className="mx-v3__cv"; cv.setAttribute("aria-hidden","true"); host.appendChild(cv);
   const V={lost:false};
+  // [hook:harness]
+  V.camHook=null;   /* the capture harness (demo.js) sets V.camHook=function(dt,riders,T){ return null | {eye:[x,y,z],target:[x,y,z],fov} } to place the camera; null = the director's */
+  // [/hook:harness]
   Object.defineProperty(V,"prFixed",{get:()=>QUAL.fixed,set:v=>{ QUAL.fixed=!!v; },enumerable:true});   /* (tests freeze the pixel-ratio ladder with V.prFixed = true; V.fixPR(p) does it too) */
   cv.addEventListener("webglcontextlost",e=>{ e.preventDefault(); V.lost=true; V.stop(); if(hooks.lost) hooks.lost(); },false);
   const cam=new THREE.PerspectiveCamera(50,1,0.5,4200);
@@ -370,6 +373,9 @@ export function create(host,hooks){
     CAMS.director(dt);   /* which shot next */
     CAMS.camera(dt);     /* the camera: position, look-at, field of view */
     // [/hook:cams]
+    // [hook:harness]
+    if(V.camHook){ const h=V.camHook(dt,rs,T); if(h){ cam.position.set(h.eye[0],h.eye[1],h.eye[2]); CAMS.target.set(h.target[0],h.target[1],h.target[2]); cam.lookAt(CAMS.target); if(h.fov&&Math.abs(cam.fov-h.fov)>1e-4){ cam.fov=h.fov; cam.updateProjectionMatrix(); } } }   /* the capture harness' camera (demo.js; null in the game): after the director, before the sky and the shadow box follow the lens */
+    // [/hook:harness]
     if(CAMS.shot){ if(world.ctx.skyMesh) world.ctx.skyMesh.position.copy(cam.position); if(LOOK.shadows) LOOK.fitShadow(cam,CAMS.target); }   /* the sky follows the lens; the shadow box follows the action */
     tags();
   }
@@ -642,9 +648,13 @@ export function create(host,hooks){
   V.camInfo=function(){ const p=cam.position, shot=CAMS.shot, dirtTop=CAMS.dirtTop; return {x:+p.x.toFixed(1),y:+p.y.toFixed(2),z:+p.z.toFixed(1),aboveDirt:+(p.y-Math.max(dirtTop(p.x,p.z),-50)).toFixed(2),fov:+cam.fov.toFixed(1),shot:shot?shot.type+(shot.why?":"+shot.why:""):"",shadows:LOOK.shadows,shHalf:LOOK.shHalf,weakGPU:QUAL.weakGPU}; };
   V.setShadows=function(on){ LOOK.setShadows(on); };
   V.fixPR=function(p){ QUAL.fix(p,W,H); };
+  // [hook:perf]
+  /* the quality tiers (perf adds them here): V.qualityNames() -> ["high","medium","low","stick"] and V.setQuality(name). The capture harness (demo.js, perf.js) and game.js use them
+     as soon as they exist; until then the harness stands in with data-effects / data-tv and V.setShadows (CONTRACT.md "How to capture", the quality tiers). */
+  // [/hook:perf]
   V.dispose=function(){ V.stop(); if(world) disposeTree(world.root); if(R) disposeTree(R.grp); if(FX) disposeTree(FX.group); renderer.dispose(); cv.remove(); };
   V.renderer=renderer; V.scene=scene; V.camera=cam;
-  V._dbg={riders:()=>R,fx:()=>FX,state:()=>RST,gate:()=>gate,world:()=>world,marshal:()=>marshal,target:()=>CAMS.target.clone(),sees:(a,b)=>CAMS.sees(a,b),dirt:(x,z)=>CAMS.dirtTop(x,z),hf:(x,z)=>world.ctx.hf?world.ctx.hf(x,z):null,yellow:()=>yellow,shot:()=>CAMS.shot,pos:k=>{ const r=rs.find(x=>x.seat===k); return r&&r.pos?{x:+r.pos.x.toFixed(2),y:+r.pos.y.toFixed(2),z:+r.pos.z.toFixed(2),crash:r.crash?r.crash.kind:null}:null; },
+  V._dbg={riders:()=>R,fx:()=>FX,look:()=>LOOK,quality:()=>QUAL,cams:()=>CAMS,state:()=>RST,gate:()=>gate,world:()=>world,marshal:()=>marshal,target:()=>CAMS.target.clone(),sees:(a,b)=>CAMS.sees(a,b),dirt:(x,z)=>CAMS.dirtTop(x,z),hf:(x,z)=>world.ctx.hf?world.ctx.hf(x,z):null,yellow:()=>yellow,shot:()=>CAMS.shot,pos:k=>{ const r=rs.find(x=>x.seat===k); return r&&r.pos?{x:+r.pos.x.toFixed(2),y:+r.pos.y.toFixed(2),z:+r.pos.z.toFixed(2),crash:r.crash?r.crash.kind:null}:null; },
     clearance:(k,full)=>{ const r=rs.find(x=>x.seat===k); if(!r||!r.crash||!r.pos) return null; const P=[r.pos,r.bikeP].filter(Boolean); let m=1e9, who=null;
       rs.forEach(o=>{ if(o===r||o.crash||o.gone||!o.pos) return; P.forEach((p,pi)=>{ const d=Math.hypot(o.pos.x-p.x,o.pos.z-p.z); if(d<m){ m=d; who={seat:o.seat,D:+o.D.toFixed(1),lat:+o.lat.toFixed(2),latT:+o.latT.toFixed(2),what:pi?"bike":"rider"}; } }); });
       if(!full) return +m.toFixed(2); const c=r.crash; return {m:+m.toFixed(2),who:who,crash:{D:+c.D.toFixed(1),bD:c.bD!=null?+c.bD.toFixed(1):null,bL:c.bL!=null?+c.bL.toFixed(2):null,rD:c.rD!=null?+c.rD.toFixed(1):null,rL:c.rL!=null?+c.rL.toFixed(2):null,t:+(T-c.T).toFixed(2)},hw:r.fr?+r.fr.hw.toFixed(2):null}; }};   /* tests only */
