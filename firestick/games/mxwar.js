@@ -298,6 +298,14 @@
     Q + ".mxp-suc > span:not(.mxp-tok){display:flex;align-items:center;gap:.35rem;min-width:0;font:var(--fw-ui) var(--fs-micro)/1.2 var(--font-ui);color:var(--text-2);white-space:nowrap;overflow:hidden}",
     Q + ".mxp-teams{display:flex;flex-wrap:wrap;gap:.35rem .5rem;margin:.1rem 0 0}",
     Q + ".mxp-cnt{font:var(--fw-ui-strong) var(--fs-micro)/1 var(--font-ui);color:var(--text-1)}",
+    /* the heat line-up before the round's first gate (as mxwar/game.js openLineup): a column per heat, its team counts, its riders */
+    Q + ".mxp-lu{display:grid;grid-template-columns:repeat(var(--lu-cols,2),minmax(0,1fr));gap:.6rem 1.5rem;height:100%}",
+    Q + ".mxp-lu__col{display:flex;flex-direction:column;gap:.35rem;min-width:0;min-height:0}",
+    Q + ".mxp-lu__h{margin:0;font:var(--fw-ui-strong) var(--fs-md)/1.2 var(--font-ui);color:var(--gold-100);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+    Q + ".mxp-lu__h span{font:var(--fw-ui) var(--fs-micro)/1.2 var(--font-ui);color:var(--text-2)}",
+    Q + ".mxp-lu__tm{display:flex;flex-wrap:wrap;gap:.3rem .4rem;margin:0}",
+    Q + ".mxp-lu__col .mxp-res{flex:1 1 auto;min-height:0;overflow:hidden}",
+    Q + ".mxp-lu__col .mxp-res .mx-mk{margin-left:auto}",
     /* toasts stay over the tower's foot, clear of the race and the corner window */
     'html[data-pgame="mxwar"][data-tv] body.ps-ingame .bg-toast{left:calc(98vw - 10.5rem);max-width:20rem}',
     /* reduced effects: nothing moves */
@@ -614,7 +622,7 @@
       stats.views++; if (!d || typeof d !== "object") return;
       if (d.auto != null) { auto[c] = !!d.auto; if (auto[c]) { H.interrupt(c); H.toast(H.name(c) + " turned on Auto"); } renderTower(null); H.push(c, safeSt(c, null)); }
     });
-    H.onEnd(function () { clearTimeout(pushT); clearInterval(panelT); window.removeEventListener("resize", onResize); document.removeEventListener("keydown", onKey, true); rv.destroy(); });
+    H.onEnd(function () { clearTimeout(pushT); clearInterval(panelT); window.removeEventListener("resize", onResize); document.removeEventListener("keydown", onKey, true); closeSkipSheet(); rv.destroy(); });
 
     /* ---------- the Victory: the season's top 16 (places 1..N, never shared: season.js standings break every tie) ---------- */
     H.standings(function () {
@@ -790,6 +798,7 @@
       status(ui.label + ": " + rc.n + " riders behind the gate");
       H.hint("OK: drop the gate now");
       logLine((cal().city || cal().venue) + " " + ui.label + ": " + rc.n + " riders behind the gate.");
+      try { var rb = realBit(S.next(G)); if (rb) logLine(rb); } catch (e) { }
       H.sfx("bell");
       var b = banner(ui.label + " · on the gate", teamLine(rc), dl(2200), "is-calm");
       for (var t = 0; t < 26 && !skipGate && H.live(); t++) await wait(100);
@@ -1008,13 +1017,32 @@
         catch (x) { stats.errors.push("lap: " + (x && x.message || x)); try { console.warn("mxwar party: a lap failed", x); } catch (y) { } if (++fails > 2) skipQ = true; else await wait(400); }
       }
       if (!H.live()) return null;
-      $("mxpSkip").hidden = true;
+      $("mxpSkip").hidden = true; closeSkipSheet();
       return ui.lastDone;
+    }
+    /* "Skip to the finish" asks on a sheet (as the phone game does: a real-length race is long, one press must not throw it away):
+       Keep watching is the main button; Back or the scrim closes it. Without BGUI.sheet it falls back to a second press. */
+    function skipNow() { if (!ui.rc || ui.rc.over || ui.ph === "panel" || ui.ph === "signup") return; ui.skipArm = 0; skipQ = true; $("mxpSkip").textContent = "Skipping..."; status("Skipping to the finish..."); }
+    function closeSkipSheet() { var B = window.BGUI, el = document.getElementById("mxpSkipSheet"); if (!el) return; try { if (B && B.sheet && B.sheet.isOpen(el)) B.sheet.close(el); } catch (e) { } if (el.parentNode) el.parentNode.removeChild(el); }
+    function openSkipSheet() {
+      var B = window.BGUI, rc = ui.rc; if (!B || !B.sheet || !rc) return false;
+      closeSkipSheet();
+      var el = document.createElement("section"); el.className = "bg-sheet ps-rj"; el.id = "mxpSkipSheet"; el.setAttribute("aria-labelledby", "mxpSkipT"); document.body.appendChild(el);
+      var c = cal(), left = Math.max(0, rc.o.len - rc.battle), mine = rc.r.some(function (p, s) { return riderOfS(s).kind === "human"; });
+      el.innerHTML = '<div class="bg-sheet__grip" aria-hidden="true"></div><div class="bg-sheet__head"><div><span class="bg-eyebrow">' + esc((c.city || c.venue) + " · " + ui.label) + '</span><h2 class="bg-sheet__title" id="mxpSkipT">Skip to the finish?</h2>' +
+        '<p class="bg-sheet__sub">' + (rc.phase === "gate" ? "The whole race" : plural(left, "lap") + " to go") + ". The cards decide the rest at once, as War always does" + (mine ? ", the table riders’ cards too" : "") + ", and everyone sees the result.</p></div></div>" +
+        '<div class="pm-acts"><button type="button" class="bg-btn bg-btn--primary bg-btn--lg" id="mxpSkipNo" data-autofocus>Keep watching</button><button type="button" class="bg-btn bg-btn--secondary bg-btn--lg" id="mxpSkipYes">Skip to the finish</button></div>';
+      var close = function () { if (B.sheet.isOpen(el)) B.sheet.close(el); };
+      document.getElementById("mxpSkipNo").onclick = close;
+      document.getElementById("mxpSkipYes").onclick = function () { close(); skipNow(); };
+      B.sheet.open(el, { dismissible: true, focus: "#mxpSkipNo" });
+      return true;
     }
     $("mxpSkip").onclick = function () {
       var rc = ui.rc; if (!rc || rc.over || ui.ph === "panel" || ui.ph === "signup") return;
+      if (openSkipSheet()) return;
       if (Date.now() - ui.skipArm > 4000) { ui.skipArm = Date.now(); $("mxpSkip").textContent = "Press again to skip"; H.toast("Skip to the finish? The cards decide the rest of " + ui.label + " at once. Press again to skip."); setTimeout(function () { if ($("mxpSkip")) $("mxpSkip").textContent = "Skip to the finish"; }, 4000); return; }
-      ui.skipArm = 0; skipQ = true; $("mxpSkip").textContent = "Skipping..."; status("Skipping to the finish...");
+      skipNow();
     };
 
     /* ---------- the panels: sign-up, results, podium, standings (focusable buttons; a countdown picks the main one) ---------- */
@@ -1031,7 +1059,7 @@
       p.hidden = false; p.setAttribute("data-kind", o.kind || ""); $("mxp").classList.add("is-panel");
       if (H.paintIcons) H.paintIcons(p);
       fitPanel();
-      head(); $("mxpSkip").hidden = true;
+      head(); $("mxpSkip").hidden = true; closeSkipSheet();
       status(o.status || o.title || ""); H.hint(o.hint || "OK: " + ((o.buttons && o.buttons[0] && o.buttons[0].label) || "continue"));
       pushNow();
       return new Promise(function (res) {
@@ -1051,6 +1079,7 @@
     /* lists in the panel: as many rows as fit (the rows' height from the room), in 1-3 columns */
     function fitPanel() {
       var body = $("mxpPBody"); if (!body) return; var rem = remPx();
+      if (body.querySelector("[data-lu]")) { fitLineup(); return; }
       Array.prototype.forEach.call(body.querySelectorAll(".mxp-res"), function (ol) {
         var rowsN = ol.children.length; if (!rowsN) return;
         var room = (ol.getAttribute("data-room") ? +ol.getAttribute("data-room") * body.clientHeight : body.clientHeight) - 2;
@@ -1150,6 +1179,51 @@
       var info = { kind: "standings", title: "Season standings", next: nxt ? (nxt.nx.round.city || nxt.nx.round.venue) + " · " + nxt.nx.label : "" };
       return panel({ kind: "standings", eyebrow: G.year + " " + LONG[G.series] + " · " + G.cls, title: "Season standings", sub: esc("After " + plural(G.results.length, "round") + " of " + G.cal.length + (L.length && L[0].pts > 0 ? " · the red plate: " + L[0].name : "")),
         body: '<ol class="mxp-res" aria-label="Season standings">' + rowsX + "</ol>", buttons: btns, countdown: nxt ? 20000 : 0, info: info });
+    }
+    /* a race in real life, one line (the phone game's realLine, short): its laps, the winner, the winning time */
+    function realBit(nx) {
+      var R = nx && nx.real; if (!R || !(R.w || R.l > 0 || R.t)) return "";
+      var t = [], tm = R.t ? String(R.t).replace(/\.\d+$/, "") : "";
+      if (R.l > 0) t.push(plural(R.l, "lap"));
+      if (R.w) t.push((tm ? "won in " + tm + " by " : "won by ") + R.w); else if (tm) t.push("won in " + tm);
+      return nx.label + " in real life: " + t.join(", ") + ".";
+    }
+    /* ---------- the heat line-up before the round's first gate (mxwar/game.js openLineup; the CEO ~18:25: "at the start of the heat races,
+         there has to be an equal amount of teams"): tonight's heats as round.js balanced them by team, each with its team counts and riders ---------- */
+    function lineupDue() { var RG = G && G.round; return !!(RG && !G.over && !G.race && !(RG.cur > 0) && !RG.races.some(function (r) { return r.res; }) && ui.lineSeen !== G.ri); }
+    var luCols = null;
+    function fitLineup() {
+      var body = $("mxpPBody"); if (!body || !luCols) return; var rem = remPx(), gap = rem * .2;
+      Array.prototype.forEach.call(body.querySelectorAll("ol[data-lu]"), function (ol) {
+        var col = luCols[+ol.getAttribute("data-lu")]; if (!col) return;
+        ol.innerHTML = ""; ol.style.removeProperty("--rows");
+        var room = ol.clientHeight, cols = +(ol.getAttribute("data-cols") || 1), per = Math.max(3, Math.floor((room + gap) / (rem * 1.25 + gap)));
+        var rowsX = capRows(col.ids, per * cols), shown = Math.ceil(rowsX.length / cols);
+        var rh = clamp(Math.floor((room - (shown - 1) * gap) / Math.max(1, shown)), Math.round(rem * 1.25), Math.round(rem * 1.9));
+        ol.style.setProperty("--cols", String(cols)); ol.style.setProperty("--rows", String(shown)); ol.style.setProperty("--rh", rh + "px");
+        ol.innerHTML = rowsX.map(function (x) { if (x.sep) return '<li class="is-sep" aria-hidden="true">...</li>'; var R = G.riders[x.id]; return resLi(x.id, x.p, '<span class="mx-mk" style="' + A.mkStyle(R.bike) + '">' + esc(R.bike || "Privateer") + "</span>"); }).join("");
+      });
+    }
+    async function lineupPanel(ch) {
+      ui.lineSeen = G.ri;
+      var RG = G.round, c = G.cal[G.ri], F = RG.F, heats = RG.races.filter(function (r) { return r.st === 0 && r.ent; }), cols = [];
+      if (heats.length) { var sp = RD.teamSplit(RG, 0); heats.forEach(function (r, i) { cols.push({ label: r.label, ids: r.ent.slice(), teams: (sp[i] || {}).teams || {}, rule: RG.st[0].toMain ? "top " + RG.st[0].toMain + " to the " + (F.finals.kind === "moto" ? "motos" : F.finals.label) : RG.st[0].toNext && RG.st[0].toNext !== "rest" ? "top " + RG.st[0].toNext + " move on" : "" }); }); }
+      else { var t = {}; (RG.fin || []).forEach(function (id) { var m = G.riders[id].bike || "Privateer"; t[m] = (t[m] || 0) + 1; }); cols.push({ label: (RG.races[0] || {}).label || "The gate", ids: (RG.fin || []).slice(), teams: t, rule: F.finals.kind === "moto" ? "the motos, the overall by points" : "" }); }
+      luCols = cols;
+      var per = cols.length === 1 ? 3 : cols.length === 2 ? 2 : 1, mine = {}, mineW = [];
+      G.humans.forEach(function (h, k) { var col = cols.filter(function (x) { return x.ids.indexOf(h) >= 0; })[0], lab = col ? col.label : F.direct ? "seeded to the motos" : ""; if (lab) { mine[SEATS[k].color] = lab; mineW.push(G.riders[h].name + ": " + lab); } });
+      var body = '<div class="mxp-lu" style="--lu-cols:' + cols.length + '">' + cols.map(function (col, i) {
+        var tm = Object.keys(col.teams).sort(function (a, b) { return col.teams[b] - col.teams[a] || (a < b ? -1 : 1); });
+        return '<section class="mxp-lu__col"><h3 class="mxp-lu__h">' + esc(col.label) + " <span>" + esc(plural(col.ids.length, "rider") + (col.rule ? " · " + col.rule : "")) + "</span></h3>" +
+          '<p class="mxp-lu__tm">' + tm.map(function (m) { return '<span class="mx-mk" style="' + A.mkStyle(m) + '">' + esc(m + " " + col.teams[m]) + "</span>"; }).join("") + "</p>" +
+          '<ol class="mxp-res" data-lu="' + i + '" data-cols="' + per + '" aria-label="' + esc(col.label) + '"></ol></section>';
+      }).join("") + "</div>";
+      var nx = nextRace(), btns = nx.buttons.slice().sort(function (a, b) { return (a.id === ch ? 0 : 1) - (b.id === ch ? 0 : 1); }), rb = realBit(nx.nx);
+      var title = heats.length > 1 ? "Tonight's heats" : heats.length ? "Tonight's " + heats[0].label : "The gate";
+      var p = panel({ kind: "lineup", eyebrow: "Round " + (G.ri + 1) + " of " + G.cal.length + " · " + (c.city || c.venue), title: title,
+        sub: esc((heats.length > 1 ? "Balanced by team: every team's riders split as evenly as they can be over the heats, the top seeds alternating as in qualifying." : "Every rider on the gate, in gate-pick order.") + (mineW.length ? " " + (mineW.length > 4 ? plural(mineW.length, "rider") + " from this table" : mineW.join(" · ")) + "." : "") + (rb ? " " + rb : "")),
+        body: body, buttons: btns, countdown: 20000, info: { kind: "lineup", title: title, mine: mine, next: (c.city || c.venue) + " · " + nx.nx.label } });
+      var res = await p; luCols = null; return res;
     }
 
     /* ---------- the sign-up: every phone picks a team and a free number (the computer seats get theirs) ---------- */
@@ -1281,6 +1355,7 @@
         }
         if (!H.live()) return;
         if (ch !== "sim") ch = "watch";
+        if (lineupDue()) { var lc = await lineupPanel(ch); if (!H.live()) return; if (lc === "sim" || lc === "watch") ch = lc; }
         r = await goNext(ch);
       }
       if (!H.live()) return;
