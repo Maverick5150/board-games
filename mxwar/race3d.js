@@ -436,7 +436,15 @@ export function create(host,hooks){
     st.slip=clamp(st.roost/6,0,1);
     // [/hook:fx]
     // [hook:bike]
-    /* extra pose inputs for the bike (read by r3d-bike.js poseBike): st.compF / st.compR (suspension compression, m), st.spinF / st.spinR (wheel spin, rad) */
+    /* extra pose inputs for the bike (read by r3d-bike.js poseBike): st.compF / st.compR (suspension compression, m), st.spinF / st.spinR (wheel spin, rad), and
+       st.lodD: the distance to the lens that picks the level of detail (a bike behind the lens or well outside the picture counts as far; a narrow lens as near),
+       st.mud (0..1, kept between frames): the dirt builds up with the distance ridden, faster in sand, and a hard landing throws more on */
+    { const bv=st.bv||(st.bv=new THREE.Vector3()), th2=Math.tan(cam.fov*PI/360); bv.set(x,oy+0.6,z);
+      const dd=Math.sqrt((cam.position.x-x)*(cam.position.x-x)+(cam.position.y-oy)*(cam.position.y-oy)+(cam.position.z-z)*(cam.position.z-z));
+      bv.applyMatrix4(cam.matrixWorldInverse); const dz2=-bv.z;
+      const off=dz2<-1||Math.abs(bv.x)>th2*cam.aspect*dz2+4||Math.abs(bv.y)>th2*dz2+4;
+      st.lodD=dd*(th2/0.577)*(off?2.6:1);
+      st.mud=Math.min(1,(st.mud||0)+dt*r.v*0.00058*(1+2.5*(fr.sand||0))+(landed?0.03*Math.min(impact,8)/8:0)); }
     // [/hook:bike]
     // [hook:rider]
     /* extra pose inputs for the rider (read by r3d-riders.js poseRider): st.stand 0..1, st.dab -1..1, st.crouch, st.lean */
