@@ -6,8 +6,8 @@
      with the gate and the finish line, 180-degree turns, a whoop section, a triple and rhythm jumps, the return straight) or an outdoor
      national (a longer winding loop over hills with big tabletops and rollers). Built once per layout into a static background canvas.
    - Every rider is a small bike in team colours with their plate riding continuously round it. The leader's lap follows the race (one
-     battle = one lap: the leader crosses the finish line as the lap is decided, the pace learnt from the real lap times; when the field
-     waits for a person's flip they keep riding, slower). Everyone else rides behind the leader at a gap from the standings (a bike's
+     battle = one lap: the leader crosses the finish line just after the lap is decided, the pace learnt from the real lap times;
+     a lap that runs late (a person thinking, a long war) eases the field toward the line, never past it uncounted). Everyone else rides behind the leader at a gap from the standings (a bike's
      length a place, plus a little per card behind), so a change of places is a smooth ride-up and overtake: the gap eases to its new
      size and the rider moving up swings to the inside line to pass. Bikes bob through the whoops and arc over the jumps (a shadow on the
      ground under them), lean into the slopes and face the way they ride. The points leader's plate is RED.
@@ -346,15 +346,24 @@ function create(host,opt){
     var C=V.C; if(!C||!V.W) return;
     var mo=motion(), simple=mo!=="full", W=V.W, H=V.H, dpr=V.dpr, t=now();
     if(!still&&dt>0&&V.phase!=="gate"){
-      /* the leader's pace: due at the finish line as the lap is decided (from = this lap's start, to = the next line crossing) */
-      var from=V.laps===0?V.pGate:V.pFin+V.laps, to=V.pFin+V.laps+1, el=(t-V.lapT)/V.exp;
-      var want=from+(to-from)*Math.min(0.97,Math.max(0,el)), cruise=1/V.exp;
+      /* the leader's pace (from = this lap's start, to = the line that ends it). Review fix: the leader is due a little SHORT of the line
+         (lag) as the lap is decided and crosses it just after, so a lap that runs late (a person thinking, a long war) never sees the
+         leader ride past the line uncounted: inside the last stretch the pace eases in proportion to the room left, a smooth slow-down
+         that never reaches the line until the lap is decided. The pace itself is learnt from the real laps (V.lap). */
+      /* the schedule aims a little slower than the learnt lap (x1.15): a lap decided early is caught up smoothly, a late one rarely
+         reaches the slow-down */
+      var E=V.exp*1.15, from=V.laps===0?V.pGate:V.pFin+V.laps, to=V.pFin+V.laps+1, span=Math.max(0.05,to-from), lag=Math.min(0.18,span*0.25), el=(t-V.lapT)/E;
+      var start=V.laps===0?V.pGate:from-lag;
+      var want=start+(to-lag-start)*Math.min(1,Math.max(0,el)), cruise=1/E;
       if(V.phase==="over") want=V.X+0.25;
-      var v=cruise*clamp(1+2.2*(want-V.X)/Math.max(0.05,to-from),V.phase==="over"?0.4:0.55,1.9);
-      V.X+=v*dt;
+      var v=cruise*clamp(1+2.2*(want-V.X)/span,V.phase==="over"?0.4:0.55,1.9);
+      if(V.phase!=="over") v*=clamp((to-V.X)/lag,0,1);
+      var dX=Math.max(0,v*dt); V.X+=v*dt;
       var k=1-Math.exp(-dt/(simple?420:650)), kl=1-Math.exp(-dt/260);
       V.riders.forEach(function(r){
-        var d=r.offT-r.off; r.off+=d*k;
+        /* review fix: never backwards, never a zoom: the gap grows by at most 85% of the leader's progress this frame and shrinks by at
+           most the leader's progress: a pass takes a second or two; a rider losing places slows and is passed */
+        var d=r.offT-r.off, st=d*k; if(st>dX*0.85) st=dX*0.85; else if(st<-dX) st=-dX; r.off+=st;
         r.laneT=r.base+clamp(d/(V.unit*1.4),-1,1)*-0.85;   // the rider moving up (the gap shrinking) swings to the inside to pass
         r.lane+=(r.laneT-r.lane)*kl;
       });
@@ -391,7 +400,11 @@ function create(host,opt){
       /* the plate floats above the rider, upright */
       var pl=plate(r);
       /* neighbours' plates are staggered (every other place a plate higher) so a close pack's numbers stay readable */
-      if(pl){ fx.setTransform(dpr,0,0,dpr,0,0); var pw=pl._w, phh=pl._h, top=y-lift-bh*depth*0.98-phh*0.92-(r.place%2?phh*0.8:0); fx.drawImage(pl,Math.round(x-pw/2),Math.round(Math.max(1,top)),pw,phh); }
+      /* review fix: on a steep or vertical stretch the riders stack up the screen, so a raised plate would sit on the next bike: there the
+         every-other plate steps sideways towards the infield instead */
+      if(pl){ fx.setTransform(dpr,0,0,dpr,0,0); var pw=pl._w, phh=pl._h, steep=Math.abs(ca)<0.5, odd=r.place%2===1;
+        var top=y-lift-bh*depth*0.98-phh*0.92-(odd&&!steep?phh*0.8:0), left=x-pw/2+(odd&&steep?(x<W/2?1:-1)*(pw*0.5+bw*0.45):0);
+        fx.drawImage(pl,Math.round(clamp(left,1,W-pw-1)),Math.round(Math.max(1,top)),pw,phh); }
     });
     /* the flagger: the white flag (last lap) or the checkered flag, waving at the finish line */
     if(V.flag&&C.flagAt){
