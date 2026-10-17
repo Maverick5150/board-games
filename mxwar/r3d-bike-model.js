@@ -54,8 +54,8 @@ Builder.prototype.add=function(g,o){
   for(let i=0;i<cnt;i++){
     _v.fromBufferAttribute(pa,i).applyMatrix4(m); _n.fromBufferAttribute(na,i).applyMatrix3(_nm).normalize();
     this.P.push(_v.x,_v.y,_v.z); this.N.push(_n.x,_n.y,_n.z); this.C.push(c[0],c[1],c[2]);
-    if(uvm==="side") this.U.push((_v.x+1.2)/1.8,0.5+0.5*clamp((_v.y-0.45)/0.75,0,1));
-    else if(uvm==="top") this.U.push((_v.x+1.2)/1.8,0.5*clamp(0.5+_v.z*2.6,0,1));
+    if(uvm==="side") this.U.push((_v.x+1.2)/2.4,0.5+0.5*clamp((_v.y-0.45)/0.75,0,1));
+    else if(uvm==="top") this.U.push((_v.x+1.2)/2.4,0.5*clamp(0.5+_v.z*2.6,0,1));
     else this.U.push(0,0);
     this.A.push(mt,rg,tn,ao0*(grad?0.62+0.38*sstep(0.18,0.85,_v.y):1));
   }
@@ -268,7 +268,7 @@ function bodyBuild(d){
   /* ---- the rear fender: long, a gentle upsweep at the tail ---- */
   const fnd=[[-0.38,0.915,0.102],[-0.58,0.905,0.101],[-0.78,0.915,0.097],[-0.93,0.938,0.090],[-1.04,0.968,0.082],[-1.13,0.996,0.072]];
   const fS=fnd.map(p=>superSec(p[0],0,p[1]-0.008,p[2],0.011,2.8,S(d,12,6,4)));
-  B.add(loft(smoothSecs(fS,S(d,3,1,1)),{}),withMat(MAT.plastic,{uv:"top",ao:1}));
+  B.add(loft(smoothSecs(fS,S(d,3,1,1)),{}),withMat(MAT.plastic,{uv:"top",ao:1,tint:3}));
   B.mark('before-exhaust');
   /* ---- the exhaust: header round the right of the engine, mid-pipe, the muffler ---- */
   const hdr=[V(0.298,0.700,0.046),V(0.345,0.600,0.092),V(0.338,0.505,0.150),V(0.262,0.462,0.172),V(0.150,0.528,0.168),V(0.030,0.600,0.172),V(-0.110,0.668,0.178),V(-0.250,0.735,0.186)];
@@ -349,7 +349,7 @@ function forkBuild(d){
   /* the front fender: a long blade over the tyre, the beak curling up, mounted on the legs */
   const fp=[[0.50,0.716,0.126],[0.57,0.730,0.122],[0.65,0.737,0.115],[0.74,0.740,0.108],[0.83,0.733,0.100],[0.91,0.712,0.093],[0.98,0.676,0.086],[1.04,0.632,0.080],[1.10,0.592,0.073],[1.16,0.574,0.066]];
   const fS=fp.map(p=>superSec(p[0],0,p[1],p[2],0.011,2.6,S(d,12,6,4)));
-  B.add(loft(smoothSecs(fS,S(d,3,1,1)),{}),withMat(MAT.plastic,{uv:"top",ao:1}));
+  B.add(loft(smoothSecs(fS,S(d,3,1,1)),{}),withMat(MAT.plastic,{uv:"top",ao:1,tint:3}));
   /* fender stays down to the legs */
   if(d>=1) [-1,1].forEach(sd=>{ B.add(blob(0.04,0.05,0.008,3,S(d,4,3,3),S(d,8,5,4)),withMat(MAT.plastic,{m:Tm(0.575,0.69,sd*0.112,0,0,0.5),uv:"top"})); });
   return B.geometry();
