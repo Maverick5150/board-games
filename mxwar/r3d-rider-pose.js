@@ -6,7 +6,7 @@
    parameters): the hands and feet are under-damped springs in the WORLD frame (limbs lag and flop behind the tumbling body). The result: per bone a 3 x 4 skinning
    matrix (world) written into the rider's row of the bone texture (r3d-riders.js). Bike frame: +X forward, +Y up, +Z right; angles in radians. */
 import {BN,NB,REST,LEN} from "./r3d-rider-model.js";
-import {BIKE} from "./r3d-bike.js";
+import {BIKE,steerOf,steerXYZ} from "./r3d-bike.js";
 
 const clamp=(x,a,b)=>x<a?a:x>b?b:x;
 const sst=(a,b,x)=>{ const t=clamp((x-a)/(b-a),0,1); return t*t*(3-2*t); };
@@ -97,6 +97,8 @@ function skeleton(Pp,Rpel,o){
     mulv(Rpel,ho[0],ho[1],ho[2],tv); H[0]=Pp[0]+tv[0]; H[1]=Pp[1]+tv[1]; H[2]=Pp[2]+tv[2];
     A[0]=o.foot[h]; A[1]=o.foot[h+1]; A[2]=o.foot[h+2];
     mulv(Rpel,1,0.12,sd*o.kneeOut,pole);
+    if(o.kneeAim>0){ const kx=o.knee[0]-H[0], ky=o.knee[1]-H[1], kz=sd*o.knee[2]-H[2], kl=Math.sqrt(kx*kx+ky*ky+kz*kz)||1, w=o.kneeAim, pm=Math.sqrt(pole[0]*pole[0]+pole[1]*pole[1]+pole[2]*pole[2])||1;   /* the pole turns toward the bike's knee point */
+      pole[0]=pole[0]*(1-w)+kx/kl*pm*w; pole[1]=pole[1]*(1-w)+ky/kl*pm*w; pole[2]=pole[2]*(1-w)+kz/kl*pm*w; }
     ik2(H,A,LEN.TH,LEN.SH,pole,Kn);
     let dx=Kn[0]-H[0], dy=Kn[1]-H[1], dz=Kn[2]-H[2];
     frameDir(RA,dx,dy,dz,Rpel[0],Rpel[3],Rpel[6]); put(TH,RA,H);
@@ -130,8 +132,8 @@ const IDM=new Float64Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
 const HINT=v3(); HINT[0]=1;
 /* the seat and the contact points of the bike, read at every call (the bike's constants can change): the grips and pegs from BIKE */
 function bikePts(){
-  const g=BIKE.GRIP, p=BIKE.PEG, s=BIKE.SEAT||null;
-  return {gx:g.x,gy:g.y,gz:g.z,px:p.x,py:p.y,pz:p.z,sx:s?s.x:-0.20,sy:s?s.y:1.00};
+  const g=BIKE.GRIP, p=BIKE.PEG, s=BIKE.SEAT||null, k=BIKE.KNEE||null;
+  return {gx:g.x,gy:g.y,gz:g.z,px:p.x,py:p.y,pz:p.z,sx:s?s.x:-0.20,sy:s?s.y:1.00,kx:k?k.x:0.14,ky:k?k.y:0.84,kz:k?k.z:0.15};
 }
 /* B = the bike's world matrix elements (column-major, 16), st = the per-rider state (CONTRACT.md section 5), dt the last step (s) */
 export function poseRide(rig,Bm,st,dt,out,base){
@@ -179,7 +181,9 @@ export function poseRide(rig,Bm,st,dt,out,base){
   Rz(T1,-pitch*0.28); Rx(T2,roll*0.30); mm(T2,T1,Rp);
   /* the contact targets: hands on the grips, the ankles over the pegs (the boot's ball on the peg; the inside foot out in a flat turn) */
   const o=SKO; o.pitch=pitch; o.roll=roll; o.hpitch=S[10]; o.hyaw=S[12]; o.fwdX=HINT; o.herr=0;
-  o.hand[0]=bp.gx; o.hand[1]=bp.gy; o.hand[2]=-bp.gz; o.hand[3]=bp.gx; o.hand[4]=bp.gy; o.hand[5]=bp.gz;
+  /* the hands are on the grips AS THE BARS ARE TURNED (r3d-bike.js steerOf / steerXYZ: the same turn the bike draws), so the arms follow the steering */
+  { const dl=steerOf(st); if(dl>1e-4||dl<-1e-4){ steerXYZ(bp.gx,bp.gy,-bp.gz,dl,o.hand,0); steerXYZ(bp.gx,bp.gy,bp.gz,dl,o.hand,3); } else { o.hand[0]=bp.gx; o.hand[1]=bp.gy; o.hand[2]=-bp.gz; o.hand[3]=bp.gx; o.hand[4]=bp.gy; o.hand[5]=bp.gz; } }
+  o.knee[0]=bp.kx; o.knee[1]=bp.ky; o.knee[2]=bp.kz; o.kneeAim=0.75*(1-stand)+0.25*stand;   /* the knees press on the shrouds (BIKE.KNEE): the leg's IK bends toward that point */
   o.foot[0]=bp.px-0.095; o.foot[1]=bp.py+0.115; o.foot[2]=-bp.pz; o.foot[3]=bp.px-0.095; o.foot[4]=bp.py+0.115; o.foot[5]=bp.pz;
   if(adab>0.01){ const R=dab>0, k=adab, i=R?3:0, s=R?1:-1; o.foot[i]=lerp(o.foot[i],0.30,k); o.foot[i+1]=lerp(o.foot[i+1],0.52,k); o.foot[i+2]=lerp(o.foot[i+2],s*0.46,k); }
   o.toe[0]=o.toe[1]=0.12+0.28*(air?1:0)-0.1*stand; if(adab>0.01){ const k=adab; if(dab>0) o.toe[1]=lerp(o.toe[1],-0.35,k); else o.toe[0]=lerp(o.toe[0],-0.35,k); }
@@ -197,7 +201,7 @@ export function poseRide(rig,Bm,st,dt,out,base){
   rig.err.hand=o.herr;
   emit(Bm,out,base);
 }
-const SKO={pitch:0,roll:0,hpitch:0,hyaw:0,fwdX:HINT,hand:[0,0,0,0,0,0],foot:[0,0,0,0,0,0],toe:[0,0],toeOut:0.12,kneeOut:0.28,elbowOut:0.9,elbowUp:0.55,elbowBack:0.25,herr:0};
+const SKO={pitch:0,roll:0,hpitch:0,hyaw:0,fwdX:HINT,hand:[0,0,0,0,0,0],foot:[0,0,0,0,0,0],toe:[0,0],toeOut:0.12,kneeOut:0.28,elbowOut:0.9,elbowUp:0.55,elbowBack:0.25,herr:0,knee:[0.14,0.84,0.15],kneeAim:0};
 
 /* ---------------- a crash: the body frame (a world matrix: origin the hip, +Y up the spine, +X the chest's front, +Z right) and limb parameters ---------------- */
 const BF=new Float64Array(16), BI=new Float64Array(9), wp=v3(), lp=v3();
@@ -229,7 +233,7 @@ export function poseBody(rig,body,lim,dt,out,base){
   const o=SKO; o.pitch=spine; o.roll=0; o.hpitch=-spine*0.6+0.1*spread; o.hyaw=0.3*Math.sin(ph*0.7)*spread; o.fwdX=HINT; o.herr=0;
   o.hand[0]=loc[0]; o.hand[1]=loc[1]; o.hand[2]=loc[2]; o.hand[3]=loc[3]; o.hand[4]=loc[4]; o.hand[5]=loc[5];
   o.foot[0]=loc[6]; o.foot[1]=loc[7]; o.foot[2]=loc[8]; o.foot[3]=loc[9]; o.foot[4]=loc[10]; o.foot[5]=loc[11];
-  o.toe[0]=o.toe[1]=0.25-0.4*spread; o.toeOut=0.15; o.kneeOut=0.35; o.elbowOut=0.8; o.elbowUp=0.2; o.elbowBack=0.4;
+  o.toe[0]=o.toe[1]=0.25-0.4*spread; o.toeOut=0.15; o.kneeOut=0.35; o.elbowOut=0.8; o.elbowUp=0.2; o.elbowBack=0.4; o.kneeAim=0;
   P[0]=P[1]=P[2]=0;
   body_id(Rp);
   skeleton(P,Rp,o);

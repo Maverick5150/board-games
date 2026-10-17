@@ -153,7 +153,12 @@ export function steerMatrix(delta,out){
 }
 /* where a point of the bike's bars ends up when they are turned by delta (the grips: the rider's hands) */
 export function steerPoint(p,delta,out){ out=out||new THREE.Vector3(); return out.copy(p).applyMatrix4(steerMatrix(delta,_m3)); }
-BIKE.steerGain=0.6;   /* how much of the track's steering the bars show (the rider's hands must follow: steerOf) */
+BIKE.steerGain=1;   /* how much of the track's steering the bars show: all of it now that the rider's hands follow the grips (steerXYZ in r3d-rider-pose.js; it was 0.6 while the hands did not) */
+/* the same turn of the bars for a plain point (no THREE objects: the rider's pose is plain arrays): (x, y, z) in bike space -> o[k], o[k+1], o[k+2] */
+export function steerXYZ(x,y,z,delta,o,k){
+  const c=Math.cos(-delta), s=Math.sin(-delta), px=x-A0.x, py=y-A0.y, pz=z-A0.z, d=UA.x*px+UA.y*py+UA.z*pz, u=1-c;   /* Rodrigues: a turn of -delta about the steering axis UA through A0 (steerMatrix) */
+  o[k]=A0.x+px*c+(UA.y*pz-UA.z*py)*s+UA.x*d*u; o[k+1]=A0.y+py*c+(UA.z*px-UA.x*pz)*s+UA.y*d*u; o[k+2]=A0.z+pz*c+(UA.x*py-UA.y*px)*s+UA.z*d*u;
+}
 export function steerOf(st){ return steerAngle(st)*BIKE.steerGain; }
 export function steerAngle(st){ if(st.steer!=null) return st.steer; const k=st.k||0; return clamp(Math.atan(BIKE.WB*k)*(st.air?0.25:1)*0.9,-BIKE.STEER_MAX,BIKE.STEER_MAX); }
 function lodOf(K,i,d){
