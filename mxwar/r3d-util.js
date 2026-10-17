@@ -76,4 +76,59 @@ export function bone(m,i,a,b,thick,fw){
   _bq.setFromUnitVectors(_up,_bd); _bs.set(thick||1,len,thick||1); _bm1.compose(a,_bq,_bs); m.setMatrixAt(i,_bm1);
 }
 
+/* ---------------- the material kit (lead): physically based presets for the bike, the rider, the dirt and the stadium ----------------
+   MAT.gloss(color, opts) glossy painted plastic (clear coat)        MAT.plastic(color, opts) satin / matte plastic      MAT.rubber(color, opts) tyres, grips, boots' soles
+   MAT.paint(color, opts) painted metal (frame, tank)                MAT.anodized(color, opts) coloured aluminium         MAT.chrome(opts) mirror metal     MAT.steel(opts) brushed steel (exhaust, spokes)
+   MAT.fabric(color, opts) jersey, pants, gloves                     MAT.leather(color, opts) boots, seat                 MAT.visor(opts) a dark mirrored visor
+   MAT.dirt(color, opts) dry soil (rough, no sheen)                  MAT.mud(color, opts) wet, packed soil with a faint clear coat      material(kind, color, opts) = the same by name.
+   color: a hex / CSS string / THREE.Color (omit it when opts.vertexColors is true); opts go to the material's constructor (vertexColors, map, normalMap, side, roughness ... override the preset;
+   opts.env scales the preset's environment-map strength).  Every material made here is registered, so setKitTier() can change them all later.
+   THE KIT TIER (setKitTier / getKitTier; r3d-look.js follows the quality tier): "high" = MeshPhysicalMaterial (clear coat, sheen: the cover's glossy plastics and helmets), "mid" = MeshStandardMaterial,
+   "low" = MeshLambertMaterial / MeshPhongMaterial (no environment map: the Fire TV tier).  The scene's environment map (r3d-look.js) lights every Standard / Physical material by itself. */
+let KIT_TIER="high"; const KIT=[];
+export function setKitTier(t){ KIT_TIER=(t==="mid"||t==="low")?t:"high"; }
+export function getKitTier(){ return KIT_TIER; }
+const PRESET={
+  gloss:   {rough:0.28,metal:0.00,cc:1.00,ccr:0.06,env:1.00,shin:90, spec:0x777777,matte:0},
+  plastic: {rough:0.55,metal:0.00,cc:0.00,ccr:0.50,env:0.55,shin:26, spec:0x303030,matte:0},
+  rubber:  {rough:0.93,metal:0.00,cc:0.00,ccr:0.50,env:0.20,shin:5,  spec:0x0c0c0c,matte:1},
+  paint:   {rough:0.38,metal:0.55,cc:0.60,ccr:0.12,env:1.00,shin:60, spec:0x666666,matte:0},
+  anodized:{rough:0.30,metal:0.92,cc:0.00,ccr:0.50,env:1.00,shin:100,spec:0xaaaaaa,matte:0},
+  chrome:  {rough:0.06,metal:1.00,cc:0.00,ccr:0.50,env:1.25,shin:160,spec:0xffffff,matte:0},
+  steel:   {rough:0.42,metal:0.95,cc:0.00,ccr:0.50,env:1.00,shin:50, spec:0x999999,matte:0},
+  fabric:  {rough:0.92,metal:0.00,cc:0.00,ccr:0.50,env:0.30,shin:4,  spec:0x050505,matte:1,sheen:0.55},
+  leather: {rough:0.55,metal:0.00,cc:0.18,ccr:0.40,env:0.50,shin:30, spec:0x222222,matte:0},
+  visor:   {rough:0.04,metal:0.85,cc:0.00,ccr:0.50,env:1.50,shin:220,spec:0xffffff,matte:0},
+  dirt:    {rough:0.97,metal:0.00,cc:0.00,ccr:0.50,env:0.10,shin:2,  spec:0x000000,matte:1},
+  mud:     {rough:0.45,metal:0.00,cc:0.30,ccr:0.50,env:0.60,shin:40, spec:0x333333,matte:0}
+};
+function kitBuild(kind,color,opts){
+  const pr=PRESET[kind]||PRESET.plastic, o=Object.assign({},opts||{}), env=o.env!=null?o.env:1; delete o.env; if(color!=null&&o.color==null) o.color=color;
+  let m;
+  if(KIT_TIER==="low"){
+    if(pr.matte) m=new THREE.MeshLambertMaterial(o);
+    else { if(o.roughness!=null) delete o.roughness; delete o.metalness; o.shininess=pr.shin; o.specular=new THREE.Color(pr.spec); m=new THREE.MeshPhongMaterial(o); }
+  } else if(KIT_TIER==="mid"||(!pr.cc&&!pr.sheen)){
+    if(o.roughness==null) o.roughness=pr.rough; if(o.metalness==null) o.metalness=pr.metal; o.envMapIntensity=(o.envMapIntensity!=null?o.envMapIntensity:pr.env*env); m=new THREE.MeshStandardMaterial(o);
+  } else {
+    if(o.roughness==null) o.roughness=pr.rough; if(o.metalness==null) o.metalness=pr.metal; o.envMapIntensity=(o.envMapIntensity!=null?o.envMapIntensity:pr.env*env);
+    if(pr.cc){ o.clearcoat=pr.cc; o.clearcoatRoughness=pr.ccr; }
+    if(pr.sheen){ o.sheen=pr.sheen; o.sheenRoughness=0.8; o.sheenColor=new THREE.Color(0x8890a8); }
+    m=new THREE.MeshPhysicalMaterial(o);
+  }
+  m.userData.kit=kind; return m;
+}
+export function material(kind,color,opts){ const m=kitBuild(kind,color,opts); KIT.push(m); return m; }
+export const MAT={};
+["gloss","plastic","rubber","paint","anodized","fabric","leather","dirt","mud"].forEach(k=>{ MAT[k]=(c,o)=>material(k,c,o); });
+["chrome","steel","visor"].forEach(k=>{ MAT[k]=(o)=>material(k,null,o); });
+/* a physically based stand-in for an existing Phong material (the base bike and helmet: gloss for a high shininess, metal for a lower one): the lead's upgrade (r3d-look.js) uses it, high tier only */
+export function pbrFromPhong(m,tier){
+  const o={vertexColors:m.vertexColors,map:m.map,color:m.color.clone(),side:m.side,transparent:m.transparent,opacity:m.opacity};
+  const gloss=m.shininess>=60; const saved=KIT_TIER; KIT_TIER=tier||"high";
+  const r=kitBuild(gloss?(m.shininess>=100?"gloss":"gloss"):"steel",null,o); KIT_TIER=saved;
+  if(m.onBeforeCompile!==THREE.Material.prototype.onBeforeCompile){ r.onBeforeCompile=m.onBeforeCompile; r.customProgramCacheKey=m.customProgramCacheKey; }
+  return r;
+}
+
 export {lin,mixc,clamp,sstep,hash2,vnoise,fbm,hashp,pnoise,pfbm,canvas,tex,normalTex,rngf,clear,clearDist};

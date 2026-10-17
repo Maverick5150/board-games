@@ -61,7 +61,7 @@ export function create(host,hooks){
   const requestAnimationFrame=cb=>GL.requestAnimationFrame(t=>{ if(QUAL.skipFrame(t)){ requestAnimationFrame(cb); return; } cb(t); });
   let lastRace=null, builtTier="";   /* the last setRace argument and the tier key the current world was built with (V.setQuality rebuilds when they differ) */
   // [/hook:perf]
-  const LOOK=createLook(renderer,{shadows:QUAL.shadowsWanted(LO)});   /* colour space, tone mapping, shadow map, the lights, fog, the post-processing slot (r3d-look.js) */
+  const LOOK=createLook(renderer,{shadows:QUAL.shadowsWanted(LO),lo:LO,tv:tv(),weak:QUAL.weakGPU,host:host});   /* colour space, tone mapping, shadow map, the light rig, fog, the environment map, the post chain, the quality flags (r3d-look.js) */
   const scene=LOOK.scene, SUN=LOOK.SUN;   /* SUN = the sun's direction (LOOK.apply updates it for each venue) */
   const cv=renderer.domElement; cv.className="mx-v3__cv"; cv.setAttribute("aria-hidden","true"); host.appendChild(cv);
   const V={lost:false};
@@ -123,7 +123,7 @@ export function create(host,hooks){
       // [hook:cams]
       CAMS.buildGrid();   /* the grid of the dirt's heights: no camera ever sits inside a jump */
       // [/hook:cams]
-      LOOK.apply(C,look,world);   /* the venue's lights, exposure, sun disc and fog (r3d-look.js) */
+      LOOK.apply(C,look,world,{lo:LO,tv:tv()});   /* the venue's lights, exposure, sun disc, fog, environment map and the look's quality tier (r3d-look.js) */
       // [hook:stadium]
       flagger=flaggerBuild(flagT("white")); flagger.grp.position.copy(world.fin.flagAt).add(v3.set(0,-0.02,0)); flagger.grp.rotation.y=-world.fin.th+(world.fin.side>0?PI:0); world.root.add(flagger.grp);
       marshal=flaggerBuild(flagT("yellow"),{marshal:true}); marshal.grp.visible=false; world.root.add(marshal.grp);
@@ -136,7 +136,7 @@ export function create(host,hooks){
     // [/hook:fx]
     list=o.riders.map((r,k)=>({s:r.s!=null?r.s:k,color:r.color,accent:r.accent,num:r.num,name:r.name,red:!!r.red,me:!!r.me}));
     N=list.length; meSeats=list.filter(r=>r.me).map(r=>r.s); redSeat=(list.find(r=>r.red)||{s:-1}).s;
-    R=createRiders(list,QUAL.options(LO)); scene.add(R.grp);
+    R=createRiders(list,QUAL.options(LO)); scene.add(R.grp); LOOK.upgrade(R.grp); LOOK.receive(R.grp);   /* physically based stand-ins for Phong parts; the body parts receive the key's shadow (r3d-look.js) */
     // [hook:fx]
     FX=createFx(Object.assign({C:C,look:look},QUAL.options(LO))); scene.add(FX.group);   /* the roost and dust particles: a new system for every race (r3d-fx.js) */
     // [/hook:fx]
@@ -279,7 +279,7 @@ export function create(host,hooks){
   };
   function renderOnce(){ if(!C||V.lost) return; step(0); render(); }
   function render(){
-    LOOK.render(scene,cam);   /* the frame (through the post-processing slot when one is set) */
+    LOOK.render(scene,cam,now()/1000);   /* the frame (through the post-processing slot when one is set) */
     const inf=renderer.info.render; stats.calls=inf.calls; stats.tris=inf.triangles;
     stats.fpsN++; const tn=now(); if(tn-stats.fpsT0>1000){ stats.fps=stats.fpsN*1000/(tn-stats.fpsT0); stats.fpsN=0; stats.fpsT0=tn; }
   }
@@ -382,7 +382,19 @@ export function create(host,hooks){
     if(V.camHook){ const h=V.camHook(dt,rs,T); if(h){ cam.position.set(h.eye[0],h.eye[1],h.eye[2]); CAMS.target.set(h.target[0],h.target[1],h.target[2]); cam.lookAt(CAMS.target); if(h.fov&&Math.abs(cam.fov-h.fov)>1e-4){ cam.fov=h.fov; cam.updateProjectionMatrix(); } } }   /* the capture harness' camera (demo.js; null in the game): after the director, before the sky and the shadow box follow the lens */
     // [/hook:harness]
     if(CAMS.shot){ if(world.ctx.skyMesh) world.ctx.skyMesh.position.copy(cam.position); if(LOOK.shadows) LOOK.fitShadow(cam,CAMS.target); }   /* the sky follows the lens; the shadow box follows the action */
+    LOOK.frame(cam,CAMS.target,dt,tw,subjectDist());   /* the camera-relative lights (rim, kick) and the depth of field's focus (r3d-look.js) */
     tags();
+  }
+  /* the depth of field's subject: the rider nearest the middle of the picture within 34 m of the lens (0 = nobody: a wide shot, no blur) */
+  const sjF=new THREE.Vector3();
+  function subjectDist(){
+    if(!LOOK.flags.dof) return 0;
+    cam.getWorldDirection(sjF); let best=0, bs=1e9;
+    for(let i=0;i<rs.length;i++){ const r=rs[i]; if((r.gone&&!r.crash)||!r.pos) continue;
+      const dx=r.pos.x-cam.position.x, dy=r.pos.y-cam.position.y, dz=r.pos.z-cam.position.z, d=Math.sqrt(dx*dx+dy*dy+dz*dz); if(d>34||d<1.2) continue;
+      const ca=(dx*sjF.x+dy*sjF.y+dz*sjF.z)/d; if(ca<0.62) continue;
+      const sc=d*(1.9-ca); if(sc<bs){ bs=sc; best=d; } }
+    return best;
   }
   /* one rider: speed, the axles (sprung masses on the wheels), the stance, the bike and body matrices */
   function rider(i,r,dt,isGate,tw){
@@ -682,7 +694,7 @@ export function create(host,hooks){
   QUAL.bindLook(LOOK); driveLook();
   QUAL.attach({V:V,cam:cam,mode:()=>mode,T:()=>T,W:()=>W,H:()=>H,count:()=>N,lodList:()=>RST});
   // [/hook:perf]
-  V.dispose=function(){ V.stop(); if(world) disposeTree(world.root); if(R) disposeTree(R.grp); if(FX) disposeTree(FX.group); renderer.dispose(); cv.remove(); };
+  V.dispose=function(){ V.stop(); if(world) disposeTree(world.root); if(R) disposeTree(R.grp); if(FX) disposeTree(FX.group); LOOK.dispose(); renderer.dispose(); cv.remove(); };
   V.renderer=renderer; V.scene=scene; V.camera=cam;
   V._dbg={riders:()=>R,fx:()=>FX,look:()=>LOOK,quality:()=>QUAL,cams:()=>CAMS,state:()=>RST,gate:()=>gate,world:()=>world,marshal:()=>marshal,target:()=>CAMS.target.clone(),sees:(a,b)=>CAMS.sees(a,b),dirt:(x,z)=>CAMS.dirtTop(x,z),hf:(x,z)=>world.ctx.hf?world.ctx.hf(x,z):null,yellow:()=>yellow,shot:()=>CAMS.shot,pos:k=>{ const r=rs.find(x=>x.seat===k); return r&&r.pos?{x:+r.pos.x.toFixed(2),y:+r.pos.y.toFixed(2),z:+r.pos.z.toFixed(2),crash:r.crash?r.crash.kind:null}:null; },
     clearance:(k,full)=>{ const r=rs.find(x=>x.seat===k); if(!r||!r.crash||!r.pos) return null; const P=[r.pos,r.bikeP].filter(Boolean); let m=1e9, who=null;
