@@ -9,6 +9,9 @@ import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
+import android.speech.tts.Voice
 import android.view.WindowManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
@@ -17,6 +20,9 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.Locale
 
 /**
  * Board Games: the hub, every game and Party Mode (the pages themselves live on GitHub Pages).
@@ -45,6 +51,19 @@ class MainActivity : Activity() {
     private var tv = true
     private var startUrl = SITE + "?tv=1"
 
+    // The announcers' voices (Motocross War; the page side is ui/voice.js): Android's own text to speech behind the bridge, because a
+    // WebView has no speechSynthesis. Optional everywhere: no speech engine, no English voice or a failed start = ttsReady() stays
+    // false and the page shows captions only. The bridge methods run on the WebView's JavaBridge thread (TextToSpeech's speak / stop
+    // are safe from any thread); the start and the end callbacks come back on the UI thread.
+    @Volatile private var tts: TextToSpeech? = null
+    @Volatile private var ttsOk = false
+    @Volatile private var destroyed = false
+    @Volatile private var voiceA: Voice? = null
+    @Volatile private var voiceB: Voice? = null
+    private var voiceNow: String? = null
+    private var ttsVol = 1f
+    private var utterSeq = 0
+
     inner class Bridge {
         @JavascriptInterface
         fun exit() { runOnUiThread { finish() } }
@@ -55,6 +74,27 @@ class MainActivity : Activity() {
         /** true on a TV, false on a phone or tablet */
         @JavascriptInterface
         fun isTV(): Boolean = tv
+
+        /** ui/voice.js: speak one line ("a" = the lead caller, "b" = the analyst). Returns the line's id, or "" when speech is unavailable
+         *  (the page then shows the caption only). flush = drop anything still queued first (the page plays one line at a time anyway). */
+        @JavascriptInterface
+        fun speak(text: String?, who: String?, rate: Float, pitch: Float, flush: Boolean): String = speakLine(text, who, rate, pitch, flush)
+
+        /** stop the line being spoken and anything queued */
+        @JavascriptInterface
+        fun stop() { stopSpeech() }
+
+        /** the device's installed English voices as JSON: [{"name","lang","quality"}] */
+        @JavascriptInterface
+        fun voices(): String = voiceList()
+
+        /** true once the speech engine has started with a usable voice */
+        @JavascriptInterface
+        fun ttsReady(): Boolean = ttsOk && tts != null
+
+        /** the announcers' volume, 0..1 */
+        @JavascriptInterface
+        fun ttsVolume(v: Float) { ttsVol = v.coerceIn(0f, 1f) }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -105,6 +145,103 @@ class MainActivity : Activity() {
 
         // self-update: asks when a newer version is on the website (checked on every launch and again from onResume), never blocks the games
         updater = Updater(this, web, tv).also { it.checkOnLaunch(true) }
+
+        // the announcers' voices start in the background (onTtsInit); until then ttsReady() is false and the page shows captions
+        try {
+            tts = TextToSpeech(applicationContext) { status -> onTtsInit(status) }
+        } catch (e: Exception) {
+            tts = null
+        }
+    }
+
+    /** the speech engine has started (or failed): English, two voices, and the end-of-line callback to the page */
+    private fun onTtsInit(status: Int) {
+        val t = tts
+        if (destroyed || t == null || status != TextToSpeech.SUCCESS) {
+            ttsOk = false
+            return
+        }
+        try {
+            val r = t.setLanguage(Locale.US)
+            if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) t.setLanguage(Locale.getDefault())
+            pickVoices(t)
+            t.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) {}
+
+                override fun onDone(utteranceId: String?) { lineEvent("done", utteranceId) }
+
+                @Suppress("OVERRIDE_DEPRECATION")
+                override fun onError(utteranceId: String?) { lineEvent("error", utteranceId) }
+
+                override fun onStop(utteranceId: String?, interrupted: Boolean) { lineEvent("stop", utteranceId) }
+            })
+            ttsOk = true
+        } catch (e: Exception) {
+            ttsOk = false
+        }
+    }
+
+    /** two different English voices that are on the device (never a network voice, never one whose data is not installed): the lead
+     *  caller "a" and the analyst "b" (another accent when there is one); with one voice both use it and the page sets them apart by pitch */
+    private fun pickVoices(t: TextToSpeech) {
+        val all: Set<Voice> = try { t.voices ?: emptySet() } catch (e: Exception) { emptySet() }
+        val ok = all.filter { v ->
+            v.locale?.language == "en" && !v.isNetworkConnectionRequired &&
+                v.features?.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) != true
+        }.sortedByDescending { v -> v.quality + (if (v.locale?.country == "US") 40 else if (v.locale?.country == "GB") 30 else 0) }
+        val a = ok.firstOrNull()
+        voiceA = a
+        voiceB = ok.firstOrNull { it.name != a?.name && it.locale?.country != a?.locale?.country } ?: ok.firstOrNull { it.name != a?.name }
+    }
+
+    /** speak one line (on the JavaBridge thread): the speaker's voice, rate and pitch, then queue it under its own id */
+    private fun speakLine(text: String?, who: String?, rate: Float, pitch: Float, flush: Boolean): String {
+        val t = tts ?: return ""
+        if (!ttsOk || destroyed || text.isNullOrBlank()) return ""
+        return try {
+            val v = if (who == "b") (voiceB ?: voiceA) else voiceA
+            if (v != null && v.name != voiceNow && t.setVoice(v) == TextToSpeech.SUCCESS) voiceNow = v.name
+            t.setSpeechRate(if (rate > 0f) rate.coerceIn(0.5f, 2f) else 1f)
+            t.setPitch(if (pitch > 0f) pitch.coerceIn(0.5f, 2f) else 1f)
+            utterSeq += 1
+            val id = "bg$utterSeq"
+            val params = Bundle()
+            params.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, ttsVol)
+            val mode = if (flush) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+            if (t.speak(text.take(400), mode, params, id) == TextToSpeech.SUCCESS) id else ""
+        } catch (e: Exception) {
+            ""
+        }
+    }
+
+    private fun stopSpeech() {
+        try { tts?.stop() } catch (e: Exception) { }
+    }
+
+    private fun voiceList(): String {
+        val t = tts ?: return "[]"
+        if (!ttsOk) return "[]"
+        return try {
+            val list = JSONArray()
+            val all: Set<Voice> = t.voices ?: emptySet()
+            all.filter { it.locale?.language == "en" && !it.isNetworkConnectionRequired }.forEach { v ->
+                list.put(JSONObject().put("name", v.name).put("lang", v.locale.toLanguageTag()).put("quality", v.quality))
+            }
+            list.toString()
+        } catch (e: Exception) {
+            "[]"
+        }
+    }
+
+    /** a line ended: tell the page (window.__bgTts in ui/voice.js) on the UI thread (the listener runs on a binder thread) */
+    private fun lineEvent(ev: String, id: String?) {
+        if (id == null || destroyed) return
+        val js = "window.__bgTts&&window.__bgTts('" + ev + "','" + id.replace("'", "") + "')"
+        runOnUiThread {
+            if (!destroyed) {
+                try { web.evaluateJavascript(js, null) } catch (e: Exception) { }
+            }
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -131,10 +268,17 @@ class MainActivity : Activity() {
         return path.isEmpty() || path == "index.html"
     }
 
-    override fun onPause() { super.onPause(); web.onPause() }
+    override fun onPause() { super.onPause(); web.onPause(); stopSpeech() }
     override fun onResume() { super.onResume(); web.onResume(); updater?.onResume() }
 
     override fun onDestroy() {
+        destroyed = true
+        ttsOk = false
+        try {
+            tts?.stop()
+            tts?.shutdown()
+        } catch (e: Exception) { }
+        tts = null
         updater?.close()
         updater = null
         super.onDestroy()
