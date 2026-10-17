@@ -129,7 +129,7 @@ export function createRiders(list,opts){
   const n=list.length, lo=!!opts.lo, grp=new THREE.Group();
   const mk=(geo,count,mat)=>{ const m=new THREE.InstancedMesh(geo,mat,count); m.frustumCulled=false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); grp.add(m); return m; };
   const A=atlas(list);
-  const M=createBike(n,lo,mk);   /* wheel, chassis, plastic, trim, fork, swing (r3d-bike.js: it makes the bike's materials first) */
+  const M=createBike(n,lo,mk,opts);   /* the bike's instanced parts in three levels of detail (r3d-bike.js: opts.bikeLod = the distances at which a bike leaves one level for the next, from the quality tier) */
   /* ---- the skinned riders ---- */
   const boneData=new Float32Array(n*NB*12), boneTex=new THREE.DataTexture(boneData,NB*3,n,THREE.RGBAFormat,THREE.FloatType);
   boneTex.minFilter=boneTex.magFilter=THREE.NearestFilter; boneTex.generateMipmaps=false; boneTex.needsUpdate=true;

@@ -44,8 +44,10 @@ const GL=typeof window!=="undefined"?window:globalThis;
 const MX=GL.MXWar;
 const G=9.81, PI=Math.PI, GRATE=0.16;
 
+/* WebGL2 is required (the riders' GPU skinning reads bone matrices with texelFetch from a float data texture, the dirt and the post chain use half-float targets): a WebGL1-only device runs the 2D track instead.
+   ?gl=0 in the page's address forces that fallback (tests, a device that misbehaves). */
 export function supported(){
-  try{ const c=document.createElement("canvas"); return !!(GL.WebGLRenderingContext&&(c.getContext("webgl2")||c.getContext("webgl"))); }catch(e){ return false; }
+  try{ if(/[?&]gl=0(&|$)/.test(GL.location.search)) return false; const c=document.createElement("canvas"); return !!(GL.WebGL2RenderingContext&&c.getContext("webgl2")); }catch(e){ return false; }
 }
 
 export function create(host,hooks){
@@ -89,7 +91,8 @@ export function create(host,hooks){
     get W(){ return W; }, get H(){ return H; },
     /* read-only views for the cameras' own needs: the per-rider state (lean, pitch, stance), the riders' and the particles' meshes (the replay
        draws copies of them from recorded frames), the flag, a finished race, a TV screen */
-    get st(){ return RST; }, get R(){ return R; }, get FX(){ return FX; }, get flag(){ return flag; }, get finished(){ return finished; }, get tv(){ return tv(); }};
+    get st(){ return RST; }, get R(){ return R; }, get FX(){ return FX; }, get flag(){ return flag; }, get finished(){ return finished; }, get tv(){ return tv(); },
+    get replayOK(){ return QUAL.options(LO).replay!==false; }};   /* the replay ring is about 30 MB: not on the FIRE TV tier (r3d-quality.js, flag replay) */
   const CAMS=createCams(VIEW);
   /* the camera presets for the remote / phone button (game.js calls these; nothing here changes the race): V.camModes() -> [{id, name}], V.camMode(id?) -> the mode (sets it when given),
      V.camNext() -> the next mode, V.camReplay() -> true when a replay started (a slow-motion replay of the last few seconds, drawn from recorded frames: render time only), V.camState() -> {mode, shot, replay, replays, rec, recMB} (the HUD shows a REPLAY badge while replay is true) */

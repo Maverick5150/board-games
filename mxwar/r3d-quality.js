@@ -61,7 +61,7 @@ export const TIERS={
     fx:{particles:160,scale:1},
     crowd:{detail:0.35,anim:false},
     scenery:{trees:0.4,terrain:0.5},
-    riders:{full:4,mid:6,near:14,far:40},
+    riders:{full:4,mid:6,near:14,far:40},riderHi:3,bikeLod:[8],dirtTier:"lo",replay:false,
     tex:{max:512,aniso:1,budgetMB:24},
     budget:{calls:46,tris:110000,geoMB:6}},
   balanced:{id:"balanced",rank:1,label:"BALANCED",aliases:["medium","mid"],fps:60,fpsTV:30,lo:false,msaa:true,
@@ -73,7 +73,7 @@ export const TIERS={
     fx:{particles:360,scale:1},
     crowd:{detail:0.7,anim:false},
     scenery:{trees:0.7,terrain:0.8},
-    riders:{full:8,mid:8,near:22,far:60},
+    riders:{full:8,mid:8,near:22,far:60},riderHi:6,bikeLod:[7,30],dirtTier:"hi",replay:true,
     tex:{max:1024,aniso:4,budgetMB:48},
     budget:{calls:60,tris:200000,geoMB:10}},
   high:{id:"high",rank:2,label:"HIGH",aliases:[],fps:60,fpsTV:60,lo:false,msaa:true,
@@ -85,7 +85,7 @@ export const TIERS={
     fx:{particles:520,scale:1},
     crowd:{detail:1,anim:true},
     scenery:{trees:1,terrain:1},
-    riders:{full:12,mid:10,near:30,far:80},
+    riders:{full:12,mid:10,near:30,far:80},riderHi:8,bikeLod:[9.5,36],dirtTier:"hi",replay:true,
     tex:{max:1024,aniso:8,budgetMB:96},
     budget:{calls:90,tris:350000,geoMB:16}},
   ultra:{id:"ultra",rank:3,label:"ULTRA",aliases:["max"],fps:60,fpsTV:60,lo:false,msaa:true,
@@ -97,7 +97,7 @@ export const TIERS={
     fx:{particles:900,scale:1},
     crowd:{detail:1,anim:true},
     scenery:{trees:1,terrain:1},
-    riders:{full:22,mid:0,near:60,far:120},
+    riders:{full:22,mid:0,near:60,far:120},riderHi:12,bikeLod:[12,45],dirtTier:"hi",replay:true,
     tex:{max:2048,aniso:16,budgetMB:192},
     budget:{calls:140,tris:600000,geoMB:32}}
 };
@@ -360,7 +360,7 @@ export function createQuality(env){
   Q.options=function(LO){
     const e=LO?TIERS.firetv:tier;
     return {lo:!!(LO||e.lo),tier:e.id,rank:e.rank,label:e.label,shadow:e.shadow,post:e.post,fog:e.fog,fx:e.fx,crowd:e.crowd,scenery:e.scenery,riders:e.riders,tex:e.tex,res:e.res,budget:e.budget,
-      particles:e.fx.particles,texMax:e.tex.max,aniso:e.tex.aniso,crowdDetail:e.crowd.detail,crowdAnim:e.crowd.anim,trees:e.scenery.trees,terrainDetail:e.scenery.terrain,riderLod:e.riders,
+      particles:e.fx.particles,texMax:e.tex.max,aniso:e.tex.aniso,crowdDetail:e.crowd.detail,crowdAnim:e.crowd.anim,trees:e.scenery.trees,terrainDetail:e.scenery.terrain,riderLod:e.riders,riderHi:e.riderHi,bikeLod:e.bikeLod,dirtTier:e.dirtTier,replay:e.replay!==false,
       live:live,key:e.id+(LO?"+lo":"")};
   };
   /* what makes a world new for the cache: the tier's build flags (a tier switch rebuilds the world on the next race) */

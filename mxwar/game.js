@@ -680,7 +680,7 @@ function track(){ if(!TRK&&MX.Track){ try{ TRK=MX.Track.create($("lane")); windo
    module support (the dynamic import is built at run time, so an old engine can't fail to parse this file), or a lost GPU context falls
    back to the 2D track; the setup's Race view = 2D chooses it on purpose. */
 var V3=null, v3state="off";
-function webgl(){ try{ var c=document.createElement("canvas"); return !!(window.WebGLRenderingContext&&(c.getContext("webgl2")||c.getContext("webgl"))); }catch(e){ return false; } }
+function webgl(){ try{ if(/[?&]gl=0(&|$)/.test(location.search)) return false; var c=document.createElement("canvas"); return !!(window.WebGL2RenderingContext&&c.getContext("webgl2")); }catch(e){ return false; } }   /* the 3D race needs WebGL2 (race3d.js supported()); ?gl=0 forces the 2D track */
 function use3D(){ return v3state==="on"&&!!V3&&!V3.lost&&cfg.view!=="2d"; }
 function load3D(){
   if(v3state!=="off"||cfg.view==="2d") return;
@@ -760,6 +760,7 @@ function trackRiders(){
     try{
       V3.setRace({series:G.series,year:G.year,round:c3.n||(G.ri+1),cal:c3,len:rc.o.len,lapT:(G.round&&G.round.lapT)||0,riders:rc.r.map(function(p,s){ var R=G.riders[seatId(s)], m=A.mk(R.bike); return {s:s,color:m[0],accent:m[0]==="#f2f4f8"?"#183a8c":(m[1]==="#0b0a12"?"#16161c":"#f2f2f6"),num:R.plate,name:R.name,red:R.id===red3,me:R.kind==="human"}; })});
     }catch(e){ try{ console.warn("mxwar: 3D race",e); }catch(x){} v3state="failed"; mode3D(); ui.trkKey=null; renderRace(); return; }
+    if(V3.warm){ try{ V3.warm(); }catch(e){} }   /* compile every shader of the new race now, while the gate shows (a weak GPU would hitch for seconds on the first frames) */
     ui.show=null; ui.yellowNext=null; ui.yellowOn=null; ui.lapReady=0; ui.finish3=false;
     if(rc.phase!=="gate"){ /* a race restored mid-way: the field placed by the standings at the start of this lap, riding on */
       rc.r.forEach(function(p,s){ if(p.out&&p.pk.length===0&&p.dnf) V3.markOut(s); });

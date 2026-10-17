@@ -22,7 +22,7 @@ function pnoise(x,z,p){ const xi=Math.floor(x), zi=Math.floor(z), xf=x-xi, zf=z-
 function pfbm(x,z,p,o){ let s=0, a=0.5, f=1, n=0; for(let i=0;i<o;i++){ s+=a*pnoise(x*f,z*f,p*f); n+=a; f*=2; a*=0.5; } return s/n; }
 function canvas(w,h){ const c=document.createElement("canvas"); c.width=w; c.height=h; return c; }
 let ANISO=4;   /* the renderer's best anisotropic filtering (race3d.js sets it): the dirt and the crowd stay crisp at a low angle */
-export function setAniso(a){ ANISO=Math.max(1,Math.min(8,a|0||1)); }
+export function setAniso(a){ ANISO=Math.max(1,Math.min(16,a|0||1)); }   /* (the ULTRA tier asks for 16) */
 export function getAniso(){ return ANISO; }
 function tex(c,rep){ const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.wrapS=t.wrapT=rep?THREE.RepeatWrapping:THREE.ClampToEdgeWrapping; t.anisotropy=ANISO; t.needsUpdate=true; return t; }
 /* a tangent-space normal map from a height field (wraps; strength = how steep the relief looks) */
