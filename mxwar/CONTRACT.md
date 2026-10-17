@@ -449,8 +449,8 @@ RECEIVES the key's shadow too (`L.receive(R.grp)`: the helmet's shadow on the sh
 
 ### 11.2 The post chain (`r3d-lead-post.js`, installed in `L.post` by the tier)
 
-The scene is drawn into a half-float HDR target (three.js applies no tone mapping to a target), then: **bloom** (dual filter, 4 levels, soft threshold at linear 1.05) -> ONE final pass: **depth of field** (a half-resolution gather pass, for the close camera only: the subject is the rider
-nearest the middle of the picture within 34 m, `subjectDist()` in `race3d.js`; the near field blurs fully, the far field at most 55 %, no blur in wide shots), **camera motion blur** on whatever is nearer than the subject (the dirt streaming past the lens), **height haze** (a warm dust glow near the ground,
+The scene is drawn into a half-float HDR target (three.js applies no tone mapping to a target), then: **bloom** (dual filter, 4 levels, soft threshold at linear 1.35, knee 0.45) -> ONE final pass: **depth of field** (a half-resolution gather pass, for the close camera only: the subject is the rider
+nearest the middle of the picture within 34 m, `subjectDist()` in `race3d.js`; the near field blurs fully, the far field at most 42 %, no blur in wide shots), **camera motion blur** on whatever is nearer than the subject (the dirt streaming past the lens), **height haze** (a warm dust glow near the ground,
 cool air above, added light) and a **sky glow** over the horizon, the bloom, **ACES filmic** tone mapping, a **grade** (cool blue shadows, warm gold highlights, saturation 1.02, an S-curve 0.62), a **vignette**, **film grain** (24 per second, hashed from the clock: deterministic in the harness) and **FXAA** inside the same pass
 (on edges only, averaged in a tone-compressed space so a 30x-bright light still blends), then sRGB. SMAA (three passes, the best edges) is available as `aa: "smaa"`. NaN / Inf from any shader is clamped away. A cut (the camera jumps more than 2 m) snaps the focus and drops the motion blur for that frame.
 The targets follow the DRAWING-BUFFER size every frame (the adaptive pixel-ratio ladder changes it behind our back: the chain rebuilds its targets). `postSupported(renderer)` (WebGL2 + a float colour buffer) gates the whole chain: no support = the plain frame.
@@ -490,7 +490,7 @@ Materials made with the kit take the tier that is current when `buildWorld` / `c
 
 ### 11.6 HDR conventions every specialist needs
 
-- Everything is drawn in linear HDR and tone-mapped at the end: a light that should GLOW must output more than 1.2 in linear (a sprite's colour times 3, a `MeshBasicMaterial` colour `setRGB(4, 4, 3.6)`); bloom starts at 1.05 with a soft knee of 0.4. White blocks and plates under the key reach about 1.4: they bloom a little (the lane blocks look neon: make them greyer).
+- Everything is drawn in linear HDR and tone-mapped at the end: a light that should GLOW must output more than 1.2 in linear (a sprite's colour times 3, a `MeshBasicMaterial` colour `setRGB(4, 4, 3.6)`); bloom starts at 1.35 with a soft knee of 0.45. White blocks and plates under the key reach about 1.4-1.7: they still glow a little (the lane blocks look neon: make them greyer). A light sprite that is not HDR-aware (peak at most 1.0, like the stadium's star sprites of the first merge) will not bloom: multiply its colour by 2-3.
   The light-bank glows that existed before (colour at most 1.05) are scaled x2 by `L.apply`, once (`material.userData.hdr` marks a material that is already HDR-aware).
 - A shader that outputs NaN or Inf (for example `pow(x, 1.6)` with x slightly below 0: the stadium's light beams do) is clamped to 0 in the chain (Direct3D drops a NaN in `min` / `max`; `isnan()` is folded away by its compiler and warns X3577).
 - Do not rely on `renderer.toneMapping` with the chain on: three.js ignores it for targets; `renderer.toneMappingExposure` is read by the final pass.
