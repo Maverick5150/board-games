@@ -59,6 +59,9 @@ function atlasMat(T,cols,rows,opts){
 const SKIN_DECL=`
 attribute vec4 aSkin; attribute vec3 aFx; attribute vec4 aInstA; attribute vec4 aInstB; attribute vec4 aInstC;
 uniform highp sampler2D uBones; uniform float uTime;
+#ifdef MX_WRINKLE
+varying vec3 vMxP; varying float vMxK;
+#endif
 void mxRows(out vec4 R0,out vec4 R1,out vec4 R2){
   int row=int(aInstA.x+0.5), b0=int(aSkin.x+0.5)*3, b1=int(aSkin.y+0.5)*3;
   vec4 a0=texelFetch(uBones,ivec2(b0,row),0), a1=texelFetch(uBones,ivec2(b0+1,row),0), a2=texelFetch(uBones,ivec2(b0+2,row),0);
@@ -82,6 +85,9 @@ const SKIN_POS=`
 #endif
 vec4 mxP=vec4(position,1.0);
 vec3 transformed=vec3(dot(mxR0,mxP),dot(mxR1,mxP),dot(mxR2,mxP));
+#ifdef MX_WRINKLE
+ vMxP=position; vMxK=clamp(0.25+aFx.y*1.4,0.0,1.0);
+#endif
 #ifdef MX_ROWS
  { float fl=aFx.y*aInstB.w; if(fl>0.0){ float ph=dot(position,vec3(41.0,53.0,29.0))+aInstA.x*2.7; transformed+=objectNormal*(fl*0.022*(0.6*sin(uTime*17.0+ph)+0.4*sin(uTime*29.0+ph*1.7))); } }
 #endif
@@ -97,6 +103,8 @@ function skinMat(mat,U,kind,opts){
   opts=opts||{};
   mat.onBeforeCompile=sh=>{
     sh.uniforms.uBones=U.uBones; sh.uniforms.uTime=U.uTime;
+    if(opts.wrinkle){ sh.vertexShader="#define MX_WRINKLE\n"+sh.vertexShader;
+      sh.fragmentShader="#define MX_WRINKLE\nvarying vec3 vMxP; varying float vMxK;\n"+sh.fragmentShader.replace("#include <color_fragment>","#include <color_fragment>\n { float w=sin(vMxP.y*46.0+2.2*sin(vMxP.x*29.0+vMxP.z*35.0))*0.55+sin(vMxP.y*83.0+vMxP.z*41.0+1.7)*0.25; diffuseColor.rgb*=1.0+0.06*w*vMxK; }"); }
     /* a rim of the rider's own colour on the edges facing away from the camera: the riders stand out of the dark stands as in a backlit cover */
     if(opts.rim){ sh.uniforms.uRim={value:opts.rim}; sh.fragmentShader="uniform float uRim;\n"+sh.fragmentShader.replace("#include <emissivemap_fragment>","#include <emissivemap_fragment>\n float mxRim=pow(1.0-clamp(dot(normalize(normal),normalize(vViewPosition)),0.0,1.0),3.0); totalEmissiveRadiance+=diffuseColor.rgb*mxRim*uRim;"); }
     if(opts.atlas) sh.uniforms.uGrid={value:opts.atlas};
@@ -105,7 +113,7 @@ function skinMat(mat,U,kind,opts){
     if(opts.atlas) vs=vs.replace("#include <uv_vertex>","#include <uv_vertex>\n#ifdef USE_MAP\n vMapUv=vec2((aInstC.z+uv.x)*uGrid.x,1.0-(aInstC.w+1.0-uv.y)*uGrid.y);\n#endif");
     sh.vertexShader=vs;
   };
-  mat.customProgramCacheKey=()=>"mx-skin-"+kind+(opts.atlas?"-atlas":"")+(opts.rim?"-rim":"");
+  mat.customProgramCacheKey=()=>"mx-skin-"+kind+"-"+(opts.tag||"")+(opts.atlas?"-atlas":"")+(opts.rim?"-rim":"")+(opts.wrinkle?"-wr":"");   /* (a key of its own per material: three.js only calls onBeforeCompile for a program it has not built yet, so a second material with the same key would never get its uniforms) */
   return mat;
 }
 /* an instanced geometry (a plain Mesh drawn instanced: no instance matrix) over a source geometry, sharing the per-instance attributes */
@@ -128,11 +136,11 @@ export function createRiders(list,opts){
   const U={uBones:{value:boneTex},uTime:{value:0}};
   const hiModel=buildRider(1), loModel=buildRider(0);
   const hiInst=instAttrs(n), loInst=instAttrs(n);
-  const cloth=skinMat(lo?new THREE.MeshLambertMaterial({vertexColors:true}):new THREE.MeshPhongMaterial({vertexColors:true,shininess:22,specular:0x262626}),U,"main",{rim:lo?0:0.34});
-  const shell=skinMat(lo?new THREE.MeshLambertMaterial({vertexColors:true}):new THREE.MeshPhongMaterial({vertexColors:true,shininess:120,specular:0x9a9a9a}),U,"main",{rim:lo?0:0.22});
-  const decal=skinMat(new THREE.MeshLambertMaterial({map:A.tex,vertexColors:true,alphaTest:0.4}),U,"main",{atlas:new THREE.Vector2(1/A.cols,1/A.rows)});
-  const depth=skinMat(new THREE.MeshDepthMaterial({depthPacking:THREE.RGBADepthPacking}),U,"depth");
-  cloth.addEventListener("dispose",()=>{ boneTex.dispose(); });
+  const cloth=skinMat(lo?new THREE.MeshLambertMaterial({vertexColors:true}):new THREE.MeshPhongMaterial({vertexColors:true,shininess:22,specular:0x262626}),U,"main",{tag:"cloth",rim:lo?0:0.34,wrinkle:!lo});
+  const shell=skinMat(lo?new THREE.MeshLambertMaterial({vertexColors:true}):new THREE.MeshPhongMaterial({vertexColors:true,shininess:120,specular:0x9a9a9a}),U,"main",{tag:"shell",rim:lo?0:0.22});
+  const decal=skinMat(new THREE.MeshLambertMaterial({map:A.tex,vertexColors:true,alphaTest:0.4}),U,"main",{tag:"decal",atlas:new THREE.Vector2(1/A.cols,1/A.rows)});
+  const depth=skinMat(new THREE.MeshDepthMaterial({depthPacking:THREE.RGBADepthPacking}),U,"depth",{tag:"shadow"});
+  cloth.addEventListener("dispose",()=>{ boneTex.dispose(); depth.dispose(); });   /* (the bone texture and the shadow pass material are not reached by a tree walk) */
   const part=(geo,mat,shadow,order)=>{ const m=new THREE.Mesh(geo,mat); m.frustumCulled=false; m.castShadow=!!shadow; if(shadow) m.customDepthMaterial=depth; if(order) m.renderOrder=order; grp.add(m); return m; };
   const S={hiBody:part(instGeo(hiModel.body,hiInst),cloth,true), hiHelmet:part(instGeo(hiModel.helmet,hiInst),shell,true), hiBack:part(instGeo(hiModel.back,hiInst),decal,false), loBody:part(instGeo(loModel.body,loInst),cloth,true)};
   /* plates (3 a bike) use the atlas */
@@ -167,7 +175,7 @@ export function createRiders(list,opts){
     vertexShader:"attribute vec2 aCell; uniform vec2 uGrid; varying vec2 vUv; void main(){ vUv=vec2((aCell.x+uv.x)*uGrid.x,1.0-(aCell.y+1.0-uv.y)*uGrid.y); vec4 c=modelViewMatrix*instanceMatrix*vec4(0.,0.,0.,1.); float s=length(instanceMatrix[0].xyz); c.xyz+=normalize(-c.xyz)*min(1.8,0.25*length(c.xyz)); c.xy+=position.xy*s; gl_Position=projectionMatrix*c; }",
     fragmentShader:"uniform sampler2D map; varying vec2 vUv; void main(){ vec4 t=texture2D(map,vUv); if(t.a<0.05) discard; gl_FragColor=t; }"});
   M.tag=new THREE.InstancedMesh(tagG,tagMat,n); M.tag.frustumCulled=false; M.tag.renderOrder=20; grp.add(M.tag);
-  const R={grp,M,A,n,list,S,hidden:new Uint8Array(n),vis:new Uint8Array(n),pos:new Float32Array(n*3),team,acc,cell,style,wind:new Float32Array(n),mud:new Float32Array(n),
+  const R={grp,M,A,n,list,S,hidden:new Uint8Array(n),vis:new Uint8Array(n),pos:new Float32Array(n*3),team,acc,cell,style,me:list.map(r=>!!r.me),wind:new Float32Array(n),mud:new Float32Array(n),
     rig:list.map((r,i)=>newRig(i)),bones:boneData,boneTex,U,hiInst,loInst,nHi:Math.max(0,opts.riderHi!=null?opts.riderHi:(lo?3:8)),dt:1/60,t:0,order:[],lod:new Int8Array(n),stats:{hi:0,lo:0,tris:hiModel.tris}};
   /* scratch */
   R._m=new THREE.Matrix4(); R._q=new THREE.Quaternion(); R._e=new THREE.Euler(0,0,0,"YZX"); R._v=new THREE.Vector3(); R._s=new THREE.Vector3(1,1,1);
@@ -207,10 +215,18 @@ export function commit(R,cam,dt){
   const M=R.M; Object.keys(M).forEach(k=>{ if(M[k].instanceMatrix) M[k].instanceMatrix.needsUpdate=true; });
   if(M.shadow.instanceColor) M.shadow.instanceColor.needsUpdate=true;
   R.dt=dt>=1/240?Math.min(0.05,dt):0; if(dt>0){ R.t+=dt; R.U.uTime.value=R.t%1000; }
-  const n=R.n, order=R.order; order.length=0;
-  const cx=cam?cam.position.x:0, cy=cam?cam.position.y:0, cz=cam?cam.position.z:0, P=R.pos;
-  for(let i=0;i<n;i++) if(R.vis[i]){ const dx=P[i*3]-cx, dy=P[i*3+1]-cy, dz=P[i*3+2]-cz; order.push(i,dx*dx+dy*dy+dz*dz); }
-  /* sort the (index, distance) pairs by distance (n is at most 40) */
+  const n=R.n, order=R.order, P=R.pos; order.length=0;
+  /* who gets the full model: the riders IN VIEW, the nearest first by depth (a rider behind the lens or off the screen is the last to be chosen, the person's own rider is favoured) */
+  const mi=cam?cam.matrixWorldInverse.elements:null, pj=cam?cam.projectionMatrix.elements:null;
+  for(let i=0;i<n;i++) if(R.vis[i]){
+    let score=0;
+    if(mi){ const x=P[i*3], y=P[i*3+1], z=P[i*3+2], vz=mi[2]*x+mi[6]*y+mi[10]*z+mi[14];
+      if(vz<-0.2){ const vx=mi[0]*x+mi[4]*y+mi[8]*z+mi[12], vy=mi[1]*x+mi[5]*y+mi[9]*z+mi[13], k=1/(-vz), nx=vx*pj[0]*k, ny=vy*pj[5]*k; score=(Math.abs(nx)<1.3&&Math.abs(ny)<1.6)?-vz:1e3-vz; }
+      else score=1e4-vz; }
+    else score=i;
+    if(R.me[i]) score*=0.3;
+    order.push(i,score); }
+  /* sort the (index, score) pairs by score (n is at most 40) */
   const k=order.length/2, idx=[]; for(let j=0;j<k;j++) idx.push(j); idx.sort((a,b)=>order[a*2+1]-order[b*2+1]);
   const H=R.hiInst, L=R.loInst; let nh=0, nl=0;
   for(let q=0;q<k;q++){ const i=order[idx[q]*2], hi=q<R.nHi, I=hi?H:L, s=hi?nh++:nl++;

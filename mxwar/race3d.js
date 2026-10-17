@@ -467,7 +467,7 @@ export function create(host,hooks){
     // [/hook:bike]
     // [hook:rider]
     /* extra pose inputs for the rider (read by r3d-riders.js poseRider): st.stand 0..1, st.dab -1..1, st.crouch, st.lean; the bike's own acceleration is measured from the matrix there */
-    st.mud=st.mud+(1-st.mud)*Math.min(1,dt*0.012);   /* the riders get dirtier through the race (time constant about 80 s): the skinned riders' shader browns the boots, legs, gloves and chest */
+    st.mud=st.mud+(1-st.mud)*Math.min(1,dt*0.02);   /* the riders get dirtier through the race (time constant about 50 s): the skinned riders' shader browns the boots, legs, gloves and chest */
     // [/hook:rider]
     poseRider(R,i,BW,st);   /* the bike, then the rider on it (r3d-riders.js, r3d-bike.js) */
     const gl=onStart?0:(MX.Course.ground(C,s,lat+0.5)-MX.Course.ground(C,s,lat-0.5));
