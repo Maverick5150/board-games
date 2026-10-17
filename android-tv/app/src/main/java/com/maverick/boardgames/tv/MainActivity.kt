@@ -197,7 +197,8 @@ class MainActivity : Activity() {
     /** speak one line (on the JavaBridge thread): the speaker's voice, rate and pitch, then queue it under its own id */
     private fun speakLine(text: String?, who: String?, rate: Float, pitch: Float, flush: Boolean): String {
         val t = tts ?: return ""
-        if (!ttsOk || destroyed || text.isNullOrBlank()) return ""
+        val tx = (text ?: "").trim()
+        if (!ttsOk || destroyed || tx.isEmpty()) return ""
         return try {
             val v = if (who == "b") (voiceB ?: voiceA) else voiceA
             if (v != null && v.name != voiceNow && t.setVoice(v) == TextToSpeech.SUCCESS) voiceNow = v.name
@@ -208,7 +209,7 @@ class MainActivity : Activity() {
             val params = Bundle()
             params.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, ttsVol)
             val mode = if (flush) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
-            if (t.speak(text.take(400), mode, params, id) == TextToSpeech.SUCCESS) id else ""
+            if (t.speak(tx.take(400), mode, params, id) == TextToSpeech.SUCCESS) id else ""
         } catch (e: Exception) {
             ""
         }
