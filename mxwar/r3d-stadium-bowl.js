@@ -103,10 +103,10 @@ float rnd(uvec2 p,uint k){ return float(pcg(p.x*1973u+p.y*9277u+k*26699u+1u))*(1
     sampled.rgb*=(0.55+0.35*r3)*(0.78+0.34*blk);
 #ifdef FANCY
     float tt=uTime*1.7+r2*137.0; uint ti=uint(floor(tt)); float kk=fract(tt);
-    float fon=step(0.9965,rnd(ui,ti+31u));
+    float fon=step(0.994,rnd(ui,ti+31u));
     vec2 hp=(f-vec2(0.5,0.78))*vec2(0.55,0.85);
-    float fl2=fon*exp(-kk*7.0)*smoothstep(0.17,0.0,length(hp))*(1.0-smoothstep(0.25,0.7,fw));
-    sampled.rgb+=vec3(1.0,0.96,0.85)*fl2*5.0;
+    float fl2=fon*exp(-kk*6.0)*smoothstep(0.24,0.0,length(hp))*(1.0-smoothstep(0.3,0.9,fw));
+    sampled.rgb+=vec3(1.0,0.96,0.85)*fl2*9.0;
 #endif
   }
   diffuseColor*=sampled;
@@ -254,10 +254,10 @@ export function stadium(C,look,q,root,ctx){
   if(dome){ const rr=Math.max(W,D)/2+80, roof=new THREE.Mesh(new THREE.SphereGeometry(rr,24,10,0,Math.PI*2,0,Math.PI*0.32),new THREE.MeshLambertMaterial({color:0x1a1a22,side:THREE.BackSide})); roof.scale.set(1,0.35,(D/2+80)/rr); roof.position.set(cx,20,cz); root.add(roof); }
   /* ---- haze: a soft cone of light from every bank toward the floor (a stadium night under the lights) ---- */
   if(hazeOn&&!dome){
-    const g=new THREE.CylinderGeometry(0.9,9,1,16,1,true); g.translate(0,-0.5,0);
+    const g=new THREE.CylinderGeometry(1.0,12,1,16,1,true); g.translate(0,-0.5,0);
     const mat=new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,fog:false,uniforms:{col:{value:new THREE.Color(0xfff0d0)}},
       vertexShader:"varying float vF; varying float vE; void main(){ vF=1.0+position.y; vec4 mv=modelViewMatrix*instanceMatrix*vec4(position,1.0); vec3 n=normalize(mat3(modelViewMatrix*instanceMatrix)*normal); vE=abs(dot(n,normalize(-mv.xyz))); gl_Position=projectionMatrix*mv; }",
-      fragmentShader:"uniform vec3 col; varying float vF; varying float vE; void main(){ float a=0.06*pow(vF,1.5)*pow(vE,1.3); gl_FragColor=vec4(col*a,a);\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}"});
+      fragmentShader:"uniform vec3 col; varying float vF; varying float vE; void main(){ float a=0.085*pow(vF,1.4)*pow(vE,1.3); gl_FragColor=vec4(col*a,a);\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}"});
     const n=Math.min(nTow,8), m=new THREE.InstancedMesh(g,mat,n), M=new THREE.Matrix4(), Q=new THREE.Quaternion(), up=new THREE.Vector3(0,-1,0), d=new THREE.Vector3(), pos=new THREE.Vector3(), sc=new THREE.Vector3(), cones=[];
     for(let i=0;i<n;i++){ const p=ring.pts[Math.floor(((i+0.5)/n+0.037)*segs)%segs]; cones.push({x:p.x+p.nx*(PR.rim[0]-1),y:PR.cap[3]+14,z:p.z+p.nz*(PR.rim[0]-1),tx:cx+(((i*37)%11)/11-0.5)*W*0.6,tz:cz+(((i*53)%7)/7-0.5)*D*0.5,ph:i*1.7}); }
     sweep=(tw)=>{ cones.forEach((c,i)=>{ pos.set(c.x,c.y,c.z); d.set(c.tx+Math.sin(tw*0.21+c.ph)*16-pos.x,0.2-pos.y,c.tz+Math.cos(tw*0.17+c.ph*1.3)*9-pos.z); const len=d.length(); d.normalize(); Q.setFromUnitVectors(up,d); sc.set(1,len,1); M.compose(pos,Q,sc); m.setMatrixAt(i,M); }); m.instanceMatrix.needsUpdate=true; };
@@ -278,7 +278,7 @@ export function stadium(C,look,q,root,ctx){
   ctx.screen=function(lap,len,num){ board.lap=lap|0; board.len=len|0; if(num!=null) board.num=num; if(!lap) board.T=null; board.dirty=true; redraw(); };
   ctx.screen(0,0,null);
   /* the night sky and the haze of a big night */
-  ctx.sky(0x04060e,0x0d1330,0x1c2038);
+  ctx.sky(0x04060e,0x101838,0x26253f);
   ctx.fog(0x141a2e,140,600);
   /* per frame: the clock of the shaders, the ribbon's scroll, the board's clock */
   function frame(dt,tw,cam,T,lap,len,num){

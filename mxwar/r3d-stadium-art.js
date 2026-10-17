@@ -169,10 +169,12 @@ export function glowSheet(){
 export const PROPS={w:1024,h:512,white:[0,480,32,32],gate:[0,32,1024,96],finish:[0,128,1024,96],ban:[[0,240,240,230],[256,240,240,230],[512,240,240,230],[768,240,240,230]]};
 /* the uv rectangle (u0, v0, u1, v1) of a region of the props texture (v up) */
 export function propsUV(r){ return [r[0]/PROPS.w,1-(r[1]+r[3])/PROPS.h,(r[0]+r[2])/PROPS.w,1-r[1]/PROPS.h]; }
-let PTEX=null;
+/* Reduce effects (the Stick): the props texture is drawn at half size (the art is laid out in 1024 x 512 design units) */
+function loMode(){ try{ const d=document.documentElement; return d.getAttribute("data-effects")==="reduced"||d.getAttribute("data-motion")==="reduce"; }catch(e){ return false; } }
+const PTEX=[null,null];
 export function propsTex(){
-  if(PTEX) return PTEX;
-  const c=canvas(PROPS.w,PROPS.h), x=c.getContext("2d"), B=BRAND, R=rngf(88);
+  const lo=loMode()?1:0; if(PTEX[lo]) return PTEX[lo];
+  const sc=lo?0.5:1, c=canvas(PROPS.w*sc,PROPS.h*sc), x=c.getContext("2d"), B=BRAND, R=rngf(88); x.scale(sc,sc);
   x.fillStyle="#ffffff"; x.fillRect(0,0,PROPS.w,PROPS.h);   /* white everywhere but the art: the plain steel samples it (uv 0,0 is its bottom-left corner) */
   /* the gate banner: war red with the black slash, MOTOCROSS WAR, the gold START */
   let r=PROPS.gate; x.save(); x.beginPath(); x.rect(r[0],r[1],r[2],r[3]); x.clip(); x.translate(r[0],r[1]);
@@ -199,5 +201,5 @@ export function propsTex(){
     else if(k===2){ words(x,"ACE",60,64,56,B.night,null,0.18,null,112); words(x,"HIGH",60,122,48,B.red,B.white,0.18,null,112); x.fillStyle=B.night; x.fillRect(10,160,100,4); words(x,"MOTOCROSS WAR",60,192,13,B.night,null,0.2,null,110); }
     else { for(let i=0;i<8;i++) for(let j=0;j<4;j++){ x.fillStyle=(i+j)%2?B.night:B.white; x.fillRect(i*15,j*15,15,15); x.fillRect(i*15,170+j*15,15,15); } words(x,"DOUBLE",60,86,30,B.red,B.night,0.18,null,112); words(x,"WAR",60,132,48,B.night,B.red,0.18,null,112); }
     worn(x,120,230,R,26,"#1c120c"); x.restore(); });
-  const t=tex(c,false); t.anisotropy=getAniso(); PTEX=t; return t;
+  const t=tex(c,false); t.anisotropy=getAniso(); PTEX[lo]=t; return t;
 }

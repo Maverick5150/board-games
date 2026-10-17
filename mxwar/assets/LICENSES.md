@@ -24,6 +24,9 @@ Add your lines between your heading and its end marker only (this keeps the role
 <!-- end dirt -->
 
 ## stadium
+- No third-party texture, model, font or photo is used by the stadium: every texture (the two crowd atlases of 64 little people, the ad boards, the LED ribbon, the suites' windows, the video boards, the gate / finish / hanging banners, the glow and starburst sprites) is drawn in code at build time
+  (`mxwar/r3d-stadium-art.js`), every model is plain geometry (`r3d-stadium-bowl.js`, `r3d-world.js`). The writing on the boards is plain words of the game (MOTOCROSS WAR, FULL SEND, DOUBLE WAR, ACE HIGH, HOLESHOT, MAIN EVENT, START, FINISH,
+  lap numbers, the leader's number, the race clock) in the brand palette (war red, stadium gold, hud white, night black). No real sponsor, logo, brand, venue or person.
 <!-- end stadium -->
 
 ## bike
