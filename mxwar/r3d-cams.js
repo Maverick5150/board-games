@@ -602,7 +602,7 @@ export function createCams(VIEW){
   }
   /* auto replay: the person's own crash, once the live crash shot has run most of its course; on demand: the last few seconds of the person's rider (or the leader) */
   function replayAuto(){
-    if(mode!=="auto"||RP||VIEW.mode!=="race"||!REC||!REC.Q.length) return;
+    if(mode!=="auto"||RP||VIEW.mode!=="race"||VIEW.finished||VIEW.lapNo>=VIEW.lenLaps||!REC||!REC.Q.length) return;   /* never over the last lap and the flag */
     VIEW.rs.forEach((r,i)=>{ const c=r.crash; if(!c||VIEW.meSeats.indexOf(r.seat)<0||replayed.has(c.T)) return;
       if(VIEW.T-c.T>5.4&&REC.Q[0].T<=c.T-1.2){ replayed.add(c.T); replayStart({subj:i,ev:c.T+0.35}); } });
   }
