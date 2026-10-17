@@ -31,8 +31,10 @@ var LEN={short:{heat:15,semi:12,lcq:12,main:40,moto:30},standard:{heat:30,semi:2
    - MODES: "real" (the default: the year's real race length) and "half" (half the race time, or half the laps; still real lap speed).
      Old saves: short -> half, standard / long -> real (MODE_OF).
    - A race is either timed (min minutes + plus laps: the clock runs out, the leader finishes the lap he is on, then the extra laps) or a lap
-     count (laps). Laps of a timed race = floor(minutes x 60 / the track's lap time) + plus (a 20 min + 1 lap Main on a 55 s track = 22
-     laps; a heat of 6 min + 1 lap = 7; a moto of 30 min + 2 laps on a 2:05 track = 16).
+     count (laps). Laps of a timed race = ceil(minutes x 60 / the track's lap time) + plus (review fix, task2: the lap on when the clock runs
+     out is finished, so it counts; the researched 2003-2026 motos, BG_audit/games/mxwar/data: 475 of 542 ran exactly ceil(30 min / their
+     average lap) + 2, only 8 floor + 2): a 20 min + 1 lap Main on a 55 s track = 23 laps; a heat of 6 min + 1 lap = 8; a moto of 30 min
+     + 2 laps on a 2:05 track = 17. RG.lv = 2 marks a round counted this way (an older save's races still to run are counted again).
    - REAL: by format id (BG_audit/games/mxwar/data/formats*.json); "inf" = not documented for that era, so the nearest documented era's
      length. Supercross: 2016 heats 6 laps / semis 5 / LCQ about 4 / Main 20 laps; 2017 timed for the first time (heats 5 min + 1, semis
      4 + 1, LCQ 3 + 1, Main 20 + 1); 2018-2026 heats 6 + 1, LCQ 5 + 1, Main 20 + 1, Triple Crown mains 2018 8 / 12 / 15 + 1, 2019
@@ -89,7 +91,7 @@ function lapsFor(spec,mode,lapS){
   var half=MODE_OF[mode]==="half";
   if(spec.laps) return Math.max(2,half?Math.ceil(spec.laps/2):spec.laps);
   var sec=spec.min*60*(half?0.5:1);
-  return Math.max(2,Math.floor(sec/Math.max(20,lapS||55))+spec.plus);
+  return Math.max(2,Math.ceil(sec/Math.max(20,lapS||55)-1e-9)+spec.plus);
 }
 function raceLen(F,kind,i,o,lapS,year){
   var L=lapsFor(realSpec(F,kind,i,year),o&&o.length,lapS);
@@ -119,7 +121,7 @@ function lengths(o,F,lapS,year){ var out={}, kinds=["heat","semi","lcq","qual","
 function newRound(F,ri,entry,o,team,meta){
   meta=meta||{};
   var lapS=meta.lapS>0?Math.round(meta.lapS):lapTime(meta.series||(/^mx-/.test(F.id)?"mx":"sx"),meta.year,meta.cal);
-  var RG={ri:ri,fmt:F.id,tc:!!F.isTC,F:F,entry:entry.slice(),races:[],cur:0,send:[],main:[],elim:[],fin:null,done:false,res:null,lapS:lapS,mode:MODE_OF[o&&o.length]||"real",year:meta.year|0};
+  var RG={ri:ri,fmt:F.id,tc:!!F.isTC,F:F,entry:entry.slice(),races:[],cur:0,send:[],main:[],elim:[],fin:null,done:false,res:null,lapS:lapS,mode:MODE_OF[o&&o.length]||"real",year:meta.year|0,lv:2};
   /* the CEO (~18:25): "at the start of the heat races, there has to be an equal amount of teams": team = {riderId: make} balances the
      first stage's races by team (season.js passes it; without it the plain odd / even seed split, as qualifying splits them) */
   if(team&&typeof team==="object"){ RG.team={}; entry.forEach(function(id){ RG.team[id]=String(team[id]||"Privateer"); }); }
@@ -281,13 +283,15 @@ function score(RG,title){
   return {cls:cls,pts:pts,wins:wins,places:places,finals:mot,hs:hs,winner:ov[0],title:!!title,main:RG.fin.slice()};
 }
 
-/* an old save (v1 / v2 battle lengths, no lap time): the races still to run get their real length; returns the round's lap time */
+/* an old save: v1 / v2 battle lengths (no lap time): the round gets its lap time; v1 / v2 and mxlaps (lv < 2: timed races counted one lap
+   short) alike: the races still to run get their real length (lv 2); returns the round's lap time. Idempotent. */
 function upgrade(RG,o,meta){
   if(!RG) return 0;
-  if(RG.lapS>0) return RG.lapS;
+  if(RG.lapS>0&&RG.lv>=2) return RG.lapS;
   meta=meta||{}; var F=RG.F;
-  RG.lapS=meta.lapS>0?Math.round(meta.lapS):lapTime(meta.series||(/^mx-/.test(F.id)?"mx":"sx"),meta.year,meta.cal); RG.mode=MODE_OF[o&&o.length]||"real"; RG.year=meta.year|0;
+  if(!(RG.lapS>0)){ RG.lapS=meta.lapS>0?Math.round(meta.lapS):lapTime(meta.series||(/^mx-/.test(F.id)?"mx":"sx"),meta.year,meta.cal); RG.mode=MODE_OF[o&&o.length]||"real"; RG.year=meta.year|0; }
   RG.races.forEach(function(r){ if(!r.res) r.len=raceLen(F,r.kind,r.i,o,RG.lapS,RG.year); });
+  RG.lv=2;
   return RG.lapS;
 }
 MX.Round={LEN:LEN,MODE_OF:MODE_OF,REAL:REAL,realSpec:realSpec,lapTime:lapTime,lapsFor:lapsFor,raceLen:raceLen,upgrade:upgrade,teamSplit:teamSplit,formatFor:formatFor,fieldSize:fieldSize,lengths:lengths,newRound:newRound,current:current,entrants:entrants,record:record,score:score,overall:overall};
