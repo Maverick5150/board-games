@@ -166,7 +166,7 @@ void main(){
 }`,
     fragmentShader:`uniform sampler2D map; varying vec2 vUv; varying vec3 vCol; varying float vY;
 #include <fog_pars_fragment>
-void main(){ vec4 t=texture2D(map,vUv); if(t.a<0.45) discard; gl_FragColor=vec4(t.rgb*vCol*mix(0.45,1.0,smoothstep(0.0,0.5,vY)),1.0);
+void main(){ vec4 t=texture2D(map,vUv); if(t.a<0.45) discard; gl_FragColor=vec4(t.rgb*vCol*(0.7*mix(0.45,1.0,smoothstep(0.0,0.5,vY))),1.0);
 #include <tonemapping_fragment>
 #include <colorspace_fragment>
 #include <fog_fragment>
@@ -195,13 +195,13 @@ export function stadium(C,look,q,root,ctx){
   const crowdBand=(pr,sub,shadeFn,uoff,voff)=>{ const slen=Math.hypot(pr[2]-pr[0],pr[3]-pr[1]), rows=Math.max(1,Math.round(slen/CROWD.row)), nA=44;
     loft(MC,LV,segs,pr,sub,(t,r,Uu,o)=>{ const s=shadeFn(t)*shadeAt(r); o.u=Uu/CROWD.seat+uoff; o.v=t*rows+voff; o.r=s; o.g=s*0.97; o.b=s*0.93; o.ar=1.2*CROWD.seat*nA/LV(pr[0]+(pr[2]-pr[0])*t).len; }); };
   crowdBand(PR.low1,6,t=>1.0-0.12*t,37.1,11.0);
-  crowdBand(PR.low2,6,t=>0.9-0.50*Math.pow(t,1.25),521.3,63.0);
-  crowdBand(PR.up,8,t=>0.40+0.34*t,1042.7,121.0);
+  crowdBand(PR.low2,6,t=>0.92-0.44*Math.pow(t,1.25),521.3,63.0);
+  crowdBand(PR.up,8,t=>0.46+0.36*t,1042.7,121.0);
   const atlas=crowdAtlas(lo), cm=crowdMaterial(atlas,U,fancy);
   const bowl=new THREE.Mesh(MC.geo(),cm); bowl.frustumCulled=false; root.add(bowl);
   const nCards=q.cards!=null?q.cards:(lo?0:1);
   if(nCards>0){ const cut=crowdAtlas(false,true), pl=r=>shadeAt(r); const c1=crowdCards(ring,LV,PR.low1,segs,U,cut,t=>1.0-0.12*t,pl); root.add(c1);
-    if(nCards>1) root.add(crowdCards(ring,LV,PR.low2,segs,U,cut,t=>0.9-0.50*Math.pow(t,1.25),pl)); }
+    if(nCards>1) root.add(crowdCards(ring,LV,PR.low2,segs,U,cut,t=>0.92-0.44*Math.pow(t,1.25),pl)); }
   /* ---- the structure: dark concrete, rails, the concourse, the cantilever, the roof edge, the back (vertex colours, unlit) ---- */
   const MS=Mesher(), flat=(rgb)=>(t,r,Uu,o)=>{ o.r=rgb[0]; o.g=rgb[1]; o.b=rgb[2]; };
   const conc=lin("#1d1c24"), concL=lin("#34333c"), dark=lin("#0b0b11"), navy=lin("#141b38"), steel=lin("#2a2c36");
