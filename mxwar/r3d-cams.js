@@ -151,7 +151,7 @@ export function createCams(VIEW){
      sight (the riders are in the air, not on the dirt) */
   function jumpCam(f){
     const C=VIEW.C, out=C.kind!=="stadium", lip=f.lip!=null?f.lip:f.from+3, arc=(C.arcs||[]).find(a=>Math.abs(a.a-lip)<2.5), sA=arc?arc.a+(arc.b-arc.a)*0.5:lip+(f.to-lip)*0.4;
-    for(const ds of [0,-5,5,-10,10]) for(const d of (out?[12,16,21]:[2.6,4,6,9,12,15,19])) for(const side of [1,-1]){
+    for(const ds of [0,-5,5,-10,10]) for(const d of (out?[12,16,21]:[7,9,12,15,19])) for(const side of [1,-1]){   /* at least 7 m from the lane: closer, the jump's own landing hides the flight */
       const s=sA+ds, fr=MX.Course.frame(C,s,tmpO), lat=side*(fr.hw+d), p=inFloor({x:fr.x-Math.sin(fr.th)*lat,z:fr.z+Math.cos(fr.th)*lat});
       if(clearDist(C,p.x,p.z)<(out?3.2:1.5)||blocked(p.x,p.z,0.8)) continue;
       const cc=safeCam(new THREE.Vector3(p.x,terrainAt(p.x,p.z,fr.y)+(out?2.2:0.9),p.z),0.7), le=side*fr.hw, edge=new THREE.Vector3(fr.x-Math.sin(fr.th)*le,MX.Course.ground(C,s,le)+0.4,fr.z+Math.cos(fr.th)*le);
@@ -464,7 +464,7 @@ export function createCams(VIEW){
       else { const k=4/dm; tv4.set(mp.x+(r.pos.x-mp.x)*k,mp.y+1.3,mp.z+(r.pos.z-mp.z)*k); spread=4; } }
     else if(!cr&&sh!=="gate"&&sh!=="line"){ /* the pack round him: the aim moves toward the riders within 12 m of him along the lap, the lens takes them in */
       let gx=0,gy=0,gz=0,gn=0,gd=0; rs.forEach((x,q)=>{ if(q===j||x.gone||!x.pos||x.crash) return; const dd=Math.abs(x.D-r.D); if(dd>14) return; gx+=x.pos.x; gy+=x.pos.y; gz+=x.pos.z; gn++; gd=Math.max(gd,x.pos.distanceTo(r.pos)); });
-      if(gn){ const k=Math.min(sh==="jump"||sh==="whoops"?0.2:0.5,gn*0.18); tv4.x+=(gx/gn-tv4.x)*k; tv4.y+=(gy/gn-tv4.y)*k; tv4.z+=(gz/gn-tv4.z)*k; spread=Math.min(14,gd*0.9); } }
+      if(gn){ const k=Math.min(sh==="jump"||sh==="whoops"?0.2:0.5,gn*0.18); tv4.x+=(gx/gn-tv4.x)*k; tv4.y+=(gy/gn-tv4.y)*k; tv4.z+=(gz/gn-tv4.z)*k; spread=Math.min(sh==="track"?8:14,gd*0.9); } }
     tv4.y-=0.3;
     /* the pan: a damped follower with the subject's speed fed forward (no lag behind a fast rider) */
     const lead=sh==="jump"||sh==="whoops"||sh==="corner"?0.13:0.07, th=r.th||0, vx=Math.cos(th)*(r.v||0)*lead*vel, vz=Math.sin(th)*(r.v||0)*lead*vel;
@@ -472,8 +472,9 @@ export function createCams(VIEW){
     const tau=cr?0.18:sh==="jump"||sh==="whoops"?0.1:sh==="corner"?0.12:0.2;
     T.set(K.tx.step(tv4.x+vx,tau,dt),K.ty.step(tv4.y,tau,dt),K.tz.step(tv4.z+vz,tau,dt)); cFocus.copy(T);
     const dist=E.distanceTo(T), wantW=2.6+spread*0.8+base+(cr?0:Math.max(0,dist-22)*0.05);   /* a far subject: a little more of the scene round it */
-    let fov=2*Math.atan(wantW/(2*dist))*R2D*(sh==="track"?1.3:1.6), lo=sh==="line"?12:20, hi=sh==="corner"?58:sh==="jump"||sh==="whoops"?52:sh==="turn1"?52:sh==="track"?44:64;
+    let fov=2*Math.atan(wantW/(2*dist))*R2D*(sh==="track"?1.3:1.6), lo=sh==="line"?12:20, hi=sh==="corner"?58:sh==="jump"||sh==="whoops"?52:sh==="turn1"?52:sh==="track"?35:64;   /* the broadcast long lens: 20-35 degrees */
     fov=clamp(fov,lo,hi);
+    if(dist>16&&(sh==="track"||sh==="jump"||sh==="whoops"||sh==="corner")) fov=Math.min(fov,34);   /* a far camera takes a long lens */
     if(sh==="turn1") fov=clamp(fov,26,64);
     if(shot.why==="yellow"){ const as=Math.max(0.8,asp); fov=clamp(2*Math.atan((11+spread*0.5)/as/(2*dist))*R2D,14,52); }   /* the yellow section about 12 m across */
     if(sh==="crash"){ /* the crash: framed by the scene's width (the rider, the bike, then the marshal): about 7 m across, never a speck */
