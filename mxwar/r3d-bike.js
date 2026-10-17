@@ -42,7 +42,7 @@ function envTexture(size){
 function liveryTexture(size){
   const c=canvas(size,size), x=c.getContext("2d"), K=size/512, u=px=>px*K;
   x.fillStyle="#000"; x.fillRect(0,0,size,size);
-  const X=xx=>(xx+1.2)/1.8*512, Y=yy=>256-(yy-0.45)/0.75*256;                 /* bike side view -> pixels (upper half) */
+  const X=xx=>(xx+1.2)/2.4*512, Y=yy=>256-(yy-0.45)/0.75*256;                 /* bike side view -> pixels (upper half) */
   const poly=(pts,col)=>{ x.fillStyle=col; x.beginPath(); pts.forEach((p,k)=>{ const a=X(p[0])*K, b=Y(p[1])*K; if(k) x.lineTo(a,b); else x.moveTo(a,b); }); x.closePath(); x.fill(); };
   /* the shroud: a swoosh from the lower front sweeping up and back, a dark lower edge */
   poly([[0.52,0.60],[0.44,0.63],[0.30,0.73],[0.15,0.86],[0.03,0.945],[-0.05,0.95],[0.10,0.84],[0.25,0.71],[0.40,0.60]],"rgb(255,0,0)");
@@ -54,7 +54,8 @@ function liveryTexture(size){
   poly([[-0.62,0.935],[-0.80,0.945],[-0.80,0.965],[-0.62,0.955]],"rgb(255,0,0)");
   /* from above: a centre stripe along the rear fender, a band on the front fender */
   const zrow=z=>(1-0.5*clamp(0.5+z*2.6,0,1))*512*K, XT=xx=>X(xx)*K;
-  x.fillStyle="rgb(255,0,0)"; x.fillRect(XT(-1.14),zrow(0.026),XT(-0.40)-XT(-1.14),zrow(-0.026)-zrow(0.026));
+  x.fillStyle="rgb(255,0,0)"; x.fillRect(XT(-1.14),zrow(0.026),XT(-0.40)-XT(-1.14),zrow(-0.026)-zrow(0.026)); x.fillRect(XT(0.55),zrow(0.022),XT(1.12)-XT(0.55),zrow(-0.022)-zrow(0.022));
+  x.fillStyle="rgb(0,255,0)"; x.fillRect(XT(0.55),zrow(0.058),XT(1.12)-XT(0.55),zrow(0.040)-zrow(0.058)); x.fillRect(XT(0.55),zrow(-0.040),XT(1.12)-XT(0.55),zrow(-0.058)-zrow(-0.040));
   x.fillStyle="rgb(0,0,255)"; x.fillRect(XT(-1.14),zrow(0.058),XT(-0.40)-XT(-1.14),zrow(0.044)-zrow(0.058)); x.fillRect(XT(-1.14),zrow(-0.044),XT(-0.40)-XT(-1.14),zrow(-0.058)-zrow(-0.044));
   const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.NoColorSpace; t.wrapS=t.wrapT=THREE.ClampToEdgeWrapping; t.anisotropy=4; t.generateMipmaps=true; t.minFilter=THREE.LinearMipmapLinearFilter; return t;
 }
@@ -71,13 +72,13 @@ function bikeMaterial(lo){
     sh.uniforms.uLiv={value:T.liv}; sh.uniforms.uMudCol={value:new THREE.Vector3(0.115,0.066,0.032)};
     sh.vertexShader=sh.vertexShader
       .replace("#include <common>","#include <common>\nattribute vec4 aMat;\nattribute vec3 aAccent;\nattribute vec3 aMud;\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec3 vMud;\nvarying vec3 vLoc;\nvarying vec2 vLiv;")
-      .replace("#include <color_vertex>","#include <color_vertex>\n{ float wl=step(7.5,aMat.z); float tn=aMat.z-8.0*wl; tn-=4.0*step(3.5,tn); vec3 tint=tn<0.5?vec3(1.0):(tn<1.5?instanceColor.rgb:aAccent); vColor.rgb=color.rgb*tint; }\nvMat=aMat; vAcc=aAccent; vMud=aMud; vLoc=position; vLiv=uv;");
+      .replace("#include <color_vertex>","#include <color_vertex>\n{ float wl=step(7.5,aMat.z); float tn=aMat.z-8.0*wl; tn-=4.0*step(3.5,tn); float sty=aMud.y; vec3 fc=sty>0.5&&sty<1.5?vec3(0.86):(sty>1.5&&sty<2.5?aAccent:instanceColor.rgb); vec3 tint=tn<0.5?vec3(1.0):(tn<1.5?instanceColor.rgb:(tn<2.5?aAccent:fc)); vColor.rgb=color.rgb*tint; }\nvMat=aMat; vAcc=aAccent; vMud=aMud; vLoc=position; vLiv=uv;");
     let fs=sh.fragmentShader.replace("#include <common>","#include <common>\nuniform sampler2D uLiv;\nuniform vec3 uMudCol;\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec3 vMud;\nvarying vec3 vLoc;\nvarying vec2 vLiv;\n"+(std?GLSL_NOISE:""));
     fs=fs.replace("#include <color_fragment>",
       "#include <color_fragment>\n"+
       "float bkWl=step(7.5,vMat.z); float bkTn=vMat.z-8.0*bkWl; float bkSp=step(3.5,bkTn); bkTn-=4.0*bkSp;\n"+
       "if(bkSp>0.5&&vMud.z>0.02){ if(fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453)<vMud.z) discard; }\n"+
-      "{ float lk=step(0.5,bkTn)*(1.0-step(1.5,bkTn)); vec3 lv=texture2D(uLiv,vLiv).rgb; float sty=vMud.y; vec3 b0=diffuseColor.rgb; vec3 cA=vAcc, cB=vec3(0.010), cC=vec3(0.80);\n"+
+      "{ float lk=step(0.5,bkTn)*(1.0-step(1.5,bkTn))+step(2.5,bkTn)*0.85; vec3 lv=texture2D(uLiv,vLiv).rgb; float sty=vMud.y; vec3 b0=diffuseColor.rgb; vec3 cA=vAcc, cB=vec3(0.010), cC=vec3(0.80);\n"+
       "  if(sty>0.5&&sty<1.5){ cA=vec3(0.010); cB=vAcc; } else if(sty>1.5&&sty<2.5){ cA=vec3(0.80); cC=vAcc; } else if(sty>2.5){ cA=vAcc; cB=vec3(0.80); cC=vec3(0.010); }\n"+
       "  b0=mix(b0,cA,lv.r*lk); b0=mix(b0,cB,lv.g*lk); b0=mix(b0,cC,lv.b*lk); diffuseColor.rgb=b0; }\n"+
       "float mudK=0.0;\n"+
@@ -109,7 +110,7 @@ export function createBike(n,lo,mk,q){
   const mkSet=(lod,src,far)=>{
     const S={lod:lod,cnt:0,meshes:[],parts:{},far:null,col:new THREE.InstancedBufferAttribute(new Float32Array(n*3).fill(1),3),acc:new THREE.InstancedBufferAttribute(new Float32Array(n*3).fill(1),3),mud:new THREE.InstancedBufferAttribute(new Float32Array(n*3),3)};
     S.col.setUsage(THREE.DynamicDrawUsage); S.acc.setUsage(THREE.DynamicDrawUsage); S.mud.setUsage(THREE.DynamicDrawUsage);
-    const one=(name,geo)=>{ const m=mk(instGeo(geo,S),n,mat); m.instanceColor=S.col; m.castShadow=true; m.count=0; m.visible=false; M["bk"+lod+"_"+name]=m; S.meshes.push(m); return m; };
+    const one=(name,geo)=>{ const m=mk(instGeo(geo,S),n,mat); m.instanceColor=S.col; m.castShadow=true; m.receiveShadow=!far&&!lo; m.count=0; m.visible=false; M["bk"+lod+"_"+name]=m; S.meshes.push(m); return m; };
     if(far) S.far=one("far",src); else PARTS.forEach(k=>{ S.parts[k]=one(k,src[k]); });
     sets.push(S); return S;
   };
