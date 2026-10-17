@@ -49,7 +49,7 @@ export function createLook(renderer,opts){
   const amb=new THREE.AmbientLight(0xffffff,0.0); scene.add(amb);
   const SUN=new THREE.Vector3(0.5,0.8,0.3);
   const base={key:4.4,hemi:0.9,fill:0.42,rim:2.2,kick:0.5,bounce:0.8,amb:0.0};   /* the venue's intensities (the flags scale / switch them) */
-  const lastCam=new THREE.Vector3(1e6,0,0); let focusD=8, venueExp=1.1, envRT=null, envKind="", post=null, canPost=false, upRoots=[], fogKind="exp", fogCol=0x0b1226, fogDen=0.0042, cssVig=null, venueNight=true, curDof=0;
+  const lastCam=new THREE.Vector3(1e6,0,0); let focusD=8, venueExp=1.1, envRT=null, envKind="", envWant="night", post=null, canPost=false, upRoots=[], fogKind="exp", fogCol=0x0b1226, fogDen=0.0042, cssVig=null, venueNight=true, curDof=0;
   const L={scene:scene,hemi:hemi,sun:sun,fill:fill,rim:rim,kick:kick,bounce:bounce,amb:amb,SUN:SUN,post:null,flags:F,tiers:TIERS};
   Object.defineProperty(L,"shadows",{get:()=>SHADOWS}); Object.defineProperty(L,"shHalf",{get:()=>shHalf}); Object.defineProperty(L,"tier",{get:()=>tierName});
 
@@ -90,6 +90,7 @@ export function createLook(renderer,opts){
     const st=F.softShadow?THREE.PCFSoftShadowMap:THREE.PCFShadowMap;
     if(renderer.shadowMap.type!==st){ renderer.shadowMap.type=st; renderer.shadowMap.needsUpdate=true; scene.traverse(o=>{ const ms=o.material?(Array.isArray(o.material)?o.material:[o.material]):[]; ms.forEach(m=>{ m.needsUpdate=true; }); }); }
     /* the environment map and the physically based stand-ins */
+    if(F.env&&!envRT&&L._world) ensureEnv();
     scene.environment=(F.env&&envRT)?envRT.texture:null;
     setKitTier(F.pbr?(F.post==="full"?"high":"mid"):"low");
     upRoots.forEach(r=>swapPBR(r,F.pbr));
@@ -105,6 +106,11 @@ export function createLook(renderer,opts){
     cssVigOn(!!F.cssVig&&!L.post&&opts.host);
     applyIntensities();
     return F;
+  }
+  /* the environment map is built the first time a tier that wants it runs on a venue (a race starts as a stick, the performance engineer later raises it: it is made then) */
+  function ensureEnv(){
+    if(envRT||!envWant) return;
+    try{ envRT=makeEnvironment(renderer,{kind:envWant,key:SUN,seed:11}).rt; envKind=envWant; L._envError=""; }catch(e){ envRT=null; L._envError=String(e&&e.stack||e).slice(0,400); }
   }
   function setTier(name){ if(!TIERS[name]) return false; forced=name; tierName=name; setFlags(TIERS[name]); return true; }
   L.setFlags=setFlags; L.setTier=setTier;
@@ -162,17 +168,15 @@ export function createLook(renderer,opts){
     env=env||{}; if(env.lo!=null) LO=!!env.lo; if(env.tv!=null) TV=!!env.tv;
     canPost=postSupported(renderer);
     lights(C,look,world);
-    /* the environment map for this venue (a night stadium, or a day sky), built once per venue kind */
-    const kind=(C.kind==="stadium"||look.night)?"night":"day";
-    if(!envRT||envKind!==kind||env.rebuildEnv){ if(envRT) envRT.dispose(); envRT=null; envKind=kind;
-      if(TIERS[forced||autoTier()].env){ try{ envRT=makeEnvironment(renderer,{kind:kind,key:SUN,seed:11}).rt; L._envError=""; }catch(e){ envRT=null; L._envError=String(e&&e.stack||e).slice(0,400); } } }
+    /* the environment map for this venue (a night stadium, or a day sky), built once per venue kind (and only when a tier wants it) */
+    envWant=(C.kind==="stadium"||look.night)?"night":"day"; if(env.rebuildEnv&&envRT){ envRT.dispose(); envRT=null; }
+    if(envRT&&envKind!==envWant){ envRT.dispose(); envRT=null; }
     /* the fog: the venue's own for a day, a cool exponential haze in the stadium air at night */
     L._fogOn=true;
     /* the stadium's light-bank glows are drawn at 1.0 or less: below the bloom's threshold. Lights that are not HDR-aware yet (their colour is at most 1.05) are made 2x brighter so the bloom
        makes them glow; a module that already outputs more than 1 (or sets userData.hdr) is left alone */
     const gm=world.ctx&&world.ctx.glowMesh; if(gm&&gm.material&&gm.material.uniforms&&gm.material.uniforms.col&&!gm.material.userData.hdr){ const c=gm.material.uniforms.col.value; if(Math.max(c.r,c.g,c.b)<=1.05){ c.multiplyScalar(2.0); gm.material.userData.hdr=true; } }
-    tierName=forced||autoTier(); setFlags(TIERS[tierName]); applyFog(world);
-    L._world=world;
+    L._world=world; tierName=forced||autoTier(); setFlags(TIERS[tierName]); applyFog(world);
   };
   function applyFog(world){
     world=world||L._world; if(!world) return;
