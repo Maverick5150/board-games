@@ -78,6 +78,7 @@ const FINAL_FRAG=`
 precision highp float;
 uniform sampler2D tScene; uniform sampler2D tBloom; uniform sampler2D tDepth;
 uniform vec2 uTexel; uniform float uBloom; uniform float uDof; uniform float uFocus; uniform float uAper; uniform float uDead; uniform float uMaxPx; uniform float uNear; uniform float uFar;
+uniform mat4 uInvVP; uniform mat4 uPrevVP; uniform vec3 uCamPos; uniform float uMB; uniform float uHaze; uniform float uHazeI; uniform float uHazeK;
 uniform float uVig; uniform float uGrain; uniform float uTime; uniform float uGrade; uniform float uAspect; uniform float uSat; uniform float uCon;
 #include <tonemapping_pars_fragment>
 #include <packing>
@@ -95,13 +96,40 @@ void main(){
   #ifdef DOF
   if(uDof>0.002){ float k=smoothstep(0.02,0.5,coc(zAt(vUv))*uDof); vec2 h=uTexel*1.5; vec3 bl=(texture2D(tBlur,vUv).rgb*2.0+texture2D(tBlur,vUv+vec2(h.x,h.y)).rgb+texture2D(tBlur,vUv+vec2(-h.x,h.y)).rgb+texture2D(tBlur,vUv+vec2(h.x,-h.y)).rgb+texture2D(tBlur,vUv+vec2(-h.x,-h.y)).rgb)/6.0; c=mix(c,bl,k); }
   #endif
+  #ifdef DEPTH
+  float dep=texture2D(tDepth,vUv).x;
+  if(dep<0.99999){
+    vec4 wp=uInvVP*vec4(vUv*2.0-1.0,dep*2.0-1.0,1.0); wp.xyz/=wp.w;
+    float zv=-perspectiveDepthToViewZ(dep,uNear,uFar);
+    /* camera motion blur on whatever is nearer than the subject (the dirt streaming past the lens): the pixel's own world position, seen from the previous step's camera */
+    if(uMB>0.001){
+      float fg=1.0-smoothstep(0.55*uFocus,1.0*uFocus,zv);
+      if(fg>0.01){
+        vec4 pp=uPrevVP*vec4(wp.xyz,1.0); vec2 puv=pp.xy/pp.w*0.5+0.5; vec2 vel=(vUv-puv)*uMB*fg; float vl=length(vel); if(vl>0.04) vel*=0.04/vl;
+        if(vl>0.0015){ vec3 acc=c; float n=1.0; for(int i=1;i<=8;i++){ float f=float(i)/8.0-0.5; vec2 uv=vUv-vel*f*2.0; acc+=texture2D(tScene,uv).rgb; n+=1.0; } c=mix(c,acc/n,clamp(vl*60.0,0.0,1.0)); }
+      }
+    }
+    /* height haze: warm dust glow near the ground, cool air above (added light: the floodlights scatter in it); more with distance, thinning with height */
+    if(uHaze>0.0){
+      float t=length(wp.xyz-uCamPos), y0=max(min(uCamPos.y,wp.y),0.0), y1=max(max(uCamPos.y,wp.y),0.0);
+      float avg=(y1-y0)<0.01?exp(-uHazeK*y0):(exp(-uHazeK*y0)-exp(-uHazeK*y1))/(uHazeK*(y1-y0));
+      float fa=1.0-exp(-uHaze*t*avg);
+      vec3 hc=mix(vec3(0.045,0.058,0.10),vec3(0.17,0.10,0.05),exp(-max(wp.y,0.0)*0.45));
+      c+=hc*fa*uHazeI;
+    }
+  } else if(uHaze>0.0){
+    /* the sky: the glow of a lit stadium low over the horizon (cool blue-violet), black overhead */
+    vec4 wp=uInvVP*vec4(vUv*2.0-1.0,1.0,1.0); vec3 dir=normalize(wp.xyz/wp.w-uCamPos);
+    c+=vec3(0.020,0.026,0.062)*exp(-max(dir.y,0.0)*7.0)*uHazeI;
+  }
+  #endif
   #ifdef BLOOM
   c+=texture2D(tBloom,vUv).rgb*uBloom;
   #endif
   c=ACESFilmicToneMapping(c);
   float lum=dot(c,vec3(0.2126,0.7152,0.0722));
   /* grade: cool blue-black shadows, warm gold highlights, a little more colour, an S-curve for deep contrast */
-  vec3 cool=vec3(0.86,0.96,1.20), warm=vec3(1.10,1.01,0.86);
+  vec3 cool=vec3(0.84,0.95,1.22), warm=vec3(1.07,1.01,0.90);
   c*=mix(vec3(1.0),cool,(1.0-smoothstep(0.0,0.28,lum))*0.75*uGrade);
   c*=mix(vec3(1.0),warm,smoothstep(0.22,0.85,lum)*0.60*uGrade);
   lum=dot(c,vec3(0.2126,0.7152,0.0722));
@@ -115,7 +143,7 @@ void main(){
 }`;
 
 export function createPost(renderer,f0){
-  const F=Object.assign({bloom:1,bloomThreshold:0.95,bloomKnee:0.4,dof:false,dofTaps:24,dofMax:0.017,aa:"none",grade:1,vignette:0.3,grain:0.03,exposure:null,sat:1.14,contrast:0.5},f0||{});
+  const F=Object.assign({motionBlur:0,haze:0,hazeI:1,bloom:1,bloomThreshold:1.05,bloomKnee:0.4,dof:false,dofTaps:24,dofMax:0.017,aa:"none",grade:1,vignette:0.3,grain:0.03,exposure:null,sat:1.02,contrast:0.62},f0||{});
   const ext=renderer.extensions;
   const P={flags:F,dead:false};
   /* the fullscreen triangle */
@@ -123,27 +151,28 @@ export function createPost(renderer,f0){
   const fsMesh=new THREE.Mesh(fsGeo,null); fsMesh.frustumCulled=false; const fsScene=new THREE.Scene(); fsScene.add(fsMesh); const fsCam=new THREE.OrthographicCamera(-1,1,1,-1,0,1);
   const mk=(frag,uni,extra)=>new THREE.ShaderMaterial(Object.assign({uniforms:uni,vertexShader:VERT,fragmentShader:frag,depthTest:false,depthWrite:false,toneMapped:false,fog:false},extra||{}));
   const sizeV=new THREE.Vector2();
-  let W=0,H=0, rtScene=null, rtLdr=null, rtDof=null, levels=[], smaa=null, depthTex=null, builtDof=false, builtMsaa=0, builtAa="none", builtBloom=false, dofAmt=0, dofFocus=8;
+  const prevVP=new THREE.Matrix4(); let mbAmt=0;
+  let builtDepth=false, W=0,H=0, rtScene=null, rtLdr=null, rtDof=null, levels=[], smaa=null, depthTex=null, builtDof=false, builtMsaa=0, builtAa="none", builtBloom=false, dofAmt=0, dofFocus=8;
   const mPre=mk(PRE_FRAG,{tSrc:{value:null},uTexel:{value:new THREE.Vector2()},uThresh:{value:0.85},uKnee:{value:0.5}});
   const mDown=mk(DOWN_FRAG,{tSrc:{value:null},uTexel:{value:new THREE.Vector2()}});
   const mUp=mk(UP_FRAG,{tSrc:{value:null},uTexel:{value:new THREE.Vector2()},uGain:{value:1}},{transparent:true,blending:THREE.CustomBlending,blendSrc:THREE.OneFactor,blendDst:THREE.OneFactor,blendEquation:THREE.AddEquation});
   let mFinal=null, mDof=null;
   const fu={tScene:{value:null},tBloom:{value:null},tDepth:{value:null},tBlur:{value:null},uTexel:{value:new THREE.Vector2()},uBloom:{value:0.4},uDof:{value:0},uFocus:{value:8},uAper:{value:3.2},uDead:{value:0.022},uMaxPx:{value:16},uNear:{value:0.5},uFar:{value:4200},
-    uVig:{value:0.3},uGrain:{value:0.03},uTime:{value:0},uGrade:{value:1},uAspect:{value:1.78},uSat:{value:1.14},uCon:{value:0.5},toneMappingExposure:{value:1}};
+    uInvVP:{value:new THREE.Matrix4()},uPrevVP:{value:new THREE.Matrix4()},uCamPos:{value:new THREE.Vector3()},uMB:{value:0},uHaze:{value:0},uHazeI:{value:1},uHazeK:{value:0.22},uVig:{value:0.3},uGrain:{value:0.03},uTime:{value:0},uGrade:{value:1},uAspect:{value:1.78},uSat:{value:1.14},uCon:{value:0.5},toneMappingExposure:{value:1}};
   function rt(w,h,o){ return new THREE.WebGLRenderTarget(Math.max(1,w),Math.max(1,h),Object.assign({type:THREE.HalfFloatType,format:THREE.RGBAFormat,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,depthBuffer:false,stencilBuffer:false,generateMipmaps:false},o||{})); }
   function free(){ if(rtScene){ rtScene.dispose(); if(depthTex) depthTex.dispose(); } if(rtLdr) rtLdr.dispose(); if(rtDof) rtDof.dispose(); rtDof=null; levels.forEach(l=>l.dispose()); levels=[]; rtScene=rtLdr=depthTex=null; if(smaa){ smaa.dispose(); smaa=null; } }
   /* (re)build the targets for the drawing buffer size and the flags that decide what exists */
   function build(){
     renderer.getDrawingBufferSize(sizeV); const w=Math.max(2,Math.round(sizeV.x)), h=Math.max(2,Math.round(sizeV.y));
-    const wantDof=!!F.dof, wantMsaa=(!wantDof&&F.aa==="msaa")?4:0, wantAa=F.aa==="smaa"?"smaa":"none", wantBloom=F.bloom>0;
-    if(w===W&&h===H&&rtScene&&wantDof===builtDof&&wantMsaa===builtMsaa&&wantAa===builtAa&&wantBloom===builtBloom) return;
-    free(); W=w; H=h; builtDof=wantDof; builtMsaa=wantMsaa; builtAa=wantAa; builtBloom=wantBloom;
-    const o={depthBuffer:true}; if(wantDof){ depthTex=new THREE.DepthTexture(W,H,THREE.UnsignedIntType); o.depthTexture=depthTex; } if(wantMsaa) o.samples=wantMsaa;
+    const wantDof=!!F.dof, wantDepth=wantDof||F.motionBlur>0||F.haze>0, wantMsaa=(!wantDepth&&F.aa==="msaa")?4:0, wantAa=F.aa==="smaa"?"smaa":"none", wantBloom=F.bloom>0;
+    if(w===W&&h===H&&rtScene&&wantDof===builtDof&&wantDepth===builtDepth&&wantMsaa===builtMsaa&&wantAa===builtAa&&wantBloom===builtBloom) return;
+    free(); W=w; H=h; builtDof=wantDof; builtDepth=wantDepth; builtMsaa=wantMsaa; builtAa=wantAa; builtBloom=wantBloom;
+    const o={depthBuffer:true}; if(wantDepth){ depthTex=new THREE.DepthTexture(W,H,THREE.UnsignedIntType); o.depthTexture=depthTex; } if(wantMsaa) o.samples=wantMsaa;
     rtScene=rt(W,H,o); if(wantDof) rtDof=rt(Math.ceil(W/2),Math.ceil(H/2));
     if(wantBloom){ let lw=W,lh=H; for(let k=0;k<5;k++){ lw=Math.max(2,Math.ceil(lw/2)); lh=Math.max(2,Math.ceil(lh/2)); levels.push(rt(lw,lh)); } }
     if(wantAa==="smaa"){ rtLdr=rt(W,H,{type:THREE.UnsignedByteType}); smaa=new SMAAPass(W,H); smaa.renderToScreen=true; }
     /* the final material is made again when the compile-time options change (the depth of field's taps, the bloom) */
-    const defs={}; if(wantDof){ defs.DOF=1; defs.DOF_TAPS=Math.max(6,F.dofTaps|0); } if(wantBloom) defs.BLOOM=1;
+    const defs={}; if(wantDof){ defs.DOF=1; defs.DOF_TAPS=Math.max(6,F.dofTaps|0); } if(wantDepth) defs.DEPTH=1; if(wantBloom) defs.BLOOM=1;
     if(mFinal) mFinal.dispose(); mFinal=mk(FINAL_FRAG,fu,{defines:defs});
     if(mDof) mDof.dispose(); mDof=wantDof?mk(DOF_FRAG,fu,{defines:{DOF_TAPS:Math.max(6,F.dofTaps|0)}}):null;
   }
@@ -170,6 +199,7 @@ export function createPost(renderer,f0){
     const u=fu; u.tScene.value=rtScene.texture; u.tBloom.value=bloomTex; u.tDepth.value=depthTex;
     u.uTexel.value.set(1/W,1/H); u.uBloom.value=0.6*F.bloom; u.uDof.value=F.dof?dofAmt:0; u.uFocus.value=dofFocus; u.uMaxPx.value=Math.max(4,F.dofMax*H); u.uNear.value=cam.near; u.uFar.value=cam.far;
     u.uVig.value=F.vignette; u.uGrain.value=F.grain; u.uTime.value=(Math.floor((tw||0)*24)%997)/997; u.uGrade.value=F.grade; u.uAspect.value=W/H; u.uSat.value=F.sat; u.uCon.value=F.contrast;
+    if(depthTex){ cam.updateMatrixWorld(); u.uInvVP.value.multiplyMatrices(cam.matrixWorld,cam.projectionMatrixInverse); u.uCamPos.value.setFromMatrixPosition(cam.matrixWorld); u.uPrevVP.value.copy(prevVP); u.uMB.value=F.motionBlur*mbAmt; u.uHaze.value=F.haze; u.uHazeI.value=F.hazeI; }
     u.toneMappingExposure.value=F.exposure!=null?F.exposure:renderer.toneMappingExposure;
     if(mDof&&u.uDof.value>0.002){ u.tBlur.value=rtDof.texture; fsMesh.material=mDof; renderer.setRenderTarget(rtDof); renderer.render(fsScene,fsCam); }
     fsMesh.material=mFinal; renderer.setRenderTarget(smaa?rtLdr:null); renderer.render(fsScene,fsCam);
@@ -179,7 +209,9 @@ export function createPost(renderer,f0){
   P.resize=function(){ /* the targets follow the drawing buffer: build() looks at it every frame */ };
   P.setFlags=function(f){ Object.assign(F,f||{}); fu.uAper.value=F.dofAper!=null?F.dofAper:3.2; fu.uDead.value=F.dofDead!=null?F.dofDead:0.022; };
   P.setDof=function(amount,focus){ dofAmt=amount; dofFocus=Math.max(0.5,focus); };
-  P.info=function(){ return {w:W,h:H,passes:(levels.length?1+2*(levels.length-1):0)+1+(smaa?3:0)+(rtDof?1:0),targets:(rtScene?1:0)+levels.length+(rtLdr?1:0)+(depthTex?1:0)+(rtDof?1:0),dof:builtDof,aa:builtAa,msaa:builtMsaa,bloom:builtBloom}; };
+  /* the camera's view-projection one step ago and how much of the foreground blur to keep (0 = none: a cut, a wide shot) */
+  P.setMotion=function(prev,amount){ prevVP.copy(prev); mbAmt=amount; };
+  P.info=function(){ return {w:W,h:H,passes:(levels.length?1+2*(levels.length-1):0)+1+(smaa?3:0)+(rtDof?1:0),targets:(rtScene?1:0)+levels.length+(rtLdr?1:0)+(depthTex?1:0)+(rtDof?1:0),dof:builtDof,depth:builtDepth,aa:builtAa,msaa:builtMsaa,bloom:builtBloom}; };
   P.dispose=function(){ P.dead=true; free(); [mPre,mDown,mUp].forEach(m=>m.dispose()); if(mFinal) mFinal.dispose(); if(mDof) mDof.dispose(); fsGeo.dispose(); };
   P.setFlags(null);
   return P;

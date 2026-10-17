@@ -20,10 +20,10 @@ import {createPost,postSupported} from "./r3d-lead-post.js";
 
 /* the tier table: every effect is one flag. post: "full" (HDR scene + bloom + DOF + SMAA + grade) | "lite" (HDR scene + bloom + grade, MSAA) | "off" (the renderer's own frame: nothing extra) */
 export const TIERS={
-  high:  {rig:"full",shadowRes:2048,softShadow:true, env:true, pbr:true, fog:"exp",post:"full",bloom:1.0,dof:true, aa:"smaa",msaa:0,grade:1,vignette:0.34,grain:0.035,exposure:1.0,cssVig:false},
-  medium:{rig:"full",shadowRes:1024,softShadow:false,env:true, pbr:true, fog:"exp",post:"lite",bloom:0.75,dof:false,aa:"msaa",msaa:4,grade:1,vignette:0.30,grain:0.0, exposure:1.0,cssVig:false},
-  low:   {rig:"lite",shadowRes:1024,softShadow:false,env:false,pbr:false,fog:"lin",post:"off", bloom:0,   dof:false,aa:"none",msaa:0,grade:0,vignette:0,   grain:0.0, exposure:1.0,cssVig:false},
-  stick: {rig:"lite",shadowRes:1024,softShadow:false,env:false,pbr:false,fog:"lin",post:"off", bloom:0,   dof:false,aa:"none",msaa:0,grade:0,vignette:0,   grain:0.0, exposure:1.0,cssVig:false}
+  high:  {rig:"full",shadowRes:2048,softShadow:true, env:true, pbr:true, fog:"exp",post:"full",bloom:1.0,dof:true, motionBlur:1.0,haze:0.011,hazeI:1.0,aa:"smaa",msaa:0,grade:1,vignette:0.34,grain:0.035,exposure:1.0,cssVig:false},
+  medium:{motionBlur:0,haze:0,hazeI:1,rig:"full",shadowRes:1024,softShadow:false,env:true, pbr:true, fog:"exp",post:"lite",bloom:0.75,dof:false,aa:"msaa",msaa:4,grade:1,vignette:0.30,grain:0.0, exposure:1.0,cssVig:false},
+  low:   {motionBlur:0,haze:0,hazeI:1,rig:"lite",shadowRes:1024,softShadow:false,env:false,pbr:false,fog:"lin",post:"off", bloom:0,   dof:false,aa:"none",msaa:0,grade:0,vignette:0,   grain:0.0, exposure:1.0,cssVig:false},
+  stick: {motionBlur:0,haze:0,hazeI:1,rig:"lite",shadowRes:1024,softShadow:false,env:false,pbr:false,fog:"lin",post:"off", bloom:0,   dof:false,aa:"none",msaa:0,grade:0,vignette:0,   grain:0.0, exposure:1.0,cssVig:false}
 };
 const SUN_DIR=new THREE.Vector3(), V1=new THREE.Vector3(), V2=new THREE.Vector3(), V3=new THREE.Vector3(), UP=new THREE.Vector3(0,1,0);
 const DEG=Math.PI/180;
@@ -58,8 +58,8 @@ export function createLook(renderer,opts){
   function lights(C,look,world){
     const night=look.night||C.kind==="stadium"; venueNight=night;
     if(C.kind==="stadium"){
-      hemi.color.set(0x5a76c8); hemi.groundColor.set(0x8a5a34); sun.color.set(0xeef3ff); sun.position.set(-78,50,36); fill.color.set(0x8fa6ff);
-      Object.assign(base,{key:5.2,hemi:1.0,fill:0.5,rim:2.6,kick:0.55,bounce:0.9,amb:0.0}); venueExp=1.15; fogCol=0x0b1226; fogDen=0.0042;
+      hemi.color.set(0x5a76c8); hemi.groundColor.set(0x8a5a34); sun.color.set(0xfff2e2); sun.position.set(-78,50,36); fill.color.set(0x8fa6ff);
+      Object.assign(base,{key:6.8,hemi:0.8,fill:0.5,rim:1.8,kick:0.55,bounce:0.9,amb:0.0}); venueExp=1.12; fogCol=0x0b1226; fogDen=0.0042;
     } else if(night){
       hemi.color.set(0x4a5a94); hemi.groundColor.set(0x7a5030); sun.color.set(0xf0f2ff); sun.position.set(-70,56,50); fill.color.set(0x8fa6ff);
       Object.assign(base,{key:4.0,hemi:0.9,fill:0.45,rim:1.9,kick:0.45,bounce:0.7,amb:0.04}); venueExp=1.1; fogCol=0x0a0f1c; fogDen=0.0030;
@@ -79,7 +79,10 @@ export function createLook(renderer,opts){
     renderer.toneMappingExposure=venueExp*e;
   }
   /* ---- tiers and flags ---- */
-  function autoTier(){ return LO?(TV?"stick":"low"):(WEAK?"medium":"high"); }
+  /* the tier nobody asked for: Reduce effects or a weak GPU = no post chain at all (low / stick); a TV or a touch phone = the light chain (medium); everything else (a laptop, a desktop) = high.
+     The performance engineer's V.setQuality(name) may call L.setTier(name) to override this. */
+  const MOBILE=(()=>{ try{ return (navigator.maxTouchPoints||0)>0&&!TV; }catch(e){ return false; } })();
+  function autoTier(){ return (LO||WEAK)?(TV?"stick":"low"):((TV||MOBILE)?"medium":"high"); }
   function setFlags(f){
     const was=Object.assign({},F); Object.assign(F,f||{});
     /* the shadow map: its size and its filter */
@@ -94,7 +97,7 @@ export function createLook(renderer,opts){
     const wantPost=F.post!=="off"&&canPost;
     if(wantPost){
       if(!post){ post=createPost(renderer,{}); }
-      post.setFlags({bloom:F.bloom,dof:F.post==="full"&&F.dof,aa:F.aa,grade:F.grade,vignette:F.vignette,grain:F.grain,exposure:null});
+      post.setFlags({bloom:F.bloom,dof:F.post==="full"&&F.dof,motionBlur:F.post==="full"?F.motionBlur:0,haze:F.post==="full"?F.haze:0,hazeI:F.hazeI,aa:F.aa,grade:F.grade,vignette:F.vignette,grain:F.grain,exposure:null});
       L.post=post; L._mine=post;
     } else if(L.post&&L.post===L._mine){ L.post=null; L._mine=null; }
     /* the fog */
@@ -132,7 +135,7 @@ export function createLook(renderer,opts){
   L.setShadows=setShadows; L.fitShadow=fitShadow; L.blobOp=blobOp;
 
   /* ---- the camera-relative lights and the depth of field's focus (every frame, after the camera is placed) ---- */
-  const camF=new THREE.Vector3();
+  const camF=new THREE.Vector3(), curVP=new THREE.Matrix4(), lastVP=new THREE.Matrix4();
   L.frame=function(cam,target,dt,tw,subjD){
     cam.getWorldDirection(camF); camF.y=0; if(camF.lengthSq()<1e-6) camF.set(1,0,0); camF.normalize();
     if(F.rig==="full"){
@@ -141,14 +144,17 @@ export function createLook(renderer,opts){
       V1.set(Math.cos(a+28*DEG)*Math.cos(26*DEG),Math.sin(26*DEG),Math.sin(a+28*DEG)*Math.cos(26*DEG)); rim.position.copy(V1).multiplyScalar(100);
       V2.set(Math.cos(a+Math.PI-35*DEG)*Math.cos(40*DEG),Math.sin(40*DEG),Math.sin(a+Math.PI-35*DEG)*Math.cos(40*DEG)); kick.position.copy(V2).multiplyScalar(100);
     }
-    /* depth of field: only a close camera (the chase, the crash, the jump close-ups); the focus sits on the subject, a little short of the look-at point */
-    if(post&&L.post===post&&F.dof&&F.post==="full"){
+    /* depth of field and the foreground motion blur: only a close camera (the chase, the crash, the jump close-ups); the focus sits on the subject */
+    cam.updateMatrixWorld(); curVP.multiplyMatrices(cam.projectionMatrix,cam.matrixWorldInverse);
+    if(post&&L.post===post&&F.post==="full"&&(F.dof||F.motionBlur>0||F.haze>0)){
       /* subjD = the distance to the rider the picture is about (0 = none in view: a wide shot, no blur) */
       const cut=cam.position.distanceTo(lastCam)>2.0||!(dt>0); lastCam.copy(cam.position);   /* a cut (a new shot, a seek): the focus is already there */
-      const has=subjD!=null?subjD>0:true, d=subjD>0?subjD:cam.position.distanceTo(target)*0.62, amt=has?1-sstep(18,36,d):0, k=Math.min(1,(dt||0.016)*5);
+      const has=subjD!=null?subjD>0:true, d=subjD>0?subjD:cam.position.distanceTo(target)*0.62, amt=has?(1-0.5*sstep(5,16,d))*(1-sstep(18,36,d)):0, k=Math.min(1,(dt||0.016)*5);
       curDof+=(amt-curDof)*(cut?1:k); if(subjD>0) focusD+=(d-focusD)*(cut?1:Math.min(1,dt*6)); else focusD=d;
-      post.setDof(curDof,clamp(focusD,2.6,40));
+      post.setDof(F.dof?curDof:0,clamp(focusD,2.6,40));
+      post.setMotion(cut?curVP:lastVP,cut?0:curDof);
     }
+    lastVP.copy(curVP);
   };
 
   /* ---- a new race: the venue's lights and exposure, the sun disc, the environment map, then the fog and the tier ---- */
