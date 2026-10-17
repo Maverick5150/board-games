@@ -137,6 +137,7 @@
       } else if (pn) {
         var mr = pn.res && pn.res.mine ? pn.res.mine[api.color()] : null;
         if (pn.kind === "results") { title = pn.title; sub = mr ? "You finished " + ord(mr.p) + " of " + mr.of + (mr.tag ? " · " + mr.tag : "") + (mr.dnf ? " · DNF: crash" : "") + (mr.pts ? " · +" + mr.pts + " pts" : "") : (pn.res ? pn.res.win + " wins" : ""); }
+        else if (pn.kind === "lineup") { var ml = pn.mine ? pn.mine[api.color()] : null; title = pn.title; sub = ml ? (/^seeded/.test(ml) ? "You're " + ml + "." : "You ride " + ml + ".") + " Watch the TV." : "Watch the TV."; }
         else if (pn.kind === "podium" || pn.kind === "final") { title = pn.title; sub = (pn.pod || []).map(function (x, i) { return (i + 1) + ". " + x; }).join(" · "); }
         else { title = pn.title || "Season standings"; sub = pn.next ? "Next: " + pn.next : "Watch the TV."; }
       }
@@ -183,7 +184,7 @@
     var down = Math.min(3, w.down || 0), h = '<div class="mxph-box is-war" role="status"><span class="mxph-pile" aria-hidden="true">';
     for (var i = 0; i < down; i++) h += '<span style="left:' + (i * 0.35) + 'rem">' + card(null) + "</span>";
     h += '<span style="left:' + (down * 0.35 + .2) + 'rem">' + card(w.up, w.won ? "is-win" : "") + "</span></span><span>" +
-      (w.n > 1 ? (w.n === 2 ? "Double war" : "Triple war") : "War") + ": " + (w.down || 0) + " down, the 4th up: " + cardName(w.up) + "." +
+      (w.n > 1 ? (w.n === 2 ? "Double war" : w.n === 3 ? "Triple war" : "War x" + w.n) : "War") + ": " + (w.down || 0) + " down, the 4th up: " + cardName(w.up) + "." +
       (w.won ? " You win the war!" : w.lost === "out" ? " You lose it: crashed out." : w.lost === "remount" ? " You lose it: down, and you remount." : w.won === false ? " You lose the war." : "") + "</span></div>";
     return h;
   }
