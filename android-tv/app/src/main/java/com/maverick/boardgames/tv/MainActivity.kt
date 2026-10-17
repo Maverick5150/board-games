@@ -162,9 +162,15 @@ class MainActivity : Activity() {
             return
         }
         try {
-            val r = t.setLanguage(Locale.US)
-            if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) t.setLanguage(Locale.getDefault())
+            // The announcers speak English: US English first, then any English. No English at all (no voice either) = no speech:
+            // ttsReady() stays false and the page shows captions (an engine left on German would read English text in a German voice).
+            var english = t.setLanguage(Locale.US) >= TextToSpeech.LANG_AVAILABLE
+            if (!english) english = t.setLanguage(Locale.ENGLISH) >= TextToSpeech.LANG_AVAILABLE
             pickVoices(t)
+            if (!english && voiceA == null) {
+                ttsOk = false
+                return
+            }
             t.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {}
 
@@ -181,14 +187,21 @@ class MainActivity : Activity() {
         }
     }
 
-    /** two different English voices that are on the device (never a network voice, never one whose data is not installed): the lead
-     *  caller "a" and the analyst "b" (another accent when there is one); with one voice both use it and the page sets them apart by pitch */
+    /** an English voice that is on the device and works offline (never a network voice, never one whose data is not installed) */
+    private fun usable(v: Voice): Boolean =
+        v.locale?.language == "en" && !v.isNetworkConnectionRequired &&
+            v.features?.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) != true
+
+    /** two different usable voices: the lead caller "a" and the analyst "b" (another accent when there is one); with one voice both use
+     *  it and the page sets them apart by pitch */
     private fun pickVoices(t: TextToSpeech) {
         val all: Set<Voice> = try { t.voices ?: emptySet() } catch (e: Exception) { emptySet() }
-        val ok = all.filter { v ->
-            v.locale?.language == "en" && !v.isNetworkConnectionRequired &&
-                v.features?.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) != true
-        }.sortedByDescending { v -> v.quality + (if (v.locale?.country == "US") 40 else if (v.locale?.country == "GB") 30 else 0) }
+        // both characters are men: a voice named "male" (the Google engine's "#male_1") ranks above its "female" neighbour
+        val ok = all.filter { v -> usable(v) }.sortedByDescending { v ->
+            val n = v.name.lowercase()
+            v.quality + (if (v.locale?.country == "US") 40 else if (v.locale?.country == "GB") 30 else 0) +
+                (if (n.contains("female")) -10 else if (n.contains("male")) 10 else 0)
+        }
         val a = ok.firstOrNull()
         voiceA = a
         voiceB = ok.firstOrNull { it.name != a?.name && it.locale?.country != a?.locale?.country } ?: ok.firstOrNull { it.name != a?.name }
@@ -225,7 +238,7 @@ class MainActivity : Activity() {
         return try {
             val list = JSONArray()
             val all: Set<Voice> = t.voices ?: emptySet()
-            all.filter { it.locale?.language == "en" && !it.isNetworkConnectionRequired }.forEach { v ->
+            all.filter { usable(it) }.forEach { v ->
                 list.put(JSONObject().put("name", v.name).put("lang", v.locale.toLanguageTag()).put("quality", v.quality))
             }
             list.toString()
