@@ -1,98 +1,24 @@
-/* MOTOCROSS WAR 3D — THE RIDERS (owner: rider): the rider as an ORIGINAL low-poly model (no logos, no sponsor marks; team = colours,
-   numbers as plain text): the helmet, the torso, the arms and legs (rounded limbs, one InstancedMesh per part type: every rider in one draw
-   call per part), the number atlas (plates, jersey-back numbers, floating tags, drawn in code), the blob shadows and number tags, and the
-   posing: two-bone IK (hands on the grips, feet on the pegs, an inside foot out in flat turns), seated in turns, standing in the whoops,
-   the rhythm and the air; a crash pose from the crash script in race3d.js (poseBody). createRiders() is the instancing glue: it makes the
-   bike's meshes (r3d-bike.js createBike) and the rider's, poseRider() poses the bike (poseBike) and then the rider. The roost / dust
-   particles are r3d-fx.js (they used to be made here). Moved out of the old one-file r3d-riders.js byte for byte (the file split: no visual change).
-   Bike local axes: +X forward, +Y up, +Z right (heading th: rotation.y = -th; roll + = lean right; pitch + = nose up; Euler order YZX).
-   createRiders(list, {lo}) -> R {grp, M (every InstancedMesh by name), A (atlas), n, list}; poseRider(R, i, B, st) with B = the bike's world
-   Matrix4 and st = the per-frame state (CONTRACT.md). */
+/* MOTOCROSS WAR 3D — THE RIDERS (owner: rider): the rider as a SKINNED, SKELETAL character (an original model, no logos, no sponsor marks, no real liveries:
+   the team is the colour, the number is plain text). The body is ONE skinned mesh (r3d-rider-model.js: a 17-bone skeleton, jersey, sleeves, gloves, pants, knee braces,
+   boots, helmet with peak, goggles, a neck brace, the number patch curved over the back) posed every frame by r3d-rider-pose.js (damped springs for the body, two-bone
+   IK for hands on the grips and feet on the pegs, a ragdoll-ish crash). The skinning is done on the GPU for ALL riders in one draw call per part: every rider's bone
+   matrices live in a float DATA TEXTURE (one row a rider), the vertex shader (patched into three.js' own Lambert / Phong / depth materials) blends two bones a vertex
+   and tints the colour slots (team / accent / fixed) per rider, so the shadow pass and the lights work as for any mesh. Levels of detail: the nearest riders (hi) are the
+   full model (about 3,500 triangles: body + glossy helmet + the number patch), the rest of the pack is a thin version of the same skeleton (about 1,000, one mesh).
+   createRiders() is the instancing glue: it makes the bike's meshes (r3d-bike.js createBike) and the rider's, poseRider() poses the bike (poseBike) and then the rider.
+   The roost / dust particles are r3d-fx.js. Bike local axes: +X forward, +Y up, +Z right (heading th: rotation.y = -th; roll + = lean right; pitch + = nose up; Euler order YZX).
+   createRiders(list, {lo, riderHi}) -> R {grp, M (the bike's InstancedMeshes, plates, blob shadows, tags), A (atlas), n, list, S (the skinned meshes)};
+   poseRider(R, i, B, st) with B = the bike's world Matrix4 and st = the per-frame state (CONTRACT.md); commit(R, cam, dt) once a frame after posing. */
 import * as THREE_NS from "../ui/vendor/three-0.160.0.module.min.js";
 const THREE=THREE_NS;
-import {merge,paint,xf,lin,canvas,bone} from "./r3d-util.js";
+import {canvas} from "./r3d-util.js";
 import {BIKE,createBike,colorBike,poseBike,hideBike,plateGeo,drawPlate} from "./r3d-bike.js";
+import {buildRider,NB} from "./r3d-rider-model.js";
+import {newRig,poseRide,poseBody} from "./r3d-rider-pose.js";
 export {BIKE} from "./r3d-bike.js";   /* (the old import path) */
 export {emit,stepParticles} from "./r3d-fx.js";   /* (the old import path: the particles moved to r3d-fx.js; the first argument is now the particle system FX.part, no longer the rider set) */
 
-/* ---------------- geometry of one rider (unit limbs along +Y) ----------------
-   Polish: the rider in baggy gear (jersey and pants in the team colour, knee braces, white boots with a toe, dark gloves), a helmet with a
-   big peak, a chin bar and goggles. Helmets are glossy (Phong), the gear is cloth (Lambert). Parts marked aFix keep their own colour
-   instead of the team colour. */
-function fixed(g,rgb){ const q=paint(g,rgb); q.setAttribute("aFix",new THREE.BufferAttribute(new Float32Array(q.attributes.position.count).fill(1),1)); return q; }
-function tinted(g,rgb){ const q=paint(g,rgb||[1,1,1]); q.setAttribute("aFix",new THREE.BufferAttribute(new Float32Array(q.attributes.position.count),1)); return q; }
-function mergeF(list){ const g=merge(list), F=new Float32Array(g.attributes.position.count); let n=0;
-  list.forEach(q=>{ const c=q.attributes.position.count, a=q.attributes.aFix; if(a) F.set(a.array,n); n+=c; }); g.setAttribute("aFix",new THREE.BufferAttribute(F,1)); return g; }
-function helmetGeo(){
-  const W=[1,1,1], dk=lin("#0f1115"), L=[];
-  const shell=new THREE.SphereGeometry(0.152,14,10), P=shell.attributes.position;
-  for(let i=0;i<P.count;i++){ const x=P.getX(i), y=P.getY(i); P.setX(i,x*1.12+(x>0&&y<0?x*0.14:0)); if(y<-0.06) P.setY(i,y*0.92); } shell.computeVertexNormals();
-  L.push(paint(shell,W));
-  L.push(xf(paint(new THREE.BoxGeometry(0.13,0.01,0.2),W),0.185,0.1,0,0,0,0.26));        /* the peak, angled up */
-  L.push(xf(paint(new THREE.BoxGeometry(0.11,0.095,0.13),W),0.17,-0.088,0,0,0,-0.45));    /* the chin bar, forward and down */
-  L.push(xf(paint(new THREE.BoxGeometry(0.05,0.04,0.09),dk),0.222,-0.104,0,0,0,-0.45));   /* its vent */
-  L.push(xf(paint(new THREE.BoxGeometry(0.045,0.07,0.2),dk),0.168,0.016,0));              /* the goggles' lens */
-  L.push(xf(paint(new THREE.CylinderGeometry(0.163,0.163,0.032,16,1,true),lin("#ececf0")),0,0.016,0,0,0,0,1.12,1,1.0));   /* the strap */
-  return merge(L);
-}
-function torsoGeo(){
-  /* from the hip (y 0) to the shoulders (y 1): a baggy jersey over a chest protector. Polish: shaped ring by ring (narrow waist, the chest
-     protector's bulge forward, broad shoulders that round over into the neck) instead of a squashed cylinder that read as a box; the waist
-     band and the collar dark (fixed), the jersey in the team colour */
-  const g=new THREE.CylinderGeometry(1,1,1,14,9,true); g.translate(0,0.5,0);
-  const key=[[0,0.158,0.112,0],[0.14,0.162,0.108,0],[0.32,0.168,0.112,0.004],[0.55,0.198,0.13,0.018],[0.75,0.214,0.136,0.02],[0.88,0.21,0.124,0.012],[0.95,0.175,0.105,0.006],[1,0.11,0.075,0.004]];
-  const at=y=>{ for(let k=1;k<key.length;k++) if(y<=key[k][0]+1e-6){ const a=key[k-1], b=key[k], t=(y-a[0])/(b[0]-a[0]), u=t*t*(3-2*t); return [a[1]+(b[1]-a[1])*u,a[2]+(b[2]-a[2])*u,a[3]+(b[3]-a[3])*u]; } return key[key.length-1].slice(1); };
-  const P=g.attributes.position, c=new Float32Array(P.count*3), fix=new Float32Array(P.count);
-  for(let i=0;i<P.count;i++){ const y=P.getY(i), x=P.getX(i), z=P.getZ(i), w=at(y);
-    P.setX(i,x*w[1]+w[2]+(x>0?0.012*Math.sin(Math.PI*Math.min(1,Math.max(0,(y-0.4)/0.5))):0)); P.setZ(i,z*w[0]);
-    const band=y<0.13, collar=y>0.965; if(band||collar){ c[i*3]=0.11; c[i*3+1]=0.11; c[i*3+2]=0.13; fix[i]=1; } else { c[i*3]=1; c[i*3+1]=1; c[i*3+2]=1; } }
-  g.setAttribute("color",new THREE.BufferAttribute(c,3)); g.setAttribute("aFix",new THREE.BufferAttribute(fix,1)); g.computeVertexNormals();
-  const n=fixed(new THREE.CylinderGeometry(0.055,0.062,0.14,8,1,true),[0.22,0.22,0.24]); n.translate(0.015,1.04,0);   /* the neck brace */
-  /* the bottom and the top closed (never a hole seen from below or above) */
-  const hb=fixed(new THREE.CircleGeometry(1,12),[0.1,0.1,0.12]); hb.rotateX(Math.PI/2); hb.scale(0.112,1,0.158); hb.translate(0,0.002,0);
-  const ht=fixed(new THREE.CircleGeometry(1,12),[0.11,0.11,0.13]); ht.rotateX(-Math.PI/2); ht.scale(0.077,1,0.112); ht.translate(0.004,0.998,0);
-  return mergeF([g.toNonIndexed(),n,hb,ht]);
-}
-/* a limb along +Y from the root (y 0, radius r0) to the end (y 1, radius r1), ROUNDED at both ends (polish: the old open cylinders met at
-   the shoulders, elbows and knees with hard creases; a lathe with a ball at each end makes a joint that reads as one body). The bone
-   matrix stretches the unit length to the limb's real length L, so the balls are built pre-squashed by 1/L (L never changes: IK keeps the
-   bone lengths). The end fraction ef keeps its own colour (a glove) */
-function limbGeo(r0,r1,L,endCol,ef){
-  const pts=[], K=2;
-  for(let k=0;k<=K;k++){ const a=-Math.PI/2+k/K*Math.PI/2; pts.push(new THREE.Vector2(Math.max(0.0005,r0*Math.cos(a)),r0*Math.sin(a))); }
-  pts.push(new THREE.Vector2(r0+(r1-r0)*0.5,L*0.5));
-  for(let k=0;k<=K;k++){ const a=k/K*Math.PI/2; pts.push(new THREE.Vector2(Math.max(0.0005,r1*Math.cos(a)),L+r1*Math.sin(a))); }
-  const g=new THREE.LatheGeometry(pts,8); g.scale(1,1/L,1);
-  const P=g.attributes.position, c=new Float32Array(P.count*3), fix=new Float32Array(P.count);
-  for(let i=0;i<P.count;i++){ const y=P.getY(i), end=ef&&y>1-ef; if(end){ c[i*3]=endCol[0]; c[i*3+1]=endCol[1]; c[i*3+2]=endCol[2]; fix[i]=1; P.setX(i,P.getX(i)*1.14); P.setZ(i,P.getZ(i)*1.14); } else { c[i*3]=1; c[i*3+1]=1; c[i*3+2]=1; } }
-  g.setAttribute("color",new THREE.BufferAttribute(c,3)); g.setAttribute("aFix",new THREE.BufferAttribute(fix,1)); g.computeVertexNormals(); return g;
-}
-function shinGeo(){
-  /* from the knee (y 0) to the foot (y 1, L = 0.45 m): a rounded knee in the dark knee brace, the pants, the tall white boot with a toe
-     forward (local +X is the rider's front) and a dark sole */
-  const L=0.45, R=y=>y<=0.2?0.074:y<0.42?0.06:0.066+0.009*(y-0.42)/0.58, pts=[], K=2;
-  for(let k=0;k<=K;k++){ const a=-Math.PI/2+k/K*Math.PI/2; pts.push(new THREE.Vector2(Math.max(0.0005,0.074*Math.cos(a)),0.074*Math.sin(a))); }
-  [0.2,0.24,0.42,0.46,0.86,0.96].forEach(y=>pts.push(new THREE.Vector2(R(y),y*L)));
-  pts.push(new THREE.Vector2(0.074,L)); pts.push(new THREE.Vector2(0.0005,L+0.014));
-  const g=new THREE.LatheGeometry(pts,8); g.scale(1,1/L,1);
-  const P=g.attributes.position, c=new Float32Array(P.count*3), fix=new Float32Array(P.count);
-  for(let i=0;i<P.count;i++){ const y=P.getY(i); let x=P.getX(i);
-    let col=[1,1,1], f=0;
-    if(y<=0.2){ col=[0.12,0.12,0.14]; f=1; } else if(y>=0.42){ col=y>=0.985?[0.16,0.16,0.18]:[0.9,0.9,0.93]; f=1; if(y>=0.84&&x>0) x+=0.085*sstepR(0.84,1.0,y); }
-    P.setX(i,x); c[i*3]=col[0]; c[i*3+1]=col[1]; c[i*3+2]=col[2]; fix[i]=f; }
-  g.setAttribute("color",new THREE.BufferAttribute(c,3)); g.setAttribute("aFix",new THREE.BufferAttribute(fix,1)); g.computeVertexNormals(); return g;
-}
-function sstepR(a,b,x){ const t=Math.max(0,Math.min(1,(x-a)/(b-a))); return t*t*(3-2*t); }
-/* a Lambert material where vertices marked aFix keep their own colour (not tinted by the team colour): boots, braces, gloves, the collar */
-function fixMat(){
-  const m=new THREE.MeshLambertMaterial({vertexColors:true});
-  m.onBeforeCompile=sh=>{ sh.vertexShader=sh.vertexShader.replace("#include <common>","#include <common>\nattribute float aFix;").replace("#include <color_vertex>","#include <color_vertex>\n#ifdef USE_COLOR\n vColor.rgb=mix(vColor.rgb,color.rgb,aFix);\n#endif"); };
-  m.customProgramCacheKey=()=>"mx-fix";
-  return m;
-}
-
-/* ---------------- the number atlas: plates (white / red) and the jersey-back numbers, drawn in code ---------------- */
-/* ---------------- the number atlas: plates (white / red) and the jersey-back numbers, drawn in code ---------------- */
+/* ---------------- the number atlas: plates (white / red), the jersey-back numbers and the floating tags, drawn in code ---------------- */
 function atlas(riders){
   const cols=16, cell=128, rows=Math.ceil((riders.length*3+2)/cols), c=canvas(cols*cell,Math.max(1,rows)*cell), x=c.getContext("2d");
   const cells={};
@@ -105,7 +31,7 @@ function atlas(riders){
     drawPlate(x,rr,fit,px,py,cell,R,t);   /* the plate: r3d-bike.js */
     /* the jersey back: the number in white with a dark edge (transparent around it) */
     const d=k++, dx=(d%cols)*cell, dy=Math.floor(d/cols)*cell;
-    fit(t,cell-14,88); x.lineWidth=9; x.strokeStyle="rgba(10,10,14,.9)"; x.strokeText(t,dx+cell/2,dy+cell/2+4); x.fillStyle=R.red?"#ff5a5a":"#ffffff"; x.fillText(t,dx+cell/2,dy+cell/2+4);
+    fit(t,cell-14,96); x.textAlign="center"; x.textBaseline="middle"; x.lineJoin="round"; x.lineWidth=11; x.strokeStyle="rgba(10,10,14,.92)"; x.strokeText(t,dx+cell/2,dy+cell/2+4); x.fillStyle=R.red?"#ff5a5a":"#ffffff"; x.fillText(t,dx+cell/2,dy+cell/2+4);
     /* the floating tag: the plate on a dark pill (gold ring for a person, red for the leader) */
     const g=k++, gx=(g%cols)*cell, gy=Math.floor(g/cols)*cell;
     x.fillStyle="rgba(10,10,16,.82)"; rr(gx+2,gy+24,cell-4,cell-48,22); x.fill();
@@ -127,6 +53,66 @@ function atlasMat(T,cols,rows,opts){
   return m;
 }
 
+/* ---------------- the skinned rider's shader: bone matrices from a data texture, two bones a vertex, colour slots, cloth flutter ---------------- */
+/* per vertex: aSkin (bone, bone, weight, weight), aFx (colour slot 0 team / 1 accent / 2 fixed, flutter, mud weight); per instance: aInstA (rider row, team rgb),
+   aInstB (accent rgb, wind), aInstC (mud, -, atlas column, atlas row). uBones: NB x 3 texels a row (the three rows of each bone's 3 x 4 matrix), one row a rider. */
+const SKIN_DECL=`
+attribute vec4 aSkin; attribute vec3 aFx; attribute vec4 aInstA; attribute vec4 aInstB; attribute vec4 aInstC;
+uniform highp sampler2D uBones; uniform float uTime;
+void mxRows(out vec4 R0,out vec4 R1,out vec4 R2){
+  int row=int(aInstA.x+0.5), b0=int(aSkin.x+0.5)*3, b1=int(aSkin.y+0.5)*3;
+  vec4 a0=texelFetch(uBones,ivec2(b0,row),0), a1=texelFetch(uBones,ivec2(b0+1,row),0), a2=texelFetch(uBones,ivec2(b0+2,row),0);
+  if(aSkin.w>0.001){
+    vec4 c0=texelFetch(uBones,ivec2(b1,row),0), c1=texelFetch(uBones,ivec2(b1+1,row),0), c2=texelFetch(uBones,ivec2(b1+2,row),0);
+    R0=a0*aSkin.z+c0*aSkin.w; R1=a1*aSkin.z+c1*aSkin.w; R2=a2*aSkin.z+c2*aSkin.w;
+  } else { R0=a0; R1=a1; R2=a2; }
+}
+`;
+const SKIN_NORMAL=`
+vec4 mxR0,mxR1,mxR2; mxRows(mxR0,mxR1,mxR2);
+vec3 objectNormal=normalize(vec3(dot(mxR0.xyz,normal),dot(mxR1.xyz,normal),dot(mxR2.xyz,normal)));
+#ifdef USE_TANGENT
+ vec3 objectTangent=vec3(tangent.xyz);
+#endif
+#define MX_ROWS
+`;
+const SKIN_POS=`
+#ifndef MX_ROWS
+ vec4 mxR0,mxR1,mxR2; mxRows(mxR0,mxR1,mxR2);
+#endif
+vec4 mxP=vec4(position,1.0);
+vec3 transformed=vec3(dot(mxR0,mxP),dot(mxR1,mxP),dot(mxR2,mxP));
+#ifdef MX_ROWS
+ { float fl=aFx.y*aInstB.w; if(fl>0.0){ float ph=dot(position,vec3(41.0,53.0,29.0))+aInstA.x*2.7; transformed+=objectNormal*(fl*0.022*(0.6*sin(uTime*17.0+ph)+0.4*sin(uTime*29.0+ph*1.7))); } }
+#endif
+`;
+const SKIN_COLOR=`
+#include <color_vertex>
+#ifdef USE_COLOR
+ { float sl=aFx.x; vec3 tint=sl<0.5?aInstA.yzw:(sl<1.5?aInstB.xyz:vec3(1.0)); vColor.rgb*=tint; vColor.rgb=mix(vColor.rgb,vec3(0.26,0.17,0.10),aFx.z*aInstC.x*0.78); }
+#endif
+`;
+/* patch a three.js material: kind "main" (lit), "depth" (the shadow pass), opts.atlas (the number patch's atlas cell from aInstC.zw) */
+function skinMat(mat,U,kind,opts){
+  opts=opts||{};
+  mat.onBeforeCompile=sh=>{
+    sh.uniforms.uBones=U.uBones; sh.uniforms.uTime=U.uTime;
+    if(opts.atlas) sh.uniforms.uGrid={value:opts.atlas};
+    let vs=sh.vertexShader.replace("#include <common>","#include <common>\n"+SKIN_DECL+(opts.atlas?"uniform vec2 uGrid;\n":""));
+    vs=vs.replace("#include <beginnormal_vertex>",SKIN_NORMAL).replace("#include <begin_vertex>",SKIN_POS).replace("#include <color_vertex>",SKIN_COLOR);
+    if(opts.atlas) vs=vs.replace("#include <uv_vertex>","#include <uv_vertex>\n#ifdef USE_MAP\n vMapUv=vec2((aInstC.z+uv.x)*uGrid.x,1.0-(aInstC.w+1.0-uv.y)*uGrid.y);\n#endif");
+    sh.vertexShader=vs;
+  };
+  mat.customProgramCacheKey=()=>"mx-skin-"+kind+(opts.atlas?"-atlas":"");
+  return mat;
+}
+/* an instanced geometry (a plain Mesh drawn instanced: no instance matrix) over a source geometry, sharing the per-instance attributes */
+function instGeo(src,inst){
+  const g=new THREE.InstancedBufferGeometry(); g.setIndex(src.index); Object.keys(src.attributes).forEach(k=>g.setAttribute(k,src.attributes[k]));
+  g.setAttribute("aInstA",inst.A); g.setAttribute("aInstB",inst.B); g.setAttribute("aInstC",inst.C); g.instanceCount=0; g.boundingSphere=new THREE.Sphere(new THREE.Vector3(0,0,0),1e5); return g;
+}
+function instAttrs(n){ const mk=()=>{ const a=new THREE.InstancedBufferAttribute(new Float32Array(n*4),4); a.setUsage(THREE.DynamicDrawUsage); return a; }; return {A:mk(),B:mk(),C:mk()}; }
+
 /* ---------------- the rider set ---------------- */
 export function createRiders(list,opts){
   opts=opts||{};
@@ -134,27 +120,31 @@ export function createRiders(list,opts){
   const mk=(geo,count,mat)=>{ const m=new THREE.InstancedMesh(geo,mat,count); m.frustumCulled=false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); grp.add(m); return m; };
   const A=atlas(list);
   const M=createBike(n,lo,mk);   /* wheel, chassis, plastic, trim, fork, swing (r3d-bike.js: it makes the bike's materials first) */
-  /* glossy helmets, cloth gear (polish); then the rider's meshes */
-  const shell=new THREE.MeshPhongMaterial({vertexColors:true,shininess:lo?40:110,specular:0x8c8c8c});
-  const cloth=fixMat();
-  Object.assign(M,{
-    helmet:mk(helmetGeo(),n,shell), torso:mk(torsoGeo(),n,cloth), uarm:mk(limbGeo(0.056,0.048,0.29),n*2,cloth), farm:mk(limbGeo(0.048,0.042,0.29,lin("#24252b"),0.2),n*2,cloth),
-    thigh:mk(limbGeo(0.088,0.07,0.43),n*2,cloth), shin:mk(shinGeo(),n*2,cloth)
-  });
-  ["helmet","torso","uarm","farm","thigh","shin"].forEach(k=>{ M[k].castShadow=true; });   /* the rider's parts cast the sun's shadow too */
-  /* plates (3 a bike) and the jersey back (1) use the atlas */
-  const pg=plateGeo(), cellA=new Float32Array(n*3*2), cellB=new Float32Array(n*2);
-  list.forEach((R,i)=>{ const c=A.cells[R.s]; for(let k=0;k<3;k++){ cellA[(i*3+k)*2]=c.plate%A.cols; cellA[(i*3+k)*2+1]=Math.floor(c.plate/A.cols); } cellB[i*2]=c.decal%A.cols; cellB[i*2+1]=Math.floor(c.decal/A.cols); });
+  /* ---- the skinned riders ---- */
+  const boneData=new Float32Array(n*NB*12), boneTex=new THREE.DataTexture(boneData,NB*3,n,THREE.RGBAFormat,THREE.FloatType);
+  boneTex.minFilter=boneTex.magFilter=THREE.NearestFilter; boneTex.generateMipmaps=false; boneTex.needsUpdate=true;
+  const U={uBones:{value:boneTex},uTime:{value:0}};
+  const hiModel=buildRider(1), loModel=buildRider(0);
+  const hiInst=instAttrs(n), loInst=instAttrs(n);
+  const cloth=skinMat(new THREE.MeshLambertMaterial({vertexColors:true}),U,"main");
+  const shell=skinMat(lo?new THREE.MeshLambertMaterial({vertexColors:true}):new THREE.MeshPhongMaterial({vertexColors:true,shininess:120,specular:0x9a9a9a}),U,"main");
+  const decal=skinMat(new THREE.MeshLambertMaterial({map:A.tex,vertexColors:true,alphaTest:0.4}),U,"main",{atlas:new THREE.Vector2(1/A.cols,1/A.rows)});
+  const depth=skinMat(new THREE.MeshDepthMaterial({depthPacking:THREE.RGBADepthPacking}),U,"depth");
+  cloth.addEventListener("dispose",()=>{ boneTex.dispose(); });
+  const part=(geo,mat,shadow,order)=>{ const m=new THREE.Mesh(geo,mat); m.frustumCulled=false; m.castShadow=!!shadow; if(shadow) m.customDepthMaterial=depth; if(order) m.renderOrder=order; grp.add(m); return m; };
+  const S={hiBody:part(instGeo(hiModel.body,hiInst),cloth,true), hiHelmet:part(instGeo(hiModel.helmet,hiInst),shell,true), hiBack:part(instGeo(hiModel.back,hiInst),decal,false), loBody:part(instGeo(loModel.body,loInst),cloth,true)};
+  /* plates (3 a bike) use the atlas */
+  const pg=plateGeo(), cellA=new Float32Array(n*3*2);
+  list.forEach((R,i)=>{ const c=A.cells[R.s]; for(let k=0;k<3;k++){ cellA[(i*3+k)*2]=c.plate%A.cols; cellA[(i*3+k)*2+1]=Math.floor(c.plate/A.cols); } });
   const pgA=pg.clone(); pgA.setAttribute("aCell",new THREE.InstancedBufferAttribute(cellA,2));
-  const pgB=pg.clone(); pgB.setAttribute("aCell",new THREE.InstancedBufferAttribute(cellB,2));
   M.plate=mk(pgA,n*3,atlasMat(A.tex,A.cols,A.rows,{side:THREE.DoubleSide}));
-  M.back=mk(pgB,n,atlasMat(A.tex,A.cols,A.rows,{transparent:true,alphaTest:0.4,depthWrite:false}));
-  /* team colours */
-  const col=new THREE.Color();
+  /* team colours: the bike's plastics and trim (r3d-bike.js), the riders' tints (linear rgb) */
+  const col=new THREE.Color(), team=new Float32Array(n*3), acc=new Float32Array(n*3), cell=new Float32Array(n*2);
   list.forEach((R,i)=>{
-    colorBike(M,i,R);   /* the bike's plastics and trim: r3d-bike.js */
-    col.set(R.color||"#888"); M.helmet.setColorAt(i,col); M.torso.setColorAt(i,col); M.uarm.setColorAt(i*2,col); M.uarm.setColorAt(i*2+1,col); M.farm.setColorAt(i*2,col); M.farm.setColorAt(i*2+1,col);
-    const pc=col.clone().multiplyScalar(0.62); M.thigh.setColorAt(i*2,pc); M.thigh.setColorAt(i*2+1,pc); M.shin.setColorAt(i*2,pc); M.shin.setColorAt(i*2+1,pc);
+    colorBike(M,i,R);
+    col.set(R.color||"#888"); team[i*3]=col.r; team[i*3+1]=col.g; team[i*3+2]=col.b;
+    col.set(R.accent||"#f2f2f6"); acc[i*3]=col.r; acc[i*3+1]=col.g; acc[i*3+2]=col.b;
+    const c=A.cells[R.s]; cell[i*2]=c.decal%A.cols; cell[i*2+1]=Math.floor(c.decal/A.cols);
   });
   Object.values(M).forEach(m=>{ if(m.instanceColor) m.instanceColor.needsUpdate=true; });
   /* blob shadows: one quad under each bike and one under each rider (for crashes); a soft dark ellipse */
@@ -175,98 +165,27 @@ export function createRiders(list,opts){
     vertexShader:"attribute vec2 aCell; uniform vec2 uGrid; varying vec2 vUv; void main(){ vUv=vec2((aCell.x+uv.x)*uGrid.x,1.0-(aCell.y+1.0-uv.y)*uGrid.y); vec4 c=modelViewMatrix*instanceMatrix*vec4(0.,0.,0.,1.); float s=length(instanceMatrix[0].xyz); c.xyz+=normalize(-c.xyz)*min(1.8,0.25*length(c.xyz)); c.xy+=position.xy*s; gl_Position=projectionMatrix*c; }",
     fragmentShader:"uniform sampler2D map; varying vec2 vUv; void main(){ vec4 t=texture2D(map,vUv); if(t.a<0.05) discard; gl_FragColor=t; }"});
   M.tag=new THREE.InstancedMesh(tagG,tagMat,n); M.tag.frustumCulled=false; M.tag.renderOrder=20; grp.add(M.tag);
-  const R={grp,M,A,n,list,hidden:new Uint8Array(n)};
+  const R={grp,M,A,n,list,S,hidden:new Uint8Array(n),vis:new Uint8Array(n),pos:new Float32Array(n*3),team,acc,cell,wind:new Float32Array(n),mud:new Float32Array(n),
+    rig:list.map((r,i)=>newRig(i)),bones:boneData,boneTex,U,hiInst,loInst,nHi:Math.max(0,opts.riderHi!=null?opts.riderHi:(lo?3:8)),dt:1/60,t:0,order:[],lod:new Int8Array(n),stats:{hi:0,lo:0,tris:hiModel.tris}};
   /* scratch */
   R._m=new THREE.Matrix4(); R._q=new THREE.Quaternion(); R._e=new THREE.Euler(0,0,0,"YZX"); R._v=new THREE.Vector3(); R._s=new THREE.Vector3(1,1,1);
   return R;
 }
 
 /* ---------------- posing ---------------- */
-const _a=new THREE.Vector3(), _c=new THREE.Vector3(), _d=new THREE.Vector3(), _e=new THREE.Vector3(), _f=new THREE.Vector3();
-const _m1=new THREE.Matrix4(), _m2=new THREE.Matrix4(), _sc=new THREE.Vector3(), _ka=new THREE.Vector3(), _kb=new THREE.Vector3(), _kc=new THREE.Vector3();
-/* two-bone IK: root a, target t, lengths l1 l2, pole direction p (world) -> the middle joint into out */
-function ik(a,t,l1,l2,p,out){
-  _ka.subVectors(t,a); let d=_ka.length(); const dmax=l1+l2-0.002, dmin=Math.abs(l1-l2)+0.002;
-  if(d>dmax){ _ka.multiplyScalar(dmax/d); d=dmax; } if(d<dmin){ _ka.multiplyScalar(dmin/Math.max(1e-4,d)); d=dmin; }
-  const e=_kb.copy(_ka).multiplyScalar(1/d), x=(l1*l1-l2*l2+d*d)/(2*d), h=Math.sqrt(Math.max(0,l1*l1-x*x));
-  const nrm=_kc.copy(p).addScaledVector(e,-p.dot(e)); if(nrm.lengthSq()<1e-6) nrm.set(0,1,0); nrm.normalize();
-  out.copy(a).addScaledVector(e,x).addScaledVector(nrm,h);
-  return d;
-}
-/* the rider's joints in bike-local space for a stance (stand 0..1, dab -1..1 the inside foot out, lean for the counter-lean) */
-const J={hip:new THREE.Vector3(),sh:new THREE.Vector3(),head:new THREE.Vector3(),gL:new THREE.Vector3(),gR:new THREE.Vector3(),fL:new THREE.Vector3(),fR:new THREE.Vector3()};
-function localJoints(stand,dab,lean,crouch){
-  J.hip.set(-0.21+0.09*stand,0.99+0.22*stand-0.06*crouch,0);
-  const pitch=0.48+0.3*stand+0.15*crouch, tl=0.52;
-  J.sh.set(J.hip.x+Math.sin(pitch)*tl,J.hip.y+Math.cos(pitch)*tl,0);
-  /* the counter-lean: the body stays more upright than the bike in a turn (rotate about the bike's X through the hip) */
-  const cl=-lean*0.3, cy=J.sh.y-J.hip.y; J.sh.z=Math.sin(cl)*cy; J.sh.y=J.hip.y+Math.cos(cl)*cy;
-  J.head.set(J.sh.x+0.07,J.sh.y+0.17,J.sh.z*1.1);
-  J.gL.set(BIKE.GRIP.x,BIKE.GRIP.y,-BIKE.GRIP.z); J.gR.set(BIKE.GRIP.x,BIKE.GRIP.y,BIKE.GRIP.z);
-  J.fL.set(BIKE.PEG.x,BIKE.PEG.y,-BIKE.PEG.z); J.fR.set(BIKE.PEG.x,BIKE.PEG.y,BIKE.PEG.z);
-  if(dab>0.01){ J.fR.lerp(_a.set(0.5,0.26,0.44),dab); }          /* the inside foot out (a right turn: the right foot) */
-  else if(dab<-0.01){ J.fL.lerp(_a.set(0.5,0.26,-0.44),-dab); }
-  return J;
-}
-const W={hip:new THREE.Vector3(),sh:new THREE.Vector3(),shL:new THREE.Vector3(),shR:new THREE.Vector3(),head:new THREE.Vector3(),gL:new THREE.Vector3(),gR:new THREE.Vector3(),fL:new THREE.Vector3(),fR:new THREE.Vector3(),hipL:new THREE.Vector3(),hipR:new THREE.Vector3(),el:new THREE.Vector3(),kn:new THREE.Vector3(),pole:new THREE.Vector3(),fw:new THREE.Vector3(),rt:new THREE.Vector3(),upv:new THREE.Vector3()};
-/* place one rider: B = the bike's world matrix (a Matrix4), st = {stand, dab, lean, crouch, spinF, spinR, compF, compR, hide, body, limbs}
-   (a crash: body = the rider's body matrix, limbs = {spread, walk, phase, stand, reach}) */
+const _m1=new THREE.Matrix4();
+/* place one rider: B = the bike's world matrix (a Matrix4), st = the per-frame state (CONTRACT.md). Normal riding reads st.stand, dab, lean, crouch, pitch, acc, v, k, air, landed, impact
+   (the bike's own acceleration is measured from B). A crash: st.body = the rider's body matrix and st.limbs = {spread, walk, phase, stand, reach} */
 export function poseRider(R,i,B,st){
-  const M=R.M;
   if(st.hide){ hideRider(R,i); return; }
-  poseBike(M,i,B,st);   /* the bike: wheels, suspension, fork, swingarm, plates (r3d-bike.js) */
-  /* ---- the rider ---- */
-  if(st.body){ poseBody(R,i,st.body,st.limbs); return; }
-  const j=localJoints(st.stand||0,st.dab||0,st.lean||0,st.crouch||0);
-  W.hip.copy(j.hip).applyMatrix4(B); W.sh.copy(j.sh).applyMatrix4(B); W.head.copy(j.head).applyMatrix4(B);
-  W.gL.copy(j.gL).applyMatrix4(B); W.gR.copy(j.gR).applyMatrix4(B); W.fL.copy(j.fL).applyMatrix4(B); W.fR.copy(j.fR).applyMatrix4(B);
-  W.fw.set(1,0,0).transformDirection(B); W.rt.set(0,0,1).transformDirection(B); W.upv.set(0,1,0).transformDirection(B);
-  limbs(R,i,W.fw,W.rt,W.upv,st);
-}
-/* torso, helmet, arms, legs from the world joints in W */
-function limbs(R,i,fw,rt,upv,st){
-  const M=R.M;
-  /* torso: a basis with +Y from hip to shoulders, +Z the bike's right */
-  _d.subVectors(W.sh,W.hip); const tl=_d.length(); _d.normalize();
-  _e.copy(rt).addScaledVector(_d,-rt.dot(_d)).normalize(); _f.crossVectors(_d,_e);   /* X = Y x Z */
-  _m1.makeBasis(_f,_d,_e); _m1.scale(_sc.set(1,tl,1)); _m1.setPosition(W.hip); M.torso.setMatrixAt(i,_m1);
-  /* the jersey-back number: on the upper back, facing back */
-  /* the plane's +Z (its face) points back, its +X to the rider's right: read from behind */
-  _c.copy(_f).negate(); _m2.makeBasis(_e,_d,_c); const back=_a.copy(W.hip).addScaledVector(_d,tl*0.62).addScaledVector(_f,-0.125);
-  _m2.scale(_sc.set(0.26,0.22,1)); _m2.setPosition(back); M.back.setMatrixAt(i,_m2);
-  /* helmet: at the head, facing forward (pitched with the torso a little) */
-  _m1.makeBasis(_f,_d,_e); _m1.setPosition(W.head); M.helmet.setMatrixAt(i,_m1);
-  /* shoulders, hips */
-  W.shL.copy(W.sh).addScaledVector(_e,-0.19); W.shR.copy(W.sh).addScaledVector(_e,0.19);
-  W.hipL.copy(W.hip).addScaledVector(_e,-0.11); W.hipR.copy(W.hip).addScaledVector(_e,0.11);
-  /* arms: elbows up and out (MX style) */
-  [["shL","gL",-1,0],["shR","gR",1,1]].forEach(a=>{ const s=W[a[0]], t=W[a[1]], sd=a[2];
-    W.pole.copy(rt).multiplyScalar(sd*1.0).addScaledVector(upv,0.55).addScaledVector(fw,-0.35);
-    ik(s,t,0.29,0.29,W.pole,W.el); bone(M.uarm,i*2+a[3],s,W.el,1,fw); bone(M.farm,i*2+a[3],W.el,t,1,fw); });
-  /* legs: knees forward, gripping the bike */
-  [["hipL","fL",-1,0],["hipR","fR",1,1]].forEach(a=>{ const h=W[a[0]], t=W[a[1]], sd=a[2];
-    W.pole.copy(fw).addScaledVector(rt,sd*0.25).addScaledVector(upv,0.15);
-    ik(h,t,0.43,0.45,W.pole,W.kn); bone(M.thigh,i*2+a[3],h,W.kn,1,fw); bone(M.shin,i*2+a[3],W.kn,t,1,fw); });
-}
-/* a crash: the rider's body frame (world Matrix4: origin the hip, +Y up the spine, +X the chest's front, +Z right) and limb spread 0..1 */
-function poseBody(R,i,body,lim){
-  const L=lim||{};
-  _f.set(1,0,0).transformDirection(body); _d.set(0,1,0).transformDirection(body); _e.set(0,0,1).transformDirection(body);
-  W.hip.setFromMatrixPosition(body); W.sh.copy(W.hip).addScaledVector(_d,0.52); W.head.copy(W.sh).addScaledVector(_d,0.17).addScaledVector(_f,0.05);
-  const spread=L.spread||0, walk=L.walk||0, ph=L.phase||0, stand=L.stand||0;
-  /* hands and feet relative to the body: spread out when tumbling, at the sides and swinging when walking, reaching when lifting the bike */
-  W.gL.copy(W.sh).addScaledVector(_e,-0.25-0.35*spread).addScaledVector(_d,-0.45+0.5*spread).addScaledVector(_f,0.12+0.1*Math.sin(ph)*walk+(L.reach||0)*0.45);
-  W.gR.copy(W.sh).addScaledVector(_e,0.25+0.35*spread).addScaledVector(_d,-0.45+0.5*spread).addScaledVector(_f,0.12-0.1*Math.sin(ph)*walk+(L.reach||0)*0.45);
-  W.fL.copy(W.hip).addScaledVector(_e,-0.14-0.3*spread).addScaledVector(_d,-0.86+0.1*spread*(1-stand)).addScaledVector(_f,0.25*Math.sin(ph)*walk+0.1*spread);
-  W.fR.copy(W.hip).addScaledVector(_e,0.14+0.3*spread).addScaledVector(_d,-0.86+0.1*spread*(1-stand)).addScaledVector(_f,-0.25*Math.sin(ph)*walk-0.05*spread);
-  limbs(R,i,_f.clone(),_e.clone(),_d.clone(),{});
+  poseBike(R.M,i,B,st);   /* the bike: wheels, suspension, fork, swingarm, plates (r3d-bike.js) */
+  const e=B.elements, p=R.pos; p[i*3]=e[12]; p[i*3+1]=e[13]; p[i*3+2]=e[14]; R.vis[i]=1; R.wind[i]=Math.min(1,Math.max(0,(st.v||0)/16)); if(st.mud!=null) R.mud[i]=st.mud;
+  if(st.body) poseBody(R.rig[i],st.body,st.limbs,R.dt,R.bones,i*NB*12);
+  else poseRide(R.rig[i],e,st,R.dt,R.bones,i*NB*12);
 }
 export function hideRider(R,i){
-  const M=R.M, z=_m1.makeScale(0,0,0);
-  hideBike(M,i);
-  ["helmet","torso","back"].forEach(k=>M[k].setMatrixAt(i,z));
-  ["uarm","farm","thigh","shin"].forEach(k=>{ M[k].setMatrixAt(i*2,z); M[k].setMatrixAt(i*2+1,z); });
-  M.shadow.setMatrixAt(i*2,z); M.shadow.setMatrixAt(i*2+1,z); M.tag.setMatrixAt(i,z);
+  hideBike(R.M,i); R.vis[i]=0;
+  const z=_m1.makeScale(0,0,0); R.M.shadow.setMatrixAt(i*2,z); R.M.shadow.setMatrixAt(i*2+1,z); R.M.tag.setMatrixAt(i,z);
 }
 const _sCol=new THREE.Color();
 export function shadowAt(R,k,x,y,z,th,sx,sz,alpha,gs,gl,op){
@@ -280,8 +199,25 @@ export function shadowAt(R,k,x,y,z,th,sx,sz,alpha,gs,gl,op){
   _m1.set(fx*a,ux,lx*b,x+ux*0.05, fy*a,uy,ly*b,y+uy*0.05, fz*a,uz,lz*b,z+uz*0.05, 0,0,0,1); R.M.shadow.setMatrixAt(k,_m1);
 }
 export function tagAt(R,i,pos,size){ if(!size){ R.M.tag.setMatrixAt(i,_m1.makeScale(0,0,0)); return; } _m1.makeScale(size,size,size); _m1.setPosition(pos); R.M.tag.setMatrixAt(i,_m1); }
-export function commit(R){
+/* once a frame, after posing: the nearest riders (R.nHi, by distance to the camera) are drawn as the full model, the rest as the thin one; every buffer is uploaded.
+   cam = the camera (its position), dt = the step just taken (the next frame's poses use it for their springs) */
+export function commit(R,cam,dt){
   const M=R.M; Object.keys(M).forEach(k=>{ if(M[k].instanceMatrix) M[k].instanceMatrix.needsUpdate=true; });
   if(M.shadow.instanceColor) M.shadow.instanceColor.needsUpdate=true;
+  R.dt=dt>=1/240?Math.min(0.05,dt):0; if(dt>0){ R.t+=dt; R.U.uTime.value=R.t%1000; }
+  const n=R.n, order=R.order; order.length=0;
+  const cx=cam?cam.position.x:0, cy=cam?cam.position.y:0, cz=cam?cam.position.z:0, P=R.pos;
+  for(let i=0;i<n;i++) if(R.vis[i]){ const dx=P[i*3]-cx, dy=P[i*3+1]-cy, dz=P[i*3+2]-cz; order.push(i,dx*dx+dy*dy+dz*dz); }
+  /* sort the (index, distance) pairs by distance (n is at most 40) */
+  const k=order.length/2, idx=[]; for(let j=0;j<k;j++) idx.push(j); idx.sort((a,b)=>order[a*2+1]-order[b*2+1]);
+  const H=R.hiInst, L=R.loInst; let nh=0, nl=0;
+  for(let q=0;q<k;q++){ const i=order[idx[q]*2], hi=q<R.nHi, I=hi?H:L, s=hi?nh++:nl++;
+    I.A.array[s*4]=i; I.A.array[s*4+1]=R.team[i*3]; I.A.array[s*4+2]=R.team[i*3+1]; I.A.array[s*4+3]=R.team[i*3+2];
+    I.B.array[s*4]=R.acc[i*3]; I.B.array[s*4+1]=R.acc[i*3+1]; I.B.array[s*4+2]=R.acc[i*3+2]; I.B.array[s*4+3]=R.wind[i];
+    I.C.array[s*4]=R.mud[i]; I.C.array[s*4+1]=0; I.C.array[s*4+2]=R.cell[i*2]; I.C.array[s*4+3]=R.cell[i*2+1]; }
+  H.A.needsUpdate=H.B.needsUpdate=H.C.needsUpdate=true; L.A.needsUpdate=L.B.needsUpdate=L.C.needsUpdate=true;
+  const S=R.S; S.hiBody.geometry.instanceCount=nh; S.hiHelmet.geometry.instanceCount=nh; S.hiBack.geometry.instanceCount=nh; S.loBody.geometry.instanceCount=nl;
+  S.hiBody.visible=S.hiHelmet.visible=S.hiBack.visible=nh>0; S.loBody.visible=nl>0; R.stats.hi=nh; R.stats.lo=nl;
+  R.boneTex.needsUpdate=true;
 }
 export function setRed(R,list){ /* the red plate moved: redraw the atlas */ const A=atlas(list); R.A.tex.image=A.canvas; R.A.tex.needsUpdate=true; }

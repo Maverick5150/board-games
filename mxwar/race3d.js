@@ -359,7 +359,7 @@ export function create(host,hooks){
     FX.step(dt);   /* the particles move on (r3d-fx.js) */
     // [/hook:fx]
     // [hook:rider]
-    commit(R);   /* every instanced mesh of the riders and bikes is uploaded (r3d-riders.js) */
+    commit(R,cam,dt);   /* the riders' level of detail by distance to the camera, every instance buffer and the bone texture are uploaded (r3d-riders.js) */
     // [/hook:rider]
     // [hook:dirt]
     if(world.dirt&&world.dirt.frame) world.dirt.frame(dt,RST);   /* per-frame work for the track surface: tyre tracks, ruts (r3d-track.js addTrack().frame) */
@@ -439,7 +439,8 @@ export function create(host,hooks){
     /* extra pose inputs for the bike (read by r3d-bike.js poseBike): st.compF / st.compR (suspension compression, m), st.spinF / st.spinR (wheel spin, rad) */
     // [/hook:bike]
     // [hook:rider]
-    /* extra pose inputs for the rider (read by r3d-riders.js poseRider): st.stand 0..1, st.dab -1..1, st.crouch, st.lean */
+    /* extra pose inputs for the rider (read by r3d-riders.js poseRider): st.stand 0..1, st.dab -1..1, st.crouch, st.lean; the bike's own acceleration is measured from the matrix there */
+    st.mud=st.mud+(1-st.mud)*Math.min(1,dt*0.012);   /* the riders get dirtier through the race (time constant about 80 s): the skinned riders' shader browns the boots, legs, gloves and chest */
     // [/hook:rider]
     poseRider(R,i,BW,st);   /* the bike, then the rider on it (r3d-riders.js, r3d-bike.js) */
     const gl=onStart?0:(MX.Course.ground(C,s,lat+0.5)-MX.Course.ground(C,s,lat-0.5));

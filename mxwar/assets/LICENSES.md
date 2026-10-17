@@ -25,6 +25,7 @@ Add your lines between your heading and its end marker only (this keeps the role
 <!-- end bike -->
 
 ## rider
+- No third-party assets. The rider (skeleton, skinned mesh, weights, colours, the number patch) is generated in code by `mxwar/r3d-rider-model.js`; the poses are `mxwar/r3d-rider-pose.js`; the number atlas is drawn on a canvas with the page's own font. No models, textures, photos or logos were downloaded.
 <!-- end rider -->
 
 ## fx
