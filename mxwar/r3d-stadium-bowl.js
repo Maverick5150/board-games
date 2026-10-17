@@ -11,7 +11,7 @@ import * as THREE_NS from "../ui/vendor/three-0.160.0.module.min.js";
 const THREE=THREE_NS;
 import {lin,mixc,clamp,sstep,canvas,tex,rngf,merge,paint,xf} from "./r3d-util.js";
 import {SOIL,dirtMaps} from "./r3d-track.js";
-import {CROWD,crowdAtlas,boardsTex,ribbonTex,suitesTex,drawBoard,glowSheet,BRAND} from "./r3d-stadium-art.js";
+import {CROWD,crowdAtlas,boardsTex,ribbonTex,suitesTex,drawBoard,glowSheet,BRAND,PROPS,propsUV,propsTex} from "./r3d-stadium-art.js";
 
 const sgn=v=>v<0?-1:1;
 /* the footprint: a superellipse resampled to equal steps along its length, with the outward normal at every point */
@@ -179,7 +179,7 @@ void main(){ vec4 t=texture2D(map,vUv); if(t.a<0.45) discard; gl_FragColor=vec4(
 export function stadium(C,look,q,root,ctx){
   const lo=!!q.lo, F=C.layout.floor||[-66,66,-48,32], x0=F[0], x1=F[1], z0=F[2], z1=F[3], cx=(x0+x1)/2, cz=(z0+z1)/2, W=x1-x0, D=z1-z0;
   const dome=look.around==="stadium-dome", fancy=q.fancy!=null?!!q.fancy:!lo, hazeOn=q.haze!=null?!!q.haze:!lo, segs=q.segs||(lo?72:128), nTow=q.towers||(lo?6:10);
-  const U={uTime:{value:0}}, R=rngf(4151);
+  const U={uTime:{value:0}}, R=rngf(4151); let sweep=null;
   /* the dirt floor */
   const fm=dirtMaps(look.soil,lo,true); fm.map.repeat.set(W/7,D/7); fm.normal.repeat.set(W/7,D/7);
   const Sx=SOIL[look.soil]||SOIL["stadium-dirt"], fc=mixc(lin(Sx[0]),lin(Sx[2]),0.6);
@@ -202,36 +202,36 @@ export function stadium(C,look,q,root,ctx){
   const nCards=q.cards!=null?q.cards:(lo?0:1);
   if(nCards>0){ const cut=crowdAtlas(false,true), pl=r=>shadeAt(r); const c1=crowdCards(ring,LV,PR.low1,segs,U,cut,t=>1.0-0.12*t,pl); root.add(c1);
     if(nCards>1) root.add(crowdCards(ring,LV,PR.low2,segs,U,cut,t=>0.92-0.44*Math.pow(t,1.25),pl)); }
-  /* ---- the structure: dark concrete, rails, the concourse, the cantilever, the roof edge, the back (vertex colours, unlit) ---- */
+  /* ---- the structure: dark concrete, rails, the concourse, the cantilever, the roof edge, the back, the wall's padded cap (vertex colours, unlit, fogged): one mesh ---- */
   const MS=Mesher(), flat=(rgb)=>(t,r,Uu,o)=>{ o.r=rgb[0]; o.g=rgb[1]; o.b=rgb[2]; };
   const conc=lin("#1d1c24"), concL=lin("#34333c"), dark=lin("#0b0b11"), navy=lin("#141b38"), steel=lin("#2a2c36");
   loft(MS,LV,segs,PR.apron,1,flat(lin("#16151c")));
   loft(MS,LV,segs,PR.aisle,1,flat(concL)); loft(MS,LV,segs,PR.rail,1,flat(conc));
   loft(MS,LV,segs,PR.conc,1,flat(concL)); loft(MS,LV,segs,PR.trim,1,flat(conc)); loft(MS,LV,segs,PR.under,1,flat(dark));
   loft(MS,LV,segs,PR.roof,1,flat(dark)); loft(MS,LV,segs,PR.back,1,flat(dark)); loft(MS,LV,segs,PR.cap,1,flat(steel));
-  root.add(new THREE.Mesh(MS.geo(),new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.DoubleSide})));
-  /* the glowing accents: LED strips under the first row, along the cross aisle rail and the concourse edge, the roof edge */
-  const MA=Mesher(), glowStrip=(pr,rgb)=>loft(MA,LV,segs,pr,1,flat(rgb));
-  glowStrip([0.35,1.785,0.455,1.95],[2.6,0.35,0.25]); glowStrip([15.55,10.25,15.55,10.4],[1.8,1.4,0.9]); glowStrip([30.0,18.0,30.0,18.12],[2.2,1.7,0.9]); glowStrip([61.0,49.55,61.0,49.7],[2.2,2.0,1.6]); glowStrip([64.05,48.2,64.05,48.5],[2.6,0.4,0.3]);
-  const accent=new THREE.Mesh(MA.geo(),new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.DoubleSide,fog:false})); root.add(accent);
-  /* ---- the LED ribbons (the lower on the concourse, the upper on the rim) and the suites' windows ---- */
+  loft(MS,LV,segs,[-0.55,1.1,-0.55,1.16],1,flat(lin("#f0f1f3"))); loft(MS,LV,segs,[-0.55,1.16,-0.55,1.4],1,flat(navy)); loft(MS,LV,segs,[-0.55,1.4,-0.05,1.4],1,flat(lin("#202a52")));   /* the wall's cap */
+  /* tall banners hanging from the roof edge, facing the floor (the props texture; the plain structure samples its white corner) */
+  const nBan=q.banners!=null?q.banners:(lo?0:14);
+  for(let k=0;k<nBan;k++){ const p=ring.pts[Math.floor((k+0.5)/nBan*segs)%segs], dd=61, qx=p.x+p.nx*dd, qz=p.z+p.nz*dd, tx=-p.nz, tz=p.nx, hw=1.6, y1=49.6, y0=43.6, r=propsUV(PROPS.ban[k%4]);
+    const v0=MS.vert(qx-tx*hw,y0,qz-tz*hw,r[0],r[1],1,1,1), v1=MS.vert(qx+tx*hw,y0,qz+tz*hw,r[2],r[1],1,1,1), v2=MS.vert(qx-tx*hw,y1,qz-tz*hw,r[0],r[3],1,1,1), v3=MS.vert(qx+tx*hw,y1,qz+tz*hw,r[2],r[3],1,1,1); MS.quad(v0,v1,v2,v3); }
+  { const sm=new THREE.MeshBasicMaterial({map:propsTex(),vertexColors:true,side:THREE.DoubleSide}); sm.userData.keepMaps=true; root.add(new THREE.Mesh(MS.geo(),sm)); }
+  /* ---- the LED ribbons (the lower on the concourse, the upper on the rim), the suites' windows, the ad boards round the floor (1.1 m, 0.55 m inside the footprint) ---- */
   const rt=ribbonTex(lo), MR=Mesher();
   [PR.rib1,PR.rim].forEach(pr=>{ const rep16=(pr[3]-pr[1])*16, nr=Math.max(1,Math.round(LV(pr[0]).len/rep16)); loft(MR,LV,segs,pr,1,(t,r,Uu,o)=>{ o.u=Uu/(LV(pr[0]).len/nr); o.v=t; o.r=1.5; o.g=1.5; o.b=1.5; }); });
-  const ribbons=new THREE.Mesh(MR.geo(),new THREE.MeshBasicMaterial({map:rt,vertexColors:true,side:THREE.DoubleSide,toneMapped:true})); root.add(ribbons);
+  root.add(new THREE.Mesh(MR.geo(),new THREE.MeshBasicMaterial({map:rt,vertexColors:true,side:THREE.DoubleSide})));
   const st=suitesTex(lo), MW=Mesher(); st.wrapS=THREE.RepeatWrapping; st.wrapT=THREE.ClampToEdgeWrapping;
   loft(MW,LV,segs,PR.suite,1,(t,r,Uu,o)=>{ o.u=Uu/16; o.v=t; o.r=1.25; o.g=1.2; o.b=1.1; });
   root.add(new THREE.Mesh(MW.geo(),new THREE.MeshBasicMaterial({map:st,vertexColors:true,side:THREE.DoubleSide})));
-  /* ---- the wall round the floor: ad boards 1.1 m, a padded cap; it follows the footprint 0.55 m inside it ---- */
-  const bt=boardsTex(lo), MB=Mesher(), L0=LV(-0.55), MK=Mesher();
-  const wallBand=(Mx,pr,fn)=>loft(Mx,LV,segs,pr,1,fn);
-  wallBand(MB,[-0.55,0.0,-0.55,1.1],(t,r,Uu,o)=>{ o.u=Uu/23.5; o.v=t; o.r=1.3; o.g=1.3; o.b=1.3; });
-  wallBand(MK,[-0.55,1.1,-0.55,1.16],flat(lin("#f0f1f3"))); wallBand(MK,[-0.55,1.16,-0.55,1.4],flat(navy)); wallBand(MK,[-0.55,1.4,-0.05,1.4],flat(lin("#202a52")));
-  root.add(new THREE.Mesh(MK.geo(),new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.DoubleSide})));
+  const bt=boardsTex(lo), MB=Mesher();
+  loft(MB,LV,segs,[-0.55,0.0,-0.55,1.1],1,(t,r,Uu,o)=>{ o.u=Uu/23.5; o.v=t; o.r=1.3; o.g=1.3; o.b=1.3; });
   root.add(new THREE.Mesh(MB.geo(),new THREE.MeshBasicMaterial({map:bt,vertexColors:true,side:THREE.DoubleSide})));
-  /* ---- light towers on the rim: a mast, a bank of floodlights facing the floor, a catwalk; the bulbs are emissive discs, every one has a glow, every bank a halo and a starburst ---- */
+  /* ---- the lights: LED strips, light towers on the rim (a mast, a bank of floodlights facing the floor, a catwalk), the bulbs as emissive discs (brighter than white), the roof edge's row of lights: ONE mesh, never fogged.
+     Every bulb has a glow, every bank a halo and a starburst (the glow sprites below). ---- */
+  const MA=Mesher(), glowStrip=(pr,rgb)=>loft(MA,LV,segs,pr,1,flat(rgb));
+  glowStrip([0.35,1.785,0.455,1.95],[2.6,0.35,0.25]); glowStrip([15.55,10.25,15.55,10.4],[1.8,1.4,0.9]); glowStrip([30.0,18.0,30.0,18.12],[2.2,1.7,0.9]); glowStrip([61.0,49.55,61.0,49.7],[2.2,2.0,1.6]); glowStrip([64.05,48.2,64.05,48.5],[2.6,0.4,0.3]);
   const parts=[], bulbs=[], glows=[], dummy=new THREE.Object3D(), tgt=new THREE.Vector3(cx,2,cz), bcols=lo?4:6, brows=lo?3:4, sp=lo?2.6:2.2;
   const steelC=lin("#1a1c24"), plate=lin("#0c0d12");
-  const addBulb=(M,s)=>{ const p=new THREE.Vector3().setFromMatrixPosition(M); bulbs.push(M.clone()); glows.push({x:p.x,y:p.y,z:p.z,s:s,r:1.0,g:0.93,b:0.78,k:0,a:0.55}); };
+  const addBulb=(M,s,rim)=>{ const p=new THREE.Vector3().setFromMatrixPosition(M); bulbs.push({M:M.clone(),rim:!!rim}); glows.push({x:p.x,y:p.y,z:p.z,s:s,r:1.0,g:0.93,b:0.78,k:0,a:rim?0.5:0.55}); };
   for(let k=0;k<nTow;k++){
     const idx=Math.floor(((k+0.5)/nTow+0.037)*segs)%segs, p=ring.pts[idx], baseD=PR.rim[0]+1.8, hM=13+(k%3)*2.5;
     const bx=p.x+p.nx*baseD, bz=p.z+p.nz*baseD, by=PR.cap[3], top=by+hM;
@@ -241,16 +241,14 @@ export function stadium(C,look,q,root,ctx){
     const frm=xf(paint(new THREE.BoxGeometry(bw+0.5,bh+0.5,0.5),steelC),0,0,-0.2); frm.applyMatrix4(Mb); parts.push(frm);
     for(const s of [-1,1]){ const m=xf(paint(new THREE.CylinderGeometry(0.34,0.5,hM+0.6,6),steelC),bx+s*p.nz*2.4,by+(hM+0.6)/2-0.3,bz-s*p.nx*2.4); parts.push(m); }
     const cat=xf(paint(new THREE.BoxGeometry(bw+1.5,0.35,2.2),steelC),0,-bh/2-0.6,-0.9); cat.applyMatrix4(Mb); parts.push(cat);
-    for(let j=0;j<brows;j++) for(let i=0;i<bcols;i++){ const lm=new THREE.Matrix4().makeTranslation((i-(bcols-1)/2)*sp,(j-(brows-1)/2)*sp,0.37); addBulb(Mb.clone().multiply(lm),lo?3.4:2.9); }
+    for(let j=0;j<brows;j++) for(let i=0;i<bcols;i++){ const lm=new THREE.Matrix4().makeTranslation((i-(bcols-1)/2)*sp,(j-(brows-1)/2)*sp,0.37); addBulb(Mb.clone().multiply(lm),lo?3.4:2.9,false); }
     const c0=new THREE.Vector3(0,0,1.0).applyMatrix4(Mb);
     glows.push({x:c0.x,y:c0.y,z:c0.z,s:bw*2.2,r:1.0,g:0.85,b:0.6,k:0,a:0.26}); glows.push({x:c0.x,y:c0.y,z:c0.z,s:bw*4.4,r:1.0,g:0.9,b:0.7,k:1,a:0.8});
   }
-  /* the roof edge: a row of small lights along the rim */
   const nRim=lo?32:64;
-  for(let k=0;k<nRim;k++){ const p=ring.pts[Math.floor(k/nRim*segs)%segs]; dummy.position.set(p.x+p.nx*(PR.rim[0]-0.2),PR.rim[3]+0.55,p.z+p.nz*(PR.rim[0]-0.2)); dummy.lookAt(cx,PR.rim[3]-8,cz); dummy.updateMatrix(); addBulb(dummy.matrix.clone(),2.0); bulbs[bulbs.length-1].rimLight=true; }
-  root.add(new THREE.Mesh(merge(parts),new THREE.MeshBasicMaterial({vertexColors:true})));
-  const bg=new THREE.CircleGeometry(0.8,12), bm=new THREE.MeshBasicMaterial({fog:false}); bm.color.setRGB(4.2,4.0,3.5);
-  const bI=new THREE.InstancedMesh(bg,bm,bulbs.length); bulbs.forEach((M,i)=>{ if(M.rimLight){ const s=0.6; M.scale(new THREE.Vector3(s,s,s)); } bI.setMatrixAt(i,M); }); bI.instanceMatrix.needsUpdate=true; bI.frustumCulled=false; root.add(bI);
+  for(let k=0;k<nRim;k++){ const p=ring.pts[Math.floor(k/nRim*segs)%segs]; dummy.position.set(p.x+p.nx*(PR.rim[0]-0.2),PR.rim[3]+0.55,p.z+p.nz*(PR.rim[0]-0.2)); dummy.lookAt(cx,PR.rim[3]-8,cz); dummy.updateMatrix(); addBulb(dummy.matrix.clone(),2.0,true); }
+  const discs=bulbs.map(b=>{ const g=new THREE.CircleGeometry(b.rim?0.5:0.8,lo?8:12); g.applyMatrix4(b.M); return paint(g,[4.2,4.0,3.5]); });
+  root.add(new THREE.Mesh(merge([MA.geo()].concat(parts,discs)),new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.DoubleSide,fog:false})));
   const sheet=glowSheet(), gm=glowSprites(sheet,glows,U); root.add(gm); ctx.glowMesh=gm;
   /* ---- the roof of a dome ---- */
   if(dome){ const rr=Math.max(W,D)/2+80, roof=new THREE.Mesh(new THREE.SphereGeometry(rr,24,10,0,Math.PI*2,0,Math.PI*0.32),new THREE.MeshLambertMaterial({color:0x1a1a22,side:THREE.BackSide})); roof.scale.set(1,0.35,(D/2+80)/rr); roof.position.set(cx,20,cz); root.add(roof); }
@@ -260,22 +258,22 @@ export function stadium(C,look,q,root,ctx){
     const mat=new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,fog:false,uniforms:{col:{value:new THREE.Color(0xfff0d0)}},
       vertexShader:"varying float vF; varying float vE; void main(){ vF=1.0+position.y; vec4 mv=modelViewMatrix*instanceMatrix*vec4(position,1.0); vec3 n=normalize(mat3(modelViewMatrix*instanceMatrix)*normal); vE=abs(dot(n,normalize(-mv.xyz))); gl_Position=projectionMatrix*mv; }",
       fragmentShader:"uniform vec3 col; varying float vF; varying float vE; void main(){ float a=0.06*pow(vF,1.5)*pow(vE,1.3); gl_FragColor=vec4(col*a,a);\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}"});
-    const n=Math.min(nTow,8), m=new THREE.InstancedMesh(g,mat,n), M=new THREE.Matrix4(), Q=new THREE.Quaternion(), up=new THREE.Vector3(0,-1,0), d=new THREE.Vector3(), pos=new THREE.Vector3(), sc=new THREE.Vector3();
-    for(let i=0;i<n;i++){ const p=ring.pts[Math.floor(((i+0.5)/n+0.037)*segs)%segs]; pos.set(p.x+p.nx*(PR.rim[0]-1),PR.cap[3]+14,p.z+p.nz*(PR.rim[0]-1));
-      const tx=cx+(((i*37)%11)/11-0.5)*W*0.6, tz=cz+(((i*53)%7)/7-0.5)*D*0.5; d.set(tx-pos.x,0.2-pos.y,tz-pos.z); const len=d.length(); d.normalize(); Q.setFromUnitVectors(up,d); sc.set(1,len,1); M.compose(pos,Q,sc); m.setMatrixAt(i,M); }
-    m.instanceMatrix.needsUpdate=true; m.frustumCulled=false; m.renderOrder=6; root.add(m);
+    const n=Math.min(nTow,8), m=new THREE.InstancedMesh(g,mat,n), M=new THREE.Matrix4(), Q=new THREE.Quaternion(), up=new THREE.Vector3(0,-1,0), d=new THREE.Vector3(), pos=new THREE.Vector3(), sc=new THREE.Vector3(), cones=[];
+    for(let i=0;i<n;i++){ const p=ring.pts[Math.floor(((i+0.5)/n+0.037)*segs)%segs]; cones.push({x:p.x+p.nx*(PR.rim[0]-1),y:PR.cap[3]+14,z:p.z+p.nz*(PR.rim[0]-1),tx:cx+(((i*37)%11)/11-0.5)*W*0.6,tz:cz+(((i*53)%7)/7-0.5)*D*0.5,ph:i*1.7}); }
+    sweep=(tw)=>{ cones.forEach((c,i)=>{ pos.set(c.x,c.y,c.z); d.set(c.tx+Math.sin(tw*0.21+c.ph)*16-pos.x,0.2-pos.y,c.tz+Math.cos(tw*0.17+c.ph*1.3)*9-pos.z); const len=d.length(); d.normalize(); Q.setFromUnitVectors(up,d); sc.set(1,len,1); M.compose(pos,Q,sc); m.setMatrixAt(i,M); }); m.instanceMatrix.needsUpdate=true; };
+    sweep(0); m.frustumCulled=false; m.renderOrder=6; root.add(m);
   }
-  /* ---- the big video boards: the east and west ends and the far side, original graphics, plain text ---- */
-  const bc=canvas(512,256), bx=bc.getContext("2d"), bt2=tex(bc,false), board={lap:0,len:0,num:null,T:null,sec:-1,dirty:true};
-  const MBd=Mesher(), parts2=[], bw2=26, bh2=11.2;
+  /* ---- the big video boards: the east and west ends and the far side, original graphics, plain text; the screens and their steel frames are ONE mesh on one texture (the canvas's last rows are white for the steel) ---- */
+  const BH=272, V0=1-256/BH, bc=canvas(512,BH), bx=bc.getContext("2d"); bx.fillStyle="#ffffff"; bx.fillRect(0,256,512,BH-256);
+  const bt2=tex(bc,false), board={lap:0,len:0,num:null,T:null,sec:-1,dirty:true};
+  const MBd=Mesher(), parts2=[], bw2=26, bh2=11.2, solid=g=>{ const uv=g.attributes.uv; for(let i=0;i<uv.count;i++) uv.setXY(i,0.5,0.015); return g; };
   [0,Math.floor(segs/2),Math.floor(segs*0.75)].forEach((i,bi)=>{ const p=ring.pts[i], dd=46, qx=p.x+p.nx*dd, qz=p.z+p.nz*dd, yc=40.5, tx=-p.nz, tz=p.nx;
     const a=[qx-tx*bw2/2,yc-bh2/2,qz-tz*bw2/2], b=[qx+tx*bw2/2,yc-bh2/2,qz+tz*bw2/2], c=[qx-tx*bw2/2,yc+bh2/2,qz-tz*bw2/2], d2=[qx+tx*bw2/2,yc+bh2/2,qz+tz*bw2/2];
-    const v0=MBd.vert(a[0],a[1],a[2],0,0,1.7,1.7,1.7), v1=MBd.vert(b[0],b[1],b[2],1,0,1.7,1.7,1.7), v2=MBd.vert(c[0],c[1],c[2],0,1,1.7,1.7,1.7), v3=MBd.vert(d2[0],d2[1],d2[2],1,1,1.7,1.7,1.7); MBd.quad(v0,v1,v2,v3);
-    const fr=xf(paint(new THREE.BoxGeometry(bw2+1.4,bh2+1.4,0.9),steel),0,0,0); const Mf=new THREE.Matrix4().makeBasis(new THREE.Vector3(tx,0,tz),new THREE.Vector3(0,1,0),new THREE.Vector3(-p.nx,0,-p.nz)); Mf.setPosition(qx+p.nx*0.65,yc,qz+p.nz*0.65); fr.applyMatrix4(Mf); parts2.push(fr);
-    for(const s of [-1,1]){ const post=xf(paint(new THREE.BoxGeometry(0.8,8,0.8),steel),qx+tx*s*(bw2/2-1.2)+p.nx*0.6,yc-bh2/2-3.2,qz+tz*s*(bw2/2-1.2)+p.nz*0.6); parts2.push(post); }
+    const v0=MBd.vert(a[0],a[1],a[2],0,V0,1.7,1.7,1.7), v1=MBd.vert(b[0],b[1],b[2],1,V0,1.7,1.7,1.7), v2=MBd.vert(c[0],c[1],c[2],0,1,1.7,1.7,1.7), v3=MBd.vert(d2[0],d2[1],d2[2],1,1,1.7,1.7,1.7); MBd.quad(v0,v1,v2,v3);
+    const fr=xf(solid(paint(new THREE.BoxGeometry(bw2+1.4,bh2+1.4,0.9),steel)),0,0,0); const Mf=new THREE.Matrix4().makeBasis(new THREE.Vector3(tx,0,tz),new THREE.Vector3(0,1,0),new THREE.Vector3(-p.nx,0,-p.nz)); Mf.setPosition(qx+p.nx*0.65,yc,qz+p.nz*0.65); fr.applyMatrix4(Mf); parts2.push(fr);
+    for(const s2 of [-1,1]){ const post=xf(solid(paint(new THREE.BoxGeometry(0.8,8,0.8),steel)),qx+tx*s2*(bw2/2-1.2)+p.nx*0.6,yc-bh2/2-3.2,qz+tz*s2*(bw2/2-1.2)+p.nz*0.6); parts2.push(post); }
   });
-  const scr=new THREE.Mesh(MBd.geo(),new THREE.MeshBasicMaterial({map:bt2,vertexColors:true,side:THREE.DoubleSide,fog:false})); root.add(scr);
-  root.add(new THREE.Mesh(merge(parts2),new THREE.MeshBasicMaterial({vertexColors:true})));
+  root.add(new THREE.Mesh(merge([MBd.geo()].concat(parts2)),new THREE.MeshBasicMaterial({map:bt2,vertexColors:true,side:THREE.DoubleSide,fog:false})));
   const redraw=()=>{ drawBoard(bx,512,256,board); bt2.needsUpdate=true; board.dirty=false; };
   ctx.screen=function(lap,len,num){ board.lap=lap|0; board.len=len|0; if(num!=null) board.num=num; if(!lap) board.T=null; board.dirty=true; redraw(); };
   ctx.screen(0,0,null);
@@ -284,7 +282,7 @@ export function stadium(C,look,q,root,ctx){
   ctx.fog(0x141a2e,140,600);
   /* per frame: the clock of the shaders, the ribbon's scroll, the board's clock */
   function frame(dt,tw,cam,T,lap,len,num){
-    U.uTime.value=tw%3600; rt.offset.x=(tw*0.011)%1;
+    U.uTime.value=tw%3600; rt.offset.x=(tw*0.011)%1; if(sweep) sweep(tw%3600);
     if(len!=null){ let ch=false; if(len!==board.len){ board.len=len|0; ch=true; } if(lap!=null&&lap!==board.lap){ board.lap=lap|0; ch=true; } if(num!=null&&num!==board.num){ board.num=num; ch=true; }
       if(T!=null&&lap>0){ const s=Math.floor(T); if(s!==board.sec){ board.sec=s; board.T=T; ch=true; } } else if(board.T!=null&&!(lap>0)){ board.T=null; ch=true; }
       if(ch) redraw(); }
