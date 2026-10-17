@@ -81,7 +81,7 @@ function assign(RG,si,pool){
 /* balanced by team (the CEO ~18:25): the teams in turn (the biggest first, then the team of the better seed), each team's riders in seed
    order; every rider goes to the race (with room left) that has the fewest of their team, then the fewest riders, then the weaker field
    so far (the higher sum of seed places): every team split as evenly as it can be (at most one apart), every race the same size (at most
-   one apart), and the top seeds spread over the races instead of every team's best landing in Heat 1 */
+   one apart); then (review fix) the riders are dealt in seed order within those team quotas, so the top seeds alternate over the races */
 function balanced(RG,pool,races){
   var g={}, order=[], first={}, cap=Math.ceil(pool.length/races), per=[], tc=[], sum=[], i;
   for(i=0;i<races;i++){ per.push([]); tc.push({}); sum.push(0); }
@@ -96,7 +96,16 @@ function balanced(RG,pool,races){
       if(sum[r]>sum[best]) best=r; }
     per[best].push(x.id); tc[best][t]=(tc[best][t]||0)+1; sum[best]+=x.k+1;
   }); });
-  return per;
+  /* review fix: the counts above are the team QUOTAS of each race; the riders are then dealt in seed order, each to the race (with quota
+     left for their team) that has had the fewest riders dealt so far, then the weaker field (the higher sum of seed places): the top
+     seeds alternate between the heats as qualifying would, and every team keeps its even split */
+  var out=[], n2=[], s2=[];
+  for(i=0;i<races;i++){ out.push([]); n2.push(0); s2.push(0); }
+  pool.forEach(function(id,k){ var t=RG.team[id]||"Privateer", best=-1;
+    for(var r=0;r<races;r++){ if(!(tc[r][t]>0)) continue;
+      if(best<0||n2[r]<n2[best]||(n2[r]===n2[best]&&s2[r]>s2[best])) best=r; }
+    out[best].push(id); tc[best][t]--; n2[best]++; s2[best]+=k+1; });
+  return out;
 }
 /* how a stage's races share the teams: [{race label, n, teams:{make: count}}] (the heat line-up screen) */
 function teamSplit(RG,si){

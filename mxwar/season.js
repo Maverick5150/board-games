@@ -68,7 +68,11 @@ function newSeason(season,index,opts,humans,seed){
   /* v2 (the CEO ~18:25): every rider of the season has their OWN number. The packer gives every rider a number (the real one where a
      source has it; a free one marked ns "a" = assigned, never shown as historical, where none does); a clash left in the data keeps the
      first rider's number and gives the next a free one (plateGen). */
-  season.riders.forEach(function(r,k){ if(r.num!=null&&!used[r.num]){ used[r.num]=1; holder[r.num]=k; } });
+  season.riders.forEach(function(r,k){ if(r.num!=null&&r.ns!=="a"&&!used[r.num]){ used[r.num]=1; holder[r.num]=k; } });
+  /* review fix: an ASSIGNED number (ns "a": no source gives that rider one) is not history, so a person may take it; its rider gets
+     another free number below. The assigned numbers are held after the people's picks. */
+  var hnum={}; humans.forEach(function(h){ var n=Math.floor(+(h&&h.num)); if(n>=0&&n<=999) hnum[n]=1; });
+  season.riders.forEach(function(r,k){ if(r.num!=null&&r.ns==="a"&&!used[r.num]&&!hnum[r.num]){ used[r.num]=1; holder[r.num]=k; } });
   /* the human riders */
   var hn={};
   humans.forEach(function(h,k){
@@ -88,7 +92,7 @@ function newSeason(season,index,opts,humans,seed){
     var id="r"+k, form=r.pos!=null&&r.pos<=5?2:r.pos!=null&&r.pos<=10?1:0;
     var own=r.num!=null&&holder[r.num]===k;
     G.riders[id]={id:id,name:r.name,kind:"pro",plate:own?r.num:null,plateGen:!own||r.ns==="a",ns:own?(r.ns||"s"):"a",bike:r.bike||"Privateer",country:r.country,pos:r.pos,realPts:r.pts,realWins:r.wins,starts:r.starts,edge:form,seed:r.seed||null};
-    if(r.num!=null&&!own) G.riders[id].realNum=r.num;
+    if(r.num!=null&&!own&&r.ns!=="a") G.riders[id].realNum=r.num;
     G.roster.push(id);
   });
   G.roster.forEach(function(id){ var r=G.riders[id]; if(r.plate==null){ r.plate=plate(G,used); used[r.plate]=1; } });

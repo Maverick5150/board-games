@@ -154,13 +154,13 @@ function numState(i){
   var n=+v;
   for(var j=0;j<i;j++){ var o=rx(j); if(o.num!==""&&+o.num===n) return {ok:false,t:"#"+n+" is already "+(cfg.humans>1?"Rider "+(j+1)+"'s":"taken")+" number.",n:n}; }
   if(!D) return {ok:true,t:"Checking the "+(si?si.year:"")+" numbers...",wait:true};
-  var h=D.riders.filter(function(x){ return x.num===n; })[0];
+  var h=D.riders.filter(function(x){ return x.num===n&&x.ns!=="a"; })[0];   /* an assigned number (no source gives it) is yours to take */
   if(h) return {ok:false,t:"#"+n+" is taken in "+D.year+": "+h.name+(h.bike?" ("+h.bike+")":"")+" rides it"+(h.ns==="a"?" (a number assigned for the game)":"")+".",n:n};
   return {ok:true,t:"#"+n+" is free in "+D.year+"."};
 }
 function freeNear(n,k){
   var si=seasonInfo(cfg.sid), D=si&&DATA[si.id], used={}, out=[];
-  if(D) D.riders.forEach(function(x){ if(x.num!=null) used[x.num]=1; });
+  if(D) D.riders.forEach(function(x){ if(x.num!=null&&x.ns!=="a") used[x.num]=1; });
   for(var j=0;j<cfg.humans;j++){ var o=rx(j); if(o.num!=="") used[+o.num]=1; }
   for(var d=1;d<1000&&out.length<k;d++){ if(n-d>=1&&!used[n-d]) out.push(n-d); if(out.length<k&&n+d<=999&&!used[n+d]) out.push(n+d); }
   return out.sort(function(a,b){ return a-b; });
@@ -551,7 +551,8 @@ function startSeason(){
 function myId(){ return G&&G.humans.length?G.humans[0]:null; }
 /* a plate: white with the team colour down its edge; the championship points leader's is RED (the CEO v2); an assigned number (no source
    gives the rider's real one) is set in italics and says so */
-function plateHTML(R){ var red=R.id===redId(); return '<span class="mx-pl'+(R.plateGen?" is-gen":"")+(red?" is-red":"")+'" style="'+A.mkStyle(R.bike)+'" title="'+(red?"Red plate: the points leader. ":"")+(R.plateGen?"Number assigned for the game (no source gives it)":"")+'">'+(R.plate!=null?R.plate:"-")+"</span>"; }
+function plateHTML(R){ var red=R.id===redId(), gen=R.plateGen&&R.kind!=="human"; /* review fix: a person's number is theirs (picked, or picked for them), never "assigned" */
+  return '<span class="mx-pl'+(gen?" is-gen":"")+(red?" is-red":"")+'" style="'+A.mkStyle(R.bike)+'" title="'+(red?"Red plate: the points leader. ":"")+(gen?"Number assigned for the game (no source gives it)":"")+'">'+(R.plate!=null?R.plate:"-")+"</span>"; }
 function nameHTML(R){ return esc(R.name)+(R.kind==="privateer"?' <span class="mx-priv">(privateer)</span>':""); }
 function stRow(r,meIds,top){
   var R=rider(r.id), me=meIds.indexOf(r.id)>=0;
@@ -695,7 +696,9 @@ function trackRiders(){
   T.setFlag(rc.over?"checkered":(rc.phase!=="gate"&&rc.battle+1===rc.o.len?"white":null));
 }
 /* a first guess at a lap's length on screen (the track learns the real one from the laps it sees) */
-function lapGuess(){ var hs=raceHumans().length; return Math.round((hs&&!cfg.auto?2600:Math.max(200,BR.pace(G,cfg.speed)*(hs?0.6:1))+1500*speedFactor())); }
+/* review fix: the first guess is the MEASURED lap time at this Game speed (LAP_S, the setup's estimate; a race without you is watched
+   about 1.5 times slower), so the field doesn't reach the line early and wait there on the first laps */
+function lapGuess(){ var hs=raceHumans().length, base=(LAP_S[normSpeed(cfg.speed)]||LAP_S.medium)*1000; return Math.round(hs?base:base*1.5); }
 /* the standings on the track: every rider at their gap behind the leader (the cards on show while a battle plays) */
 function trackSync(atGate){
   var T=track(), rc=ui.rc; if(!T||!rc) return;
@@ -1241,7 +1244,7 @@ function openLineup(go,label){
   var mine=me.map(function(h){ var col=cols.filter(function(x){ return x.ids.indexOf(h)>=0; })[0]; return col?(me.length>1?G.riders[h].name+": ":"You ride ")+col.label:null; }).filter(Boolean);
   $("lineSheet").innerHTML='<div class="bg-sheet__grip" aria-hidden="true"></div><div class="mx-shd"><span class="bg-eyebrow">Round '+(G.ri+1)+" of "+G.cal.length+" · "+esc(c.city||c.venue)+'</span>'+
     '<h2 class="bg-sheet__title" id="lineTitle">'+(heats.length>1?"Tonight's heats":heats.length?"Tonight's "+esc(heats[0].label):"The gate")+"</h2>"+
-    '<p class="bg-sheet__sub">'+(heats.length>1?"Balanced by team: every team's riders are split as evenly as they can be over the heats, then by seed.":"Every rider on the gate, in gate-pick order.")+(mine.length?" <b>"+esc(mine.join(" · "))+".</b>":"")+"</p></div>"+
+    '<p class="bg-sheet__sub">'+(heats.length>1?"Balanced by team: every team's riders are split as evenly as they can be over the heats, and the top seeds alternate between them as in qualifying.":"Every rider on the gate, in gate-pick order.")+(mine.length?" <b>"+esc(mine.join(" · "))+".</b>":"")+"</p></div>"+
     '<div class="mx-lu'+(cols.length>1?" is-multi":"")+'" style="--lu-cols:'+cols.length+'">'+html+"</div>"+
     '<div class="mx-sacts"><button class="bg-btn bg-btn--primary bg-btn--lg" id="lineGo" type="button" data-icon="play">'+esc(label)+'</button><button class="bg-btn bg-btn--ghost bg-btn--lg" id="lineSeason" type="button">Season</button></div>';
   var B=BG(); if(B&&B.icon) $("lineSheet").querySelectorAll("[data-icon]").forEach(function(el){ el.insertAdjacentHTML("afterbegin",B.icon(el.getAttribute("data-icon"))); });
