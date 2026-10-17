@@ -13,7 +13,8 @@ const THREE=THREE_NS;
 import {setAniso} from "./r3d-util.js";
 import {createBench} from "./r3d-perf-bench.js";
 const GL=typeof window!=="undefined"?window:globalThis;
-const nowMs=()=>(GL.performance&&performance.now)?performance.now():Date.now();
+/* the REAL clock: the capture harness replaces performance.now with a virtual one, and a GPU probe or a GPU sample must be timed with the wall clock */
+const nowMs=(GL.Performance&&GL.Performance.prototype&&GL.Performance.prototype.now&&GL.performance)?()=>GL.Performance.prototype.now.call(GL.performance):()=>Date.now();
 
 /* a TV (the Fire TV app and Party Mode's screen set data-tv on the page) */
 export function isTV(){ return document.documentElement.hasAttribute("data-tv"); }
@@ -56,6 +57,7 @@ export const TIERS={
     res:{maxPR:1.0,capW:1280,tvW:1280,start:0.75,min:0.5},
     shadow:{real:false,size:512,soft:false},
     post:{on:false,bloom:false,bloomScale:0.5,aa:"none",dof:false,shafts:false},
+    fog:{on:true,far:0.75},
     fx:{particles:160,scale:1},
     crowd:{detail:0.35,anim:false},
     scenery:{trees:0.4,terrain:0.5},
@@ -67,6 +69,7 @@ export const TIERS={
     res:{maxPR:1.25,tvW:1280,start:1,min:0.5},
     shadow:{real:true,size:1024,soft:false},
     post:{on:true,bloom:true,bloomScale:0.5,aa:"fxaa",dof:false,shafts:false},
+    fog:{on:true,far:0.9},
     fx:{particles:360,scale:1},
     crowd:{detail:0.7,anim:false},
     scenery:{trees:0.7,terrain:0.8},
@@ -78,6 +81,7 @@ export const TIERS={
     res:{maxPR:1.75,tvW:1280,start:1,min:0.5},
     shadow:{real:true,size:1024,soft:false},
     post:{on:true,bloom:true,bloomScale:1,aa:"smaa",dof:false,shafts:true},
+    fog:{on:true,far:1},
     fx:{particles:520,scale:1},
     crowd:{detail:1,anim:true},
     scenery:{trees:1,terrain:1},
@@ -89,6 +93,7 @@ export const TIERS={
     res:{maxPR:2.0,tvW:1920,start:1,min:0.5},
     shadow:{real:true,size:2048,soft:true},
     post:{on:true,bloom:true,bloomScale:1,aa:"smaa",dof:true,shafts:true},
+    fog:{on:true,far:1},
     fx:{particles:900,scale:1},
     crowd:{detail:1,anim:true},
     scenery:{trees:1,terrain:1},
@@ -253,22 +258,23 @@ export function fitTextures(root,max){
   return n;
 }
 
-/* ---------------------------------------------------------------- the GPU probe: ~40 ms on a good GPU. A fixed workload (60k lit triangles + 3 layers of a 40-op fragment shader on a 640x360 target),
-   timed with gl.finish(): the median of 8 frames after 3 warm-up frames. Calibration: see CONTRACT.md; the bench panel prints it so the Fire TV's number can be added. */
+/* ---------------------------------------------------------------- the GPU probe: about 60 ms in all on a good GPU (11 frames). A fixed workload (61k lit triangles + 6 layers of a 32-iteration fragment shader on a 960x540 target),
+   timed with gl.finish() on the REAL clock: the median of 8 frames after 3 warm-up frames. Thresholds (ms per frame): under 3 = fast, 3-12 = as the GPU string says, over 12 = one tier down, over 30 = two down.
+   Calibration: this laptop's Intel UHD measures the number printed in CONTRACT.md; the bench panel shows it so the Fire TV's number can be added. */
 export function probeGpu(renderer){
   const out={ms:0,ok:false};
   try{
-    const gl=renderer.getContext(), W=640, H=360, rt=new THREE.WebGLRenderTarget(W,H,{depthBuffer:true});
+    const gl=renderer.getContext(), W=960, H=540, rt=new THREE.WebGLRenderTarget(W,H,{depthBuffer:true});
     const sc=new THREE.Scene(), cam=new THREE.PerspectiveCamera(50,W/H,0.5,200); cam.position.set(0,6,14); cam.lookAt(0,0,0);
     sc.add(new THREE.HemisphereLight(0xffffff,0x443322,1.2)); const dl=new THREE.DirectionalLight(0xffffff,2); dl.position.set(3,8,5); sc.add(dl);
     const geo=new THREE.IcosahedronGeometry(0.5,3), mat=new THREE.MeshPhongMaterial({color:0xc8a070,shininess:60}), N=192, im=new THREE.InstancedMesh(geo,mat,N), m4=new THREE.Matrix4();
     for(let i=0;i<N;i++){ m4.makeTranslation((i%16-7.5)*0.9,Math.floor(i/16)*0.35-1,(Math.floor(i/16)-6)*1.0); im.setMatrixAt(i,m4); } sc.add(im);
     const fm=new THREE.ShaderMaterial({transparent:true,depthWrite:false,uniforms:{u:{value:0}},vertexShader:"void main(){ gl_Position=vec4(position.xy,0.0,1.0); }",
-      fragmentShader:"uniform float u; void main(){ vec2 p=gl_FragCoord.xy*0.01; float a=0.0; for(int i=0;i<10;i++){ a+=sin(p.x*float(i+1)+u)*cos(p.y*float(i+2)-u)+dot(p,p)*0.001; p=p.yx*1.01+a*0.01; } gl_FragColor=vec4(vec3(0.5+0.5*sin(a)),0.18); }"});
-    const quad=new THREE.Mesh(new THREE.PlaneGeometry(2,2),fm); quad.frustumCulled=false; for(let i=0;i<3;i++){ const q=quad.clone(); q.renderOrder=10+i; sc.add(q); }
+      fragmentShader:"uniform float u; void main(){ vec2 p=gl_FragCoord.xy*0.01; float a=0.0; for(int i=0;i<32;i++){ a+=sin(p.x*float(i+1)+u)*cos(p.y*float(i+2)-u)+dot(p,p)*0.001; p=p.yx*1.01+a*0.01; } gl_FragColor=vec4(vec3(0.5+0.5*sin(a)),0.18); }"});
+    const quad=new THREE.Mesh(new THREE.PlaneGeometry(2,2),fm); quad.frustumCulled=false; for(let i=0;i<6;i++){ const q=quad.clone(); q.renderOrder=10+i; sc.add(q); }
     const prevRT=renderer.getRenderTarget(), prevAuto=renderer.info.autoReset, ts=[];
     renderer.setRenderTarget(rt);
-    for(let i=0;i<11;i++){ const t0=nowMs(); renderer.render(sc,cam); gl.finish(); if(i>=3) ts.push(nowMs()-t0); }
+    for(let i=0;i<11;i++){ const t0=nowMs(); renderer.render(sc,cam); gl.finish(); const d=nowMs()-t0; if(i>=3) ts.push(d); if(i>=4&&d>80) break; }   /* (a hopeless GPU: stop early) */
     renderer.setRenderTarget(prevRT); renderer.info.autoReset=prevAuto; renderer.info.reset();
     rt.dispose(); geo.dispose(); mat.dispose(); fm.dispose(); quad.geometry.dispose();
     ts.sort((a,b)=>a-b); out.ms=+ts[ts.length>>1].toFixed(2); out.best=+ts[0].toFixed(2); out.ok=true;
@@ -286,7 +292,8 @@ export function createQuality(env){
   env=env||{};
   const LO0=!!env.lo;
   const ua=(GL.navigator&&navigator.userAgent)||"";
-  const dev={tv:isTV(),mobile:/Android|iPhone|iPad|iPod|Mobile/i.test(ua),dpr:GL.devicePixelRatio||1,cores:(GL.navigator&&navigator.hardwareConcurrency)||0,mem:(GL.navigator&&navigator.deviceMemory)||0};
+  const dev={mobile:/Android|iPhone|iPad|iPod|Mobile/i.test(ua),dpr:GL.devicePixelRatio||1,cores:(GL.navigator&&navigator.hardwareConcurrency)||0,mem:(GL.navigator&&navigator.deviceMemory)||0};
+  Object.defineProperty(dev,"tv",{get:isTV,enumerable:true});   /* live: the app may set data-tv after the view is made */
   /* 1. what GPU: a throwaway context, so the renderer can be made with the right attributes (MSAA cannot be changed later) */
   let gpu0={cls:1,family:"unknown",string:"",software:false};
   try{ const c=document.createElement("canvas"), g=c.getContext("webgl2")||c.getContext("webgl"); if(g){ gpu0=classifyGpu(gpuString(g)); const lc=g.getExtension("WEBGL_lose_context"); if(lc) lc.loseContext(); } }catch(e){}
@@ -307,7 +314,7 @@ export function createQuality(env){
   Q.probe=null;
   if(!want&&gpu0.cls>=1&&env.probe!==false&&!gpu0.software){
     Q.probe=probeGpu(renderer); Q.stats.probeMs=Q.probe.ms;
-    if(Q.probe.ok){ const ms=Q.probe.ms, r=ORDER.indexOf(tierId); let nr=r; if(ms>14) nr=Math.max(0,r-2); else if(ms>7) nr=Math.max(0,r-1); else if(ms<1.6&&gpu0.cls>=2&&!dev.mobile) nr=Math.min(3,r+1); tierId=ORDER[nr]; if(nr!==r) source="probe"; else source="gpu+probe"; }
+    if(Q.probe.ok){ const ms=Q.probe.ms, r=ORDER.indexOf(tierId); let nr=r; if(ms>30) nr=Math.max(0,r-2); else if(ms>12) nr=Math.max(0,r-1); else if(ms<3&&gpu0.cls>=2&&!dev.mobile) nr=Math.min(3,r+1); tierId=ORDER[nr]; if(nr!==r) source="probe"; else source="gpu+probe"; }
   } else if(!want&&gpu0.cls<=0) source="gpu";
   if(dev.tv&&!want&&tierId!=="firetv"&&(dev.cores&&dev.cores<=4)&&(dev.mem&&dev.mem<=2)) { tierId="firetv"; source="tv-class"; }
   let tier=TIERS[tierId];
@@ -343,13 +350,15 @@ export function createQuality(env){
   Object.defineProperty(Q,"tier",{get:()=>tier}); Object.defineProperty(Q,"tierName",{get:()=>tierId});
   Object.defineProperty(Q,"effTier",{get:()=>eff()});
   Object.defineProperty(Q,"rung",{get:()=>ladder.k}); Object.defineProperty(Q,"ladder",{get:()=>ladder}); Object.defineProperty(Q,"targetFps",{get:()=>targetFps()});
-  Q.names=tierNames; Q.resolve=resolveTier; Q.TIERS=TIERS;
+  /* the names of the tiers; indexOf also knows the old names and "auto" (the capture harness checks DEMO.quality(name) against this list) */
+  Q.names=function(){ const a=tierNames(); Object.defineProperty(a,"indexOf",{value:function(x){ const id=resolveTier(x)||(String(x).toLowerCase()==="auto"?this[0]:x); return Array.prototype.indexOf.call(this,id); }}); return a; };
+  Q.resolve=resolveTier; Q.TIERS=TIERS;
   Q.label=name=>{ const id=resolveTier(name); return id?TIERS[id].label:null; };
 
   /* ---- options for the builders ---- */
   Q.options=function(LO){
     const e=LO?TIERS.firetv:tier;
-    return {lo:!!(LO||e.lo),tier:e.id,rank:e.rank,label:e.label,shadow:e.shadow,post:e.post,fx:e.fx,crowd:e.crowd,scenery:e.scenery,riders:e.riders,tex:e.tex,res:e.res,budget:e.budget,
+    return {lo:!!(LO||e.lo),tier:e.id,rank:e.rank,label:e.label,shadow:e.shadow,post:e.post,fog:e.fog,fx:e.fx,crowd:e.crowd,scenery:e.scenery,riders:e.riders,tex:e.tex,res:e.res,budget:e.budget,
       particles:e.fx.particles,texMax:e.tex.max,aniso:e.tex.aniso,crowdDetail:e.crowd.detail,crowdAnim:e.crowd.anim,trees:e.scenery.trees,terrainDetail:e.scenery.terrain,riderLod:e.riders,
       live:live,key:e.id+(LO?"+lo":"")};
   };
@@ -361,8 +370,10 @@ export function createQuality(env){
   function applyPR(p){
     pr=p; live.pr=p; try{ renderer.setPixelRatio(p); renderer.setSize(env.W(),env.H(),false); if(env.resized) env.resized(env.W(),env.H(),p); }catch(e){}
   }
+  let lastTV=isTV();
   Q.resize=function(w,h,W,H,LO){
     if(!!LO!==LOcur){ LOcur=!!LO; applyAniso(); setRung(); }
+    else if(isTV()!==lastTV){ lastTV=isTV(); setRung(); }   /* a TV flag that came late: the frame-rate target changes (30 on a TV) */
     const dpr=GL.devicePixelRatio||1, e=eff();
     if(!Q.fixed){
       let cap=Math.min(dpr,e.res.maxPR); if(e.res.capW) cap=Math.min(cap,e.res.capW/w); if(dev.tv&&e.res.tvW) cap=Math.min(cap,e.res.tvW/w);
@@ -388,7 +399,7 @@ export function createQuality(env){
     if(live.shadows!==env.shadowsOn()){ env.setShadows(live.shadows&&!LOcur); }
     Q.stats.shadowDrop=!live.shadows&&eff().shadow.real;
     const np=Math.max(0.5,prCap*STEPS[rung.si]);
-    if(!Q.fixed&&Math.abs(np-pr)>1e-3){ if(np<pr) Q.stats.prDrops++; else Q.stats.prRaises++; applyPR(np); }
+    if(!Q.fixed&&Math.abs(np-pr)>1e-3){ if(np<pr) Q.stats.prDrops++; else Q.stats.prRaises++; applyPR(np); if(env.redraw) env.redraw(); }   /* a new size clears the canvas: draw this frame again at once, so no blank frame is ever shown */
     emit("rung",{k:ladder.k,why:why,scale:live.scale,shadows:live.shadows,fx:live.particleScale,post:live.post.on,pr:+pr.toFixed(2)});
   }
 

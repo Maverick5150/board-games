@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Motocross War graphics benchmark</title>
+<style>html,body{margin:0;height:100%;background:#090c12;color:#f0f1f3;font:600 20px/1.4 system-ui,sans-serif}body{display:flex;align-items:center;justify-content:center;text-align:center}</style></head>
+<body><div>Motocross War graphics benchmark<br><small style="opacity:.7">starting a real race and measuring 20 seconds ...</small></div>
+<script>
+/* Opens the capture page in live mode with the benchmark on: ../../demo.html?live=1&bench=1&q=auto (q=auto = the tier this device chooses for itself).
+   Add ?sweep=1 for all four tiers one after the other, ?quality=firetv|balanced|high|ultra to force one, ?seconds=30 for a longer run. */
+(function(){
+  var p=new URLSearchParams(location.search), q=new URLSearchParams();
+  q.set("live","1"); q.set("bench",p.get("sweep")?"sweep":"1"); q.set("q",p.get("quality")||"auto"); if(p.get("seconds")) q.set("benchSeconds",p.get("seconds"));
+  location.replace("../../demo.html?"+q.toString());
+})();
+</script></body></html>
