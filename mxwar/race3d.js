@@ -31,9 +31,10 @@ function rng(seed){ var t=seed>>>0; return function(){ t=(t+0x6D2B79F5)>>>0; var
 function now(){ return (g.performance&&performance.now)?performance.now():Date.now(); }
 /* the demo / capture clock: a VIRTUAL time (ms) that only moves when a frame is stepped (V.step), and a seeded random source, so a recorded run is
    exactly repeatable; in the game both are the real clock and Math.random */
-var VCLK={on:false,ms:0}, RNG={f:null};
+var VCLK={on:false,ms:0}, RNG={f:null}, VR={f:null};
 function vnow(){ return VCLK.on?VCLK.ms:now(); }
 function rand(){ return RNG.f?RNG.f():Math.random(); }
+function vrand(){ return VR.f?VR.f():Math.random(); }
 function hex(c){ c=String(c||"#888888").replace("#",""); if(c.length===3) c=c[0]+c[0]+c[1]+c[1]+c[2]+c[2]; var n=parseInt(c,16); return [((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255]; }
 
 /* ---------------- textures made in code ---------------- */
@@ -125,7 +126,7 @@ function create(host,opt){
     IB.decal=R.vbuf(new Float32Array(64*12),[["iP",4],["iD",4],["iN",4]],true);
     IB.flag=R.vbuf(new Float32Array(3000*10),[["aPos",3],["aNor",3],["aCol",4]],true);
     IB.glow=R.vbuf(new Float32Array(48*8),[["iP",4],["iCol",4]],true);
-    IB.clump=R.vbuf(new Float32Array(300*12),[["iP",4],["iCol",4],["iV",4]],true);
+    IB.clump=R.vbuf(new Float32Array(600*12),[["iP",4],["iCol",4],["iV",4]],true);
     /* the textures made in code (smaller on a device that starts at the lean level) */
     var big=V.q>=1;
     TEX.dirt=R.tex(dirtTexture(7,big?512:256),{aniso:4,w:big?512:256,h:big?512:256});
@@ -137,7 +138,7 @@ function create(host,opt){
     var nc=document.createElement("canvas"); nc.width=nc.height=64; var nx=nc.getContext("2d"), ni=nx.createImageData(64,64), Rn0=rng(1234);
     for(var q=0;q<ni.data.length;q++) ni.data[q]=(q&3)===3?255:Math.floor(Rn0()*256);   /* opaque: a canvas keeps colour exactly only at full alpha */
     nx.putImageData(ni,0,0); TEX.noise=R.tex(nc,{nearest:true});
-    atlasInit();
+    atlasInit(); bannerInit();
   }
   /* ---------- the plate / label atlas: 8 x 8 cells of 128 x 64 ---------- */
   var ATL={c:null,x:null,t:null,cells:{},dirty:false};
@@ -174,6 +175,70 @@ function create(host,opt){
   function atlasRedraw(){ V.riders.forEach(function(r){ drawCell(r.k,r.plate,{red:r.red,me:r.me,color:r.hex}); drawOut(r.k,r.plate); drawJersey(r); }); }
   if(document.fonts&&document.fonts.ready) document.fonts.ready.then(function(){ if(ATL.x){ atlasRedraw(); } });
 
+  /* ---------- the banners: ORIGINAL Motocross War graphics, drawn in code into an atlas (no logos, no marks of anyone else): the game's own wordmark,
+     a red WAR slab, the tagline, gold chevrons; hung as hoardings round the floor wall and as tall banners from the canopy. The infield TOWER shows
+     the live lap and race clock (its own small texture, redrawn once a second). ---------- */
+  var BAN={c:null,t:null,tw:null,twc:null,twT:-1};
+  var BUV={h:[],v:[]};   /* the atlas cells: horizontal (8:1) and vertical (1:2) */
+  function bannerInit(){
+    BUV.h=[]; BUV.v=[]; var c=document.createElement("canvas"); c.width=1024; c.height=1024; var x=c.getContext("2d"), i;
+    var W=1024, HH=128;
+    function distress(ctx,w,h,n,seed){ var Rr=rng(seed); ctx.save(); ctx.globalCompositeOperation="destination-out"; for(var q=0;q<n;q++){ var px=Rr()*w, py=Rr()*h, sz=1+Rr()*Rr()*7; ctx.globalAlpha=0.35+Rr()*0.65; ctx.fillRect(px,py,sz*(1+Rr()*2),sz); } ctx.restore(); }
+    function word(ctx,txt,px,py,size,fill,edge,skew){
+      ctx.save(); ctx.translate(px,py); ctx.transform(1,0,-(skew==null?0.2:skew),1,0,0); ctx.font="italic 900 "+size+"px 'Arial Black', Impact, Manrope, sans-serif"; ctx.textBaseline="middle"; ctx.textAlign="left";
+      if(edge){ ctx.lineJoin="round"; ctx.lineWidth=size*0.12; ctx.strokeStyle=edge; ctx.strokeText(txt,0,0); } ctx.fillStyle=fill; ctx.fillText(txt,0,0); ctx.restore(); }
+    /* H0: the wordmark on a night panel */
+    var g=x.createLinearGradient(0,0,0,HH); g.addColorStop(0,"#121723"); g.addColorStop(1,"#080b12"); x.fillStyle=g; x.fillRect(0,0,W,HH);
+    var tc=document.createElement("canvas"); tc.width=W; tc.height=HH; var t=tc.getContext("2d");
+    word(t,"MOTOCROSS",34,64,74,"#f4f1ea","#0a0c12",0.22); word(t,"WAR",600,60,104,"#f72d2e","#0a0c12",0.22); distress(t,W,HH,520,11); x.drawImage(tc,0,0);
+    x.fillStyle="#f72d2e"; x.fillRect(0,HH-7,W,7); x.fillStyle="#ecb967"; x.fillRect(0,0,W,4);
+    /* H1: the red WAR slab with chevrons */
+    g=x.createLinearGradient(0,HH,W,HH*2); g.addColorStop(0,"#d51e22"); g.addColorStop(1,"#8f0c10"); x.fillStyle=g; x.fillRect(0,HH,W,HH);
+    x.save(); x.beginPath(); x.rect(0,HH,W,HH); x.clip(); x.fillStyle="rgba(255,255,255,.16)"; for(i=-2;i<22;i++){ x.beginPath(); x.moveTo(i*60,HH); x.lineTo(i*60+34,HH+64); x.lineTo(i*60,HH*2); x.lineTo(i*60+22,HH*2); x.lineTo(i*60+56,HH+64); x.lineTo(i*60+22,HH); x.fill(); } x.restore();
+    tc=document.createElement("canvas"); tc.width=W; tc.height=HH; t=tc.getContext("2d"); word(t,"WAR",300,66,118,"#fbfaf6","#4a0608",0.2); word(t,"MX",70,66,58,"#fbfaf6",null,0.2); word(t,"MX",780,66,58,"#fbfaf6",null,0.2); distress(t,W,HH,420,23); x.drawImage(tc,0,HH);
+    /* H2: the tagline */
+    g=x.createLinearGradient(0,HH*2,0,HH*3); g.addColorStop(0,"#0c1019"); g.addColorStop(1,"#05070c"); x.fillStyle=g; x.fillRect(0,HH*2,W,HH);
+    tc=document.createElement("canvas"); tc.width=W; tc.height=HH; t=tc.getContext("2d"); word(t,"REAL TRACKS  •  REAL RIDERS  •  REAL RACING",22,64,50,"#ecb967","#06080d",0.18); distress(t,W,HH,300,31); x.drawImage(tc,0,HH*2);
+    x.fillStyle="#f72d2e"; x.fillRect(0,HH*3-6,W,6);
+    /* H3: black and gold chevrons */
+    x.fillStyle="#0b0d13"; x.fillRect(0,HH*3,W,HH); x.fillStyle="#ecb967"; for(i=-2;i<22;i++){ x.beginPath(); x.moveTo(i*60,HH*3); x.lineTo(i*60+30,HH*3); x.lineTo(i*60+66,HH*3+64); x.lineTo(i*60+30,HH*4); x.lineTo(i*60,HH*4); x.lineTo(i*60+36,HH*3+64); x.fill(); }
+    x.fillStyle="#f72d2e"; x.fillRect(0,HH*3,W,5); x.fillRect(0,HH*4-5,W,5);
+    for(i=0;i<4;i++) BUV.h.push([0,(i*HH)/1024,1,((i+1)*HH)/1024]);
+    /* V0..V3: tall banners (256 x 512 each, in the lower half) */
+    var VW=256, VH=512, vy=512;
+    function vtext(ctx,txt,cx,cy,size,fill,edge){ ctx.save(); ctx.translate(cx,cy); ctx.rotate(-PI/2); ctx.transform(1,0,-0.2,1,0,0); ctx.font="italic 900 "+size+"px 'Arial Black', Impact, Manrope, sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; if(edge){ ctx.lineJoin="round"; ctx.lineWidth=size*0.12; ctx.strokeStyle=edge; ctx.strokeText(txt,0,0); } ctx.fillStyle=fill; ctx.fillText(txt,0,0); ctx.restore(); }
+    var vc=document.createElement("canvas"); vc.width=VW; vc.height=VH; var v=vc.getContext("2d");
+    function vcell(k,paint){ v.clearRect(0,0,VW,VH); paint(v); x.drawImage(vc,k*VW,vy); BUV.v.push([(k*VW)/1024,vy/1024,((k+1)*VW)/1024,(vy+VH)/1024]); }
+    vcell(0,function(q){ var gg=q.createLinearGradient(0,0,0,VH); gg.addColorStop(0,"#121723"); gg.addColorStop(1,"#06080d"); q.fillStyle=gg; q.fillRect(0,0,VW,VH); vtext(q,"MOTOCROSS",VW*0.34,VH*0.5,76,"#f4f1ea","#0a0c12"); vtext(q,"WAR",VW*0.72,VH*0.5,124,"#f72d2e","#0a0c12"); distress(q,VW,VH,380,41); q.fillStyle="#f72d2e"; q.fillRect(0,0,8,VH); q.fillRect(VW-8,0,8,VH); });
+    vcell(1,function(q){ var gg=q.createLinearGradient(0,0,VW,VH); gg.addColorStop(0,"#d51e22"); gg.addColorStop(1,"#7e090d"); q.fillStyle=gg; q.fillRect(0,0,VW,VH); vtext(q,"WAR",VW*0.5,VH*0.5,210,"#fbfaf6","#4a0608"); distress(q,VW,VH,380,43); });
+    vcell(2,function(q){ q.fillStyle="#0b0d13"; q.fillRect(0,0,VW,VH); q.fillStyle="#ecb967"; for(var k=-2;k<12;k++){ q.beginPath(); q.moveTo(0,k*60+60); q.lineTo(VW/2,k*60); q.lineTo(VW,k*60+60); q.lineTo(VW,k*60+96); q.lineTo(VW/2,k*60+36); q.lineTo(0,k*60+96); q.fill(); } });
+    vcell(3,function(q){ q.fillStyle="#f4f1ea"; q.fillRect(0,0,VW,VH); q.fillStyle="#f72d2e"; q.fillRect(0,0,VW*0.22,VH); q.fillStyle="#0b0d13"; q.fillRect(VW*0.78,0,VW*0.22,VH); vtext(q,"MX",VW*0.5,VH*0.5,150,"#0b0d13",null); distress(q,VW,VH,260,47); });
+    BAN.c=c; BAN.t=R.tex(c,{aniso:4,w:1024,h:1024});
+    /* the infield tower's own texture: blue, a lit face with the lap and the race clock */
+    BAN.twc=document.createElement("canvas"); BAN.twc.width=256; BAN.twc.height=512; BAN.tw=R.tex(BAN.twc,{mip:false,clamp:true}); towerDraw(true);
+  }
+  function towerDraw(force){
+    if(!BAN.twc) return; var sec=Math.max(0,Math.floor(V.T)); if(!force&&sec===BAN.twT) return; BAN.twT=sec;
+    var x=BAN.twc.getContext("2d"), W=256, H=512, g=x.createLinearGradient(0,0,0,H); g.addColorStop(0,"#1b49d8"); g.addColorStop(0.5,"#102f9e"); g.addColorStop(1,"#0a1c66"); x.fillStyle=g; x.fillRect(0,0,W,H);
+    x.fillStyle="rgba(255,255,255,.07)"; for(var i=0;i<H;i+=8) x.fillRect(0,i,W,2);
+    x.textAlign="center"; x.textBaseline="middle"; var lap=Math.min(Math.max(1,V.lap||1),V.len||99), mm=Math.floor(sec/60), ss=sec%60;
+    x.fillStyle="#9fc0ff"; x.font="800 30px Manrope, 'Arial Narrow', sans-serif"; x.fillText("LAP",W/2,60);
+    x.fillStyle="#ffffff"; x.font="900 96px Manrope, 'Arial Black', sans-serif"; x.fillText(String(lap),W/2,140); x.fillStyle="#9fc0ff"; x.font="800 30px Manrope, sans-serif"; x.fillText("OF "+(V.len||"-"),W/2,206);
+    x.fillStyle="#ffffff"; x.fillRect(30,250,W-60,3);
+    x.fillStyle="#9fc0ff"; x.fillText("RACE TIME",W/2,300); x.fillStyle="#ffe27a"; x.font="900 82px Manrope, 'Arial Black', sans-serif"; x.fillText((mm<10?"0":"")+mm+":"+(ss<10?"0":"")+ss,W/2,380);
+    x.fillStyle="#f72d2e"; x.fillRect(0,H-26,W,26); x.fillStyle="#fff"; x.font="900 18px Manrope, sans-serif"; x.fillText("MOTOCROSS WAR",W/2,H-13);
+    gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D,BAN.tw); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,BAN.twc); gl.activeTexture(gl.TEXTURE0);
+  }
+  /* a banner quad (code 9: the atlas coordinates ride in the material's first two numbers); a, b, c, d = the corners bottom-left, bottom-right,
+     top-right, top-left seen from the front; inside = a point on the side it faces */
+  function bannerQuad(P,a,b,c,d,uv,inside,code){
+    var ux=b[0]-a[0], uy=b[1]-a[1], uz=b[2]-a[2], vx=d[0]-a[0], vy=d[1]-a[1], vz=d[2]-a[2], nx=uy*vz-uz*vy, ny=uz*vx-ux*vz, nz=ux*vy-uy*vx, l=Math.hypot(nx,ny,nz)||1; nx/=l; ny/=l; nz/=l;
+    var mx=(a[0]+c[0])/2, my=(a[1]+c[1])/2, mz=(a[2]+c[2])/2; if(nx*(inside[0]-mx)+ny*(inside[1]-my)+nz*(inside[2]-mz)<0){ nx=-nx; ny=-ny; nz=-nz; }
+    var u0=uv[0], v0=uv[1], u1=uv[2], v1=uv[3], s0=P.v, cc=code||9;
+    [[a,u0,v1],[b,u1,v1],[c,u1,v0],[d,u0,v0]].forEach(function(q){ P.cm=[q[1],q[2],0,1]; P.vert(q[0][0],q[0][1],q[0][2],nx,ny,nz,1,1,1,cc); });
+    P.quad(s0,s0+1,s0+2,s0+3); P.cm=[0.25,0.35,0,1];
+  }
+
   /* ---------- the scene for a course ---------- */
   function sideClear(C,s,side,d){ /* how much room beside the track at s on one side (to the nearest other part of the course) */
     var i=Math.round(s/C.DS)%C.N, nx=-C.tz[i]*side, nz=C.tx[i]*side, px=C.x[i]+nx*d, pz=C.z[i]+nz*d, best=1e9;
@@ -194,7 +259,7 @@ function create(host,opt){
     var S={C:C,meshes:[],spots:{},night:true,cols:{}}, sur=C.layout.surroundings||(C.outdoor?"hills-trees":"stadium-open"), Rn=rng(hash(C.id)+C.variant);
     S.sur=sur; S.night=!C.outdoor; S.sandy=C.layout.soil==="sand";
     /* colours of the ground */
-    S.cols.dirt=C.outdoor?[0.5,0.36,0.25]:S.sandy?[0.68,0.55,0.4]:[0.41,0.29,0.2]; S.cols.sand=[0.82,0.72,0.53]; S.cols.grass=[0.23,0.36,0.15];
+    S.cols.dirt=C.outdoor?[0.5,0.36,0.25]:S.sandy?[0.68,0.55,0.4]:[0.38,0.29,0.23]; S.cols.sand=[0.82,0.72,0.53]; S.cols.grass=[0.23,0.36,0.15];
     /* polish 2: every real track its own ground: the soil the researcher found (loam dark, clay red-brown, hard-pack pale, sand) and the
        country round it (the desert's dry brush, farmland's greener grass) */
     if(C.outdoor){ var SOIL={loam:[0.43,0.31,0.21],clay:[0.55,0.34,0.22],hardpack:[0.6,0.49,0.37],sand:[0.7,0.58,0.42]}; if(SOIL[C.layout.soil]) S.cols.dirt=SOIL[C.layout.soil];
@@ -257,6 +322,12 @@ function create(host,opt){
       gridNormals(Tc,crow,nc,true); mergeB(T,Tc); }
     S.track=R.mesh(T,"dirt");
     S.box={x0:minx,x1:maxx,z0:minz,z1:maxz};
+    /* the infield tower: the clear spot nearest the middle of the course (at least 14 m from every lane), facing the start straight */
+    if(!C.outdoor&&sur!=="beach-speedway"){ var bcx0=(minx+maxx)/2, bcz0=(minz+maxz)/2, bestT=null;
+      for(var gz=-45;gz<=45;gz+=7.5) for(var gx=-60;gx<=60;gx+=7.5){ var px0=bcx0+gx, pz0=bcz0+gz, dmin=1e9; for(var q0=0;q0<C.N;q0+=4){ var dd0=Math.hypot(C.x[q0]-px0,C.z[q0]-pz0)-C.hw[q0]; if(dd0<dmin) dmin=dd0; }
+        if(C.Lc) for(q0=0;q0<=C.Nc;q0+=4){ var dd1=Math.hypot(C.cx[q0]-px0,C.cz[q0]-pz0)-C.chw[q0]; if(dd1<dmin) dmin=dd1; }
+        var sc0=Math.min(dmin,22)-Math.hypot(gx,gz)*0.08; if(dmin>=14&&(!bestT||sc0>bestT.sc)) bestT={x:px0,z:pz0,sc:sc0}; }
+      if(bestT) S.towerSpot={x:bestT.x,z:bestT.z,yaw:Math.atan2(C.z[0]-bestT.z,C.x[0]-bestT.x)}; }
     /* 2. the floor / the land */
     var F=new GL.Builder(), mar=C.outdoor?260:14;
     if(!C.outdoor){
@@ -282,13 +353,14 @@ function create(host,opt){
       gridNormals(F,L.nz+1,L.nx+1,true);
     }
     S.floorMesh=R.mesh(F,"dirt");
+    S.centre=[(S.box.x0+S.box.x1)/2,C.outdoor?10:0,(S.box.z0+S.box.z1)/2]; S.radius=Math.max(S.box.x1-S.box.x0,S.box.z1-S.box.z0)*0.62; grandSpot(C,S);
     /* 3. the static props (one lit mesh): tuff blocks / track stakes, the finish line, its arch, the flag stand, the gate posts, the venue */
     var P=new GL.Builder();
     edges(C,P,Rn,S);
     finish(C,P,S);
     gateStatic(C,P,S);
     if(C.outdoor) outdoorSet(C,P,Rn,S); else if(sur==="beach-speedway") speedwaySet(C,P,Rn,S); else stadiumSet(C,P,Rn,S);
-    var sp=splitBy(P,function(code){ return code===4||code===5||code===7||code===8; });
+    var sp=splitBy(P,function(code){ return code===4||code===5||code===7||code===8||code===9||code===10; });
     S.props=R.mesh(sp[0],"lit"); S.stands=sp[1].v?R.mesh(sp[1],"lit"):null;
     var ev=S.banks&&S.banks.length?S.banks:(S.lights||[]), pick=[]; for(var li=0;li<4&&ev.length;li++) pick.push(ev[Math.floor(li*ev.length/4)]); S.envLights=pick;
     /* 4. the gate (it falls toward the riders when it drops) */
@@ -472,7 +544,10 @@ function create(host,opt){
     var f=S.floor, x0=f.x0-1, x1=f.x1+1, z0=f.z0-1, z1=f.z1+1, rc=16, k;
     var path=roundRect(x0,z0,x1,z1,rc,84), M12=new Float32Array(12);
     wallRing(P,path,1.8,[0.13,0.13,0.16,0],[0.85,0.85,0.83,0]);
-    band(P,path,-0.05,0.38,1.45,[1,1,1,5]);
+    /* the floor wall's hoardings: each segment either an LED panel or one of the four banner designs (original art) */
+    for(k=0;k<path.length;k++){ var ha=path[k], hb=path[(k+1)%path.length], hh=hash("h"+k+C.id)%11, d0=-0.06, ins=[(x0+x1)/2,1,(z0+z1)/2];
+      var A0=[ha[0]+ha[2]*d0,0.4,ha[1]+ha[3]*d0], B0=[hb[0]+hb[2]*d0,0.4,hb[1]+hb[3]*d0], B1=[hb[0]+hb[2]*d0,1.48,hb[1]+hb[3]*d0], A1=[ha[0]+ha[2]*d0,1.48,ha[1]+ha[3]*d0];
+      if(hh<4) P.face([A0,B0,B1,A1],[1,1,1,5]); else bannerQuad(P,A0,B0,B1,A1,BUV.h[hh%4],ins); }
     tiers(P,path,Rn,0.6,1.8,26,0.9,0.46,1);
     band(P,path,24.0,13.76,15.4,[0.09,0.09,0.11,0]); band(P,path,23.96,13.95,15.2,[1,1,1,5]);
     band(P,path,24.6,15.4,18.4,[1,1,1,7]);
@@ -493,12 +568,21 @@ function create(host,opt){
       for(var bi=-2;bi<=2;bi++) for(var bj=-1;bj<=1;bj++){ var bx=cxx-nx*0.45+tx*bi*1.0, bz=czz-nz*0.45+tz*bi*1.0, by=hy+bj*0.85;
         P.box(bx-0.34,by-0.3,bz-0.34,bx+0.34,by+0.3,bz+0.34,[2.7,2.6,2.3,2]); }
       S.lights.push([cxx-nx*1.2,hy,czz-nz*1.2,6.0]); S.banks.push([cxx-nx*1.2,hy,czz-nz*1.2]); }
+    /* tall banners hung from the canopy's edge, and the infield tower (the live lap and race clock) */
+    for(k=5;k<path.length;k+=Math.max(2,Math.round(path.length/16))){ var tb=path[k], bnx=tb[2], bnz=tb[3], btx=-bnz, btz=bnx, bcx=tb[0]+bnx*28.4, bcz=tb[1]+bnz*28.4, bw=1.7, ct=[(x0+x1)/2,20,(z0+z1)/2];
+      if(S.grand&&Math.hypot(bcx-S.grand.eye[0],bcz-S.grand.eye[2])<62) continue;
+      bannerQuad(P,[bcx-btx*bw,23,bcz-btz*bw],[bcx+btx*bw,23,bcz+btz*bw],[bcx+btx*bw,35.6,bcz+btz*bw],[bcx-btx*bw,35.6,bcz-btz*bw],BUV.v[(k*7+hash(C.id))%4],ct); }
+    if(S.towerSpot){ var tw=S.towerSpot, tcx=tw.x, tcz=tw.z, tyaw=tw.yaw, tcc=Math.cos(tyaw), tss=Math.sin(tyaw), ts=2.2, th0=0.0, th1=11.5;
+      P.box(tcx-ts-0.3,th0,tcz-ts-0.3,tcx+ts+0.3,0.6,tcz+ts+0.3,[0.08,0.08,0.1,0]);
+      [[0,-1],[1,0],[0,1],[-1,0]].forEach(function(nn2){ var fx2=tcx+nn2[0]*ts, fz2=tcz+nn2[1]*ts, rx2=nn2[1], rz2=-nn2[0];
+        bannerQuad(P,[fx2-rx2*ts,th0+0.6,fz2-rz2*ts],[fx2+rx2*ts,th0+0.6,fz2+rz2*ts],[fx2+rx2*ts,th1,fz2+rz2*ts],[fx2-rx2*ts,th1,fz2-rz2*ts],[0,0,1,1],[fx2+nn2[0]*6,5,fz2+nn2[1]*6],10); });
+      P.box(tcx-ts-0.2,th1,tcz-ts-0.2,tcx+ts+0.2,th1+0.5,tcz+ts+0.2,[0.07,0.07,0.09,0]); S.lights.push([tcx,th1+1.2,tcz,3.4]); }
     /* a lit strip along the canopy's lower edge */
     band(P,path,27.9,35.95,36.1,[1.5,1.35,1.1,2]);
     /* the skyline beyond the stands: dark towers with lit windows, some with a red beacon; fogged by the distance */
     var cx0=(x0+x1)/2, cz0=(z0+z1)/2, rad0=Math.max(x1-x0,z1-z0)/2+60, nsk=90;
-    for(k=0;k<nsk;k++){ var ang=k/nsk*TAU+Rn()*0.05, rr=rad0+55+Rn()*150, w=14+Rn()*30, dd=14+Rn()*30, h=40+Math.pow(Rn(),1.6)*170, sx=cx0+Math.cos(ang)*rr*(0.9+Rn()*0.2)*1.15, sz=cz0+Math.sin(ang)*rr*(0.9+Rn()*0.2), v0=P.v;
-      P.box(-w/2,0,-dd/2,w/2,h,dd/2,[0.3,0.3,0.3,7]); P.xform(v0,GL.local(M12,sx,-2,sz,0,ang+PI/2+(Rn()-0.5)*0.5,0,1));
+    for(k=0;k<nsk;k++){ var ang=k/nsk*TAU+Rn()*0.05, rr=rad0+170+Rn()*260, w=24+Rn()*50, dd=24+Rn()*50, h=70+Math.pow(Rn(),1.6)*260, sx=cx0+Math.cos(ang)*rr*(0.9+Rn()*0.2)*1.15, sz=cz0+Math.sin(ang)*rr*(0.9+Rn()*0.2), v0=P.v;
+      P.box(-w/2,0,-dd/2,w/2,h,dd/2,[0.2,0.2,0.2,7]); P.xform(v0,GL.local(M12,sx,-2,sz,0,ang+PI/2+(Rn()-0.5)*0.5,0,1));
       if(h>90&&Rn()<0.7){ P.box(sx-0.5,h-1,sz-0.5,sx+0.5,h+1,sz+0.5,[2.6,0.25,0.2,2]); S.lights.push([sx,h,sz,2.2]); } }
     /* two big boards over the ends (the short sides): a dark frame and an LED face */
     var ends=[0,0]; path.forEach(function(p,i){ if(p[0]<path[ends[0]][0]) ends[0]=i; if(p[0]>path[ends[1]][0]) ends[1]=i; });
@@ -716,7 +800,7 @@ function create(host,opt){
     V.riders=list.map(function(o,k){ var c=hex(o.color), a=hex(o.accent||"#f2f2f6");
       return {s:o.s,k:k,hex:o.color,col:c,acc:a,plate:o.plate,red:!!o.red,me:!!o.me,name:o.name||"",segs:[],lag0:0,lane:((k*7919)%13-6)/6*0.55,lat:0,latV:0,D:0,
         crash:null,out:false,dnf:null,pull:null,park:null,spin:0,place:k,hold:null,whip:((((k*2654435761)>>>0)%7)-3)*0.09}; });
-    V.by={}; V.riders.forEach(function(r){ V.by[r.s]=r; r.mudJit=(rand()-0.5)*0.2; drawCell(r.k,r.plate,{red:r.red,me:r.me,color:r.hex}); drawOut(r.k,r.plate); drawJersey(r); });
+    V.by={}; V.riders.forEach(function(r){ V.by[r.s]=r; r.mudJit=(vrand()-0.5)*0.2; drawCell(r.k,r.plate,{red:r.red,me:r.me,color:r.hex}); drawOut(r.k,r.plate); drawJersey(r); });
     V.n=V.riders.length;
   };
   V.setRed=function(s){ V.riders.forEach(function(r){ var on=r.s===s; if(on!==r.red){ r.red=on; drawCell(r.k,r.plate,{red:r.red,me:r.me,color:r.hex}); } }); };
@@ -798,6 +882,7 @@ function create(host,opt){
       var lc=1; while(lc<999&&lapEnd(lc)<=tc) lc++;
       V.yellow={lap:k+1,T0:tc,until:lapEnd(Math.max(k+1,lc+1)),s:dAt(r,tc)%C.L,ms:(dAt(r,tc)+0.45*r.crash.v)%C.L,seat:c.s}; });
     V.pass=planPass(res,tg,Tb,Tend,crashT);
+    if(V.pass) pushEv("pass",V.pass.t0,V.pass.t1,V.pass.w,{p:V.pass.p});
     /* reserve the shots of this lap */
     if(first){ reserve({kind:"gate",t0:-1.5,t1:Math.min(3.4,turnT-2.2),pri:6}); reserve({kind:"turn1",t0:turnT-2.2,t1:turnT+2.6,spot:SC.turn1,holeshot:turnT+0.9,pri:6}); }
     /* polish: the crash shot stays until he is back on and riding off (6.8 s), or has pushed the bike off the track (7.8 s) */
@@ -832,6 +917,7 @@ function create(host,opt){
     var C=V.C, D=dAt(r,tc), lat=r.lat, i=Math.round((D%C.L)/C.DS)%C.N, v=Math.max(6,C.v[i]);
     var dur=kind==="out"?9.5:7.2;
     r.crash={T0:tc,D:D,lat:lat,v:v,kind:kind,dur:dur,side:lat>=0?1:-1};
+    pushEv("crash",tc,tc+dur,r.s,{out:kind==="out"});
     if(kind==="out"){ r.segs.push({t0:tc,t1:tc+0.01,l0:lagAt(r,tc),l1:lagAt(r,tc)}); r.outAt=tc; }
     else {
       /* rejoin from the crash site: the time lost is the crash plus the restart; then ease back to the gap of the new place (at most 15%
@@ -928,7 +1014,7 @@ function create(host,opt){
   var NCNT={body:"body",fork:"fork",swing:"swing",shock:"shock",wheelF:"wheelF",wheelR:"wheelR",torso:"torso",uarm:"arm",farm:"arm",thigh:"leg",shin:"leg",r1s:"r1s",r1t:"r1t",w1:"w1",r2s:"r2s",r2t:"r2t"};
   var SHCAST=["body","fork","swing","shock","wheelF","wheelR","torso","uarm","farm","thigh","shin","r1s","r1t","w1"];
   var CAP=48;
-  var IBD={plate:new Float32Array(240*16),person:new Float32Array(128*20),label:new Float32Array(90*12),decal:new Float32Array(64*12),part:new Float32Array(400*8),gate:new Float32Array(20),glow:new Float32Array(48*8),clump:new Float32Array(300*12)};
+  var IBD={plate:new Float32Array(240*16),person:new Float32Array(128*20),label:new Float32Array(90*12),decal:new Float32Array(64*12),part:new Float32Array(400*8),gate:new Float32Array(20),glow:new Float32Array(48*8),clump:new Float32Array(600*12)};
   PARTS.forEach(function(k){ IBD[k]=new Float32Array(CAP*20); });
   var counts={body:0,fork:0,swing:0,shock:0,wheelF:0,wheelR:0,torso:0,arm:0,leg:0,r1s:0,r1t:0,w1:0,r2s:0,r2t:0,plate:0,person:0,label:0,decal:0,part:0,clump:0};
   var poses=[], LIST=[], RIDING=[], OBSL=[], UP=[0,1,0];
@@ -978,7 +1064,7 @@ function create(host,opt){
      foot out. The next riders (to 55 m) are one RIGID mesh each (seated or standing) with two spinning wheels; the rest one rigid mesh with the
      wheels baked in. */
   var Mo=MX.Models, MD=Mo.D;
-  var HERO_D2=26*26, MID_D2=55*55;
+  var HERO_D2=30*30, MID_D2=60*60;
   function lodOf(r,o,state){
     if(state==="lying") return 0;
     var Q=QUAL[V.q], d2=r._d2!=null?r._d2:1e9, hero=r._hero;
@@ -1034,10 +1120,11 @@ function create(host,opt){
     if(r._lod!==0) return;
     var team=r.col, acc=r.acc, st=clamp(stand,0,1), mud=r.mud==null?V.mudAmt:r.mud, cmp=clamp((comp||0)/0.3,0,1);
     var hx=MD.HIP[0]+0.06*st, hy=MD.HIP[1]+0.22*st-0.1*cmp*(1-0.5*st), pitch=-0.35*st+(extraPitch||0)+0.06*cmp;
-    GL.amul(B12,M,GL.local(L12,hx,hy,0,pitch,0,0,1)); putInst(IBD.torso,counts.torso,B12,team,acc,mud);
+    var hideT=V.mode==="onboard"&&r.s===V._fseat&&!V.rp;
+    GL.amul(B12,M,GL.local(L12,hx,hy,0,pitch,0,0,1)); if(!hideT) putInst(IBD.torso,counts.torso,B12,team,acc,mud);
     /* the number printed on the jersey's back (its own cell: the name above, the number big) */
-    if(counts.plate<170){ GL.amul(BK,B12,GL.local(L12,-0.045,0.385,0,0.34,PI,0,1.0)); putPlate(counts.plate++,BK,r.uvj||(r.uvj=(function(uv){ return [uv[2],uv[1],uv[0],uv[3]]; })(jerseyUV(r.k)))); }
-    counts.torso++;
+    if(!hideT&&counts.plate<170){ GL.amul(BK,B12,GL.local(L12,-0.045,0.385,0,0.34,PI,0,1.0)); putPlate(counts.plate++,BK,r.uvj||(r.uvj=(function(uv){ return [uv[2],uv[1],uv[0],uv[3]]; })(jerseyUV(r.k)))); }
+    if(!hideT) counts.torso++;
     /* the arms */
     var cp=Math.cos(pitch), sp=Math.sin(pitch), sd, ar;
     for(sd=-1;sd<=1;sd+=2){
@@ -1094,25 +1181,25 @@ function create(host,opt){
   /* roost and dust. DUST: a few wide soft puffs, lit warm by the lights (the haze round a pack). CLUMPS: the roost proper: pellets of dirt
      thrown up and back by the rear tyre, ballistic (g = 9.81), bouncing on the ground, drawn as small lit pellets stretched along their
      velocity on screen; most of them near the lens (the quality level sets how many). */
-  var parts={n:0,p:new Float32Array(400*10)}, CLN=13, CL={n:0,p:new Float32Array(300*CLN)};
+  var parts={n:0,p:new Float32Array(400*10)}, CLN=13, CL={n:0,p:new Float32Array(600*CLN)};
   function spawn(x,y,z,vx,vy,vz,size,life,col){ if(parts.n>=QUAL[V.q].parts||parts.n>=400) return; var o=parts.n++*10, p=parts.p; p[o]=x;p[o+1]=y;p[o+2]=z;p[o+3]=vx;p[o+4]=vy;p[o+5]=vz;p[o+6]=size;p[o+7]=life;p[o+8]=life;p[o+9]=col; }
-  function spawnClump(x,y,z,vx,vy,vz,size,life,gy,sand){ if(CL.n>=QUAL[V.q].clumps||CL.n>=300) return; var o=CL.n++*CLN, p=CL.p; p[o]=x;p[o+1]=y;p[o+2]=z;p[o+3]=vx;p[o+4]=vy;p[o+5]=vz;p[o+6]=size;p[o+7]=life;p[o+8]=life;p[o+9]=gy;p[o+10]=0.55+rand()*0.6;p[o+11]=sand?1:0;p[o+12]=0; }
+  function spawnClump(x,y,z,vx,vy,vz,size,life,gy,sand){ if(CL.n>=QUAL[V.q].clumps||CL.n>=600) return; var o=CL.n++*CLN, p=CL.p; p[o]=x;p[o+1]=y;p[o+2]=z;p[o+3]=vx;p[o+4]=vy;p[o+5]=vz;p[o+6]=size;p[o+7]=life;p[o+8]=life;p[o+9]=gy;p[o+10]=0.55+vrand()*0.6;p[o+11]=sand?1:0;p[o+12]=0; }
   /* the dirt a rear tyre throws: clumps by the roost amount (the nearer the lens and the more it matters, the more), a puff now and then */
   function roostFx(o,r,adv,boost){
     var dx=o.x-CAM.eye[0], dz=o.z-CAM.eye[2], d2=dx*dx+dz*dz; if(d2>75*75||o.v<1.5) return;
-    var near=d2<16*16?1:d2<36*36?0.55:0.25, rate=o.roost*(34+120*boost)*near, n=rate*adv, k=Math.floor(n)+(rand()<n-Math.floor(n)?1:0), i;
+    var near=d2<16*16?1:d2<36*36?0.55:0.25, rate=o.roost*(60+200*boost)*near, n=rate*adv, k=Math.floor(n)+(vrand()<n-Math.floor(n)?1:0), i;
     var tx=o.tx, tz=o.tz, rx=-tz, rz=tx, rear=0.74+0.05, bx=o.x-tx*rear, bz=o.z-tz*rear, by=o.y+0.3, side=-clamp((o.k||0)*14,-1,1);
     for(i=0;i<k;i++){
-      var back=2.2+rand()*7.0, up=1.2+rand()*4.2, sd=(rand()-0.5)*3.4+side*(1.2+rand()*2.2), big=rand()<0.08;
-      spawnClump(bx+(rand()-0.5)*0.22,by+rand()*0.12,bz+(rand()-0.5)*0.22,tx*(o.v*0.28-back)+rx*sd,up+(o.air?0:0),tz*(o.v*0.28-back)+rz*sd,big?0.1+rand()*0.06:0.028+rand()*0.06,0.9+rand()*1.0,o.gl,o.sand);
+      var back=2.2+vrand()*7.0, up=1.2+vrand()*4.2, sd=(vrand()-0.5)*3.4+side*(1.2+vrand()*2.2), big=vrand()<0.08;
+      spawnClump(bx+(vrand()-0.5)*0.22,by+vrand()*0.12,bz+(vrand()-0.5)*0.22,tx*(o.v*0.28-back)+rx*sd,up+(o.air?0:0),tz*(o.v*0.28-back)+rz*sd,big?0.06+vrand()*0.04:(vrand()<0.55?0.012+vrand()*0.02:0.026+vrand()*0.04),0.9+vrand()*1.1,o.gl,o.sand);
     }
-    if(rand()<o.roost*adv*9*near) spawn(bx+(rand()-0.5)*0.4,o.y+0.2,bz+(rand()-0.5)*0.4,-tx*o.v*0.2+(rand()-0.5)*1.4,0.6+rand()*1.3,-tz*o.v*0.2+(rand()-0.5)*1.4,0.35+rand()*0.35,0.9+rand()*0.7,o.sand?1:0);
+    if(vrand()<o.roost*adv*9*near) spawn(bx+(vrand()-0.5)*0.4,o.y+0.2,bz+(vrand()-0.5)*0.4,-tx*o.v*0.2+(vrand()-0.5)*1.4,0.6+vrand()*1.3,-tz*o.v*0.2+(vrand()-0.5)*1.4,0.35+vrand()*0.35,0.9+vrand()*0.7,o.sand?1:0);
   }
   /* a burst where a bike lands, the rider hits the ground, a crash digs in */
   function burstFx(x,y,z,gy,vx,vz,count,sand,power){
-    var i; for(i=0;i<count;i++){ var a=rand()*TAU, sp=(0.6+rand()*3.2)*power;
-      spawnClump(x+(rand()-0.5)*0.8,gy+0.1,z+(rand()-0.5)*0.8,Math.cos(a)*sp+vx,1.2+rand()*3.8*power,Math.sin(a)*sp+vz,0.03+rand()*0.075,0.8+rand()*0.9,gy,sand); }
-    for(i=0;i<Math.max(1,count>>2);i++) spawn(x+(rand()-0.5)*1.2,gy+0.15,z+(rand()-0.5)*1.2,(rand()-0.5)*2.4+vx*0.3,0.5+rand()*1.3,(rand()-0.5)*2.4+vz*0.3,0.4+rand()*0.5,1.0+rand()*0.7,sand?1:0);
+    var i; for(i=0;i<count;i++){ var a=vrand()*TAU, sp=(0.6+vrand()*3.2)*power;
+      spawnClump(x+(vrand()-0.5)*0.8,gy+0.1,z+(vrand()-0.5)*0.8,Math.cos(a)*sp+vx,1.2+vrand()*3.8*power,Math.sin(a)*sp+vz,0.025+vrand()*0.05,0.8+vrand()*0.9,gy,sand); }
+    for(i=0;i<Math.max(1,count>>2);i++) spawn(x+(vrand()-0.5)*1.2,gy+0.15,z+(vrand()-0.5)*1.2,(vrand()-0.5)*2.4+vx*0.3,0.5+vrand()*1.3,(vrand()-0.5)*2.4+vz*0.3,0.4+vrand()*0.5,1.0+vrand()*0.7,sand?1:0);
   }
   function stepParts(dt){
     var p=parts.p, n=0, i;
@@ -1249,19 +1336,22 @@ function create(host,opt){
   V.dtR=0;
   function update(dt){
     var C=V.C; if(!C) return;
-    var sh=V.shot, adv=V.frozen?0:dt;
-    V.dtR=adv;
+    var sh=V.shot, adv=V.frozen?0:dt, rate=1, advP;
+    if(V.rp){ rate=V.rp.rate; V.rp.t+=adv*rate; replayStep(); }
+    advP=adv*(V.rp?V.rp.rate:1);
+    V.dtR=advP;
     if(sh) sh.el+=adv;
     if(V.phase!=="pre") V.T+=adv;
     if(V.phase==="race"&&V.T>=lapEnd(V.lap)){ V.lap++; reserveLine(V.lap); }
     if(V.phase==="race"&&V.resLap<V.lap&&V.T>=lapEnd(V.lap)-5&&V.needSent!==V.lap){ V.needSent=V.lap; if(opt.onNeed) try{ opt.onNeed(V.lap); }catch(e){} }
     if(V.isLast&&V.T>=lapEnd(V.resLap)-6&&V.flag!=="checkered") V.flag="checkered";
-    direct(); sh=V.shot;
+    if(!V.rp) direct(); sh=V.shot;
+    towerDraw();
     checkWaiters();
     if(sh&&sh.holeshot&&!sh.hsDone&&V.T>=sh.holeshot){ sh.hsDone=true; V.banners({kind:"holeshot"}); }
     if(V.crashT!=null&&V.T>=V.crashT+0.35&&!V.crashBanner){ V.crashBanner=true; var yr=V.yellow&&V.by[V.yellow.seat]; V.banners({kind:"crash",seat:yr?yr.s:-1,out:!!(yr&&yr.crash&&yr.crash.kind==="out")}); }
     /* the riders */
-    var T=V.T, fieldN=0;
+    var T=V.rp?V.rp.t:V.T, fieldN=0;
     PARTS.forEach(function(k){ counts[NCNT[k]]=0; }); counts.plate=0; counts.person=0; counts.label=0; counts.decal=0;
     /* the hero riders (the articulated models): the nearest few to the lens from the last frame, and the one on screen */
     var Qh=QUAL[V.q].hero, ord=V.riders.slice().sort(function(a,b){ return (a._d2!=null?a._d2:1e9)-(b._d2!=null?b._d2:1e9); }), fseat=V._fseat;
@@ -1310,13 +1400,14 @@ function create(host,opt){
         var M=bikeMats(o,r,wy);
         emitRider(r,o,M,"ride"); emitRiderBody(r,M,o.stand,o.air?-0.05:0,(V.phase==="pre"||T<0||o.air)?0:footOut(o),o.lean,o.comp);
         if(r.wasAir&&!o.air&&o.v>6&&adv>0&&!fx&&V.fxMode==="full") burstFx(o.x,o.y,o.z,o.gl,o.tx*o.v*0.15,o.tz*o.v*0.15,14,o.sand,1);
+        if(o.air&&!r.wasAir) r.airT0=T; if(r.wasAir&&!o.air&&adv>0&&T-(r.airT0||T)>0.85&&(r.me||r.s===fseat)) pushEv("jump",r.airT0,T,r.s);
         r.wasAir=o.air;
         var h=o.y-o.gl, k=clamp(1-h/7,0.35,1);
         emitShadow(o.x,o.gl,o.z,o.tx,o.tz,UP,0.72*k,0.9+0.6*(1-k));
         pose(r,o.x,o.y,o.z,o.tx,o.tz,o.v,o.air,x.D,false,false,false,null,o);
-        if(adv>0&&!fx&&V.fxMode==="full"&&o.roost>0.08&&!o.air) roostFx(o,r,adv,r.s===fseat?1:0);
-      } else if(x.mode==="crash"){ var oc=emitCrash(r,T,adv); pose(r,oc.x,oc.y,oc.z,oc.tx,oc.tz,0,false,r.crash.D,true,false,false,r.fig,oc);
-        if(adv>0&&T-r.crash.T0<1.4&&!fx&&V.fxMode==="full"&&rand()<0.45) burstFx(oc.x,oc.y,oc.z,oc.gl,0,0,6,oc.sand,1.3); }
+        if(adv>0&&!fx&&V.fxMode==="full"&&o.roost>0.08&&!o.air) roostFx(o,r,advP,r.s===fseat?1:0);
+      } else if(x.mode==="crash"){ var oc=emitCrash(r,T,advP); pose(r,oc.x,oc.y,oc.z,oc.tx,oc.tz,0,false,r.crash.D,true,false,false,r.fig,oc);
+        if(adv>0&&T-r.crash.T0<1.4&&!fx&&V.fxMode==="full"&&vrand()<0.45) burstFx(oc.x,oc.y,oc.z,oc.gl,0,0,6,oc.sand,1.3); }
       else if(x.mode==="park"){ var pk=r.park;
         if(pk.crashed&&r.crash){ var op=emitCrash(r,r.crash.T0+r.crash.dur-0.01,0); pose(r,op.x,op.y,op.z,op.tx,op.tz,0,false,pk.D,false,true,true,null,op); return; }
         ridePose(pk.D,pk.lat,o); o.air=false; o.y=TK.ground(C,o.s,pk.lat); o.lean=0; o.pitch=0; var Mp=bikeMats(o,r,0.5); emitRider(r,o,Mp,"lying");
@@ -1338,7 +1429,7 @@ function create(host,opt){
     var gA=V.dropT==null||T<0?0:Math.min(1.45,sstep(T/0.32)*1.45+Math.sin(clamp(T/0.32,0,1)*PI)*0.05);
     var GF=gateF(C); GL.frame(A12,GF.x+GF.tx*1.2,GF.E,GF.z+GF.tz*1.2,GF.tx,0,GF.tz,0);
     GL.amul(B12,A12,GL.local(L12,0,0,GF.off,gA,0,0,1)); putInst(IBD.gate,0,B12,[1,1,1],[1,1,1]);
-    if(adv>0&&V.fxMode==="full"&&!fx) stepParts(adv); else if(adv>0){ parts.n=0; counts.part=0; CL.n=0; counts.clump=0; }
+    if(adv>0&&V.fxMode==="full"&&!fx) stepParts(advP); else if(adv>0){ parts.n=0; counts.part=0; CL.n=0; counts.clump=0; }
     /* labels: the top of the field, you, the red plate, the fighters of a shown battle; OUT under a crashed-out rider */
     var showAll=CAM.close;
     poses.forEach(function(p){ var r=p.r;
@@ -1387,7 +1478,7 @@ function create(host,opt){
   var PRESET={chase:{name:"Cover chase",back:3.5,up:1.5,fov:70*DEG},broadcast:{name:"Broadcast trackside",h:7,dist:22,fov:48*DEG},grandstand:{name:"Grandstand",fov:50*DEG},onboard:{name:"Onboard",fov:82*DEG},replay:{name:"Replay",fov:48*DEG}};
   V.PRESET=PRESET; V.mode="chase"; V.focus=-1;
   var CH={init:false,f:-1,ex:0,ey:0,ez:0,tx:0,ty:0,tz:0,gy:0,roll:0,fov:70*DEG,shk:0,shT:9,lastY:0,wasAir:false,vy:0,dolly:1,cr:0,sx:0,sz:0,side:1,ph:0,snap:true};
-  V.setCamera=function(m){ if(!PRESET[m]) return false; if(V.mode!==m){ V.mode=m; CAM.se=null; CAM.st=null; V.cut=true; CH.init=false; if(m==="broadcast") V.shot=null; if(V.onCamera) try{ V.onCamera(m); }catch(e){} } return true; };
+  V.setCamera=function(m){ if(!PRESET[m]) return false; if(V.mode!==m){ if(m==="replay") V.prevMode=V.mode; if(V.rp&&m!=="replay"){ V.rp=null; V.shot=null; } V.mode=m; CAM.se=null; CAM.st=null; CAM.near=0; V.cut=true; CH.init=false; OB.init=false; if(m==="broadcast") V.shot=null; if(m==="replay") startReplay(); if(V.onCamera) try{ V.onCamera(m); }catch(e){} } return true; };
   V.camera=function(){ return V.mode; };
   V.cameraName=function(m){ return (PRESET[m||V.mode]||PRESET.chase).name; };
   V.cycleCamera=function(dir){ var order=["chase","broadcast","grandstand","onboard","replay"], i=order.indexOf(V.mode); V.setCamera(order[(i+(dir<0?-1:1)+order.length)%order.length]); return V.mode; };
@@ -1409,7 +1500,7 @@ function create(host,opt){
     if(best){ AF.s=best.r.s; AF.until=T+4; } return best;
   }
   /* the chase: on the track 3.5 m behind the rider (round the bends, not cutting them), 1.5 m up, aimed down the line ahead of him */
-  var CHP={}, CHQ={};
+  var CHP={}, CHQ={}, CHQ2={};
   function chaseCam(dt){
     var f=focusPose(); if(!f) return false; V._fseat=f.r.s;
     var C=V.C, P=PRESET.chase, r=f.r, por=V.H>V.W*1.05, T=V.T, cr=!!f.crash, still=f.parked;
@@ -1425,19 +1516,22 @@ function create(host,opt){
     if(C.Lc&&useD<-C.Lc){ tx0=f.tx; tz0=f.tz; ex=f.x-tx0*back; ez=f.z-tz0*back; gyc=f.gl!=null?f.gl:f.y; }
     else { ridePose(useD,latC,o); ex=o.x; ez=o.z; gyc=o.gl; tx0=o.tx; tz0=o.tz; }
     /* the look-ahead: the line 9 m on (more at speed), so the view leans into the bend before the bike does */
-    var ahead=9+Math.min(f.v||0,22)*0.22, o2=CHQ, tgx, tgz, tgy;
+    var kap=Math.abs(f.k||0), ahead=clamp((9+Math.min(f.v||0,22)*0.22)/(1+kap*22),3.2,13), o2=CHQ, tgx, tgz, tgy;
     if(cr){ var fg=f.fig, mx=fg?(f.x+fg[0])/2:f.x, mz=fg?(f.z+fg[2])/2:f.z, my=fg?(f.y+fg[3])/2:f.y; tgx=mx; tgz=mz; tgy=my+0.7; }
     else if(C.Lc&&D+ahead<-C.Lc){ tgx=f.x+f.tx*ahead; tgz=f.z+f.tz*ahead; tgy=(f.gl!=null?f.gl:f.y)+0.9; }
-    else { ridePose(D+ahead,lat*0.8,o2); tgx=o2.x; tgz=o2.z; tgy=lerp(f.y,o2.gl,0.55)+0.85; if(f.air) tgy=f.y+0.2; }
+    else { ridePose(D+ahead,lat*0.8,o2); tgx=lerp(f.x,o2.x,0.62); tgz=lerp(f.z,o2.z,0.62); tgy=lerp(f.y,o2.gl,0.45)+0.85; if(f.air) tgy=f.y+0.2; }
     /* heights: the ground under the camera is smoothed (whoops don't shake the view), a little of the bike's height in the air */
     var airH=Math.max(0,f.y-(f.gl!=null?f.gl:f.y));
-    if(CH.snap) CH.gy=gyc; else CH.gy+=(gyc-CH.gy)*k(0.28);
+    if(CH.snap) CH.gy=gyc; else CH.gy+=(gyc-CH.gy)*k(gyc>CH.gy?0.1:0.3);
     var ey=CH.gy+upH+0.34*airH;
+    /* the boom: three points of the line between the lens and the rider; the lens rises until each is 0.5 m clear of the dirt */
+    if(!(C.Lc&&useD<-C.Lc)){ var ty0=f.y+0.95, bo=CHQ2; for(var bi=1;bi<=3;bi++){ var tt=bi*0.25; ridePose(D-back*(1-tt),lerp(latC,lat,tt),bo);
+        var need=(bo.gl+0.5-ty0*tt)/(1-tt); if(need>ey) ey=need; } }
     if(C.outdoor){ var gl2=landAt(SC,ex,ez)+0.7; if(ey<gl2) ey=gl2; }
     /* the landing: a short soft shake (bounded) and a small push of the lens; a little vibration at speed (not with reduced motion) */
     var vy=CH.snap?0:(f.y-CH.lastY)/Math.max(dt,1e-3); CH.lastY=f.y;
     var mo=motion()==="full"&&!fx?1:0.25;
-    if(CH.wasAir&&!f.air&&!cr){ CH.shk=clamp(Math.max(0,-CH.vy)*0.0075,0.004,0.05)*mo; CH.shT=0; CH.sx=rand()*2-1; CH.sz=rand()*2-1; }
+    if(CH.wasAir&&!f.air&&!cr){ CH.shk=clamp(Math.max(0,-CH.vy)*0.0075,0.004,0.05)*mo; CH.shT=0; CH.sx=vrand()*2-1; CH.sz=vrand()*2-1; }
     CH.wasAir=!!f.air; if(f.air) CH.vy=vy; else CH.vy=0;
     CH.shT+=dt; var dec=Math.exp(-CH.shT*7.5), sk=CH.shk*dec*Math.sin(CH.shT*34);
     var vib=(f.air||still?0:Math.min(1,(f.v||0)/20))*0.004*mo*Math.sin(T*61);
@@ -1462,10 +1556,67 @@ function create(host,opt){
     CAM.eye=[G0.eye[0]+Math.sin(u)*G0.sway,G0.eye[1]+Math.sin(u*1.3)*0.25,G0.eye[2]+Math.cos(u*0.8)*G0.sway*0.4]; CAM.tgt=G0.tgt.slice(); CAM.fov=G0.fov; CAM.close=false; CAM.up=null; CAM.roll=0; CAM.se=null; CAM.st=null; CAM.focus=G0.tgt.slice(); CAM.sRad=0; CAM.dof=0;
     return true;
   }
+  /* ---------- the onboard camera: on the bars, stabilised (the roll a third of the bike's, the heading eased), 82 degrees ---------- */
+  var OB={init:false,hx:1,hz:0,roll:0,fovs:0}, OB12=new Float32Array(12);
+  function onboardCam(dt){
+    var f=focusPose(); if(!f) return false; V._fseat=f.r.s;
+    var cp=Math.cos(f.pitch||0), fx=f.tx*cp, fy=Math.sin(f.pitch||0), fz=f.tz*cp, mo=motion()==="full"&&!fx0?1:0.3;
+    if(!OB.init||OB.f!==f.r.s){ OB.init=true; OB.f=f.r.s; OB.hx=f.tx; OB.hz=f.tz; OB.roll=f.lean||0; }
+    var k=1-Math.exp(-dt/0.08); OB.hx+=(f.tx-OB.hx)*k; OB.hz+=(f.tz-OB.hz)*k; OB.roll+=((f.lean||0)*0.32-OB.roll)*(1-Math.exp(-dt/0.2));
+    GL.frame(OB12,f.x,f.y,f.z,fx,fy,fz,f.lean||0);
+    var M0=OB12, lx=0.52, ly=1.3, vib=(f.air||f.parked?0:Math.min(1,(f.v||0)/20))*0.006*mo;
+    var ex=M0[0]*lx+M0[1]*ly+M0[3], ey=M0[4]*lx+M0[5]*ly+M0[7]+Math.sin(V.T*53)*vib, ez=M0[8]*lx+M0[9]*ly+M0[11];
+    /* the view: along the track's heading with a share of the bike's pitch, tilted down a little; the up vector rolled by the stabilised roll */
+    var hl=Math.hypot(OB.hx,OB.hz)||1, dx=OB.hx/hl, dz=OB.hz/hl, pitch=(f.pitch||0)*0.55-0.06;
+    CAM.eye=[ex,ey,ez]; CAM.tgt=[ex+dx*20*Math.cos(pitch),ey+20*Math.sin(pitch),ez+dz*20*Math.cos(pitch)]; CAM.fov=PRESET.onboard.fov+(f.air?3*DEG:0); CAM.close=true; CAM.near=0.12;
+    CAM.up=[dz*Math.sin(OB.roll)*-1,Math.cos(OB.roll),dx*Math.sin(OB.roll)]; CAM.roll=OB.roll; CAM.se=null; CAM.st=null; CAM.focus=[f.x,f.gl!=null?f.gl+0.9:f.y,f.z]; CAM.sRad=14; CAM.dof=0.25;
+    return true;
+  }
+  var fx0=fx;
+  /* ---------- the REPLAY: the race clock keeps running underneath; the riders are drawn at an earlier time (V.rp.t) in slow motion from a low
+     3/4 rear angle (a crash, a pass) or a side profile (a jump), twice, then back to the camera it came from ---------- */
+  V.events=[]; V.rp=null;
+  function pushEv(kind,T0,T1,s,extra){ if(V.rp) return; var e={kind:kind,T:T0,T1:T1,s:s}; if(extra) for(var q in extra) e[q]=extra[q]; V.events.push(e); if(V.events.length>40) V.events.shift(); }
+  V.replayInfo=function(){ return V.rp?{kind:V.rp.kind,t:+V.rp.t.toFixed(2),t0:+V.rp.t0.toFixed(2),t1:+V.rp.t1.toFixed(2),rate:V.rp.rate,loops:V.rp.loops}:null; };
+  function startReplay(){
+    var T=V.T, pick=null, i;
+    for(i=V.events.length-1;i>=0;i--){ var e=V.events[i]; if(e.T1<T-0.4&&e.T>0){ pick=e; break; } }
+    var t0,t1,shot;
+    if(pick){ t0=Math.max(0,pick.T-(pick.kind==="jump"?1.6:pick.kind==="pass"?2.5:2)); t1=Math.min(T-0.3,pick.T1+(pick.kind==="crash"?3.2:2)); }
+    else { var f=focusPose(); pick={kind:"chase",s:f?f.r.s:0}; t0=Math.max(0,T-9); t1=Math.max(t0+2,T-0.8); }
+    var mode=pick.kind==="jump"?"side":"rear";
+    V.rp={t:t0,t0:t0,t1:t1,rate:0.38,loops:0,kind:pick.kind,s:pick.s,mode:mode,side:(pick.s%2)?1:-1,from:V.prevMode||"chase"};
+    V.shot=null; CAM.se=null; CAM.st=null; V.cut=true; CH.init=false;
+    setShot({kind:"rep",focus:pick.s,mode:mode,side:V.rp.side,d:1e9});
+  }
+  function replayStep(){
+    var R0=V.rp; if(!R0) return;
+    if(R0.t>=R0.t1){ R0.loops++; if(R0.loops>=2){ var back=R0.from||"chase"; V.rp=null; V.mode=back; CAM.se=null; CAM.st=null; V.cut=true; CH.init=false; V.shot=null; if(V.onCamera) try{ V.onCamera(back); }catch(e){} return; }
+      R0.t=R0.t0; V.cut=true; CAM.se=null; CAM.st=null; }
+  }
+  /* ---------- the grandstand camera: the upper deck on the long side, the whole course in true proportion ---------- */
+  function fitGrand(eye,tgt,pts,fov0){
+    var fw=[tgt[0]-eye[0],tgt[1]-eye[1],tgt[2]-eye[2]], fl=Math.hypot(fw[0],fw[1],fw[2]); fw[0]/=fl; fw[1]/=fl; fw[2]/=fl;
+    var rx=-fw[2], rz=fw[0], rl=Math.hypot(rx,rz)||1; rx/=rl; rz/=rl; var ux=-fw[1]*rx, uy=fw[0]*rx+fw[2]*rz, uz=-fw[1]*rz;   /* up = right x forward */
+    var tH=0, tV=0;
+    pts.forEach(function(p){ var vx=p[0]-eye[0], vy=p[1]-eye[1], vz=p[2]-eye[2], cx=vx*rx+vz*rz, cy=vx*ux+vy*uy+vz*uz, cz=vx*fw[0]+vy*fw[1]+vz*fw[2]; if(cz<1) return; tH=Math.max(tH,Math.abs(cx/cz)); tV=Math.max(tV,Math.abs(cy/cz)); });
+    var a=16/9, need=Math.max(tV,tH/a), fov=2*Math.atan(need*1.1);
+    return Math.max(fov0,Math.min(fov,66*DEG));
+  }
+  function grandSpot(C,S){
+    if(C.outdoor){ var R0=S.radius; S.grand={eye:[S.centre[0]+R0*0.15,R0*0.7,S.centre[2]+R0*1.2],tgt:[S.centre[0],0,S.centre[2]],fov:50*DEG,sway:4}; return; }
+    var f=S.floor, wx=f.x1-f.x0, wz=f.z1-f.z0, cx=(f.x0+f.x1)/2, cz=(f.z0+f.z1)/2, dOut=39.5, eyeH=30.8, eye, side=C.fside>0?-1:1;
+    if(wx>=wz) eye=[cx,eyeH,side>0?f.z1+dOut:f.z0-dOut]; else eye=[side>0?f.x1+dOut:f.x0-dOut,eyeH,cz];
+    var bx=(S.box.x0+S.box.x1)/2, bz=(S.box.z0+S.box.z1)/2, dh=Math.hypot(bx-eye[0],bz-eye[2]), tgt=[bx,eye[1]-dh*Math.tan(9*DEG),bz], pts=[];
+    [[S.box.x0,S.box.z0],[S.box.x1,S.box.z0],[S.box.x1,S.box.z1],[S.box.x0,S.box.z1],[bx,S.box.z0],[bx,S.box.z1],[S.box.x0,bz],[S.box.x1,bz]].forEach(function(q){ pts.push([q[0],0,q[1]]); pts.push([q[0],3,q[1]]); });
+    var fov=fitGrand(eye,tgt,pts,50*DEG);
+    S.grand={eye:eye,tgt:tgt,fov:fov,sway:1.2,fitted:+(fov/DEG).toFixed(1)};
+  }
   function camera(dt){
     var done=false;
     if(V.mode==="chase") done=chaseCam(dt);
     else if(V.mode==="grandstand") done=grandCam(dt);
+    else if(V.mode==="onboard") done=onboardCam(dt);
     if(!done) directorCamera(dt);
     if(V.free){ CAM.eye=V.free.eye; CAM.tgt=V.free.tgt; CAM.fov=V.free.fov||0.9; CAM.close=V.free.close!==false; CAM.up=V.free.up||null; CAM.roll=0; CAM.focus=V.free.focus||V.free.tgt; CAM.sRad=V.free.sRad!=null?V.free.sRad:12; CAM.dof=V.free.dof!=null?V.free.dof:0.5; }
   }
@@ -1507,6 +1658,10 @@ function create(host,opt){
         /* polish: frame the bike AND the thrown rider (their midpoint, wide enough for both) */
         if(f4){ var fg=f4.fig, mxx=fg?(f4.x+fg[0])/2:f4.x, myy=fg?(f4.y+fg[3])/2:f4.y, mzz=fg?(f4.z+fg[2])/2:f4.z, spread=fg?Math.hypot(fg[0]-f4.x,fg[2]-f4.z):0;
           TGT[0]=mxx; TGT[1]=myy+0.5; TGT[2]=mzz; var dd2=Math.hypot(mxx-sp3.x,mzz-sp3.z); fov=clamp(2*Math.atan((4.6+spread*0.55)/Math.max(1,dd2)),0.3,1.0); } close=true; break; }
+      case "rep": { var fr=focus||lead; if(!fr) break; var sd2=sh.side||1, rx2=-fr.tz, rz2=fr.tx, hgt=fr.gl!=null?fr.gl:fr.y;
+        if(sh.mode==="side"){ EYE[0]=fr.x+rx2*13*sd2-fr.tx*1.5; EYE[1]=hgt+1.3; EYE[2]=fr.z+rz2*13*sd2-fr.tz*1.5; TGT[0]=fr.x+fr.tx*1.2; TGT[1]=fr.y+0.7; TGT[2]=fr.z+fr.tz*1.2; fov=0.5; }
+        else { EYE[0]=fr.x-fr.tx*5.4+rx2*2.7*sd2; EYE[1]=hgt+1.05+Math.max(0,(fr.y-hgt))*0.4; EYE[2]=fr.z-fr.tz*5.4+rz2*2.7*sd2; TGT[0]=fr.x+fr.tx*1.4; TGT[1]=fr.y+0.85; TGT[2]=fr.z+fr.tz*1.4; fov=PRESET.replay.fov; }
+        close=true; if(C.outdoor){ var gy3=landAt(S,EYE[0],EYE[2])+0.9; if(EYE[1]<gy3) EYE[1]=gy3; } break; }
       case "line": { var L=S.line, f5=lead, FG2=S.flagger, LA=S.lineAim, bx2=(LA[0]+FG2.x)/2, by2=(LA[1]+FG2.y+0.7)/2, bz2=(LA[2]+FG2.z)/2; EYE[0]=L.x; EYE[1]=L.y; EYE[2]=L.z;
         /* aim between the line and the flagger; the leader pulls the aim his way as he comes up to the line */
         if(f5){ var dl=Math.hypot(f5.x-LA[0],f5.z-LA[2]), w3=clamp(1-dl/45,0,1)*0.45; TGT[0]=lerp(bx2,f5.x,w3); TGT[1]=lerp(by2,f5.y+0.8,w3); TGT[2]=lerp(bz2,f5.z,w3); } else { TGT[0]=bx2; TGT[1]=by2; TGT[2]=bz2; }
@@ -1529,9 +1684,9 @@ function create(host,opt){
      2 QUALITY:     up to 1080p, 4x MSAA where WebGL2 has it, a 2048 shadow map, depth of field, the most particles and hero riders.
      "auto" picks the level from the device and steps down when the measured frame time says so (and back up, once, when there is room). */
   var QUAL=[
-    {name:"performance",px:0.62e6,post:false,shadow:0,env:false,mud:false,detail:false,bloom:0,dof:0,fxaa:false,msaa:false,hero:1,mid:5,parts:150,clumps:70,fps30:true,flare:false},
-    {name:"balanced",px:1.0e6,post:true,shadow:1024,env:true,mud:true,detail:true,bloom:0.32,dof:0,fxaa:true,msaa:false,hero:3,mid:9,parts:300,clumps:160,fps30:false,flare:true},
-    {name:"quality",px:2.15e6,post:true,shadow:2048,env:true,mud:true,detail:true,bloom:0.5,dof:0.6,fxaa:true,msaa:true,hero:6,mid:14,parts:480,clumps:260,fps30:false,flare:true}];
+    {name:"performance",px:0.62e6,post:false,shadow:0,env:false,mud:false,detail:false,bloom:0,dof:0,fxaa:false,msaa:false,hero:1,mid:5,parts:150,clumps:90,fps30:true,flare:false},
+    {name:"balanced",px:1.0e6,post:true,shadow:1024,env:true,mud:true,detail:true,bloom:0.32,dof:0,fxaa:true,msaa:false,hero:3,mid:9,parts:300,clumps:280,fps30:false,flare:true},
+    {name:"quality",px:2.15e6,post:true,shadow:2048,env:true,mud:true,detail:true,bloom:0.5,dof:0.6,fxaa:true,msaa:true,hero:6,mid:14,parts:480,clumps:560,fps30:false,flare:true}];
   V.q=startLevel(); V.qAuto=true; V.qCap=2; V.QUAL=QUAL; V.qLog=[]; V.qDirty=true;
   function startLevel(){
     var ua=(navigator&&navigator.userAgent)||"", rd=(R.caps.renderer||"");
@@ -1621,11 +1776,11 @@ function create(host,opt){
     var W=V.W, H=V.H, Q=QUAL[V.q], Lg=SC.L;
     if(V.qDirty||V.postKey!==W+"x"+H+"|"+V.q) applyQuality(W,H);
     var post=V.postOn&&R.post, P0;
-    R.frame(); frameLight(dt);
+    R.frame(); if(!V._lightDone) frameLight(dt);
     /* camera matrices: CAM.fov is the vertical field of a 16:9 frame: a portrait screen keeps most of the width (a taller view), a very wide one a little less height */
     var asp=W/H, kk=(16/9)/asp, fy=Math.min(1.4,2*Math.atan(Math.tan(CAM.fov/2)*(kk>1?Math.pow(kk,0.52):Math.pow(kk,0.35))));
     var far=C.outdoor?2400:900;
-    GL.persp(PROJ,fy,asp,CAM.close?0.35:1.5,far); GL.lookAt(VIEW,CAM.eye,CAM.tgt,CAM.up||[0,1,0]); GL.mul(VP,PROJ,VIEW); GL.inv(IVP,VP);
+    GL.persp(PROJ,fy,asp,CAM.near||(CAM.close?0.35:1.5),far); GL.lookAt(VIEW,CAM.eye,CAM.tgt,CAM.up||[0,1,0]); GL.mul(VP,PROJ,VIEW); GL.inv(IVP,VP);
     var tSec=fx||V.fxMode!=="full"?0:(vnow()%600000)/1000;   /* the LED boards and the crowd hold still with Reduce effects */
     /* every instance buffer is filled once, then used by the shadow pass and the main pass */
     PARTS.forEach(function(k){ var n=counts[NCNT[k]]; if(n) R.update(IB[k],IBD[k],n); });
@@ -1648,7 +1803,8 @@ function create(host,opt){
     /* the shared textures: 1 noise, 2 smooth noise, 3 shadow, 4 / 5 the dirt's detail */
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D,TEX.noise); gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D,TEX.smooth);
     if(useSh){ gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D,R.shadow.tex); }
-    gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D,TEX.detA); gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D,TEX.detB); gl.activeTexture(gl.TEXTURE0);
+    gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D,TEX.detA); gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D,TEX.detB);
+    gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D,BAN.t); gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D,BAN.tw); gl.activeTexture(gl.TEXTURE0);
     function u3(l,v){ if(l!=null) gl.uniform3fv(l,v); }
     function common(Pg){ var u=Pg.u; gl.uniformMatrix4fv(u.uVP,false,VP);
       u3(u.uSun,LU.sun); u3(u.uSunCol,LU.sunCol); u3(u.uFill,LU.fill); u3(u.uFillCol,LU.fillCol); u3(u.uSky,LU.sky); u3(u.uGnd,LU.gnd);
@@ -1656,6 +1812,7 @@ function create(host,opt){
       if(u.uExpo!=null) gl.uniform1f(u.uExpo,LU.expo); if(u.uTM!=null) gl.uniform1f(u.uTM,TM); if(u.uOut!=null) gl.uniform1f(u.uOut,OUT); if(u.uFar!=null) gl.uniform1f(u.uFar,far);
       if(u.uTime!=null) gl.uniform1f(u.uTime,tSec); if(u.uNoise!=null) gl.uniform1i(u.uNoise,1); if(u.uSmooth!=null) gl.uniform1i(u.uSmooth,2);
       if(u.uMudCol!=null) gl.uniform3fv(u.uMudCol,LU.mud); if(u.uLDir!=null) gl.uniform3fv(u.uLDir,LU.ld); if(u.uLCol!=null) gl.uniform3fv(u.uLCol,LU.lc);
+      if(u.uBanner!=null) gl.uniform1i(u.uBanner,6); if(u.uTower!=null) gl.uniform1i(u.uTower,7); if(u.uPxW!=null) gl.uniform1f(u.uPxW,2*Math.tan(fy/2)/H);
       if(u.uLVP!=null){ gl.uniformMatrix4fv(u.uLVP,false,LVP); } if(u.uShP!=null){ gl.uniform4fv(u.uShP,SHP); } if(u.uShadow!=null) gl.uniform1i(u.uShadow,3); }
     /* the sky */
     var Pg=R.progs.sky; R.use(Pg); gl.depthMask(false); gl.uniformMatrix4fv(Pg.u.uIVP,false,IVP); gl.uniform3fv(Pg.u.uTop,Lg.top); gl.uniform3fv(Pg.u.uHor,Lg.hor); gl.uniform3fv(Pg.u.uSun,Lg.sun); gl.uniform3fv(Pg.u.uSunCol,Lg.sunCol);
@@ -1765,9 +1922,9 @@ function create(host,opt){
   V.freeze=function(on){ V.frozen=!!on; };
   /* capture / demo hooks: a seeded random source, a virtual clock, one deterministic frame (update + camera + draw at a fixed dt; draw=false
      fast-forwards the same simulation without rendering) and a free camera for stills of a model or a spot */
-  V.seed=function(n){ RNG.f=(n==null)?null:rng(n>>>0); };
+  V.seed=function(n){ RNG.f=(n==null)?null:rng(n>>>0); VR.f=(n==null)?null:rng((n^0x5bd1e995)>>>0); };
   V.virtual=function(on){ VCLK.on=!!on; if(on) VCLK.ms=0; };
-  V.step=function(dt,doDraw){ if(VCLK.on) VCLK.ms+=dt*1000; update(dt); camera(dt); if(doDraw!==false) draw(dt); };
+  V.step=function(dt,doDraw){ if(VCLK.on) VCLK.ms+=dt*1000; update(dt); camera(dt); if(V.C&&SC){ frameLight(dt); V._lightDone=true; } if(doDraw!==false) draw(dt); V._lightDone=false; };
   V.freeCam=function(o){ V.free=o||null; };
   V.debugShot=function(kind,o){ o=o||{}; V.res=[]; setShot({kind:kind,d:o.d||999,spot:o.spot||(kind==="side"||kind==="wide"?(SC.secs.filter(function(x){ return !o.type||x.F&&x.F.type===o.type; })[0]):null),focus:o.focus!=null?o.focus:-1,pair:o.pair}); };
   V.timeFor=function(type){ var sp=SC.secs.filter(function(x){ return x.F&&x.F.type===type; })[0]; return sp?{lip:sp.F.lip!=null?leadTimeAt(sp.F.lip,(V.lap>1?lapEnd(V.lap-1):0)):null,s0:leadTimeAt(sp.F.s0,(V.lap>1?lapEnd(V.lap-1):0)),F:{type:sp.F.type,s0:sp.F.s0,s1:sp.F.s1,lip:sp.F.lip,tgt:sp.F.tgt}}:null; };
@@ -1798,7 +1955,7 @@ function create(host,opt){
     dead.forEach(function(p,i){ rows.push({s:p.r.s,place:live.length+i+1,gap:0,out:true,crash:!!p.crash,air:false,D:p.D,v:0}); });
     return rows;
   };
-  V.poseList=function(){ return poses.map(function(p){ return {s:p.r.s,x:p.x,y:p.y,z:p.z,tx:p.tx,tz:p.tz,gl:p.gl,air:!!p.air,parked:!!p.parked,v:p.v||0,lod:p.r._lod}; }); };
+  V.poseList=function(){ return poses.map(function(p){ return {s:p.r.s,x:p.x,y:p.y,z:p.z,tx:p.tx,tz:p.tz,gl:p.gl,D:p.D,air:!!p.air,parked:!!p.parked,v:p.v||0,lod:p.r._lod}; }); };
   V.speedOf=function(s){ var p=s>=0?riderPos(s):null; return p&&!p.parked?(p.v||0):0; };
   V.order=function(){ return poses.filter(function(p){ return !p.parked; }).sort(function(a,b){ return b.D-a.D; }).map(function(p){ return p.r.s; }); };
   V.destroy=function(){ V.stop(); try{ canvas.remove(); }catch(e){} };

@@ -256,11 +256,13 @@ function torsoMesh(lod){
   function P(x,y,z){ return [x*cl+y*sl,-x*sl+y*cl,z]; }   /* rotate (x, y) forward by the baked lean about the hip */
   /* pelvis and pants down to the thighs' tops (the thighs are separate limbs): a squarish loft */
   M(B,MAT.pants);
-  var rows=[[0.0,0.17,0.12,K.pants],[0.1,0.175,0.125,K.pants],[0.2,0.175,0.13,K.team],[0.3,0.2,0.145,K.team],[0.42,0.245,0.155,K.team],[0.5,0.255,0.14,K.team],[0.56,0.215,0.115,K.team],[0.6,0.1,0.09,K.skin]];
+  var rows=[[0.0,0.17,0.12,K.pants],[0.1,0.175,0.125,K.pants],[0.17,0.175,0.128,K.pants],[0.17,0.176,0.129,K.black],[0.215,0.178,0.131,K.black],
+    [0.215,0.18,0.131,K.team],[0.3,0.2,0.145,K.team],[0.4,0.235,0.152,K.team],[0.455,0.25,0.15,K.team],[0.455,0.25,0.15,K.acc],[0.5,0.255,0.14,K.acc],[0.55,0.22,0.12,K.acc],
+    [0.55,0.22,0.12,K.pad],[0.6,0.1,0.09,K.pad]];
   var Fx=[1,0,0], Fz=[0,0,1];
   var rings=[], cols=[], mats=[];
   rows.forEach(function(r,idx){
-    var c=P(0.035*Math.sin(idx/7*PI),r[0],0), bz=[0,0,1], bx=[cl,-sl,0];
+    var c=P(0.035*Math.sin(r[0]/0.6*PI),r[0],0), bz=[0,0,1], bx=[cl,-sl,0];
     var rg=[], p=2/2.6; for(var k=0;k<nn;k++){ var a=k/nn*TAU, ca=Math.cos(a), sa=Math.sin(a), px=sgn(ca)*Math.pow(Math.abs(ca),p), pz=sgn(sa)*Math.pow(Math.abs(sa),p);
       var back=px<0?1.0:1.0; rg.push([c[0]+bx[0]*r[2]*px,c[1]+bx[1]*r[2]*px,c[2]+bz[2]*r[1]*pz]); }
     rings.push(rg); cols.push(r[3]);
@@ -296,7 +298,7 @@ function torsoMesh(lod){
   return B;
 }
 /* an upper arm (jersey sleeve), a forearm (sleeve, the glove): along +X from 0 to the segment's length */
-function upperArmMesh(lod){ var B=new GL.Builder(); M(B,MAT.cloth); limb(B,[0,0,0],[D.UARM,0,0],0.062,0.05,K.team,{n:lod===0?9:7,mid:1.12,ratio:1,rings:4}); M(B,MAT.pads_||MAT.cloth); if(lod<2) B.ball(0,0,0,0.066,0.066,0.066,K.team,6); return B; }
+function upperArmMesh(lod){ var B=new GL.Builder(); M(B,MAT.cloth); limb(B,[0,0,0],[D.UARM,0,0],0.062,0.05,K.team,{n:lod===0?9:7,mid:1.12,ratio:1,rings:4}); M(B,MAT.pads_||MAT.cloth); if(lod<2) B.ball(0,0,0,0.068,0.068,0.068,K.acc,6); return B; }
 function foreArmMesh(lod){
   var B=new GL.Builder(); M(B,MAT.cloth); limb(B,[0,0,0],[D.FARM*0.78,0,0],0.05,0.042,K.team,{n:lod===0?9:7,mid:1.1,ratio:1,rings:4});
   M(B,MAT.glove); var gn=lod===0?8:6; limb(B,[D.FARM*0.74,0,0],[D.FARM*1.1,0,0],0.05,0.038,K.acc,{n:gn,mid:1.15,ratio:1.1,rings:3});
@@ -306,7 +308,7 @@ function foreArmMesh(lod){
 /* a thigh (pants with a knee guard) along +X from the hip to the knee; a shin with the boot: from the knee to the ankle, the boot's foot at the end */
 function thighMesh(lod){
   var B=new GL.Builder(); M(B,MAT.pants); limb(B,[0,0,0],[D.THIGH,0,0],0.088,0.066,K.pants,{n:lod===0?10:7,mid:1.1,ratio:1,rings:5});
-  M(B,MAT.plastic); if(lod<2) B.ball(D.THIGH,0,0,0.074,0.076,0.07,K.teamD,7);
+  M(B,MAT.plastic); if(lod<2){ B.ball(D.THIGH,-0.012,0,0.078,0.08,0.074,K.teamD,7); limb(B,[D.THIGH-0.14,0,0],[D.THIGH+0.04,0,0],0.082,0.075,K.black,{n:8,mid:1.04,rings:3}); }
   /* the team colour stripe down the thigh */
   if(lod===0){ M(B,MAT.pants); B.box(0.04,0.06,-0.014,D.THIGH*0.92,0.09,0.014,K.acc); }
   return B;

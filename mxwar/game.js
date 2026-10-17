@@ -698,10 +698,47 @@ function view3d(){
   if(V3||V3tried) return V3; V3tried=true;
   if(/[?&]gl=0(&|$)/.test(location.search)||!MX.Race3D) return null;
   try{ V3=MX.Race3D.create($("view3d"),{onBanner:onBanner3d,onNeed:onNeed3d}); }catch(e){ V3=null; try{ console.warn("mxwar 3d:",e); }catch(x){} }
-  if(V3) window.__mx3d=V3;
+  if(V3){ window.__mx3d=V3; applyLook(); }
   return V3;
 }
 function is3d(){ return !!(V3&&ui.use3d); }
+/* ================= the look: camera presets and graphics quality (the CEO's visual pack, 2026-10-17) =================
+   Cover chase (the default: low behind the rider, like the cover), Broadcast (the TV director), Grandstand (the whole course from the stands),
+   Onboard, Replay (slow motion of the last crash, pass or jump). Graphics: Auto (picked from the measured frame time), Performance, Balanced,
+   Quality. Both are remembered on this device. Controls: the Camera and Graphics buttons (D-pad / tap), a tap on the view, the keys C, G and R,
+   the remote's fast-forward / rewind (camera) and play-pause (replay). */
+var CAMS=["chase","broadcast","grandstand","onboard","replay"], CAMN={chase:"Cover chase",broadcast:"Broadcast",grandstand:"Grandstand",onboard:"Onboard",replay:"Replay"};
+var GFX=["auto","performance","balanced","quality"], GFXN={auto:"Auto",performance:"Performance",balanced:"Balanced",quality:"Quality"};
+function lookPref(k,list,def){ try{ var v=localStorage.getItem(k); return list.indexOf(v)>=0?v:def; }catch(e){ return def; } }
+function lookSave(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+function applyLook(){
+  if(!V3) return;
+  V3.setQuality(lookPref("bg_mxwar_gfx",GFX,"auto")); V3.setCamera(lookPref("bg_mxwar_cam",CAMS,"chase"));
+  V3.onCamera=function(m){ if(m!=="replay") lookSave("bg_mxwar_cam",m); labelLook(); };
+  labelLook();
+}
+function labelLook(){
+  var cb=$("camBtn"), gb=$("gfxBtn"); if(!cb||!gb||!V3) return;
+  setBtn(cb,"Camera: "+(CAMN[V3.camera()]||""),"tv"); setBtn(gb,"Graphics: "+(GFXN[lookPref("bg_mxwar_gfx",GFX,"auto")]||""),"gear");
+  cb.setAttribute("aria-label","Camera: "+(CAMN[V3.camera()]||"")+". Press for the next view."); gb.setAttribute("aria-label","Graphics: "+(GFXN[lookPref("bg_mxwar_gfx",GFX,"auto")]||"")+". Press for the next level.");
+}
+function nextCamera(dir){ if(!V3||!is3d()) return; V3.cycleCamera(dir); labelLook(); toast(CAMN[V3.camera()],{ms:1200}); }
+function nextGraphics(){ if(!V3||!is3d()) return; var cur=lookPref("bg_mxwar_gfx",GFX,"auto"), nx=GFX[(GFX.indexOf(cur)+1)%GFX.length]; lookSave("bg_mxwar_gfx",nx); V3.setQuality(nx); labelLook(); toast("Graphics: "+GFXN[nx],{ms:1400}); }
+$("camBtn").addEventListener("click",function(){ nextCamera(1); });
+$("gfxBtn").addEventListener("click",function(){ nextGraphics(); });
+$("view3d").addEventListener("click",function(){ if(is3d()&&!sheetUp()) nextCamera(1); });
+document.addEventListener("keydown",function(e){
+  if(!G||ui.view!=="race"||!is3d()||sheetUp()||e.ctrlKey||e.altKey||e.metaKey) return;
+  var t=e.target, tag=t&&t.tagName; if(tag==="INPUT"||tag==="SELECT"||tag==="TEXTAREA") return;
+  var k=e.key;
+  if(k==="c"||k==="C"){ e.preventDefault(); nextCamera(1); }
+  else if(k==="g"||k==="G"){ e.preventDefault(); nextGraphics(); }
+  else if(k==="r"||k==="R"||k==="MediaPlayPause"){ e.preventDefault(); V3.setCamera(V3.camera()==="replay"?(lookPref("bg_mxwar_cam",CAMS,"chase")):"replay"); labelLook(); }
+  else if(k==="MediaFastForward"||k==="MediaTrackNext"){ e.preventDefault(); nextCamera(1); }
+  else if(k==="MediaRewind"||k==="MediaTrackPrevious"){ e.preventDefault(); nextCamera(-1); }
+  else if(k==="ContextMenu"){ e.preventDefault(); nextGraphics(); }
+});
+
 /* the round's lap time (seconds) from its track layout (tracks3d.js): the season sizes the real race lengths with it */
 var lapCache={};
 MX.lapTime=function(series,year,cal){
@@ -938,6 +975,7 @@ function syncControls(){
   f.hidden=!hs.length||rc.over||(!gate&&!alive.length);
   auto.hidden=!hs.length||rc.over;
   skip.hidden=rc.over||(!is3d()&&hs.length&&alive.length>0);
+  $("camBtn").hidden=$("gfxBtn").hidden=!is3d(); if(is3d()) labelLook();
   if(is3d()) skip.textContent=hs.length&&alive.length?"Skip to the finish":"Sim to the flag";
   var lbl="Flip", sub="";
   if(gate){ lbl="Drop the gate"; sub=hs.length>1?"then every rider turns a card":""; }

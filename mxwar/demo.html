@@ -66,13 +66,16 @@
   #war.flash{box-shadow:0 0 0 2px var(--war),0 0 26px rgba(247,45,46,.55)}
   #war.flash .t b{color:var(--war)}
   /* banners: the holeshot, the crash and the yellow flag */
-  #banner{position:absolute; left:50%; top:17%; transform:translateX(-50%); padding:.5em 1.6em .6em; border-radius:6px; background:rgba(9,12,18,.86); text-align:center; box-shadow:0 0 0 1px rgba(255,255,255,.1),0 10px 30px rgba(0,0,0,.6); opacity:0; transition:opacity .25s}
+  #banner{position:absolute; left:50%; top:15%; transform:translateX(-50%); padding:.5em 1.6em .6em; border-radius:6px; background:rgba(9,12,18,.86); text-align:center; box-shadow:0 0 0 1px rgba(255,255,255,.1),0 10px 30px rgba(0,0,0,.6); opacity:0; transition:opacity .25s}
   #banner.on{opacity:1}
   #banner b{display:block; font:800 1.9em/1 "Arial Narrow","Bahnschrift",Impact,sans-serif; letter-spacing:.06em; text-transform:uppercase}
   #banner span{display:block; margin-top:.25em; color:var(--mute); font-size:.9em}
   #banner.yellow{background:linear-gradient(180deg,rgba(84,66,6,.95),rgba(40,30,4,.95)); box-shadow:inset 0 0 0 2px #ffd84a,0 10px 30px rgba(0,0,0,.6)}
   #banner.yellow b{color:#ffe27a}
   #banner.war b{color:var(--war)}
+  #banner.pass{background:linear-gradient(180deg,rgba(60,44,12,.94),rgba(24,18,6,.94)); box-shadow:inset 0 0 0 2px var(--gold),0 10px 30px rgba(0,0,0,.6)}
+  #banner.pass b{color:var(--gold)}
+  #banner.calm b{color:var(--white)}
   #lbl{position:absolute; left:50%; bottom:1.6%; transform:translateX(-50%); font-size:.62em; letter-spacing:.14em; color:rgba(240,241,243,.55); text-transform:uppercase}
   #fatal{position:absolute; inset:0; display:none; place-items:center; background:#090c12; font-size:1.4em}
 </style>

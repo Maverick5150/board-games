@@ -275,8 +275,8 @@ function build(layout,o){
      the surface (none across jumps, whoops or rhythm), so the strip's mesh carries them and a wheel in a rut rides lower */
   C.rutU=new Float32Array(N); C.rutD=new Float32Array(N); C.rutB=new Float32Array(N);
   for(i=0;i<N;i++){ var kk2=C.k[i], s4=i*DS, flat=clamp(1-C.F[i]*1.6,0,1), vary=0.62+0.38*Math.sin(s4*0.061+1.3)*Math.sin(s4*0.0173+0.4);
-    C.rutU[i]=clamp(kk2*10,-0.52,0.52); C.rutD[i]=(0.05+0.1*clamp(Math.abs(kk2)*12,0,1))*vary*flat*(outdoor?1.1:1)*(s4<C.startLen*0.3?0.4:1);
-    C.rutB[i]=clamp(Math.abs(C.berm[i])/1.1,0,1)*flat*0.14*vary*(C.berm[i]>=0?1:-1); }
+    C.rutU[i]=clamp(kk2*10,-0.52,0.52); C.rutD[i]=(0.085+0.17*clamp(Math.abs(kk2)*12,0,1))*vary*flat*(outdoor?1.1:1)*(s4<C.startLen*0.3?0.4:1);
+    C.rutB[i]=clamp(Math.abs(C.berm[i])/1.1,0,1)*flat*0.2*vary*(C.berm[i]>=0?1:-1); }
   smooth(C.rutU,C.rutU,10); smooth(C.rutD,C.rutD,6); smooth(C.rutB,C.rutB,6);
   profile(C,o);
   return C;

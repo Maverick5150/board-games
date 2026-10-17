@@ -298,6 +298,9 @@
   .mx-auto .bg-row__title{font-size:var(--fs-md)}
   #skipBtn{flex:1 1 100%; min-height:var(--tap)}
   #boardBtn{flex:0 0 auto; min-height:3.5rem; padding-inline:.9rem}
+  #camBtn,#gfxBtn{flex:0 1 auto; min-height:3.5rem; padding-inline:.9rem; white-space:nowrap}
+  #camBtn .bg-ico,#gfxBtn .bg-ico{width:1.2em; height:1.2em}
+  html:not([data-tv]) #camBtn,html:not([data-tv]) #gfxBtn{flex:1 1 40%; min-height:var(--tap); padding-inline:.5rem; font-size:var(--fs-sm)}
   #boardBtn .bg-ico{width:1.2em; height:1.2em}
   .mx-stat{margin:.4rem 0 0; text-align:center; font:var(--fw-ui-strong) var(--fs-sm)/1.4 var(--font-ui); color:var(--text-1); min-height:1.4em}
   .mx-tower{margin:.5rem 0 0; padding:.5rem .5rem .4rem; border-radius:var(--r-lg); background:rgba(8,8,12,.78); box-shadow:inset 0 0 0 1px rgba(231,202,144,.16)}
@@ -826,6 +829,8 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
       <button class="bg-btn bg-btn--primary bg-btn--lg" id="flipBtn" type="button" data-focus-first><span class="bg-btn__label" id="flipLabel">Flip</span><span class="bg-btn__sub" id="flipSub"></span></button>
       <button class="bg-row mx-auto" id="autoBtn" type="button" role="switch" aria-checked="false"><span class="bg-row__main"><span class="bg-row__title">Auto</span></span><span class="bg-toggle" aria-hidden="true"></span></button>
       <button class="bg-btn bg-btn--secondary" id="boardBtn" type="button" data-icon="board" aria-haspopup="dialog">Battle board</button>
+      <button class="bg-btn bg-btn--secondary" id="camBtn" type="button" data-icon="tv" hidden aria-label="Camera: next view">Camera</button>
+      <button class="bg-btn bg-btn--secondary" id="gfxBtn" type="button" data-icon="gear" hidden aria-label="Graphics quality: next level">Graphics</button>
       <button class="bg-btn bg-btn--secondary" id="skipBtn" type="button" hidden>Sim to the flag</button>
     </div>
     <p class="mx-stat" id="stat" data-stage-text aria-live="polite"></p>
@@ -877,6 +882,7 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
 <script src="art.js"></script>
 <script src="track.js"></script>
 <script src="gl3d.js"></script>
+<script src="models3d.js"></script>
 <script src="data/tracks.js"></script>
 <script src="tracks3d.js"></script>
 <script src="race3d.js"></script>

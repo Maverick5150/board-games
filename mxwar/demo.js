@@ -103,7 +103,7 @@ function hudLap(){ var lap=Math.min(Math.max(1,V&&V.lap||1),rc.o.len); $("lapTxt
 var lastBoardKey="";
 function hudUpdate(){
   if(!V||!V.board) return;
-  var B=V.board(), me=-1, k="";
+  var B=V.board(), me=-1, k=""; if(!B.length) return;
   for(var i=0;i<B.length;i++){ var b=B[i], li=rowEls[i], R=rider(b.s); if(!li) continue;
     li.className=(R.kind==="human"?"me ":"")+(b.out?"out ":"")+(b.s===redSeat()?"red":"");
     li.children[0].textContent=i+1; var n=li.children[1]; n.textContent=R.plate; n.style.setProperty("--mk",A.mk(R.bike)[0]);
@@ -112,6 +112,12 @@ function hudUpdate(){
   if(me>=0){ var m=B[me]; $("youPos").innerHTML=(me+1)+"<small>"+ord(me+1)+"</small>"; $("youLbl").textContent="You · lap "+Math.min(Math.max(1,V.lap),rc.o.len)+" of "+rc.o.len;
     $("youGap").textContent=me===0?"Leading":(B[me-1]?"+"+(m.gap-B[me-1].gap).toFixed(1)+" s to the rider ahead":""); }
   else { $("youLbl").textContent="Leader"; $("youPos").textContent=rider(B[0].s).name.split(" ").slice(-1)[0].toUpperCase(); $("youGap").textContent=""; }
+  /* the moments: a new lap, the white flag, and when You pass (or are passed by) a rider */
+  var lapNow=Math.min(Math.max(1,V.lap),rc.o.len);
+  if(DEMO.lastLap==null) DEMO.lastLap=lapNow; else if(lapNow!==DEMO.lastLap){ DEMO.lastLap=lapNow; if(lapNow===rc.o.len) banner("White flag","Last lap",1800,"calm"); else banner("Lap "+lapNow,"of "+rc.o.len,1300,"calm"); }
+  if(me>=0){ var pl=me+1; if(DEMO.lastPlace!=null&&pl!==DEMO.lastPlace&&(DEMO.vclock||0)>3.5){ var oth=pl<DEMO.lastPlace?B[me+1]:B[me-1], RR=oth?rider(oth.s):null;
+      if(RR) banner(pl<DEMO.lastPlace?"You passed #"+RR.plate+" "+RR.name.split(" ").slice(-1)[0]:"Passed by #"+RR.plate+" "+RR.name.split(" ").slice(-1)[0],"Now "+pl+ord(pl),1500,pl<DEMO.lastPlace?"pass":"calm"); }
+    DEMO.lastPlace=pl; }
   var sp=V.speedOf?V.speedOf(V.focusSeat?V.focusSeat():-1):0; $("spdN").textContent=Math.round(sp*2.23694);
   hudWar();
   if(DEMO.cardsT!=null){}
@@ -161,7 +167,7 @@ DEMO.step=function(dt,draw){
   if(DEMO.bannerUntil!=null&&DEMO.vclock>DEMO.bannerUntil&&cfg.record){ $("banner").classList.remove("on"); DEMO.bannerUntil=null; }
 };
 /* n seconds of the same simulation without drawing (a fast-forward between the recorded windows) */
-DEMO.skip=function(sec,dt){ dt=dt||1/30; var n=Math.round(sec/dt); for(var i=0;i<n;i++) DEMO.step(dt,false); hudUpdate(); };
+DEMO.skip=function(sec,dt){ dt=dt||1/30; var n=Math.round(sec/dt); for(var i=0;i<n;i++) DEMO.step(dt,false); DEMO.lastLap=null; DEMO.lastPlace=null; hudUpdate(); };
 /* a free camera round a rider, for stills of the models: back / up / side in metres from the bike's position (in its heading), aim = height of the look-at point */
 DEMO.rig=function(seat,back,up,side,aim,fov,ahead){
   var p=V.poseList().filter(function(q){ return q.s===seat; })[0]; if(!p) return null;
