@@ -171,10 +171,10 @@ const MOTE_FS=[
 "  #include <colorspace_fragment>",
 "}"].join("\n");
 
-const LENS_VS=[
-"attribute vec4 aS; attribute float aV; uniform float uAspect;",   /* aS = centre x, y (screen, -1..1), radius (fraction of the height), seed; aV = how much of it shows */
+const LENS_VS=K=>[
+"attribute vec4 aS; uniform float uVis["+K+"]; uniform float uAspect;",   /* aS = centre x, y (screen, -1..1), radius (fraction of the height), seed; uVis = how much of each shows (a uniform: set while the lens is drawn, it applies to that very draw; an attribute set there would upload one draw late) */
 "varying vec2 vUv; varying float vSeed; varying float vVis;",
-"void main(){ vUv=position.xy; vSeed=aS.w; vVis=aV; vec2 p=aS.xy+position.xy*vec2(aS.z/uAspect,aS.z)*step(0.002,aV); gl_Position=vec4(p,0.0,1.0); }"].join("\n");
+"void main(){ float av=uVis[gl_InstanceID]; vUv=position.xy; vSeed=aS.w; vVis=av; vec2 p=aS.xy+position.xy*vec2(aS.z/uAspect,aS.z)*step(0.002,av); gl_Position=vec4(p,0.0,1.0); }"].join("\n");
 const LENS_FS=[
 "varying vec2 vUv; varying float vSeed; varying float vVis;",
 "void main(){",
@@ -295,8 +295,8 @@ export function createFx(opts){
     const K=T.lens; lg=new THREE.InstancedBufferGeometry();
     lg.setAttribute("position",new THREE.BufferAttribute(new Float32Array([-1,-1,0, 1,-1,0, 1,1,0, -1,1,0]),3)); lg.setIndex([0,1,2, 0,2,3]);
     const S=new Float32Array(K*4); for(let k=0;k<K;k++){ const a=rnd()*6.283, d=0.35+0.55*rnd(); S[k*4]=Math.cos(a)*d*0.95; S[k*4+1]=Math.sin(a)*d*0.8-0.12; S[k*4+2]=0.015+0.03*rnd()*rnd()*3.0; S[k*4+3]=rnd()*10; }
-    lAV=new Float32Array(K); lg.setAttribute("aS",new THREE.InstancedBufferAttribute(S,4)); lg.setAttribute("aV",new THREE.InstancedBufferAttribute(lAV,1).setUsage(THREE.DynamicDrawUsage)); lg.instanceCount=K;
-    lm=new THREE.ShaderMaterial({uniforms:{uAspect:{value:1.78}},vertexShader:LENS_VS,fragmentShader:LENS_FS,transparent:true,depthWrite:false,depthTest:false});
+    lAV=new Float32Array(K); lg.setAttribute("aS",new THREE.InstancedBufferAttribute(S,4)); lg.instanceCount=K;
+    lm=new THREE.ShaderMaterial({uniforms:{uAspect:{value:1.78},uVis:{value:lAV}},vertexShader:LENS_VS(K),fragmentShader:LENS_FS,transparent:true,depthWrite:false,depthTest:false});
     lens=new THREE.Mesh(lg,lm); lens.frustumCulled=false; lens.renderOrder=999; lens.name="fx-lens";
     const fw=new THREE.Vector3(), tmp=new THREE.Vector3();
     lens.onBeforeRender=function(r,sc,cam){
@@ -306,7 +306,6 @@ export function createFx(opts){
       for(let j=0;j<burst.length;j++){ const b=burst[j]; const dx=b[0]-cp.x, dy=b[1]-cp.y, dz=b[2]-cp.z, d=Math.sqrt(dx*dx+dy*dy+dz*dz); if(d<0.5||d>8) continue;
         const f=(dx*fw.x+dy*fw.y+dz*fw.z)/d; if(f<0.5) continue; const w=1-d/8; ex+=b[3]*w*w*(f-0.4); }
       const K=lAV.length; for(let k=0;k<K;k++){ const need=(k+0.5)/K; lAV[k]=clamp((ex*4.5-need*0.9)*3.0,0,1); }
-      lg.attributes.aV.needsUpdate=true;
     };
     grp.add(lens);
   }
@@ -505,6 +504,13 @@ export function createFx(opts){
     for(let k=0;k<NC;k++){ if(!cAlive[k]) continue; const dx=cPos[k*3]-x, dz=cPos[k*3+2]-z; if(dx*dx+dz*dz<r*r){ o.clods++; if(o.samples.length<6) o.samples.push(["c",+cPos[k*3].toFixed(2),+cPos[k*3+1].toFixed(2),+cPos[k*3+2].toFixed(2),+cLife[k].toFixed(2),cRest[k],+cRad[k].toFixed(3)]); } }
     for(let k=0;k<NS;k++){ if(sLife[k]<=0) continue; const dx=sPos[k*3]-x, dz=sPos[k*3+2]-z; if(dx*dx+dz*dz<r*r){ if(k<P0) o.sprays++; else if(k<H0) o.puffs++; else o.haze++; } }
     return o;
+  };
+  /* tests: a checksum of every pool, the generator state and the lens, to prove two runs of the same tick agree */
+  FX.hash=function(){
+    let a=0,b2=0,c=0,d=0,e2=0;
+    for(let k=0;k<NC*3;k++){ a+=cPos[k]*(1+(k%7)); b2+=cVel[k]; } for(let k=0;k<NC;k++){ c+=cLife[k]*(1+k%5)+cRest[k]+cAng[k]*0.01; }
+    for(let k=0;k<NS*3;k++){ d+=sPos[k]*(1+(k%5)); } for(let k=0;k<NS*4;k++){ e2+=aB[k]*(1+(k%3))+aA[k]; }
+    return {clods:[a,b2,c].map(x=>+x.toFixed(5)),sprites:[+d.toFixed(5),+e2.toFixed(5)],live:[cLive,liveS,liveP,liveH],simT:+simT.toFixed(6),FRAME:FRAME,sd:sd,lens:lAV?Array.from(lAV).map(x=>+x.toFixed(4)):null,mote:mm?+mm.uniforms.uT.value.toFixed(6):null,budget:FX.budget,PS:[PS.c,PS.s,PS.p,PS.h].map(x=>+x.toFixed(4)),burst:burst.length,focus:focus.map(o=>[o.on,+o.x.toFixed(3),+o.z.toFixed(3)])};
   };
   FX.setBudget=function(f){ FX.budget=clamp(f,0.05,1); FX.pinned=f<1; };   /* (a budget set from outside is kept: the self-adapting ladder only brings back what it took) */
   FX.emit=function(x,y,z,vx,vy,vz,size,life,dirt){ if(size>0.3) puff(x,y,z,vx,vy,vz,size,0.5,life,0.25,dirt||COL.dust); else clod(x,y,z,vx,vy,vz,Math.max(0.01,size*0.5),life,dirt||COL.clod,y-0.1,-1,0,0); };
