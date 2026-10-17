@@ -592,10 +592,15 @@ function lenSync(){
   if(rc.phase!=="gate"&&!rc.over){ $("midBig").textContent="Lap "+Math.min(ui.lap,rc.o.len); $("midSmall").textContent="of "+rc.o.len; }   /* as drawDuel */
   chips();
 }
+/* mxsave review: the MANUAL "Save game" slot keeps the old save until it is saved over, so loading it again would say it again: the
+   notices said are remembered per race (season, round, race, the season's dice, the lengths; the last 12, guarded) and said once */
+var LENK="bg_mxwar_lensaid";
 function lenNotice(my){
   if(my!==gen||!G||!G.lenNote) return;
-  var n=G.lenNote; delete G.lenNote; save();
-  setTimeout(function(){ if(my===gen) toast(lenWords(n),{ms:5200}); },2600);
+  var n=G.lenNote, id=[G.sid,G.ri,G.rkey,G.rs,n.was,n.len,n.done].join("|"); delete G.lenNote; save();
+  var said=[]; try{ said=JSON.parse(localStorage.getItem(LENK)||"[]"); if(!Array.isArray(said)) said=[]; }catch(e){ said=[]; }
+  if(said.indexOf(id)>=0) return;
+  setTimeout(function(){ if(my!==gen) return; toast(lenWords(n),{ms:5200}); said.unshift(id); try{ localStorage.setItem(LENK,JSON.stringify(said.slice(0,12))); }catch(e){} },2600);
 }
 function resetUI(){ ui.winShown=-1; ui.result=false; ui.finished=-1; ui.order=[]; ui.lastCards={}; ui.bikes={}; ui.pendRound=null; ui.pendSeason=null; ui.log=[]; ui.rc=null; ui.rmap=null; ui.hs=null; ui.trkKey=null; disp=null; trackShow(); renderLog(); }
 function dressSaveBar(){
