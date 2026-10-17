@@ -193,7 +193,9 @@ export function create(host,hooks){
   function tick(t){
     raf=0; if(!running) return;
     if(document.hidden){ running=false; return; }
-    const dt=(lastT?Math.min(0.1,(t-lastT)/1000):1/60)*(V.timeScale||1); lastT=t;   /* timeScale: tests only (never in the game: real time) */
+    /* real time even on a slow device (frames up to half a second apart still move the race on by their real length; the physics
+       sub-steps); timeScale: tests only (never in the game) */
+    const dt=Math.min(1.0,(lastT?Math.min(0.5,(t-lastT)/1000):1/60)*(V.timeScale||1)); lastT=t;
     const c0=now();
     const off=motion()==="off";
     step(dt);
@@ -345,8 +347,9 @@ export function create(host,hooks){
         nE-=1; }
     }
   }
-  function dirtCol(){ const s=look&&look.soil; return s==="sand"?[0.6,0.5,0.33]:s==="hardpack"?[0.42,0.32,0.22]:[0.27,0.19,0.12]; }
-  function dustCol(){ const s=look&&look.soil; return s==="sand"?[0.72,0.64,0.5]:C.kind==="stadium"?[0.42,0.35,0.28]:[0.6,0.52,0.42]; }
+  /* roost chunks a little darker than the lit dirt, dust paler than it (display colours: the particle shader writes them as they are) */
+  function dirtCol(){ const s=look&&look.soil; return s==="sand"?[0.74,0.63,0.45]:s==="hardpack"?[0.55,0.43,0.3]:C.kind==="stadium"?[0.45,0.33,0.22]:[0.36,0.27,0.18]; }
+  function dustCol(){ const s=look&&look.soil; return s==="sand"?[0.86,0.79,0.64]:C.kind==="stadium"?[0.7,0.6,0.48]:[0.74,0.67,0.55]; }
   function gnd(r,s,onStart,off){ if(onStart) return (r.fr.y||0)+0.02; return MX.Course.ground(C,s+off,r.lat); }
   function ride(r,s,onStart,off){
     if(onStart) return (r.fr.y||0)+0.02;
@@ -449,12 +452,12 @@ export function create(host,hooks){
   /* a trackside camera beside loop distance s: the side with room, off the track (inside the wall in a stadium) */
   function trackCam(s,h,distA){
     const f=MX.Course.frame(C,s,tmpO);
-    /* the first spot with room (3 m from any lane: nobody rides through the lens); else the roomiest, raised to look over the riders */
+    /* the first spot with room (4.5 m from any lane: nobody jumps through the lens); else the roomiest, raised to look over the riders */
     let best=null, bd=-1e9;
     for(const side of [1,-1]) for(const dist of (distA||[11,15,19,24])){ const lat=side*(f.hw+dist); const p=inFloor({x:f.x-Math.sin(f.th)*lat,z:f.z+Math.cos(f.th)*lat}); const cd=clearDist(C,p.x,p.z);
-      if(cd>=3) return new THREE.Vector3(p.x,terrainAt(p.x,p.z,f.y)+h,p.z);
+      if(cd>=4.5) return new THREE.Vector3(p.x,terrainAt(p.x,p.z,f.y)+h,p.z);
       if(cd>bd){ bd=cd; best=p; } }
-    return new THREE.Vector3(best.x,terrainAt(best.x,best.z,f.y)+h+clamp(3-bd,0,3)*1.2,best.z);
+    return new THREE.Vector3(best.x,terrainAt(best.x,best.z,f.y)+h+clamp(4.5-bd,0,4.5)*1.1,best.z);
   }
   function featCam(f){
     const sp=(C.spots||[]).find(x=>Math.abs(x.mid-(f.from+f.to)/2)<3);
@@ -469,7 +472,10 @@ export function create(host,hooks){
     for(const dist of [14,20,26]){ const lat=side*(f.hw+dist), x=f.x-Math.sin(f.th)*lat, z=f.z+Math.cos(f.th)*lat; if(clear(C,x,z,2)){ const p=inFloor({x:x,z:z}); return new THREE.Vector3(p.x,terrainAt(p.x,p.z,f.y)+10,p.z); } }
     const p=inFloor({x:f.x+20,z:f.z+20}); return new THREE.Vector3(p.x,terrainAt(p.x,p.z,0)+10,p.z);
   }
-  function lineCam(){ const fa=world.fin.flagAt, th=world.fin.th, sd=world.fin.side; const p=inFloor({x:fa.x+Math.cos(th)*5.5-Math.sin(th)*sd*1.5,z:fa.z+Math.sin(th)*5.5+Math.cos(th)*sd*1.5}); return new THREE.Vector3(p.x,fa.y+0.6,p.z); }
+  /* the line: from beyond it, low, across the track from the flagger: the riders come at the lens over the stripe, the flagger and the
+     flag up on the tower behind them */
+  function lineCam(){ const fin=world.fin, f=MX.Course.frame(C,0,tmpO), th=f.th, lat=-Math.sign(fin.lat||1)*(f.hw+3.5);
+    const p=inFloor({x:f.x+Math.cos(th)*11-Math.sin(th)*lat,z:f.z+Math.sin(th)*11+Math.cos(th)*lat}); return new THREE.Vector3(p.x,terrainAt(p.x,p.z,f.y)+2.1,p.z); }
   function candidates(urgent){
     const L=[], lead=leaderIdx(); if(lead<0) return L;
     const r=rs[lead], me=meSeats.filter(s=>rs[s]&&!rs[s].gone&&!rs[s].crash);
@@ -550,6 +556,8 @@ export function create(host,hooks){
       cPos.copy(shot.cam);
       tv4.copy(tv3); let spread=0;
       if(shot.victim!=null&&rs[shot.victim]&&rs[shot.victim].pos){ tv4.lerp(rs[shot.victim].pos,0.45); spread=Math.min(14,rs[shot.victim].pos.distanceTo(tv3)); }
+      else if(sh==="line"&&world.fin){ /* the flagger's flag in the frame with the rider */
+        const fp=world.fin.flagAt, dm=Math.hypot(fp.x-tv3.x,fp.z-tv3.z); tv4.set(tv4.x+(fp.x-tv4.x)*0.4,tv4.y+(fp.y+1.6-tv4.y)*0.4,tv4.z+(fp.z-tv4.z)*0.4); spread=Math.min(18,dm*0.9+2); }
       else if((shot.why==="yellow"||sh==="crash")&&marshal&&marshal.grp.visible){ /* the marshal waving the yellow flag in the frame too */
         const mp=marshal.grp.position, dm=Math.hypot(mp.x-tv3.x,mp.z-tv3.z); if(dm<40){ tv4.set(tv4.x+(mp.x-tv4.x)*0.35,tv4.y+(mp.y+1.4-tv4.y)*0.35,tv4.z+(mp.z-tv4.z)*0.35); spread=Math.min(16,dm*0.9); } }
       tv4.y-=0.3;
@@ -569,7 +577,7 @@ export function create(host,hooks){
   function tags(){
     if(!R) return;
     cam.updateMatrixWorld();
-    const show2=[], camP=cam.position, th=Math.tan(cam.fov*PI/360)*2, px=tv()?30:24;
+    const show2=[], camP=cam.position, th=Math.tan(cam.fov*PI/360)*2, px=tv()?clamp(Math.round((GL.innerHeight||1080)/36),15,30):24;   /* TV tags scale with the screen like its text */
     rs.forEach((r,i)=>{ if((r.gone&&!r.crash)||!r.pos){ tagAt(R,i,null,0); return; } show2.push([camP.distanceTo(r.pos),i]); });
     const max=LO?5:7, mine=new Set(meSeats.concat(redSeat>=0?[redSeat]:[]));
     show2.sort((a,b)=>(mine.has(b[1])-mine.has(a[1]))||a[0]-b[0]);   /* the person's and the red plate first, then the nearest */
@@ -616,5 +624,6 @@ export function create(host,hooks){
   V.fixPR=function(p){ prCap=p; pr=p; renderer.setPixelRatio(p); renderer.setSize(W,H,false); V.prFixed=true; };
   V.dispose=function(){ V.stop(); if(world) disposeTree(world.root); if(R) disposeTree(R.grp); renderer.dispose(); cv.remove(); };
   V.renderer=renderer; V.scene=scene; V.camera=cam;
+  V._dbg={riders:()=>R,gate:()=>gate,world:()=>world,marshal:()=>marshal};   /* tests only */
   return V;
 }

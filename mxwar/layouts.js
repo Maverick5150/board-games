@@ -56,11 +56,13 @@ function sxModern(variant){
     for(var i=lanes.length-1;i>0;i--){ var j=Math.floor(R()*(i+1)), t=lanes[i]; lanes[i]=lanes[j]; lanes[j]=t; }
     if(R()<0.22) lanes[lanes.indexOf("rhythm")]="sand";
   }
+  /* a modern stadium lap is 54-59 s (Main Events of 20 min + 1 lap run 21-23 laps): the speeds are tuned to it */
+  var lapT=variant?54+R()*5:56;
   var Gm=sxGeom(k,r,m);
   feats=feats.concat(sxPack(lanes[0],Gm.slots.A,R),sxPack(lanes[1],Gm.slots.D,R),sxPack(lanes[2],Gm.slots.C,R),sxPack("onoff",Gm.slots.B,R));
   feats.push({k:"rough",from:Gm.roughFrom,to:Gm.roughTo,r:1});   /* the braking bumps round the connector */
   return {id:"sx-modern"+(variant?"-v"+(variant%997):""),name:"Stadium",kind:"stadium",width:7.5,berm:1.5,vtop:15.5,acc:0.72,grip:0.74,x0:Gm.x0,z0:Gm.z0,th0:0,path:Gm.path,
-    start:Gm.start,floor:Gm.floor,finSide:-m,features:feats,lanes:lanes,shape:{k:k,r:r,mirror:m<0}};
+    start:Gm.start,floor:Gm.floor,finSide:-m,features:feats,lanes:lanes,shape:{k:k,r:r,mirror:m<0},lapT:lapT};
 }
 
 /* ---------------- 2. the Daytona-style hybrid (Supercross on a speedway infield) ----------------
@@ -82,7 +84,8 @@ function hybrid(variant){
     {k:"rough",from:356,to:384,r:0.8}
   ];
   if(variant&&R()<0.5){ feats[2].combo=[3,1]; }
-  return {id:"hybrid"+(variant?"-v"+(variant%997):""),name:"Speedway infield",kind:"hybrid",width:9,berm:1.7,vtop:18.5,acc:0.8,grip:0.84,x0:0,z0:30,th0:0,path:HY_PATH,
+  var lapT=variant?60+R()*5:62;   /* the speedway infield's longer, sandier lap */
+  return {id:"hybrid"+(variant?"-v"+(variant%997):""),name:"Speedway infield",kind:"hybrid",lapT:lapT,width:9,berm:1.7,vtop:18.5,acc:0.8,grip:0.84,x0:0,z0:30,th0:0,path:HY_PATH,
     start:{x0:-110,z0:-12,th0:0,path:[["S",146],["R",18,90],["S",38]],join:62,gateW:20,narrow0:20,narrow1:150,gateAt:2},
     floor:[-150,90,-40,125],finSide:-1,features:feats};
 }
@@ -157,7 +160,9 @@ function fromShared(S){
     /* a real stadium lap is 50-60 s (the CEO): from the track's length at a stadium's average speed, kept inside that range */
     out.vavg=L/Math.max(48,Math.min(58,L/10.5));
     /* the floor: the track's bounding box with room for the outside berms and the wall, at least the researched floor size */
-    var bx0=1e9, bx1=-1e9, bz0=1e9, bz1=-1e9; pts.forEach(function(p){ bx0=Math.min(bx0,p[0]); bx1=Math.max(bx1,p[0]); bz0=Math.min(bz0,p[1]); bz1=Math.max(bz1,p[1]); });
+    var bx0=1e9, bx1=-1e9, bz0=1e9, bz1=-1e9, inc=function(x,z){ bx0=Math.min(bx0,x); bx1=Math.max(bx1,x); bz0=Math.min(bz0,z); bz1=Math.max(bz1,z); };
+    pts.forEach(function(p){ inc(p[0],p[1]); });
+    if(S.gate&&S.gate.x!=null&&S.gate.y!=null) inc((S.gate.x-cx)*k,(S.gate.y-cz)*k);   /* the gate (and the start behind it) stays on the floor */
     var mg=w/2+5, W0=bx1-bx0+2*mg, D0=bz1-bz0+2*mg;
     if(S.floorM&&S.floorM.length===2){ W0=Math.max(W0,+S.floorM[0]||0); D0=Math.max(D0,+S.floorM[1]||0); }
     var mx=(bx0+bx1)/2, mz=(bz0+bz1)/2; out.floor=[mx-W0/2,mx+W0/2,mz-D0/2,mz+D0/2];

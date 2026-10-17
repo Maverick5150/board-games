@@ -654,7 +654,10 @@
   html:not([data-tv]) body.mx-3d .mx-acts{margin-top:.15rem; gap:.5rem; row-gap:.45rem}
   html:not([data-tv]) body.mx-3d #flipBtn{min-height:3.1rem; flex:1 1 9rem}
   html:not([data-tv]) body.mx-3d .mx-auto{min-height:3.1rem}
-  html:not([data-tv]) body.mx-3d #boardBtn, html:not([data-tv]) body.mx-3d #skipBtn{flex:1 1 0; min-height:2.9rem; padding-inline:.6rem; font-size:var(--fs-sm)}
+  html:not([data-tv]) body.mx-3d #boardBtn, html:not([data-tv]) body.mx-3d #skipBtn{min-height:2.9rem; padding-inline:.6rem; font-size:var(--fs-sm)}
+  /* two rows on a phone: Flip + Auto, then Battle board + Skip (the board's own width decides the wrap, so nothing runs off the screen) */
+  html:not([data-tv]) body.mx-3d #boardBtn{flex:0 1 auto}
+  html:not([data-tv]) body.mx-3d #skipBtn{flex:1 1 8rem}
   html:not([data-tv]) body.mx-3d .mx-stat{margin-top:.25rem; min-height:1.2em; font-size:var(--fs-xs)}
   html:not([data-tv]) body.mx-3d .mx-otw li{min-height:1.15rem}
   html:not([data-tv]) body.mx-3d .mx-otw__n{max-width:5.8rem}

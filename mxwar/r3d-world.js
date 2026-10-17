@@ -102,7 +102,7 @@ function trackMesh(C,look,q,matTrack){
   const outdoor=C.kind!=="stadium";
   /* lateral stations: the shoulders go down to the surroundings; outdoors a grass apron blends into the terrain */
   const fr=[-1.85,-1.35,-1,-0.72,-0.42,-0.15,0,0.15,0.42,0.72,1,1.35,1.85];
-  const nl=fr.length, pos=[], col=[], uv=[], idx=[];
+  const nl=fr.length, pos=[], col=[], uv=[], idx=[], prevX=new Float64Array(nl), prevZ=new Float64Array(nl);
   const st=C.ds*(q.lo?2:1), segs=Math.floor(C.L/st), o={}, o2={};
   for(let k=0;k<=segs;k++){
     const s=k*st, f=Co.frame(C,s,o), hw=f.hw, nx=-Math.sin(f.th), nz=Math.cos(f.th), sand=C.sand[Math.round(s/C.ds)%C.N]||0;
@@ -116,10 +116,15 @@ function trackMesh(C,look,q,matTrack){
       if(Math.sign(lat)===inSide&&Math.abs(lat)>knee){ const xx=Math.abs(lat); lat=inSide*(knee+(lim-knee)*Math.tanh((xx-knee)/Math.max(0.01,lim-knee))); }
       let y;
       if(a<=1) y=Co.ground(C,s,lat);
-      else { const edge=Co.ground(C,s,Math.sign(u)*hw); const t=(a-1)/0.85; y=edge+(f.y-0.06-edge)*sstep(0,1,t); }
+      else { const edge=Co.ground(C,s,Math.sign(u)*hw); const t=(a-1)/0.85; y=edge+(f.y-(outdoor?0.55:0.3)-edge)*sstep(0,1,t); }   /* the shoulder dips under the ground at its outer edge */
       /* small ruts and braking bumps */
       if(a<0.9) y+=(vnoise(s*0.9,lat*1.7)-0.5)*0.05+rough*0.06*Math.sin(s*2.4)*(1-a);
-      pos.push(f.x+nx*lat,y,f.z+nz*lat);
+      /* never behind the same station of the row before (a hairpin tighter than the track is wide): the inside fans round a point
+         instead of folding back over itself */
+      let vx=f.x+nx*lat, vz=f.z+nz*lat;
+      if(k>0){ const al=(vx-prevX[j])*Math.cos(f.th)+(vz-prevZ[j])*Math.sin(f.th); if(al<0.02){ vx+=Math.cos(f.th)*(0.02-al); vz+=Math.sin(f.th)*(0.02-al); } }
+      prevX[j]=vx; prevZ[j]=vz;
+      pos.push(vx,y,vz);
       /* colour: the groove darker, the edges lighter and drier, berm faces packed, sand pale, the outside shoulders grass outdoors */
       const ii=Math.round(s/C.ds)%C.N, groove=Math.exp(-Math.pow(u*2.2,2)), bermFace=a>0.55&&a<=1?C.bank[ii]/2:0;
       const Fh=C.F[ii]||0, Fs=Math.abs((C.F[(ii+1)%C.N]||0)-(C.F[(ii-1+C.N)%C.N]||0))/(2*C.ds);
@@ -212,7 +217,7 @@ function gateBuild(C,look,n){
   const pads=new THREE.InstancedMesh(padG,new THREE.MeshLambertMaterial({color:0xb9bcc4}),slots);
   pads.frustumCulled=false;
   /* the concrete pad behind the gate */
-  const conc=new THREE.Mesh(new THREE.PlaneGeometry(4.2,gw+1.0),new THREE.MeshLambertMaterial({color:0x5f5c57}));
+  const conc=new THREE.Mesh(new THREE.PlaneGeometry(4.2,gw+1.0),new THREE.MeshLambertMaterial({color:0x4b3b2c}));   /* the packed starting pad behind the gate */
   conc.rotation.x=-Math.PI/2; conc.position.set(-2.2,0.025,0); grp.add(conc);
   grp.add(pads);
   grp.position.set(f.x,(f.y||0)+0.01,f.z); grp.rotation.y=-th;
@@ -282,7 +287,7 @@ function stadium(C,look,q,root,ctx){
   /* the dirt floor */
   const floorT=dirtTex(look.soil,q.lo,true); floorT.repeat.set(W/9,D/9);
   const floor=new THREE.Mesh(new THREE.PlaneGeometry(W+4,D+4),new THREE.MeshLambertMaterial({map:floorT,color:new THREE.Color(SOIL[look.soil]?SOIL[look.soil][2]:"#5e432c").multiplyScalar(0.78)}));
-  floor.rotation.x=-Math.PI/2; floor.position.set(cx,-0.05,cz); root.add(floor);
+  floor.rotation.x=-Math.PI/2; floor.position.set(cx,-0.16,cz); root.add(floor);   /* under the deepest rut of the track, so it never shows through the dirt */
   /* the padded wall round the floor */
   const wt=wallTex(); wt.repeat.set((W+D)*2/14,1);
   const wallG=[]; const h=1.4;
@@ -342,18 +347,26 @@ function terrainHeightFn(C,look){
   /* fine samples (every ~3 m) for the carve along the track, every fourth one for the smooth elevation field */
   const pts=[], st=Math.max(1,Math.round(3/C.ds));
   for(let i=0;i<C.N;i+=st) pts.push([C.x[i],C.z[i],C.y[i],C.hw[i]]);
+  const nLoop=pts.length;
   if(C.S&&C.S.n) for(let i=0;i<C.S.n;i+=st) pts.push([C.S.x[i],C.S.z[i],C.S.y[i]||0,C.S.hw[i]]);
   const amp=look.around==="beach-speedway"?0.4:look.around==="farmland"?2.5:7;
   /* a spatial hash for the nearest track point */
   const cell=24, H={}; pts.forEach((p,i)=>{ const k=Math.floor(p[0]/cell)+","+Math.floor(p[1]/cell); (H[k]=H[k]||[]).push(i); });
   function nearest(x,z){ let best=1e9, bi=-1; const cx=Math.floor(x/cell), cz=Math.floor(z/cell);
     for(let r=0;r<4&&bi<0||r<2;r++) for(let a=-r;a<=r;a++) for(let b=-r;b<=r;b++){ if(Math.max(Math.abs(a),Math.abs(b))!==r) continue; const L=H[(cx+a)+","+(cz+b)]; if(!L) continue; L.forEach(i=>{ const p=pts[i], d=(p[0]-x)*(p[0]-x)+(p[1]-z)*(p[1]-z); if(d<best){ best=d; bi=i; } }); }
-    return bi<0?null:{d:Math.sqrt(best),p:pts[bi]}; }
+    if(bi<0) return null;
+    /* the track's height right beside (x, z): along the centre-line between the two nearest samples, not the nearest sample's */
+    const p=pts[bi]; let y=p[2];
+    const nb=bi<nLoop?[(bi+1)%nLoop,(bi-1+nLoop)%nLoop]:[bi+1<pts.length?bi+1:bi,bi-1>=nLoop?bi-1:bi];
+    for(const j of nb){ if(j===bi) continue; const q=pts[j], ex=q[0]-p[0], ez=q[1]-p[1], L2=ex*ex+ez*ez||1, t=((x-p[0])*ex+(z-p[1])*ez)/L2; if(t>=0&&t<=1){ y=p[2]+(q[2]-p[2])*t; break; } }
+    return {d:Math.sqrt(best),p:p,y:y}; }
   return function(x,z){
     let sw=0, sy=0; for(let i=0;i<pts.length;i+=12){ const p=pts[i], d2=(p[0]-x)*(p[0]-x)+(p[1]-z)*(p[1]-z), w=1/(d2+2500); sw+=w; sy+=w*p[2]; }
     let y=sy/sw+(fbm(x/140,z/140,4)-0.45)*amp*2.2;
     const n=nearest(x,z);
-    if(n){ const t=sstep(n.p[3]+2,n.p[3]+46,n.d); y=(n.p[2]-0.18)*(1-t)+y*t; }
+    /* carved flat a little under the track out to 12 m beyond its edge (wider than a terrain cell, so no grass triangle can rise through
+       the dirt), then easing back into the hills */
+    if(n){ const t=sstep(n.p[3]+12,n.p[3]+56,n.d); y=(n.y-0.25)*(1-t)+y*t; }
     return y;
   };
 }
@@ -388,8 +401,8 @@ function outdoorWorld(C,look,q,root,ctx){
   spectators(C,look,q,root,hf,R);
   /* the paddock: trucks and tents near the start */
   paddock(C,look,q,root,hf,R);
-  ctx.sky(look.around==="desert"?0x8fb6e0:0x5d8fd6,0xc9dcf0,0xe8e0cf,true);
-  ctx.fog(0xcfdbe6,260,1300);
+  ctx.sky(look.around==="desert"?0x8fb6e0:0x4f86d4,0xa9c7ec,0xdfe6ec,true);
+  ctx.fog(0xd3dee8,280,1400);
   return {cx:cx,cz:cz};
 }
 function spectators(C,look,q,root,hf,R){
@@ -473,7 +486,8 @@ export function buildWorld(C,look,q){
   const root=new THREE.Group(), ctx={};
   ctx.dirt=dirtTex(look.soil,q.lo);
   const tm=ctx.dirt.clone(); tm.needsUpdate=true;
-  const matTrack=new THREE.MeshLambertMaterial({map:tm,vertexColors:true});
+  /* both sides: at a traced hairpin tighter than the track is wide the inside folds over itself; drawn from both sides it never shows a hole */
+  const matTrack=new THREE.MeshLambertMaterial({map:tm,vertexColors:true,side:THREE.DoubleSide});
   ctx.glowTex=glowTex();
   ctx.glow=function(list,color){
     if(q.lo) list=list.filter((g,i)=>i%2===0);

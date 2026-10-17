@@ -263,7 +263,7 @@ function speedProfile(C,Lo){
   /* a researched layout gives its length: its lap time follows from it at a real average speed (the CEO, 21:10: "from the track's length
      where the layout gives it"): the profile is scaled until the lap is length / average speed (stadium about 36 km/h, outdoors about 56) */
   C.sc=1; speedPass(C,Lo);
-  if(Lo.vavg){ for(var it=0;it<6;it++){ var want=C.L/Lo.vavg, f=C.Tlap/want; if(Math.abs(f-1)<0.015) break; C.sc*=Math.pow(f,0.9); speedPass(C,Lo); } }
+  if(Lo.vavg||Lo.lapT){ for(var it=0;it<6;it++){ var want=Lo.vavg?C.L/Lo.vavg:Lo.lapT, f=C.Tlap/want; if(Math.abs(f-1)<0.015) break; C.sc*=Math.pow(f,0.9); speedPass(C,Lo); } }
 }
 function speedPass(C,Lo){
   var N=C.N, ds=C.ds, vmax=new Float64Array(N), fix=new Float64Array(N), i, k;

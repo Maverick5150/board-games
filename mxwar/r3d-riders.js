@@ -112,10 +112,18 @@ function limbGeo(r0,r1,endCol,endFrac){
   g.setAttribute("color",new THREE.BufferAttribute(c,3)); g.computeVertexNormals(); return g;
 }
 function shinGeo(){
-  const g=limbGeo(0.055,0.048); const P=g.attributes.position, c=g.attributes.color;
-  /* the boot: the lower 55% is white-grey with a toe */
-  for(let i=0;i<P.count;i++){ const y=P.getY(i); if(y>0.45){ c.setXYZ(i,0.92,0.92,0.95); if(y>0.9) P.setX(i,P.getX(i)+0.06); } }
+  const g=limbGeo(0.055,0.048); const P=g.attributes.position, c=g.attributes.color, fix=new Float32Array(P.count);
+  /* the boot: the lower 55% is white-grey with a toe, whatever the team colour (aFix: the shin's material keeps it white) */
+  for(let i=0;i<P.count;i++){ const y=P.getY(i); if(y>0.45){ c.setXYZ(i,0.92,0.92,0.95); fix[i]=1; if(y>0.9) P.setX(i,P.getX(i)+0.06); } }
+  g.setAttribute("aFix",new THREE.BufferAttribute(fix,1));
   return g;
+}
+/* a Lambert material where vertices marked aFix keep their own colour (not tinted by the team colour): white boots */
+function fixMat(){
+  const m=new THREE.MeshLambertMaterial({vertexColors:true});
+  m.onBeforeCompile=sh=>{ sh.vertexShader=sh.vertexShader.replace("#include <common>","#include <common>\nattribute float aFix;").replace("#include <color_vertex>","#include <color_vertex>\n#ifdef USE_COLOR\n vColor.rgb=mix(vColor.rgb,color.rgb,aFix);\n#endif"); };
+  m.customProgramCacheKey=()=>"mx-fix";
+  return m;
 }
 
 /* ---------------- the number atlas: plates (white / red) and the jersey-back numbers, drawn in code ---------------- */
@@ -167,7 +175,7 @@ export function createRiders(list,opts){
   const M={
     wheel:mk(wheelGeo(),n*2), chassis:mk(chassisGeo(),n), plastic:mk(plasticsGeo(),n), trim:mk(trimGeo(),n), fork:mk(forkGeo(),n), swing:mk(swingGeo(),n),
     helmet:mk(helmetGeo(),n), torso:mk(torsoGeo(),n), uarm:mk(limbGeo(0.05,0.045),n*2), farm:mk(limbGeo(0.045,0.04,lin("#1a1a1e"),0.22),n*2),
-    thigh:mk(limbGeo(0.075,0.06),n*2), shin:mk(shinGeo(),n*2)
+    thigh:mk(limbGeo(0.075,0.06),n*2), shin:mk(shinGeo(),n*2,fixMat())
   };
   /* plates (3 a bike) and the jersey back (1) use the atlas */
   const pg=plateGeo(), cellA=new Float32Array(n*3*2), cellB=new Float32Array(n*2);
@@ -203,7 +211,7 @@ export function createRiders(list,opts){
   const pgeo=new THREE.BufferGeometry(); pgeo.setAttribute("position",new THREE.BufferAttribute(pp,3)); pgeo.setAttribute("aAlpha",new THREE.BufferAttribute(pa,1)); pgeo.setAttribute("aSize",new THREE.BufferAttribute(ps,1)); pgeo.setAttribute("aCol",new THREE.BufferAttribute(pc,3));
   const pmat=new THREE.ShaderMaterial({uniforms:{uScale:{value:300}},transparent:true,depthWrite:false,
     vertexShader:"attribute float aAlpha; attribute float aSize; attribute vec3 aCol; varying float vA; varying vec3 vC; uniform float uScale; void main(){ vA=aAlpha; vC=aCol; vec4 mv=modelViewMatrix*vec4(position,1.); gl_PointSize=clamp(aSize*uScale/max(0.5,-mv.z),1.0,64.0); gl_Position=projectionMatrix*mv; }",
-    fragmentShader:"varying float vA; varying vec3 vC; void main(){ vec2 d=gl_PointCoord-0.5; float r=dot(d,d); if(r>0.25) discard; gl_FragColor=vec4(vC,vA*(1.0-r*3.2)); }"});
+    fragmentShader:"varying float vA; varying vec3 vC; void main(){ vec2 d=gl_PointCoord-0.5; float r=dot(d,d); if(r>0.25) discard; float f=1.0-r*4.0; gl_FragColor=vec4(vC,vA*f*sqrt(f)); }"});   /* soft round puffs, fading to nothing at the rim (colours are display sRGB) */
   const pts=new THREE.Points(pgeo,pmat); pts.frustumCulled=false; pts.renderOrder=3; grp.add(pts);
   const part={n:P,pos:pp,alpha:pa,size:ps,col:pc,vel:new Float32Array(P*3),life:new Float32Array(P),max:new Float32Array(P),next:0,geo:pgeo,mat:pmat};
   const R={grp,M,A,n,part,list,hidden:new Uint8Array(n)};

@@ -50,7 +50,7 @@ function lapsFor(sp,lapT,half,lenF){
   if(half) n=Math.ceil(n/2);
   return Math.max(2,Math.min(200,n));
 }
-function nominalLap(series){ return series==="mx"?118:series==="smx"?58:54; }
+function nominalLap(series){ return series==="mx"?118:series==="smx"?62:56; }
 /* the laps of every race kind of a round: {heat, semi, lcq, qual, main, moto} */
 function realLens(o,F,ctx){
   var half=o&&(o.length==="half"||o.length==="short"), out={}, lapT=(ctx&&ctx.lapT)||nominalLap(ctx&&ctx.series);   /* v2's Short = half; Standard / Long = real */

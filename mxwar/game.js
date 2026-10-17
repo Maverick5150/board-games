@@ -323,7 +323,7 @@ function drawLength(){
 var RACE_EXTRA_S=45;
 function specWords(sp){ return sp.laps?plural(sp.laps,"lap"):sp.min+" min + "+plural(sp.plus,"lap"); }
 function estimate(si,F){
-  var series=si.series, year=si.year, half=cfg.length==="half", lapT=series==="mx"?116:series==="smx"?57:51;
+  var series=si.series, year=si.year, half=cfg.length==="half", lapT=series==="mx"?118:series==="smx"?62:56;
   function laps(kind){ return RD.lapsFor(RD.spec(series,year,kind,F),lapT,half,1); }
   var races=[], mine=[], parts=[], seen={};
   F.qual.forEach(function(st,i){ for(var k=0;k<st.races;k++){ races.push(laps(st.kind)); if(i===0&&k===0) mine.push(laps(st.kind)); } if(!seen[st.kind]){ seen[st.kind]=1; parts.push(st.label+" "+laps(st.kind)+" ("+specWords(RD.spec(series,year,st.kind,F))+")"); } });
@@ -931,8 +931,8 @@ function syncControls(){
   var gate=rc.phase==="gate", rt=use3D();
   f.hidden=!hs.length||rc.over||(!gate&&!alive.length);
   auto.hidden=!hs.length||rc.over;
-  skip.hidden=rc.over||(!rt&&hs.length&&alive.length>0)||gate;
-  skip.textContent=rt||!hs.length||!alive.length?"Skip to the finish":"Sim to the flag";
+  skip.hidden=rc.over||gate;   /* every race, flat or 3D, real time: Skip to the finish (it asks first) */
+  skip.textContent="Skip to the finish";
   var lbl="Flip", sub="";
   if(gate){ lbl="Drop the gate"; sub=hs.length>1?"then every rider turns a card":""; }
   else if(rc.phase==="war"&&need.length){ lbl="War: 3 down, flip the 4th"; }
@@ -961,7 +961,7 @@ $("flipBtn").addEventListener("click",function(){
   intent=1;
   if(!busy) drive(); else syncControls();
 });
-$("skipBtn").addEventListener("click",function(){ if(!G||!ui.rc||ui.rc.over) return; if(raceHumans().length&&humansAlive().length||use3D()) confirmSkip(); else skipNow(); });
+$("skipBtn").addEventListener("click",function(){ if(!G||!ui.rc||ui.rc.over) return; confirmSkip(); });
 function skipNow(){ if(!G||!ui.rc) return; clearGrace(); if(use3D()) V3.skip(); if(busy){ skipQ=true; syncControls(); return; } simNow(); }
 function confirmSkip(){
   var rc=ui.rc, left=Math.max(0,rc.o.len-rc.battle);
