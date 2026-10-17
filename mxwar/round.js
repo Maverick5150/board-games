@@ -186,7 +186,7 @@ function lengths(o,F,lapS,year){ var out={}, kinds=["heat","semi","lcq","qual","
 function newRound(F,ri,entry,o,team,meta){
   meta=meta||{};
   var lapS=meta.lapS>0?Math.round(meta.lapS):(nightLap(meta.cal)||lapTime(meta.series||(/^mx-/.test(F.id)?"mx":"sx"),meta.year,meta.cal));
-  var RG={ri:ri,fmt:F.id,tc:!!F.isTC,F:F,entry:entry.slice(),races:[],cur:0,send:[],main:[],elim:[],fin:null,done:false,res:null,lapS:lapS,mode:MODE_OF[o&&o.length]||"real",year:meta.year|0,lv:4};
+  var RG={ri:ri,fmt:F.id,tc:!!F.isTC,F:F,entry:entry.slice(),races:[],cur:0,send:[],main:[],elim:[],fin:null,done:false,res:null,lapS:lapS,mode:MODE_OF[o&&o.length]||"real",year:meta.year|0,lv:5};   /* lv 5: every race of it starts at its real length (mxsave) */
   /* mxtimewire: every race its own laps, lap time and first lap (raceInfo) */
   function race(key,label,kind,si,i){ var inf=raceInfo(F,kind,i,o,lapS,RG.year,meta.cal);
     var x={key:key,label:label,kind:kind,st:si,i:i,len:inf.len,lap:inf.lap,fl:inf.fl,src:inf.src,lsrc:inf.lsrc,ent:null,res:null,hs:null,why:null};
@@ -356,7 +356,7 @@ function score(RG,title){
    short) alike: the races still to run get their real length (lv 2); returns the round's lap time. Idempotent. */
 /* mxtimewire: a round saved before the per-round timing (lv 2, or a save whose calendar has no timing yet: the page attaches it from the
    season file, Season.attachTiming) gets the races still to run recounted from that night's research (lv 3); the race under way
-   (meta.live = its key) keeps its length, lap time and first lap. */
+   (meta.live = its key) keeps its length, lap time and first lap here; Season.upgrade then moves it to its real length (lv 5, mxsave). */
 function upgrade(RG,o,meta){
   if(!RG) return 0;
   meta=meta||{}; var F=RG.F;
