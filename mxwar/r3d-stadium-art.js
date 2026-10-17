@@ -14,7 +14,7 @@ const FONT="'Arial Black', Impact, 'Helvetica Neue', Arial, system-ui, sans-seri
 export const CROWD={seat:0.55,row:0.85,N:8};   /* a seat 0.55 m wide, a row 0.85 m up the slope; the atlas is N x N sprites, one sprite per seat */
 export const SPR={PEOPLE:36,ARMS0:36,ARMS1:47,PHONE0:48,PHONE1:55,STAND0:56,STAND1:59,EMPTY0:60,EMPTY1:61,AISLE:62,FLAG:63};
 /* the crowd of a night race under floodlights: mostly dark clothes, a lot of red (the war red) and white, a few bright pops */
-const SHIRTS=["#1a1b22","#26262e","#303036","#3a3a44","#1d2433","#2a2f45","#3b4a66","#4a2a2e","#6a1f26","#1a1b22","#26262e","#303036","#c8102e","#f72d2e","#b0221f","#c8102e","#d9d4cc","#f0f1f3","#9a9aa8","#c8c8d0","#d9d4cc","#ecb967","#e8741a","#1f4fc4","#3f9b46","#6a3f2a"];
+const SHIRTS=["#1a1b22","#26262e","#303036","#3a3a44","#1d2433","#2a2f45","#3b4a66","#4a2a2e","#6a1f26","#1a1b22","#26262e","#303036","#c8102e","#f72d2e","#b0221f","#c8102e","#d9d4cc","#f0f1f3","#9a9aa8","#c8c8d0","#d9d4cc","#c89a50","#b8561a","#2a4a9a","#2f6b3a","#6a3f2a"];
 const SKIN=["#e8bf98","#c98f66","#8d5a3b","#5a3a26","#f0cfae","#a8714c","#d9a77d"];
 const HAIR=["#1c1410","#3a281a","#101014","#6a4a2a","#b89a6a","#8a8a90","#c8aa6a","#d8d0c0"];
 const SEATS=["#1b2a52","#4a1a1f","#222633","#1d3d3a","#2a2a44"];
@@ -163,4 +163,26 @@ export function softTex(){
 export function glowSheet(){
   const c=canvas(256,128), x=c.getContext("2d"); x.drawImage(softTex().image,0,0,128,128); x.drawImage(starTex().image,128,0,128,128);
   const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t;
+}
+
+/* ---------------- props: the start gate's and the finish arch's banners (one texture: a white block for the plain steel, the two banners) ---------------- */
+export const PROPS={w:1024,h:256,white:[0,0,32,32],gate:[0,32,1024,96],finish:[0,128,1024,96]};
+/* the uv rectangle (u0, v0, u1, v1) of a region of the props texture (v up) */
+export function propsUV(r){ return [r[0]/PROPS.w,1-(r[1]+r[3])/PROPS.h,(r[0]+r[2])/PROPS.w,1-r[1]/PROPS.h]; }
+export function propsTex(){
+  const c=canvas(PROPS.w,PROPS.h), x=c.getContext("2d"), B=BRAND, R=rngf(88);
+  x.fillStyle="#ffffff"; x.fillRect(0,0,64,64);
+  /* the gate banner: war red with the black slash, MOTOCROSS WAR, the gold START */
+  let r=PROPS.gate; x.save(); x.beginPath(); x.rect(r[0],r[1],r[2],r[3]); x.clip(); x.translate(r[0],r[1]);
+  let g=x.createLinearGradient(0,0,0,r[3]); g.addColorStop(0,"#ff4a3c"); g.addColorStop(1,"#a80f18"); x.fillStyle=g; x.fillRect(0,0,r[2],r[3]);
+  x.fillStyle=B.night; x.beginPath(); x.moveTo(0,0); x.lineTo(260,0); x.lineTo(210,r[3]); x.lineTo(0,r[3]); x.fill();
+  x.fillStyle=B.gold; x.beginPath(); x.moveTo(760,0); x.lineTo(1024,0); x.lineTo(1024,r[3]); x.lineTo(710,r[3]); x.fill();
+  words(x,"MOTOCROSS WAR",500,50,66,B.white,"#3a0509",0.22,null,440); words(x,"START",868,50,64,B.night,null,0.22,null,230); words(x,"WAR",110,52,62,B.red,B.white,0.22,null,150);
+  worn(x,r[2],r[3],R,70,"#3a0509"); x.restore();
+  /* the finish banner: a checkered band round the word FINISH */
+  r=PROPS.finish; x.save(); x.beginPath(); x.rect(r[0],r[1],r[2],r[3]); x.clip(); x.translate(r[0],r[1]);
+  for(let i=0;i<64;i++) for(let j=0;j<6;j++){ x.fillStyle=(i+j)%2?B.night:B.white; x.fillRect(i*16,j*16,16,16); }
+  x.fillStyle=B.red; x.fillRect(250,12,524,72); x.strokeStyle=B.white; x.lineWidth=4; x.strokeRect(250,12,524,72); words(x,"FINISH",512,50,64,B.white,"#3a0509",0.2,null,480);
+  x.restore();
+  const t=tex(c,false); t.anisotropy=getAniso(); return t;
 }

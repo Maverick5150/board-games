@@ -12,7 +12,7 @@ const THREE=THREE_NS;
 import {lin,mixc,clamp,sstep,fbm,pfbm,canvas,tex,rngf,merge,paint,xf,clear,getAniso} from "./r3d-util.js";
 import {SOIL,dirtMaps,padMaps,trackMaterial,addTrack} from "./r3d-track.js";
 import {stadium as stadiumBowl,glowSprites} from "./r3d-stadium-bowl.js";
-import {glowSheet,BRAND} from "./r3d-stadium-art.js";
+import {glowSheet,BRAND,PROPS,propsUV,propsTex} from "./r3d-stadium-art.js";
 const MXG=(typeof window!=="undefined"?window:globalThis).MXWar;
 const CO=()=>MXG.Course;
 
@@ -69,6 +69,23 @@ function checkerTex(){
 }
 
 /* (the starting pad's dirt maps are cached by r3d-track.js padMaps) */
+/* ---------------- steel and banners: plain parts with baked face shading on one props texture (the start gate and the finish arch are each ONE draw call) ---------------- */
+const _SL=new THREE.Vector3(0.3,0.8,0.5).normalize();
+function steelPart(g,rgb,k){ g=g.index?g.toNonIndexed():g; const m=g.attributes.position.count, N=g.attributes.normal, c=new Float32Array(m*3), uv=new Float32Array(m*2);
+  for(let i=0;i<m;i++){ const sh=(0.5+0.5*Math.max(0,N.getX(i)*_SL.x+N.getY(i)*_SL.y+N.getZ(i)*_SL.z))*(k||1); c[i*3]=rgb[0]*sh; c[i*3+1]=rgb[1]*sh; c[i*3+2]=rgb[2]*sh; uv[i*2]=0.01; uv[i*2+1]=0.99; }
+  g.setAttribute("color",new THREE.BufferAttribute(c,3)); g.setAttribute("uv",new THREE.BufferAttribute(uv,2)); return g; }
+/* a light: no shading, brighter than white (the frame's bloom picks it up) */
+function lampPart(g,rgb){ g=steelPart(g,rgb,1); const c=g.attributes.color; for(let i=0;i<c.count;i++) c.setXYZ(i,rgb[0],rgb[1],rgb[2]); return g; }
+function bannerQuad(w,h,rect,face){ const g=new THREE.PlaneGeometry(w,h), uv=g.attributes.uv, r=propsUV(rect), m=g.attributes.position.count, c=new Float32Array(m*3).fill(1);
+  for(let i=0;i<m;i++) uv.setXY(i,r[0]+(r[2]-r[0])*uv.getX(i),r[1]+(r[3]-r[1])*uv.getY(i)); g.rotateY(face>0?Math.PI/2:-Math.PI/2); g.setAttribute("color",new THREE.BufferAttribute(c,3)); return g; }
+function propsMesh(parts){ const t=propsTex(); return new THREE.Mesh(merge(parts),new THREE.MeshBasicMaterial({map:t,vertexColors:true,side:THREE.DoubleSide})); }
+/* a truss: two chords, struts and zig-zag braces, along z from -len/2 to len/2 */
+function trussParts(len,y,x,steel,lamp,nLamps){ const P=[], cs=0.5, st=1.2;
+  P.push(xf(steelPart(new THREE.BoxGeometry(0.16,0.16,len),steel),x,y+cs/2,0), xf(steelPart(new THREE.BoxGeometry(0.16,0.16,len),steel),x,y-cs/2,0));
+  const nn=Math.max(2,Math.round(len/st)); for(let i=0;i<=nn;i++){ const z=-len/2+len*i/nn; P.push(xf(steelPart(new THREE.BoxGeometry(0.08,cs,0.08),steel),x,y,z)); if(i<nn){ const zc=z+len/nn/2, L=Math.hypot(cs,len/nn), a=Math.atan2(len/nn,cs); P.push(xf(steelPart(new THREE.BoxGeometry(0.06,L,0.06),steel,0.9),x,y,zc,a*(i%2?1:-1)+0,0,0)); } }
+  for(let i=0;i<nLamps;i++){ const z=-len/2+len*(i+0.5)/nLamps; P.push(xf(lampPart(new THREE.BoxGeometry(0.28,0.2,0.28),lamp),x+0.12,y-cs/2-0.18,z)); }
+  return P; }
+
 /* ---------------- the starting gate: a long beam, one pad per rider slot, the concrete pad behind it ---------------- */
 function gateBuild(C,look,n){
   const Co=CO(), grp=new THREE.Group(), o={};
@@ -87,6 +104,12 @@ function gateBuild(C,look,n){
   conc.material.userData.keepMaps=true;   /* shared: never freed with the gate */
   conc.rotation.x=-Math.PI/2; conc.position.set(-2.2,0.025,0); conc.receiveShadow=true; grp.add(conc);
   grp.add(pads);
+  /* the gate's steel: two end posts, a truss over the whole gate with a MOTOCROSS WAR START banner hung under it (both faces), lamps along it; one draw call */
+  { const steel=lin("#2c2f3a"), lamp=[4.2,3.9,3.3], span=gw+2.2, parts=[];
+    for(const sd of [-1,1]) parts.push(xf(steelPart(new THREE.BoxGeometry(0.34,7.2,0.34),steel),-0.35,3.6,sd*(span/2)), xf(steelPart(new THREE.BoxGeometry(0.9,0.12,0.9),steel,0.8),-0.35,0.06,sd*(span/2)));
+    parts.push.apply(parts,trussParts(span,6.9,-0.35,steel,lamp,Math.max(6,Math.round(span/1.6))));
+    const bw=span-0.6, bq1=bannerQuad(bw,1.8,PROPS.gate,1), bq2=bannerQuad(bw,1.8,PROPS.gate,-1); xf(bq1,-0.2,5.5,0); xf(bq2,-0.5,5.5,0); parts.push(bq1,bq2);
+    grp.add(propsMesh(parts)); }
   grp.position.set(f.x,(f.y||0)+0.01,f.z); grp.rotation.y=-th;
   const state={grp:grp,pads:pads,slots:slots,pad:pad,gw:gw,th:th,x:f.x,z:f.z,y:f.y||0,drop:0,dropT:-1};
   state.slotLat=function(k){ return -gw/2+pad*(k+0.5); };   /* lateral (right +) of slot k */
@@ -116,6 +139,12 @@ function finishBuild(C,look){
   [0.5,1.1,1.7].forEach(y=>parts.push(xf(paint(new THREE.BoxGeometry(0.05,0.05,1.2),st),-0.62,y,0)));   /* the ladder rungs */
   stand.add(new THREE.Mesh(merge(parts),new THREE.MeshLambertMaterial({vertexColors:true})));
   stand.position.set(0.9,0,lat); grp.add(stand);
+  /* the finish arch: two legs either side of the lane (clear of the flag stand and of the next lane's blocks), a truss with the checkered FINISH banner (both faces) and lamps; one draw call */
+  { const steel=lin("#2c2f3a"), lamp=[4.2,3.9,3.3], zi=-side*(f.hw+2.3), zo=side*(f.hw+3.5), z0=Math.min(zi,zo), z1=Math.max(zi,zo), span=z1-z0, zc=(z0+z1)/2, parts=[];
+    for(const zz of [zi,zo]) parts.push(xf(steelPart(new THREE.BoxGeometry(0.36,7.6,0.36),steel),0,3.8,zz), xf(steelPart(new THREE.BoxGeometry(1.0,0.12,1.0),steel,0.8),0,0.06,zz));
+    const nPre=parts.length; parts.push.apply(parts,trussParts(span+0.4,7.3,0,steel,lamp,Math.max(5,Math.round(span/1.6)))); parts.forEach((p,i)=>{ if(i>=nPre) p.translate(0,0,zc); });
+    const bq1=bannerQuad(span-0.2,1.15,PROPS.finish,1), bq2=bannerQuad(span-0.2,1.15,PROPS.finish,-1); xf(bq1,0.12,6.3,zc); xf(bq2,-0.12,6.3,zc); parts.push(bq1,bq2);
+    grp.add(propsMesh(parts)); }
   grp.position.set(f.x,f.y||0,f.z); grp.rotation.y=-f.th;
   return {grp:grp,flagAt:new THREE.Vector3(f.x+Math.cos(f.th)*0.9-Math.sin(f.th)*lat,(f.y||0)+2.47,f.z+Math.sin(f.th)*0.9+Math.cos(f.th)*lat),th:f.th,side:side,lat:lat};
 }
