@@ -38,7 +38,7 @@ Nothing in this contract changes how `game.js`, the engine (`race.js`, `round.js
 
 | Role | The CEO's title | Files | Hook zones in `race3d.js` | What it is |
 |---|---|---|---|---|
-| lead | Lead Graphics Engineer (the integrator step after the builders applies every REQUEST in these files) | `race3d.js` (everything outside the zones), `r3d-util.js`, `r3d-look.js`, `CONTRACT.md`, `sw.js` | none (it is the rest of the file) | the view: `create()`, the race state machine, rider motion and the cards sync, the crash scripts, the frame loop; shared helpers; renderer settings, light rig, fog, the post-processing slot and the frame's counters |
+| lead | Lead Graphics Engineer (the integrator step after the builders applies every REQUEST in these files) | `race3d.js` (everything outside the zones), `r3d-util.js`, `r3d-look.js`, `r3d-lead-post.js`, `r3d-lead-env.js`, `CONTRACT.md`, `sw.js` | none (it is the rest of the file) | the view: `create()`, the race state machine, rider motion and the cards sync, the crash scripts, the frame loop; shared helpers; renderer settings, light rig, fog, the post-processing slot and the frame's counters |
 | dirt | Environment Artist (the ground) | `r3d-track.js`, `mxwar/assets/dirt/` | `dirt` | the track SURFACE: soil, dirt maps, the track ribbon (berms, jump faces, whoops, sand, the start path), its material, the lane-edge blocks |
 | stadium | Environment Artist (the stadium) | `r3d-world.js`, `mxwar/assets/stadium/` | `stadium` | everything round the track: stands, crowd, suites, walls, light rigs and glow, the big screen, sky, start gate, finish line, flaggers and flags, outdoor terrain, trees, paddock, speedway infield; `buildWorld()` |
 | bike | Vehicle / Rider Specialist (the machine) | `r3d-bike.js`, `mxwar/assets/bike/` | `bike` | the motorcycle: `BIKE` constants, part geometries, materials, instanced meshes, plates, the bike's pose |
@@ -57,7 +57,9 @@ Not part of the view, nobody edits them in this phase (the integrator does, at t
 ```
 r3d-util.js        <- everything (three.js only)
 r3d-quality.js     <- util, perf-bench   (r3d-perf-bench.js imports nothing: the quality object and the view are passed in)
-r3d-look.js        <- util
+r3d-look.js        <- util, lead-env, lead-post (+ three-addons SMAAPass / Pass / SMAAShader)
+r3d-lead-env.js    <- util
+r3d-lead-post.js   <- (three.js only)
 r3d-track.js       <- util
 r3d-world.js       <- util, track
 r3d-bike.js        <- util
@@ -505,3 +507,75 @@ a speedway hybrid (H), a crash lap with a remount, the yellow flag and a crash-o
 - `r3d-look.js`: `L.render` resets `renderer.info` once per frame and leaves `autoReset` off, so calls and triangles are the whole frame (the shadow pass and every pass of a post chain). The pixels are unchanged.
 - New: `mxwar/demo.html`, `demo.js`, `demo-engine.js`, `demo-bookmarks.json` (the harness; not part of the game, not in `sw.js`), `ui/vendor/three-addons/` (56 files, MIT), the "base" section of `mxwar/assets/LICENSES.md`.
 - `sw.js` is unchanged (`mxwar-v7`): scripts are fetched network-first, so the service worker serves the new view without a version bump; bump it at release, and add every `three-addons` file a merged module imports.
+
+## 11. The look (lead, 2026-10-17): the light rig, the post chain, the environment map, the material kit, the quality flags
+
+What the lead built (branch `mxvis-lead`; files `r3d-look.js`, `r3d-lead-post.js`, `r3d-lead-env.js`, `r3d-util.js` (the kit), the lead lines of `race3d.js`, `sw.js`). Every effect is one flag; a TIER is a named set of flags.
+
+### 11.1 The light rig (`r3d-look.js`)
+
+A stadium at night, lit like the cover: `L.sun` = THE KEY (a hard warm-white floodlight, intensity 6.8, from the south-west at 30 degrees: raking light, long shadows, the only light that casts real shadows; PCF-soft 2048 on high, PCF 1024 below),
+`L.rim` = a warm rim light AHEAD of the camera (turned 28 degrees to its right, 26 degrees up: it cuts helmets, shoulders and fenders out of the dark), `L.kick` = a soft cool fill from BEHIND the camera (the jersey numbers stay readable),
+`L.bounce` = the warm light off the dirt, pointing up (undersides), `L.hemi` = blue sky over a warm ground, `L.fill` = a cool world-fixed fill. `rim` and `kick` follow the camera (`L.frame(cam, target, dt, tw, subjD)`, every frame,
+called by `race3d.js` after the camera is placed). The shadow box (`L.fitShadow`) is unchanged: fitted to what the camera looks at, snapped to texels. Real shadows fall on the dirt from the bike and rider parts, and every instanced body part now
+RECEIVES the key's shadow too (`L.receive(R.grp)`: the helmet's shadow on the shoulders). Stadium air: `FogExp2` (density 0.0042, deep blue) on the high / medium tiers; the venue's own linear fog on low / stick and outdoors by day.
+
+### 11.2 The post chain (`r3d-lead-post.js`, installed in `L.post` by the tier)
+
+The scene is drawn into a half-float HDR target (three.js applies no tone mapping to a target), then: **bloom** (dual filter, 4 levels, soft threshold at linear 1.05) -> ONE final pass: **depth of field** (a half-resolution gather pass, for the close camera only: the subject is the rider
+nearest the middle of the picture within 34 m, `subjectDist()` in `race3d.js`; the near field blurs fully, the far field at most 55 %, no blur in wide shots), **camera motion blur** on whatever is nearer than the subject (the dirt streaming past the lens), **height haze** (a warm dust glow near the ground,
+cool air above, added light) and a **sky glow** over the horizon, the bloom, **ACES filmic** tone mapping, a **grade** (cool blue shadows, warm gold highlights, saturation 1.02, an S-curve 0.62), a **vignette**, **film grain** (24 per second, hashed from the clock: deterministic in the harness) and **FXAA** inside the same pass
+(on edges only, averaged in a tone-compressed space so a 30x-bright light still blends), then sRGB. SMAA (three passes, the best edges) is available as `aa: "smaa"`. NaN / Inf from any shader is clamped away. A cut (the camera jumps more than 2 m) snaps the focus and drops the motion blur for that frame.
+The targets follow the DRAWING-BUFFER size every frame (the adaptive pixel-ratio ladder changes it behind our back: the chain rebuilds its targets). `postSupported(renderer)` (WebGL2 + a float colour buffer) gates the whole chain: no support = the plain frame.
+
+### 11.3 The flags and the tiers (the performance engineer switches them: `L.setTier(name)` / `L.setFlags({...})`; `L.flags` is live, `L.tiers` is the table)
+
+| flag | meaning | high | medium | low | stick |
+|---|---|---|---|---|---|
+| `post` | `"full"` (HDR + bloom + depth effects) / `"lite"` (HDR + bloom + grade) / `"off"` (the renderer's own frame) | full | lite | off | off |
+| `bloom` | strength 0..2 (0 = no bloom passes at all) | 1 | 0.75 | 0 | 0 |
+| `dof` | depth of field (needs the depth texture) | on | off | off | off |
+| `motionBlur` | foreground motion blur 0..2 (needs the depth texture) | 1 | 0 | 0 | 0 |
+| `haze`, `hazeI` | height haze density and intensity (also the sky glow); 0 = off | 0.011, 1 | 0 | 0 | 0 |
+| `aa` | `"fxaa"` (inline, almost free) / `"smaa"` / `"msaa"` (a 4x target: cheap on tiled GPUs, slow on this laptop; not with the depth effects) / `"none"` | fxaa | fxaa | none | none |
+| `grade`, `vignette`, `grain` | colour grade 0..1, vignette 0..1, film grain 0..0.1 | 1, 0.34, 0.035 | 1, 0.30, 0 | 0 | 0 |
+| `rig` | `"full"` (key, rim, kick, bounce, hemi, fill) / `"lite"` (key, hemi, fill, ambient) | full | full | lite | lite |
+| `shadowRes`, `softShadow` | the key's shadow map size and the PCF-soft filter (the real shadows themselves are `L.setShadows` / the ladder) | 2048, soft | 1024 | 1024 | 1024 |
+| `env` | the environment map for physically based materials | on | on | off | off |
+| `pbr` | `L.upgrade`: Physical stand-ins for Phong parts; also the material kit's tier | on | on | off | off |
+| `fog` | `"exp"` (FogExp2 at night) / `"lin"` (the venue's) | exp | exp | lin | lin |
+| `exposure` | a multiplier on the venue's exposure | 1 | 1 | 1 | 1 |
+
+Nobody has to call `setTier`: `L.apply` picks one when a race starts: a TV = `stick` (the Stick's model is NOT measured: no post chain until a device is), Reduce effects or a weak GPU = `low`, a touch device = `medium`, anything else = `high`.
+The harness' `DEMO.quality("medium")` (real shadows off) does not change the look's tier: use `look.setTier("medium")` for the lite chain (`lead-shots.js`, `lead-prof2.js` in `BG_audit/sprint/mxvis/lead/tools/`). `L.info()` says what is on.
+
+### 11.4 The environment map (`r3d-lead-env.js`)
+
+`makeEnvironment(renderer, {kind: "night" | "day", key, seed}) -> {rt, dispose}`: a procedural night stadium (a dark dome, a warm dirt floor, a crowd band of speckles, ten light banks at 26-34 degrees, a 46x floodlight where the key is, two more up to the sides) drawn once into a PMREM cube
+(256 px, about 30 ms, once per venue kind). `scene.environment` lights every `MeshStandardMaterial` / `MeshPhysicalMaterial` by itself (`material.envMapIntensity` scales it; three.js r160 has no `scene.environmentIntensity`). Lambert / Phong / Basic materials ignore it.
+
+### 11.5 The material kit (`r3d-util.js`) for the bike, rider, dirt and stadium specialists
+
+`import {MAT, material, setKitTier, getKitTier} from "./r3d-util.js"`: `MAT.gloss(color, opts)` (painted plastic, clear coat), `MAT.plastic`, `MAT.rubber`, `MAT.paint` (painted metal), `MAT.anodized`, `MAT.chrome(opts)`, `MAT.steel(opts)`, `MAT.fabric` (sheen), `MAT.leather`, `MAT.visor(opts)`, `MAT.dirt`, `MAT.mud`;
+`opts` go to the constructor (`vertexColors`, `map`, `normalMap`, `side` ... override the preset; `env` scales its environment strength); the preset table is in the file. The kit tier (`high` = MeshPhysicalMaterial, `mid` = MeshStandardMaterial, `low` = Lambert / Phong with no environment map) follows the look's tier (`setKitTier` runs in `setFlags`).
+Materials made with the kit take the tier that is current when `buildWorld` / `createRiders` run (a new race). Instanced parts with `onBeforeCompile` patches work on Standard / Physical too (the chunks have the same names).
+`L.upgrade(root)` (called by `race3d.js` for the riders' group) swaps every MeshPhongMaterial under root for a Physical stand-in (`pbrFromPhong`) on the high / medium tiers and back on the others: it keeps the base bike and helmet reflective until the bike / rider specialists use the kit; materials that are already Standard / Physical are left alone.
+
+### 11.6 HDR conventions every specialist needs
+
+- Everything is drawn in linear HDR and tone-mapped at the end: a light that should GLOW must output more than 1.2 in linear (a sprite's colour times 3, a `MeshBasicMaterial` colour `setRGB(4, 4, 3.6)`); bloom starts at 1.05 with a soft knee of 0.4. White blocks and plates under the key reach about 1.4: they bloom a little (the lane blocks look neon: make them greyer).
+  The light-bank glows that existed before (colour at most 1.05) are scaled x2 by `L.apply`, once (`material.userData.hdr` marks a material that is already HDR-aware).
+- A shader that outputs NaN or Inf (for example `pow(x, 1.6)` with x slightly below 0: the stadium's light beams do) is clamped to 0 in the chain (Direct3D drops a NaN in `min` / `max`; `isnan()` is folded away by its compiler and warns X3577).
+- Do not rely on `renderer.toneMapping` with the chain on: three.js ignores it for targets; `renderer.toneMappingExposure` is read by the final pass.
+
+### 11.7 What the lead measured (this laptop, Intel UHD, the interleaved minimum of 4 rounds, the other lanes' load included: ratios, not absolutes)
+
+| 1280x720 | ms (sim + draw + GPU sync) | fps |
+|---|---|---|
+| plain frame (`post: "off"`) | 21.5 | 47 |
+| high (everything) | 27.9 | 36 |
+| high without depth of field | 24.4 | 41 |
+| high without bloom | 24.8 | 40 |
+| high without FXAA | 27.8 | 36 (the inline FXAA is free) |
+
+At 1920x1080 the high chain costs +22 ms on this iGPU (30.6 -> 52.8 ms; the depth of field about 11 ms of it): `high` is a laptop / tablet tier, not a TV tier. The adaptive ladder lowers the pixel ratio and the chain follows it. Draw calls per whole frame: 49-58 on high (the base 43); the triangles do not change (198.2k).
