@@ -401,11 +401,11 @@ export function createFx(opts){
       if(rnd()<0.35) clod(fx,gF+0.05,fz,cth*fr+rx*out,up,sth*fr+rz*out,(0.014+0.03*Math.pow(rnd(),2))*BIG,0.9+0.8*rnd(),COL.clod,gF,s0F,st.lat,st.th);
       else spray(fx,gF+0.06,fz,cth*fr+rx*out*1.2,up*1.1,sth*fr+rz*out*1.2,COL.spray); }
     /* the dust off the rear tyre: a rooster tail of puffs in a hollow fan (the line straight behind the bike stays clear for a chase camera), more under power, on the brakes and in sand; the 22 on the gate throw less each */
-    const pwD=pw*(1-0.86*e.launch);
+    const lf=1-0.8*e.launch, pwD=pw*lf*lf;
     e.dA+=(1.2+3.5*cruise*loose+18*pwD*loose+10*bm+8*sand*cruise+6*brake)*dt*PS.p*imp; n=e.dA|0; e.dA-=n; if(n>8) n=8;
     while(n-->0){ const side=(rnd()<0.5?-1:1)*(0.5+1.4*rnd()), hi=rnd()<0.25*ef?2.2:1, off=0.9+v*dt*rnd(), ox=rx*side*0.2;
       puff(st.x-cth*off+ox,gR+0.25+0.25*rnd(),st.z-sth*off+rz*side*0.2,cth*v*0.12-cth*(0.3+0.8*rnd())+rx*side*0.9-sgn*bm*rx*1.2,(0.5+1.0*rnd())*hi,sth*v*0.12-sth*(0.3+0.8*rnd())+rz*side*0.9-sgn*bm*rz*1.2,
-      0.36+0.26*rnd()+0.2*ef,0.8+0.5*rnd()+0.3*ef,1.5+1.0*rnd()+0.4*ef,(0.2+0.14*rnd()+0.16*ef+0.05*sand)*(0.7+0.3*loose)*(1-0.72*e.launch),COL.dust,0.3,1.4); }
+      0.36+0.26*rnd()+0.2*ef,0.8+0.5*rnd()+0.3*ef,1.5+1.0*rnd()+0.4*ef,(0.2+0.14*rnd()+0.16*ef+0.05*sand)*(0.7+0.3*loose)*lf,COL.dust,0.3,1.4); }
     /* the haze that hangs over the track behind a fast pack: large, faint, slow */
     e.hA+=(v>6?0.8+0.7*ef:0)*dt*PS.h*(st.me?1.3:1)*RATE; n=e.hA|0; e.hA-=n; if(n>3) n=3;
     while(n-->0) haze(st.x-cth*(1.4+3*rnd())+rx*(rnd()-0.5)*1.5,gR+0.7+0.9*rnd(),st.z-sth*(1.4+3*rnd())+rz*(rnd()-0.5)*1.5,(rnd()-0.5)*0.5,0.15,(rnd()-0.5)*0.5,1.3+0.8*rnd(),0.45+0.25*rnd(),3.2+2.4*rnd(),0.05+0.035*rnd(),COL.dust);
