@@ -109,13 +109,27 @@ function armBack(){ var B=BG(); if(B&&B.back&&B.back.arm) B.back.arm(); }
 function hubHref(){ var B=BG(); return B&&B.back&&B.back.hub?B.back.hub():"../index.html"; }
 
 /* ================= the season files (one per year, loaded on demand; sw.js caches each on first use) ================= */
-var loading={};
+var loading={}, trkLoading={};
+/* polish 2: the season's real track layouts (data/trk-<id>.js, packed from the researcher's files) load with it; offline or missing, the
+   built-in tracks stand in */
+function tracksIn(id){ var T=window.MXWarTracks; return !T||!T.files||!T.files[id]||!!(T.loaded&&T.loaded[id]); }
+function loadTracks(id){
+  if(tracksIn(id)) return Promise.resolve();
+  if(trkLoading[id]) return trkLoading[id];
+  return (trkLoading[id]=new Promise(function(res){
+    var s=document.createElement("script"); s.src="data/trk-"+id+".js"; s.async=true;
+    s.onload=function(){ res(); }; s.onerror=function(){ delete trkLoading[id]; s.remove(); res(); };
+    document.head.appendChild(s);
+  }));
+}
 function loadSeason(id){
-  if(DATA[id]) return Promise.resolve(DATA[id]);
+  if(DATA[id]&&tracksIn(id)) return Promise.resolve(DATA[id]);
   if(loading[id]) return loading[id];
+  if(DATA[id]) return (loading[id]=loadTracks(id).then(function(){ delete loading[id]; return DATA[id]; }));
+  loadTracks(id);
   loading[id]=new Promise(function(res,rej){
     var s=document.createElement("script"); s.src="data/"+id+".js"; s.async=true;
-    s.onload=function(){ if(DATA[id]) res(DATA[id]); else { delete loading[id]; rej(new Error("no data")); } };
+    s.onload=function(){ if(DATA[id]) loadTracks(id).then(function(){ res(DATA[id]); }); else { delete loading[id]; rej(new Error("no data")); } };
     s.onerror=function(){ delete loading[id]; s.remove(); rej(new Error("load")); };
     document.head.appendChild(s);
   });
@@ -472,6 +486,8 @@ function loadSaved(d){
   resetUI();
   ui.view=G.race?"race":"season"; ui.rc=G.race; ui.lap=0; ui.rmap=G.rmap?G.rmap.slice():null; ui.label=G.race?raceLabel():"";
   ui.use3d=!!(G.race&&view3d()); document.body.classList.toggle("mx-3d",ui.use3d); ui.lapT0=Date.now();
+  /* the season's track layouts (a saved season carries its data, not its tracks): when they arrive, the 3D race takes the round's real track */
+  var tid=G.series+"-"+G.year, g0=G; if(!tracksIn(tid)) loadTracks(tid).then(function(){ if(G===g0&&ui.use3d&&V3&&ui.rc){ ui.v3key=null; ensure3d(); } });
   if(ui.use3d){ var tb=$("table"); tb.setAttribute("role","button"); tb.setAttribute("tabindex","0"); tb.setAttribute("data-focus",""); tb.setAttribute("aria-label","The cards: make them bigger"); }
   closeSheets(); closeWin();
   Sound.music(GAME);
@@ -525,6 +541,7 @@ function contOffer(){
   ui.cont=false; if(G) return false;
   var a=null; try{ a=Saves.get?Saves.get(GAME,"auto"):null; }catch(e){ a=null; }
   var d=a&&a.data; if(!d||!d.G||d.G.over||d.G.id!=="mxwar") return false;
+  loadTracks(d.G.series+"-"+d.G.year);   /* warm: Continue finds the round's track ready */
   ui.cont=true; $("resumeBtn").style.display="block"; $("resumeLabel").textContent="Continue";
   $("resumeSub").innerHTML=subParts([d.G.year+" "+(SHORTS[d.G.series]||""),"round "+(d.G.ri+1)+" of "+d.G.cal.length].concat(Saves.when&&a.ts?[Saves.when(a.ts)]:[]));
   syncStart(); return true;
@@ -689,7 +706,7 @@ function is3d(){ return !!(V3&&ui.use3d); }
 var lapCache={};
 MX.lapTime=function(series,year,cal){
   if(!MX.Tracks) return 0;
-  try{ var pick=MX.Tracks.forRound(series,year,cal||{}), k=pick.key; if(lapCache[k]==null){ var C=MX.Tracks.build(pick.layout,{variant:pick.variant,gate:series==="mx"?40:22}); lapCache[k]={lap:C.Tlap,open:MX.Tracks.timeAt(C,MX.Tracks.lapEnd(C,1))}; } return lapCache[k].lap; }catch(e){ return 0; }
+  try{ var pick=MX.Tracks.forRound(series,year,cal||{}), k=pick.key; if(lapCache[k]==null){ var C=MX.Tracks.course(series,year,cal||{},{gate:series==="mx"?40:22}).C; lapCache[k]={lap:C.Tlap,open:MX.Tracks.timeAt(C,MX.Tracks.lapEnd(C,1))}; } return lapCache[k].lap; }catch(e){ return 0; }
 };
 function lapTimes(){ var c=G.cal[Math.min(G.ri,G.cal.length-1)], t=MX.lapTime(G.series,G.year,c)||(G.series==="mx"?120:55), pick=MX.Tracks?MX.Tracks.forRound(G.series,G.year,c):null, e=pick&&lapCache[pick.key]; return {lap:t,open:e?e.open:t*0.75}; }
 function accentOf(make){ var m=A.mk(make); return m[0]==="#f2f4f8"?"#183a8c":m[1]==="#0b0a12"?"#1b1b20":"#f2f2f6"; }
@@ -698,11 +715,21 @@ function ensure3d(){
   var V=V3, rc=ui.rc; if(!V||!rc) return;
   var key=gen+"|"+G.ri+"|"+G.rkey; if(ui.v3key===key) return; ui.v3key=key;
   var c=G.cal[Math.min(G.ri,G.cal.length-1)], red=redId();
-  V.setTrack(G.series,G.year,c,rc.n);
+  var pick=V.setTrack(G.series,G.year,c,rc.n);
+  if(rc.phase==="gate") trackBanner(pick);
   V.setRiders(rc.r.map(function(p,s){ var R=G.riders[seatId(s)]; return {s:s,color:A.mk(R.bike)[0],accent:accentOf(R.bike),plate:R.plate,red:R.id===red,me:R.kind==="human",name:R.name}; }));
   if(rc.phase==="gate") V.atGate(rc.o.len);
   else { var L=RC.standings(rc), outs={}; rc.r.forEach(function(p,s){ if(p.out) outs[s]=1; });
     V.resume({lap:rc.battle,order:L.map(function(x){ return x.s; }),counts:rc.r.map(function(p){ return p.pk.length; }),outs:outs,len:rc.o.len,flag:rc.battle+1===rc.o.len?"white":null}); }
+}
+/* polish 2: at the gate of a round's first race, which track this is and how its layout is known (the researcher's real layouts: the
+   official map, the race reports, the era's style; or one of our own) */
+function trackBanner(pick){
+  if(!pick||!pick.layout||!G) return; var k=gen+"|"+G.ri; if(ui.trkB===k) return; ui.trkB=k;
+  var L=pick.layout, own=/^(sx-stadium|daytona-hybrid|national-hills)$/.test(L.id||"");
+  var how=own||pick.fallback?"A track of our own design":L.status==="TRACED"?"From the official track map":L.status==="SKETCHED"?"From the race reports":"In the style of "+(Math.floor(G.year/10)*10)+"s Supercross";
+  if(!own&&!pick.fallback&&L.kind==="outdoor"&&L.status!=="TRACED") how="From the race reports";
+  banner(L.name||"The track",(L.venue&&!own?L.venue+" · ":"")+how,dl(2400),"is-calm");
 }
 /* the lap's result to the 3D view: the standings, the riders out, the crashes of this battle (CRASH-CONTRACT.md events) */
 function send3d(w,war){
