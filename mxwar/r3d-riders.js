@@ -217,6 +217,7 @@ export function commit(R,cam,dt){
   R.dt=dt>=1/240?Math.min(0.05,dt):0; if(dt>0){ R.t+=dt; R.U.uTime.value=R.t%1000; }
   const n=R.n, order=R.order, P=R.pos; order.length=0;
   /* who gets the full model: the riders IN VIEW, the nearest first by depth (a rider behind the lens or off the screen is the last to be chosen, the person's own rider is favoured) */
+  if(cam) cam.updateMatrixWorld();   /* (the view matrix as the camera is NOW, not as the last draw left it: the same riders get the full model whatever was drawn before) */
   const mi=cam?cam.matrixWorldInverse.elements:null, pj=cam?cam.projectionMatrix.elements:null;
   for(let i=0;i<n;i++) if(R.vis[i]){
     let score=0;
