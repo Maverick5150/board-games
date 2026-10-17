@@ -29,13 +29,13 @@ function tube(a,b,r,c,seg,capped){ const d=new THREE.Vector3().subVectors(b,a), 
   g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize())); g.translate(a.x,a.y,a.z); return g; }
 function wheelGeo(){
   /* polish: the tyre's tread is ONE torus with every other step of its outer ring pushed out (knobby in silhouette, the old 12 knob boxes
-     cost more than the tyre), the rim, the hub, two crossed spokes, the brake disc: about 380 triangles a wheel instead of 630 */
-  const NT=26, tire=new THREE.TorusGeometry(0.272,0.07,6,NT), TP=tire.attributes.position;
+     cost more than the tyre), the rim, the hub, two crossed spokes, the brake disc: about 400 triangles a wheel instead of 630 */
+  const NT=24, tire=new THREE.TorusGeometry(0.272,0.07,5,NT), TP=tire.attributes.position;
   for(let i=0;i<TP.count;i++){ const x=TP.getX(i), y=TP.getY(i), r=Math.hypot(x,y); if(r<0.3) continue; const a=Math.atan2(y,x), j=Math.round(a/(Math.PI*2)*NT);
     if(((j%2)+2)%2===0){ const k=1+0.034*(r-0.3)/0.042; TP.setX(i,x*k); TP.setY(i,y*k); } }
   tire.computeVertexNormals();
   const L=[paint(tire,lin("#18181b"))];
-  L.push(paint(new THREE.TorusGeometry(0.212,0.017,3,18),lin("#c6cad1")));
+  L.push(paint(new THREE.TorusGeometry(0.212,0.017,3,16),lin("#c6cad1")));
   const hub=paint(new THREE.CylinderGeometry(0.05,0.05,0.17,8,1,true),lin("#9a9da6")); hub.rotateX(Math.PI/2); L.push(hub);
   for(let i=0;i<2;i++){ const b=paint(new THREE.BoxGeometry(0.008,0.42,0.008),lin("#b4b7be")); b.rotateZ(i*Math.PI/2+0.4); L.push(b); }
   const disc=paint(new THREE.CylinderGeometry(0.115,0.115,0.008,10,1,true),lin("#aeb2ba")); disc.rotateX(Math.PI/2); disc.translate(0,0,-0.075); L.push(disc);

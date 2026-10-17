@@ -1,5 +1,5 @@
-// Offline cache for Motocross War (v5: the 3D race: race3d.js + r3d-world.js + r3d-riders.js on the vendored three.js r160, course.js, layouts.js, the researched tracks) (the season files data/<series>-<year>.js are cached on first use: every .js the page fetches is stored) (bump VERSION to force update)
-const VERSION = "mxwar-v5";
+// Offline cache for Motocross War (v6: the 3D race polished; v5: the 3D race: race3d.js + r3d-world.js + r3d-riders.js on the vendored three.js r160, course.js, layouts.js, the researched tracks) (the season files data/<series>-<year>.js are cached on first use: every .js the page fetches is stored) (bump VERSION to force update)
+const VERSION = "mxwar-v6";
 const PREFIX = VERSION.replace(/v[0-9]+$/, "");   // every game shares one origin (one CacheStorage): only ever delete THIS game's old caches
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "../sound.js", "../skins.js", "../saves.js", "../names.js", "./data/index.js", "./race.js", "./round.js", "./season.js", "./brain.js", "./art.js", "./track.js", "./course.js", "./layouts.js", "./data/tracks.js", "./race3d.js", "./r3d-world.js", "./r3d-riders.js", "../ui/vendor/three-0.160.0.module.min.js", "./game.js",
   "../ui/theme.css", "../ui/ui.js", "../ui/icons.js", "../ui/picker.js",

@@ -295,6 +295,7 @@ function clearDist(C,x,z){
   return best;
 }
 
+const PADMAPS={};
 /* ---------------- the starting gate: a long beam, one pad per rider slot, the concrete pad behind it ---------------- */
 function gateBuild(C,look,n){
   const Co=CO(), grp=new THREE.Group(), o={};
@@ -305,8 +306,13 @@ function gateBuild(C,look,n){
   const pads=new THREE.InstancedMesh(padG,new THREE.MeshLambertMaterial({color:0xb9bcc4}),slots);
   pads.frustumCulled=false;
   /* the concrete pad behind the gate */
-  const conc=new THREE.Mesh(new THREE.PlaneGeometry(4.2,gw+1.0),new THREE.MeshLambertMaterial({color:0x4b3b2c}));   /* the packed starting pad behind the gate */
-  conc.rotation.x=-Math.PI/2; conc.position.set(-2.2,0.025,0); grp.add(conc);
+  /* the packed starting pad behind the gate: hard dirt with the floor's grain (polish: it was a flat brown slab from above) */
+  const sk=look.soil||"stadium-dirt", pm=PADMAPS[sk]||(PADMAPS[sk]=dirtMaps(sk,true,true));   /* drawn once per soil (the gate is rebuilt every race) */
+  const Sp=SOIL[look.soil]||SOIL["stadium-dirt"], pc=mixc(lin(Sp[0]),lin(Sp[2]),0.75);
+  const pg=new THREE.PlaneGeometry(4.2,gw+1.0), PU=pg.attributes.uv; for(let i=0;i<PU.count;i++) PU.setXY(i,PU.getX(i)*4.2/6,PU.getY(i)*(gw+1)/6);
+  const conc=new THREE.Mesh(pg,new THREE.MeshLambertMaterial({map:pm.map,normalMap:pm.normal,normalScale:new THREE.Vector2(0.6,0.6),color:new THREE.Color().setRGB(pc[0],pc[1],pc[2])}));
+  conc.material.userData.keepMaps=true;   /* shared: never freed with the gate */
+  conc.rotation.x=-Math.PI/2; conc.position.set(-2.2,0.025,0); conc.receiveShadow=true; grp.add(conc);
   grp.add(pads);
   grp.position.set(f.x,(f.y||0)+0.01,f.z); grp.rotation.y=-th;
   const state={grp:grp,pads:pads,slots:slots,pad:pad,gw:gw,th:th,x:f.x,z:f.z,y:f.y||0,drop:0,dropT:-1};
@@ -528,11 +534,12 @@ function spectators(C,look,q,root,hf,R){
     const x=f.x-Math.sin(f.th)*lat, z=f.z+Math.cos(f.th)*lat; if(!clear(C,x,z,5)) continue; list.push([x,z,hf?hf(x,z):0,R()]); } });
   if(!list.length) return;
   /* a person: shirt (the instance colour), arms, trousers, shoes, a head with hair or a cap (their own colours: aFix) */
-  const shirt=xf(paint(new THREE.CylinderGeometry(0.2,0.17,0.62,7),[1,1,1]),0,1.1,0); shirt.scale(1,1,0.7);
+  /* (about 110 triangles a person: there are hundreds of them, small on screen) */
+  const shirt=xf(paint(new THREE.CylinderGeometry(0.2,0.17,0.62,6,1,true),[1,1,1]),0,1.1,0); shirt.scale(1,1,0.7);
   const parts=[shirt,
     xf(paint(new THREE.BoxGeometry(0.09,0.56,0.1),[1,1,1]),0.25,1.08,0,0,0,0.12),xf(paint(new THREE.BoxGeometry(0.09,0.56,0.1),[1,1,1]),-0.25,1.08,0,0,0,-0.12),
     xf(paint(new THREE.BoxGeometry(0.15,0.8,0.16),lin("#2c3040")),0.09,0.4,0),xf(paint(new THREE.BoxGeometry(0.15,0.8,0.16),lin("#2c3040")),-0.09,0.4,0),
-    xf(paint(new THREE.SphereGeometry(0.12,8,6),lin("#c58c63")),0,1.56,0),xf(paint(new THREE.SphereGeometry(0.125,8,4,0,Math.PI*2,0,1.25),lin("#2a2018")),0,1.6,0)];
+    xf(paint(new THREE.SphereGeometry(0.12,6,4),lin("#c58c63")),0,1.56,0),xf(paint(new THREE.SphereGeometry(0.125,6,2,0,Math.PI*2,0,1.25),lin("#2a2018")),0,1.6,0)];
   const fixN=[0,0,0,1,1,1,1];
   parts.forEach((g,k)=>{ const n=g.attributes.position.count; g.setAttribute("aFix",new THREE.BufferAttribute(new Float32Array(n).fill(fixN[k]),1)); });
   const body=mergeFix(parts);

@@ -80,7 +80,7 @@ export function create(host,hooks){
 
   /* ---------------- the round -> the course and the world (built once per layout) ---------------- */
   V.setRace=function(o){
-    const lo=motion()!=="full"; if(lo!==LO){ LO=lo; worldKey=""; }   /* Reduce effects changed: the next race is built simpler (or richer) */
+    const lo=motion()!=="full"; if(lo!==LO){ LO=lo; worldKey=""; setShadows(!LO&&!weakGPU&&!stats.shadowDrop); }   /* Reduce effects changed: the next race is built simpler (or richer), the shadows follow */
     const pick=MX.Layouts.pick(o.series,o.year,o.round,o.cal||{});
     const key=pick.layout.id+"|"+(pick.look.around)+"|"+(LO?"lo":"hi")+"|"+(o.lapT>0?Math.round(o.lapT):"");
     if(key!==worldKey){
@@ -122,7 +122,12 @@ export function create(host,hooks){
     if(world.ctx.sunMesh){ world.ctx.sunMesh.position.copy(sun.position).normalize().multiplyScalar(2300); world.ctx.sunMesh.lookAt(0,0,0); }
     SUN.copy(sun.position).normalize();
   }
-  function disposeTree(o){ o.traverse(m=>{ if(m.geometry) m.geometry.dispose(); if(m.material){ const ms=Array.isArray(m.material)?m.material:[m.material]; ms.forEach(x=>{ if(x.map) x.map.dispose(); x.dispose(); }); } }); }
+  /* free a world or a rider set: geometries, materials and every texture they hold (normal and glow maps, shader uniforms too: a new
+     layout each round must not leave the old one's textures on the GPU) */
+  function disposeTree(o){ o.traverse(m=>{ if(m.geometry) m.geometry.dispose(); if(m.material){ const ms=Array.isArray(m.material)?m.material:[m.material]; ms.forEach(x=>{
+    if(!x.userData||!x.userData.keepMaps) ["map","normalMap","emissiveMap","alphaMap"].forEach(k=>{ if(x[k]) x[k].dispose(); });
+    if(x.uniforms) Object.values(x.uniforms).forEach(u=>{ if(u&&u.value&&u.value.isTexture) u.value.dispose(); });
+    x.dispose(); }); } }); }
   /* the highest dirt in every 2 m cell (the track, its berms and shoulders, the start path): no camera ever sits inside a jump or under a
      landing (polish: a chase camera behind a rider who had just landed could end up under the jump's face, and the screen showed the
      dirt's underside as a black wedge) */
@@ -323,7 +328,9 @@ export function create(host,hooks){
     /* positions on the course from each rider's clock */
     for(let i=0;i<N;i++){
       const r=rs[i]; if(r.gone&&!r.crash) continue;
-      if(r.crash&&r.crash.kind==="remount"&&T-r.crash.T>=r.crash.down){ r.g=T-r.crash.tau; r.crash=null; r.boot={t:0}; r.init=false; }
+      if(r.crash&&r.crash.kind==="remount"&&T-r.crash.T>=r.crash.down){ /* back on the bike where it lies (not where the crash began: no jump back) */
+        const c=r.crash, ts=c.v0/7.5, hw0=(r.fr&&r.fr.hw)||4; r.g=T-MX.Course.tOfD(C,c.D+c.v0*ts-3.75*ts*ts); r.lat=clamp(c.lat+c.side*Math.min(2.2,0.9*ts),-hw0+0.6,hw0-0.6);
+        r.crash=null; r.boot={t:0}; r.init=false; }
       if(r.crash&&r.crash.kind==="out"&&lapNo>r.crash.lap+1){ r.crash=null; r.gone=true; hideRider(R,i); continue; }   /* cleared after the yellow lap */
       if(r.leave&&lapNo>r.leave&&!r.crash){ r.gone=true; r.leave=0; hideRider(R,i); continue; }
       const tau=atGate?0:tauOf(i), d0=MX.Course.dOfT(C,Math.max(0,tau));
@@ -344,11 +351,23 @@ export function create(host,hooks){
       let target;
       if(r.onStart||atGate||(r.lapN===1&&r.D<C.hsD)){ const f=atGate?0:sstep(C.hsD*0.18,C.hsD*0.9,r.D); target=gate.slotLat(slotOf(r.k))*(1-f)+(r.bias*hw*0.4)*f; }
       else { const kk=MX.Course.frame(C,r.s+9,tmpO).k; target=Math.abs(kk)>1/30?-Math.sign(kk)*hw*0.36+r.bias*0.5:r.bias*hw*0.45; }
-      for(let b=a-1;b>=0&&order[b].D-r.D<5.5;b--){ const o=order[b]; const ol=o.crash?o.crash.lat:o.lat; if(Math.abs(ol-target)<(o.crash?1.7:1.15)){ target=ol+(target>=ol?1.25:-1.25)*(o.crash?1.4:1); } }
+      for(let b=a-1;b>=0&&order[b].D-r.D<5.5;b--){ const o=order[b]; if(o.crash) continue; if(Math.abs(o.lat-target)<1.15){ target=o.lat+(target>=o.lat?1.25:-1.25); } }   /* (a fallen rider: below, where he and the bike lie now) */
       for(let b=a+1;b<order.length&&r.D-order[b].D<1.4;b++){ const o=order[b]; if(o.crash) continue; if(Math.abs(o.lat-target)<1.0){ target=o.lat+(target>=o.lat?1.1:-1.1); } }
-      rs.forEach(o=>{ if(o.crash&&o!==r){ const dd=o.crash.D-r.D; if(dd>-3&&dd<16){ const ol=o.crash.lat; if(Math.abs(ol-target)<1.8) target=ol+(target>=ol?1.9:-1.9); } } });
-      r.latT=clamp(target,-hw+0.55,hw-0.55);
-      const maxV=r.init&&dt>0?2.4*dt:99; r.lat+=clamp(r.latT-r.lat,-maxV,maxV);
+      /* nobody rides into a fallen rider or his bike, where they are now (the bike slides on, the rider is thrown further the other way):
+         each blocks 1.9 m either side of it; the line goes round the blocked stretch on the side with room (polish: pushed off one and
+         then the other, a rider could end up between them, over the bike), and the rider swerves quicker than he drifts across a lane */
+      let blk=null, ia=-hw+0.55, ib=hw-0.55;
+      rs.forEach(o=>{ const c=o.crash; if(c&&o!==r){ for(let q2=0;q2<2;q2++){ const pd=q2?(c.rD!=null?c.rD:c.D):(c.bD!=null?c.bD:c.D), pl=q2?(c.rL!=null?c.rL:c.lat):(c.bL!=null?c.bL:c.lat), dd=pd-r.D;
+        if(dd>-3&&dd<22){ (blk=blk||[]).push([pl-1.9,pl+1.9]); } } } });
+      if(blk){ blk.sort((x,y)=>x[0]-y[0]); const mg=[]; blk.forEach(v=>{ const l=mg[mg.length-1]; if(l&&v[0]<=l[1]) l[1]=Math.max(l[1],v[1]); else mg.push(v.slice()); });
+        /* a blocked stretch in the way: the wanted line is in it, or the rider is, or he'd cross it to get to his line; he goes round it on
+           the side he is on now (never across the fallen rider to reach his line), or on the side with room */
+        const cur=clamp(r.lat,ia,ib), tc=clamp(target,ia,ib), lo2=Math.min(cur,tc), hi2=Math.max(cur,tc);
+        const hit=mg.find(v=>(tc>v[0]&&tc<v[1])||(cur>v[0]&&cur<v[1])||(lo2<=v[0]&&hi2>=v[1]));
+        if(hit){ const left=hit[0]-ia, right=ib-hit[1], goL=left>=0.3, goR=right>=0.3, preferL=cur<=(hit[0]+hit[1])/2;   /* room either side within the track */
+          target=goL&&goR?(preferL?hit[0]:hit[1]):goL?hit[0]:goR?hit[1]:(left>right?ia:ib); } }
+      r.latT=clamp(target,ia,ib);
+      const maxV=r.init&&dt>0?(blk?4.2:2.4)*dt:99; r.lat+=clamp(r.latT-r.lat,-maxV,maxV);
     }
     /* the flagger: the white flag as the leader comes to the line to start the last lap, the checkered flag as the winner arrives */
     if(racing&&!finished){ const L0=leaderIdx(); if(L0>=0&&!rs[L0].onStart){ const tl=(C.L-rs[L0].s)/Math.max(4,rs[L0].v||8);
@@ -394,8 +413,13 @@ export function create(host,hooks){
       r.lean+=clamp(leanTarget(r)-r.lean,-dt*1.6,dt*1.6);
       const dabT=(r.stand<0.3&&Math.abs(fr.k)>1/14&&r.v<11&&!inAir)?Math.sign(fr.k):0; r.dab+=clamp(dabT-r.dab,-dt*3,dt*3);
     }
-    const yF=r.F.y, yR=r.Rr.y, LsEq=BIKE.TRAVEL-BIKE.SAG, oy=(yF+yR)/2-BIKE.WR-LsEq, pitch=Math.atan2(yF-yR,BIKE.WB);
-    let roll=r.lean, yaw=-th, pz=pitch;
+    const yF=r.F.y, yR=r.Rr.y, LsEq=BIKE.TRAVEL-BIKE.SAG, pitch=Math.atan2(yF-yR,BIKE.WB);
+    let oy=(yF+yR)/2-BIKE.WR-LsEq;
+    /* polish: weight transfer: the bike squats and lifts its front under hard throttle (the gate drop, out of a turn) and dives on the
+       brakes into a turn, pivoting on the wheel that stays down */
+    const paT=(isGate||r.air||onStart&&r.D<0.5)?0:clamp(acc*0.013,-0.06,0.1); r.pa=(r.pa||0)+(paT-(r.pa||0))*Math.min(1,dt*7);
+    oy+=BIKE.WB/2*Math.abs(Math.sin(r.pa));
+    let roll=r.lean, yaw=-th, pz=pitch+r.pa;
     if(isGate){ roll=0; pz+=Math.sin(tw*31+i)*0.004; }
     if(r.air&&aF&&aF.A&&aF.A.b-aF.A.a>14&&!LO){ const u=aF.u; const wsg=((i*13)%3)-1; roll+=wsg*0.55*Math.sin(PI*clamp(u*1.15,0,1)); yaw+=wsg*0.18*Math.sin(PI*u); }
     eul.set(roll,yaw,pz,"YZX"); q.setFromEuler(eul);
@@ -464,12 +488,12 @@ export function create(host,hooks){
     r.tg=null;
     const f=r.fr||{x:0,z:0,th:0};
     if(!LO) for(let k=0;k<26;k++) emit(R,f.x+(Math.random()-0.5)*1.2,(r.gy||0)+0.3,f.z+(Math.random()-0.5)*1.2,(Math.random()-0.5)*5,1+Math.random()*3,(Math.random()-0.5)*5,k<18?0.06+Math.random()*0.08:0.8+Math.random()*0.7,k<18?0.8:1.8,k<18?dirtCol():dustCol());
-    placeMarshalS(r.s,r.crash.side,shot&&shot.type==="crash"?shot.cam:null);
+    placeMarshalS(r.s,r.crash.side,shot&&shot.type==="crash"?shot.cam:null,r.crash.kind);
     if(show){ show.fire("crash"); const S=show; setTimeout(()=>S.fire("yellow"),2400); }
     if(shot&&shot.type!=="crash") pickShot(true);
   }
   /* the marshal: beside the track a little past the crash, on the far side from the camera that shows it (never in front of the lens) */
-  function placeMarshalS(s,side,camP){
+  function placeMarshalS(s,side,camP,kind){
     if(!marshal) return;
     /* polish: right at the track's edge near the crash (the old 11 m on and 2.2 m out left the flag a speck); where the camera that shows
        the crash sees him BEHIND the action, never between the lens and the rider; with no camera, the far side */
@@ -481,7 +505,8 @@ export function create(host,hooks){
       if(camP){ const ax=fc.x-camP.x, az=fc.z-camP.z, bx=x-camP.x, bz=z-camP.z, da=Math.hypot(ax,az)||1, db=Math.hypot(bx,bz)||1, cosA=(ax*bx+az*bz)/(da*db);
         if(db<da+1.5) sc-=4; else if(cosA<0.86) sc-=1.5; else sc+=1+(db-da)*0.02;
         if(!sees(camP,v3.set(x,MX.Course.ground(C,s+ds,sd*f.hw)+1.8,z),0.1)) sc-=3; }   /* hidden behind a jump from the crash camera */
-      else sc+=sd===-(side||1)?0.5:0;
+      else sc+=sd===(side||1)?0.5:0;   /* on the bike's side (the rider tumbles the other way) */
+      if(kind==="out"&&sd===-(side||1)&&ds>=3&&ds<=13) sc-=2.5;   /* never where a crashed-out rider walks off the track */
       cands.push({sc:sc,f:f,lat:lat,x:x,z:z,s:s+ds});
     }
     if(!cands.length){ const f=MX.Course.frame(C,s+8,{}), lat=-(side||1)*(f.hw+1.5); cands.push({sc:0,f:f,lat:lat,x:f.x-Math.sin(f.th)*lat,z:f.z+Math.cos(f.th)*lat,s:s+8}); }
@@ -497,43 +522,62 @@ export function create(host,hooks){
   V.yellowAt=function(sector){ if(!C) return; marshalAt(crashSpot(MX.Course.wrap(C,sector*C.L))); };
   V.yellowOff=function(){ if(marshal&&!rs.some(r=>r.crash)) marshal.grp.visible=false; };
   const CM=new THREE.Matrix4(), BM=new THREE.Matrix4(), cq=new THREE.Quaternion(), ce=new THREE.Euler(0,0,0,"YZX"), cv3=new THREE.Vector3(), cv4=new THREE.Vector3();
+  /* a point on the dirt as it is drawn: race distance D, lateral lat (+ right): {px, py, pz} and the frame (th, hw) in o */
+  function surfY(s,lat,f,x,z){ const a=Math.abs(lat); let y;
+    if(a<=f.hw) y=MX.Course.ground(C,s,lat);
+    else { const edge=MX.Course.ground(C,s,Math.sign(lat)*f.hw); y=edge+((f.y||0)-(C.kind==="stadium"?0.3:0.55)-edge)*sstep(0,1,(a-f.hw)/2.2); }
+    return Math.max(y,terrainAt(x,z,-1e9),C.kind==="stadium"?-0.16:-1e9); }
+  function trackXZ(D,lat,o){ const l=MX.Course.atD(C,Math.max(0,D),o), on=l.onStart, sl=l.s;
+    const f=on?MX.Course.startFrame(C,Math.max(0,D),o):MX.Course.frame(C,sl,o);
+    o.px=f.x-Math.sin(f.th)*lat; o.pz=f.z+Math.cos(f.th)*lat; o.py=on?(f.y||0)+0.02:surfY(sl,lat,f,o.px,o.pz); return o; }
+  const tmpCB={}, tmpCR={};
+  /* polish: the bike and the rider part company (the bike slides off to its side, the rider is thrown further and tumbles the other way:
+     the old script left the rider lying under his own bike); both follow the track's curve and stand on the dirt as it is drawn (the
+     shoulders too) while the rider walks back to the bike or off the track; a rider out of the race turns to watch it */
   function crashPose(i,r,tw,dt){
-    const c=r.crash, t=T-c.T, f=r.fr, th=c.th, cth=Math.cos(th), sth=Math.sin(th), nx=-sth, nz=cth;
-    /* the bike: tips over toward the side, slides to a stop, spins a little; lifted again for a remount */
-    const ts=c.v0/7.5, tt=Math.min(t,ts), slide=c.v0*tt-3.75*tt*tt;
-    const lift=c.kind==="remount"?sstep(3.2,3.9,t):0, rollB=c.side*(1.25*sstep(0,0.38,t))*(1-lift);
-    const yawB=c.side*0.9*(1-Math.exp(-t*2.2))*(1-lift*0.8);
-    const latB=clamp(c.lat+c.side*Math.min(2.2,0.9*tt),-f.hw-1.5,f.hw+1.5);
-    const bx=f.x+cth*slide+nx*latB, bz=f.z+sth*slide+nz*latB;
-    const loc=MX.Course.atD(C,c.D+slide,tmpO), gy=loc.onStart?(f.y||0):MX.Course.ground(C,loc.s,latB);
-    ce.set(rollB,-th+yawB,0.05*Math.sin(t*6)*(t<ts?1:0),"YZX"); cq.setFromEuler(ce);
+    const c=r.crash, t=T-c.T, side=c.side, rsd=-side;
+    /* the bike: tips over toward its side, slides to a stop along the track, spins a little; lifted again for a remount */
+    const ts=c.v0/7.5, tt=Math.min(t,ts), slide=c.v0*tt-3.75*tt*tt, slideEnd=c.v0*ts-3.75*ts*ts;
+    const lift=c.kind==="remount"?sstep(3.2,3.9,t):0, rollB=side*(1.25*sstep(0,0.38,t))*(1-lift);
+    const yawB=side*0.9*(1-Math.exp(-t*2.2))*(1-lift*0.8), hw0=(r.fr&&r.fr.hw)||4;
+    const bl=c.kind==="remount"?hw0-0.6:hw0+1.5, latB=clamp(c.lat+side*Math.min(2.2,0.9*tt),-bl,bl);   /* a bike that will be ridden on stays on the dirt */
+    trackXZ(c.D+slide,latB,tmpCB); const bx=tmpCB.px, bz=tmpCB.pz, gy=tmpCB.py, thB=tmpCB.th;
+    ce.set(rollB,-thB+yawB,0.05*Math.sin(t*6)*(t<ts?1:0),"YZX"); cq.setFromEuler(ce);
     BM.compose(cv3.set(bx,gy+0.32*Math.abs(Math.sin(rollB)),bz),cq,sc1);
-    /* the rider: thrown forward, tumbling and bouncing, lying, getting up; then to the bike (remount) or off the track (out) */
-    const tr=Math.min(t,1.4), thrown=c.v0*0.85*tr-3.1*tr*tr, side=c.side;
-    let hx=f.x+cth*(thrown+0.6)+nx*(c.lat+side*Math.min(3,1.6*tr)), hz=f.z+sth*(thrown+0.6)+nz*(c.lat+side*Math.min(3,1.6*tr));
-    let hy, bodyPitch=0, bodyRoll=0, spread=0, walk=0, stand=0, reach=0, phase=0, bodyYaw=-th;
+    /* the rider: over the bars, further than the bike slides, tumbling away from it; lying; up; then to the bike (remount) or off (out) */
+    const tr=Math.min(t,1.4), thrown=c.v0*0.95*tr-2.7*tr*tr, thrownEnd=c.v0*0.95*1.4-2.7*1.96;
+    let Dr=c.D+thrown+0.6, latR=clamp(c.lat+rsd*Math.min(2.1,1.5*tr),-hw0-1,hw0+1), face=null;
+    let hy, bodyPitch=0, bodyRoll=0, spread=0, walk=0, stand=0, reach=0, phase=0;
     if(t<0.62){ /* thrown over the bars: up off the seat, rotating forward, down onto the dirt */
-      const u=t/0.62; hy=Math.max(0.3,1.0+2.3*t-4.9*t*t); bodyPitch=-2.5*u; bodyRoll=side*0.5*u; spread=0.55+0.45*u; }
+      const u=t/0.62; hy=Math.max(0.3,1.0+2.3*t-4.9*t*t); bodyPitch=-2.5*u; bodyRoll=rsd*0.5*u; spread=0.55+0.45*u; }
     else if(t<1.4){ /* the tumble: two rolls along the dirt, each bounce lower, ending face down (two whole turns: no jump into the lying pose) */
       const u=t-0.62, e=1-Math.pow(1-u/0.78,2), b=Math.abs(Math.sin(u*8.05))*0.42*Math.exp(-u*3.0);
-      hy=0.26+b; bodyRoll=side*(0.5*(1-e)+4*PI*e); bodyPitch=-2.5+(2.5-PI/2)*sstep(0,0.78,u); spread=1; }
+      hy=0.26+b; bodyRoll=rsd*(0.5*(1-e)+4*PI*e); bodyPitch=-2.5+(2.5-PI/2)*sstep(0,0.78,u); spread=1; }
     else if(t<1.9){ hy=0.16; bodyRoll=0; bodyPitch=-PI/2; spread=0.7; }
     else if(t<2.7){ const u=sstep(1.9,2.7,t); hy=0.16+u*0.8; bodyPitch=-PI/2*(1-u); spread=0.7*(1-u); stand=u; }
     else { hy=0.96; stand=1;
-      const endX=f.x+cth*(thrown+0.6)+nx*(c.lat+side*3), endZ=f.z+sth*(thrown+0.6)+nz*(c.lat+side*3);
-      if(c.kind==="remount"){ const u=sstep(2.7,3.3,t); const tx=bx+nx*(-side*0.7), tz=bz+nz*(-side*0.7); hx=endX+(tx-endX)*u; hz=endZ+(tz-endZ)*u; walk=t<3.3?1:0; phase=t*9; reach=sstep(3.1,3.5,t); bodyYaw=-th+side*0.6*(1-sstep(3.3,3.9,t)); }
-      else { const u=sstep(2.7,4.7,t); const off=side*(f.hw+4.5); const tx=f.x+cth*(thrown+1.5)+nx*off, tz=f.z+sth*(thrown+1.5)+nz*off; hx=endX+(tx-endX)*u; hz=endZ+(tz-endZ)*u; walk=t<4.7?1:0; phase=t*8; bodyYaw=-th+side*PI/2; }
-      if(c.kind==="remount"&&t>=3.9){ poseRider(R,i,BM,{stand:0.3,dab:0,lean:rollB,crouch:0.2,spinF:r.spinF,spinR:r.spinR}); shadowAt(R,i*2,bx,gy,bz,th,2.1,0.9,1,0,0,blobOp(bx,gy,bz)); shadowAt(R,i*2+1,0,-999,0,0,0,0,0); r.pos=r.pos||new THREE.Vector3(); r.pos.set(bx,gy+1,bz); r.th=th; r.gy=gy; r.bikeP=(r.bikeP||new THREE.Vector3()).set(bx,gy+0.4,bz); return; }
+      const D0=c.D+thrownEnd+0.6, L0=clamp(c.lat+rsd*2.1,-hw0-1,hw0+1);
+      if(c.kind==="remount"){
+        if(t>=3.9){ poseRider(R,i,BM,{stand:0.3,dab:0,lean:rollB,crouch:0.2,spinF:r.spinF,spinR:r.spinR}); shadowAt(R,i*2,bx,gy,bz,thB,2.1,0.9,1,0,0,blobOp(bx,gy,bz)); shadowAt(R,i*2+1,0,-999,0,0,0,0,0); r.pos=r.pos||new THREE.Vector3(); r.pos.set(bx,gy+1,bz); r.th=thB; r.gy=gy; r.bikeP=(r.bikeP||new THREE.Vector3()).set(bx,gy+0.4,bz); return; }
+        const D1=c.D+slideEnd-0.1, L1=latB+rsd*0.7, u=sstep(2.7,3.3,t);
+        Dr=D0+(D1-D0)*u; latR=L0+(L1-L0)*u; walk=t<3.3?1:0; phase=t*9; reach=sstep(3.1,3.5,t);
+        face=t<3.3?Math.atan2(L1-L0,D1-D0):t<3.6?Math.atan2(-rsd,0.25):Math.atan2(-rsd*(1-sstep(3.6,3.9,t)),0.25+sstep(3.6,3.9,t));   /* walk back, face the bike, swing on */
+      } else {
+        const L1=rsd*(hw0+4.5), u=sstep(2.7,4.7,t);
+        Dr=D0+1.2*u; latR=L0+(L1-L0)*u; walk=t<4.7?1:0; phase=t*8;
+        face=t<4.9?Math.atan2(L1-L0,1.2):Math.atan2(-rsd*sstep(4.9,5.6,t),1-sstep(4.9,5.6,t)*0.9);   /* walk off the track, then turn to watch the race */
+      }
     }
-    const l2=MX.Course.atD(C,c.D+thrown,tmpO2), hgy=l2.onStart?(f.y||0):MX.Course.ground(C,l2.s,c.lat);
+    trackXZ(Dr,latR,tmpCR); const hx=tmpCR.px, hz=tmpCR.pz, hgy=tmpCR.py, thR=tmpCR.th, bodyYaw=-(thR+(face!=null?face:0));
+    c.bD=c.D+slide; c.bL=latB; c.rD=Dr; c.rL=latR;   /* where the bike and the rider are (the others steer round them) */
     if(!LO&&dt>0){ /* dust: a burst where the rider hits the dirt and at each bounce; a trail behind the sliding bike */
       const ev=[0.62,1.01,1.4]; while(c.fx<ev.length&&t>=ev[c.fx]){ const nb=c.fx?6:14; for(let k=0;k<nb;k++) emit(R,hx+(Math.random()-0.5)*0.9,hgy+0.15,hz+(Math.random()-0.5)*0.9,(Math.random()-0.5)*2.4,0.4+Math.random()*1.2,(Math.random()-0.5)*2.4,0.55+Math.random()*0.7,1.3+Math.random()*0.7,dustCol()); c.fx++; }
-      if(t<ts&&Math.random()<Math.min(1,dt*40)) emit(R,bx+(Math.random()-0.5)*0.7,gy+0.12,bz+(Math.random()-0.5)*0.7,-cth*1.2+(Math.random()-0.5),0.3+Math.random()*0.7,-sth*1.2+(Math.random()-0.5),0.45+Math.random()*0.5,1.1,dustCol()); }
+      if(t<ts&&Math.random()<Math.min(1,dt*40)) emit(R,bx+(Math.random()-0.5)*0.7,gy+0.12,bz+(Math.random()-0.5)*0.7,-Math.cos(thB)*1.2+(Math.random()-0.5),0.3+Math.random()*0.7,-Math.sin(thB)*1.2+(Math.random()-0.5),0.45+Math.random()*0.5,1.1,dustCol()); }
     ce.set(bodyRoll,bodyYaw,bodyPitch,"YZX"); cq.setFromEuler(ce); CM.compose(cv4.set(hx,hgy+hy,hz),cq,sc1);
     poseRider(R,i,BM,{body:CM,limbs:{spread:spread,walk:walk,phase:phase,stand:stand,reach:reach},spinF:r.spinF,spinR:r.spinR});
-    shadowAt(R,i*2,bx,gy,bz,th+yawB,2.0,1.0,1,0,0,blobOp(bx,gy,bz)); shadowAt(R,i*2+1,hx,hgy,hz,th,1.0,0.8,clamp(1-hy/2,0.3,1),0,0,blobOp(hx,hgy,hz));
+    shadowAt(R,i*2,bx,gy,bz,thB+yawB,2.0,1.0,1,0,0,blobOp(bx,gy,bz)); shadowAt(R,i*2+1,hx,hgy,hz,thR,1.0,0.8,clamp(1-hy/2,0.3,1),0,0,blobOp(hx,hgy,hz));
     r.bikeP=(r.bikeP||new THREE.Vector3()).set(bx,gy+0.4,bz);
-    r.pos=r.pos||new THREE.Vector3(); r.pos.set(hx,hgy+hy+0.4,hz); r.th=th; r.gy=gy;
+    r.pos=r.pos||new THREE.Vector3(); r.pos.set(hx,hgy+hy+0.4,hz); r.th=thR; r.gy=gy;
   }
 
   /* ---------------- the camera director: the whole lap at real speed, cut between sections as the leader rides them ---------------- */
@@ -542,14 +586,19 @@ export function create(host,hooks){
   function nextFeat(s){
     let best=null, bd=1e9; C.feats.forEach(f=>{ if(f.k!=="whoops"&&f.k!=="jump"&&f.k!=="rhythm"&&f.k!=="sand"&&f.k!=="step") return; const d=MX.Course.wrap(C,f.from-s); if(d<bd){ bd=d; best=f; } }); return best?{f:best,d:bd}:null;
   }
-  function inFloor(p){ if(C.kind!=="stadium"||!C.layout.floor) return p; const F=C.layout.floor; p.x=clamp(p.x,F[0]+2.2,F[1]-2.2); p.z=clamp(p.z,F[2]+2.2,F[3]-2.2); return p; }
+  /* a camera inside the stadium: on the floor and inside the bowl of stands, whose rounded corners cut across the floor's corners
+     (polish: a corner camera could stand inside the stands and film the crowd's backs; r3d-world builds the bowl as this superellipse) */
+  function inFloor(p){ if(C.kind!=="stadium"||!C.layout.floor) return p; const F=C.layout.floor; p.x=clamp(p.x,F[0]+2.2,F[1]-2.2); p.z=clamp(p.z,F[2]+2.2,F[3]-2.2);
+    const cx=(F[0]+F[1])/2, cz=(F[2]+F[3])/2, rx=(F[1]-F[0])/2+1.5-3.5, rz=(F[3]-F[2])/2+1.5-3.5, dx=(p.x-cx)/rx, dz=(p.z-cz)/rz, q=Math.pow(dx*dx*dx*dx+dz*dz*dz*dz,0.25);
+    if(q>1){ p.x=cx+(p.x-cx)/q; p.z=cz+(p.z-cz)/q; }
+    return p; }
   function terrainAt(x,z,y){ if(world.ctx.hf) return world.ctx.hf(x,z); return y||0; }
   /* a trackside camera beside loop distance s: the side with room, off the track (inside the wall in a stadium) */
   /* a trackside camera beside loop distance s: a spot with room (no lane within `room` m: nobody rides through the lens) at least minOff m
      from the subject's line (a wall may pull a spot in: the real distance counts), the side with more room; inside the wall in a stadium.
      Where the floor is packed with lanes it becomes a crane, raised over the riders (polish: a spot pulled in by the wall could put the
      rider 3 m from the lens) */
-  function trackCam(s,h,distA,room,minOff,tgtH){
+  function trackCam(s,h,distA,room,minOff,tgtH,xt){
     const f=MX.Course.frame(C,s,tmpO), want=room!=null?room:(C.kind==="stadium"?5.5:4.5), mo=f.hw+(minOff!=null?minOff:7);
     const tg=new THREE.Vector3(f.x,MX.Course.ground(C,s,0)+(tgtH!=null?tgtH:1.0),f.z), fx=f.x, fz=f.z, fth=f.th, fhw=f.hw, fy=f.y;
     let best=null, bs=-1e9;
@@ -557,20 +606,24 @@ export function create(host,hooks){
       const lat=side*(fhw+dist), p=inFloor({x:fx-Math.sin(fth)*lat,z:fz+Math.cos(fth)*lat});
       const cd=clearDist(C,p.x,p.z), off=Math.hypot(p.x-fx,p.z-fz), base=terrainAt(p.x,p.z,fy);
       /* the spot must see the subject's spot over the dirt (polish: a camera behind a landing showed nothing but the mound); higher if it must */
-      let vis=-1; for(const up of [0,2.5,5,9]){ const c=safeCam(new THREE.Vector3(p.x,base+h+up,p.z),1.2); if(sees(c,tg)){ vis=up; if(cd>=want&&off>=mo&&up<9) return c; break; } }
+      let vis=-1; for(const up of [0,2.5,5,9]){ const c=safeCam(new THREE.Vector3(p.x,base+h+up,p.z),1.2); if(sees(c,tg)&&(!xt||xt.every(t=>sees(c,t)))){ vis=up; if(cd>=want&&off>=mo&&up<9) return c; break; } }
       const sc=Math.min(cd,want)*2+Math.min(off,mo)*0.8-Math.max(0,off-mo-12)*0.1-(vis<0?20:vis*0.6);
       if(sc>bs){ bs=sc; best={p:p,cd:cd,off:off,vis:vis,base:base}; } }
     const raise=clamp(want-best.cd,0,want)*1.3+(best.off<mo?2.5:0)+(best.vis>0?best.vis:best.vis<0?9:0);
     return safeCam(new THREE.Vector3(best.p.x,best.base+h+1.5+raise,best.p.z),1.2);
   }
+  /* a point of the section to keep in sight: on the centre-line at loop distance s, h above the dirt */
+  function secPt(s,h){ const f=MX.Course.frame(C,s,{}); return new THREE.Vector3(f.x,MX.Course.ground(C,s,0)+h,f.z); }
   function featCam(f){
     const sp=(C.spots||[]).find(x=>Math.abs(x.mid-(f.from+f.to)/2)<3), out=C.kind!=="stadium";
+    /* the whole section in sight, not just its middle: the whoops from end to end, a jump's lip and its landing */
+    const xt=f.k==="whoops"?[secPt(f.from+4,1),secPt(f.to-4,1)]:f.k==="jump"?[secPt(f.lip!=null?f.lip:f.from+3,1.2),secPt(f.to-2,0.8)]:null;
     /* a jump: from below the landing side, looking up at the riders against the sky (outdoors higher and further back: the hills' big
        faces would hide them) */
-    if(f.k==="jump"){ const at=f.lip!=null?f.lip+(f.to-f.lip)*0.55:(f.from+f.to)/2; return out?trackCam(at,3.6,[12,16,21,27],4.5,10,(f.h||2)+1.5):trackCam(at,1.5,[9,12,15,19],undefined,undefined,(f.h||2)+1.5); }
+    if(f.k==="jump"){ const at=f.lip!=null?f.lip+(f.to-f.lip)*0.55:(f.from+f.to)/2; return out?trackCam(at,3.6,[12,16,21,27],4.5,10,(f.h||2)+1.5,xt):trackCam(at,1.5,[9,12,15,19],undefined,undefined,(f.h||2)+1.5,xt); }
     if(f.k==="whoops"&&sp){ const p=inFloor({x:sp.x,z:sp.z}), fm=MX.Course.frame(C,sp.mid,tmpO), c=safeCam(new THREE.Vector3(p.x,terrainAt(p.x,p.z,sp.y)+5.5,p.z),1.5);
-      if(clearDist(C,p.x,p.z)>=4&&Math.hypot(p.x-fm.x,p.z-fm.z)>=fm.hw+7&&sees(c,new THREE.Vector3(fm.x,MX.Course.ground(C,sp.mid,0)+1,fm.z))) return c; }
-    if(f.k==="whoops") return trackCam((f.from+f.to)/2,C.kind==="stadium"?5.5:7.5);
+      if(clearDist(C,p.x,p.z)>=4&&Math.hypot(p.x-fm.x,p.z-fm.z)>=fm.hw+7&&sees(c,new THREE.Vector3(fm.x,MX.Course.ground(C,sp.mid,0)+1,fm.z))&&xt.every(t=>sees(c,t))) return c; }
+    if(f.k==="whoops") return trackCam((f.from+f.to)/2,C.kind==="stadium"?5.5:7.5,undefined,undefined,undefined,undefined,xt);
     /* a rhythm lane, the sand, a step-up: further back and higher, a third of the way along, looking down on the lane (the riders ahead
        must not fill the lens) */
     return trackCam(f.from+(f.to-f.from)*0.35,C.kind==="stadium"?7:5,[14,18,23,29,36],5.5,11,1.6);
@@ -579,15 +632,19 @@ export function create(host,hooks){
      of the lanes (raised over a lane that passes close); scored for the wanted distance and for standing ahead along fdir (the riders come
      toward the lens) */
   function spotCam(cx,cz,fy,fdir,targets,dists,heights,want,avoid){
-    let best=null, bs=-1e9;
-    for(const d of dists) for(let k=0;k<16;k++){ const a=k/16*PI*2, p=inFloor({x:cx+Math.cos(a)*d,z:cz+Math.sin(a)*d}), cd=clearDist(C,p.x,p.z), dd=Math.hypot(p.x-cx,p.z-cz);
-      if(cd<1.2||dd<d*0.6) continue;
+    /* every spot scored first on what is cheap (room, distance, standing ahead), then the sight lines tested best first: a spot whose
+       best possible score can't beat the best found is never tested (the sight tests are what cost: this keeps the cut to a crash smooth) */
+    const cand=[];
+    for(const d of dists) for(let k=0;k<16;k++){ const a=k/16*PI*2, p=inFloor({x:cx+Math.cos(a)*d,z:cz+Math.sin(a)*d}), dd=Math.hypot(p.x-cx,p.z-cz);
+      if(dd<d*0.6) continue;
       if(avoid&&avoid.some(o=>Math.hypot(p.x-o.x,p.z-o.z)<o.d)) continue;   /* too close to someone who must be in the frame */
-      const base=terrainAt(p.x,p.z,fy); let c=null, hi=0;
-      for(const h of heights){ const q=safeCam(new THREE.Vector3(p.x,base+h+(cd<3?1:0),p.z),1.2); if(targets.every(t=>sees(q,t))){ c=q; break; } hi++; }
-      if(!c) continue;
-      const ahead=((p.x-cx)*fdir.x+(p.z-cz)*fdir.z)/dd, sc=Math.min(cd,3.5)*1.2-Math.abs(dd-want)*0.4+ahead*0.9-hi*0.8;
-      if(sc>bs){ bs=sc; best=c; } }
+      const cd=clearDist(C,p.x,p.z); if(cd<1.2) continue;
+      const ahead=((p.x-cx)*fdir.x+(p.z-cz)*fdir.z)/dd; cand.push({p:p,cd:cd,sc:Math.min(cd,3.5)*1.2-Math.abs(dd-want)*0.4+ahead*0.9}); }
+    cand.sort((a,b)=>b.sc-a.sc);
+    let best=null, bs=-1e9;
+    for(const c0 of cand){ if(c0.sc<=bs) break;
+      const base=terrainAt(c0.p.x,c0.p.z,fy); let hi=0;
+      for(const h of heights){ if(c0.sc-hi*0.8<=bs) break; const q=safeCam(new THREE.Vector3(c0.p.x,base+h+(c0.cd<3?1:0),c0.p.z),1.2); if(targets.every(t=>sees(q,t))){ bs=c0.sc-hi*0.8; best=q; break; } hi++; } }
     return best;
   }
   /* the crash camera: close (about 9.5 m from where the rider lands), a crane at about 5 m looking down over the riders passing the crash,
@@ -599,9 +656,12 @@ export function create(host,hooks){
   /* the yellow lap: the marshal waving the flag and the riders coming into the section, both in sight */
   function yellowCam(ys){
     const f=MX.Course.frame(C,ys,{}), fa=MX.Course.frame(C,ys-14,{}), T=[new THREE.Vector3(f.x,MX.Course.ground(C,ys,0)+1,f.z),new THREE.Vector3(fa.x,MX.Course.ground(C,ys-14,0)+1,fa.z)];
-    let av=null, cx=f.x, cz=f.z;
-    if(marshal&&marshal.grp.visible){ const m=marshal.grp.position; T.push(m.clone().add(v3.set(0,1.5,0))); av=[{x:m.x,z:m.z,d:9}]; cx=(f.x+m.x)/2; cz=(f.z+m.z)/2; }   /* the marshal 9 m or more from the lens */
-    return spotCam(cx,cz,f.y,{x:Math.cos(f.th),z:Math.sin(f.th)},T,[11,14,17,21,26],[3.5,6,9,12],15,av)||trackCam(ys+2,3.4,[8,11,14,18,23],3.5,6);
+    let av=null, cx=f.x, cz=f.z, dir={x:Math.cos(f.th),z:Math.sin(f.th)};
+    if(marshal&&marshal.grp.visible){ const m=marshal.grp.position; T.push(m.clone().add(v3.set(0,1.5,0))); av=[{x:m.x,z:m.z,d:9}]; cx=(f.x+m.x)/2; cz=(f.z+m.z)/2;   /* the marshal 9 m or more from the lens */
+      /* across the track from him, a little ahead: the riders pass between the lens and the flag (the classic shot; polish: from his own
+         side the frame was grass and his back) */
+      const ax=f.x-m.x, az=f.z-m.z, al=Math.hypot(ax,az)||1; dir={x:ax/al*0.8+Math.cos(f.th)*0.6,z:az/al*0.8+Math.sin(f.th)*0.6}; const dl=Math.hypot(dir.x,dir.z)||1; dir.x/=dl; dir.z/=dl; }
+    return spotCam(cx,cz,f.y,dir,T,[11,14,17,21,26],[3.5,6,9,12],15,av)||trackCam(ys+2,3.4,[8,11,14,18,23],3.5,6);
   }
   /* the gate camera: low, a few metres beyond the start straight's edge and a little ahead of the gate (the side with more room) */
   function gateCam(g){
@@ -618,8 +678,14 @@ export function create(host,hooks){
   }
   /* the line: from beyond it, low, across the track from the flagger: the riders come at the lens over the stripe, the flagger and the
      flag up on the tower behind them */
-  function lineCam(){ const fin=world.fin, f=MX.Course.frame(C,0,tmpO), th=f.th, lat=-Math.sign(fin.lat||1)*(f.hw+3.5);
-    const p=inFloor({x:f.x+Math.cos(th)*11-Math.sin(th)*lat,z:f.z+Math.sin(th)*11+Math.cos(th)*lat}); return new THREE.Vector3(p.x,terrainAt(p.x,p.z,f.y)+2.1,p.z); }
+  function lineCam(){ const fin=world.fin, f=MX.Course.frame(C,0,{}), th=f.th, sd0=-Math.sign(fin.lat||1);
+    /* it must see the riders coming to the line and the flag over any jump or landing just past it (polish: at a traced track with a
+       jump right after the line the lens saw only the landing's back); the first spot that does, from the classic low one up */
+    const T=[secPt(0,1),secPt(-22,1),fin.flagAt.clone().add(v3.set(0,1.2,0))];
+    for(const h of [2.1,3.6,5.5,8]) for(const fw of [11,8,15,20]) for(const sd of [sd0,-sd0]){ const lat=sd*(f.hw+3.5);
+      const p=inFloor({x:f.x+Math.cos(th)*fw-Math.sin(th)*lat,z:f.z+Math.sin(th)*fw+Math.cos(th)*lat}); if(clearDist(C,p.x,p.z)<1.5) continue;
+      const c=safeCam(new THREE.Vector3(p.x,terrainAt(p.x,p.z,f.y)+h,p.z),1.2); if(T.every(t=>sees(c,t))) return c; }
+    const lat=sd0*(f.hw+3.5), p=inFloor({x:f.x+Math.cos(th)*11-Math.sin(th)*lat,z:f.z+Math.sin(th)*11+Math.cos(th)*lat}); return safeCam(new THREE.Vector3(p.x,terrainAt(p.x,p.z,f.y)+5.5,p.z),1.2); }
   function candidates(urgent){
     const L=[], lead=leaderIdx(); if(lead<0) return L;
     const r=rs[lead], me=meSeats.filter(s=>rs[s]&&!rs[s].gone&&!rs[s].crash);
@@ -723,6 +789,7 @@ export function create(host,hooks){
           (the riders join the frame as they arrive; a rider still far off doesn't pull the marshal out of it) */
         const mp=marshal.grp.position, dm=Math.hypot(mp.x-tv3.x,mp.z-tv3.z);
         if(dm<26){ tv4.set((tv4.x+mp.x)/2,(tv4.y+mp.y+1.4)/2,(tv4.z+mp.z)/2); spread=Math.min(14,dm*0.8); }
+        else if(yellow){ const sp=secPt(yellow.s,1); tv4.set((sp.x+mp.x)/2,(sp.y+mp.y+1.3)/2,(sp.z+mp.z)/2); spread=Math.min(8,Math.hypot(sp.x-mp.x,sp.z-mp.z)); }   /* the section and the flag, waiting for the riders */
         else { const k=4/dm; tv4.set(mp.x+(tv3.x-mp.x)*k,mp.y+1.3,mp.z+(tv3.z-mp.z)*k); spread=4; } }
       tv4.y-=0.3;
       if(snap) cTarget.copy(tv4); else cTarget.lerp(tv4,1-Math.exp(-dt/(cr?0.18:0.1)));
@@ -731,8 +798,9 @@ export function create(host,hooks){
       if(sh==="turn1") fov=clamp(fov,26,64);
       if(shot.why==="yellow"){ const asp=Math.max(0.8,W/Math.max(1,H)); fov=clamp(2*Math.atan((11+spread*0.5)/asp/(2*dist))*180/PI,14,52); }   /* the yellow section about 12 m across */
       if(sh==="crash"){ /* the crash: framed by the scene's width (the rider, the bike, then the marshal): about 7 m across, never a speck */
-        const visW=(cr?6.2+spread*1.25:8+Math.max(0,dist-12)*0.3)*(W<H?0.8:1), asp=Math.max(0.8,W/Math.max(1,H));
-        fov=clamp(2*Math.atan(visW/asp/(2*dist))*180/PI,8,55); }
+        /* (the width across the screen whatever its shape: an upright phone gets the same scene, taller) */
+        const visW=(cr?6.2+spread*1.25:8+Math.max(0,dist-12)*0.3)*(W<H?0.85:1), asp=W/Math.max(1,H);
+        fov=clamp(2*Math.atan(visW/asp/(2*dist))*180/PI,8,W<H?75:55); }
     }
     /* a portrait screen: a little wider vertically, the sides cropped (the riders stay big) */
     const asp=W/Math.max(1,H); if(asp<1&&sh!=="gate"&&sh!=="crash") fov=clamp(2*Math.atan(Math.tan(fov*PI/360)/Math.max(0.78,Math.pow(asp,0.55)))*180/PI,10,80);
@@ -750,7 +818,7 @@ export function create(host,hooks){
     rs.forEach((r,i)=>{ if((r.gone&&!r.crash)||!r.pos){ tagAt(R,i,null,0); return; } show2.push([camP.distanceTo(r.pos),i]); });
     const max=LO?5:7, mine=new Set(meSeats.concat(redSeat>=0?[redSeat]:[]));
     show2.sort((a,b)=>(mine.has(b[1])-mine.has(a[1]))||a[0]-b[0]);   /* the person's and the red plate first, then the nearest */
-    let k=0; const placed=[], pw=px*1.6*0.9, ph=px*0.8;
+    let k=0; const placed=[], pw=px*1.6*0.9, ph=px*1.05;   /* tags never touch (no stacks of plates over a pack) */
     show2.forEach(([d,i])=>{
       const r=rs[i], view=d*th, riderPx=2.0/view*H, small=riderPx<95;
       const vis=(k<max||mine.has(i))&&small&&d>6&&!(mode==="gate"&&!mine.has(i));
@@ -800,6 +868,9 @@ export function create(host,hooks){
   V.fixPR=function(p){ prCap=p; pr=p; renderer.setPixelRatio(p); renderer.setSize(W,H,false); V.prFixed=true; };
   V.dispose=function(){ V.stop(); if(world) disposeTree(world.root); if(R) disposeTree(R.grp); renderer.dispose(); cv.remove(); };
   V.renderer=renderer; V.scene=scene; V.camera=cam;
-  V._dbg={riders:()=>R,gate:()=>gate,world:()=>world,marshal:()=>marshal,target:()=>cTarget.clone(),sees:(a,b)=>sees(a,b),dirt:(x,z)=>dirtTop(x,z),hf:(x,z)=>world.ctx.hf?world.ctx.hf(x,z):null,yellow:()=>yellow,shot:()=>shot};   /* tests only */
+  V._dbg={riders:()=>R,gate:()=>gate,world:()=>world,marshal:()=>marshal,target:()=>cTarget.clone(),sees:(a,b)=>sees(a,b),dirt:(x,z)=>dirtTop(x,z),hf:(x,z)=>world.ctx.hf?world.ctx.hf(x,z):null,yellow:()=>yellow,shot:()=>shot,pos:k=>{ const r=rs.find(x=>x.seat===k); return r&&r.pos?{x:+r.pos.x.toFixed(2),y:+r.pos.y.toFixed(2),z:+r.pos.z.toFixed(2),crash:r.crash?r.crash.kind:null}:null; },
+    clearance:(k,full)=>{ const r=rs.find(x=>x.seat===k); if(!r||!r.crash||!r.pos) return null; const P=[r.pos,r.bikeP].filter(Boolean); let m=1e9, who=null;
+      rs.forEach(o=>{ if(o===r||o.crash||o.gone||!o.pos) return; P.forEach((p,pi)=>{ const d=Math.hypot(o.pos.x-p.x,o.pos.z-p.z); if(d<m){ m=d; who={seat:o.seat,D:+o.D.toFixed(1),lat:+o.lat.toFixed(2),latT:+o.latT.toFixed(2),what:pi?"bike":"rider"}; } }); });
+      if(!full) return +m.toFixed(2); const c=r.crash; return {m:+m.toFixed(2),who:who,crash:{D:+c.D.toFixed(1),bD:c.bD!=null?+c.bD.toFixed(1):null,bL:c.bL!=null?+c.bL.toFixed(2):null,rD:c.rD!=null?+c.rD.toFixed(1):null,rL:c.rL!=null?+c.rL.toFixed(2):null,t:+(T-c.T).toFixed(2)},hw:r.fr?+r.fr.hw.toFixed(2):null}; }};   /* tests only */
   return V;
 }
