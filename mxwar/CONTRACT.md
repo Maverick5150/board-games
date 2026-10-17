@@ -45,7 +45,7 @@ Nothing in this contract changes how `game.js`, the engine (`race.js`, `round.js
 | rider | Vehicle / Rider Specialist (the rider) | `r3d-riders.js`, `mxwar/assets/rider/` | `rider` | the rider: geometry, two-bone IK, poses (seated, standing, dab, crash body), the number atlas, blob shadows, number tags, the instancing glue |
 | fx | Effects Specialist | `r3d-fx.js`, `mxwar/assets/fx/` | `fx` | roost, dust, impacts: the particle system and when / how much to emit |
 | cams | Cinematic Camera Specialist | `r3d-cams.js` | `cams` | the TV director, every camera rig, the sight tests, the camera itself |
-| perf | Performance Engineer | `r3d-quality.js` | `perf` | the quality tiers, the adaptive pixel-ratio ladder, weak-GPU detection, reduce-effects and TV flags, the options every builder receives, `V.qualityNames()` / `V.setQuality()` |
+| perf | Performance Engineer | `r3d-quality.js`, `r3d-perf-bench.js`, `mxwar/assets/perf/` | `perf` | the quality tiers and their flags, the adaptive-resolution ladder, GPU classification and probe, reduce-effects and TV flags, the options every builder receives, `V.qualityNames()` / `V.setQuality()`, the riders' level-of-detail and texture-budget helpers, the in-game benchmark (`?bench=1`) |
 | qa | Quality Director | no code | none | runs section 9.3 steps 2-5 on each specialist's branch, compares the real captures with the cover, rejects what the pictures do not support |
 | base | the studio (done; frozen) | `mxwar/demo.html`, `demo.js`, `demo-engine.js`, `demo-bookmarks.json`, `ui/vendor/three-addons/`, `mxwar/assets/LICENSES.md` ("base" section), the tools in `BG_audit/sprint/mxvis/tools/` | `harness` (two frozen zones) | the capture harness, the vendored add-ons; the integrator adds an add-on or a tool option on REQUEST |
 
@@ -56,7 +56,7 @@ Not part of the view, nobody edits them in this phase (the integrator does, at t
 
 ```
 r3d-util.js        <- everything (three.js only)
-r3d-quality.js     <- util
+r3d-quality.js     <- util, perf-bench   (r3d-perf-bench.js imports nothing: the quality object and the view are passed in)
 r3d-look.js        <- util
 r3d-track.js       <- util
 r3d-world.js       <- util, track
@@ -98,15 +98,22 @@ conversion belong to the chain's OutputPass (three.js applies `renderer.toneMapp
 `renderer.info.render.calls / triangles` (= `V.stats().calls / tris`, the harness' `DEMO.stats()`) are the WHOLE frame: the shadow map pass + the scene + every pass of a chain. (three.js alone resets the counters inside every `renderer.render()`
 right AFTER it drew the shadow map, so it never counts the shadow pass, and a chain would show only its last pass.) A chain must not touch `renderer.info`.
 
-### r3d-quality.js (perf)
+### r3d-quality.js (perf) and r3d-perf-bench.js (perf)
 
-`isTV()` (page has `data-tv`), `motionMode()` -> `"off"` (reduced motion) | `"lo"` (Reduce effects) | `"full"`, `detectWeakGPU(renderer)`.
-`createQuality({host, lo, setShadows(on), shadowsOn(), W(), H()}) -> Q`: creates the WebGLRenderer (`Q.renderer`; antialias off with Reduce effects), sets anisotropy, tests the GPU.
-`Q.weakGPU`, `Q.pr` / `Q.prCap` (the current / maximum pixel ratio), `Q.fixed`, `Q.stats {prDrops, shadowDrop}`, `Q.shadowsWanted(LO)`,
-`Q.resize(w, h, W, H, LO) -> pr` (the cap per device: a TV at most 1280 wide, 960 with Reduce effects; a phone 1.75, 1.0), `Q.adapt(dt)` (every frame: frames over 34 ms for 1.2 s drop the real shadows,
-for 1.5 s lower the pixel ratio by 15% down to half the cap; fast frames raise it again), `Q.fix(p, W, H)` (tests),
-**`Q.options(LO) -> {lo}`: the quality options `buildWorld(C, look, q)`, `createRiders(list, q)` and `createFx({C, look, ...q})` receive.** Tiers (a crowd density, a particle budget...) go
-here; the builders read the fields they know. A field that changes what is BUILT must also go into the world's cache key (the `[hook:perf]` zone next to `key` in `V.setRace`).
+The quality system: one place that says how much any module may spend (tiers), how the frame rate is held (the ladder), how a device is classified (GPU string + probe) and how anybody measures (the benchmark). The flag table, the rules for builders and the measurements are in section 9.4.
+
+- `TIERS` = `{firetv, balanced, high, ultra}` (labels FIRE TV, BALANCED, HIGH, ULTRA), `tierNames()`, `resolveTier(name)` (also the old harness names: `stick` and `low` = firetv, `medium` = balanced), `STEPS` = the render-scale ladder `[1, .9, .8, .75, .67, .6, .5]`.
+- `isTV()`, `motionMode()` -> `"off"` | `"lo"` | `"full"`, `classifyGpu(str)` -> `{cls (-1 software, 0 weak, 1 mid, 2 strong, 3 big), family, string}`, `detectWeakGPU(renderer)`, `probeGpu(renderer)` -> `{ms}`.
+- `createQuality({host, lo, setShadows(on), shadowsOn(), W(), H(), resized(W, H, pr), redraw()}) -> Q`. Makes the WebGLRenderer (`Q.renderer`; MSAA only when the tier says so), picks the tier (`?quality=` / `?tier=` (and `?q=` on the capture page) > a stored choice for this GPU > GPU class + probe),
+  sets the anisotropy. Fields: `Q.tier` (the tier definition), `Q.tierName`, `Q.source` (`url` | `stored` | `gpu` | `probe` | `gpu+probe` | `manual` | `auto-demote`), `Q.gpu`, `Q.probe`, `Q.dev {tv, mobile, dpr, cores, mem}`, `Q.targetFps`,
+  `Q.pr` / `Q.prCap` / `Q.fixed` / `Q.stats {prDrops, prRaises, sheds, reverts, shadowDrop, probeMs}` (as before), `Q.rung`, `Q.ladder`, `Q.events` (the ladder's log), `Q.lod`, `Q.bench`.
+  - **`Q.options(LO) -> q`: what `buildWorld(C, look, q)`, `createRiders(list, q)` and `createFx({C, look, ...q})` receive.** `q.lo` (the simple world: true for FIRE TV or Reduce effects), `q.tier`, `q.rank`, `q.shadow`, `q.post`, `q.fog`, `q.fx`, `q.crowd`, `q.scenery`, `q.riders`, `q.tex`, `q.res`, `q.budget` (the tier's blocks, section 9.4),
+    shortcuts `q.particles`, `q.texMax`, `q.aniso`, `q.crowdDetail`, `q.crowdAnim`, `q.trees`, `q.terrainDetail`, `q.riderLod`, `q.key`, and **`q.live`** (a reference to `Q.live`, below: read it every frame for anything that moves at run time). A field that changes what is BUILT is part of `Q.buildKey(LO)`, which is in the world's cache key (`setRace` zone): a tier switch rebuilds the world on the next `setRace`.
+  - **`Q.live`**: the flags the ladder moves at run time, always current: `shadows` (real shadows wanted now), `shadowSize`, `particleScale` (0..1: multiply the emission by it), `crowdAnim`, `scale` (the render scale step), `pr`, `post {on, bloom, bloomScale, aa, dof, shafts}`. A post chain reads `QUAL.live.post` every frame; `Q.onChange(fn(what, info, live))` fires on `"rung"` and `"tier"`.
+  - `Q.set(name, src)` (also `"auto"`), `Q.demote(why)`, `Q.summary()`, `Q.memory(scene)`, `Q.fitTextures(root)`, `Q.budgetCheck(calls, tris)`, `Q.resize(w, h, W, H, LO) -> pr`, `Q.adapt(dt, ms)` (every frame), `Q.fix(p, W, H)` (tests), `Q.save()`, `Q.bindLook(LOOK)`, `Q.attach(view)`.
+- Helpers anyone may use: `createLadder(cfg)` / `buildRungs(tier)` / `rungCost(rung, tier)` (the controller, pure), `createLod() -> L` (`L.update(cam, list, n, H, tier)`, then `L.level[i]` 0 full / 1 mid / 2 low / 3 not in view, `L.dist[i]`, `L.px[i]`, `L.inView(x, y, z, r)`; the view also writes `RST[i].lod` every frame),
+  `texBudget(root, tier) -> {count, MB, budgetMB, over, biggest}`, `fitTextures(root, max)` (shrinks static canvas textures; the view calls it on the new world), `summarize(ms[], fps)` (r3d-perf-bench.js: avg / 1% low / 0.1% low / percentiles).
+- `r3d-perf-bench.js`: `createBench(Q, view)`; `?bench=1` (or `__mxv3.bench({seconds})`) measures 20 s of the real race and shows the numbers on the screen (9.4). `?fps=1` is a one-line live counter.
 
 ### r3d-track.js (dirt)
 
@@ -206,9 +213,9 @@ Zones (find them with a search for `[hook:`); each role may change only its own 
 
 | Role | Where | What is there now |
 |---|---|---|
-| perf | `create()` top | `QUAL = createQuality(...)`, `renderer = QUAL.renderer` |
-| perf | `setRace` | Reduce-effects change (`LOOK.setShadows(QUAL.shadowsWanted(LO))`); the world cache `key`; `buildWorld(C, look, QUAL.options(LO))` |
-| perf | `tick`, `V.resize` | `QUAL.adapt(dt)`; `QUAL.resize(w, h, W, H, LO)` |
+| perf | `create()` top | `QUAL = createQuality(...)` (with `resized` and `redraw` callbacks), `renderer = QUAL.renderer`, `lastRace` / `builtTier` |
+| perf | `setRace` | `lastRace = o`; Reduce-effects change (`LOOK.setShadows(QUAL.shadowsWanted(LO))`); the world cache `key` (+ `QUAL.buildKey(LO)`); `buildWorld(C, look, QUAL.options(LO))` and `QUAL.fitTextures(world.root)` |
+| perf | `tick`, `V.resize` | `QUAL.adapt(dt, ms)` (the ladder, the benchmark, the riders' level of detail, the GPU sample); `QUAL.resize(w, h, W, H, LO)` |
 | cams | `create()` | `VIEW` (the live state) and `CAMS = createCams(VIEW)` |
 | cams | `setRace` | `CAMS.buildGrid()` after the world is built; `CAMS.reset()` |
 | cams | `step` | `CAMS.director(dt)`, `CAMS.camera(dt)` |
@@ -226,7 +233,7 @@ Zones (find them with a search for `[hook:`); each role may change only its own 
 | rider | `step` | `commit(R)` |
 | harness | `create()`, right after the view object `V` | `V.camHook = null` (frozen: the capture harness' camera, section 9) |
 | harness | `step`, right after the cams zone | the `V.camHook` call: when the harness set a camera it replaces the director's position, look-at point (`CAMS.target`) and field of view; nothing happens in the game (frozen) |
-| perf | `create()`, after `V.fixPR` | empty: `V.qualityNames()` and `V.setQuality(name)` go here; the harness, `perf.js` and `finish.js` use them as soon as they exist (section 9.4) |
+| perf | `create()`, after `V.fixPR` | `V.qualityNames()`, `V.qualityLabel()`, `V.quality()`, `V.setQuality(name)`, `V.bench(o)`, `V.benchResult()`, `QUAL.bindLook(LOOK)`, `QUAL.attach(view)`; the harness, `perf.js`, `shots.js` and `finish.js` use them (section 9.4) |
 
 Other lines that touch a module (lead's, ask for a change through REQUESTS): the shot tweaks in `V.drop`, `V.gate`, `V.standings`, `placeMarshalS` (uses `CAMS.shot`, `CAMS.sees`, `CAMS.terrainAt`), the sky / shadow-box lines after the cams zone, `tags()`
 (number tags: placement and size on screen), `crashPose` (the fall's trajectory and pose script), `surfY` / `trackXZ` (where the dirt is, for fallen riders).
@@ -362,10 +369,55 @@ const WT = "C:/Users/Maverick/Documents/BG_mxV-<role>", OUT = "C:/Users/Maverick
 ```
 `DEMO.seek(t)`, `DEMO.step(dt, draw)`, `DEMO.skip(s)`, `DEMO.quality(name)`, `DEMO.size(w, h, pr)`, `DEMO.bench(n)`, `DEMO.live(true)` (the view's own requestAnimationFrame loop on the real clock), `DEMO.scan(seconds, every)` (when is a rider in a feature, in the air; the crashes) are in `tools/README.md`.
 
-### 9.4 Quality tiers
+### 9.4 Quality tiers (the perf engineer, 2026-10-17)
 
-Today the harness makes the tiers itself (and `finish.js`, `perf.js`, `shots.js` take them with `--quality`): `high` = everything with real shadows; `medium` = real shadows off; `low` = Reduce effects (`data-effects="reduced"`: the simpler world and riders, 160 particles, no antialiasing, no shadows);
-`stick` = `low` + the TV flag (`data-tv`) at 960x540 (the TV pixel-ratio cap: at most 960 wide with Reduce effects). The perf engineer adds `V.qualityNames()` and `V.setQuality(name)` in the `perf` zone after `V.fixPR`; the tools then use the view's own names and tiers.
+Four tiers, names for people and for tools: `firetv` (FIRE TV), `balanced`, `high`, `ultra`. The old harness names still work everywhere (`--quality stick|low` = firetv, `medium` = balanced, `high` = high; `auto` = what this device would choose for itself).
+`V.qualityNames()`, `V.setQuality(name)`, `V.quality()`, `V.bench(o)`, `V.benchResult()` are in the `[hook:perf]` zone after `V.fixPR`. The capture tools now use the view's own names (`perf.js` runs the four tiers by default; `shots.js`, `finish.js`, `record.js` take `--quality firetv|balanced|high|ultra` or the old names).
+**The `high` tier draws exactly the base's pixels** (the six stills at 1280x720 and 1920x1080: 0 differing pixels, 12 of 12); `firetv` builds exactly the old `stick` world (36 calls / 101,448 triangles at B1, 30 / 100,888 at the pack).
+
+**The flag table.** Every field is in `Q.options(LO)` (builders) and the tier definition `TIERS[id]`. A builder reads what it knows and ignores the rest; **a specialist whose new feature costs more than the tier's budget gates it on the tier**, never builds it unconditionally:
+
+| flag (`Q.options(LO)` field) | FIRE TV (`firetv`) | BALANCED (`balanced`) | HIGH (`high`) | ULTRA (`ultra`) |
+|---|---|---|---|---|
+| who it is for | Fire TV Stick / Lite / 4K class, old phones, Pi | mid phones, old laptops, integrated GPUs | new phones, Apple, good laptops | discrete GPUs, Apple M |
+| frame rate the ladder holds (`fps`) | 30 | 60 (TV: 30) | 60 (TV: 60) | 60 (TV: 60) |
+| `lo` (the simple world: fewer trees, small textures, ...) | true | false | false | false |
+| `msaa` (canvas antialiasing; fixed when the renderer is made) | false | true | true | true |
+| `res.maxPR` / `res.tvW` / `res.capW` / `res.start` | 1 / 1280 / 1280 / 0.75 | 1.25 / 1280 / - / 1 | 1.75 / 1280 / - / 1 | 2 / 1920 / - / 1 |
+| `shadow` real / map size / soft | blob only / 512 / false | real / 1024 / false | real / 1024 / false | real / 2048 / true |
+| `post` on / bloom (scale) / aa / dof / shafts | false / no bloom / none / false / false | true / bloom(0.5) / fxaa / false / false | true / bloom(1) / smaa / false / true | true / bloom(1) / smaa / true / true |
+| `fog` far scale | 0.75 | 0.9 | 1 | 1 |
+| `fx.particles` (ring buffer size) | 160 | 360 | 520 | 900 |
+| `crowd.detail` / `crowd.anim` | 0.35 / false | 0.7 / false | 1 / true | 1 / true |
+| `scenery.trees` / `scenery.terrain` | 0.4 / 0.5 | 0.7 / 0.8 | 1 / 1 | 1 / 1 |
+| `riders.full` / `mid` / `near` m / `far` m | 4 / 6 / 14 / 40 | 8 / 8 / 22 / 60 | 12 / 10 / 30 / 80 | 22 / 0 / 60 / 120 |
+| `tex.max` px / `aniso` / `budgetMB` | 512 / 1 / 24 | 1024 / 4 / 48 | 1024 / 8 / 96 | 2048 / 16 / 192 |
+| budget: draw calls / triangles / geometry MB (whole frame) | 46 / 110k / 6 | 60 / 200k / 10 | 90 / 350k / 16 | 140 / 600k / 32 |
+
+**Rules for builders.**
+- Read `q.lo` for "the simple world" exactly as today (FIRE TV and Reduce effects). New detail goes behind a tier flag: crowd density and animation (`q.crowdDetail`, `q.crowdAnim`), trees and terrain (`q.trees`, `q.terrainDetail`), particle ring size (`q.particles`), texture size (`q.texMax`: choose the 512 / 1K / 2K file or canvas size from it), anisotropy (`q.aniso`, applied by `setAniso` at texture creation).
+- Anything that moves at run time reads `q.live` / `QUAL.live` EVERY FRAME, not at build time: `live.particleScale` multiplies the roost / dust emission, `live.crowdAnim` stops the crowd's animation, `live.post` switches bloom / depth of field / the whole chain (a chain that is `on` only when `live.post.on`), `live.shadows` is the real shadow map (the view toggles `LOOK.setShadows` itself, and resizes the shadow map to `live.shadowSize`).
+- Riders: draw the `q.riderLod.full` nearest riders in full, the next `mid` simplified, the rest minimal (`QUAL.lod.level[i]` / `st.lod`; hysteresis built in: a level changes only after 8 frames of asking). A bike or rider mesh is one instanced draw call per part type: keep it that way, draw calls (CPU) matter more than triangles on a Fire TV.
+- Budgets (whole frame: the shadow pass counted): the last row of the table. `V.stats().calls / tris`, `DEMO.stats()` and the bench panel show them; `Q.budgetCheck(calls, tris)` says ok / over. Textures: `Q.memory(scene)`; the riders' number atlas (2048x640, 7 MB with mipmaps) is 43% of today's texture memory and larger than the FIRE TV tier's 512: it should follow `q.texMax`.
+- Do not change `renderer.setPixelRatio` / `setSize` yourself: the ladder owns them (it also resizes the post chain through `LOOK.resize` and redraws the frame at once, so a resolution step never shows a blank frame).
+
+**How a tier is chosen.** (1) `?quality=firetv|balanced|high|ultra` (or `?tier=`; on the capture page `?q=`; the `data-quality` attribute of `<html>`; `V.setQuality(name)`). (2) A stored choice for this GPU string (localStorage `mxwar.quality.v1`, written after 20 s of calm and on every manual / auto change).
+(3) The GPU string (`classifyGpu`: Mali-G31 / G51 / T-series, PowerVR GE8xxx, Adreno 3xx-5xx, VideoCore, old Intel HD = weak -> `firetv`; mid Mali-G5x/G7x, Adreno 6xx low, integrated Intel / AMD = `balanced`; Adreno 64x+, Mali-G77+, Apple = `high`; GeForce / Radeon RX / Apple M = `ultra`; a software rasteriser = `firetv`) then a GPU probe
+(`probeGpu`: a fixed 960x540 workload timed with `gl.finish()` on the real clock, 11 frames; under 3 ms promotes a strong desktop GPU one tier, over 12 ms demotes one, over 30 ms two; a weak GPU is never probed). A TV with at most 4 cores and 2 GB is `firetv` whatever the GPU says. Reduce effects / reduced motion always force the FIRE TV flags.
+When the ladder sits at its floor for 10 s and frames still run long, an automatic choice is demoted one tier (`Q.demote`) and the next `setRace` builds that tier's world.
+`V.setQuality(name)` applies the run-time flags at once and rebuilds the world immediately when its build flags differ and the view is at the gate or idle (what the capture harness needs: it calls it right after `V.setRace`); during a race it keeps the world and the next `setRace` rebuilds.
+
+**The ladder (adaptive resolution).** The render scale moves along 7 steps (`STEPS`) relative to the pixel-ratio cap of the tier and device; effects are cut in a fixed order as rungs of ONE chain: scale .9, .8, particles x.6, depth of field, bloom to half resolution, real shadows, scale .75, crowd animation, particles x.35, bloom, the post chain, scale .67, .6
+(the cuts a tier has nothing to cut for are skipped; FIRE TV also has three rungs UP from its start of 0.75 x 1280 = 960x540). It holds 30 fps on a TV (FIRE TV always) and 60 elsewhere. Down: the 1.2 s mean frame time (slowest 6% dropped: a hitch is not a slow device) over 1.18 x the target on two checks in a row; the cost model picks how far (at most 3 rungs); the rung it left is banned for 3 dwells (21 s) and each repeat doubles the ban.
+Up: after a dwell (7 s; 3 s with lots of room), the frame's own cost (sim + draw + a `gl.finish()` sampled every 30th frame) predicts at most 82% of the frame time one rung up, never above the 90 s decaying peak of that cost; a try is watched for 3.5 s and undone at once if its own samples exceed 97% of the frame time. `BG_audit/sprint/mxvis/perf/ladder-sim.js` runs the controller on 9 simulated devices: a static device converges in 1-3 moves within 10 s and then never moves; a load swing of +-22% settles in 3 moves; a 30 s load spike is followed by a recovery in 40 s.
+
+**The in-game benchmark.** `?bench=1` on `mxwar/demo.html?live=1&q=auto` (a real race of the real engine, measured from the gate drop; `mxwar/assets/perf/bench.html` opens exactly that, with `?sweep=1` for all four tiers, `?quality=` to force one, `?seconds=` for another length) or on the game page (`mxwar/index.html?bench=1`: start any race, the first 20 s after the gate drops are measured).
+It shows on the screen: tier and how it was chosen, target fps, fps average / 1% low / 0.1% low, frame ms average / p95 / p99 / max / share of frames on target, canvas size and render scale, calls, triangles, JS ms per frame, the frame's own cost, JS heap, textures (MB), the ladder's steps, the GPU string and the probe ms, device flags; PASS = average at least 95% of the target and 1% low at least 80% of it.
+The result is `window.__MXBENCH`, a console line `[mxwar-bench] {json}`, localStorage `mxwar.bench.last` / `.history`, and `__mxv3.benchResult()`. `?bench=sweep` runs firetv, balanced, high, ultra one after the other (the page reloads between them; sessionStorage keeps the results) and ends with a table (`window.__MXBENCH_SWEEP`). `?fps=1` shows a one-line counter in any race.
+OK / tap runs it again, Esc / Back closes it.
+
+**Measure it.** `perf.js --qualities firetv,balanced,high,ultra --sizes 960x540,1920x1080` (frame cost per tier and size, fixed pixel ratio so the ladder is off); `DEMO.quality(name)` switches a page's tier (rebuilding the world); the ladder runs only on the view's own loop (`DEMO.live(true)`, or `?live=1`).
+The runner's CPU cap decides how noisy a timing is (the calibration column says): compare ratios and the best-of columns, and trust calls / triangles / textures / memory always. The Fire TV Stick has still not been measured by anyone: `?bench=1` on the device is the measurement, and the probe ms it prints calibrates the thresholds above.
 
 ### 9.5 The GPU result (this laptop, measured 2026-10-17 14:15, the base's pixels)
 
