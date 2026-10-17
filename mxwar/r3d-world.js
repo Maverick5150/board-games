@@ -72,13 +72,13 @@ function checkerTex(){
 /* ---------------- steel and banners: plain parts with baked face shading on one props texture (the start gate and the finish arch are each ONE draw call) ---------------- */
 const _SL=new THREE.Vector3(0.3,0.8,0.5).normalize();
 function steelPart(g,rgb,k){ g=g.index?g.toNonIndexed():g; const m=g.attributes.position.count, N=g.attributes.normal, c=new Float32Array(m*3), uv=new Float32Array(m*2);
-  for(let i=0;i<m;i++){ const sh=(0.5+0.5*Math.max(0,N.getX(i)*_SL.x+N.getY(i)*_SL.y+N.getZ(i)*_SL.z))*(k||1); c[i*3]=rgb[0]*sh; c[i*3+1]=rgb[1]*sh; c[i*3+2]=rgb[2]*sh; uv[i*2]=0.01; uv[i*2+1]=0.99; }
+  for(let i=0;i<m;i++){ const sh=(0.5+0.5*Math.max(0,N.getX(i)*_SL.x+N.getY(i)*_SL.y+N.getZ(i)*_SL.z))*(k||1); c[i*3]=rgb[0]*sh; c[i*3+1]=rgb[1]*sh; c[i*3+2]=rgb[2]*sh; uv[i*2]=0.01; uv[i*2+1]=0.03; }
   g.setAttribute("color",new THREE.BufferAttribute(c,3)); g.setAttribute("uv",new THREE.BufferAttribute(uv,2)); return g; }
 /* a light: no shading, brighter than white (the frame's bloom picks it up) */
 function lampPart(g,rgb){ g=steelPart(g,rgb,1); const c=g.attributes.color; for(let i=0;i<c.count;i++) c.setXYZ(i,rgb[0],rgb[1],rgb[2]); return g; }
 function bannerQuad(w,h,rect,face){ const g=new THREE.PlaneGeometry(w,h), uv=g.attributes.uv, r=propsUV(rect), m=g.attributes.position.count, c=new Float32Array(m*3).fill(1);
   for(let i=0;i<m;i++) uv.setXY(i,r[0]+(r[2]-r[0])*uv.getX(i),r[1]+(r[3]-r[1])*uv.getY(i)); g.rotateY(face>0?Math.PI/2:-Math.PI/2); g.setAttribute("color",new THREE.BufferAttribute(c,3)); return g; }
-function propsMesh(parts){ const t=propsTex(); return new THREE.Mesh(merge(parts),new THREE.MeshBasicMaterial({map:t,vertexColors:true,side:THREE.DoubleSide})); }
+function propsMesh(parts){ const t=propsTex(), m=new THREE.MeshBasicMaterial({map:t,vertexColors:true,side:THREE.DoubleSide}); m.userData.keepMaps=true; return new THREE.Mesh(merge(parts),m); }   /* the props texture is shared: never freed with a gate or a world */
 /* a truss: two chords, struts and zig-zag braces, along z from -len/2 to len/2 */
 function trussParts(len,y,x,steel,lamp,nLamps){ const P=[], cs=0.5, st=1.2;
   P.push(xf(steelPart(new THREE.BoxGeometry(0.16,0.16,len),steel),x,y+cs/2,0), xf(steelPart(new THREE.BoxGeometry(0.16,0.16,len),steel),x,y-cs/2,0));

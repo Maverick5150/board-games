@@ -117,8 +117,8 @@ export function ribbonTex(lo){
 export function suitesTex(lo){
   const W=lo?256:512, H=lo?64:128, c=canvas(W,H), x=c.getContext("2d"), R=rngf(31), n=8, w=W/n;
   x.fillStyle="#0a0a10"; x.fillRect(0,0,W,H);
-  for(let i=0;i<n;i++){ const px=i*w, lit=R()<0.92, k=0.62+R()*0.38;
-    const g=x.createLinearGradient(0,H*0.14,0,H*0.86); if(lit){ g.addColorStop(0,"rgb("+(255*k|0)+","+(238*k|0)+","+(205*k|0)+")"); g.addColorStop(0.55,"rgb("+(246*k|0)+","+(208*k|0)+","+(142*k|0)+")"); g.addColorStop(1,"rgb("+(170*k|0)+","+(118*k|0)+","+(62*k|0)+")"); } else { g.addColorStop(0,"#2a2e3c"); g.addColorStop(1,"#141620"); }
+  for(let i=0;i<n;i++){ const px=i*w, lit=R()<0.9, k=0.5+R()*0.38, cool=R()<0.18;
+    const g=x.createLinearGradient(0,H*0.14,0,H*0.86); if(lit){ const c0=cool?[215,232,255]:[255,238,205], c1=cool?[170,200,240]:[246,208,142], c2=cool?[90,120,170]:[170,118,62]; g.addColorStop(0,"rgb("+(c0[0]*k|0)+","+(c0[1]*k|0)+","+(c0[2]*k|0)+")"); g.addColorStop(0.55,"rgb("+(c1[0]*k|0)+","+(c1[1]*k|0)+","+(c1[2]*k|0)+")"); g.addColorStop(1,"rgb("+(c2[0]*k|0)+","+(c2[1]*k|0)+","+(c2[2]*k|0)+")"); } else { g.addColorStop(0,"#2a2e3c"); g.addColorStop(1,"#141620"); }
     x.fillStyle=g; x.fillRect(px+w*0.1,H*0.14,w*0.8,H*0.72);
     if(lit&&R()<0.25){ x.fillStyle="rgba(120,180,255,0.85)"; x.fillRect(px+w*0.58,H*0.22,w*0.24,H*0.15); }
     if(lit) for(let p=0;p<Math.floor(R()*3);p++){ const sx=px+w*(0.2+R()*0.6), sy=H*(0.66+R()*0.08); x.fillStyle="rgba(50,30,20,0.45)"; x.beginPath(); x.arc(sx,sy-H*0.07,H*0.04,0,7); x.fill(); x.fillRect(sx-H*0.06,sy-H*0.03,H*0.12,H*0.2); }
@@ -166,12 +166,14 @@ export function glowSheet(){
 }
 
 /* ---------------- props: the start gate's and the finish arch's banners (one texture: a white block for the plain steel, the two banners) ---------------- */
-export const PROPS={w:1024,h:256,white:[0,0,32,32],gate:[0,32,1024,96],finish:[0,128,1024,96]};
+export const PROPS={w:1024,h:512,white:[0,480,32,32],gate:[0,32,1024,96],finish:[0,128,1024,96],ban:[[0,240,240,230],[256,240,240,230],[512,240,240,230],[768,240,240,230]]};
 /* the uv rectangle (u0, v0, u1, v1) of a region of the props texture (v up) */
 export function propsUV(r){ return [r[0]/PROPS.w,1-(r[1]+r[3])/PROPS.h,(r[0]+r[2])/PROPS.w,1-r[1]/PROPS.h]; }
+let PTEX=null;
 export function propsTex(){
+  if(PTEX) return PTEX;
   const c=canvas(PROPS.w,PROPS.h), x=c.getContext("2d"), B=BRAND, R=rngf(88);
-  x.fillStyle="#ffffff"; x.fillRect(0,0,64,64);
+  x.fillStyle="#ffffff"; x.fillRect(0,0,PROPS.w,PROPS.h);   /* white everywhere but the art: the plain steel samples it (uv 0,0 is its bottom-left corner) */
   /* the gate banner: war red with the black slash, MOTOCROSS WAR, the gold START */
   let r=PROPS.gate; x.save(); x.beginPath(); x.rect(r[0],r[1],r[2],r[3]); x.clip(); x.translate(r[0],r[1]);
   let g=x.createLinearGradient(0,0,0,r[3]); g.addColorStop(0,"#ff4a3c"); g.addColorStop(1,"#a80f18"); x.fillStyle=g; x.fillRect(0,0,r[2],r[3]);
@@ -184,5 +186,18 @@ export function propsTex(){
   for(let i=0;i<64;i++) for(let j=0;j<6;j++){ x.fillStyle=(i+j)%2?B.night:B.white; x.fillRect(i*16,j*16,16,16); }
   x.fillStyle=B.red; x.fillRect(250,12,524,72); x.strokeStyle=B.white; x.lineWidth=4; x.strokeRect(250,12,524,72); words(x,"FINISH",512,50,64,B.white,"#3a0509",0.2,null,480);
   x.restore();
-  const t=tex(c,false); t.anisotropy=getAniso(); return t;
+  /* four tall banners (drawn in a 120 x 230 design space, stretched 2x across: they hang 3.2 m x 6 m): they hang from the roof edge of the bowl */
+  const ban=[
+    (g)=>{ g.addColorStop(0,"#ff4a3c"); g.addColorStop(1,"#8f0c14"); },
+    (g)=>{ g.addColorStop(0,"#171b30"); g.addColorStop(1,B.night); },
+    (g)=>{ g.addColorStop(0,"#ffd98a"); g.addColorStop(1,"#c4902c"); },
+    (g)=>{ g.addColorStop(0,"#f0f1f3"); g.addColorStop(1,"#c0c2cc"); }];
+  PROPS.ban.forEach((r,k)=>{ x.save(); x.beginPath(); x.rect(r[0],r[1],r[2],r[3]); x.clip(); x.translate(r[0],r[1]); x.scale(2,1);
+    const g=x.createLinearGradient(0,0,0,230); ban[k](g); x.fillStyle=g; x.fillRect(0,0,120,230);
+    if(k===0){ x.fillStyle=B.night; x.beginPath(); x.moveTo(0,0); x.lineTo(46,0); x.lineTo(0,120); x.fill(); words(x,"MOTOCROSS",60,26,19,B.white,"#3a0509",0.2,null,112); ["W","A","R"].forEach((ch,i)=>words(x,ch,60,78+i*46,56,B.white,"#3a0509",0.18)); words(x,"MAIN EVENT",60,214,15,B.gold,"#3a0509",0.2,null,112); }
+    else if(k===1){ chevrons(x,0,18,120,34,3,B.red); words(x,"FULL",60,86,46,B.white,B.red,0.18,null,112); words(x,"SEND",60,138,46,B.gold,"#3a1a05",0.18,null,112); chevrons(x,0,176,120,34,3,B.red); }
+    else if(k===2){ words(x,"ACE",60,64,56,B.night,null,0.18,null,112); words(x,"HIGH",60,122,48,B.red,B.white,0.18,null,112); x.fillStyle=B.night; x.fillRect(10,160,100,4); words(x,"MOTOCROSS WAR",60,192,13,B.night,null,0.2,null,110); }
+    else { for(let i=0;i<8;i++) for(let j=0;j<4;j++){ x.fillStyle=(i+j)%2?B.night:B.white; x.fillRect(i*15,j*15,15,15); x.fillRect(i*15,170+j*15,15,15); } words(x,"DOUBLE",60,86,30,B.red,B.night,0.18,null,112); words(x,"WAR",60,132,48,B.night,B.red,0.18,null,112); }
+    worn(x,120,230,R,26,"#1c120c"); x.restore(); });
+  const t=tex(c,false); t.anisotropy=getAniso(); PTEX=t; return t;
 }
