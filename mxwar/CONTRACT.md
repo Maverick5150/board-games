@@ -573,7 +573,7 @@ Materials made with the kit take the tier that is current when `buildWorld` / `c
 | ms per frame (sim + draw + GPU sync) | 1280x720 | 1920x1080 |
 |---|---|---|
 | plain frame, the new light rig (`post: "off"`) | 18.5 (54 fps) | 27.4 (37 fps) |
-| stick (lite rig, Reduce effects world, no post) | 15.1 (66 fps) | 22.7 (44 fps) |
+| stick tier of the look (lite rig, no post; the world here is the full one, not the Reduce effects world) | 15.1 (66 fps) | 22.7 (44 fps) |
 | medium (HDR + bloom + grade + inline FXAA) | 19.1 (52 fps) | 32.4 (31 fps) |
 | high (everything) | 27.3 (37 fps) | 52.3 (19 fps) |
 | high without depth of field | 24.6 | 42.2 |
