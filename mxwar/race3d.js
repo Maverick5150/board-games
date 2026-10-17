@@ -356,7 +356,7 @@ export function create(host,hooks){
     }
     for(let i=0;i<N;i++){ const r=rs[i]; if((r.gone&&!r.crash)||!r.fr){ hideRider(R,i); RST[i].visible=false; continue; } rider(i,r,dt,atGate,tw); }
     // [hook:fx]
-    { const sh=CAMS.shot, sr=sh&&sh.subj>=0?rs[sh.subj]:null; FX.focus(sr&&sr.pos?sr.pos:null); }   /* where the TV director is looking: the dirt goes where the viewer looks (r3d-fx.js) */
+    { const Li=leaderIdx(), Ld=Li>=0?rs[Li]:null, Me=meSeats.length?rs.find(r=>r.seat===meSeats[0]):null; FX.focus(Ld&&Ld.pos?Ld.pos:null,Me&&Me.pos?Me.pos:null); }   /* the leader and the person: where the viewer mostly looks (race state only, never the camera: the frames stay a pure function of the tick) (r3d-fx.js) */
     FX.step(dt);   /* the particles move on (r3d-fx.js) */
     // [/hook:fx]
     // [hook:rider]
