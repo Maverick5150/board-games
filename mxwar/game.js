@@ -219,7 +219,7 @@ function drawSeasonCard(){
     '<span class="mx-scard__t"><span class="bg-tag '+(si.status==="VERIFIED"?"bg-tag--official":"bg-tag--paper")+'">'+(si.status==="VERIFIED"?"verified":"partly inferred")+"</span></span>";
   c.setAttribute("aria-label","Season "+si.year+" "+LONG[si.series]+". Change the year");
   $("seasonDesc").innerHTML="<b>A night"+(si.series==="mx"?" outdoors":" in the stadium")+":</b> "+esc(progWords(F))+". "+esc(pointsWords(F));
-  loadSeason(si.id).then(function(){ if(cfg.sid===si.id){ refreshBikeSelects(); drawRiders(); } },function(){});
+  loadSeason(si.id).then(function(){ if(cfg.sid===si.id){ refreshBikeSelects(); drawRiders(); drawLength(); } },function(){});
 }
 function pointsWords(F){
   if(!F||!F.table) return "";
@@ -310,7 +310,11 @@ function drawLength(){
   });
   var si=seasonInfo(cfg.sid), E=estimate(si);
   if(!E){ $("lengthDesc").textContent="Every race runs in real time: a lap takes as long as a real lap."; return; }
-  $("lengthDesc").innerHTML="<b>Real time:</b> a lap takes as long as a real "+(E.mx?"outdoor":"stadium")+" lap, about "+E.lapW+" ("+E.range+" by track). "+
+  if(E.real) $("lengthDesc").innerHTML="<b>Real time:</b> every race takes its real lap time ("+esc(E.range)+" in "+esc(String(si.year))+"). "+
+    (cfg.length==="half"?"<b>Half length:</b> half of each race's real laps, still at real lap speed. ":"<b>Real length:</b> every round races the laps its real races ran. ")+
+    esc("Researched for "+E.withT+" of "+E.n+" rounds"+(E.withT<E.n?" (the rest: the "+si.year+" rules)":"")+".")+(E.first&&E.races.length?" <b>"+esc((E.first.city||E.first.venue)+": "+E.races.join(" · "))+".</b>":"")+" Every lap is one battle of War; the most cards at the flag wins.<br>"+
+    "<b>Time:</b> a round about "+E.all+" min if you watch every race"+(E.mine<E.all-2?" (about "+E.mine+" min when you sim the races you're not in)":"")+"; the "+si.rounds+"-round "+si.year+" season about "+E.season+", over several sittings: it saves after every race.";
+  else $("lengthDesc").innerHTML="<b>Real time:</b> a lap takes as long as a real "+(E.mx?"outdoor":"stadium")+" lap, about "+E.lapW+" ("+E.range+" by track). "+
     (cfg.length==="half"?"<b>Half length:</b> half the race time, still at real lap speed. ":"<b>Real length:</b> the "+esc(String(si.year))+" format. ")+
     "<b>"+E.races.map(esc).join(" · ")+".</b> Every lap is one battle of War; the most cards at the flag wins.<br>"+
     "<b>Time:</b> a round about "+E.all+" min if you watch every race"+(E.mine<E.all-2?" (about "+E.mine+" min when you sim the races you're not in)":"")+"; the "+si.rounds+"-round "+si.year+" season about "+E.season+", over several sittings: it saves after every race.";
@@ -325,11 +329,74 @@ function drawLength(){
 var RACE_EXTRA_S=75;   /* a race's line-up, gate, banners and results sheet: about a minute and a quarter */
 function lapSec(){ if(G){ try{ return S.lapOf(G); }catch(e){} } return 55; }
 function lapMs(){ return lapSec()*1000; }
+/* mxtimewire: the race's real first lap (ms; 0 = none researched) and a lap time in words (a stadium lap "54.8 s", an outdoor "2:26.5") */
+function firstMs(){ if(G){ try{ var f=S.firstLapOf(G); return f>0?Math.round(f*1000):0; }catch(e){} } return 0; }
+function lapWords(sec){ sec=+sec||0; if(sec<60) return (Math.round(sec*10)/10).toFixed(1)+" s"; var m=Math.floor(sec/60), r=Math.round((sec-m*60)*10)/10; if(r>=60){ m++; r=0; } return m+":"+(r<10?"0":"")+r.toFixed(1); }
+function raceTime(t){ return String(t||"").replace(/\.\d+$/,""); }
 function mmss(sec){ sec=Math.round(sec); var m=Math.floor(sec/60), r=sec%60; return m?m+":"+(r<10?"0":"")+r:sec+" s"; }
 function specWords(sp){ return sp.laps?plural(sp.laps,"lap"):sp.min+" min + "+plural(sp.plus,"lap"); }
+/* mxtimewire: one race of the night, the game's length next to the real race ("Main Event in real life: 22 laps, 54.8 s a lap, won in
+   20:41 by ..."); a race with no research says so (the era's rule, and where its lap time comes from) */
+/* where a lap time comes from, in words (plain text): the night's real lap, the era's typical lap (the years of lap charts it came from), or
+   the track estimate */
+function lapFrom(src,sec,c){
+  var tm=c&&c.tm;
+  if(src==="night") return "the night's real lap, "+lapWords(sec);
+  if(src==="era") return "the era's typical lap, "+lapWords(sec)+(tm&&tm.epy?" (the "+tm.epy+" lap charts)":"");
+  if(src==="venue") return "a lap about "+lapWords(sec)+" (estimated)";
+  return lapWords(sec)+" a lap";
+}
+function realLine(x){
+  var R=x.real, lab=esc(x.label), half=cfg.length==="half"||(G&&G.o&&G.o.length==="half"), c=x.round||(G&&G.cal[G.ri]);
+  var lapNote=esc(lapFrom(x.lsrc,x.lapS,c));
+  if(x.src==="time"&&R){
+    var how=x.b>0?" at "+lapFrom(x.bs,x.b,c):"";
+    return "<b>"+lab+" in real life:</b> "+esc("won in "+raceTime(R.t)+(R.w?" by "+R.w:"")+(R.u?" ("+R.u+")":""))+"; no lap chart survives. "+
+      esc((half?"Half length: ":"")+plural(x.len,"lap")+", "+lapWords(x.lapS)+" a lap: the laps worked out from that time"+how+".");
+  }
+  if(x.src==="min"&&R&&R.mr) return "<b>"+lab+" in real life:</b> "+esc((R.u||R.m+" min")+(R.w?", won by "+R.w:""))+" (no lap count or times survive): "+esc(plural(x.len,"lap"))+" at "+lapNote+".";
+  if(x.src==="real"&&R){
+    var t=[plural(R.l,"lap")];
+    if(R.p) t.push(lapWords(R.p)+" a lap"+(R.pk==="m"?"":" (average)"));
+    if(R.w) t.push((R.t?"won in "+raceTime(R.t)+" by ":"won by ")+R.w);
+    return "<b>"+lab+" in real life:</b> "+esc(t.join(", "))+"."+(half?" Half length: "+esc(plural(x.len,"lap"))+".":"")+(R.p?"":" No lap times survive: "+lapNote+".")+(R.f&&!half?" First lap "+esc(lapWords(R.f))+".":"");
+  }
+  if(x.src==="min"&&R) return "<b>"+lab+" in real life:</b> "+esc(R.m+" minutes"+(R.pl?" + "+plural(R.pl,"lap"):""))+" (no lap count survives): "+esc(plural(x.len,"lap"))+" at "+lapNote+".";
+  var sp=RD.realSpec(S.calFormat(G,x.round||G.cal[G.ri]),x.kind,x.i|0,G.year);
+  return "<b>Race info:</b> no researched times for this race: "+esc(specWords(sp))+" by the "+esc(String(G.year))+" rules, "+lapNote+".";
+}
+function progMins(pm){ var h=Math.floor(pm/60), m=Math.round(pm-h*60); return h?h+" h"+(m?" "+m+" min":""):m+" min"; }
+/* the Race times sheet: every race of the round on now, the game's laps and lap time, and that night's research */
+function openTimes(){
+  if(!G||G.over) return;
+  var c=G.cal[G.ri], list=S.roundRaces(G), tm=c.tm||null, half=G.o.length==="half";
+  var rows=list.map(function(x){
+    var R=x.real, top="<b>"+esc(x.label)+"</b> · "+esc(plural(x.len,"lap"))+" · "+esc(lapWords(x.lap))+" a lap"+(x.fl?" · first lap "+esc(lapWords(x.fl)):"")+(x.done?" · raced":x.live?" · on now":"");
+    var sub;
+    if(x.src==="real"&&R) sub="Real: "+(R.u?R.u+", ":"")+plural(R.l,"lap")+" run"+(R.w?", won "+(R.t?"in "+raceTime(R.t)+" ":"")+"by "+R.w:"")+(R.b?"; best lap "+lapWords(R.b)+(R.bb?" by "+R.bb:""):"")+(R.p?"":"; no lap times survive ("+lapFrom(x.lsrc,x.lap,c)+")")+(half?"; half length":"")+".";
+    else if(x.src==="time"&&R) sub="Real: won in "+raceTime(R.t)+(R.w?" by "+R.w:"")+(R.u?" ("+R.u+")":"")+"; no lap chart survives: the laps worked out from that time"+(x.b>0?" at "+lapFrom(x.bs,x.b,c):"")+(half?"; half length":"")+".";
+    else if(x.src==="min"&&R) sub="Real: "+(R.u||R.m+" minutes")+(R.w?", won by "+R.w:"")+"; no lap count"+(R.mr?" or times survive":" survives")+": laps at "+lapFrom(x.lsrc,x.lap,c)+".";
+    else sub="No researched times for this race: "+specWords(x.rule)+" by the "+G.year+" rules"+(x.lsrc==="night"?", at the night's real lap":x.lsrc==="era"?", at the era's typical lap":x.lsrc==="venue"?", a lap estimated":"")+".";
+    return '<li class="mx-tt'+(x.live?" is-me":"")+(onTV()?" bg-focus":"")+'"'+(onTV()?' data-focus tabindex="-1"':"")+'><span class="mx-tt__t">'+top+'</span><span class="mx-tt__s">'+esc(sub)+"</span></li>";
+  }).join("");
+  var cnt=function(k){ return list.filter(function(x){ return x.src===k; }).length; }, real=cnt("real"), byT=cnt("time"), byM=cnt("min");
+  var subTop=(real?"Each race runs the laps it ran that night"+(half?" (Half length: half of them)":"")+", a lap as long as its real lap.":
+    byT?"No lap charts survive for this round: each race runs the laps its winning time makes"+(half?" (Half length: half of them)":"")+", so a lap takes its real share of that time.":
+    byM?"No lap counts or times survive for this round: each race runs its real timed rule at "+lapFrom(list[0].lsrc,list[0].lap,c)+".":
+    "No race of this round has researched times: the "+G.year+" rules, at an estimated lap.")+
+    (tm&&tm.pm?" The real program: about "+progMins(tm.pm)+(tm.pe?" (estimated)":"")+".":"");
+  $("timesSheet").innerHTML='<div class="bg-sheet__grip" aria-hidden="true"></div><div class="mx-shd"><span class="bg-eyebrow">'+esc("Round "+(G.ri+1)+" · "+(c.city||c.venue)+(c.date?" · "+fmtDate(c.date):""))+'</span><h2 class="bg-sheet__title" id="timesTitle">Race times</h2><p class="bg-sheet__sub">'+esc(subTop)+"</p></div>"+
+    '<ol class="mx-res mx-ttl">'+rows+"</ol>"+
+    '<p class="mx-note">'+esc(real+" of "+list.length+" races with their laps researched"+(byT?", "+byT+" from the winning time":"")+(byM?", "+byM+" from the timed rule":"")+(tm&&tm.s?" ("+tm.s.toLowerCase()+")":"")+". Lap time = "+(real?"the winner's median lap (else the average)"+(byT?"; from a winning time: that time / the laps":""):byT?"the winning time / the laps":"as said for each race")+"; a race takes about its laps x its lap time.")+"</p>"+
+    '<div class="mx-sacts"><button class="bg-btn bg-btn--primary bg-btn--lg" id="timesClose" type="button">Close</button></div>';
+  sheetOpen($("timesBox"),{focus:"#timesClose",onClose:function(){ setTimeout(function(){ if(onTV()&&!sheetUp()) focusTV($("timesBtn")); },60); }});
+  $("timesClose").addEventListener("click",function(){ sheetClose($("timesBox")); });
+}
+$("timesBtn").addEventListener("click",openTimes);
 /* the honest time of the selected season's usual round (its format, a typical lap of 56 s / 2:00) */
 function estimate(si){
   var F=si&&IDX.formats[si.format]; if(!F) return null;
+  var D=DATA[si.id]; if(D&&D.rounds&&D.rounds.some(function(r){ return r.tm; })){ try{ var E=estimateReal(si,D); if(E) return E; }catch(e){} }
   var mx=si.series==="mx", lap=mx?120:56, o={length:cfg.length}, all=0, mine=0, names=[];
   F.qual.forEach(function(st,k){ var n=RD.raceLen(F,st.kind,0,o,lap,si.year), sec=n*lap+RACE_EXTRA_S;
     names.push(st.label+(st.races>1?"s":"")+" "+n+" laps"+(cfg.length==="half"?"":" ("+specWords(RD.realSpec(F,st.kind,0,si.year))+")"));
@@ -338,6 +405,23 @@ function estimate(si){
   all+=fin; mine+=fin;
   var ss=all*si.rounds/3600;
   return {mx:mx,lapW:mx?"2 min":"55 s",range:mx?"1:45-2:15":"53-59 s",races:names,all:Math.round(all/60),mine:Math.round(mine/60),season:ss<1.6?Math.round(ss*60)+" min":Math.round(ss)+" hours"};
+}
+/* mxtimewire: the season's own rounds (the season file loaded): every round's races at their real laps and lap times */
+function estimateReal(si,D){
+  var mx=si.series==="mx", o={length:cfg.length}, all=0, mine=0, n=0, lo=1e9, hi=0, withT=0, names=null, first=null;
+  D.rounds.forEach(function(r){
+    if(!r.title&&!cfg.nonTitle) return;
+    var F=RD.formatFor(IDX,D.format,r), lapS=RD.nightLap(r)||RD.lapTime(si.series,si.year,r), a=0, m=0, nm=[];
+    n++; if(r.tm) withT++;
+    function one(label,kind,i){ var inf=RD.raceInfo(F,kind,i,o,lapS,si.year,r); if(inf.lsrc!=="night"&&inf.lsrc!=="venue"&&inf.lsrc!=="era"){ lo=Math.min(lo,inf.lap); hi=Math.max(hi,inf.lap); } nm.push(label+" "+inf.len+" laps"); return inf.len*inf.lap+RACE_EXTRA_S; }
+    F.qual.forEach(function(st,k){ for(var i=0;i<st.races;i++){ var sec=one(st.label+(st.races>1?" "+(i+1):""),st.kind,i); a+=sec; if(i===0) m+=k===0?sec:sec*0.5; } });
+    var f=F.finals; for(var i=0;i<f.races;i++){ var sec=one(f.races===1&&f.kind!=="moto"?f.label:(F.isTC?"Main "+(i+1):f.label+" "+(i+1)),f.kind,i); a+=sec; m+=sec; }
+    all+=a; mine+=m; if(!names&&r.tm){ names=nm; first=r; }
+  });
+  if(!n) return null;
+  if(!names){ names=[]; }
+  var ss=all/3600, rng=hi>0?(lo===hi?lapWords(lo):lapWords(lo)+" to "+lapWords(hi)):(mx?"1:45-2:15":"53-59 s");
+  return {mx:mx,real:true,withT:withT,n:n,first:first,lapW:rng,range:rng,races:names,all:Math.round(all/n/60),mine:Math.round(mine/n/60),season:ss<1.6?Math.round(ss*60)+" min":Math.round(ss)+" hours"};
 }
 /* War's rules for every race (race.js VERSIONS + HOUSE), the year's program, and the races you're not in */
 var HDESC={
@@ -482,6 +566,8 @@ function loadSaved(d){
   Sound.music(GAME);
   showSetup(false); drawSetup(); armBack();
   if(G.over){ ui.finished=gen; setView("season"); setTimeout(function(){ if(G&&G.over&&!setupShown()) openWin(); },300); }
+  /* mxtimewire: a save from before the per-round timing: attach it from the season file (the race under way keeps its length) */
+  if(!G.tmv){ var g0=G, my=gen; loadSeason(G.sid).then(function(Dd){ if(G!==g0||my!==gen) return; var n=S.attachTiming(G,Dd); save(); if(n&&ui.view==="season"&&!setupShown()) renderSeason(); },function(){}); }
 }
 function resetUI(){ ui.winShown=-1; ui.result=false; ui.finished=-1; ui.order=[]; ui.lastCards={}; ui.bikes={}; ui.pendRound=null; ui.pendSeason=null; ui.log=[]; ui.rc=null; ui.rmap=null; ui.hs=null; ui.trkKey=null; disp=null; trackShow(); renderLog(); }
 function dressSaveBar(){
@@ -610,16 +696,17 @@ function renderSeason(){
   if(G.over){
     $("nextEyebrow").textContent="Season over"; $("nextTitle").textContent=L[0].name+" is the "+G.year+" champion";
     $("nextSub").innerHTML=esc(plural(G.cal.length,"round")+" raced.");
-    setBtn(go,"The champion","trophy"); sim.hidden=true;
+    setBtn(go,"The champion","trophy"); sim.hidden=true; $("timesBtn").hidden=true;
   } else {
     var nx=S.next(G), c=nx.round, F=S.calFormat(G,c);
     $("nextEyebrow").textContent="Round "+(G.ri+1)+" of "+n+(c.title?"":" · no points (exhibition)")+(c.mult>1?" · points x"+c.mult:"");
     $("nextTitle").textContent=(c.city||c.venue)+" · "+nx.label;
     var bits=[];
     if(c.venue&&c.city) bits.push(esc(c.venue)); if(c.date) bits.push(esc(fmtDate(c.date)));
-    bits.push(esc(plural(nx.len,"lap"))+(nx.lapS?" · about "+Math.max(1,Math.round(nx.len*nx.lapS/60))+" min ("+esc(mmss(nx.lapS))+" a lap)":""));
+    bits.push(esc(plural(nx.len,"lap"))+(nx.lapS?" · about "+Math.max(1,Math.round(nx.len*nx.lapS/60))+" min ("+esc(lapWords(nx.lapS))+" a lap)":""));
     if(nx.n) bits.push(nx.n+" riders");
-    $("nextSub").innerHTML=bits.join(" · ")+(nx.newRound?"<br><b>Tonight:</b> "+esc(progWords(F))+".":"")+(!nx.humanIn&&G.humans.length?"<br><b>You're not in this race.</b>":"");
+    $("nextSub").innerHTML=bits.join(" · ")+"<br>"+realLine(nx)+(nx.newRound?"<br><b>Tonight:</b> "+esc(progWords(F))+".":"")+(!nx.humanIn&&G.humans.length?"<br><b>You're not in this race.</b>":"");
+    $("timesBtn").hidden=false;
     var final=nx.kind==="main"||nx.kind==="moto";
     ui.goSim=!nx.humanIn&&!final&&cfg.others==="sim"&&G.humans.length>0;
     setBtn(go,ui.goSim?"Sim to results":nx.humanIn||final?"To the gate":"Watch",ui.goSim?"":"play");
@@ -760,7 +847,7 @@ function trackRiders(){
   var c=G.cal[Math.min(G.ri,G.cal.length-1)], red=redId();
   T.setLayout(G.series==="mx"?"outdoor":"stadium",(c.venue||"")+"|"+(c.city||"")+"|"+G.year);
   T.setRiders(rc.r.map(function(p,s){ var R=G.riders[seatId(s)], m=A.mk(R.bike); return {s:s,color:m[0],accent:m[0]==="#f2f4f8"?"#183a8c":"#f2f2f6",plate:R.plate,red:R.id===red,me:R.kind==="human"}; }));
-  T.setPace(lapGuess());
+  T.setPace(lapGuess()); if(T.setFirst) T.setFirst(firstMs());
   if(rc.phase==="gate") T.gate(true);
   else { T.gate(false); trackSync(false); T.setLaps(rc.battle,rc.o.len);
     /* crashes (CRASH-CONTRACT.md) picked up again: a rider out by a crash stays off the track where it happened; the yellow flies on */
@@ -774,7 +861,7 @@ function trackRiders(){
    about 1.5 times slower), so the field doesn't reach the line early and wait there on the first laps */
 function lapGuess(){ return lapMs(); }
 /* reduced motion / no track: ms until the next lap's cards (the last lap's cards turned at ui.lapAt) */
-function clockWait(){ var rc=ui.rc; if(!rc||rc.phase!=="flip"||!ui.lapAt||timedT()) return 0; return Math.max(0,Math.round(ui.lapAt+lapMs()-Date.now())); }
+function clockWait(){ var rc=ui.rc; if(!rc||rc.phase!=="flip"||!ui.lapAt||timedT()) return 0; var f=rc.battle<=1?firstMs():0; return Math.max(0,Math.round(ui.lapAt+(f>0?f:lapMs())-Date.now())); }
 function lapWait(T){ return T?T.ready():clockWait(); }
 /* the standings on the track: every rider at their gap behind the leader (the cards on show while a battle plays) */
 function trackSync(atGate){
@@ -1366,7 +1453,7 @@ function renderBoard(keep){
     box.innerHTML='<div class="bg-sheet__grip" aria-hidden="true"></div><div class="mx-shd"><span class="bg-eyebrow" id="boardEye"></span>'+
       '<h2 class="bg-sheet__title" id="boardTitle">Battle board</h2><p class="bg-sheet__sub" id="boardSub"></p></div>'+
       '<div class="mx-bdw"><div class="mx-bdw__main"><p class="mx-bd__h">Place · rider · the card turned this lap (and the war cards) · cards held · won or lost this lap</p>'+
-      '<ol class="mx-bd"></ol></div><div class="mx-bdw__log"><h3 class="bg-eyebrow mx-bd__lh">Lap log</h3><ol class="mx-lapl"></ol></div></div>'+
+      '<ol class="mx-bd"></ol></div><div class="mx-bdw__log"><h3 class="bg-eyebrow mx-bd__lh">Lap log</h3><ol class="mx-lapl"></ol><p class="mx-note mx-bdreal"></p></div></div>'+
       '<div class="mx-sacts"><button class="bg-btn bg-btn--primary bg-btn--lg" id="boardClose" type="button">Back to the race</button></div>';
     $("boardClose").addEventListener("click",function(){ sheetClose($("boardBox"),"go"); });
     list=box.querySelector(".mx-bd");
@@ -1375,6 +1462,7 @@ function renderBoard(keep){
   $("boardEye").textContent=eye; $("boardSub").textContent=sub;
   list.innerHTML=rows; list.style.setProperty("--bd-rows",String(Math.max(1,Math.ceil(order.length/2)))); list.scrollTop=st;
   box.querySelector(".mx-lapl").innerHTML=laps;
+  var rl=box.querySelector(".mx-bdreal"); if(rl){ var nx=S.next(G); rl.innerHTML=nx&&nx.t==="race"?realLine(nx):""; }
 }
 /* the board covers the track (a sheet on the phone, big on TV): the track rests while it is open and rides on when it closes */
 $("boardBtn").addEventListener("click",function(){ if(!G||!ui.rc) return; renderBoard(false); sheetOpen($("boardBox"),{focus:"#boardClose",onClose:function(){ $("boardBox").classList.remove("show"); setTimeout(function(){ trackShow(); if(onTV()&&!sheetUp()) focusTV($("boardBtn")); },60); }}); trackShow(); });
@@ -1410,10 +1498,10 @@ function openLineup(go,label){
 /* ================= sheets ================= */
 function sheetOpen(el,o){ var B=BG(); el.classList.add("show"); if(luxe()&&!B.sheet.isOpen(el)) B.sheet.open(el,o); else if(!luxe()){ var f=el.querySelector((o&&o.focus)||"button"); if(f) try{ f.focus(); }catch(e){} } }
 function sheetClose(el,reason){ var B=BG(); el.classList.remove("show"); if(B&&B.sheet&&B.sheet.isOpen(el)) B.sheet.close(el,reason); }
-function closeSheets(){ ["resBox","podBox","fullBox","newBox","boardBox","lineBox","skipBox"].forEach(function(id){ var el=$(id); if(el.classList.contains("show")||(BG()&&BG().sheet&&BG().sheet.isOpen(el))) sheetClose(el,"go"); }); }
+function closeSheets(){ ["resBox","podBox","fullBox","newBox","boardBox","lineBox","skipBox","timesBox"].forEach(function(id){ var el=$(id); if(el.classList.contains("show")||(BG()&&BG().sheet&&BG().sheet.isOpen(el))) sheetClose(el,"go"); }); }
 function hintSync(){
   var B=BG();
-  if(luxe()) ["resBox","podBox","fullBox","newBox","boardBox","lineBox","skipBox"].forEach(function(id){ var el=$(id); if(el&&el.classList.contains("show")&&!B.sheet.isOpen(el)) el.classList.remove("show"); });
+  if(luxe()) ["resBox","podBox","fullBox","newBox","boardBox","lineBox","skipBox","timesBox"].forEach(function(id){ var el=$(id); if(el&&el.classList.contains("show")&&!B.sheet.isOpen(el)) el.classList.remove("show"); });
   /* a sheet closed by Back on the TV (the podium, All riders): the ring goes back to the main action, never left on the page body */
   if(!onTV()) return;
   var tries=0;
@@ -1422,7 +1510,7 @@ function hintSync(){
     setTimeout(function(){
       if(!G||setupShown()) return;
       if(sheetUp()||busy) return again();   /* a sheet still closing, or the next one opening: look again */
-      var a=document.activeElement, shut=a&&a.closest&&a.closest("#resBox,#podBox,#fullBox,#newBox,#winBox,#boardBox,#lineBox,#skipBox");
+      var a=document.activeElement, shut=a&&a.closest&&a.closest("#resBox,#podBox,#fullBox,#newBox,#winBox,#boardBox,#lineBox,#skipBox,#timesBox");
       var fine=a&&a!==document.body&&a.isConnected&&!a.hidden&&!shut&&a.getClientRects().length&&(!a.checkVisibility||a.checkVisibility({visibilityProperty:true}));
       if(!fine) focusTV(mainControl());
     },tries===1?260:180);

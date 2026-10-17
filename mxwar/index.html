@@ -400,6 +400,12 @@
   .mx-bd__d.is-up{color:#b6e04e} .mx-bd__d.is-dn{color:#ffb4a6}
   .mx-bd .mx-pl{font-size:var(--fs-micro)}
   .mx-bd__lh{margin:.25rem 0 .35rem}
+  .mx-ttl li{display:grid; gap:.1rem; align-items:start; padding:.4rem .6rem}
+  .mx-tt__t{font:var(--fw-ui) var(--fs-sm)/1.35 var(--font-ui); color:var(--text-1)}
+  .mx-tt__s{font:var(--fw-ui) var(--fs-xs)/1.4 var(--font-ui); color:var(--text-2)}
+  /* the race rows scroll inside the sheet: inner room for the remote ring (theme --focus-room), the rows still line up with the sheet text */
+  #timesBox .mx-res{max-height:min(46vh,28rem); overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; padding-right:.2rem}
+  html[data-tv] #timesBox .mx-res{padding:var(--focus-room) calc(var(--focus-room) + .75rem); margin:0 calc(-1 * (var(--focus-room) + .75rem)) .5rem}
   .mx-lapl{display:grid; gap:.15rem; margin:0 0 .75rem; padding:0; list-style:none; font:var(--fw-ui) var(--fs-xs)/1.4 var(--font-ui); color:var(--text-2)}
   .mx-lapl li:first-child{color:var(--text-1); font-weight:var(--fw-ui-strong)}
   @media (max-width: 30em){ .mx-bd__mk{display:none} .mx-bd li{grid-template-columns:1.4rem auto minmax(0,1fr) minmax(3.4rem,auto) 1.9rem 2.2rem; gap:.3rem} }
@@ -742,6 +748,7 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
           <button class="bg-btn bg-btn--primary bg-btn--lg" id="goBtn" type="button" data-focus-first data-icon="play">To the gate</button>
           <button class="bg-btn bg-btn--secondary bg-btn--lg" id="simBtn" type="button" hidden>Sim to results</button>
         </div>
+        <button class="bg-btn bg-btn--ghost bg-btn--block" id="timesBtn" type="button" data-icon="info" aria-haspopup="dialog">Race times of this round</button>
         <button class="bg-btn bg-btn--ghost bg-btn--block" id="saveBtn" type="button" data-icon="save">Save the season</button>
       </section>
       <section class="mx-panel" aria-labelledby="calHead">
@@ -813,6 +820,7 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
   <section class="bg-sheet" id="skipBox" aria-labelledby="skipTitle"><div id="skipSheet"></div></section>
   <section class="bg-sheet" id="boardBox" aria-labelledby="boardTitle"><div id="boardSheet"></div></section>
   <section class="bg-sheet" id="lineBox" aria-labelledby="lineTitle"><div id="lineSheet"></div></section>
+  <section class="bg-sheet" id="timesBox" aria-labelledby="timesTitle"><div id="timesSheet"></div></section>
 
   <div class="bg-win" id="winBox" aria-labelledby="winTitle">
     <div class="bg-win__scrim"></div>
