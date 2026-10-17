@@ -195,7 +195,7 @@ export function createFx(opts){
   /* the soil: the dark moist clods and the paler dust (linear colours; the shaders light them) */
   const soil=look.soil||"stadium-dirt";
   const COL=soil==="sand"?{clod:[0.30,0.22,0.12],dust:[0.52,0.42,0.27],loose:1.0}:soil==="hardpack"?{clod:[0.16,0.1,0.058],dust:[0.46,0.35,0.22],loose:0.8}
-    :soil==="loam"?{clod:[0.07,0.045,0.027],dust:[0.3,0.22,0.15],loose:0.45}:soil==="clay"?{clod:[0.15,0.07,0.034],dust:[0.42,0.27,0.16],loose:0.6}:{clod:[0.145,0.082,0.043],dust:[0.46,0.33,0.21],loose:0.7};
+    :soil==="loam"?{clod:[0.07,0.045,0.027],dust:[0.3,0.22,0.15],loose:0.45}:soil==="clay"?{clod:[0.15,0.07,0.034],dust:[0.42,0.27,0.16],loose:0.6}:{clod:[0.19,0.108,0.056],dust:[0.46,0.33,0.21],loose:0.7};
   COL.spray=[COL.clod[0]*0.62+COL.dust[0]*0.38,COL.clod[1]*0.62+COL.dust[1]*0.38,COL.clod[2]*0.62+COL.dust[2]*0.38];
   /* a private generator: the effects never touch Math.random (same race = same dirt) */
   let sd=0x5EEDF00D|0; const rnd=()=>{ sd=(sd+0x6D2B79F5)|0; let t=Math.imul(sd^(sd>>>15),1|sd); t=(t+Math.imul(t^(t>>>7),61|t))^t; return ((t^(t>>>14))>>>0)/4294967296; };
@@ -294,7 +294,7 @@ export function createFx(opts){
   if(T.lens>0){
     const K=T.lens; lg=new THREE.InstancedBufferGeometry();
     lg.setAttribute("position",new THREE.BufferAttribute(new Float32Array([-1,-1,0, 1,-1,0, 1,1,0, -1,1,0]),3)); lg.setIndex([0,1,2, 0,2,3]);
-    const S=new Float32Array(K*4); for(let k=0;k<K;k++){ const a=rnd()*6.283, d=0.35+0.55*rnd(); S[k*4]=Math.cos(a)*d*0.95; S[k*4+1]=Math.sin(a)*d*0.8-0.12; S[k*4+2]=0.02+0.045*rnd()*rnd()*3.0; S[k*4+3]=rnd()*10; }
+    const S=new Float32Array(K*4); for(let k=0;k<K;k++){ const a=rnd()*6.283, d=0.35+0.55*rnd(); S[k*4]=Math.cos(a)*d*0.95; S[k*4+1]=Math.sin(a)*d*0.8-0.12; S[k*4+2]=0.015+0.03*rnd()*rnd()*3.0; S[k*4+3]=rnd()*10; }
     lAV=new Float32Array(K); lg.setAttribute("aS",new THREE.InstancedBufferAttribute(S,4)); lg.setAttribute("aV",new THREE.InstancedBufferAttribute(lAV,1).setUsage(THREE.DynamicDrawUsage)); lg.instanceCount=K;
     lm=new THREE.ShaderMaterial({uniforms:{uAspect:{value:1.78}},vertexShader:LENS_VS,fragmentShader:LENS_FS,transparent:true,depthWrite:false,depthTest:false});
     lens=new THREE.Mesh(lg,lm); lens.frustumCulled=false; lens.renderOrder=999; lens.name="fx-lens";
@@ -305,7 +305,7 @@ export function createFx(opts){
         if(d<0.5||d>9) continue; const f=(dx*fw.x+dy*fw.y+dz*fw.z)/d; if(f<0.55) continue; const w=1-d/9; ex+=e.spray*w*w*(f-0.45); }
       for(let j=0;j<burst.length;j++){ const b=burst[j]; const dx=b[0]-cp.x, dy=b[1]-cp.y, dz=b[2]-cp.z, d=Math.sqrt(dx*dx+dy*dy+dz*dz); if(d<0.5||d>8) continue;
         const f=(dx*fw.x+dy*fw.y+dz*fw.z)/d; if(f<0.5) continue; const w=1-d/8; ex+=b[3]*w*w*(f-0.4); }
-      const K=lAV.length; for(let k=0;k<K;k++){ const need=(k+0.5)/K; lAV[k]=clamp((ex*2.6-need*0.9)*3.0,0,1); }
+      const K=lAV.length; for(let k=0;k<K;k++){ const need=(k+0.5)/K; lAV[k]=clamp((ex*4.5-need*0.9)*3.0,0,1); }
       lg.attributes.aV.needsUpdate=true;
     };
     grp.add(lens);
@@ -385,7 +385,7 @@ export function createFx(opts){
     e.cA+=(2+5*cruise+380*pw+320*bm+110*sand*cruise)*dt*PS.c*imp; let n=e.cA|0; e.cA-=n; if(n>40) n=40;
     while(n-->0){
       const up=(2.6+6.4*Math.pow(rnd(),0.9))*lift, bk=(rnd()-0.3)*(1.2+3.2*ef)+0.05*v, sd=(rnd()+rnd()-1)*(1.6+1.8*bm)-sgn*bm*(1.5+3.5*rnd()), cr=(0.1+0.25*rnd())*v;
-      const bx=st.x-cth*(0.8+v*dt*rnd())+rx*(rnd()-0.5)*0.14, bz=st.z-sth*(0.8+v*dt*rnd())+rz*(rnd()-0.5)*0.14, big=rnd()<0.04?1.6:1;
+      const bx=st.x-cth*(0.8+v*dt*rnd())+rx*(rnd()-0.5)*0.14, bz=st.z-sth*(0.8+v*dt*rnd())+rz*(rnd()-0.5)*0.14, big=rnd()<0.025?1.5:1;
       clod(bx,gR+0.05+0.1*rnd(),bz,cth*cr-cth*bk+rx*sd,up,sth*cr-sth*bk+rz*sd,(0.015+0.036*Math.pow(rnd(),2.2))*big*BIG,0.9+0.9*rnd(),COL.clod,gR,s0R,st.lat,st.th);
     }
     /* the fine spray: hundreds of specks in the same fan, faster */
@@ -401,11 +401,11 @@ export function createFx(opts){
       if(rnd()<0.35) clod(fx,gF+0.05,fz,cth*fr+rx*out,up,sth*fr+rz*out,(0.014+0.03*Math.pow(rnd(),2))*BIG,0.9+0.8*rnd(),COL.clod,gF,s0F,st.lat,st.th);
       else spray(fx,gF+0.06,fz,cth*fr+rx*out*1.2,up*1.1,sth*fr+rz*out*1.2,COL.spray); }
     /* the dust off the rear tyre: a rooster tail of puffs in a hollow fan (the line straight behind the bike stays clear for a chase camera), more under power, on the brakes and in sand; the 22 on the gate throw less each */
-    const pwD=pw*(1-0.5*e.launch);
+    const pwD=pw*(1-0.86*e.launch);
     e.dA+=(1.2+3.5*cruise*loose+18*pwD*loose+10*bm+8*sand*cruise+6*brake)*dt*PS.p*imp; n=e.dA|0; e.dA-=n; if(n>8) n=8;
     while(n-->0){ const side=(rnd()<0.5?-1:1)*(0.5+1.4*rnd()), hi=rnd()<0.25*ef?2.2:1, off=0.9+v*dt*rnd(), ox=rx*side*0.2;
       puff(st.x-cth*off+ox,gR+0.25+0.25*rnd(),st.z-sth*off+rz*side*0.2,cth*v*0.12-cth*(0.3+0.8*rnd())+rx*side*0.9-sgn*bm*rx*1.2,(0.5+1.0*rnd())*hi,sth*v*0.12-sth*(0.3+0.8*rnd())+rz*side*0.9-sgn*bm*rz*1.2,
-      0.36+0.26*rnd()+0.2*ef,0.8+0.5*rnd()+0.3*ef,1.5+1.0*rnd()+0.4*ef,(0.2+0.14*rnd()+0.16*ef+0.05*sand)*(0.7+0.3*loose)*(1-0.4*e.launch),COL.dust,0.3,1.4); }
+      0.36+0.26*rnd()+0.2*ef,0.8+0.5*rnd()+0.3*ef,1.5+1.0*rnd()+0.4*ef,(0.2+0.14*rnd()+0.16*ef+0.05*sand)*(0.7+0.3*loose)*(1-0.72*e.launch),COL.dust,0.3,1.4); }
     /* the haze that hangs over the track behind a fast pack: large, faint, slow */
     e.hA+=(v>6?0.8+0.7*ef:0)*dt*PS.h*(st.me?1.3:1)*RATE; n=e.hA|0; e.hA-=n; if(n>3) n=3;
     while(n-->0) haze(st.x-cth*(1.4+3*rnd())+rx*(rnd()-0.5)*1.5,gR+0.7+0.9*rnd(),st.z-sth*(1.4+3*rnd())+rz*(rnd()-0.5)*1.5,(rnd()-0.5)*0.5,0.15,(rnd()-0.5)*0.5,1.3+0.8*rnd(),0.45+0.25*rnd(),3.2+2.4*rnd(),0.05+0.035*rnd(),COL.dust);
