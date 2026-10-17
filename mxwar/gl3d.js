@@ -108,6 +108,17 @@ Builder.prototype.beam=function(a,b,w,h,col){
   this.face([a00,a01,a11,a10],col); this.face([b00,b10,b11,b01],col);
   this.face([a00,a10,b10,b00],col); this.face([a10,a11,b11,b10],col); this.face([a11,a01,b01,b11],col); this.face([a01,a00,b00,b01],col);
 };
+/* a tapered beam: section w0 x h0 at a, w1 x h1 at b */
+Builder.prototype.tbeam=function(a,b,w0,h0,w1,h1,col){
+  var dx=b[0]-a[0], dy=b[1]-a[1], dz=b[2]-a[2], L=Math.sqrt(dx*dx+dy*dy+dz*dz)||1; dx/=L; dy/=L; dz/=L;
+  var ux=0, uy=1, uz=0; if(Math.abs(dy)>0.9){ ux=1; uy=0; }
+  var sx=dy*uz-dz*uy, sy=dz*ux-dx*uz, sz=dx*uy-dy*ux, l=Math.sqrt(sx*sx+sy*sy+sz*sz)||1; sx/=l; sy/=l; sz/=l;
+  var tx=sy*dz-sz*dy, ty=sz*dx-sx*dz, tz=sx*dy-sy*dx;
+  function P(p,i,j,w,h){ return [p[0]+sx*i*w/2+tx*j*h/2, p[1]+sy*i*w/2+ty*j*h/2, p[2]+sz*i*w/2+tz*j*h/2]; }
+  var a00=P(a,-1,-1,w0,h0),a10=P(a,1,-1,w0,h0),a11=P(a,1,1,w0,h0),a01=P(a,-1,1,w0,h0),b00=P(b,-1,-1,w1,h1),b10=P(b,1,-1,w1,h1),b11=P(b,1,1,w1,h1),b01=P(b,-1,1,w1,h1);
+  this.face([a00,a01,a11,a10],col); this.face([b00,b10,b11,b01],col);
+  this.face([a00,a10,b10,b00],col); this.face([a10,a11,b11,b10],col); this.face([a11,a01,b01,b11],col); this.face([a01,a00,b00,b01],col);
+};
 /* a cylinder along Z (a wheel) centred at (cx, cy, cz), radius r, width w, n sides; smooth sides, flat caps */
 Builder.prototype.cylZ=function(cx,cy,cz,r,w,n,col,capCol){
   var s=this.v, k, a;
@@ -165,7 +176,7 @@ var LIGHT=[
 "  float d=max(dot(n,uSun),0.0); vec3 amb=mix(uGnd,uSky,n.y*0.5+0.5);",
 "  float sp=uSpot.w>0.0?clamp(1.15-length(w.xz-uSpot.xy)/uSpot.z,0.55,1.0):1.0;",
 "  vec3 o=c*(amb+uSunCol*d)*sp;",
-"  if(spec>0.0){ vec3 v=normalize(uCam-w); vec3 h=normalize(uSun+v); o+=uSunCol*pow(max(dot(n,h),0.0),28.0)*spec*sp; }",
+"  if(spec>0.0){ vec3 v=normalize(uCam-w); vec3 h=normalize(uSun+v); o+=uSunCol*pow(max(dot(n,h),0.0),28.0)*spec*sp; float rim=pow(1.0-max(dot(n,v),0.0),3.0); o+=(uSky*0.45+c*0.35)*rim*spec; }",
 "  return o;",
 "}",
 "vec3 fog(vec3 c, vec3 w){ float f=clamp((length(uCam-w)-uFogR.x)/(uFogR.y-uFogR.x),0.0,1.0); return mix(c,uFog,f*f*(3.0-2.0*f)); }"].join("\n");
@@ -175,9 +186,9 @@ var LIT_FS=[
 "float hsh(vec3 p){ return fract(sin(dot(p,vec3(12.9898,78.233,37.719)))*43758.5453); }",
 "void main(){ vec3 n=normalize(vNor); vec3 b=vCol;",
 "  if(vK>3.5){ vec3 cell=floor(vec3(vW.x*2.1,vW.y*2.6,vW.z*2.1)); float h=hsh(cell), h2=hsh(cell+7.1);",
-"    vec3 hue=0.5+0.5*cos(6.2832*(h+vec3(0.0,0.33,0.67))); vec3 p=mix(vec3(0.42),hue,0.6)*(0.3+0.7*h2);",
+"    vec3 hue=0.5+0.5*cos(6.2832*(h+vec3(0.0,0.33,0.67))); vec3 p=mix(vec3(0.38),hue,0.42)*(0.45+0.4*h2);",
 "    float head=step(0.62,fract(vW.y*2.6))*step(0.3,h2); p=mix(p,vec3(0.78,0.6,0.48),head*0.55); b=mix(vec3(0.07,0.075,0.1),p,step(0.16,hsh(cell+3.3)))*vCol;",
-"    b=mix(b,vec3(0.26,0.25,0.27)*vCol,clamp((length(uCam-vW)-55.0)/90.0,0.0,0.85)); }",
+"    b=mix(b,vec3(0.24,0.235,0.25)*vCol,clamp((length(uCam-vW)-22.0)/70.0,0.0,0.9)); }",
 "  vec3 c=mix(shade(b,n,vW,vK>3.5?0.0:0.35),b,vEm); gl_FragColor=vec4(fog(c,vW),1.0); }"].join("\n");
 /* the ground: dirt (the code-made texture: ruts and tyre marks along the track), sand, grass; aMat = (grass, groove, tint, sand) */
 var DIRT_VS=[
@@ -194,7 +205,7 @@ var DIRT_FS=[
 "  float macro=0.82+0.36*m.b;",
 "  vec3 dirt=uDirt*(0.55+0.9*t.r)*macro; dirt*=1.0-(0.2+0.45*vMat.y)*t.g;",
 "  vec3 sand=uSand*(0.8+0.35*t.r)*macro;",
-"  vec3 grass=uGrass*(0.62+0.7*m.g)*(0.85+0.3*t.b);",
+"  vec3 grass=uGrass*(0.7+0.45*m.r)*(0.8+0.35*m.b)*(0.92+0.16*t.r);",
 "  vec3 c=mix(mix(dirt,sand,vMat.w),grass,vMat.x)*vMat.z;",
 "  vec3 n=normalize(vNor);",
 "  gl_FragColor=vec4(fog(shade(c,n,vW,0.0),vW),1.0);",

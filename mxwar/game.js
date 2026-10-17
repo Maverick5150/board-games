@@ -722,7 +722,8 @@ function onBanner3d(b){
 }
 /* real time never stops: a person's card still face down 5 s before the line turns by itself */
 function onNeed3d(lap){
-  var rc=ui.rc; if(!G||!rc||rc.over||busy||paused()) return;
+  var rc=ui.rc; if(!G||!rc||rc.over) return;
+  if(busy||paused()){ setTimeout(function(){ if(V3&&V3.resLap<lap&&ui.rc===rc) onNeed3d(lap); },500); return; }
   if(RC.need(rc).length){ toast("Time's up: "+(G.humans.length>1?"the cards":"your card")+" turned for lap "+Math.min(lap,rc.o.len)+".",{ms:2200}); act({t:"flipAll"}); }
 }
 /* the 2D fallback at real lap times too: a lap lasts the track's lap time from the moment the leader starts it */
@@ -933,7 +934,7 @@ $("flipBtn").addEventListener("click",function(){
   intent=1;
   if(!busy) drive(); else syncControls();
 });
-$("skipBtn").addEventListener("click",function(){ if(!G||!ui.rc||ui.rc.over) return; if(is3d()&&humansAlive().length){ confirmSkip(); return; } if(busy){ skipQ=true; syncControls(); return; } simNow(); });
+$("skipBtn").addEventListener("click",function(){ if(!G||!ui.rc||ui.rc.over) return; if(is3d()&&humansAlive().length){ confirmSkip(); return; } if(busy){ skipQ=true; if(V3&&is3d()) V3.flush(); syncControls(); return; } simNow(); });
 /* "Skip to the finish" (the CEO ~21:10: confirms, then shows the result): the rest of the race is decided by the cards at once */
 function confirmSkip(){
   var rc=ui.rc; if(!rc) return;
@@ -941,7 +942,7 @@ function confirmSkip(){
     '<p class="mx-skipq">The cards decide the last '+plural(Math.max(1,rc.o.len-rc.battle),"lap")+" at once and you see the result. The race on the track stops here.</p>"+
     '<div class="mx-sacts"><button class="bg-btn bg-btn--secondary bg-btn--lg" id="skipYes" type="button">Skip to the finish</button><button class="bg-btn bg-btn--primary bg-btn--lg" id="skipNo" type="button" data-autofocus>Keep watching</button></div>';
   sheetOpen($("skipBox"),{focus:"#skipNo"});
-  $("skipYes").addEventListener("click",function(){ sheetClose($("skipBox"),"go"); if(busy){ skipQ=true; syncControls(); return; } simNow(); });
+  $("skipYes").addEventListener("click",function(){ sheetClose($("skipBox"),"go"); if(busy){ skipQ=true; if(V3) V3.flush(); syncControls(); return; } simNow(); });
   $("skipNo").addEventListener("click",function(){ sheetClose($("skipBox")); });
 }
 $("table").addEventListener("click",function(e){ if(!is3d()) return; e.stopPropagation(); pipBig(); });
@@ -1451,5 +1452,5 @@ deviceCopy(); drawSetup(); saveBar.refresh(); showSetup(true); contOffer();
 if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(function(){}); }
 window.__mxwar={get G(){ return G; },toSeason:function(){ ui.rc=null; setView("season"); drive(); },cfg:cfg,ui:ui,drive:drive,act:act,simNow:simNow,enterRace:enterRace,startSeason:startSeason,loadSeason:loadSeason,
   state:function(){ return {busy:busy,gen:gen,view:ui.view,intent:intent,phase:ui.rc?ui.rc.phase:null,battle:ui.rc?ui.rc.battle:null,over:G?G.over:null,finished:ui.finished,winShown:ui.winShown,use3d:is3d()}; },
-  get v3(){ return V3; },pipBig:pipBig};
+  get v3(){ return V3; },pipBig:pipBig,skip:function(){ if(!G||G.over) return; if(busy){ skipQ=true; if(V3) V3.flush(); } else simNow(); }};
 })();

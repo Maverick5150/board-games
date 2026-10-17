@@ -643,7 +643,10 @@
   body.mx-3d .mx-banner.is-yellow span{color:#fff3c4}
   html:not([data-tv]) body.mx-3d .mx-log{display:none}
   .mx-skipq{margin:0 0 .75rem; font:var(--fw-body) var(--fs-sm)/1.5 var(--font-ui); color:var(--text-2)}
-  html[data-tv] body.mx-3d .mx-race{grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr) auto auto auto; grid-template-areas:"head" "arena" "acts" "stat" "log"}
+  html[data-tv] body.mx-3d .mx-race{grid-template-columns:minmax(0,1fr) auto; grid-template-rows:minmax(0,1fr) auto auto; grid-template-areas:"arena arena" "acts acts" "stat log"; row-gap:.35rem}
+  html[data-tv] body.mx-3d .mx-rhead{display:none}
+  html[data-tv] body.mx-3d .mx-stat{grid-area:stat; align-self:center; margin:0}
+  html[data-tv] body.mx-3d .mx-logw{grid-area:log; align-self:center}
   html[data-tv] body.mx-3d .mx-tower, html[data-tv] body.mx-3d .mx-log{display:none}
   html[data-tv] body.mx-3d .mx-arena{height:auto}
   html[data-tv] body.mx-3d .mx-table{width:21rem; right:.75rem; bottom:.75rem; padding:.45rem .55rem .55rem}
