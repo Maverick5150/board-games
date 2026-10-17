@@ -149,3 +149,22 @@ attrs, color)` (a seat-coloured button), `api.afkHTML(id)` (the "computer is pla
   goes first").
 - The phone keeps the line of the move BEFORE while the TV still animates the next one (the new log line would spoil it).
 - While a choice plays out, keep each card's outcome text from the moment of the choice (after `apply` the engine's state has moved on).
+
+## 7. Notes from the third plugin (War, games/war.js: 2 to 16 seats, everyone acts at once)
+- Registry: `{id:"war", n:"2-16", min:2, max:16, colors:[the 10 Party colours + "lime","sky","magenta","cream","mint","coral"],
+  palette:{lime:["#b6e04e","Lime",3], ...}}` (war/index.html's seats 11-16). `max` sets the room size and the lobby's computer row
+  (0-14 with 2 phones); nothing in index.html / play.html changes for 16. `thumb` may point at a hero poster (`object-fit: cover` crops it).
+- A simultaneous game: start one `H.turn` per person AT ONCE (each phone gets its own ask; the host keeps them apart by request id) and let
+  the computers act on timers; apply each answer the moment it arrives, and play the table's events once the engine resolves. Several
+  open asks are fine; `H.interrupt(c)` ends one (the Auto switch uses it).
+- An "Auto" switch on the phone: `api.view({auto:true})` -> `H.onView` keeps it per seat; the TV then plays that seat like a computer
+  (but the player stays a person, not "away"). Put such a switch ABOVE the main button: a Flip that appears under a finger on the way to
+  the switch gets tapped instead (seen in the test). The phone re-sends the switch until the TV's snapshot confirms it, and answers an
+  ask that crossed the switch by itself.
+- Many phones: debounce the snapshots (`pushSoon`, 450 ms) while seats act one by one; push at once at the turn boundaries.
+- A layout for 2 to 16 seats: try every column count, keep the one that gives the largest card, place the first half of the seats above a
+  centre band and the rest below; the side rail's row height comes from the room left (`--rh`) and is a fixed `height`, never `min-height`
+  (16 rows of 1.5rem fit 1080p with the hint bar clear). A 16-row Victory uses the host's two-column card by itself.
+- A game with no first player (everyone acts at once) plays its deal as the opening show instead of `H.first` (OK skips it).
+- Tests: `window.__warp` (counters, the seats' Auto map, `sync()`); rig a war by swapping cards between packets (the engine's check stays
+  clean). A live game guards the TV page: quit it with Back before loading another page in a test, or the navigation waits on the prompt.

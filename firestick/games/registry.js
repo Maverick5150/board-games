@@ -12,7 +12,11 @@
     {id:"snakes", title:"Snakes and Ladders", n:"2-6", min:2, max:6, meta:"Climb and slide", colors:["red","blue","green","yellow","purple","teal"],
      files:{tv:["../snakes/boards.js","../snakes/engine.js","../snakes/brain.js","../snakes/board.js","../ui/picker.js","games/snakes.js"], phone:["games/snakes-phone.js"]}},
     {id:"candy", title:"Candy Land", n:"2-4", min:2, max:4, meta:"Draw a colour, hop the road", colors:["red","blue","green","yellow"], pickColors:true,
-     files:{tv:["../candy/engine.js","../candy/brain.js","../candy/board.js","../ui/picker.js","games/candy.js"], phone:["../candy/board.js","games/candy-phone.js"]}}
+     files:{tv:["../candy/engine.js","../candy/brain.js","../candy/board.js","../ui/picker.js","games/candy.js"], phone:["../candy/board.js","games/candy-phone.js"]}},
+    {id:"war", title:"War", n:"2-16", min:2, max:16, meta:"Flip, tie, declare war", thumb:"../ui/art/hero-war.svg", felt:true,
+     colors:["red","blue","green","yellow","orange","purple","teal","pink","black","brown","lime","sky","magenta","cream","mint","coral"],
+     palette:{lime:["#b6e04e","Lime",3], sky:["#7cc8ff","Sky",2], magenta:["#ea6fe0","Magenta",8], cream:["#eadcb4","Cream",4], mint:["#86ecc4","Mint",6], coral:["#ff8f80","Coral",1]},   /* war/index.html's seats 11-16 */
+     files:{tv:["../war/engine.js","../war/brain.js","../war/cards.js","games/war.js"], phone:["../war/cards.js","games/war-phone.js"]}}
   ];
   var tvDefs = {}, phoneDefs = {}, loaded = {}, loading = {};
   function get(id) { for (var i = 0; i < LIST.length; i++) if (LIST[i].id === id) return LIST[i]; return null; }
