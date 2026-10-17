@@ -663,6 +663,7 @@ export function create(host,hooks){
     if(lastRace&&QUAL.buildKey(LO)!==builtTier&&(mode==="gate"||mode==="idle")){ V.setRace(lastRace); rebuilt=true; }   /* the build flags changed and nothing is racing: build the new world now (a race in progress keeps its world until the next setRace) */
     return {tier:QUAL.tierName,label:QUAL.label(QUAL.tierName),was:was,changed:r.changed,rebuilt:rebuilt,pendingRebuild:QUAL.buildKey(LO)!==builtTier};
   };
+  V.warm=()=>{ try{ if(!R) return Promise.resolve(false); const pr=renderer.compileAsync?renderer.compileAsync(scene,cam):Promise.resolve(renderer.compile(scene,cam)); return pr.then(()=>true,()=>false); }catch(e){ return Promise.resolve(false); } };   /* compile every shader of the scene now (call once after setRace, while the line-up shows): a weak GPU otherwise hitches for seconds on the first frames */
   V.bench=o=>QUAL.bench.start(o);
   V.benchResult=()=>QUAL.bench.result;
   /* The look (r3d-look.js) may have its own tier table (high / medium / low / stick): our tier drives it, and the ladder's cuts (post chain, bloom, depth of field) are forwarded as flags it understands.
