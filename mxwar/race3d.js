@@ -367,7 +367,7 @@ export function create(host,hooks){
     // [hook:stadium]
     if(flagger&&flagger.grp.visible) flagger.wave(tw,flag?1:0.05);
     if(marshal&&marshal.grp.visible) marshal.wave(tw*1.2,1);
-    if(world.frame) world.frame(dt,tw,cam);   /* per-frame work for the surroundings: the crowd, lights, the screen (r3d-world.js buildWorld().frame) */
+    if(world.frame){ const Lx=racing?leaderIdx():-1; world.frame(dt,tw,cam,racing?T:null,racing?lapNo:0,lenLaps,Lx>=0&&list[Lx]?list[Lx].num:null); }   /* per-frame work for the surroundings: the crowd, lights, the big screen (race clock, lap, the leader's number) (r3d-world.js buildWorld().frame) */
     // [/hook:stadium]
     // [hook:cams]
     CAMS.director(dt);   /* which shot next */
