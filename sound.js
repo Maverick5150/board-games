@@ -1,5 +1,5 @@
 /* Board Games — synthesized music + sound effects (Web Audio, no audio files).
-   API: Sound.music(name) | Sound.sfx(name) | Sound.fromText(msg) | Sound.openPanel() | Sound.mountButton(opts)
+   API: Sound.music(name) | Sound.sfx(name) | Sound.fromText(msg) | Sound.openPanel() | Sound.mountButton(opts) | Sound.duck(on)
    mountButton opts: {top, right, size} (classic look); with ui/theme.css on the page the button is Luxe and docks in
    .bg-topbar__end ({into: el} = another slot, {dock: false} = float; top/right still move a floating one). */
 (function(g){
@@ -28,9 +28,18 @@ function ensure(){
   return true;
 }
 function isHidden(){ try{ return !!(g.document&&g.document.hidden); }catch(e){ return false; } }
+/* a game's announcers (Motocross War: ui/voice.js lowers the music under a spoken line): duck(true) takes the music down about 8 dB, duck(false) brings it back;
+   a game that never calls it hears no change */
+var duckK=1;
+function musicLevel(){ return st.mm?0:st.music*0.55*duckK; }
+function duck(on){
+  duckK=on?0.4:1;
+  if(!ctx||!musicGain) return;
+  try{ musicGain.gain.setTargetAtTime(musicLevel(),ctx.currentTime,on?0.08:0.4); }catch(e){}
+}
 function applyVol(){
   if(!ctx) return; var t=ctx.currentTime;
-  musicGain.gain.setTargetAtTime(st.mm?0:st.music*0.55,t,0.05);
+  musicGain.gain.setTargetAtTime(musicLevel(),t,0.05);
   sfxGain.gain.setTargetAtTime(st.sm?0:st.sfx*0.9,t,0.05);
   if(st.mm) halt(); else run();          // muted music schedules no notes at all; unmuting starts it again
 }
@@ -504,5 +513,5 @@ function addStyle(name,S,fl){
   STYLES[name]=S; if(fl&&!STY[name]) STY[name]=fl; delete songCache[name];
   return true;
 }
-g.Sound={music:music,skip:skip,nowPlaying:nowPlaying,stop:function(){ want=null; stopMusic(); },sfx:sfx,fromText:fromText,openPanel:openPanel,closePanel:closePanel,panelOpen:panelOpen,mountButton:mountButton,addStyle:addStyle,hasStyle:function(n){ return !!STYLES[n]; },state:st,_songs:getSongs,_themes:THEMES};
+g.Sound={music:music,skip:skip,nowPlaying:nowPlaying,stop:function(){ want=null; stopMusic(); },duck:duck,sfx:sfx,fromText:fromText,openPanel:openPanel,closePanel:closePanel,panelOpen:panelOpen,mountButton:mountButton,addStyle:addStyle,hasStyle:function(n){ return !!STYLES[n]; },state:st,_songs:getSongs,_themes:THEMES};
 })(window);

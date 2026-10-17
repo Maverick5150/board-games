@@ -17,6 +17,7 @@
   try { if (localStorage.getItem("bgui.effects") === "reduced") h.setAttribute("data-effects", "reduced"); } catch (e) { }
 })(document.documentElement);</script>
 <link rel="stylesheet" href="../ui/theme.css">
+<link rel="stylesheet" href="../ui/voice.css">
 <link rel="preload" href="../ui/fonts/manrope-var-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="../ui/fonts/dmserifdisplay-latin.woff2" as="font" type="font/woff2" crossorigin>
 <script src="../ui/icons.js" defer></script>
@@ -63,7 +64,7 @@
   .mx-setup{display:flex; flex-direction:column; width:min(100%,40rem); margin:0 auto; padding:0 var(--gutter)}
   .mx-col{display:contents}
   .mx-hero{order:1} .mx-sec--series{order:2} .mx-sec--players{order:3} .mx-sec--names{order:4} .mx-sec--length{order:5} .mx-sec--speed{order:6}
-  .mx-sec--rules{order:7} .mx-sec--save{order:8} .mx-back{order:9} .mx-dock{order:10}
+  .mx-sec--ann{order:7} .mx-sec--rules{order:8} .mx-sec--save{order:9} .mx-back{order:10} .mx-dock{order:11}
   .mx-hero{position:relative; min-height:0; margin:0 calc(-1 * var(--gutter)); padding-top:46%; border-radius:0; background:transparent}
   .mx-hero .bg-hero__layer{bottom:auto; height:auto; aspect-ratio:16/9; border-radius:0; background-color:transparent;
     background-image:url("../ui/art/hero-mxwar.svg"); background-size:100% auto; background-position:100% 0;
@@ -218,6 +219,27 @@
   /* mxcrash: the race is the show: the track fills the arena (taller now that the cards live in a corner window) */
   .mx-arena{position:relative; height:clamp(18rem,calc(100svh - 27rem),30rem); border-radius:var(--r-xl); overflow:hidden; user-select:none; -webkit-user-select:none;
     background:#2a1d12; box-shadow:inset 0 0 0 1px rgba(231,202,144,.22)}
+  /* the announcers (mxwar/booth.js, ui/voice.js): a caption band under the picture, the height of three lines of captions (the lane and the cards
+     window sit above it, so no caption ever covers a rider, the cards window or the controls); Off removes it (html[data-ann] is set by game.js) */
+  .mx-arena{--cap-h:0px}
+  .mx-capband{position:absolute; left:0; right:0; bottom:0; z-index:6; display:none; align-items:center; height:var(--cap-h); overflow:hidden;
+    background:linear-gradient(180deg,rgba(26,18,11,.97),rgba(14,10,7,.99)); box-shadow:inset 0 1px 0 rgba(231,202,144,.26)}
+  html[data-ann] .mx-capband{display:flex}
+  html[data-ann] .mx-arena{--cap-h:4.5rem; height:calc(clamp(18rem,calc(100svh - 27rem),30rem) + var(--cap-h))}
+  html[data-ann] .mx-capband .bgv-cap{--bgv-left:.6rem; --bgv-right:.6rem; position:relative; left:auto; bottom:auto; flex-direction:row; align-items:baseline; gap:.45rem;
+    margin:0 .6rem; max-width:calc(100% - 1.2rem); max-height:calc(var(--cap-h) - .4rem); padding:.3rem .6rem .35rem .5rem; box-shadow:inset 0 0 0 1px rgba(232,226,255,.12)}
+  html[data-ann] .mx-capband .bgv-cap__text{font-size:var(--fs-sm); line-height:1.28; -webkit-line-clamp:3}
+  html[data-ann] .mx-capband .bgv-cap__who{font-size:var(--fs-micro)}
+  .mx-capidle{position:absolute; left:.6rem; right:.6rem; top:0; bottom:0; display:flex; align-items:center; justify-content:center; text-align:center; pointer-events:none;
+    font:var(--fw-ui) var(--fs-micro)/1.2 var(--font-ui); letter-spacing:.06em; text-transform:uppercase; color:var(--text-3); opacity:.75; transition:opacity 180ms ease-out}
+  .mx-capband .bgv-cap.is-on ~ .mx-capidle{opacity:0}
+  /* over a sheet, or on the season: the caption sits on top, just above the open sheet or under the top bar (never over a sheet's contents) */
+  html:root .bgv-cap.mx-capfix{--bgv-left:.75rem; --bgv-right:.75rem; visibility:visible; display:none; position:fixed; left:var(--gutter,1rem); right:auto; bottom:auto; top:calc(var(--bg-bar-h,3.5rem) + .5rem); z-index:92; flex-direction:row; align-items:baseline; gap:.45rem;
+    max-width:calc(100vw - 2 * var(--gutter,1rem)); box-shadow:inset 0 0 0 1px rgba(232,226,255,.18), 0 .5rem 1.4rem rgba(0,0,0,.6)}
+  html:root .bgv-cap.mx-capfix.is-over-sheet{top:auto; bottom:var(--cap-bot,auto)}
+  html:root .bgv-cap.mx-capfix .bgv-cap__text{font-size:var(--fs-sm); -webkit-line-clamp:3}
+  html:root body.mx-capfix-on .bgv-cap.mx-capfix{display:flex}
+  html[data-ann] body.mx-capfix-on .mx-capband .bgv-cap{display:none}
   .mx-track{position:absolute; inset:0; z-index:0}
   .mx-track svg{display:block; width:100%; height:100%}
   .mx-lane{position:absolute; left:0; right:0; top:0; height:var(--lane-h,54%); z-index:2; pointer-events:none; overflow:hidden; background:#140f0c; box-shadow:0 1px 0 rgba(231,202,144,.22)}
@@ -236,7 +258,7 @@
     background:radial-gradient(50% 50% at 30% 60%,rgba(214,180,140,.55),rgba(214,180,140,0))}
   /* the card window (the CEO, 20:06: "wars will be in a tiny box window ... Put it in a corner"): small in the bottom-right corner, a tap /
      OK makes it bigger and smaller again; its size and the cards' size come from layoutArena (--pip-w / --pip-h / --cw) */
-  .mx-table{position:absolute; right:var(--pip-e,.75rem); bottom:var(--pip-e,.75rem); width:var(--pip-w,10rem); height:var(--pip-h,7.5rem); z-index:5;
+  .mx-table{position:absolute; right:var(--pip-e,.75rem); bottom:calc(var(--pip-e,.75rem) + var(--cap-h,0px)); width:var(--pip-w,10rem); height:var(--pip-h,7.5rem); z-index:5;
     border-radius:var(--r-lg); background:linear-gradient(180deg,rgba(16,13,20,.9),rgba(8,7,11,.93)); box-shadow:inset 0 0 0 1.5px rgba(231,202,144,.5), 0 .5rem 1.4rem rgba(0,0,0,.55); transform-origin:100% 100%}
   .mx-table.is-pip .mx-sn, .mx-table.is-pip .mx-you, .mx-table.is-pip .mx-fight__tie{display:none}
   .mx-table.is-pip .mx-slot{gap:.15rem}
@@ -574,6 +596,21 @@
     html:not([data-tv]) .mx-tw li{grid-template-columns:1.4rem auto minmax(0,1fr) 2.2rem 1.9rem 2.1rem; gap:.3rem}
   }
 
+  /* the caption band: landscape phone (the arena has the full height: three small lines) and the TV (three lines of 1rem) */
+  @media (orientation: landscape) and (max-height: 31.25em){ html:not([data-tv])[data-ann] .mx-arena{--cap-h:3.8rem; height:var(--ls-game)} html:not([data-tv]) .mx-capband .bgv-cap__text{font-size:.8125rem} }
+  html[data-tv][data-ann] .mx-arena{--cap-h:4.9rem; height:auto}
+  html[data-tv][data-ann] .mx-capband .bgv-cap{padding:.25rem .8rem .3rem .7rem}
+  html[data-tv]:root .bgv-cap.mx-capfix{--bgv-left:2.5rem; top:calc(var(--bg-bar-h,4.75rem) + .75rem)}
+  html[data-tv] .mx-saylab{gap:.35rem}
+  .mx-ann{display:grid; gap:.25rem}
+  .mx-annv{display:grid; gap:.6rem; margin-top:.75rem}
+  #annSeg{grid-template-columns:minmax(0,1fr) minmax(0,1.9fr) minmax(0,1fr)}
+  .mx-annv__l{display:grid; grid-template-columns:minmax(0,1fr); gap:.2rem; font:var(--fw-ui) var(--fs-xs)/1.2 var(--font-ui); color:var(--text-2)}
+  .mx-annv .bg-select{width:100%; max-width:100%}
+  #annHear{margin-top:.75rem}
+  .mx-saylab{grid-column:1 / -1; display:grid; gap:.2rem; font:var(--fw-ui) var(--fs-xs)/1.2 var(--font-ui); color:var(--text-2)}
+  .mx-saylab .bg-input{min-height:var(--tap)}
+
   /* ---------- phone sideways: the TV's split, phone sized. The arena on the left at the full height; the head, the controls, the tower
      and the log on the right in their own scroll area; the page never scrolls ---------- */
   @media (orientation: landscape) and (max-height: 31.25em){
@@ -645,7 +682,7 @@
 <script src="../names.js"></script>
 <script>window.Saves=window.Saves||{put:function(){return false;},get:function(){return null;},del:function(){},toast:function(){},auto:function(){},bar:function(){return {refresh:function(){}};}};</script>
 <script>/* a no-op Sound with every method this page uses, in case sound.js fails to load */
-window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){},closePanel:function(){},panelOpen:function(){return false;},addStyle:function(){return false;},hasStyle:function(){return false;}};
+window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){},closePanel:function(){},panelOpen:function(){return false;},addStyle:function(){return false;},hasStyle:function(){return false;},duck:function(){}};
 window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";}};</script>
 </head>
 <body class="bg-app bg-app--scene mx-in-setup">
@@ -719,6 +756,23 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
         <div class="bg-section mx-subhead"><h2 class="bg-eyebrow" id="skillHead" data-stage-text>Computer skill</h2></div>
         <div class="bg-seg bg-seg--text" id="skillSeg" role="group" aria-labelledby="skillHead"><button type="button" data-k="easy" aria-pressed="false">Easy</button><button type="button" data-k="normal" class="on" aria-pressed="true">Normal</button><button type="button" data-k="hard" aria-pressed="false">Hard</button></div>
         <p class="mx-legend" id="skillNote" data-stage-text></p>
+      </section>
+      <section class="mx-sec mx-sec--ann" id="annSec" aria-labelledby="annHead" hidden>
+        <div class="bg-section"><h2 class="bg-eyebrow" id="annHead" data-stage-text>Announcers</h2></div>
+        <div class="bg-seg bg-seg--text" id="annSeg" role="group" aria-labelledby="annHead"></div>
+        <p class="mx-legend" id="annNote" data-stage-text aria-live="polite"></p>
+        <div class="mx-ann" id="annMore">
+          <div class="bg-section mx-subhead"><h2 class="bg-eyebrow" id="chatHead" data-stage-text>Chatter</h2></div>
+          <div class="bg-seg bg-seg--text" id="annChat" role="group" aria-labelledby="chatHead"></div>
+          <div class="mx-annvol"><div class="bg-section mx-subhead"><h2 class="bg-eyebrow" id="volHead" data-stage-text>Volume</h2></div>
+            <div class="bg-seg bg-seg--text" id="annVol" role="group" aria-labelledby="volHead"></div></div>
+          <div class="bg-card mx-card mx-annv" id="annVoices" hidden>
+            <label class="mx-annv__l">Caller voice<select class="bg-select" id="annVa"></select></label>
+            <label class="mx-annv__l">Analyst voice<select class="bg-select" id="annVb"></select></label>
+          </div>
+          <button class="bg-btn bg-btn--secondary bg-btn--block" id="annHear" type="button" data-icon="play">Hear the announcers</button>
+          <p class="mx-legend" id="annHearNote" data-stage-text aria-live="polite"></p>
+        </div>
       </section>
       <section class="mx-sec mx-sec--save" aria-labelledby="saveHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="saveHead" data-stage-text>Save and load</h2></div>
@@ -795,6 +849,7 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
         <button class="mx-pipbtn" id="pipBtn" type="button" aria-expanded="false" aria-label="Show the cards bigger"><span class="mx-pipbtn__ic" id="pipIc"></span></button>
       </div>
       <div class="mx-banner" id="banner" aria-live="polite"><b id="bannerT"></b><span id="bannerS"></span></div>
+      <div class="mx-capband" id="capBand" aria-label="The announcers"></div>
     </div>
     <div class="mx-acts" id="acts" data-toast-avoid>
       <button class="bg-btn bg-btn--primary bg-btn--lg" id="flipBtn" type="button" data-focus-first><span class="bg-btn__label" id="flipLabel">Flip</span><span class="bg-btn__sub" id="flipSub"></span></button>
@@ -848,9 +903,13 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
 <script src="race.js"></script>
 <script src="round.js"></script>
 <script src="season.js"></script>
+<script src="announce-lines.js"></script>
+<script src="announce.js"></script>
 <script src="brain.js"></script>
 <script src="art.js"></script>
 <script src="track.js"></script>
+<script src="../ui/voice.js"></script>
+<script src="booth.js"></script>
 <script src="game.js"></script>
 </body>
 </html>
