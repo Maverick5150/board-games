@@ -275,8 +275,12 @@ function shadow(){
 /* mxcrash (the CEO, 2026-10-16 20:06: "riders are moving so fucking fast ... the results of the cards is what moves the driver ... if they
    lose a war double war the rider crashes and gets back up. If they lose a triple war they crash and dont return ... When a rider crashes
    the yellow flag comes out"):
-   - PACE: the leader rides one lap in V.exp ms (the Game speed's lap: game.js LAP_MS, Medium 10 s: about a third of v2's speed, a real
-     rider's pace for the size of the bikes) at a steady speed. A lap's cards are turned as the leader STARTS that lap (ready() says when),
+   - PACE (mxlaps, the CEO ~21:10 "Fix it" with a search answer: about 50 s to 1 min a stadium lap, 1 to 2 min outdoors): the leader rides
+     one lap in V.exp ms = the REAL lap time of the round (round.js lapTime: Supercross 53-59 s, outdoor 1:45-2:15; game.js lapMs) at a
+     steady speed; no Game speed changes it.
+   - PASSES OVER THE WHOLE LAP (mxlaps): a lap's result moves every rider's target gap, but each rider whose place changes makes the move
+     at their own point of the lap (from just after the cards turn to about 60% round, a stable spread by rider and lap: update ->
+     r.pend, applied as the leader passes that point; the rest of the lap lets every move ride out before the line), so the passes happen one by one round the lap, each a ride-up of a few seconds, never the whole field at once. A lap's cards are turned as the leader STARTS that lap (ready() says when),
      and the field then rides the result round the lap (passes are ride-ups over the lap). The leader never crosses the line that ends a
      lap whose cards are not turned yet: he eases to it (a person thinking). The riding is logic (advance) apart from the drawing, so the
      race keeps its clock while the board covers the track; it pauses with the Menu (setLive).
@@ -342,7 +346,7 @@ function create(host,opt){
     var C=V.C; if(!C) return;
     var n=V.riders.length, lanes=n>30?5:n>12?4:3, cols=Math.ceil(n/lanes);
     var room=(C.gate-C.gateLine)/C.L, step=Math.min(V.unit*0.9,room/Math.max(1,cols));
-    V.riders.forEach(function(r){ var c=Math.floor(r.k/lanes), l=r.k%lanes; r.gx=V.pGate-(c+0.6)*step; r.gl=(l-(lanes-1)/2)/Math.max(1,(lanes-1)/2)*0.85; if(on){ r.off=V.pGate-r.gx; r.offT=r.off; r.lane=r.gl; r.laneT=r.gl; r.cr=null; } });
+    V.riders.forEach(function(r){ var c=Math.floor(r.k/lanes), l=r.k%lanes; r.gx=V.pGate-(c+0.6)*step; r.gl=(l-(lanes-1)/2)/Math.max(1,(lanes-1)/2)*0.85; r.pend=null; if(on){ r.off=V.pGate-r.gx; r.offT=r.off; r.lane=r.gl; r.laneT=r.gl; r.cr=null; } });
     V.X=V.pGate; V.lapT=now(); V.lt=now();
     if(on){ V.laps=0; V.flag=null; V.yel=null; V.lapSeen=0; }
     else { V.riders.forEach(function(r){ r.off=V.pGate-r.gx; r.lane=r.gl; }); laneCheck(); }
@@ -358,7 +362,18 @@ function create(host,opt){
     var raw=[0], minGap=V.unit*1.35, kc=V.unit*0.08, i;   /* riders level on cards still ride a bike and a third apart (v1 leftover: crowded bikes) */
     for(i=1;i<alive.length;i++) raw.push(raw[i-1]+minGap+kc*Math.max(0,(cnt[alive[i-1]]||0)-(cnt[alive[i]]||0)));
     var tot=raw[raw.length-1]||0, lim=0.84, sc=tot>lim?lim/tot:1;
-    alive.forEach(function(s,i){ var r=V.by[s]; if(!r) return; r.offT=raw[i]*sc; r.out=false; r.place=i; });
+    var spread=V.phase==="race"&&V.exp>=15000&&motion()!=="off", mv=[], cl=Math.floor(V.X-V.pFin+1e-9);   /* cl: the lap the leader rides now */
+    alive.forEach(function(s,i){ var r=V.by[s]; if(!r) return; var nt=raw[i]*sc, moved=r.place!==i;
+      if(r.pend&&r.pend.lap<cl){ r.offT=r.pend.t; r.pend=null; }   /* a move left over from the lap before: made now */
+      r.out=false; r.place=i;
+      if(!spread||r.cr) { r.offT=nt; r.pend=null; return; }
+      if(r.pend){ r.pend.t=nt; return; }                                  /* already moving this lap: the same point, the new target */
+      if(moved&&Math.abs(nt-r.offT)>=V.unit*0.5) mv.push({r:r,t:nt}); else r.offT=nt; });
+    /* the riders changing places take turns round the lap (a stable order by rider and lap) */
+    mv.sort(function(a,b){ return (((a.r.s+1)*2654435761+cl*40503)>>>0)%9973-(((b.r.s+1)*2654435761+cl*40503)>>>0)%9973; });
+    /* spread from just after the cards turn to a little past half the lap: every move has the rest of the lap to ride out before the line */
+    var room=Math.max(0.2,Math.min(0.55,V.pFin+cl+0.6-V.X)), st0=V.X+0.04;
+    mv.forEach(function(m,j){ m.r.pend={t:m.t,at:st0+room*(j+0.5)/mv.length,lap:cl}; });
     order.forEach(function(s,i){ var r=V.by[s]; if(r&&outs&&outs[s]){ if(!r.out){ r.out=true; r.parkT=now(); } r.place=i; } });
     V.dirty=true; if(!V.run) drawFrame(true);
   };
@@ -371,8 +386,8 @@ function create(host,opt){
     V.dirty=true; if(!V.run) drawFrame(true);
   };
   /* a race picked up again (Continue, a new screen): n laps decided; the leader rides the last of them */
-  V.setLaps=function(n,len){ V.laps=n; V.lapsN=len||V.lapsN; V.lapT=now(); V.lt=now(); V.X=n>0?Math.max(V.pGate,V.pFin+n-0.3):V.pGate; laneCheck(true); V.riders.forEach(function(r){ if(!r.cr){ r.off=r.offT; r.lane=r.laneT; } }); };
-  V.setPace=function(ms){ if(ms>0) V.exp=clamp(ms,1500,30000); };
+  V.setLaps=function(n,len){ V.laps=n; V.lapsN=len||V.lapsN; V.lapT=now(); V.lt=now(); V.X=n>0?Math.max(V.pGate,V.pFin+n-0.3):V.pGate; laneCheck(true); V.riders.forEach(function(r){ if(r.pend){ r.offT=r.pend.t; r.pend=null; } if(!r.cr){ r.off=r.offT; r.lane=r.laneT; } }); };
+  V.setPace=function(ms){ if(ms>0) V.exp=clamp(ms,1500,200000); };
   V.setFlag=function(f){ V.flag=f||null; V.flagT=now(); if(f==="checkered") V.phase="over"; V.dirty=true; if(!V.run) drawFrame(true); };
   V.setRed=function(s){ V.riders.forEach(function(r){ var on=r.s===s; if(on!==r.red){ r.red=on; r.plate=null; } }); V.dirty=true; };
   /* the race clock runs while the race is on screen or only covered by the board (the Menu pauses it) */
@@ -421,9 +436,10 @@ function create(host,opt){
     var dX=Math.max(0,v*dt); V.X+=dX;
     var k=1-Math.exp(-dt/(simple?420:650)), kl=1-Math.exp(-dt/260);
     V.riders.forEach(function(r){
+      if(r.pend&&V.X>=r.pend.at){ r.offT=r.pend.t; r.pend=null; }   /* this rider's move of the lap starts here */
       if(r.cr){
         r.off=V.X-r.cr.at;                            /* down on the track: the field rides on past */
-        if(r.cr.kind==="remount"&&t-r.cr.t0>=r.cr.dur){ r.cr=null; r.slowT=t+V.exp*0.6; r.lane=r.laneT; }
+        if(r.cr.kind==="remount"&&t-r.cr.t0>=r.cr.dur){ r.cr=null; r.slowT=t+Math.min(V.exp*0.6,15000); r.lane=r.laneT; }
         return;
       }
       if(r.out) return;
@@ -464,7 +480,7 @@ function create(host,opt){
   V.show=function(on){ V.want=!!on; if(on) V.start(); else V.stop(); };
   V.state=function(){ return {half:!!V.half,run:V.run,live:V.live,riders:V.riders.length,laps:V.laps,X:+(V.X-V.pFin).toFixed(3),lap:V.leaderLap(),exp:Math.round(V.exp),kind:V.kind,key:V.key,W:V.W,H:V.H,flag:V.flag,phase:V.phase,mode:motion(),frames:V.frames|0,
     yellow:V.yel?{c:+(V.yel.c-V.pFin).toFixed(3),until:+(V.yel.until-V.pFin).toFixed(3)}:null,crashed:V.riders.filter(function(r){ return r.cr; }).map(function(r){ return {s:r.s,kind:r.cr.kind}; }),hole:V.hole}; };
-  V.positions=function(){ var C=V.C, out=[]; if(!C) return out; V.riders.forEach(function(r){ var s=(V.X-r.off)*C.L; C.at(s,P); out.push({s:r.s,x:Math.round(P.x),y:Math.round(P.y),off:+r.off.toFixed(4),offT:+r.offT.toFixed(4),out:r.out,place:r.place,cr:r.cr?r.cr.kind:null}); }); return out; };
+  V.positions=function(){ var C=V.C, out=[]; if(!C) return out; V.riders.forEach(function(r){ var s=(V.X-r.off)*C.L; C.at(s,P); out.push({s:r.s,x:Math.round(P.x),y:Math.round(P.y),off:+r.off.toFixed(4),offT:+r.offT.toFixed(4),pend:r.pend?+(r.pend.at-V.pFin).toFixed(3):null,out:r.out,place:r.place,cr:r.cr?r.cr.kind:null}); }); return out; };
   V.frames=0;
 
   /* draw one frame (still = draw where they stand, no riding) */
