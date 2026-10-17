@@ -1,5 +1,5 @@
 // Offline cache for Motocross War (the season files data/<series>-<year>.js are cached on first use: every .js the page fetches is stored) (bump VERSION to force update)
-const VERSION = "mxwar-v3";
+const VERSION = "mxwar-v4";
 const PREFIX = VERSION.replace(/v[0-9]+$/, "");   // every game shares one origin (one CacheStorage): only ever delete THIS game's old caches
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "../sound.js", "../skins.js", "../saves.js", "../names.js", "./data/index.js", "./race.js", "./round.js", "./season.js", "./brain.js", "./art.js", "./track.js", "./game.js",
   "../ui/theme.css", "../ui/ui.js", "../ui/icons.js", "../ui/picker.js",
