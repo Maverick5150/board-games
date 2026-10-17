@@ -20,8 +20,8 @@ import {createPost,postSupported} from "./r3d-lead-post.js";
 
 /* the tier table: every effect is one flag. post: "full" (HDR scene + bloom + DOF + SMAA + grade) | "lite" (HDR scene + bloom + grade, MSAA) | "off" (the renderer's own frame: nothing extra) */
 export const TIERS={
-  high:  {rig:"full",shadowRes:2048,softShadow:true, env:true, pbr:true, fog:"exp",post:"full",bloom:1.0,dof:true, motionBlur:1.0,haze:0.011,hazeI:1.0,aa:"smaa",msaa:0,grade:1,vignette:0.34,grain:0.035,exposure:1.0,cssVig:false},
-  medium:{motionBlur:0,haze:0,hazeI:1,rig:"full",shadowRes:1024,softShadow:false,env:true, pbr:true, fog:"exp",post:"lite",bloom:0.75,dof:false,aa:"msaa",msaa:4,grade:1,vignette:0.30,grain:0.0, exposure:1.0,cssVig:false},
+  high:  {rig:"full",shadowRes:2048,softShadow:true, env:true, pbr:true, fog:"exp",post:"full",bloom:1.0,dof:true, motionBlur:1.0,haze:0.011,hazeI:1.0,aa:"fxaa",msaa:0,grade:1,vignette:0.34,grain:0.035,exposure:1.0,cssVig:false},
+  medium:{motionBlur:0,haze:0,hazeI:1,rig:"full",shadowRes:1024,softShadow:false,env:true, pbr:true, fog:"exp",post:"lite",bloom:0.75,dof:false,aa:"fxaa",msaa:0,grade:1,vignette:0.30,grain:0.0, exposure:1.0,cssVig:false},
   low:   {motionBlur:0,haze:0,hazeI:1,rig:"lite",shadowRes:1024,softShadow:false,env:false,pbr:false,fog:"lin",post:"off", bloom:0,   dof:false,aa:"none",msaa:0,grade:0,vignette:0,   grain:0.0, exposure:1.0,cssVig:false},
   stick: {motionBlur:0,haze:0,hazeI:1,rig:"lite",shadowRes:1024,softShadow:false,env:false,pbr:false,fog:"lin",post:"off", bloom:0,   dof:false,aa:"none",msaa:0,grade:0,vignette:0,   grain:0.0, exposure:1.0,cssVig:false}
 };
@@ -79,10 +79,10 @@ export function createLook(renderer,opts){
     renderer.toneMappingExposure=venueExp*e;
   }
   /* ---- tiers and flags ---- */
-  /* the tier nobody asked for: Reduce effects or a weak GPU = no post chain at all (low / stick); a TV or a touch phone = the light chain (medium); everything else (a laptop, a desktop) = high.
-     The performance engineer's V.setQuality(name) may call L.setTier(name) to override this. */
+  /* the tier nobody asked for: Reduce effects, a weak GPU or ANY TV (the Fire TV Stick model is not measured yet: design for the weakest) = no post chain at all (low / stick); a touch phone = the
+     light chain (medium); everything else (a laptop, a desktop) = high. The performance engineer's V.setQuality(name) may call L.setTier(name) to override this once a device is measured. */
   const MOBILE=(()=>{ try{ return (navigator.maxTouchPoints||0)>0&&!TV; }catch(e){ return false; } })();
-  function autoTier(){ return (LO||WEAK)?(TV?"stick":"low"):((TV||MOBILE)?"medium":"high"); }
+  function autoTier(){ return TV?"stick":(LO||WEAK)?"low":MOBILE?"medium":"high"; }
   function setFlags(f){
     const was=Object.assign({},F); Object.assign(F,f||{});
     /* the shadow map: its size and its filter */

@@ -9,7 +9,7 @@
    Flags (all optional; the tier table in r3d-look.js sets them):
      bloom      0..2   strength multiplier (0 = no bloom passes at all)       bloomThreshold  linear HDR level where glow starts (0.85)     bloomKnee 0.5
      dof        bool   compile the depth-of-field gather into the final pass (needs the depth texture: no MSAA then)   dofTaps 14   dofMax  blur radius as a fraction of the height (0.022)
-     aa         "smaa" | "msaa" | "none"    smaa = an SMAA pass after the grade;  msaa = a 4x multisampled scene target (cheap on tiled GPUs; not with dof)
+     aa         "fxaa" | "smaa" | "msaa" | "none"    fxaa = inside the final pass (a few taps only on edges: the cheap default);  smaa = three heavier passes (the best edges);  msaa = a 4x multisampled scene target (cheap on tiled GPUs; not with dof / depth)
      grade      0..1   colour grade amount       vignette 0..1   grain 0..0.1    exposure   (null = the renderer's toneMappingExposure)
    Nothing is random: the grain is hashed from the pixel and the clock (the harness' virtual clock makes a frame a pure function of the tick). */
 import * as THREE_NS from "../ui/vendor/three-0.160.0.module.min.js";
@@ -89,15 +89,36 @@ uniform sampler2D tBlur;
 float zAt(vec2 uv){ return -perspectiveDepthToViewZ(texture2D(tDepth,uv).x,uNear,uFar); }
 float coc(float z){ float d=1.0/max(z,0.05)-1.0/uFocus; return d>0.0?clamp((d-uDead)*uAper,0.0,1.0):clamp((-d-uDead)*uAper*0.5,0.0,0.55); }   /* near: full blur; far: at most 55% (the stands stay a stadium) */
 #endif
+float lm(vec3 c){ return dot(c,vec3(0.299,0.587,0.114)); }
+float pl(vec3 c){ float l=lm(c); return l/(1.0+l); }
+vec3 cmp(vec3 x){ x=min(max(x,vec3(0.0)),vec3(64.0)); return x/(1.0+x); }
+vec3 unc(vec3 t){ return t/(1.0-min(t,vec3(0.9995))); }
 vec3 enc(vec3 c){ c=clamp(c,0.0,1.0); return mix(c*12.92,1.055*pow(c,vec3(1.0/2.4))-0.055,step(0.0031308,c)); }
 void main(){
   vec3 c=texture2D(tScene,vUv).rgb;
   c=min(max(c,vec3(0.0)),vec3(64.0));   /* a NaN (a shader that divided by zero) or an Inf becomes 0 / 64, never a black or white smear in the bloom */
-  #ifdef DOF
-  if(uDof>0.002){ float k=smoothstep(0.02,0.5,coc(zAt(vUv))*uDof); vec2 h=uTexel*1.5; vec3 bl=(texture2D(tBlur,vUv).rgb*2.0+texture2D(tBlur,vUv+vec2(h.x,h.y)).rgb+texture2D(tBlur,vUv+vec2(-h.x,h.y)).rgb+texture2D(tBlur,vUv+vec2(h.x,-h.y)).rgb+texture2D(tBlur,vUv+vec2(-h.x,-h.y)).rgb)/6.0; c=mix(c,bl,k); }
+  #ifdef AA
+  { /* FXAA in the HDR frame, averaging in a tone-compressed space (a 30x-bright light edge must still blend): early-out where there is no edge */
+    vec2 t=uTexel;
+    vec3 NW=min(max(texture2D(tScene,vUv+vec2(-1.0,-1.0)*t).rgb,vec3(0.0)),vec3(64.0)), NE=min(max(texture2D(tScene,vUv+vec2(1.0,-1.0)*t).rgb,vec3(0.0)),vec3(64.0)), SW=min(max(texture2D(tScene,vUv+vec2(-1.0,1.0)*t).rgb,vec3(0.0)),vec3(64.0)), SE=min(max(texture2D(tScene,vUv+vec2(1.0,1.0)*t).rgb,vec3(0.0)),vec3(64.0));
+    float lM=pl(c), lNW=pl(NW), lNE=pl(NE), lSW=pl(SW), lSE=pl(SE);
+    float lMin=min(lM,min(min(lNW,lNE),min(lSW,lSE))), lMax=max(lM,max(max(lNW,lNE),max(lSW,lSE)));
+    if(lMax-lMin>max(0.04,lMax*0.12)){
+      vec2 dir=vec2(-((lNW+lNE)-(lSW+lSE)),((lNW+lSW)-(lNE+lSE)));
+      float red=max((lNW+lNE+lSW+lSE)*0.03125,0.0078125), rcp=1.0/(min(abs(dir.x),abs(dir.y))+red);
+      dir=clamp(dir*rcp,vec2(-8.0),vec2(8.0))*t;
+      vec3 A=0.5*(cmp(texture2D(tScene,vUv+dir*(1.0/3.0-0.5)).rgb)+cmp(texture2D(tScene,vUv+dir*(2.0/3.0-0.5)).rgb));
+      vec3 B=A*0.5+0.25*(cmp(texture2D(tScene,vUv+dir*-0.5).rgb)+cmp(texture2D(tScene,vUv+dir*0.5).rgb));
+      float lB=lm(unc(B)); lB=lB/(1.0+lB);
+      c=unc((lB<lMin||lB>lMax)?A:B);
+    }
+  }
   #endif
   #ifdef DEPTH
   float dep=texture2D(tDepth,vUv).x;
+  #ifdef DOF
+  if(uDof>0.002){ float k=smoothstep(0.02,0.5,coc(-perspectiveDepthToViewZ(dep,uNear,uFar))*uDof); vec2 h=uTexel*1.5; vec3 bl=(texture2D(tBlur,vUv+vec2(h.x,h.y)).rgb+texture2D(tBlur,vUv+vec2(-h.x,-h.y)).rgb)*0.5; c=mix(c,bl,k); }
+  #endif
   if(dep<0.99999){
     vec4 wp=uInvVP*vec4(vUv*2.0-1.0,dep*2.0-1.0,1.0); wp.xyz/=wp.w;
     float zv=-perspectiveDepthToViewZ(dep,uNear,uFar);
@@ -143,7 +164,7 @@ void main(){
 }`;
 
 export function createPost(renderer,f0){
-  const F=Object.assign({motionBlur:0,haze:0,hazeI:1,bloom:1,bloomThreshold:1.05,bloomKnee:0.4,dof:false,dofTaps:24,dofMax:0.017,aa:"none",grade:1,vignette:0.3,grain:0.03,exposure:null,sat:1.02,contrast:0.62},f0||{});
+  const F=Object.assign({motionBlur:0,haze:0,hazeI:1,bloom:1,bloomThreshold:1.05,bloomKnee:0.4,dof:false,dofTaps:16,dofMax:0.017,aa:"none",grade:1,vignette:0.3,grain:0.03,exposure:null,sat:1.02,contrast:0.62},f0||{});
   const ext=renderer.extensions;
   const P={flags:F,dead:false};
   /* the fullscreen triangle */
@@ -164,15 +185,15 @@ export function createPost(renderer,f0){
   /* (re)build the targets for the drawing buffer size and the flags that decide what exists */
   function build(){
     renderer.getDrawingBufferSize(sizeV); const w=Math.max(2,Math.round(sizeV.x)), h=Math.max(2,Math.round(sizeV.y));
-    const wantDof=!!F.dof, wantDepth=wantDof||F.motionBlur>0||F.haze>0, wantMsaa=(!wantDepth&&F.aa==="msaa")?4:0, wantAa=F.aa==="smaa"?"smaa":"none", wantBloom=F.bloom>0;
+    const wantDof=!!F.dof, wantDepth=wantDof||F.motionBlur>0||F.haze>0, wantMsaa=(!wantDepth&&F.aa==="msaa")?4:0, wantAa=(F.aa==="smaa"||F.aa==="fxaa")?F.aa:"none", wantBloom=F.bloom>0;
     if(w===W&&h===H&&rtScene&&wantDof===builtDof&&wantDepth===builtDepth&&wantMsaa===builtMsaa&&wantAa===builtAa&&wantBloom===builtBloom) return;
     free(); W=w; H=h; builtDof=wantDof; builtDepth=wantDepth; builtMsaa=wantMsaa; builtAa=wantAa; builtBloom=wantBloom;
     const o={depthBuffer:true}; if(wantDepth){ depthTex=new THREE.DepthTexture(W,H,THREE.UnsignedIntType); o.depthTexture=depthTex; } if(wantMsaa) o.samples=wantMsaa;
     rtScene=rt(W,H,o); if(wantDof) rtDof=rt(Math.ceil(W/2),Math.ceil(H/2));
-    if(wantBloom){ let lw=W,lh=H; for(let k=0;k<5;k++){ lw=Math.max(2,Math.ceil(lw/2)); lh=Math.max(2,Math.ceil(lh/2)); levels.push(rt(lw,lh)); } }
+    if(wantBloom){ let lw=W,lh=H; for(let k=0;k<4;k++){ lw=Math.max(2,Math.ceil(lw/2)); lh=Math.max(2,Math.ceil(lh/2)); levels.push(rt(lw,lh)); } }
     if(wantAa==="smaa"){ rtLdr=rt(W,H,{type:THREE.UnsignedByteType}); smaa=new SMAAPass(W,H); smaa.renderToScreen=true; }
     /* the final material is made again when the compile-time options change (the depth of field's taps, the bloom) */
-    const defs={}; if(wantDof){ defs.DOF=1; defs.DOF_TAPS=Math.max(6,F.dofTaps|0); } if(wantDepth) defs.DEPTH=1; if(wantBloom) defs.BLOOM=1;
+    const defs={}; if(wantDof){ defs.DOF=1; defs.DOF_TAPS=Math.max(6,F.dofTaps|0); } if(wantDepth) defs.DEPTH=1; if(wantBloom) defs.BLOOM=1; if(wantAa==="fxaa") defs.AA=1;
     if(mFinal) mFinal.dispose(); mFinal=mk(FINAL_FRAG,fu,{defines:defs});
     if(mDof) mDof.dispose(); mDof=wantDof?mk(DOF_FRAG,fu,{defines:{DOF_TAPS:Math.max(6,F.dofTaps|0)}}):null;
   }
@@ -202,7 +223,7 @@ export function createPost(renderer,f0){
     if(depthTex){ cam.updateMatrixWorld(); u.uInvVP.value.multiplyMatrices(cam.matrixWorld,cam.projectionMatrixInverse); u.uCamPos.value.setFromMatrixPosition(cam.matrixWorld); u.uPrevVP.value.copy(prevVP); u.uMB.value=F.motionBlur*mbAmt; u.uHaze.value=F.haze; u.uHazeI.value=F.hazeI; }
     u.toneMappingExposure.value=F.exposure!=null?F.exposure:renderer.toneMappingExposure;
     if(mDof&&u.uDof.value>0.002){ u.tBlur.value=rtDof.texture; fsMesh.material=mDof; renderer.setRenderTarget(rtDof); renderer.render(fsScene,fsCam); }
-    fsMesh.material=mFinal; renderer.setRenderTarget(smaa?rtLdr:null); renderer.render(fsScene,fsCam);
+    fsMesh.material=mFinal; renderer.setRenderTarget(rtLdr?rtLdr:null); renderer.render(fsScene,fsCam);
     if(smaa){ smaa.render(renderer,null,rtLdr); }
     renderer.setRenderTarget(null); renderer.autoClear=ac;
   };
