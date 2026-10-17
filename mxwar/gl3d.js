@@ -185,26 +185,38 @@ var LIGHT=[
 "}",
 "vec3 fog(vec3 c, vec3 w){ float dd=length(uCam-w); float hz=(1.0-exp(-dd*uFogR.z))*(1.0-0.55*clamp(w.y/38.0,0.0,1.0)); c=mix(c,uHaze,hz);",
 "  float f=clamp((dd-uFogR.x)/(uFogR.y-uFogR.x),0.0,1.0); return mix(c,uFog,f*f*(3.0-2.0*f)); }"].join("\n");
+/* precision (polish): the lighting stays mediump (the fast 16-bit path of a Fire TV GPU), but world positions of a few hundred metres, the
+   track's texture V (it grows along the lap: up to ~270 on RedBud) and the cell math of the patterns (crowd, LED boards, suites, stars) are
+   a quarter of a cell or a texel in 16-bit floats, so those varyings and those few operations are HP = highp where the GPU has it */
+var PREC=["precision mediump float;","#ifdef GL_FRAGMENT_PRECISION_HIGH","#define HP highp","#else","#define HP mediump","#endif"].join("\n");
 var TONE="uniform float uExpo; vec3 tone(vec3 c){ c*=uExpo; vec3 hi=max(c-0.62,0.0); return min(c-hi+hi/(1.0+hi*1.6),vec3(1.0)); }";
 /* colour codes in aCol.a: 0 own colour, 1 x team, 2 emissive, 3 x accent, 4 CROWD (a seat pattern: shirts, heads, empty seats; partly
    self-lit by the house lights; far away it settles to the crowd's mean colour instead of shimmering), 5 LED RIBBON BOARD (panels of
    colour that change every few seconds with a light sweep running along: original, no text or marks), 6 ROOF / TRUSS steel, 7 SUITES (dark
-   glass with warm lit windows, some dark) */
+   glass with warm lit windows, some dark), 8 CROWD RISER (the heads and shoulders of a row, from its own row coordinate: r brightness,
+   g 0 foot / 1 top, b the row's seed) */
 var LIT_FS=[
-"precision mediump float;", LIGHT, TONE,
-"uniform float uTime; uniform sampler2D uNoise;",
-"varying vec3 vCol; varying vec3 vNor; varying vec3 vW; varying float vEm; varying float vK;",
-"vec4 nz(vec3 p){ return texture2D(uNoise,(p.xz+p.y*vec2(17.0,29.0)+0.5)/64.0); }",
+PREC, LIGHT, TONE,
+"uniform HP float uTime; uniform sampler2D uNoise;",
+"varying vec3 vCol; varying vec3 vNor; varying HP vec3 vW; varying float vEm; varying float vK;",
+"vec4 nz(HP vec3 p){ HP vec2 q=fract((p.xz+p.y*vec2(17.0,29.0)+0.5)/64.0); return texture2D(uNoise,q); }",
+/* the coordinate along a stand or a board: x or z by the face's normal (x + z would stand still on a diagonal and smear the pattern) */
+"HP float along(){ return abs(vNor.x)>abs(vNor.z)?vW.z:vW.x; }",
 "void main(){ vec3 n=normalize(vNor); vec3 b=vCol; float em=vEm, spec=0.35;",
-"  if(vK>4.5&&vK<5.5){ float a=(vW.x+vW.z)*0.5, seg=floor(a/6.0)+floor(uTime*0.18)*5.0, h=nz(vec3(seg,1.0,3.0)).r;",
+"  if(vK>4.5&&vK<5.5){ HP float a=along()*0.5; HP float seg=floor(a/6.0)+floor(uTime*0.18)*5.0; float h=nz(vec3(seg,1.0,3.0)).r;",
 "    vec3 c1=h<0.3?vec3(0.12,0.38,1.0):h<0.55?vec3(1.0,0.8,0.32):h<0.8?vec3(0.95,0.95,1.0):vec3(1.0,0.28,0.2);",
 "    float sweep=smoothstep(0.9,1.0,fract(a*0.02-uTime*0.3)), px=1.0-0.32*(1.0-step(0.3,fract(a*3.0))*step(0.3,fract(vW.y*3.0)))*clamp(1.0-length(uCam-vW)/55.0,0.0,1.0);",
 "    b=(c1*px*0.85+sweep*0.5)*vCol; em=1.0; spec=0.0; }",
-"  else if(vK>3.5&&vK<4.5){ vec3 cell=floor(vec3(vW.x*2.1,vW.y*2.6,vW.z*2.1)); vec4 hn=nz(cell); float h=hn.r, h2=hn.g;",
+"  else if(vK>3.5&&vK<4.5){ HP vec3 cell=floor(vec3(vW.x*2.1,vW.y*2.6,vW.z*2.1)); vec4 hn=nz(cell); float h=hn.r, h2=hn.g;",
 "    vec3 hue=0.5+0.5*cos(6.2832*(h+vec3(0.0,0.33,0.67))); vec3 p=mix(vec3(0.4),hue,0.38)*(0.46+0.5*h2);",
 "    float head=step(0.62,fract(vW.y*2.6))*step(0.3,h2); p=mix(p,vec3(0.8,0.62,0.5),head*0.5); b=mix(vec3(0.08,0.085,0.11),p,step(0.14,hn.b))*vCol;",
 "    b=mix(b,vec3(0.34,0.31,0.32)*vCol,clamp((length(uCam-vW)-30.0)/90.0,0.0,0.72)); em=0.42; spec=0.0; }",
-"  else if(vK>6.5){ float a=(vW.x+vW.z)*0.5, cx=floor(a*0.42), wl=step(0.16,fract(a*0.42))*step(0.22,fract(vW.y*0.95))*step(0.12,1.0-fract(vW.y*0.95));",
+"  else if(vK>7.5){ HP float a=along()*2.15; float fx=fract(a), fy=vCol.g; vec4 hn=nz(vec3(floor(a),3.0,floor(vCol.b*251.0+0.5)));",
+"    vec3 hue=0.5+0.5*cos(6.2832*(hn.r+vec3(0.0,0.33,0.67))); vec3 shirt=mix(vec3(0.42),hue,0.45)*(0.5+0.5*hn.g); float occ=step(0.12,hn.b);",
+"    float tor=step(abs(fx-0.5),0.41-0.13*fy)*step(fy,0.6); vec2 hd=vec2((fx-0.5)*1.25,fy-0.79); float head=step(dot(hd,hd),0.028);",
+"    vec3 p=mix(vec3(0.06,0.065,0.085),shirt,tor*occ); p=mix(p,vec3(0.78,0.6,0.48)*(0.75+0.3*hn.a),head*occ);",
+"    p=mix(p,vec3(0.3,0.28,0.3),clamp((length(uCam-vW)-35.0)/90.0,0.0,0.72)); b=p*vCol.r; em=0.42; spec=0.0; }",
+"  else if(vK>6.5){ HP float a=along()*0.5; HP float cx=floor(a*0.42); float wl=step(0.16,fract(a*0.42))*step(0.22,fract(vW.y*0.95))*step(0.12,1.0-fract(vW.y*0.95));",
 "    float h=nz(vec3(cx,floor(vW.y*0.95),5.0)).b; b=mix(vec3(0.035,0.04,0.055),vec3(0.95,0.74,0.48)*(0.45+0.55*h),wl*step(0.22,h))*vCol; em=1.0; spec=0.0; }",
 "  else if(vK>5.5){ spec=0.12; }",
 "  vec3 c=mix(shade(b,n,vW,spec),b,em); gl_FragColor=vec4(tone(fog(c,vW)),1.0); }"].join("\n");
@@ -217,9 +229,9 @@ var DIRT_VS=[
 /* polish: the packed racing line darker and with a damp sheen under the lights (uWet), loose dry dirt lighter; vMat.z carries the tint
    and the cavity light baked by the scene (the troughs of the whoops and the bottoms of the landings darker, the crests and lips lighter) */
 var DIRT_FS=[
-"precision mediump float;", LIGHT, TONE,
+PREC, LIGHT, TONE,
 "uniform sampler2D uTex; uniform vec3 uDirt; uniform vec3 uSand; uniform vec3 uGrass; uniform float uWet;",
-"varying vec3 vW; varying vec3 vNor; varying vec2 vUV; varying vec4 vMat;",
+"varying HP vec3 vW; varying vec3 vNor; varying HP vec2 vUV; varying vec4 vMat;",
 "void main(){",
 "  vec4 t=texture2D(uTex,vUV); vec4 m=texture2D(uTex,vW.xz*0.031);",
 "  float macro=0.8+0.4*m.b, gr=(0.2+0.5*vMat.y)*t.g;",
@@ -236,16 +248,16 @@ var SKY_VS=[
 "attribute vec2 aXY; uniform mat4 uIVP; varying vec3 vRay;",
 "void main(){ vec4 a=uIVP*vec4(aXY,1.0,1.0); vec4 b=uIVP*vec4(aXY,-1.0,1.0); vRay=a.xyz/a.w-b.xyz/b.w; gl_Position=vec4(aXY,0.9999,1.0); }"].join("\n");
 var SKY_FS=[
-"precision mediump float;", TONE,
+PREC, TONE,
 "uniform vec3 uTop; uniform vec3 uHor; uniform vec3 uSun; uniform vec3 uSunCol; uniform float uNight; uniform sampler2D uTex; uniform sampler2D uNoise; uniform float uClouds;",
-"varying vec3 vRay;",
-"void main(){ vec3 r=normalize(vRay); float h=clamp(r.y,0.0,1.0);",
+"varying HP vec3 vRay;",
+"void main(){ HP vec3 r=normalize(vRay); float h=clamp(r.y,0.0,1.0);",
 "  vec3 c=mix(uHor,uTop,pow(h,0.55));",
 "  float sd=max(dot(r,uSun),0.0); c+=uSunCol*(pow(sd,400.0)*1.6+pow(sd,12.0)*0.22)*(1.0-uNight);",
 "  if(uClouds>0.0&&r.y>0.0){ vec2 p=r.xz/(r.y+0.12)*0.16; float n=texture2D(uTex,p).b*0.6+texture2D(uTex,p*2.7).r*0.4;",
 "    float cl=smoothstep(0.52,0.78,n)*uClouds*smoothstep(0.0,0.25,r.y); vec3 cc=mix(vec3(0.98,0.97,0.95),vec3(0.7,0.72,0.78),smoothstep(0.6,0.95,n)); c=mix(c,cc,cl*0.85); }",
 "  if(uNight>0.0){ c+=vec3(0.06,0.05,0.045)*uNight*(1.0-smoothstep(0.0,0.45,r.y));",
-"    vec2 q=floor(r.xz/(r.y+0.3)*260.0); float st=texture2D(uNoise,(q+0.5)/64.0).g; c+=vec3(0.75)*step(0.9965,st)*uNight*smoothstep(0.25,0.5,r.y); }",
+"    HP vec2 q=floor(r.xz/(r.y+0.3)*260.0); HP vec2 qn=fract((q+0.5)/64.0); float st=texture2D(uNoise,qn).g; c+=vec3(0.75)*step(0.9965,st)*uNight*smoothstep(0.25,0.5,r.y); }",
 "  gl_FragColor=vec4(tone(c),1.0); }"].join("\n");
 /* sprites: roost dust (world-size soft discs), labels (fixed pixel size, from the atlas), blob shadows (flat oval decals) */
 var PART_VS=[
