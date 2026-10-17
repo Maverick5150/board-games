@@ -29,7 +29,7 @@ function clone(x){ return JSON.parse(JSON.stringify(x)); }
 
 function defaultOpts(){
   return {
-    length:"standard",   // short | standard | long (round.js LEN, v2: heat 15/30/50, semi + LCQ 12/25/40, Main 40/80/150, moto 30/60/100 laps)
+    length:"real",       // real | half (round.js REAL: the year's real race lengths, laps from the round's own lap time); v2's short | standard | long kept for old saves
     len:{},              // per race kind overrides {heat, semi, lcq, main, moto}
     war:{},              // race.js options (Version, House rows, cards per rider, Real form)
     fill:"full",         // full: the era's full program (privateers fill a short roster) | roster: smaller races, real riders only
@@ -40,7 +40,7 @@ function defaultOpts(){
 function normalize(o){
   var d=defaultOpts(), k; o=o||{};
   for(k in d) if(o[k]!==undefined) d[k]=o[k];
-  if(!Round.LEN[d.length]) d.length="standard";
+  if(!Round.REAL[d.length]&&!Round.LEN[d.length]) d.length="real";
   d.len=(d.len&&typeof d.len==="object")?clone(d.len):{};
   d.war=Race.mergeOpts(d.war||{}); delete d.war.len;
   d.fill=d.fill==="roster"?"roster":"full";
@@ -139,6 +139,15 @@ function privateer(G){
 
 /* ---------------- a round ---------------- */
 function calFormat(G,cal){ return Round.formatFor({formats:G.formats},G.fmt,cal); }
+/* the round's lap time: its own track (course.js + layouts.js when they are loaded: the game, the 3D view, the tests), else the series' usual
+   lap; cached by layout */
+var lapCache={};
+function lapTime(G,cal){
+  var C0=MX.Course, L0=MX.Layouts;
+  if(C0&&L0){ try{ var pk=L0.pick(G.series,G.year,cal.n||(G.ri+1),cal), id=pk.layout.id; if(lapCache[id]==null) lapCache[id]=Math.round(C0.build(pk.layout).Tlap*10)/10; return lapCache[id]; }catch(e){} }
+  return Round.nominalLap(G.series);
+}
+function roundCtx(G,cal){ return {series:G.series,year:G.year,lapT:lapTime(G,cal)}; }
 function startRound(G){
   var cal=G.cal[G.ri], F=calFormat(G,cal), full=Round.fieldSize(F), H=G.humans.length;
   /* candidates: this round's real riders, then the roster (most starts, then the real final position), then privateers */
@@ -164,7 +173,7 @@ function startRound(G){
     entry.sort(function(a,b){ return (G.pts[b]||0)-(G.pts[a]||0)||seedPos(G,a)-seedPos(G,b)||idx[a]-idx[b]; });
   }
   var team={}; entry.forEach(function(id){ team[id]=G.riders[id].bike||"Privateer"; });
-  G.round=Round.newRound(F,G.ri,entry,G.o,team);
+  G.round=Round.newRound(F,G.ri,entry,G.o,team,roundCtx(G,cal));
   log(G,"Round "+(G.ri+1)+": "+(cal.city||cal.venue)+(cal.title?"":" (no points)")+".","round");
   return G.round;
 }
@@ -176,7 +185,7 @@ function next(G){
   if(G.over) return {t:"over"};
   var cal=G.cal[G.ri], RG=G.round, r, ent;
   if(G.race) return {t:"race",live:true,ri:G.ri,round:cal,key:G.rkey,label:raceLabel(G),kind:G.race.kind,len:G.race.o.len,n:G.race.n,humanIn:G.rmap.some(isHuman.bind(null,G))};
-  if(!RG){ var F=calFormat(G,cal), L=Round.lengths(G.o); r=F.qual.length?{label:F.qual[0].label+(F.qual[0].races>1?" 1":""),kind:F.qual[0].kind,len:L[F.qual[0].kind]}:{label:F.finals.races>1?F.finals.label+" 1":F.finals.label,kind:F.finals.kind,len:Math.round(L[F.finals.kind]*(F.finals.lenF||1))}; return {t:"race",live:false,ri:G.ri,round:cal,key:null,label:r.label,kind:r.kind,len:r.len,n:null,humanIn:true,newRound:true}; }
+  if(!RG){ var F=calFormat(G,cal), real=true, L=real?Round.realLens(G.o,F,roundCtx(G,cal)):Round.lengths(G.o); r=F.qual.length?{label:F.qual[0].label+(F.qual[0].races>1?" 1":""),kind:F.qual[0].kind,len:L[F.qual[0].kind]}:{label:F.finals.races>1?F.finals.label+" 1":F.finals.label,kind:F.finals.kind,len:real?L[F.finals.kind]:Math.round(L[F.finals.kind]*(F.finals.lenF||1))}; return {t:"race",live:false,ri:G.ri,round:cal,key:null,label:r.label,kind:r.kind,len:r.len,n:null,humanIn:true,newRound:true,lapT:real?lapTime(G,cal):null}; }
   r=Round.current(RG); ent=Round.entrants(RG)||[];
   return {t:"race",live:false,ri:G.ri,round:cal,key:r.key,label:r.label,kind:r.kind,len:r.len,n:ent.length,humanIn:ent.some(isHuman.bind(null,G))};
 }
@@ -222,13 +231,16 @@ function simRace(G){
 function endRace(G){
   var R=G.race, RG=G.round, r=Round.current(RG), ev=[];
   var order=R.res.slice(), hs=R.hs>=0?R.r[R.hs].id:null, fin=r.st<0;
-  var tr=Round.record(RG,order,hs,R.why);
-  order.forEach(function(id,p){ var s=stOf(G,id); s.races++; if(fin){ s.finals++; } });
+  /* crashes (CRASH-CONTRACT.md): who went down (remounts and outs) and who did not finish; a save from before crashes has none */
+  var dnf={}, cr={};
+  R.r.forEach(function(p){ if(p.dnf) dnf[p.id]={lap:p.dnf.lap,why:p.dnf.why}; if(p.crashes) cr[p.id]=p.crashes; });
+  var tr=Round.record(RG,order,hs,R.why,dnf);
+  order.forEach(function(id,p){ var s=stOf(G,id); s.races++; if(fin){ s.finals++; } if(cr[id]) s.crashes=(s.crashes|0)+cr[id]; if(dnf[id]&&dnf[id].why==="crash") s.dnfs=(s.dnfs|0)+1; });
   if(hs!=null){ var sh=stOf(G,hs); sh.hsAll++; if(fin) sh.hs++; }
-  G.last={ri:G.ri,key:r.key,label:r.label,kind:r.kind,order:order,hs:hs,why:R.why,battles:R.battle,len:R.o.len,wars:R.wars,toMain:tr.toMain,toNext:tr.toNext,out:tr.out};
+  G.last={ri:G.ri,key:r.key,label:r.label,kind:r.kind,order:order,hs:hs,why:R.why,battles:R.battle,len:R.o.len,wars:R.wars,toMain:tr.toMain,toNext:tr.toNext,out:tr.out,dnf:dnf,crashes:cr};
   var cal=G.cal[G.ri];
   log(G,(cal.city||cal.venue)+" "+r.label+": "+G.riders[order[0]].name+" wins"+(hs!=null?" (holeshot "+G.riders[hs].name+")":"")+".","race");
-  ev.push({e:"raceDone",ri:G.ri,key:r.key,label:r.label,kind:r.kind,order:order,hs:hs,why:R.why,toMain:tr.toMain,toNext:tr.toNext,out:tr.out,walkover:tr.walkover||null});
+  ev.push({e:"raceDone",ri:G.ri,key:r.key,label:r.label,kind:r.kind,order:order,hs:hs,why:R.why,toMain:tr.toMain,toNext:tr.toNext,out:tr.out,walkover:tr.walkover||null,dnf:dnf,crashes:cr});
   G.race=null; G.rmap=null; G.rkey=null;
   if(RG.done) ev=ev.concat(endRound(G));
   return ev;
@@ -330,6 +342,6 @@ function check(G){
 }
 
 MX.Season={VER:VER,MAXH:MAXH,defaultOpts:defaultOpts,normalize:normalize,newSeason:newSeason,next:next,startRound:startRound,startRace:startRace,apply:apply,step:step,simRace:simRace,
-  standings:standings,redPlate:redPlate,snapshot:snapshot,check:check,raceSeat:raceSeat,humanSeats:humanSeats,rider:rider,calFormat:calFormat};
+  standings:standings,redPlate:redPlate,snapshot:snapshot,check:check,raceSeat:raceSeat,humanSeats:humanSeats,rider:rider,calFormat:calFormat,lapTime:lapTime};
 if(typeof module!=="undefined"&&module.exports) module.exports=MX.Season;
 })(typeof window!=="undefined"?window:globalThis);

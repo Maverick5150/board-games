@@ -77,7 +77,8 @@
   .mx-field{display:grid; gap:.15rem}
   .mx-field .bg-row__desc{margin-top:0}
   #seriesSeg{grid-template-columns:repeat(3,minmax(0,1fr))}
-  #lengthSeg{grid-template-columns:repeat(3,minmax(0,1fr))}
+  #lengthSeg{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #viewSeg{grid-template-columns:repeat(2,minmax(0,1fr))}
   .mx-vdesc{margin:.875rem 0 0; padding:.75rem .875rem; border-radius:var(--r-md); background:var(--ink-2); box-shadow:var(--well-edge);
     font:var(--fw-body) var(--fs-sm)/1.45 var(--font-ui); color:var(--text-2)}
   .mx-vdesc b{color:var(--text-1); font-weight:var(--fw-ui-strong)}
@@ -342,6 +343,9 @@
   .mx-tag--main{color:var(--text-on-gold); background:var(--gold-fill)}
   .mx-tag--next{color:#0b0a12; background:#9fd6ff}
   .mx-tag--out{color:var(--text-2); background:var(--ink-4)}
+  .mx-tag--dnf{color:#fff; background:#8a1c22}
+  .mx-tag--cr{color:#1d1a24; background:#f2cf1d}
+  .mx-bd__cr{display:inline-block; margin-left:.25rem; padding:0 .3rem; border-radius:var(--r-pill); font:var(--fw-caps) var(--fs-micro)/1.35 var(--font-ui); color:#1d1a24; background:#f2cf1d}
   .mx-tag--pts{color:#0b0a12; background:#b6e04e}
   .mx-sum{display:flex; flex-wrap:wrap; gap:.4rem; margin:0 0 .75rem}
   .mx-sacts{display:flex; flex-wrap:wrap; gap:.625rem; margin:0 calc(-1 * var(--focus-room)); padding:var(--focus-room)}
@@ -436,7 +440,7 @@
     mask-image:linear-gradient(90deg,rgba(0,0,0,0),#000 8%,#000 96%,rgba(0,0,0,0)),linear-gradient(180deg,rgba(0,0,0,0),#000 9%,#000 58%,rgba(0,0,0,0));
     mask-composite:intersect}
   html[data-tv] .mx-hero .bg-hero__body{padding:0}
-  html[data-tv] #seriesSeg, html[data-tv] #lengthSeg, html[data-tv] #speedSeg, html[data-tv] #skillSeg, html[data-tv] #versionSeg{gap:1.5rem}
+  html[data-tv] #seriesSeg, html[data-tv] #lengthSeg, html[data-tv] #speedSeg, html[data-tv] #skillSeg, html[data-tv] #versionSeg, html[data-tv] #viewSeg{gap:1.5rem}
   html[data-tv] .mx-rules .bg-row{min-height:0; padding:.5rem .875rem}
   html[data-tv] .mx-col--b{display:flex; flex-direction:column}
   html[data-tv] .mx-sec--players{order:1} html[data-tv] .mx-dock{order:2} html[data-tv] .mx-sec--speed{order:3} html[data-tv] .mx-sec--save{order:4} html[data-tv] .mx-back{order:5}
@@ -588,6 +592,95 @@
     html:not([data-tv]) .mx-hero{padding-top:5.5rem}
     html:not([data-tv]) .mx-hero .bg-hero__layer{bottom:0; aspect-ratio:auto; background-size:cover; background-position:50% 40%}
   }
+
+  /* ---------- MOTOCROSS WAR 3D (the CEO, 20:06): the race fills the arena; the cards are a small window in a corner; a compact tower and
+     the lap bug over the view; banners as broadcast graphics near the top, one at a time ---------- */
+  .mx-v3, .mx-otw, .mx-bug{display:none}
+  body.mx-3d .mx-v3{display:block; position:absolute; inset:0; z-index:1; background:#05060a}
+  body.mx-3d .mx-v3 canvas{display:block; width:100%; height:100%}
+  body.mx-3d .mx-lane, body.mx-3d .mx-track, body.mx-3d .mx-gate, body.mx-3d .mx-dust{display:none !important}
+  body.mx-3d .mx-arena{background:#05060a}
+  /* the corner card window (bottom-right): tap / OK = bigger */
+  body.mx-3d .mx-table{top:auto; left:auto; right:.45rem; bottom:.45rem; width:var(--pip-w,10rem); height:var(--pip-h,6.5rem); z-index:6; border-radius:var(--r-md);
+    background:linear-gradient(180deg,rgba(14,14,20,.88),rgba(6,6,10,.9)); box-shadow:inset 0 0 0 1px rgba(231,202,144,.32), 0 .4rem 1.2rem rgba(0,0,0,.55); cursor:pointer; overflow:hidden}
+  body.mx-3d .mx-table:focus-visible{outline:3px solid var(--gold-100); outline-offset:2px}
+  body.mx-3d .mx-table .mx-slot__lab{font-size:var(--fs-micro); padding:0 .35rem}
+  body.mx-3d .mx-table .mx-slot__who{font-size:var(--fs-micro); max-width:100%}
+  body.mx-3d .mx-table .mx-slot__who .mx-pl{font-size:var(--fs-micro); min-width:2em}
+  body.mx-3d .mx-table .mx-mid b{font-size:var(--fs-lg)}
+  body.mx-3d .mx-table .mx-war{inset:.25rem}
+  body.mx-3d .mx-table .mx-fight__who{font-size:var(--fs-micro)}
+  body.mx-3d .mx-table .mx-fight__tie{display:none}
+  body.mx-3d .mx-table.is-big{background:linear-gradient(180deg,rgba(14,14,20,.94),rgba(6,6,10,.95))}
+  body.mx-3d .mx-table.is-big .mx-fight__tie{display:block}
+  body.mx-3d .mx-table:not(.is-big) .mx-slot__who .mx-sn, body.mx-3d .mx-table:not(.is-big) .mx-slot__who .mx-you{display:none}
+  body.mx-3d .mx-table .mx-slot__lab{white-space:nowrap}
+  /* the timing tower over the race (top-left) */
+  body.mx-3d .mx-otw{display:grid; position:absolute; left:.45rem; top:.45rem; z-index:5; gap:.1rem; margin:0; padding:.3rem; list-style:none; max-width:46%;
+    border-radius:var(--r-sm); background:rgba(6,6,10,.72); box-shadow:inset 0 0 0 1px rgba(231,202,144,.18); pointer-events:none}
+  body.mx-3d .mx-otw:empty{display:none}
+  body.mx-3d .mx-otw li{display:flex; align-items:center; gap:.3rem; min-height:1.25rem; padding:0 .3rem 0 .15rem; border-radius:.25rem; font:var(--fw-ui-strong) var(--fs-micro)/1.15 var(--font-ui); color:#f4f1e8; white-space:nowrap}
+  body.mx-3d .mx-otw li.is-me{background:linear-gradient(90deg,rgba(231,202,144,.34),rgba(231,202,144,.08)); box-shadow:inset 0 0 0 1px var(--gold-200)}
+  body.mx-3d .mx-otw li.is-out{opacity:.62}
+  body.mx-3d .mx-otw li.is-sep{min-height:0; height:.25rem; padding:0; border-top:1px dashed rgba(231,202,144,.35)}
+  body.mx-3d .mx-otw .mx-pl{font-size:var(--fs-micro); min-width:2.2em; padding:.02rem .2rem .02rem .5em}
+  .mx-otw__p{min-width:1.15rem; text-align:right; color:var(--gold-100); font-weight:800; font-variant-numeric:tabular-nums}
+  .mx-otw__n{overflow:hidden; text-overflow:ellipsis; max-width:7.5rem}
+  .mx-otw__x{padding:0 .25rem; border-radius:var(--r-pill); color:#fff; background:#8a1c22; font-size:var(--fs-micro)}
+  /* the lap bug (top-right) */
+  body.mx-3d .mx-bug{display:flex; position:absolute; right:.45rem; top:.45rem; z-index:5; align-items:center; gap:.35rem; padding:.25rem .6rem; border-radius:var(--r-sm);
+    background:rgba(6,6,10,.76); box-shadow:inset 0 0 0 1px rgba(231,202,144,.3); color:#f4f1e8; font:var(--fw-ui-strong) var(--fs-sm)/1.1 var(--font-ui); pointer-events:none}
+  body.mx-3d .mx-bug[hidden]{display:none}
+  body.mx-3d .mx-bug b{font:400 var(--fs-lg)/1 var(--font-display); color:var(--gold-100)}
+  body.mx-3d .mx-bug span{color:var(--text-2); font-size:var(--fs-xs)}
+  body.mx-3d .mx-bug.is-white{box-shadow:inset 0 0 0 1.5px #fffdf6}
+  body.mx-3d .mx-bug .mx-flag{width:1.5em; height:1em}
+  /* banners: a broadcast graphic near the top, not over the action */
+  body.mx-3d .mx-banner{top:4.2rem; transform:translate(-50%,0); padding:.4rem 1.1rem .5rem; max-width:min(92%,34rem)}
+  body.mx-3d .mx-banner b{font-size:var(--fs-2xl)}
+  body.mx-3d .mx-banner span{font-size:var(--fs-xs)}
+  body.mx-3d .mx-banner.is-crash{background:linear-gradient(180deg,rgba(120,16,20,.95),rgba(60,6,8,.95))}
+  body.mx-3d .mx-banner.is-crash b{color:#fff}
+  body.mx-3d .mx-banner.is-yellow{background:linear-gradient(180deg,rgba(242,207,29,.96),rgba(200,160,10,.96)); box-shadow:inset 0 0 0 1.5px #1d1a24, 0 .8rem 2rem rgba(0,0,0,.6)}
+  body.mx-3d .mx-banner.is-yellow b, body.mx-3d .mx-banner.is-yellow span{color:#1d1a24}
+  body.mx-3d .mx-banner.is-war b{color:#ffe2a8}
+  body.mx-3d .mx-flash{display:none}
+  /* one focus: the old tower, the log and the head chips step aside (the battle board has everything) */
+  body.mx-3d .mx-tower, body.mx-3d .mx-log, body.mx-3d #lapChip, body.mx-3d #fieldChip{display:none !important}
+  html:not([data-tv]) body.mx-3d .mx-arena{height:max(17rem,calc(100svh - 17.6rem))}
+  html:not([data-tv]) body.mx-3d .mx-race{padding-bottom:.25rem}
+  html:not([data-tv]) body.mx-3d .mx-rhead{min-height:0; padding-bottom:.3rem}
+  html:not([data-tv]) body.mx-3d #hsChip{display:none}
+  html:not([data-tv]) body.mx-3d .mx-acts{margin-top:.15rem; gap:.5rem; row-gap:.45rem}
+  html:not([data-tv]) body.mx-3d #flipBtn{min-height:3.1rem; flex:1 1 9rem}
+  html:not([data-tv]) body.mx-3d .mx-auto{min-height:3.1rem}
+  html:not([data-tv]) body.mx-3d #boardBtn, html:not([data-tv]) body.mx-3d #skipBtn{flex:1 1 0; min-height:2.9rem; padding-inline:.6rem; font-size:var(--fs-sm)}
+  html:not([data-tv]) body.mx-3d .mx-stat{margin-top:.25rem; min-height:1.2em; font-size:var(--fs-xs)}
+  html:not([data-tv]) body.mx-3d .mx-otw li{min-height:1.15rem}
+  html:not([data-tv]) body.mx-3d .mx-otw__n{max-width:5.8rem}
+  /* TV: the race fills the screen above one row of controls and the status line */
+  html[data-tv] body.mx-3d .mx-race{grid-template-columns:minmax(0,1fr) auto; grid-template-rows:auto minmax(0,1fr) auto; grid-template-areas:"head head" "arena arena" "acts stat"; column-gap:1.5rem}
+  html[data-tv] body.mx-3d .mx-logw{display:none}
+  html[data-tv] body.mx-3d .mx-stat{align-self:center; max-width:34rem; margin:0}
+  html[data-tv] body.mx-3d .mx-otw{left:.75rem; top:.75rem; padding:.4rem}
+  html[data-tv] body.mx-3d .mx-otw li{min-height:1.6rem; font-size:max(21px,var(--fs-xs))}
+  html[data-tv] body.mx-3d .mx-otw .mx-pl, html[data-tv] body.mx-3d .mx-otw__x{font-size:max(21px,var(--fs-xs))}
+  html[data-tv] body.mx-3d .mx-bug, html[data-tv] body.mx-3d .mx-bug span{font-size:max(21px,var(--fs-sm))}
+  html[data-tv] body.mx-3d .mx-table .mx-slot__lab, html[data-tv] body.mx-3d .mx-table .mx-slot__who, html[data-tv] body.mx-3d .mx-table .mx-slot__who .mx-pl,
+  html[data-tv] body.mx-3d .mx-table .mx-mid span, html[data-tv] body.mx-3d .mx-table .mx-fight__who, html[data-tv] body.mx-3d .mx-table .mx-fight__who .mx-pl{font-size:21px}
+  html[data-tv] body.mx-3d .mx-table .mx-slot__lab{letter-spacing:.02em}
+  html[data-tv] body.mx-3d .mx-otw__n{max-width:12rem}
+  html[data-tv] body.mx-3d .mx-bug{right:.75rem; top:.75rem; padding:.35rem .9rem}
+  html[data-tv] body.mx-3d .mx-table{right:.75rem; bottom:.75rem}
+  html[data-tv] body.mx-3d .mx-banner{top:5.5rem}
+  html[data-tv] body.mx-3d .mx-banner b{font-size:var(--fs-4xl)}
+  html[data-tv] body.mx-3d .mx-banner span{font-size:var(--fs-md)}
+  html[data-tv] body.mx-3d .mx-acts{margin:0}
+  @media (orientation: landscape) and (max-height: 31.25em){
+    html:not([data-tv]) body.mx-3d .mx-arena{height:var(--ls-game)}
+    html:not([data-tv]) body.mx-3d .mx-otw li{min-height:1.1rem}
+    html:not([data-tv]) body.mx-3d .mx-banner{top:2.6rem}
+  }
 </style>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
@@ -665,6 +758,10 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
       <section class="mx-sec mx-sec--speed" aria-labelledby="speedHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="speedHead" data-stage-text>Game speed</h2></div>
         <div class="bg-seg bg-seg--text" id="speedSeg" role="group" aria-labelledby="speedHead"><button type="button" data-s="slow" aria-pressed="false">Slow</button><button type="button" data-s="medium" class="on" aria-pressed="true">Medium</button><button type="button" data-s="fast" aria-pressed="false">Fast</button></div>
+        <p class="mx-legend" data-stage-text>The race itself always runs in real time; this is how fast the cards turn and the lists move.</p>
+        <div class="bg-section mx-subhead"><h2 class="bg-eyebrow" id="viewHead" data-stage-text>Race view</h2></div>
+        <div class="bg-seg bg-seg--text" id="viewSeg" role="group" aria-labelledby="viewHead"><button type="button" data-v="3d" class="on" aria-pressed="true">3D race</button><button type="button" data-v="2d" aria-pressed="false">Flat track</button></div>
+        <p class="mx-legend" id="viewNote" data-stage-text></p>
         <div class="bg-section mx-subhead"><h2 class="bg-eyebrow" id="skillHead" data-stage-text>Computer skill</h2></div>
         <div class="bg-seg bg-seg--text" id="skillSeg" role="group" aria-labelledby="skillHead"><button type="button" data-k="easy" aria-pressed="false">Easy</button><button type="button" data-k="normal" class="on" aria-pressed="true">Normal</button><button type="button" data-k="hard" aria-pressed="false">Hard</button></div>
         <p class="mx-legend" id="skillNote" data-stage-text></p>
@@ -728,6 +825,9 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
       <span class="mx-chip" id="fieldChip"></span>
     </div>
     <div class="mx-arena" id="arena" data-stage-solid aria-label="The track">
+      <div class="mx-v3" id="v3" aria-hidden="true"></div>
+      <ol class="mx-otw" id="otw" aria-label="Running order"></ol>
+      <div class="mx-bug" id="bug" hidden></div>
       <div class="mx-track" id="trackArt" aria-hidden="true"></div>
       <div class="mx-lane" id="lane" aria-hidden="true"></div>
       <div class="mx-dust" id="dust" aria-hidden="true"></div>
@@ -794,6 +894,9 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
 <script src="brain.js"></script>
 <script src="art.js"></script>
 <script src="track.js"></script>
+<script src="course.js"></script>
+<script src="layouts.js"></script>
+<script src="data/tracks.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

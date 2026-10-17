@@ -25,6 +25,39 @@ if(MX.Round) return;
    extra. (v1, ~16:55: Short 10/8/8/25/20, Standard 15/12/12/40/30, Long 20/15/15/60/40.) A season saved with v1 lengths races its next race
    at the new lengths; a race already under way keeps its own. */
 var LEN={short:{heat:15,semi:12,lcq:12,main:40,moto:30},standard:{heat:30,semi:25,lcq:25,main:80,moto:60},long:{heat:50,semi:40,lcq:40,main:150,moto:100}};
+/* REAL LENGTHS (the CEO, 2026-10-16 ~21:10: "Races have their REAL LENGTH for the year's format ... The lap count follows from duration / that
+   track's lap time, plus the extra laps"). The year's race length (BG_audit/games/mxwar/data/formats.json "length" / "motoLength"):
+   Supercross 2018-2026 heat 6 min + 1 lap, LCQ 5 min + 1 lap, Main 20 min + 1 lap; 2017 heat 5 + 1, semi 4 + 1, LCQ 3 + 1, Main 20 + 1;
+   2016 heat 6 laps, semi 5, LCQ 4, Main 20 laps; before 2016 lap-count programs (the Main 20 laps; heats 8, semis and the LCQ 6 laps:
+   the usual counts, NOT in the research); the Triple Crown's mains 12 min + 1 lap; the 1974-76 stadium motos 12 laps (not in the
+   research); Pro Motocross motos 30 min + 2 laps (documented 1998+, the research infers it for 1986-1997 and earlier); SMX motos 20 min +
+   1 lap. A timed race: when the clock runs out the leader finishes that lap and one more (laps = ceil(minutes / lap time) + the extra).
+   The lap time is the round's own track (course.js; about 50-57 s in a stadium, 1:53-2:07 outdoors), else 54 s / 118 s.
+   "Real length" is the default; "Half length" halves the laps (still at real lap speed). */
+var REAL={real:1,half:1};
+function spec(series,year,kind,F){
+  if(series==="smx") return kind==="lcq"||kind==="heat"||kind==="semi"?{min:5,plus:1}:{min:20,plus:1};
+  if(series==="mx"||kind==="moto"&&series!=="sx") return {min:30,plus:2};
+  if(kind==="moto") return {laps:12};
+  if(F&&F.isTC&&kind==="main") return {min:12,plus:1};
+  if(year>=2018) return ({heat:{min:6,plus:1},semi:{min:5,plus:1},lcq:{min:5,plus:1},qual:{min:6,plus:1},main:{min:20,plus:1}})[kind]||{min:6,plus:1};
+  if(year===2017) return ({heat:{min:5,plus:1},semi:{min:4,plus:1},lcq:{min:3,plus:1},qual:{min:5,plus:1},main:{min:20,plus:1}})[kind]||{min:5,plus:1};
+  if(year===2016) return ({heat:{laps:6},semi:{laps:5},lcq:{laps:4},qual:{laps:6},main:{laps:20}})[kind]||{laps:6};
+  return ({heat:{laps:8},semi:{laps:6},lcq:{laps:6},qual:{laps:8},main:{laps:20}})[kind]||{laps:8};
+}
+function lapsFor(sp,lapT,half,lenF){
+  var n=sp.laps?Math.round(sp.laps*(lenF||1)):Math.ceil(sp.min*60/Math.max(20,lapT||54))+(sp.plus||0);
+  if(half) n=Math.ceil(n/2);
+  return Math.max(2,Math.min(200,n));
+}
+function nominalLap(series){ return series==="mx"?118:series==="smx"?58:54; }
+/* the laps of every race kind of a round: {heat, semi, lcq, qual, main, moto} */
+function realLens(o,F,ctx){
+  var half=o&&(o.length==="half"||o.length==="short"), out={}, lapT=(ctx&&ctx.lapT)||nominalLap(ctx&&ctx.series);   /* v2's Short = half; Standard / Long = real */
+  ["heat","semi","lcq","qual","main","moto"].forEach(function(k){ out[k]=lapsFor(spec(ctx&&ctx.series,ctx&&ctx.year,k,F),lapT,half,k===F.finals.kind?(F.finals.lenF&&!F.isTC?F.finals.lenF:1):1); });
+  if(o&&o.len) for(var k in o.len) if(out[k]!=null&&+o.len[k]>=1) out[k]=Math.min(2000,Math.floor(+o.len[k]));
+  return out;
+}
 
 function clone(x){ return JSON.parse(JSON.stringify(x)); }
 /* the format for one round: the round's own override (1976 Anaheim, Daytona 1979-85), the Triple Crown night (formats.json: a 40-rider
@@ -44,8 +77,9 @@ function lengths(o){ var base=LEN[o&&o.length]||LEN.standard, out={}, k; for(k i
 /* ---------------- a new round ----------------
    entry: rider ids in SEED order (the season's standings / form); n = the night's field (fill === "roster" may make it smaller than the
    format's full program: the first stage's races keep their count and get smaller). */
-function newRound(F,ri,entry,o,team){
-  var L=lengths(o), RG={ri:ri,fmt:F.id,tc:!!F.isTC,F:F,entry:entry.slice(),races:[],cur:0,send:[],main:[],elim:[],fin:null,done:false,res:null};
+function newRound(F,ri,entry,o,team,ctx){
+  var real=!!ctx, L=real?realLens(o,F,ctx):lengths(o), RG={ri:ri,fmt:F.id,tc:!!F.isTC,F:F,entry:entry.slice(),races:[],cur:0,send:[],main:[],elim:[],fin:null,done:false,res:null};
+  if(ctx) { RG.lapT=ctx.lapT||null; RG.real=real; }
   /* the CEO (~18:25): "at the start of the heat races, there has to be an equal amount of teams": team = {riderId: make} balances the
      first stage's races by team (season.js passes it; without it the plain odd / even seed split, as qualifying splits them) */
   if(team&&typeof team==="object"){ RG.team={}; entry.forEach(function(id){ RG.team[id]=String(team[id]||"Privateer"); }); }
@@ -61,7 +95,7 @@ function newRound(F,ri,entry,o,team){
   var f=F.finals;
   for(var i=0;i<f.races;i++){
     var lbl=f.races===1&&f.kind!=="moto"?f.label:(F.isTC?"Main "+(i+1):f.label+" "+(i+1));
-    RG.races.push({key:"final-"+(i+1),label:lbl,kind:f.kind,st:-1,i:i,len:Math.max(5,Math.round((L[f.kind]||L.main)*(f.lenF||1))),ent:null,res:null,hs:null,why:null});
+    RG.races.push({key:"final-"+(i+1),label:lbl,kind:f.kind,st:-1,i:i,len:real?(L[f.kind]||L.main):Math.max(5,Math.round((L[f.kind]||L.main)*(f.lenF||1))),ent:null,res:null,hs:null,why:null});
   }
   if(!st.length) RG.fin=entry.slice(0,f.size);
   else assign(RG,0,rest.slice(0,st[0].races*st[0].size));
@@ -122,13 +156,16 @@ function entrants(RG,k){
   return r.ent?r.ent.slice():null;
 }
 /* the result of the current race: order = rider ids, place 1 first. Returns what happened (transfers) for the page. */
-function record(RG,order,hs,why){
+function record(RG,order,hs,why,dnf){
   var r=RG.races[RG.cur], out={race:r.key,toMain:[],toNext:[],out:[]};
   if(!r||RG.done) throw new Error("No race to record.");
   var ent=entrants(RG,RG.cur), u={};
   if(order.length!==ent.length) throw new Error("Result size "+order.length+" != "+ent.length);
   order.forEach(function(id){ if(ent.indexOf(id)<0||u[id]) throw new Error("Bad result "+id); u[id]=1; });
   r.res=order.slice(); r.hs=hs==null?null:hs; r.why=why||null;
+  /* crashes (CRASH-CONTRACT.md): the riders who did not finish {id: {lap, why: "crash" | "cards"}}, already classified behind the finishers
+     by race.js; they score the points of their place (the series' tables pay by place) */
+  if(dnf&&typeof dnf==="object"&&Object.keys(dnf).length) r.dnf=JSON.parse(JSON.stringify(dnf));
   if(r.st>=0){
     var s=RG.st[r.st], nm=s.toMain, nn=s.toNext==="rest"?1e9:(+s.toNext||0), last=r.st===RG.st.length-1;
     if(last) nn=0;
@@ -204,6 +241,6 @@ function score(RG,title){
   return {cls:cls,pts:pts,wins:wins,places:places,finals:mot,hs:hs,winner:ov[0],title:!!title,main:RG.fin.slice()};
 }
 
-MX.Round={LEN:LEN,teamSplit:teamSplit,formatFor:formatFor,fieldSize:fieldSize,lengths:lengths,newRound:newRound,current:current,entrants:entrants,record:record,score:score,overall:overall};
+MX.Round={REAL:REAL,spec:spec,lapsFor:lapsFor,realLens:realLens,nominalLap:nominalLap,LEN:LEN,teamSplit:teamSplit,formatFor:formatFor,fieldSize:fieldSize,lengths:lengths,newRound:newRound,current:current,entrants:entrants,record:record,score:score,overall:overall};
 if(typeof module!=="undefined"&&module.exports) module.exports=MX.Round;
 })(typeof window!=="undefined"?window:globalThis);
