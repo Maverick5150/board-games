@@ -417,7 +417,7 @@ export function buildWorld(C,look,q){
     m.instanceMatrix.needsUpdate=true; m.frustumCulled=false; m.renderOrder=-5; root.add(m);
   };
   let info;
-  if(C.kind==="stadium") info=stadiumBowl(C,look,q,root,ctx);
+  if(C.kind==="stadium"){ info=stadiumBowl(C,look,q,root,ctx); ctx.bowlY=info.bowlY; }   /* ctx.bowlY(x, z) -> {y, d}: the height of the stands at a place (for cameras) */
   else if(look.around==="beach-speedway"||C.kind==="hybrid") info=speedway(C,look,q,root,ctx);
   else info=outdoorWorld(C,look,q,root,ctx);
   const dirt=addTrack(C,look,q,root,matTrack), track=dirt.track;   /* the track surface (r3d-track.js) joins the scene where it always did */
