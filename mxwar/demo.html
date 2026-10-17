@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Motocross War 3D: capture harness</title>
+<!-- The capture / demo page of the 3D race view (mxwar/demo.js). A LIVE race of the real game engine (the 2026 Supercross season, round 1
+     Anaheim, the Main with 22 riders, a fixed seed, the person "YOU" in the field) through race3d.js exactly as game.js drives it, with a
+     deterministic fixed time step: window.DEMO = {ready, step, skip, seek, camera, bookmark, quality, size, stats, grab, ...}.
+     No menus, no HUD. Query: ?seed=N  ?round=N  ?kind=main|heat|lcq  ?season=sx-2026  ?live=1 (real time, the view's own loop)  ?q=high|medium|low|stick
+     ?w=1280&h=720 (the canvas size, default the window)  ?view=race3d.js  ?hud=1 (a small status line)  ?cam=<json> (a camera spec).
+     Docs: BG_audit/sprint/mxvis/tools/README.md. Not part of the game; nothing links here. -->
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden}
+  #v3{position:absolute;left:0;top:0;background:#05060a;overflow:hidden}
+  #v3 canvas{display:block}
+  #hud{position:fixed;left:8px;bottom:8px;font:12px/1.3 ui-monospace,Consolas,monospace;color:#cfd3dc;background:rgba(0,0,0,.55);padding:4px 8px;border-radius:4px;display:none;z-index:5;white-space:pre}
+  #err{position:fixed;left:8px;top:8px;right:8px;font:13px/1.35 ui-monospace,Consolas,monospace;color:#ffb4b4;background:rgba(60,0,0,.85);padding:8px 10px;border-radius:6px;display:none;z-index:6;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<div id="v3"></div>
+<div id="hud"></div>
+<div id="err"></div>
+<!-- the engine (classic scripts, as in index.html) -->
+<script src="data/index.js"></script>
+<script src="race.js"></script>
+<script src="round.js"></script>
+<script src="season.js"></script>
+<script src="art.js"></script>
+<script src="course.js"></script>
+<script src="layouts.js"></script>
+<script src="data/tracks.js"></script>
+<script src="data/sx-2026.js"></script>
+<script src="demo-engine.js"></script>
+<!-- the harness (a module: it loads the view with import()) -->
+<script type="module" src="demo.js"></script>
+</body>
+</html>

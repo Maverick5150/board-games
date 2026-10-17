@@ -1,0 +1,363 @@
+{
+  "version": 1,
+  "about": "Six fixed views of ONE race, the same for every specialist and for the before / after comparison. The race is the real game engine (mxwar/demo-engine.js, the same drive as game.js) through the 3D view on the harness page (mxwar/demo.html): the 2026 Supercross season, round 1 Anaheim, the Main with 22 riders, the person 'YOU' among them (seat 12), the red plate on seat 0, engine seed 22. t is race seconds after the gate drop (the view's clock T; t < 0 = at the gate, before the drop); the harness steps whole 1/60 s ticks on a virtual clock with a seeded Math.random, so the same plan gives the same frames. Cameras: a rider rig {seat, back, up, side, aim, fov} (metres along / across the rider's heading, + side = the rider's right, up above the dirt; seat 'you' | 'lead' | 'crash' | N | {rank:k}) or a world pose {eye, target, fov} (x east, y up, z south; the stadium floor is x -67.5..67.5, z -32..44; the whoops lane is z -5, the big jump z 19, the gate (-54.6, 33)). Run them with tools/shots.js; every tool is documented in tools/README.md.",
+  "race": {
+    "season": "sx-2026",
+    "round": 1,
+    "kind": "main",
+    "seed": 22,
+    "riders": 22,
+    "laps": 24,
+    "you": 12,
+    "redPlate": 0,
+    "lapSeconds": 53.7,
+    "track": "sx-modern-v832 (the generated Stadium template: the round has no traced layout), 518 m"
+  },
+  "defaults": {
+    "sizes": [
+      "1280x720",
+      "1920x1080"
+    ],
+    "quality": "high"
+  },
+  "bookmarks": [
+    {
+      "id": "B1",
+      "name": "cover chase",
+      "t": 41.5,
+      "why": "The cover's framing: low behind a rider (3.5 m back, 1.5 m up, 70 degrees vertical), exiting the east berm (hairpin 3, lap 1) with riders ahead and the stadium and its lights in frame. Lap 1, seat 15 (plate 45, 4th in the running order).",
+      "cam": {
+        "seat": 15,
+        "back": 3.5,
+        "up": 1.5,
+        "side": 0.9,
+        "aim": {
+          "ahead": 10,
+          "up": 1.2,
+          "side": -0.4
+        },
+        "fov": 70
+      }
+    },
+    {
+      "id": "B2",
+      "name": "stadium wide",
+      "t": 125,
+      "why": "High in the south grandstand: the whole course and all 22 riders, spread over lap 3 (Reference_Crops/broadcast_overview). FOV 50 (the stadium_aerial preset).",
+      "cam": {
+        "eye": [
+          0,
+          33,
+          92
+        ],
+        "target": [
+          0,
+          0,
+          4
+        ],
+        "fov": 50
+      }
+    },
+    {
+      "id": "B3",
+      "name": "whoops",
+      "t": 46,
+      "why": "Trackside beside the whoops lane (15 whoops, s 337-393, z -5): the first-lap pack skims them head-on toward the lens, the flagger's stand behind.",
+      "cam": {
+        "eye": [
+          -8,
+          2,
+          -12
+        ],
+        "target": [
+          8,
+          1,
+          -5
+        ],
+        "fov": 42
+      }
+    },
+    {
+      "id": "B4",
+      "name": "jump",
+      "t": 77.5,
+      "why": "A low side view from the far side of the start straight: six riders in the air over the big triple / tabletop (s 68-104, z 19) on lap 2, the stadium behind them.",
+      "cam": {
+        "eye": [
+          6,
+          1.1,
+          34
+        ],
+        "target": [
+          10,
+          3.2,
+          19
+        ],
+        "fov": 45
+      }
+    },
+    {
+      "id": "B5",
+      "name": "gate",
+      "t": 1.6,
+      "why": "The start gate and the launch into turn 1: 1.6 s after the drop, the pads down, 22 riders pulling away from the gate (x -54.6, z 33) toward the first corner, seen from behind and the side.",
+      "cam": {
+        "eye": [
+          -60,
+          2.2,
+          24
+        ],
+        "target": [
+          -45,
+          0.9,
+          33
+        ],
+        "fov": 50
+      }
+    },
+    {
+      "id": "B6",
+      "name": "crash",
+      "t": 111.5,
+      "why": "A crash with the yellow flag: lap 2, the whoops (s 373). The double-war loser (seat 19) is thrown over the bars and tumbles, the bike slides, dust, the marshal waves the yellow flag at the edge of the track, the field rides past.",
+      "cam": {
+        "eye": [
+          4,
+          3,
+          -12.5
+        ],
+        "target": [
+          -2,
+          0.7,
+          -6
+        ],
+        "fov": 52
+      }
+    }
+  ],
+  "extras": [
+    {
+      "id": "B1b",
+      "name": "cover chase, you",
+      "t": 41.5,
+      "why": "The same moment on the person's own rider.",
+      "cam": {
+        "seat": "you",
+        "back": 3.5,
+        "up": 1.5,
+        "side": 0.9,
+        "aim": {
+          "ahead": 10,
+          "up": 1.2,
+          "side": -0.4
+        },
+        "fov": 70
+      }
+    },
+    {
+      "id": "B1c",
+      "name": "cover chase, low",
+      "t": 41.5,
+      "why": "Lower and closer, as in the cover.",
+      "cam": {
+        "seat": 15,
+        "back": 3,
+        "up": 1.2,
+        "side": 1,
+        "aim": {
+          "ahead": 9,
+          "up": 1.3,
+          "side": -0.3
+        },
+        "fov": 70
+      }
+    },
+    {
+      "id": "B2b",
+      "name": "stadium wide, oblique",
+      "t": 125,
+      "why": "The same wide from the south-west corner (the near stand clips the lens at the bottom: a known limit of this pose).",
+      "cam": {
+        "eye": [
+          -28,
+          34,
+          95
+        ],
+        "target": [
+          8,
+          0,
+          3
+        ],
+        "fov": 50
+      }
+    },
+    {
+      "id": "B3b",
+      "name": "whoops, south side",
+      "t": 46,
+      "why": "From the south side of the whoops lane.",
+      "cam": {
+        "eye": [
+          18,
+          2.2,
+          1.5
+        ],
+        "target": [
+          10,
+          0.9,
+          -5
+        ],
+        "fov": 45
+      }
+    },
+    {
+      "id": "B4b",
+      "name": "jump, first lap",
+      "t": 15.5,
+      "why": "Lap 1: the whole field airborne over the big jump at once.",
+      "cam": {
+        "eye": [
+          14,
+          1,
+          36
+        ],
+        "target": [
+          12,
+          3.4,
+          19
+        ],
+        "fov": 42
+      }
+    },
+    {
+      "id": "B5b",
+      "name": "gate, front",
+      "t": 1.6,
+      "why": "The launch from the front: the wall of riders coming at the lens.",
+      "cam": {
+        "eye": [
+          -38,
+          1.4,
+          41
+        ],
+        "target": [
+          -55,
+          1,
+          33
+        ],
+        "fov": 55
+      }
+    },
+    {
+      "id": "B5c",
+      "name": "gate, before the drop",
+      "t": -1,
+      "why": "The riders on the gate, before the drop.",
+      "cam": {
+        "eye": [
+          -30,
+          1.6,
+          40
+        ],
+        "target": [
+          -54,
+          1,
+          33
+        ],
+        "fov": 60
+      }
+    },
+    {
+      "id": "B6b",
+      "name": "crash, rider lying",
+      "t": 112,
+      "why": "A beat later: the rider lies in the whoops, the bike on its side.",
+      "cam": {
+        "seat": "crash",
+        "back": 9,
+        "up": 3.2,
+        "side": -4.5,
+        "aim": {
+          "ahead": 2,
+          "up": 0.5
+        },
+        "fov": 55
+      }
+    },
+    {
+      "id": "B6c",
+      "name": "crash, low front",
+      "t": 111.8,
+      "why": "Low from the front: the rider on the ground, the marshal's flag at the left.",
+      "cam": {
+        "seat": "crash",
+        "back": -9,
+        "up": 1.6,
+        "side": 6.5,
+        "aim": {
+          "ahead": -1.5,
+          "up": 0.7
+        },
+        "fov": 52
+      }
+    }
+  ],
+  "recordings": [
+    {
+      "id": "R1",
+      "name": "cinematic chase",
+      "t0": 39,
+      "seconds": 10,
+      "fps": 30,
+      "why": "The cover chase camera on seat 15 (plate 45) from hairpin 3 through the whoops: roost, suspension, the pack ahead.",
+      "cuts": [
+        {
+          "at": 0,
+          "cam": {
+            "seat": 15,
+            "back": 3.5,
+            "up": 1.5,
+            "side": 0.9,
+            "aim": {
+              "ahead": 10,
+              "up": 1.2,
+              "side": -0.4
+            },
+            "fov": 70,
+            "damp": 0.18
+          }
+        }
+      ]
+    },
+    {
+      "id": "R2",
+      "name": "stadium broadcast",
+      "t0": 120,
+      "seconds": 10,
+      "fps": 30,
+      "why": "The high south-grandstand broadcast camera (stadium_aerial, FOV 50) panning with the race leader for 5 s, then a cut to the view's own director (its trackside / chase / jump cameras): what a viewer of the real game is shown.",
+      "cuts": [
+        {
+          "at": 0,
+          "cam": {
+            "eye": [
+              0,
+              33,
+              92
+            ],
+            "follow": {
+              "seat": "lead",
+              "up": 1,
+              "damp": 0.9
+            },
+            "fov": 50
+          }
+        },
+        {
+          "at": 5,
+          "cam": null
+        }
+      ]
+    }
+  ]
+}
