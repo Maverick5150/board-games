@@ -127,7 +127,7 @@ const GL_AO_HI=`float mxAO=clamp(mxT.b*mxAOd,0.0,1.0);
 reflectedLight.indirectDiffuse*=mxAO*mxAO;
 reflectedLight.directDiffuse*=mix(1.0,mxAO,0.85);
 reflectedLight.directSpecular*=0.45*mix(1.0,mxAO,0.85);
-float mxFr=pow(1.0-clamp(dot(mxNg,normalize(vViewPosition)),0.0,1.0),3.0), mxWs=smoothstep(0.5,1.0,mxWet);
+float mxFr=pow(1.0-clamp(dot(mxNg,normalize(vViewPosition)),0.0,1.0),3.0), mxWs=smoothstep(0.42,0.95,mxWet);
 reflectedLight.indirectSpecular+=uSheen*(mxFr*mxWs*uTun.z*mxAO);
 `;
 const GL_AO_LO=`float mxAO=clamp(mxT.b*mxAOd,0.0,1.0);
@@ -141,7 +141,7 @@ function dirtMaterial(tier,tiles,sheen){
   const hi=tier==="hi";
   const m=hi?new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.95,metalness:0,vertexColors:true,side:THREE.DoubleSide})
             :new THREE.MeshLambertMaterial({color:0xffffff,vertexColors:true,side:THREE.DoubleSide});
-  const U={uTrack:{value:null},uTileA:{value:tiles.A},uTileB:{value:tiles.B},uTm:{value:new THREE.Vector4(1/500,4,0.125,1)},uSheen:{value:new THREE.Color(sheen)},uTun:{value:new THREE.Vector4(hi?1.5:1.2,hi?1.15:0.9,0.3,hi?1.35:1.2)}};
+  const U={uTrack:{value:null},uTileA:{value:tiles.A},uTileB:{value:tiles.B},uTm:{value:new THREE.Vector4(1/500,4,0.125,1)},uSheen:{value:new THREE.Color(sheen)},uTun:{value:new THREE.Vector4(hi?1.5:1.2,hi?1.15:0.9,0.5,hi?1.35:1.2)}};
   m.userData.mx=U;
   m.onBeforeCompile=sh=>{
     Object.assign(sh.uniforms,U);
