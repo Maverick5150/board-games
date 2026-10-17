@@ -27,7 +27,7 @@ var SRC=(function(){ try{ var c=doc&&doc.currentScript; return c&&c.src?c.src:""
 
 var S={mode:"voice",vol:1,engine:null,ready:false,unlocked:false,q:[],cur:null,seq:0,bridge:null,list:[],pick:{a:null,b:null},chosen:{a:null,b:null},
   names:{a:"Caller",b:"Analyst"},rate:{a:1.08,b:0.96},pitch:{a:1.0,b:0.9},same:false,clips:null,caps:[],starts:[],ends:[],readyFns:[],strips:[],native:{},
-  hidden:!!(doc&&doc.visibilityState==="hidden"),waitT:null,initDone:false};
+  hidden:!!(doc&&doc.visibilityState==="hidden"),waitT:null,initDone:false,spoke:false,fails:0,cleared:false};
 function call(fns,arg){ for(var i=0;i<fns.length;i++){ try{ fns[i](arg); }catch(e){} } }
 function words(t){ var m=String(t||"").match(/[A-Za-z0-9'’-]+/g); return m?m.length:0; }
 /* the delivery energy of a line (T0 calm ... T3 peak, from the commentator): the voice speeds up and lifts a little as the action rises */
@@ -86,12 +86,15 @@ function init(){
   var br=bridgeOf();
   if(br){
     S.bridge=br;
-    var t0=NOW();
+    var t0=NOW(), fell=false;
     (function poll(){
       var ok=false; try{ ok=!!br.ttsReady(); }catch(e){ ok=false; }
-      if(ok){ try{ S.list=JSON.parse(br.voices()||"[]")||[]; }catch(e){ S.list=[]; } S.unlocked=true; setReady("native"); return; }
-      if(NOW()-t0<6000){ S.waitT=setTimeout(poll,250); return; }   /* the app's speech engine starts asynchronously (about 6 s at most; by the clock, so a slow device does not wait longer) */
-      S.bridge=null; webSpeechOrCaptions();
+      if(ok){ try{ S.list=JSON.parse(br.voices()||"[]")||[]; }catch(e){ S.list=[]; } S.bridge=br; S.same=S.list.length<2; S.unlocked=true; setReady("native"); return; }
+      var waited=NOW()-t0;
+      /* the app's speech engine starts asynchronously. After 6 s (by the clock, so a slow device does not wait longer) the page goes on with
+         the browser's voice or captions, and keeps asking for a minute and a half: a slow Fire TV may bring its voice up late (review) */
+      if(!fell&&waited>=6000){ fell=true; S.bridge=null; webSpeechOrCaptions(); }
+      if(waited<90000) S.waitT=setTimeout(poll,fell?1500:250);
     })();
     return;
   }
@@ -123,16 +126,21 @@ function speak(text,o){
   if(it.pri===3&&S.cur&&S.cur.pri<3){ var c=S.cur; finish(c,true); }
   /* waiting lines: interrupts first (in their order), then the rest by priority, first come first served */
   var k=S.q.length; while(k>0&&S.q[k-1].pri<it.pri) k--; S.q.splice(k,0,it);
-  if(S.q.length>6){ var low=0; for(var i=1;i<S.q.length;i++) if(S.q[i].pri<S.q[low].pri) low=i; S.q.splice(low,1); }
+  if(S.q.length>6){ var low=0; for(var i=1;i<S.q.length;i++) if(S.q[i].pri<S.q[low].pri) low=i; drop(S.q.splice(low,1)[0]); }
   pump();
   return it.id;
 }
+/* a line that never started (it waited past its ttl, was pushed out of a full queue, or was cleared): the page is told, or the commentator
+   would think the booth is still busy with it (review). Told a moment later, never from inside pump() / speak() / stop(): the page's
+   answer may hand a new line to speak() at once, and that must not happen in the middle of choosing the next line. */
+function drop(x){ if(!x||x.done) return; x.done=true; clearTimeout(x.guard); if(x.onEnd) setTimeout(function(){ try{ x.onEnd(x,true); }catch(e){} },0); }
 function pump(){
   if(S.cur||!S.ready||S.hidden) return;
+  if(S.mode==="off"){ var gone=S.q; S.q=[]; gone.forEach(drop); return; }
   var t=NOW(), it=null;
   /* some engines drop a line spoken in the same breath as a cancel(): the next line waits a moment after a cut */
   if(S.cutAt&&t-S.cutAt<70){ clearTimeout(S.cutT); S.cutT=setTimeout(pump,75-(t-S.cutAt)); return; }
-  while(S.q.length){ var x=S.q.shift(); if(x.exp>t){ it=x; break; } }
+  while(S.q.length){ var x=S.q.shift(); if(x.exp>t){ it=x; break; } drop(x); }
   if(!it) return;
   S.cur=it; it.t0=t;
   caption(it,"start"); if(it.onStart) try{ it.onStart(it); }catch(e){} call(S.starts,it);
@@ -156,9 +164,18 @@ function run(it,eng){
       var u=new g.SpeechSynthesisUtterance(it.say), v=it.who==="b"?S.chosen.b:S.chosen.a;
       if(v) u.voice=v; if(v&&v.lang) u.lang=v.lang;
       u.rate=rateOf(it); u.pitch=pitchFor(it); u.volume=Math.max(0,Math.min(1,S.vol));
-      u.onstart=function(){ it.started=true; };
+      u.onstart=function(){ it.started=true; S.spoke=true; S.fails=0; };
       u.onend=function(){ if(S.cur===it) finish(it,false); };
-      u.onerror=function(ev){ if(S.cur===it){ var why=ev&&ev.error; if(why==="interrupted"||why==="canceled") return; finish(it,false); } };
+      u.onerror=function(ev){
+        if(S.cur!==it) return;
+        var why=ev&&ev.error; if(why==="interrupted"||why==="canceled") return;
+        if(it.started){ finish(it,false); return; }                 /* it had begun to speak: the line is over */
+        /* the engine refused the line (not-allowed before the first tap, synthesis-failed ...): the caption stays up for its reading time,
+           it does not flash by and take the next lines with it; an engine that keeps failing is given up for captions only (review) */
+        S.fails++;
+        if(why!=="not-allowed"&&S.fails>=3){ setReady("captions"); }
+        guard(readMs(it));
+      };
       it.u=u;
       var ss=g.speechSynthesis; try{ if(ss.paused) ss.resume(); }catch(e){}
       ss.speak(u); guard(estMs(it)*2.2+2500); return;
@@ -205,8 +222,9 @@ function finish(it,cut){
   if(!cut) setTimeout(pump,0);
 }
 function stop(){
-  var c=S.cur; S.q=[];
+  var c=S.cur, gone=S.q; S.q=[]; clearTimeout(S.cutT);
   if(c) finish(c,true);
+  gone.forEach(drop);
   if(hasSpeech()) try{ g.speechSynthesis.cancel(); }catch(e){}
   if(S.bridge) try{ S.bridge.stop(); }catch(e){}
   if(S.custom&&typeof S.custom.stop==="function") try{ S.custom.stop(); }catch(e){}
@@ -216,19 +234,29 @@ g.__bgTts=function(ev,id){ var it=S.native[String(id)]; if(!it) return; if(ev===
 
 /* ---------------- unlocking (iOS and Chrome speak only after the page has had a tap) ---------------- */
 function unlock(){
-  if(S.unlocked) return true;
   init();
+  if(S.spoke||S.engine==="native"){ S.unlocked=true; return true; }
   if(hasSpeech()){
-    /* a line spoken before the first tap can sit blocked in the browser's own queue (iOS): clear it now, or it would be heard late (a
-       line that is really playing - it has started - is left alone) */
-    try{ if(!(S.cur&&S.cur.started)) g.speechSynthesis.cancel(); }catch(e){}
+    var c=S.cur;
+    try{
+      /* a line spoken before the first tap can sit blocked in the browser's own queue (iOS): clear it now, or it would be heard late (a
+         line that is really playing - it has started - is left alone; one issued a moment ago may just not have reported its start yet) */
+      if(c&&c.u&&!c.started&&S.engine==="speech"&&NOW()-c.t0>600) finish(c,true);
+      else if(!c&&!S.cleared) g.speechSynthesis.cancel();
+      S.cleared=true;
+    }catch(e){}
     try{ var u=new g.SpeechSynthesisUtterance(" "); u.volume=0; u.rate=1; g.speechSynthesis.speak(u); }catch(e){}
   }
   S.unlocked=true; pump(); return true;
 }
+/* The first speak() must run inside a user gesture that the browser counts: touchend, click, keydown (iOS Safari does not count a
+   pointerdown or a touchstart; Chrome counts pointerdown only for a mouse). So the unlock hangs on those, not on the first event that
+   comes, and it tries again on the next taps until a line has really started to speak (review). */
 if(doc&&doc.addEventListener){
-  var once=function(){ unlock(); ["pointerdown","touchend","keydown","click"].forEach(function(t){ try{ doc.removeEventListener(t,once,true); }catch(e){} }); };
-  ["pointerdown","touchend","keydown","click"].forEach(function(t){ try{ doc.addEventListener(t,once,{capture:true,passive:true}); }catch(e){ doc.addEventListener(t,once,true); } });
+  var GEST=["touchend","pointerup","mouseup","click","keydown"], nGest=0;
+  var unhook=function(){ GEST.forEach(function(t){ try{ doc.removeEventListener(t,once,true); }catch(e){} }); };
+  var once=function(){ unlock(); if(++nGest>=12||S.spoke||S.engine==="native") unhook(); };
+  GEST.forEach(function(t){ try{ doc.addEventListener(t,once,{capture:true,passive:true}); }catch(e){ doc.addEventListener(t,once,true); } });
   doc.addEventListener("visibilitychange",function(){ S.hidden=doc.visibilityState==="hidden"; if(S.hidden) stop(); else pump(); });
   g.addEventListener&&g.addEventListener("pagehide",function(){ S.hidden=true; stop(); });
   g.addEventListener&&g.addEventListener("pageshow",function(){ S.hidden=false; });
@@ -264,7 +292,7 @@ function captions(host,o){
 }
 
 /* ---------------- settings ---------------- */
-function mode(m){ if(m===undefined) return S.mode; m=m==="captions"||m==="off"?m:"voice"; S.mode=m; if(m!=="voice") { var c=S.cur; if(c&&m==="off") stop(); } return S.mode; }
+function mode(m){ if(m===undefined) return S.mode; m=m==="captions"||m==="off"?m:"voice"; S.mode=m; if(m==="off") stop(); return S.mode; }
 function volume(v){ if(v===undefined) return S.vol; S.vol=Math.max(0,Math.min(1,+v||0)); return S.vol; }
 function configure(c){
   c=c||{};

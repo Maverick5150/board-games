@@ -230,7 +230,21 @@ function create(o){
     var k=useLast?"last":"full", shown=ns.length>3?ns.slice(0,3):ns, more=ns.length-shown.length;
     var c=shown.map(function(n){ return n[k].c; }), s=shown.map(function(n){ return n[k].s; });
     function join(a,tail){ if(tail) return a.join(", ")+" and "+tail; return a.length<=2?a.join(" and "):a.slice(0,-1).join(", ")+" and "+a[a.length-1]; }
-    return more?V(join(c,cntV(more,"more","more").c),join(s,words(more)+" more")):V(join(c),join(s));
+    var out=more?V(join(c,cntV(more,"more","more").c),join(s,words(more)+" more")):V(join(c),join(s));
+    out.rids=ns.map(function(n){ return n.id; });   /* who the list names (the pronoun rule looks at it) */
+    return out;
+  }
+  /* does the slot value print a home rider's name? (a name slot carries rid, a list of names rids) */
+  function slotHuman(v){
+    if(!v||typeof v==="function") return false;
+    if(v.rid!=null){ var R=rider(v.rid); if(R&&R.kind==="human") return true; }
+    if(v.rids) for(var i=0;i<v.rids.length;i++){ var R2=rider(v.rids[i]); if(R2&&R2.kind==="human") return true; }
+    return false;
+  }
+  /* a template that prints a home rider's name through a slot ({by}, {red}, {last1} ...) never says he / him / his about the line */
+  function printsHuman(text,sl){
+    var re=/\{([A-Za-z0-9]+)\}/g, m; while((m=re.exec(text))) if(slotHuman(sl[m[1]])) return true;
+    return false;
   }
 
   /* ---------------- the race context (set up from the season's own state) ---------------- */
@@ -324,6 +338,7 @@ function create(o){
       if(cal){ sl.city=placeV(cal.city); sl.venue=placeV(cal.venue||cal.city); }
       /* a Supercross (or SMX) night is in a stadium, or on a speedway's grounds (Daytona, Talladega ...): "the building is full" is only for a stadium */
       if(Gs.series!=="mx") tags[venueKind(cal,A.track.layout)]=1;
+      if(rc&&rc.F&&rc.F.finals&&rc.F.finals.kind==="main") tags.hasmain=1;   /* the night ends with a Main Event (the 1974-76 nights and the outdoor days are motos) */
       sl.year=V(String(Gs.year),yearWords(Gs.year));
       sl.cls=clsV(Gs.cls);
       sl.series=Gs.series==="sx"?V("Supercross"):Gs.series==="mx"?V("Pro Motocross"):V("SuperMotocross");
@@ -406,7 +421,7 @@ function create(o){
     var now=A.now, rec={}; A.recent.forEach(function(id){ rec[id]=1; });
     /* a line that names a home rider never says he / him / his (a person is only ever "{you}") unless its template is tagged you */
     var humanRef=!!ctx.human||((ctx.facts&&ctx.facts.named)||[]).some(function(id){ var R=rider(id); return !!(R&&R.kind==="human"); }), solo=role==="A"&&!ctx.follow&&ACTION[ev];
-    P=P.filter(function(tp){ if(rec[tp.id]) return false; if(humanRef&&tp.tags.indexOf("you")<0&&PRONOUN.test(tp.text)) return false; if(solo&&!NAMED.test(tp.text)) return false; return true; });
+    P=P.filter(function(tp){ if(rec[tp.id]) return false; if(tp.tags.indexOf("you")<0&&PRONOUN.test(tp.text)&&(humanRef||printsHuman(tp.text,ctx.slots))) return false; if(solo&&!NAMED.test(tp.text)) return false; return true; });
     if(!P.length) return null;
     if(ctx.onlyYou) P=P.filter(function(tp){ return tp.tags.indexOf("you")>=0; });
     if(!P.length) return null;
@@ -452,7 +467,7 @@ function create(o){
     A.q.push(it);
     return it;
   }
-  function resolveAfter(id){ A.q.forEach(function(x){ if(x.after===id){ x.after=null; x.due=Math.max(x.due,A.now+x.delay); x.exp=Math.max(x.exp,x.due+x.ttlMs); } }); }
+  function resolveAfter(id){ A.q.forEach(function(x){ if(x.after===id){ x.after=null; x.due=Math.max(x.due,A.now+x.delay); x.exp=Math.max(x.exp,x.due+x.ttlMs); if(x.hard!=null) x.exp=Math.min(x.exp,x.hard); } }); }   /* hard: the last race's leftovers never outlive the next race's first 8 s (review) */
   function estMs(who,text){ var w=wc(text); return Math.round((who==="a"?w/2.7:w/2.5)*1000+350+(/^Sideways\.$|^Board's sideways\.$/.test(text)?600:0)); }
   function boothBusy(){ var b=A.booth; if(A.now<b.until) return true; if(b.fb&&b.cur&&!b.cur.done&&A.now<b.cur.at+b.cur.est*2.5) return true; return false; }
   function emit(it,cut){
@@ -529,7 +544,9 @@ function create(o){
     if(due.length){
       var it=due[0];
       if(A.race&&A.race.sideways&&it.ev!=="gate_drop"){ /* nothing between "sideways" and the drop */ return; }
-      if(busy){ if(it.pri===3&&b.cur&&b.cur.pri<3&&!b.cur.done){ emit(it,true); } return; }
+      /* an interrupt cuts a normal or filler line that is speaking, unless that line is nearly over (under 0.9 s left: it waits for the
+         end, nobody is cut off in the last word) or has run long (past 1.4 times its length: a slow voice is cut after all) */
+      if(busy){ if(it.pri===3&&b.cur&&b.cur.pri<3&&!b.cur.done&&(b.until-t>900||t>b.cur.at+b.cur.est*1.4)){ emit(it,true); } return; }
       var gap=gapNeeded(it); if(t<lastEnd()+gap) return;
       if(it.budget&&A.race&&!it.build&&!it.post&&A.race.gated&&!A.race.flagged&&A.race.tokens<(it.pri>=2?-0.5:0.999)){ A.q=A.q.filter(function(x){ return x!==it; }); resolveAfter(it.id); return; }
       if(!emit(it)){ A.q=A.q.filter(function(x){ return x!==it; }); resolveAfter(it.id); }
@@ -698,7 +715,7 @@ function create(o){
   /* ---------------- before the gate ---------------- */
   function onRace(e,simmed){
     /* the last race's leftovers: its post-race lines may finish (8 s at most); nothing else from it is still true */
-    A.q=A.q.filter(function(x){ return x.post; }); A.q.forEach(function(x){ x.exp=Math.min(x.exp,A.now+8000); });
+    A.q=A.q.filter(function(x){ return x.post; }); A.q.forEach(function(x){ x.hard=A.now+8000; x.exp=Math.min(x.exp,x.hard); });
     var r=setupRace(e.key,e.label,e.kind,e.n,e.riders,false,e.ri);
     var rc=r.rc, Gs=A.G, RG=Gs.round, first=!rc.opened;   /* the show opens with the round's first race, watched or simmed (a sim summary never comes before the welcome) */
     if(simmed) r.sim=true;
@@ -731,7 +748,7 @@ function create(o){
       if(ev==="party_welcome"){ sl.k=numV((Gs.humans||[]).length); }
       if(ev==="race_intro_lcq"&&r){ var star=starIn(A.rmap); if(star){ sl.star=nameRec(star).full; t.star=1; c.facts.star=star; } }
       if(ev==="race_intro_main"&&r&&r.real&&r.real.w){ sl.realWinner=nameV(r.real.w); sl.realYear=sl.year; } else delete t.real;
-      if(ev==="smx_playoff"){ var mult=(r&&r.rc&&r.rc.cal&&r.rc.cal.mult)||1; t["x"+mult]=1; if(mult>1) t.mult=1; var F=Gs.round&&Gs.round.F; if(F&&F.direct&&F.qual&&F.qual.length){ t.seeds=1; sl.tm=numV(F.qual[0].toMain); } }
+      if(ev==="smx_playoff"){ var mult=(r&&r.rc&&r.rc.cal&&r.rc.cal.mult)||1; t["x"+mult]=1; if(mult>1) t.mult=1; var F=Gs.round&&Gs.round.F; if(F&&F.direct&&F.qual&&F.qual.length){ t.seeds=1; sl.tm=numV(F.qual[0].toMain); sl.seedsN=numV(F.direct); } }
       if(ev==="triple_crown"&&r&&r.kind==="main"){ t["main"+(r.i+1)]=1; }
       if(ev==="triple_crown"&&(!r||r.kind!=="main")) t.main1=1;
       return c;
@@ -799,8 +816,9 @@ function create(o){
       if(tied.length>=3){ t.many=1; sl.k=numV(tied.length); }
       if(tied.some(function(s){ return placeIn(L,s)===1; })) t.lead=1;
       var hs=tied.filter(isHumanSeat); if(hs.length){ t.you=1; sl.you=nameRec(seatId(hs[0])).full; c.human=true; c.facts.you=seatId(hs[0]); sl.others=listV(tied.filter(function(s){ return s!==hs[0]; }).map(seatId),true); }
-      if(n>=4){ t.deep=1; sl.depthw=V(depthWord(n)); }
-      c.story={kind:"war",riders:tied.slice(),label:n>=3?"triple war":n===2?"double war":"a war"};
+      if(n===3) t.d3=1;                                    /* exactly a triple war: only these lines may say "triple" or "a third time" */
+      if(n>=4){ t.deep=1; sl.depthw=V(depthWord(n)); }     /* four ties and more: the lines that name the depth (quadruple, quintuple ...) */
+      c.story={kind:"war",riders:tied.slice(),label:n>=4?depthWord(n)+" war":n===3?"triple war":n===2?"double war":"a war"};
       return c;
     };
   }
@@ -811,7 +829,13 @@ function create(o){
     q("holeshot",{role:"C",ctx:holeshotCtx(e.s),due:Math.max(A.now,(r.gateAt||A.now)+d),ttl:6,followP:L1>=15000?0.5:0.2,story:"holeshot"});
   }
   function holeshotCtx(s){ return function(){ var c=baseCtx(), id=seatId(s); c.facts.ev="holeshot"; c.facts.rid=id; c.facts.seat=s; c.facts.named=[id]; riderSlots(c.slots,id); var n=nameRec(id); if(n.human){ c.tags.you=1; c.human=true; } if(n.make) c.tags.make=1; if(id===redNow()) c.tags.red=1; c.story={kind:"holeshot",riders:[s]}; return c; }; }
-  function onYellow(e){ var r=A.race; if(!r) return; r.yellowNext={lap:e.lap,sector:e.sector,s:e.s}; r.yellowSector=e.sector; }
+  function onYellow(e){
+    var r=A.race; if(!r) return;
+    var y=r.yellowNext;   /* one yellow event per rider who went down in this war: they share the lap and the place */
+    if(y&&y.lap===e.lap&&y.sector===e.sector){ if(y.seats.indexOf(e.s)<0) y.seats.push(e.s); y.s=e.s; }
+    else r.yellowNext={lap:e.lap,sector:e.sector,s:e.s,seats:[e.s]};
+    r.yellowSector=e.sector;
+  }
   function onOut(e){
     var r=A.race; if(!r) return;
     var seats=(e.seats||[]).slice(); if(!seats.length) return;
@@ -851,6 +875,7 @@ function create(o){
     if(r.cut>0&&prev&&prev.length&&b>=2){
       var tp=transferPair(prev,cur,r.cut);
       if(tp){
+        r.tcLaps=(r.tcLaps|0)+1;   /* laps on which somebody crossed the line: "that's N times it has changed" counts these, called or not */
         var lateL=b>r.len*2/3;
         if(last&&!le) { main=q("last_lap_battle",{role:"C",ctx:transferCtx(tp,true),due:passT,ttl:5,followP:0.5,story:"last-lap"}); tcDone=true; }
         else if(b-r.lastTC>=(lateL?2:3)){ r.lastTC=b; r.tcCount=(r.tcCount|0)+1; q("transfer_change",{role:lateL?"C":"any",pri:lateL?3:1,rank:7,ctx:transferCtx(tp,false),due:t0+L*(main?0.55:0.4),ttl:6,followP:0.3,story:"bubble"}); tcDone=true; }
@@ -918,8 +943,12 @@ function create(o){
       riderSlots(sl,id); var n=nameRec(id); if(n.human){ t.you=1; c.human=true; }
       sl.place=ordV(placeIn(cur,s0)); c.facts.place=placeIn(cur,s0); c.facts.rid=id;
       var by=cq[0].by; if(by!=null&&by>=0){ sl.by=nameRec(seatId(by)).last; c.facts.by=seatId(by); }
-      if(cq.length>=2){ sl.riders=listV(cq.map(function(x){ return seatId(x.s); }),true); sl.k=numV(cq.length); if(cq.some(function(x){ return x.kind==="out"; })) t.out=1; c.human=cq.some(function(x){ return isHumanSeat(x.s); }); }
+      if(cq.length>=2){ sl.riders=listV(cq.map(function(x){ return seatId(x.s); }),true); sl.k=numV(cq.length); if(cq.some(function(x){ return x.kind==="out"; })) t.out=1; c.human=cq.some(function(x){ return isHumanSeat(x.s); }); if(cq.length>=3) t.many=1; else t.pair=1; }
       if(cq[0].kind==="out"&&gain>0) t.gain=1;
+      /* the war the crash came out of: "double" is a remount, "triple", "quadruple" ... a crash out (the lines name the depth from the engine's own number) */
+      var dp=cq[0].depth|0; if(dp>=2){ sl.depthw=V(depthWord(dp)); c.facts.depth=dp; }
+      /* a yellow flag flies on the NEXT lap: none when this was the last lap (the race is over) */
+      if(b<r.len&&!(A.R&&A.R.over)) t.yel=1;
       if(r.isFinal&&r.rc&&r.rc.cal&&r.rc.cal.title&&r.F&&r.F.pointsOn==="race"&&r.F.table&&(r.F.table[placeIn(cur,s0)-1]||0)>0) t.points=1;
       var sec=sectionFor(sector); if(sec){ sl.section=sec.n; sl.atSection=sec.at; t.section=1; c.facts.section=sec.type; }
       c.story={kind:"crash",riders:cq.map(function(x){ return x.s; }),section:sec?sec.type:null};
@@ -934,9 +963,12 @@ function create(o){
   }
   function yellowCtx(y){
     return function(){
-      var c=baseCtx(), sl=c.slots, t=c.tags; c.facts.ev="yellow"; c.facts.sector=y.sector; c.facts.yellowLap=y.lap; c.facts.named=[];
+      var c=baseCtx(), sl=c.slots, t=c.tags; c.facts.ev="yellow"; c.facts.sector=y.sector; c.facts.yellowLap=y.lap;
+      var down=(y.seats||(y.s!=null?[y.s]:[])).slice();
+      c.facts.named=down.map(seatId).filter(Boolean);   /* who went down: "where he went down" is never said about a home rider */
+      if(down.some(isHumanSeat)) c.human=true;
       var sec=sectionFor(y.sector); if(sec){ sl.section=sec.n; sl.atSection=sec.at; t.section=1; c.facts.section=sec.type; }
-      c.story={kind:"yellow",section:sec?sec.type:null,riders:y.s!=null?[y.s]:[]};
+      c.story={kind:"yellow",section:sec?sec.type:null,riders:down};
       return c;
     };
   }
@@ -970,7 +1002,7 @@ function create(o){
     return {sIn:i.s,sOut:o2.s,inFrom:pp[i.s],inPlace:i.place,outFrom:o2.place,outNow:pn[o2.s],lastspot:i.place===cut,cut:cut};
   }
   function transferCtx(tp,last){
-    var r=A.race, cur=r.cur.slice(), b=r.lap, k=r.tcCount|0, sIn=tp.sIn, sOut=tp.sOut;
+    var r=A.race, cur=r.cur.slice(), b=r.lap, k=r.tcLaps|0, sIn=tp.sIn, sOut=tp.sOut;
     return function(){
       var c=baseCtx(), sl=c.slots, t=c.tags, id=seatId(sIn); c.facts.ev=last?"last_lap_battle":"transfer_change"; c.facts.rid=id; c.facts.place=placeIn(cur,sIn); c.facts.lap=b; c.facts.named=[id,seatId(sOut)];
       c.facts.tc={cut:tp.cut,inFrom:tp.inFrom,outFrom:tp.outFrom,outNow:tp.outNow,lastspot:tp.lastspot};
@@ -1017,7 +1049,8 @@ function create(o){
     return function(){ var c=baseCtx(), sl=c.slots, t=c.tags, id=seatId(m.s); c.facts.ev=m.d>0?"you_up":"you_down"; c.facts.rid=id; c.facts.place=m.p; c.facts.from=m.p0; c.facts.lap=b; c.facts.named=[id];
       sl.you=nameRec(id).full; t.you=1; c.human=true; sl.place=ordV(m.p); sl.from=ordV(m.p0); sl.lostN=cntV(Math.abs(m.d),"spot","spots");
       if(r.cut>0&&((m.d>0&&m.p<=r.cut&&m.p0>r.cut)||(m.d<0&&m.p>r.cut&&m.p0<=r.cut))) t.transfer=1;
-      if(m.d>0&&m.p<=3) t.podium=1; if(m.d>0&&m.p>10&&m.p<=15) t.top10=1;
+      /* podium: on it now. top10: has just come INTO the top ten. near10: still outside it, 11th to 15th ("the top ten is coming") */
+      if(m.d>0&&m.p<=3) t.podium=1; if(m.d>0&&m.p<=10&&m.p0>10) t.top10=1; if(m.d>0&&m.p>10&&m.p<=15) t.near10=1;
       c.story={kind:"you",riders:[m.s],label:nameRec(id).full.c}; return c; };
   }
   function orderCtx(ev){
@@ -1139,7 +1172,7 @@ function create(o){
     var r=A.race, s=order[0], R=A.R;
     return function(){ var c=baseCtx(), sl=c.slots, t=c.tags, id=seatId(s), n=nameRec(id); c.facts.ev="winner_line"; c.facts.race=r.key; c.facts.rid=id; c.facts.named=[id];
       riderSlots(sl,id); if(n.human){ t.you=1; c.human=true; } if(n.make) t.make=1;
-      var wire=R&&R.st&&R.st.led&&R.st.led[s]>=r.len; if(r.hs===s&&wire) t.hs=1; else if(r.hs===s) t.hsback=1;
+      var wire=R&&R.st&&R.st.led&&R.st.led[s]>=(R.battle|0); if(r.hs===s&&wire) t.hs=1; else if(r.hs===s) t.hsback=1;   /* led every lap that was run (a race can end before its last lap when one rider holds every card) */
       var ww=r.warsWon[s]|0; if(ww>=2){ t.wars=1; sl.warsWonN=cntV(ww,"war","wars"); c.facts.warsWon=ww; }
       var wcr=R&&R.r&&R.r[s]?(R.r[s].crashes|0):0; if(wcr>0){ t.crashed=1; c.facts.crashes=wcr; } else { t.clean=1; c.facts.crashes=0; }
       var sp=r.startPlace[s]; if(sp>=5){ t.came=1; sl.startPlace=ordV(sp); c.facts.startPlace=sp; }
@@ -1270,6 +1303,7 @@ function create(o){
       sl.red=nameRec(L[0].id).full; sl.second=nameRec(L[1].id).full; sl.third=nameRec(L[2].id).full; sl.ptsN=cntV(L[0].pts,"point","points");
       var d=L[0].pts-L[1].pts; if(d>0){ t.lead=1; sl.leadN=cntV(d,"point","points"); if(d<=Math.max(10,maxRound(A.G.results.length?A.G.results[A.G.results.length-1].ri:A.G.ri))) t.slim=1; } else t.tie=1; c.facts.lead=d;
       var Gs=A.G; sl.rn=numV(Gs.results.length?Gs.results[Gs.results.length-1].ri+1:Gs.ri); if(Gs.ri<Gs.cal.length) t.more=1;
+      if(Gs.cal.length-Gs.ri>=1&&Gs.cal.length-Gs.ri<=4) t.fewleft=1;   /* "the rounds are running out": only when four or fewer are left */
       var hum=L.filter(function(x){ return x.human; })[0];
       if(youLine){ if(!hum||hum.place<=1||!(hum.pts>0)) return null; t={}; c.tags=Object.assign({},c.tags,{you:1}); delete c.tags.lead; delete c.tags.tie; delete c.tags.more; sl.you=nameRec(hum.id).full; sl.place=ordV(hum.place); sl.ptsN=cntV(hum.pts,"point","points"); c.facts.you=hum.id; c.facts.place=hum.place; c.facts.youPts=hum.pts; c.facts.pts=null; c.human=true; c.onlyYou=true; }
       return c; };
@@ -1332,7 +1366,15 @@ function create(o){
     else if(kind==="crash") pull(function(x){ return x.race===r.key&&/crash/.test(x.ev)&&x.lap===r.lap; });
     else if(kind==="holeshot") pull(function(x){ return x.ev==="holeshot"; });
     else if(kind==="checkered") pull(function(x){ return x.ev==="checkered"||x.ev==="photo_finish"; });
-    else if(kind==="lapped"&&info.s!=null){ q("lapped",{ctx:function(){ var c=baseCtx(); c.facts.ev="lapped"; c.facts.rid=seatId(info.s); c.facts.named=[seatId(info.s)]; riderSlots(c.slots,seatId(info.s),"other"); return c; },ttl:8,pri:1}); }
+    else if(kind==="lapped"&&info.s!=null){
+      /* info.s = the rider being lapped, info.by = the rider lapping him (the view tells us): only a lap by the LEADER is called as the leader's */
+      q("lapped",{ctx:function(){
+        var c=baseCtx(), sid=seatId(info.s); c.facts.ev="lapped"; c.facts.rid=sid; c.facts.named=[sid]; riderSlots(c.slots,sid,"other");
+        var human=!!(nameRec(sid)&&nameRec(sid).human);
+        if(info.by!=null&&seatId(info.by)){ var bid=seatId(info.by), bn=nameRec(bid), rr=A.race, Lc=(rr&&rr.cur)||[]; c.facts.by=bid; c.facts.named.push(bid); c.slots.lapper=bn.full; if(Lc[0]&&Lc[0].s===info.by) c.tags.lapperlead=1; if(bn.human) human=true; }
+        if(human) c.human=true;
+        return c; },ttl:8,pri:1});
+    }
     tick(A.now);
   }
   function shot(s){ if(!s) { A.shotInfo=null; return; } A.shotInfo={kind:s.kind||null,riders:(s.riders||[]).slice(),section:s.section||null,at:A.now}; }
