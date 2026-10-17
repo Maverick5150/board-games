@@ -56,7 +56,7 @@ function loft(M,LV,segs,pr,sub,fn){
 /* the crowd: every seat is one person from the atlas, picked by a hash of its place: no repeating wallpaper. Basic material (the floodlights are
    baked into the vertex shade per row and per place round the bowl), the person lookup replaces the map fragment. FANCY: cheering groups, a wave,
    sway, camera flashes. */
-function crowdMaterial(atlas,U,fancy){
+function crowdMaterial(atlas,U,fancy,animNow){
   const m=new THREE.MeshBasicMaterial({map:atlas,vertexColors:true,side:THREE.DoubleSide});
   if(fancy) m.defines={FANCY:1};
   m.onBeforeCompile=sh=>{
@@ -105,7 +105,7 @@ float rnd(uvec2 p,uint k){ return float(pcg(p.x*1973u+p.y*9277u+k*26699u+1u))*(1
     float tt=uTime*1.7+r2*137.0; uint ti=uint(floor(tt)); float kk=fract(tt);
     float fon=step(0.994,rnd(ui,ti+31u));
     vec2 hp=(f-vec2(0.5,0.78))*vec2(0.55,0.85);
-    float fl2=fon*exp(-kk*6.0)*smoothstep(0.24,0.0,length(hp))*(1.0-smoothstep(0.3,0.9,fw));
+    float fl2=fon*exp(-kk*6.0)*(1.0-smoothstep(0.0,0.24,length(hp)))*(1.0-smoothstep(0.3,0.9,fw));
     sampled.rgb+=vec3(1.0,0.96,0.85)*fl2*9.0;
 #endif
   }
@@ -113,7 +113,7 @@ float rnd(uvec2 p,uint k){ return float(pcg(p.x*1973u+p.y*9277u+k*26699u+1u))*(1
 }
 #endif`);
   };
-  m.customProgramCacheKey=()=>"mx-crowd"+(fancy?"F":"");
+  m.customProgramCacheKey=()=>"mx-crowd"+((animNow?animNow():fancy)?"F":"");
   return m;
 }
 
@@ -126,14 +126,14 @@ export function glowSprites(sheet,list,U){
 void main(){ vUv=uv; vK=aKind; vCol=instanceColor; vI=aAmp*(0.86+0.14*sin(uTime*(3.0+aPh*5.0)+aPh*40.0));
   vec4 c=modelViewMatrix*instanceMatrix*vec4(0.,0.,0.,1.); float s=length(instanceMatrix[0].xyz); c.xy+=position.xy*s; c.z+=min(s*0.35,2.0); gl_Position=projectionMatrix*c; }`,
     fragmentShader:`uniform sampler2D map; varying vec2 vUv; varying vec3 vCol; varying float vK; varying float vI;
-void main(){ vec2 uv=vec2(vUv.x*0.5+0.5*vK,vUv.y); vec4 t=texture2D(map,uv); gl_FragColor=vec4(vCol*t.rgb*t.a*vI,t.a);
+void main(){ vec2 uv=vec2(vUv.x*0.5+0.5*vK,vUv.y); vec4 t=texture2D(map,uv); gl_FragColor=vec4(vCol*t.rgb*t.a*vI*1.5,t.a);
 #include <tonemapping_fragment>
 #include <colorspace_fragment>
 }`});
   const m=new THREE.InstancedMesh(geo,mat,n), M=new THREE.Matrix4(), c=new THREE.Color();
   list.forEach((g,i)=>{ M.makeScale(g.s,g.s,g.s); M.setPosition(g.x,g.y,g.z); m.setMatrixAt(i,M); c.setRGB(g.r,g.g,g.b); m.setColorAt(i,c); kind[i]=g.k||0; amp[i]=g.a==null?1:g.a; ph[i]=g.p==null?(i*0.6180339)%1:g.p; });
   geo.setAttribute("aKind",new THREE.InstancedBufferAttribute(kind,1)); geo.setAttribute("aAmp",new THREE.InstancedBufferAttribute(amp,1)); geo.setAttribute("aPh",new THREE.InstancedBufferAttribute(ph,1));
-  m.instanceMatrix.needsUpdate=true; if(m.instanceColor) m.instanceColor.needsUpdate=true; m.frustumCulled=false; m.renderOrder=5; return m;
+  mat.userData.hdr=true; m.instanceMatrix.needsUpdate=true; if(m.instanceColor) m.instanceColor.needsUpdate=true; m.frustumCulled=false; m.renderOrder=5; return m;   /* userData.hdr: already written for the HDR chain (the lead's L.apply leaves it alone) */
 }
 
 /* the near rows: upright cut-out people standing on the slope (one card per seat, facing the floor): they overlap like a real crowd, bob, sway, cheer and flash; the lookup is
@@ -178,7 +178,10 @@ void main(){ vec4 t=texture2D(map,vUv); if(t.a<0.45) discard; gl_FragColor=vec4(
 
 export function stadium(C,look,q,root,ctx){
   const lo=!!q.lo, F=C.layout.floor||[-66,66,-48,32], x0=F[0], x1=F[1], z0=F[2], z1=F[3], cx=(x0+x1)/2, cz=(z0+z1)/2, W=x1-x0, D=z1-z0;
-  const dome=look.around==="stadium-dome", fancy=q.fancy!=null?!!q.fancy:!lo, hazeOn=q.haze!=null?!!q.haze:!lo, segs=q.segs||(lo?72:128), nTow=q.towers||(lo?6:10);
+  /* the quality tier: from the perf specialist's options when they exist (crowd.detail 0.35 / 0.7 / 1, crowd.anim, post.shafts, tier id), else from lo; each field can also be given outright (q.segs, q.fancy, q.cards, q.towers, q.haze, q.banners) */
+  const det=q.crowdDetail!=null?q.crowdDetail:(lo?0.35:1), dome=look.around==="stadium-dome";
+  const fancy=q.fancy!=null?!!q.fancy:(q.crowdAnim!=null?!!q.crowdAnim:!lo), hazeOn=q.haze!=null?!!q.haze:(q.post&&q.post.shafts!=null?!!q.post.shafts:!lo);
+  const segs=q.segs||(det>=1?128:det>=0.7?96:72), nTow=q.towers||(det>=1?10:det>=0.7?8:6), nCards=q.cards!=null?q.cards:(det>=1?(q.tier==="ultra"?2:1):det>=0.7?1:0), nBan=q.banners!=null?q.banners:(det>=0.7?14:0);
   const U={uTime:{value:0}}, R=rngf(4151); let sweep=null;
   /* the dirt floor */
   const fm=dirtMaps(look.soil,lo,true); fm.map.repeat.set(W/7,D/7); fm.normal.repeat.set(W/7,D/7);
@@ -190,18 +193,24 @@ export function stadium(C,look,q,root,ctx){
   const PR={apron:[-0.05,1.4,1.0,2.5],low1:[1.0,2.5,14.0,9.5],aisle:[14.0,9.5,15.6,9.5],rail:[15.6,9.5,15.6,10.4],low2:[15.6,10.4,30.0,18.0],conc:[30.0,18.0,31.0,18.0],
     rib1:[31.0,18.0,31.0,19.5],suite:[31.0,19.5,31.0,23.5],trim:[31.0,23.5,31.0,24.0],under:[31.0,24.0,36.0,25.5],up:[36.0,25.5,64.0,44.0],rim:[64.0,44.0,64.0,47.0],cap:[64.0,47.0,64.0,48.5],
     roof:[64.0,48.5,61.0,49.7],back:[64.0,44.0,72.0,0.0]};
+  /* where the stands are: bowlY(x, z) -> {y: the height of the seats / structure at that place (0 on the floor), d: how far out from the footprint (negative = on the floor)}.
+     For cameras (keep an eye above the stand under it) and anything that must not stand inside the bowl. */
+  const PROF=[[-0.05,1.4],[1.0,2.5],[14.0,9.5],[15.6,9.5],[15.6,10.4],[30.0,18.0],[31.0,18.0],[31.0,24.0],[36.0,25.5],[64.0,44.0],[64.0,48.5]];
+  function bowlY(x,z){ let bi=0,bd=1e9; for(let i=0;i<ring.n;i++){ const p=ring.pts[i], d2=(p.x-x)*(p.x-x)+(p.z-z)*(p.z-z); if(d2<bd){ bd=d2; bi=i; } }
+    const p=ring.pts[bi], d=(x-p.x)*p.nx+(z-p.z)*p.nz; if(d<=PROF[0][0]) return {y:0,d:d};
+    for(let k=1;k<PROF.length;k++){ if(d<=PROF[k][0]||k===PROF.length-1){ const a=PROF[k-1], b=PROF[k], t=b[0]===a[0]?1:clamp((d-a[0])/(b[0]-a[0]),0,1); return {y:a[1]+(b[1]-a[1])*t,d:d}; } }
+    return {y:0,d:d}; }
   /* ---- the crowd: three lofted strips of seats ---- */
   const MC=Mesher(), shadeAt=(r)=>1+0.10*Math.sin(r*Math.PI*2*5+0.7)+0.06*Math.sin(r*Math.PI*2*11)+0.04*Math.sin(r*Math.PI*2*23);
   const crowdBand=(pr,sub,shadeFn,uoff,voff)=>{ const slen=Math.hypot(pr[2]-pr[0],pr[3]-pr[1]), rows=Math.max(1,Math.round(slen/CROWD.row)), nA=44;
     loft(MC,LV,segs,pr,sub,(t,r,Uu,o)=>{ const s=shadeFn(t)*shadeAt(r); o.u=Uu/CROWD.seat+uoff; o.v=t*rows+voff; o.r=s; o.g=s*0.97; o.b=s*0.93; o.ar=1.2*CROWD.seat*nA/LV(pr[0]+(pr[2]-pr[0])*t).len; }); };
   crowdBand(PR.low1,6,t=>1.0-0.12*t,37.1,11.0);
-  crowdBand(PR.low2,6,t=>0.92-0.44*Math.pow(t,1.25),521.3,63.0);
-  crowdBand(PR.up,8,t=>0.46+0.36*t,1042.7,121.0);
-  const atlas=crowdAtlas(lo), cm=crowdMaterial(atlas,U,fancy);
+  crowdBand(PR.low2,6,t=>0.95-0.36*Math.pow(t,1.25),521.3,63.0);
+  crowdBand(PR.up,8,t=>0.60+0.34*t,1042.7,121.0);
+  let animOn=fancy; const atlas=crowdAtlas(lo), cm=crowdMaterial(atlas,U,fancy,()=>animOn);
   const bowl=new THREE.Mesh(MC.geo(),cm); bowl.frustumCulled=false; root.add(bowl);
-  const nCards=q.cards!=null?q.cards:(lo?0:1);
   if(nCards>0){ const cut=crowdAtlas(false,true), pl=r=>shadeAt(r); const c1=crowdCards(ring,LV,PR.low1,segs,U,cut,t=>1.0-0.12*t,pl); root.add(c1);
-    if(nCards>1) root.add(crowdCards(ring,LV,PR.low2,segs,U,cut,t=>0.92-0.44*Math.pow(t,1.25),pl)); }
+    if(nCards>1) root.add(crowdCards(ring,LV,PR.low2,segs,U,cut,t=>0.95-0.36*Math.pow(t,1.25),pl)); }
   /* ---- the structure: dark concrete, rails, the concourse, the cantilever, the roof edge, the back, the wall's padded cap (vertex colours, unlit, fogged): one mesh ---- */
   const MS=Mesher(), flat=(rgb)=>(t,r,Uu,o)=>{ o.r=rgb[0]; o.g=rgb[1]; o.b=rgb[2]; };
   const conc=lin("#1d1c24"), concL=lin("#34333c"), dark=lin("#0b0b11"), navy=lin("#141b38"), steel=lin("#2a2c36");
@@ -211,7 +220,6 @@ export function stadium(C,look,q,root,ctx){
   loft(MS,LV,segs,PR.roof,1,flat(dark)); loft(MS,LV,segs,PR.back,1,flat(dark)); loft(MS,LV,segs,PR.cap,1,flat(steel));
   loft(MS,LV,segs,[-0.55,1.1,-0.55,1.16],1,flat(lin("#f0f1f3"))); loft(MS,LV,segs,[-0.55,1.16,-0.55,1.4],1,flat(navy)); loft(MS,LV,segs,[-0.55,1.4,-0.05,1.4],1,flat(lin("#202a52")));   /* the wall's cap */
   /* tall banners hanging from the roof edge, facing the floor (the props texture; the plain structure samples its white corner) */
-  const nBan=q.banners!=null?q.banners:(lo?0:14);
   for(let k=0;k<nBan;k++){ const p=ring.pts[Math.floor((k+0.5)/nBan*segs)%segs], dd=61, qx=p.x+p.nx*dd, qz=p.z+p.nz*dd, tx=-p.nz, tz=p.nx, hw=1.6, y1=49.6, y0=43.6, r=propsUV(PROPS.ban[k%4]);
     const v0=MS.vert(qx-tx*hw,y0,qz-tz*hw,r[0],r[1],1,1,1), v1=MS.vert(qx+tx*hw,y0,qz+tz*hw,r[2],r[1],1,1,1), v2=MS.vert(qx-tx*hw,y1,qz-tz*hw,r[0],r[3],1,1,1), v3=MS.vert(qx+tx*hw,y1,qz+tz*hw,r[2],r[3],1,1,1); MS.quad(v0,v1,v2,v3); }
   { const sm=new THREE.MeshBasicMaterial({map:propsTex(),vertexColors:true,side:THREE.DoubleSide}); sm.userData.keepMaps=true; root.add(new THREE.Mesh(MS.geo(),sm)); }
@@ -233,7 +241,7 @@ export function stadium(C,look,q,root,ctx){
   const steelC=lin("#1a1c24"), plate=lin("#0c0d12");
   const addBulb=(M,s,rim)=>{ const p=new THREE.Vector3().setFromMatrixPosition(M); bulbs.push({M:M.clone(),rim:!!rim}); glows.push({x:p.x,y:p.y,z:p.z,s:s,r:1.0,g:0.93,b:0.78,k:0,a:rim?0.5:0.55}); };
   for(let k=0;k<nTow;k++){
-    const idx=Math.floor(((k+0.5)/nTow+0.037)*segs)%segs, p=ring.pts[idx], baseD=PR.rim[0]+1.8, hM=13+(k%3)*2.5;
+    const idx=Math.floor(((k+0.5)/nTow+0.037)*segs)%segs, p=ring.pts[idx], baseD=PR.rim[0]+1.8, hM=dome?3+(k%3)*1.2:13+(k%3)*2.5;
     const bx=p.x+p.nx*baseD, bz=p.z+p.nz*baseD, by=PR.cap[3], top=by+hM;
     dummy.position.set(bx-p.nx*1.6,top,bz-p.nz*1.6); dummy.lookAt(tgt.x,tgt.y,tgt.z); dummy.updateMatrix(); const Mb=dummy.matrix.clone();
     const bw=(bcols-1)*sp+2.2, bh=(brows-1)*sp+2.2;
@@ -251,13 +259,13 @@ export function stadium(C,look,q,root,ctx){
   root.add(new THREE.Mesh(merge([MA.geo()].concat(parts,discs)),new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.DoubleSide,fog:false})));
   const sheet=glowSheet(), gm=glowSprites(sheet,glows,U); root.add(gm); ctx.glowMesh=gm;
   /* ---- the roof of a dome ---- */
-  if(dome){ const rr=Math.max(W,D)/2+80, roof=new THREE.Mesh(new THREE.SphereGeometry(rr,24,10,0,Math.PI*2,0,Math.PI*0.32),new THREE.MeshLambertMaterial({color:0x1a1a22,side:THREE.BackSide})); roof.scale.set(1,0.35,(D/2+80)/rr); roof.position.set(cx,20,cz); root.add(roof); }
+  if(dome){ const rr=W/2+95, roof=new THREE.Mesh(new THREE.SphereGeometry(rr,32,10,0,Math.PI*2,0,Math.PI*0.36),new THREE.MeshBasicMaterial({color:0x14141c,side:THREE.BackSide})); roof.scale.set(1,0.3,(D/2+95)/rr); roof.position.set(cx,29,cz); root.add(roof); }
   /* ---- haze: a soft cone of light from every bank toward the floor (a stadium night under the lights) ---- */
   if(hazeOn&&!dome){
     const g=new THREE.CylinderGeometry(1.0,12,1,16,1,true); g.translate(0,-0.5,0);
     const mat=new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,fog:false,uniforms:{col:{value:new THREE.Color(0xfff0d0)}},
       vertexShader:"varying float vF; varying float vE; void main(){ vF=1.0+position.y; vec4 mv=modelViewMatrix*instanceMatrix*vec4(position,1.0); vec3 n=normalize(mat3(modelViewMatrix*instanceMatrix)*normal); vE=abs(dot(n,normalize(-mv.xyz))); gl_Position=projectionMatrix*mv; }",
-      fragmentShader:"uniform vec3 col; varying float vF; varying float vE; void main(){ float a=0.085*pow(vF,1.4)*pow(vE,1.3); gl_FragColor=vec4(col*a,a);\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}"});
+      fragmentShader:"uniform vec3 col; varying float vF; varying float vE; void main(){ float a=0.085*pow(max(vF,0.0),1.4)*pow(max(vE,0.0),1.3); gl_FragColor=vec4(col*a,a);\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}"});
     const n=Math.min(nTow,8), m=new THREE.InstancedMesh(g,mat,n), M=new THREE.Matrix4(), Q=new THREE.Quaternion(), up=new THREE.Vector3(0,-1,0), d=new THREE.Vector3(), pos=new THREE.Vector3(), sc=new THREE.Vector3(), cones=[];
     for(let i=0;i<n;i++){ const p=ring.pts[Math.floor(((i+0.5)/n+0.037)*segs)%segs]; cones.push({x:p.x+p.nx*(PR.rim[0]-1),y:PR.cap[3]+14,z:p.z+p.nz*(PR.rim[0]-1),tx:cx+(((i*37)%11)/11-0.5)*W*0.6,tz:cz+(((i*53)%7)/7-0.5)*D*0.5,ph:i*1.7}); }
     sweep=(tw)=>{ cones.forEach((c,i)=>{ pos.set(c.x,c.y,c.z); d.set(c.tx+Math.sin(tw*0.21+c.ph)*16-pos.x,0.2-pos.y,c.tz+Math.cos(tw*0.17+c.ph*1.3)*9-pos.z); const len=d.length(); d.normalize(); Q.setFromUnitVectors(up,d); sc.set(1,len,1); M.compose(pos,Q,sc); m.setMatrixAt(i,M); }); m.instanceMatrix.needsUpdate=true; };
@@ -283,9 +291,11 @@ export function stadium(C,look,q,root,ctx){
   /* per frame: the clock of the shaders, the ribbon's scroll, the board's clock */
   function frame(dt,tw,cam,T,lap,len,num){
     U.uTime.value=tw%3600; rt.offset.x=(tw*0.011)%1; if(sweep) sweep(tw%3600);
+    /* the adaptive ladder can switch the crowd's animation off under load (q.live.crowdAnim from r3d-quality.js): the shader is rebuilt without it */
+    const lv=q.live; if(lv&&fancy&&lv.crowdAnim!=null&&!!lv.crowdAnim!==animOn){ animOn=!!lv.crowdAnim; if(animOn) cm.defines={FANCY:1}; else delete cm.defines; cm.needsUpdate=true; }
     if(len!=null){ let ch=false; if(len!==board.len){ board.len=len|0; ch=true; } if(lap!=null&&lap!==board.lap){ board.lap=lap|0; ch=true; } if(num!=null&&num!==board.num){ board.num=num; ch=true; }
       if(T!=null&&lap>0){ const s=Math.floor(T); if(s!==board.sec){ board.sec=s; board.T=T; ch=true; } } else if(board.T!=null&&!(lap>0)){ board.T=null; ch=true; }
       if(ch) redraw(); }
   }
-  return {cx:cx,cz:cz,frame:frame,board:board};
+  return {cx:cx,cz:cz,frame:frame,board:board,bowlY:bowlY};
 }
