@@ -1,0 +1,567 @@
+/* MOTOCROSS WAR 3D — the tracks: layouts (BG_audit/games/mxwar/LAYOUT-FORMAT.md) and the course builder with the riding physics.
+   window.MXWar.Tracks (node: module.exports, pure: no DOM).
+   - A LAYOUT is facts in our own coordinates: a closed centre line (normalised points, x right, y down, starting at the start gate), a
+     length and width in metres, an optional elevation by lap fraction, and features along it (start, finish, whoops, rhythm, triple, double,
+     tabletop, stepup, stepdown, big-jump, berm, sand, hill, offcamber ...). The researcher's real layouts arrive as mxwar/data/tracks.js
+     (window.MXWarTracks = track-layouts.json); until a round has one, three built-in tracks of our own design stand in: a modern stadium
+     Supercross track, the Daytona hybrid and an outdoor national with hills (status ERA-DEFAULT / SKETCHED, said so in the data).
+   - build(layout) -> a COURSE: the centre line resampled every 0.5 m (a centripetal Catmull-Rom spline), its heading and curvature, the
+     ground (base elevation + feature shapes + banked berms on the outside of turns), and the riding profile every rider follows:
+       speed (cornering limit from the curvature, braking 8.5 m/s2 and a 450's acceleration, the exact take-off speed of every jump so it
+       lands on the landing's down face, the whoops skimmed at speed), the time along the lap (calibrated to a real lap: a stadium lap about
+       50-60 s), the bike's PATH (ground-following, ballistic arcs off every lip: g = 9.81, the whoops skimmed crest to crest), its pitch, the
+       suspension (a spring-damper hit by every landing), standing or seated, and the lean in the turns. Every rider rides the same physics
+       at their own time gap, so a pack bunches in the turns and strings out on the straights by itself. */
+(function(g){
+"use strict";
+var MX=g.MXWar=g.MXWar||{};
+if(MX.Tracks) return;
+var PI=Math.PI, TAU=PI*2, GRAV=9.81;
+function clamp(x,a,b){ return x<a?a:x>b?b:x; }
+function sstep(x){ x=clamp(x,0,1); return x*x*(3-2*x); }
+function hash(s){ var h=2166136261>>>0; s=String(s||""); for(var i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619)>>>0; } return h>>>0; }
+
+/* ---------------- the built-in layouts: drawn with a tiny path language in metres, stored in the layout format ----------------
+   P(x, y, headingDeg): s(len) a straight; t(radius, deg) a turn (deg > 0 = right, < 0 = left); f(type, len, extra) a feature over the next
+   len metres (a straight); mark(type, extra) a zero-length mark (the finish line). Map coordinates: x right, y down. */
+function Path(x,y,hd){ this.x=x; this.y=y; this.h=hd*PI/180; this.h0=this.h; this.pts=[[x,y]]; this.s=0; this.feats=[]; this.el=[]; }
+Path.prototype.pt=function(){ this.pts.push([this.x,this.y]); };
+Path.prototype.st=function(len){ var n=Math.max(1,Math.ceil(len/7)); for(var i=0;i<n;i++){ this.x+=Math.cos(this.h)*len/n; this.y+=Math.sin(this.h)*len/n; this.pt(); } this.s+=len; return this; };
+Path.prototype.t=function(r,deg){ var a=deg*PI/180, n=Math.max(2,Math.ceil(Math.abs(deg)/15)), side=deg>0?1:-1;
+  var cx=this.x-Math.sin(this.h)*r*side, cy=this.y+Math.cos(this.h)*r*side, a0=Math.atan2(this.y-cy,this.x-cx);
+  for(var i=1;i<=n;i++){ var aa=a0+a*i/n; this.x=cx+Math.cos(aa)*r; this.y=cy+Math.sin(aa)*r; this.pt(); }
+  this.h+=a; this.s+=Math.abs(a)*r; return this; };
+Path.prototype.f=function(type,len,ex){ var F={type:type,s0:this.s,s1:this.s+len}; for(var k in (ex||{})) F[k]=ex[k]; this.feats.push(F); return this.st(len); };
+Path.prototype.mark=function(type,ex){ var F={type:type,s0:this.s,s1:this.s+0.5}; for(var k in (ex||{})) F[k]=ex[k]; this.feats.push(F); return this; };
+Path.prototype.elev=function(m){ this.el.push([this.s,m]); return this; };
+/* close the loop exactly: the shortest turn-straight-turn (Dubins) from here onto the start pose, turns of radius r */
+Path.prototype.close=function(r){
+  var x0=this.x, y0=this.y, h0=this.h, x1=this.pts[0][0], y1=this.pts[0][1], h1=this.h0, best=null, sides=[[1,1],[-1,-1],[1,-1],[-1,1]];
+  function ctr(x,y,h,s){ return [x-s*r*Math.sin(h),y+s*r*Math.cos(h)]; }
+  function wrap(a){ a%=TAU; return a<0?a+TAU:a; }
+  sides.forEach(function(sd){ var s1=sd[0], s2=sd[1], c1=ctr(x0,y0,h0,s1), c2=ctr(x1,y1,h1,s2), dx=c2[0]-c1[0], dy=c2[1]-c1[1], d=Math.hypot(dx,dy), th=Math.atan2(dy,dx);
+    var q=r*(s2-s1)/Math.max(1e-9,d); if(Math.abs(q)>1) return; var ph=th-Math.asin(q), len=d*Math.cos(th-ph); if(len<0) return;
+    var a1=wrap((ph-h0)*s1), a2=wrap((h1-ph)*s2), tot=r*a1+len+r*a2; if(!best||tot<best.tot) best={s1:s1,s2:s2,a1:a1,a2:a2,len:len,tot:tot}; });
+  if(!best) return this;
+  if(best.a1>1e-3) this.t(r,best.s1*best.a1*180/PI); if(best.len>0.05) this.st(best.len); if(best.a2>1e-3) this.t(r,best.s2*best.a2*180/PI);
+  return this;
+};
+Path.prototype.layout=function(meta){
+  /* close the loop onto the start, then normalise (one scale for x and y: the shape is kept) */
+  this.pts.pop();
+  var L=0, n=this.pts.length, i; for(i=0;i<n;i++){ var a=this.pts[i], b=this.pts[(i+1)%n]; L+=Math.hypot(b[0]-a[0],b[1]-a[1]); }
+  var minx=1e9, miny=1e9, maxx=-1e9, maxy=-1e9; this.pts.forEach(function(p){ minx=Math.min(minx,p[0]); miny=Math.min(miny,p[1]); maxx=Math.max(maxx,p[0]); maxy=Math.max(maxy,p[1]); });
+  var span=Math.max(maxx-minx,maxy-miny), pad=span*0.04, k=1/(span+pad*2);
+  var out={}; for(var m in meta) out[m]=meta[m];
+  out.points=this.pts.map(function(p){ return [+((p[0]-minx+pad)*k).toFixed(4),+((p[1]-miny+pad)*k).toFixed(4)]; });
+  out.lengthM=Math.round(L);
+  out.features=this.feats.map(function(F){ var o={t0:+(F.s0/L).toFixed(4),t1:+(Math.min(F.s1,L)/L).toFixed(4),type:F.type}; for(var q in F) if(q!=="s0"&&q!=="s1"&&q!=="type") o[q]=F[q]; return o; });
+  if(this.el.length) out.elev=this.el.map(function(e){ return [+(e[0]/L).toFixed(4),e[1]]; });
+  return out;
+};
+var BUILTIN=null;
+function builtins(){
+  if(BUILTIN) return BUILTIN;
+  /* 1. a modern stadium Supercross track (our own design in the modern style): a long start straight into a 180 left, the whoops, a
+        rhythm lane and a tabletop, the big triple, the finish line and its jump, a sand corner on the way back. About 540 m, 8.5 m wide. */
+  var A=new Path(30,72,0);
+  A.f("start",100).t(9,-180).st(14).f("whoops",54,{count:15}).st(16).t(8,180).st(10).f("rhythm",46,{count:6}).st(10).f("tabletop",18).st(14)
+   .t(8,-180).st(14).f("triple",34,{name:"The triple"}).st(12).mark("finish").f("tabletop",16,{name:"Finish-line jump"}).st(38).t(10,-90).f("sand",14).st(16).t(10,-90).close(10);
+  var sx=A.layout({id:"sx-stadium",name:"Stadium Supercross",venue:"",city:"",kind:"stadium",years:[1974,2026],status:"ERA-DEFAULT",
+    source:"Our own design in the modern stadium style (no published map copied)",widthM:8.5,soil:"stadium-dirt",surroundings:"stadium-open",lapS:56});
+  /* 2. the Daytona hybrid: the Supercross track in the speedway's infield, longer and faster with wide turns, sandy soil, under the lights */
+  var D=new Path(40,120,0);
+  D.f("start",140).st(10).t(15,-180).st(14).f("rhythm",50,{count:7}).st(14).f("double",24).st(18).t(15,180).st(12).f("whoops",52,{count:15}).st(24).f("triple",34,{name:"The big triple"}).st(4)
+   .t(15,-180).st(14).f("sand",30).st(10).f("stepup",24).st(16).mark("finish").f("tabletop",20,{name:"Finish-line jump"}).st(36).close(15);
+  var dy=D.layout({id:"daytona-hybrid",name:"Daytona",venue:"Daytona International Speedway",city:"Daytona Beach",kind:"stadium",years:[1974,2026],status:"SKETCHED",
+    source:"The speedway-infield hybrid (long, sandy, fast) sketched from descriptions; the yearly layout is not traced",widthM:10,soil:"sand",surroundings:"beach-speedway",lapS:66});
+  /* 3. an outdoor national with hills: a long start straight, a climb to a tabletop on the hilltop, rollers down, the big double, whoops in
+        the valley, a step-up back up the hill, an off-camber, a double, a sand corner, the finish-line tabletop */
+  var N=new Path(60,520,0);
+  N.elev(0).f("start",190).st(20).t(34,-90).st(60).elev(8).f("tabletop",28,{name:"Top of the hill"}).elev(14).st(60).f("rollers",50,{count:5}).st(40)
+   .t(30,-90).st(30).f("rhythm",64,{count:5}).st(40).elev(16).t(32,-180).st(30).f("big-jump",46,{name:"The big double"}).elev(8).st(40)
+   .t(28,180).st(24).f("whoops",56,{count:12}).elev(2).st(36).t(26,-180).st(16).f("stepup",30).st(24).f("offcamber",30).elev(5).st(16)
+   .t(26,180).f("double",32).st(24).f("sand",44).elev(1).st(24).mark("finish").f("tabletop",26,{name:"Finish-line tabletop"}).st(24).close(30);
+  var mx=N.layout({id:"national-hills",name:"Outdoor National",venue:"",city:"",kind:"outdoor",years:[1972,2026],status:"ERA-DEFAULT",
+    source:"Our own design in the style of a hilly national (no published map copied)",widthM:10,soil:"loam",surroundings:"hills-trees",lapS:120});
+  BUILTIN={sx:sx,daytona:dy,mx:mx}; return BUILTIN;
+}
+
+/* ---------------- choosing a layout for a round ---------------- */
+function data(){ return g.MXWarTracks||null; }
+function byId(id){ var D=data(); if(D&&D.byId&&D.byId[id]) return D.byId[id]; if(D&&D.layouts) for(var i=0;i<D.layouts.length;i++) if(D.layouts[i].id===id) return D.layouts[i]; var B=builtins(); for(var k in B) if(B[k].id===id) return B[k]; return null; }
+function norm(s){ return String(s||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim(); }
+/* a city without its state ("Anaheim, CA" -> "anaheim"): the whole name, never its first word (San Diego is not San Francisco) */
+function cityOf(s){ return norm(String(s||"").split(",")[0]); }
+/* series "sx" | "mx" | "smx", year, the calendar entry {n, city, venue}. The layout of a round, in this order (the pack, BG_audit/sprint/
+   mxbuild/layouts-pack.js, decides the first two and says which in the data):
+     how "round"  the researcher's layout of THAT round (status TRACED from the published map / SKETCHED from the race reports / ERA-DEFAULT,
+                  the era's style at that venue);
+     how "venue"  no layout for that round: the same venue's layout of the nearest other year (D.fb[key] = {id, how, year});
+     how "era"    nothing for the venue: a built-in of our own design in the era's style (Daytona by its city, outdoor for Motocross, the
+                  stadium track for the rest; the mirror variant spreads the stadium track over the season so two cities in a row differ).
+   A season whose pack predates a calendar change (no key at all) still finds a same-venue / same-city layout at run time (how "venue"). */
+function forRound(series,year,cal,o){
+  var D=data(), key=series+"-"+year+"-r"+(cal&&cal.n), L=null, how="", fbYear=0;
+  if(o&&o.builtin) D=null;   /* the fallback when a real layout cannot be built */
+  if(D&&D.need) D.need(series,year);   /* the season's layouts (node loads them here; the page loads them with the season file) */
+  if(D&&D.rounds&&D.rounds[key]){ L=byId(D.rounds[key]); if(L) how="round"; }
+  if(!L&&D&&D.fb&&D.fb[key]){ L=byId(D.fb[key].id); if(L){ how="venue"; fbYear=D.fb[key].year|0; } }
+  if(!L&&D&&D.layouts&&!(D.fb&&D.fb[key]===0)){
+    var v=norm(cal&&cal.venue), c=cityOf(cal&&cal.city), best=null, bd=1e9;
+    D.layouts.forEach(function(x){
+      var kindOk=series==="smx"?x.kind==="stadium":(series==="mx")===(x.kind==="outdoor"); if(!kindOk) return;
+      var hit=(v&&norm(x.venue)&&norm(x.venue)===v)||(c&&cityOf(x.city)&&cityOf(x.city)===c); if(!hit) return;
+      var yr=x.years||[0,9999], d=year<yr[0]?yr[0]-year:year>yr[1]?year-yr[1]:0, pen=x.status==="TRACED"?0:x.status==="SKETCHED"?2:6;
+      if(d+pen<bd){ bd=d+pen; best=x; fbYear=yr[0]; } });
+    if(best){ L=best; how="venue"; }
+  }
+  var B=builtins(), variant=0;
+  if(!L){
+    how="era";
+    if(/daytona/i.test((cal&&cal.city)||"")||/daytona/i.test((cal&&cal.venue)||"")) L=B.daytona;
+    else if(series==="mx") L=B.mx;
+    else if(series==="smx") L=B.daytona;
+    else { L=B.sx; variant=hash((cal&&(cal.venue||cal.city))||"")%4; }
+  }
+  return {layout:L,variant:variant,key:L.id+"|"+variant,how:how,fbYear:fbYear,status:how==="era"?"ERA-DEFAULT":L.status};
+}
+
+/* ---------------- feature shapes (height above the base, metres, at x metres into a feature of length len) ---------------- */
+function bump(x,a,b,h,k){ /* a mound rising over [a, mid] and falling over [mid, b] */ if(x<=a||x>=b) return 0; var u=(x-a)/(b-a); return h*Math.pow(Math.sin(PI*u),k||1); }
+function face(x,a,b,h,p){ /* a take-off face: concave, rising from a to the lip at b (height h), then a short back slope */ if(x<a) return 0; if(x<=b) return h*Math.pow((x-a)/(b-a),p||1.35); var d=(x-b)/2.6; return d>=1?0:h*(1-d*d); }
+function land(x,a,top,b,h){ /* a landing: the back rises over [a, top - .4], a short flat, the down face to b */ if(x<a||x>b) return 0; if(x<top-0.4){ var u=(x-a)/(top-0.4-a); return h*(1-(1-u)*(1-u)); } if(x<=top) return h; var w=(x-top)/(b-top); return h*(1-sstep(w)); }
+var SHAPES={
+  whoops:function(x,len,F){ var n=F.count||Math.max(4,Math.round(len/3.4)), u=x/len; if(u<0||u>1) return 0; var e=Math.min(1,Math.min(u,1-u)*n*0.9+0.45); return (F.h||1.12)*e*(0.5-0.5*Math.cos(TAU*n*u)); },
+  rollers:function(x,len,F){ var n=F.count||Math.max(3,Math.round(len/9)); if(x<0||x>len) return 0; return (F.h||1.3)*(0.5-0.5*Math.cos(TAU*n*x/len)); },
+  rhythm:function(x,len,F){ var n=F.count||Math.max(3,Math.round(len/7)), sp=len/n, i=Math.floor(x/sp), y=x-i*sp; if(i<0||i>=n) return 0; var h=(F.h||1.55)*(i%2?0.82:1); return bump(y,0.2,sp-0.2,h,0.8); },
+  double:function(x,len,F){ var H=F.h||1.9; return Math.max(face(x,0,4.6,H),land(x,len-8.6,len-6.2,len,H)); },
+  triple:function(x,len,F){ var H=F.h||2.3; return Math.max(face(x,0,5.4,H),bump(x,len*0.36,len*0.6,H*0.55,0.9),land(x,len-10,len-7,len,H*1.02)); },
+  tabletop:function(x,len,F){ var H=F.h||1.9; if(x<0||x>len) return 0; if(x<4.6) return H*Math.pow(x/4.6,1.3); if(x<len-6) return H; return H*(1-sstep((x-(len-6))/6)); },
+  stepup:function(x,len,F){ var H=F.h||1.5, H2=H*1.65; if(x<0||x>len) return 0; var t=face(x,0,4.2,H); if(x<len*0.55) return t; var a=len*0.55; if(x<a+3) return Math.max(t,H2*sstep((x-a)/3)); return H2*(1-sstep((x-(a+3))/(len-a-3))); },
+  /* polish 2: a step-down is a real face up to its lip, then a lower table to land on (it used to be a 2.2 m wall over 1.8 m: a 12 m launch) */
+  stepdown:function(x,len,F){ var H=F.h||2.0, H2=H*0.45; if(x<0||x>len) return 0; if(x<4.2) return face(x,0,4.2,H); if(x<5.4) return H2+(H-H2)*(1-sstep((x-4.2)/1.2)); if(x<len-5) return H2; return H2*(1-sstep((x-(len-5))/5)); },
+  "big-jump":function(x,len,F){ var H=F.h||3.1; return Math.max(face(x,0,7,H,1.25),land(x,len-14,len-10.5,len,H*1.05)); },
+  hill:function(x,len,F){ if(x<0||x>len) return 0; var s=Math.sin(PI*x/len); return (F.h||7)*s*s; },
+  /* polish 2: the OVER-UNDER BRIDGE of a modern Supercross track: a table 3.4 m high over the other lane's tunnel (ridden as a tabletop:
+     the face, the deck, the landing) */
+  bridge:function(x,len,F){ var H=F.h||3.4, r=7; if(x<0||x>len) return 0; if(x<r) return H*Math.pow(x/r,1.25); if(x>len-r) return H*(1-sstep((x-(len-r))/r)); return H; }
+};
+var JUMPS={double:1,triple:1,tabletop:1,stepup:1,"big-jump":1,stepdown:1,bridge:1};
+/* the shortest length a jump shape needs; a shorter mark in a traced layout is ridden as a roller */
+var MINLEN={double:13,triple:20,tabletop:12,stepup:14,"big-jump":22,stepdown:12,bridge:20};
+/* polish 2: and the longest: a traced mark longer than a real jump of its kind (a 54 m "triple") is a jump of that length followed by flat
+   ground (the arc over 44 m flew 8.6 m high) */
+var MAXLEN={double:24,triple:34,stepup:26,stepdown:26,"big-jump":42};
+var PRI={whoops:5,rhythm:5,rollers:4,double:6,triple:6,tabletop:6,stepup:6,"big-jump":6,stepdown:6,bridge:7,sand:3,offcamber:2,mechanics:1,berm:1,hill:1,tunnel:1};
+
+/* ---------------- the course ---------------- */
+/* one centripetal Catmull-Rom segment p1 -> p2 (p0, p3 its neighbours), sampled every ~0.4 m into out */
+function crSeg(p0,p1,p2,p3,out){
+  var t0=0, t1=t0+Math.pow(Math.hypot(p1[0]-p0[0],p1[1]-p0[1]),0.5)+1e-4, t2=t1+Math.pow(Math.hypot(p2[0]-p1[0],p2[1]-p1[1]),0.5)+1e-4, t3=t2+Math.pow(Math.hypot(p3[0]-p2[0],p3[1]-p2[1]),0.5)+1e-4;
+  var seg=Math.max(2,Math.ceil(Math.hypot(p2[0]-p1[0],p2[1]-p1[1])/0.4));
+  for(var k=0;k<seg;k++){ var t=t1+(t2-t1)*k/seg, xy=[0,0];
+    for(var c=0;c<2;c++){
+      var A1=(t1-t)/(t1-t0)*p0[c]+(t-t0)/(t1-t0)*p1[c], A2=(t2-t)/(t2-t1)*p1[c]+(t-t1)/(t2-t1)*p2[c], A3=(t3-t)/(t3-t2)*p2[c]+(t-t2)/(t3-t2)*p3[c];
+      var B1=(t2-t)/(t2-t0)*A1+(t-t0)/(t2-t0)*A2, B2=(t3-t)/(t3-t1)*A2+(t-t1)/(t3-t1)*A3;
+      xy[c]=(t2-t)/(t2-t1)*B1+(t-t1)/(t2-t1)*B2; }
+    out.push(xy); }
+}
+function build(layout,o){
+  o=o||{}; var variant=o.variant|0, gateN=Math.max(8,Math.min(42,o.gate||22)), outdoor=layout.kind==="outdoor";
+  function mir(p){ return [variant&1?1-p[0]:p[0],variant&2?1-p[1]:p[1]]; }
+  var pts=layout.points.map(mir);
+  var n=pts.length, L0=0, i;
+  for(i=0;i<n;i++){ var a=pts[i], b=pts[(i+1)%n]; L0+=Math.hypot(b[0]-a[0],b[1]-a[1]); }
+  var sc=(layout.lengthM||600)/L0;
+  /* centripetal Catmull-Rom through the points (closed), sampled densely */
+  var dense=[];
+  function P(k){ var q=pts[((k%n)+n)%n]; return [q[0]*sc,q[1]*sc]; }
+  for(i=0;i<n;i++) crSeg(P(i-1),P(i),P(i+1),P(i+2),dense);
+  /* resample every DS metres */
+  var DS=0.5, cum=[0];
+  for(i=1;i<=dense.length;i++){ var u=dense[i-1], v=dense[i%dense.length]; cum.push(cum[i-1]+Math.hypot(v[0]-u[0],v[1]-u[1])); }
+  var Ltot=cum[dense.length], N=Math.round(Ltot/DS), L=N*DS;
+  var C={layout:layout,id:layout.id,variant:variant,kind:outdoor?"outdoor":"stadium",N:N,DS:DS,L:L,outdoor:outdoor,
+    x:new Float32Array(N),z:new Float32Array(N),tx:new Float32Array(N),tz:new Float32Array(N),k:new Float32Array(N),E:new Float32Array(N),F:new Float32Array(N),
+    hw:new Float32Array(N),berm:new Float32Array(N),sand:new Float32Array(N),cam:new Float32Array(N),feat:new Int16Array(N),Lc:0,Nc:0,bridges:[]};
+  var j=0;
+  for(i=0;i<N;i++){ var s=i*Ltot/N; while(j<dense.length-1&&cum[j+1]<s) j++; var f=(s-cum[j])/Math.max(1e-6,cum[j+1]-cum[j]), q0=dense[j], q1=dense[(j+1)%dense.length];
+    C.x[i]=q0[0]+(q1[0]-q0[0])*f; C.z[i]=q0[1]+(q1[1]-q0[1])*f; }
+  /* centre the track on the origin */
+  var mnx=1e9,mxx=-1e9,mnz=1e9,mxz=-1e9; for(i=0;i<N;i++){ mnx=Math.min(mnx,C.x[i]); mxx=Math.max(mxx,C.x[i]); mnz=Math.min(mnz,C.z[i]); mxz=Math.max(mxz,C.z[i]); }
+  var cx0=(mnx+mxx)/2, cz0=(mnz+mxz)/2; for(i=0;i<N;i++){ C.x[i]-=cx0; C.z[i]-=cz0; }
+  C.box={x0:mnx-cx0,x1:mxx-cx0,z0:mnz-cz0,z1:mxz-cz0};
+  /* heading and curvature (smoothed) */
+  var hd=new Float32Array(N);
+  for(i=0;i<N;i++){ var a2=(i+1)%N, b2=(i-1+N)%N, dx=C.x[a2]-C.x[b2], dz=C.z[a2]-C.z[b2], l=Math.hypot(dx,dz)||1; C.tx[i]=dx/l; C.tz[i]=dz/l; hd[i]=Math.atan2(dz,dx); }
+  var kr=new Float32Array(N);
+  for(i=0;i<N;i++){ var d=hd[(i+2)%N]-hd[(i-2+N)%N]; while(d>PI) d-=TAU; while(d<-PI) d+=TAU; kr[i]=d/(4*DS); }
+  smooth(kr,C.k,8);
+  /* polish 2: the START CHUTE (the researcher's startPath on the real Supercross layouts: the start straight from the gate to where it joins
+     the lap, up to 150 m and often curving into turn 1). Race distance runs from the gate at D = -Lc; the lap starts at D = 0 (points[0], the
+     join), so D mod L is still the lap position on every lap. Its own arrays: cx, cz, ctx, ctz, ck (index 0 the gate, Nc the join). */
+  /* (a start path that begins at points[0] is the lap itself: no chute) */
+  var spg=layout.startPath&&layout.startPath.length>=2?mir(layout.startPath[0]):null;
+  if(spg&&Math.hypot(spg[0]-pts[0][0],spg[1]-pts[0][1])*sc>3){
+    var spts=layout.startPath.map(mir).map(function(p){ return [p[0]*sc,p[1]*sc]; }), J0=P(0), last=spts[spts.length-1];
+    if(Math.hypot(last[0]-J0[0],last[1]-J0[1])<1) spts[spts.length-1]=J0; else spts.push(J0);
+    var lenC=0; for(i=1;i<spts.length;i++) lenC+=Math.hypot(spts[i][0]-spts[i-1][0],spts[i][1]-spts[i-1][1]);
+    if(lenC>=6&&lenC<400){
+      var m=spts.length, s0p=spts[0], s1p=spts[1], ctrl=[[2*s0p[0]-s1p[0],2*s0p[1]-s1p[1]]].concat(spts,[P(1)]), cd=[];
+      for(i=0;i<m-1;i++) crSeg(ctrl[i],ctrl[i+1],ctrl[i+2],ctrl[i+3],cd);
+      cd.push(J0);
+      var ccum=[0]; for(i=1;i<cd.length;i++) ccum.push(ccum[i-1]+Math.hypot(cd[i][0]-cd[i-1][0],cd[i][1]-cd[i-1][1]));
+      var Lc0=ccum[cd.length-1], Nc=Math.max(4,Math.round(Lc0/DS));
+      C.Nc=Nc; C.Lc=Nc*DS; C.cx=new Float32Array(Nc+1); C.cz=new Float32Array(Nc+1); C.ctx=new Float32Array(Nc+1); C.ctz=new Float32Array(Nc+1); C.ck=new Float32Array(Nc+1);
+      var jj=0; for(i=0;i<=Nc;i++){ var sC=i*Lc0/Nc; while(jj<cd.length-2&&ccum[jj+1]<sC) jj++; var fC=(sC-ccum[jj])/Math.max(1e-6,ccum[jj+1]-ccum[jj]); C.cx[i]=cd[jj][0]+(cd[jj+1][0]-cd[jj][0])*fC-cx0; C.cz[i]=cd[jj][1]+(cd[jj+1][1]-cd[jj][1])*fC-cz0; }
+      C.cx[Nc]=C.x[0]; C.cz[Nc]=C.z[0];
+      var chd=new Float32Array(Nc+1);
+      for(i=0;i<=Nc;i++){ var ia=Math.min(Nc,i+1), ib=Math.max(0,i-1), ddx=C.cx[ia]-C.cx[ib], ddz=C.cz[ia]-C.cz[ib], ll=Math.hypot(ddx,ddz)||1; C.ctx[i]=ddx/ll; C.ctz[i]=ddz/ll; chd[i]=Math.atan2(ddz,ddx); }
+      for(i=0;i<=Nc;i++){ var ia2=Math.min(Nc,i+2), ib2=Math.max(0,i-2), dh=chd[ia2]-chd[ib2]; while(dh>PI) dh-=TAU; while(dh<-PI) dh+=TAU; C.ck[i]=dh/(Math.max(1,ia2-ib2)*DS); }
+      var ck2=new Float32Array(Nc+1); for(i=0;i<=Nc;i++){ var acc=0, cnt=0; for(var q2=-6;q2<=6;q2++){ var ii2=i+q2; if(ii2<0||ii2>Nc) continue; acc+=C.ck[ii2]; cnt++; } ck2[i]=acc/cnt; } C.ck=ck2;
+      for(i=0;i<=Nc;i++){ mnx=Math.min(mnx,C.cx[i]+cx0); mxx=Math.max(mxx,C.cx[i]+cx0); mnz=Math.min(mnz,C.cz[i]+cz0); mxz=Math.max(mxz,C.cz[i]+cz0); }
+      C.box={x0:mnx-cx0,x1:mxx-cx0,z0:mnz-cz0,z1:mxz-cz0};
+    }
+  }
+  /* features in metres */
+  var W=(layout.widthM||(outdoor?10:8.5))/2;
+  C.feats=(layout.features||[]).map(function(F,fi){ var o2={}; for(var q in F) o2[q]=F[q]; o2.s0=F.t0*L; o2.s1=Math.max(F.t1*L,o2.s0+0.5); o2.len=o2.s1-o2.s0; o2.i=fi;
+    if(o2.type==="bridge"||o2.type==="tunnel"){ o2.decl=o2.type; o2.mark=true; return o2; }   /* where the drawing says over / under: the bridge itself is placed at the crossing (below) */
+    if(JUMPS[o2.type]&&o2.len<MINLEN[o2.type]){ o2.was=o2.type; o2.type="rollers"; o2.count=1; o2.h=Math.min(1.3,0.4+o2.len*0.08); }
+    if(MAXLEN[o2.type]&&o2.len>MAXLEN[o2.type]){ o2.drawn=o2.len; o2.len=MAXLEN[o2.type]; o2.s1=o2.s0+o2.len; }
+    if(o2.type==="hill"&&layout.elev&&layout.elev.length) o2.mark=true;   /* the real elevation already has the hill */
+    if(o2.type==="berm"||o2.type==="offcamber"||o2.type==="mechanics") o2.mark=true;
+    return o2; });
+  /* polish 2: OVER-UNDER BRIDGES: where two parts of the lap cross, one rides over a 3.4 m table and the other through the tunnel under it
+     (the drawing's bridge / tunnel marks say which; else the part with fewer obstacles goes over). The obstacles that were drawn across the
+     crossing on either part are ridden flat (their shapes would collide with the bridge). */
+  bridges(C,W);
+  featIndex(C);
+  C.featAt=function(s){ s=((s%L)+L)%L; var b=null; for(var q=0;q<C.feats.length;q++){ var F=C.feats[q]; if(s>=F.s0&&s<=F.s1&&!F.mark&&(!b||(PRI[F.type]||0)>(PRI[b.type]||0))) b=F; } return b; };
+  var fin=C.feats.filter(function(F){ return F.type==="finish"; })[0], st=C.feats.filter(function(F){ return F.type==="start"; })[0];
+  C.sFin=fin?(fin.s0+fin.s1)/2:(st?st.s1:L*0.9);
+  C.startLen=st?st.len:(C.Lc?0.5:Math.min(80,L*0.12));
+  /* the start funnel: the gate's width (the drawn gate, else half a metre a rider) narrowing to the track's width over the chute and the start
+     straight */
+  var gw=layout.gateW?Math.max(W,layout.gateW/2):Math.max(W,gateN*0.5+1.2), fLen=Math.max(20,(C.Lc+C.startLen)*0.85);
+  C.gw=gw; C.funLen=C.Lc+C.startLen;
+  /* the base elevation (outdoors), the feature heights, the width (the start funnel), the berms */
+  var el=(layout.elev||[]).slice().sort(function(a,b){ return a[0]-b[0]; });
+  for(i=0;i<N;i++){
+    var s2=i*DS, t2b=s2/L;
+    C.E[i]=el.length?elevAt(el,t2b):0;
+    var h=0, sd=0, fid=-1;
+    for(var q=0;q<C.feats.length;q++){ var F=C.feats[q], x2=s2-F.s0; if(x2<-0.01||x2>F.len+0.01) continue; var fn=F.mark?null:SHAPES[F.type]; if(fn){ var hh=fn(x2,F.len,F); if(hh>h) h=hh; } if(F.type==="sand") sd=1;
+      if(F.type!=="start"&&F.type!=="finish"&&!F.flat&&!F.decl&&(fid<0||(PRI[F.type]||0)>(PRI[C.feats[fid].type]||0))) fid=q; }
+    C.F[i]=h; C.sand[i]=sd; C.feat[i]=fid;
+    var fun=sstep(1-(C.Lc+s2)/fLen);
+    C.hw[i]=s2<C.startLen?W+(gw-W)*fun:W;
+  }
+  smooth(C.E,C.E,30);
+  /* the start funnel widens toward the free side only (the stands side of a stadium start, never into the next row): the strip's centre
+     moves sideways by the extra width (C.off), the inner edge stays where it was */
+  C.off=new Float32Array(N);
+  var nS=Math.min(N-1,Math.round(C.startLen/DS)), room=[0,0];
+  [1,-1].forEach(function(side,si){ var worst=1e9;
+    for(var i2=0;i2<=nS;i2+=4){ var nx2=-C.tz[i2]*side, nz2=C.tx[i2]*side, px=C.x[i2]+nx2*(gw*2-W), pz=C.z[i2]+nz2*(gw*2-W);
+      for(var j2=0;j2<N;j2+=3){ var along=Math.min(Math.abs(j2-i2),N-Math.abs(j2-i2))*DS; if(along<C.startLen+40) continue; var d2=Math.hypot(C.x[j2]-px,C.z[j2]-pz); if(d2<worst) worst=d2; } }
+    room[si]=worst; });
+  C.fside=room[0]>=room[1]?1:-1;
+  for(i=0;i<N;i++) C.off[i]=C.fside*(C.hw[i]-W);
+  /* the chute: its width from the funnel; centred on the drawn start straight at the gate, easing into the lap's offset at the join; flat at
+     the join's level */
+  if(C.Lc){ C.chw=new Float32Array(C.Nc+1); C.coff=new Float32Array(C.Nc+1); C.cE=C.E[0];
+    for(i=0;i<=C.Nc;i++){ C.chw[i]=W+(gw-W)*sstep(1-(i*DS)/fLen); C.coff[i]=C.off[0]*sstep(i/C.Nc); } }
+  /* berms: the outside of every turn rises (signed: + = the berm is on the right side) */
+  var bmax=outdoor?1.2:1.6;
+  for(i=0;i<N;i++){ var kk=C.k[i], bh=clamp(Math.abs(kk)*12,0,bmax); if(C.F[i]>0.3) bh*=0.3; C.berm[i]=kk>0?-bh:bh; }
+  var tmp=new Float32Array(N); smooth(C.berm,tmp,10); C.berm=tmp;
+  var oc=C.feats.filter(function(F){ return F.type==="offcamber"; });
+  C.camb=new Float32Array(N); oc.forEach(function(F){ for(var s3=F.s0;s3<F.s1;s3+=DS){ var ii=((Math.round(s3/DS))%N+N)%N; C.camb[ii]=-0.13*Math.sin(PI*(s3-F.s0)/F.len)*(C.k[ii]>=0?1:-1); } });
+  profile(C,o);
+  return C;
+}
+/* find where two parts of the lap cross; put a bridge on the part that goes over (C.bridges: {so, su, x, z, cosA, sinA, half}) */
+function bridges(C,W){
+  var N=C.N, DS=C.DS, L=C.L, X=[], i, j, el=(C.layout.elev||[]).slice().sort(function(a,b){ return a[0]-b[0]; });
+  function wrapD(a,b){ var d=Math.abs(a-b)%L; return Math.min(d,L-d); }
+  function eAt(s){ return el.length?elevAt(el,(((s%L)+L)%L)/L):0; }   /* outdoors the higher part goes over (a natural overpass needs a lower table) */
+  for(i=0;i<N;i+=2){ var i2=(i+2)%N, ax=C.x[i], az=C.z[i], bx=C.x[i2], bz=C.z[i2];
+    for(j=i+2;j<N;j+=2){ if(wrapD(i*DS,j*DS)<40) continue; var j2=(j+2)%N, cx=C.x[j], cz=C.z[j], dx=C.x[j2], dz=C.z[j2];
+      var d1x=bx-ax, d1z=bz-az, d2x=dx-cx, d2z=dz-cz, den=d1x*d2z-d1z*d2x; if(Math.abs(den)<1e-9) continue;
+      var t=((cx-ax)*d2z-(cz-az)*d2x)/den, u=((cx-ax)*d1z-(cz-az)*d1x)/den;
+      if(t>=0&&t<=1&&u>=0&&u<=1){ var sa=(i+2*t)*DS, sb=(j+2*u)*DS, dup=X.some(function(q){ return wrapD(q.a,sa)<12&&wrapD(q.b,sb)<12; });
+        if(!dup) X.push({a:sa,b:sb,x:ax+d1x*t,z:az+d1z*t}); } } }
+  X.forEach(function(q){
+    function near(type,s){ return C.feats.some(function(F){ return F.decl===type&&wrapD((F.s0+F.s1)/2,s)<34; }); }
+    function busy(s){ var n=0; C.feats.forEach(function(F){ if(!F.mark&&SHAPES[F.type]&&F.s1>s-14&&F.s0<s+14) n++; }); return n; }
+    var aOver=near("bridge",q.a)||near("tunnel",q.b), bOver=near("bridge",q.b)||near("tunnel",q.a), over, ea=eAt(q.a), eb=eAt(q.b);
+    if(aOver&&!bOver) over="a"; else if(bOver&&!aOver) over="b"; else if(Math.abs(ea-eb)>1.2) over=ea>eb?"a":"b"; else over=busy(q.a)<=busy(q.b)?"a":"b";
+    var so=over==="a"?q.a:q.b, su=over==="a"?q.b:q.a, H=clamp(3.4-(eAt(so)-eAt(su)),0.8,3.4);
+    var io=Math.round(so/DS)%N, iu=Math.round(su/DS)%N, cosA=Math.abs(C.tx[io]*C.tx[iu]+C.tz[io]*C.tz[iu]), sinA=Math.sqrt(Math.max(0.05,1-cosA*cosA));
+    var half=Math.max(13,(W+1.4)/sinA+7), uh=(W+4)/sinA;
+    if(so<half+2||so>L-half-2) return;   /* too near the lap's seam for the table: the crossing stays flat */
+    if(sinA<0.45) return;   /* lanes that cross at a shallow angle (a criss-cross) stay flat: a bridge would need a very long deck */
+    var stF=C.feats.filter(function(F){ return F.type==="start"&&F.s0<30; })[0], stL=stF?stF.s1:0;
+    if(!C.Lc&&(su<stL+12||su>L-8||so<stL+12)) return;   /* never over the gate or its start straight (a chute keeps the gate off the lap) */
+    if(C.bridges.some(function(b){ return wrapD(b.so,so)<half*2+6||wrapD(b.su,so)<half+6; })) return;
+    C.feats.forEach(function(F){ if(F.mark||!SHAPES[F.type]) return;
+      if((F.s1>so-half-2&&F.s0<so+half+2)||(F.s1>su-uh&&F.s0<su+uh)){ F.mark=true; F.flat=true; } });
+    C.feats.push({type:"bridge",s0:so-half,s1:so+half,len:half*2,h:H,auto:true,name:"Over-under bridge",i:C.feats.length});
+    C.bridges.push({so:so,su:su,x:q.x,z:q.z,cosA:cosA,sinA:sinA,half:half});
+  });
+}
+function elevAt(el,t){ if(t<=el[0][0]) return lerpWrap(el[el.length-1],el[0],t); for(var i=0;i<el.length-1;i++) if(t<=el[i+1][0]){ var a=el[i], b=el[i+1]; return a[1]+(b[1]-a[1])*sstep((t-a[0])/Math.max(1e-6,b[0]-a[0])); } return lerpWrap(el[el.length-1],el[0],t); }
+function lerpWrap(a,b,t){ var span=(b[0]+1)-a[0], u=((t<a[0]?t+1:t)-a[0])/Math.max(1e-6,span); return a[1]+(b[1]-a[1])*sstep(u); }
+function smooth(src,dst,r){ var N=src.length, out=new Float32Array(N), acc=0, i; for(i=-r;i<=r;i++) acc+=src[((i%N)+N)%N]; for(i=0;i<N;i++){ out[i]=acc/(2*r+1); acc+=src[(i+r+1)%N]-src[((i-r)%N+N)%N]; } dst.set(out); return dst; }
+
+/* the ground height at track position s (metres, wraps) and lateral offset lat (metres, + = right of the centre line) */
+function idx(C,s){ var f=((s%C.L)+C.L)%C.L/C.DS, i=Math.floor(f); return [i%C.N,(i+1)%C.N,f-i]; }
+function ground(C,s,lat){
+  var q=idx(C,s), i=q[0], j=q[1], f=q[2];
+  var base=C.E[i]+(C.E[j]-C.E[i])*f+C.F[i]+(C.F[j]-C.F[i])*f;
+  if(!lat) return base;
+  var hw=C.hw[i], bm=C.berm[i]+(C.berm[j]-C.berm[i])*f, u=lat/hw, side=bm>=0?1:-1, w=Math.max(0,u*side);
+  return base+Math.abs(bm)*Math.pow(Math.min(w,1.25),1.7)+(C.camb[i]||0)*lat;
+}
+/* polish 2: the shaped features over each 0.5 m sample (fh asked only those: a course builds several times faster, which a Fire TV feels at
+   every round's start) */
+var NOF=[];
+function featIndex(C){ var N=C.N, lists=new Array(N), q, i;
+  for(q=0;q<C.feats.length;q++){ var F=C.feats[q]; if(F.mark||!SHAPES[F.type]) continue; var a=Math.max(0,Math.floor((F.s0-0.6)/C.DS)), b=Math.min(N-1,Math.ceil((F.s1+0.6)/C.DS)); for(i=a;i<=b;i++) (lists[i]||(lists[i]=[])).push(F); }
+  C.fl=lists; }
+/* the ground without one feature's shape (the whoops skim rides over whatever else was drawn there) */
+function fhX(C,s,X){ var L=C.L; s=((s%L)+L)%L; var q=idx(C,s), e=C.E[q[0]]+(C.E[q[1]]-C.E[q[0]])*q[2], h=0, lst=C.fl?(C.fl[q[0]]||NOF):C.feats;
+  for(var k=0;k<lst.length;k++){ var F=lst[k], x=s-F.s0; if(F===X||x<-0.01||x>F.len+0.01) continue; var fn=F.mark?null:SHAPES[F.type]; if(fn){ var y=fn(x,F.len,F); if(y>h) h=y; } }
+  return e+h; }
+function fh(C,s){ /* centre-line ground at any s by the analytic feature shapes (finer than the 0.5 m samples, for the jump physics) */
+  var L=C.L; s=((s%L)+L)%L; var q=idx(C,s), e=C.E[q[0]]+(C.E[q[1]]-C.E[q[0]])*q[2], h=0, lst=C.fl?(C.fl[q[0]]||NOF):C.feats;
+  for(var k=0;k<lst.length;k++){ var F=lst[k], x=s-F.s0; if(x<-0.01||x>F.len+0.01) continue; var fn=F.mark?null:SHAPES[F.type]; if(fn){ var y=fn(x,F.len,F); if(y>h) h=y; } }
+  return e+h;
+}
+
+/* ---------------- the riding profile ---------------- */
+function profile(C,o){
+  var N=C.N, DS=C.DS, L=C.L, i, outdoor=C.outdoor;
+  /* 1. the exact take-off speed of every jump: from the lip (the face's top) to a point on the landing's down face */
+  C.feats.forEach(function(F){
+    if(!JUMPS[F.type]||F.mark) return;   /* (a mark or an obstacle ridden flat has no take-off) */
+    var lip=F.s0+(F.type==="big-jump"||F.type==="bridge"?7:F.type==="triple"?5.4:F.type==="stepup"||F.type==="stepdown"?4.2:4.6), tgt;
+    if(F.type==="tabletop") tgt=F.s1-6+2.2; else if(F.type==="bridge") tgt=F.s1-7+2.4; else if(F.type==="stepup") tgt=F.s0+F.len*0.55+3.4; else if(F.type==="stepdown") tgt=F.s0+Math.max(8.5,Math.min(F.len-5.5,F.len*0.62));
+    else if(F.type==="big-jump") tgt=F.s1-10.5+3.6; else if(F.type==="triple") tgt=F.s1-7+2.6; else tgt=F.s1-6.2+2.3;
+    var yl=fh(C,lip), sl=(fh(C,lip)-fh(C,lip-0.3))/0.3, th=Math.atan(sl), dx=tgt-lip, dy=fh(C,tgt)-yl;
+    var den=2*Math.cos(th)*Math.cos(th)*(dx*Math.tan(th)-dy), v=den>0?Math.sqrt(GRAV*dx*dx/den):14;
+    F.lip=lip; F.tgt=tgt; F.vj=clamp(v*Math.cos(th),6,outdoor?26:19); F.theta=th;
+  });
+  /* 2. the speed limit at every point (horizontal speed along the line) */
+  var lim=new Float32Array(N), sp=new Float32Array(N), k=1;
+  function limits(kv){
+    for(i=0;i<N;i++){
+      var kk=Math.abs(C.k[i]), bank=Math.abs(C.berm[i])>0.5, aLat=(bank?10.5:7.5)*kv*kv, vt=(outdoor?26:17)*kv;
+      var v=kk>1e-4?Math.sqrt(aLat/kk):vt; v=Math.min(v,vt);
+      if(C.sand[i]) v=Math.min(v,vt*0.72);
+      var F=C.feat[i]>=0?C.feats[C.feat[i]]:null;
+      if(F&&F.type==="whoops") v=Math.min(v,(outdoor?14:14.2)*Math.min(1.08,kv));
+      if(F&&F.type==="rhythm") v=Math.min(v,(outdoor?15:11.5)*Math.min(1.1,kv));
+      lim[i]=v;
+    }
+    /* the jumps: a steady run up the face at the take-off speed, the same speed in the air to the landing target */
+    /* polish 2: from 14 m before the lip, as the take-off calibration rides it (a faster run at the face pops the bike long) */
+    C.feats.forEach(function(F){ if(!F.vj) return; for(var s=F.lip-14;s<=F.tgt+1;s+=DS){ var ii=((Math.round(s/DS))%N+N)%N; lim[ii]=F.vj; } });
+  }
+  function passes(start0){
+    var a, rep, vprev;
+    for(i=0;i<N;i++) sp[i]=lim[i];
+    for(rep=0;rep<3;rep++){
+      for(i=0;i<N;i++){ var j=(i+1)%N, v=sp[i], acc=Math.max(1.2,7.8*(1-v/(outdoor?31:28))); var near=nearLip(j); if(near) acc=13; var vn=Math.sqrt(v*v+2*acc*DS); if(sp[j]>vn) sp[j]=vn; }
+      for(i=N-1;i>=0;i--){ var j2=(i+1)%N, vb=Math.sqrt(sp[j2]*sp[j2]+2*8.5*DS); if(sp[i]>vb) sp[i]=vb; }
+    }
+  }
+  var lipZone=new Uint8Array(N); C.feats.forEach(function(F){ if(!F.vj) return; for(var s=F.lip-28;s<=F.lip;s+=DS){ lipZone[((Math.round(s/DS))%N+N)%N]=1; } });
+  function nearLip(j){ return lipZone[j]===1; }
+  function lapTime(){ var t=0; for(i=0;i<N;i++) t+=DS/Math.max(0.5,sp[i]); return t; }
+  /* 3. calibrate the free limits (cornering grip, top speed) to a real lap time; the jump speeds stay physical */
+  var want=(o&&o.lapS>0)?o.lapS:(C.layout.lapS)||(C.outdoor?clamp(L/16.5,95,170):clamp(L/11.2,42,80)), lo=0.55, hi=1.6;
+  for(var it=0;it<22;it++){ k=(lo+hi)/2; limits(k); passes(); var tl=lapTime(); if(tl>want) lo=k; else hi=k; }
+  limits(k); passes();
+  C.kv=k;
+  C.v=new Float32Array(sp);
+  C.tau=new Float64Array(N+1); for(i=0;i<N;i++) C.tau[i+1]=C.tau[i]+DS/Math.max(0.5,sp[i]);
+  C.Tlap=C.tau[N];
+  /* the opening lap from a standing start at the gate (s = 0): the reaction, then the drive, until it meets the flying lap */
+  var v0=new Float32Array(N), t0=new Float64Array(N+1), v=0, conv=-1;
+  for(i=0;i<N;i++){ var acc0=Math.max(1.2,(i*DS<12?6.4:7.8)*(1-v/(C.outdoor?31:28))); if(conv<0){ v0[i]=Math.min(sp[i],v); if(i>0&&v>=sp[i]-1e-3&&i*DS>10) conv=i; v=Math.min(sp[i],Math.sqrt(v*v+2*acc0*DS)); } else v0[i]=sp[i]; }
+  for(i=0;i<N;i++) t0[i+1]=t0[i]+DS/Math.max(0.6,v0[i]);
+  C.v0=v0; C.tau0=t0; C.conv=conv<0?N:conv;
+  /* 4. the bike's path: a sprung chassis over the ground (a 2 Hz spring, a damper, 0.30 m of travel; the wheels leave the ground as soon as
+        the spring is unloaded, then it is ballistic, g = 9.81): faces are absorbed, the whoops are skimmed crest to crest, every lip throws
+        the bike on an arc. Each jump's take-off speed is found by a bisection (a local ride up to the lip) so the arc lands on its target. */
+  var Y=new Float32Array(N), AIR=new Uint8Array(N), PIT=new Float32Array(N), CMP=new Float32Array(N), STD=new Float32Array(N), LEAN=new Float32Array(N), ROOST=new Float32Array(N), FLY=new Int32Array(N);
+  var KS=(TAU*2.0)*(TAU*2.0), CD=2*0.5*TAU*2.0, FREE=GRAV/KS, TRAVEL=0.3, flights=[], VY=new Float32Array(N);
+  /* polish 2: SKIMMING AND DOUBLING. A face that comes up faster than the suspension can take used to throw the chassis at the face's whole
+     vertical speed: riders flew 5-9 m high over the whoops and the rhythm lanes. Now in the whoops the bike skims the crests (touching each
+     one, airborne over the troughs), in a rhythm lane it jumps two bumps at a time (a ballistic double from a crest to the down face of the
+     bump after next), and outside the real jumps' own faces no bump throws the chassis faster than 3.5 m/s upward (rollers are soaked up). */
+  var GUIDES=[], CAPZ=new Uint8Array(N);
+  C.feats.forEach(function(F){ if(!F.vj) return; for(var s=F.s0-1;s<=F.lip+0.6;s+=DS) CAPZ[((Math.round(s/DS))%N+N)%N]=1; });
+  function baseE(s){ var q=idx(C,s); return C.E[q[0]]+(C.E[q[1]]-C.E[q[0]])*q[2]; }
+  function guides(){
+    GUIDES=[];
+    C.feats.forEach(function(F){ if(F.mark) return;
+      if(F.type==="whoops"){ var n=F.count||Math.max(4,Math.round(F.len/3.4)), H=F.h||1.12;
+        /* (any other obstacle drawn over the whoops still counts: the skim never sinks into it, and it meets the ground at both ends) */
+        GUIDES.push({a:F.s0,b:F.s1,bw:1.2,g:function(s){ var u=(s-F.s0)/F.len, e=clamp(Math.min(u,1-u)*n*1.15,0,1); return Math.max(fhX(C,s,F),baseE(s)+(H*0.97-0.03+0.03*Math.cos(TAU*n*u))*e); }}); }
+      else if(F.type==="rhythm"){ var n2=F.count||Math.max(3,Math.round(F.len/7)), sp2=F.len/n2, span=sp2<=10.5?2:sp2<=18?1:0;   /* doubles when the bumps are close, singles when far apart, rolled when they are rollers */
+        if(span) for(var b0=0;b0+span<n2;b0+=span+1) (function(b0){ var x0=F.s0+(b0+0.45)*sp2, x1=F.s0+(b0+span)*sp2+0.68*sp2, y0=fh(C,x0), y1=fh(C,x1), v=Math.max(6,sp[((Math.round(x0/DS))%N+N)%N]), t=(x1-x0)/v, vy0=(y1-y0+0.5*GRAV*t*t)/t;
+          if(vy0>7.5) return;   /* too slow for that gap: rolled */
+          GUIDES.push({a:x0,b:x1,bw:1.6,g:function(s){ var tt=(s-x0)/v; return y0+vy0*tt-0.5*GRAV*tt*tt; }}); })(b0); }
+    });
+  }
+  function guideAt(s){ s=((s%L)+L)%L; for(var q=0;q<GUIDES.length;q++){ var G=GUIDES[q]; if(s>G.a-G.bw&&s<G.b+G.bw){ var w=s<G.a?(s-(G.a-G.bw))/G.bw:s>G.b?1-(s-G.b)/G.bw:1; return {w:sstep(w),y:s<G.a||s>G.b?fh(C,s):G.g(s)}; } } return null; }
+  function simulate(record){
+    var sub=4, h=DS/sub, y=fh(C,0), vy=0, inAir=false, takeS=0, takeP=0, fl=[];
+    guides();
+    for(var lap=0;lap<2;lap++){
+      for(i=0;i<N;i++){
+        var vh=Math.max(1,sp[i]), capOk=CAPZ[i]===1;
+        for(var q=0;q<sub;q++){
+          var s=i*DS+q*h+h, dt=h/vh, yg=fh(C,s), vg=(fh(C,s+0.15)-fh(C,s-0.15))/0.3*vh, ext=y-yg, ac, yPrev=y;
+          if(ext<FREE){ ac=KS*(yg-y)+CD*(vg-vy); if(ac<-GRAV) ac=-GRAV; } else ac=-GRAV;
+          vy+=ac*dt; y+=vy*dt;
+          if(yg-y>TRAVEL){ y=yg-TRAVEL; if(vy<vg) vy=capOk?vg:Math.min(vg,3.5); }
+          var gd=GUIDES.length?guideAt(s):null;
+          if(gd&&gd.w>0){ var yN=y+(gd.y-y)*gd.w; vy+=(clamp((yN-yPrev)/dt,-12,12)-vy)*gd.w; y=yN; }
+          if(vy>14) vy=14;   /* a safety net: nothing on a motocross track throws a bike up faster */
+          var air=y-yg>FREE*1.05;
+          if(air&&!inAir){ inAir=true; takeS=s; takeP=Math.atan2(vy,vh); }
+          else if(!air&&inAir){ inAir=false; if(lap===1&&s-takeS>2.5) fl.push({s0:takeS,s1:s,p0:takeP,p1:Math.atan((fh(C,s+0.3)-fh(C,s-0.3))/0.6)}); }
+        }
+        if(lap===1&&record){ Y[i]=y; AIR[i]=inAir?1:0; CMP[i]=clamp(fh(C,i*DS)-y,0,TRAVEL); VY[i]=vy; }
+      }
+    }
+    return fl;
+  }
+  /* each jump on its own: the chassis rides up to the lip at a steady speed; a bisection finds the take-off speed whose arc lands on the
+     target (on the landing's down face) */
+  function landAt(F,v,y0,vy0){
+    var h=DS/4, s=F.lip-14, y=fh(C,s)+(y0||0), vy=vy0||0, air=false, took=-1;
+    for(var n2=0;n2<4000;n2++){
+      var sN=s+h, dt=h/v, yg=fh(C,sN), vg=(fh(C,sN+0.15)-fh(C,sN-0.15))/0.3*v, ac;
+      if(y-yg<FREE){ ac=KS*(yg-y)+CD*(vg-vy); if(ac<-GRAV) ac=-GRAV; } else ac=-GRAV;
+      vy+=ac*dt; y+=vy*dt; if(yg-y>TRAVEL){ y=yg-TRAVEL; if(vy<vg) vy=vg; }
+      var a=y-yg>FREE*1.05; s=sN;
+      if(a&&!air){ air=true; if(took<0&&s>F.lip-2.5) took=s; }
+      else if(!a&&air){ air=false; if(took>=0&&s-took>1.5) return s; }
+      if(s>F.s1+25) return took>=0?s:F.lip;   /* polish 2: no flight at all = short (the bisection must go faster), not long */
+    }
+    return s;
+  }
+  function calib(F,y0,vy0){ var lo=5, hi=outdoor?28:21;
+    for(var it2=0;it2<24;it2++){ var mid=(lo+hi)/2; if(landAt(F,mid,y0,vy0)<F.tgt) lo=mid; else hi=mid; }
+    F.vj=(lo+hi)/2; }
+  C.feats.forEach(function(F){ if(F.vj) calib(F,0,0); });
+  limits(k); passes();
+  /* round two: a jump right after a rough section meets the face with the chassis still moving: calibrate again from the full lap's state */
+  var fl1=simulate(true), again=false;
+  C.feats.forEach(function(F){ if(!F.vj) return; var f=null; fl1.forEach(function(x){ if(!f&&x.s0>=F.lip-2.5&&x.s0<=F.lip+1.5) f=x; });
+    if(f&&Math.abs(f.s1-F.tgt)<1.2) return; var i0=((Math.round((F.lip-14)/DS))%N+N)%N; calib(F,Y[i0]-fh(C,F.lip-14),VY[i0]); again=true; });
+  if(again){ limits(k); passes(); }
+  C.v=new Float32Array(sp); for(i=0;i<N;i++) C.tau[i+1]=C.tau[i]+DS/Math.max(0.5,sp[i]); C.Tlap=C.tau[N];
+  opening(C,sp,k);
+  flights=simulate(true);
+  /* pitch: from the path under the two wheels; in a long flight, from the take-off angle to the landing slope */
+  for(i=0;i<N;i++){ var sA=i*DS, ya=pathAt(Y,N,DS,sA+0.74), yb=pathAt(Y,N,DS,sA-0.74); PIT[i]=Math.atan2(ya-yb,1.48); }
+  flights.forEach(function(fl){ var a=fl.s0, b=fl.s1; if(b<a) b+=L; for(var s=a;s<=b;s+=DS){ var u=(s-a)/(b-a), ii=((Math.round(s/DS))%N+N)%N; PIT[ii]=fl.p0+(fl.p1-fl.p0)*sstep(u)-0.06*Math.sin(PI*u); FLY[ii]=1; } });
+  /* standing: in the whoops, rhythm and jumps and on the fast straights; seated in the turns */
+  for(i=0;i<N;i++){ var Fq=C.feat[i]>=0?C.feats[C.feat[i]]:null, stv=0;
+    if(Fq&&(Fq.type!=="sand"&&Fq.type!=="berm"&&Fq.type!=="offcamber")) stv=1;
+    if(AIR[i]||FLY[i]) stv=1; if(sp[i]>13.5&&Math.abs(C.k[i])<0.02) stv=Math.max(stv,0.8); if(Math.abs(C.k[i])>0.05) stv*=0.2; STD[i]=stv; }
+  var std2=new Float32Array(N); smooth(STD,std2,8);
+  /* lean into the turns: atan(v^2 k / g), smoothed */
+  for(i=0;i<N;i++) LEAN[i]=clamp(Math.atan(sp[i]*sp[i]*C.k[i]/GRAV),-0.78,0.78);
+  var lean2=new Float32Array(N); smooth(LEAN,lean2,4);
+  /* roost: hard acceleration out of the turns */
+  for(i=0;i<N;i++){ var j3=(i+1)%N, acc3=(sp[j3]*sp[j3]-sp[i]*sp[i])/(2*DS); ROOST[i]=AIR[i]?0:clamp((acc3-1.2)/4,0,1)*(C.sand[i]?1.4:1); }
+  C.Y=Y; C.air=AIR; C.pitch=PIT; C.comp=CMP; C.stand=std2; C.lean=lean2; C.roost=ROOST; C.fly=FLY; C.flights=flights;
+}
+function pathAt(Y,N,DS,s){ var f=((s/DS)%N+N)%N, i=Math.floor(f), j=(i+1)%N; f-=i; return Y[i]+(Y[j]-Y[i])*f; }
+/* the opening from a standing start at the gate: the chute first (polish 2: the reaction, the drive, braking for its bends and into the lap),
+   then the lap from the join until it meets the flying lap (C.v0, C.tau0, C.conv; the chute: C.cv, C.ctau, C.Tc) */
+function opening(C,sp,kv){
+  var N=C.N, DS=C.DS, i, top=C.outdoor?31:28, vJ=0;
+  C.Tc=0;
+  if(C.Lc){
+    var Nc=C.Nc, lc=new Float32Array(Nc+1), vc=new Float32Array(Nc+1), v=0;
+    for(i=0;i<=Nc;i++){ var kc=Math.abs(C.ck[i]), vt=(C.outdoor?26:17)*kv; lc[i]=Math.min(vt,kc>1e-4?Math.sqrt(7.5*kv*kv/kc):vt); }
+    lc[Nc]=Math.min(lc[Nc],sp[0]);
+    for(i=0;i<=Nc;i++){ vc[i]=Math.min(lc[i],v); var acc=Math.max(1.2,(i*DS<12?6.4:7.8)*(1-v/top)); v=Math.min(lc[i],Math.sqrt(v*v+2*acc*DS)); }
+    for(i=Nc-1;i>=0;i--){ var vb=Math.sqrt(vc[i+1]*vc[i+1]+2*8.5*DS); if(vc[i]>vb) vc[i]=vb; }
+    C.cv=vc; C.ctau=new Float64Array(Nc+1); for(i=0;i<Nc;i++) C.ctau[i+1]=C.ctau[i]+DS/Math.max(0.6,vc[i]); C.Tc=C.ctau[Nc]; vJ=vc[Nc];
+  }
+  var v0=new Float32Array(N), t0=new Float64Array(N+1), w=vJ, conv=-1;
+  for(i=0;i<N;i++){ var acc0=Math.max(1.2,(!C.Lc&&i*DS<12?6.4:7.8)*(1-w/top));
+    if(conv<0){ v0[i]=Math.min(sp[i],w); if((C.Lc||i>0)&&w>=sp[i]-1e-3&&(C.Lc||i*DS>10)) conv=i; w=Math.min(sp[i],Math.sqrt(w*w+2*acc0*DS)); } else v0[i]=sp[i]; }
+  for(i=0;i<N;i++) t0[i+1]=t0[i]+DS/Math.max(0.6,i<(conv<0?N:conv)?Math.min(v0[i],sp[i]):sp[i]);
+  C.v0=v0; C.tau0=t0; C.conv=conv<0?N:conv;
+}
+
+/* ---------------- reading a course ---------------- */
+/* the profile time -> race distance (metres from the gate, continuous over the laps): the opening lap from the standing start, then flying laps */
+function distAt(C,tau){
+  if(tau<=0) return -C.Lc;
+  if(C.Lc){ if(tau<C.Tc) return -C.Lc+C.DS*search(C.ctau,tau,C.Nc); tau-=C.Tc; }
+  var T0=C.tau0[C.N];
+  if(tau<T0) return C.DS*search(C.tau0,tau,C.N);
+  var t=tau-T0, laps=Math.floor(t/C.Tlap), r=t-laps*C.Tlap;
+  return C.L*(1+laps)+C.DS*search(C.tau,r,C.N);
+}
+/* the inverse: the profile time at race distance D */
+function timeAt(C,D){
+  if(C.Lc){ if(D<=-C.Lc) return 0; if(D<0) return lerpArr(C.ctau,(D+C.Lc)/C.DS); return C.Tc+timeLap(C,D); }
+  return timeLap(C,D);
+}
+function timeLap(C,D){
+  if(D<=0) return 0;
+  if(D<C.L) return lerpArr(C.tau0,D/C.DS);
+  var laps=Math.floor(D/C.L)-1, r=D-C.L*(laps+1);
+  return C.tau0[C.N]+laps*C.Tlap+lerpArr(C.tau,r/C.DS);
+}
+function lerpArr(a,f){ var i=Math.floor(f), t=f-i; if(i>=a.length-1) return a[a.length-1]; return a[i]+(a[i+1]-a[i])*t; }
+function search(a,v,N){ var lo=0, hi=N; while(hi-lo>1){ var m=(lo+hi)>>1; if(a[m]<=v) lo=m; else hi=m; } var d=a[hi]-a[lo]; return lo+(d>0?(v-a[lo])/d:0); }
+/* the race distance where lap k (1-based) ends: the k-th crossing of the finish line (a finish line close behind the gate makes the opening
+   lap a full loop more) */
+function lapEnd(C,k){ var f=C.sFin+C.Lc<C.L*0.25?C.sFin+C.L:C.sFin; return f+(k-1)*C.L; }
+/* polish 2: a course that cannot be raced (a layout the builder cannot make sense of): the page falls back to a built-in track */
+function sane(C){ if(!C||!(C.N>100)||!(C.Tlap>15&&C.Tlap<400)) return false; for(var i=0;i<C.N;i+=7) if(!isFinite(C.Y[i])||!isFinite(C.x[i])||!(C.v[i]>0)) return false; return isFinite(C.tau0[C.N])&&(!C.Lc||isFinite(C.Tc)); }
+/* the course of a round, never failing: the round's layout, else the built-in one; the last few are kept (the season's lap time and the 3D
+   view ask for the same course at a round's start: built once) */
+var CCACHE=[];
+/* merge: the course is built at the layout's own lap time (cached per layout, variant and gate: a round's races all share it) and the view
+   rides it in the ENGINE's lap time (race.js lapS: each race its researched lap) by a time scale; only a lap time far from the course's
+   natural one (outside 0.72 - 1.4 x, where the speeds would look wrong) builds the course again calibrated to it (o.lapS) */
+var BAND=[0.72,1.4];
+function course(series,year,cal,o){
+  o=o||{};
+  var pick=forRound(series,year,cal), C=null, gate=o.gate, key=pick.key+"|"+(gate||22), q, hit=null;
+  for(q=0;q<CCACHE.length;q++) if(CCACHE[q].key===key){ hit=CCACHE[q]; break; }
+  if(!hit){
+    try{ C=build(pick.layout,{variant:pick.variant,gate:gate}); if(!sane(C)) C=null; }catch(e){ C=null; }
+    if(!C){ pick=forRound(series,year,cal,{builtin:true}); C=build(pick.layout,{variant:pick.variant,gate:gate}); pick.fallback=true; }
+    hit={key:key,r:{pick:pick,C:C}}; CCACHE.unshift(hit); if(CCACHE.length>5) CCACHE.pop();
+  }
+  var r=hit.r, lapS=+o.lapS||0;
+  if(lapS>20&&(lapS/r.C.Tlap<BAND[0]||lapS/r.C.Tlap>BAND[1])){
+    var k2=key+"|L"+Math.round(lapS/6)*6, h2=null; for(q=0;q<CCACHE.length;q++) if(CCACHE[q].key===k2){ h2=CCACHE[q]; break; }
+    if(!h2){ var C2=null; try{ C2=build(r.pick.layout,{variant:r.pick.variant,gate:gate,lapS:lapS}); if(!sane(C2)) C2=null; }catch(e){ C2=null; }
+      if(C2){ h2={key:k2,r:{pick:r.pick,C:C2}}; CCACHE.unshift(h2); if(CCACHE.length>5) CCACHE.pop(); } }
+    if(h2) r=h2.r;
+  }
+  return r;
+}
+/* sample a course array at track position s (wraps), linear */
+function at(C,arr,s){ var f=((s%C.L)+C.L)%C.L/C.DS, i=Math.floor(f)%C.N, j=(i+1)%C.N, t=f-Math.floor(f); return arr[i]+(arr[j]-arr[i])*t; }
+
+MX.Tracks={BAND:BAND,cityOf:cityOf,builtins:builtins,forRound:forRound,byId:byId,build:build,course:course,sane:sane,ground:ground,fh:fh,distAt:distAt,timeAt:timeAt,lapEnd:lapEnd,at:at,SHAPES:SHAPES,JUMPS:JUMPS};
+if(typeof module!=="undefined"&&module.exports) module.exports=MX.Tracks;
+})(typeof window!=="undefined"?window:globalThis);

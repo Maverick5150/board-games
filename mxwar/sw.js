@@ -1,7 +1,7 @@
-// Offline cache for Motocross War (the season files data/<series>-<year>.js are cached on first use: every .js the page fetches is stored) (bump VERSION to force update)
-const VERSION = "mxwar-v8";
+// Offline cache for Motocross War (the season files data/<series>-<year>.js and their track layouts data/trk-<series>-<year>.js are cached on first use: every .js the page fetches is stored) (bump VERSION to force update)
+const VERSION = "mxwar-v9";
 const PREFIX = VERSION.replace(/v[0-9]+$/, "");   // every game shares one origin (one CacheStorage): only ever delete THIS game's old caches
-const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "../sound.js", "../skins.js", "../saves.js", "../names.js", "./data/index.js", "./race.js", "./round.js", "./season.js", "./brain.js", "./art.js", "./track.js", "./game.js",
+const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "../sound.js", "../skins.js", "../saves.js", "../names.js", "./data/index.js", "./race.js", "./round.js", "./season.js", "./brain.js", "./art.js", "./track.js", "./gl3d.js", "./data/tracks.js", "./tracks3d.js", "./director3d.js", "./race3d.js", "./hud.js", "./update.js", "./game.js",
   "../ui/theme.css", "../ui/ui.js", "../ui/icons.js", "../ui/picker.js",
   "../ui/fonts/dmserifdisplay-latin.woff2", "../ui/fonts/dmserifdisplay-italic-latin.woff2", "../ui/fonts/manrope-var-latin.woff2",
   "../ui/tex/felt.webp", "../ui/tex/paper.webp", "../ui/tex/orb-gold.webp", "../ui/tex/orb-violet.webp", "../ui/tex/rays-core.webp",
@@ -9,7 +9,7 @@ const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "../sound.js", "
 
 // Updates: a new VERSION re-downloads every asset (cache "reload" skips the browser's HTTP cache, so cache-first icons are fresh too)
 // and takes over at once (skipWaiting + clients.claim). Pages and scripts are network-first, so a published update loads on the
-// next launch or navigation by itself; an open game is never reloaded.
+// next launch or navigation by itself; an OPEN game page is reloaded by update.js at a safe moment (or offers a button during a race).
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(ASSETS.map(u => new Request(u, { cache: "reload" })))).then(() => self.skipWaiting()));
 });

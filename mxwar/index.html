@@ -567,6 +567,113 @@
   html[data-tv] #winBox .mx-res{grid-template-columns:repeat(2,minmax(0,1fr)); column-gap:.75rem; width:100%; max-height:min(30vh,14rem)}
   html[data-tv] #fullBox .mx-res li{scroll-margin:1rem}
 
+
+  /* ---------- MOTOCROSS WAR 3D (the CEO 2026-10-16 20:06 "I want 3D perfection on every track ... wars in a tiny box window" and 2026-10-17 07:40
+     "People are going to be watching the standings ... all 40 riders ... Everything needs to fit on the TV"): the race in 3D fills the arena
+     (race3d.js); the cards run behind it (a tiny war flash; "Cards" opens the corner window); the standings are the overlay (hud.js): a small
+     timing tower always, EVERY rider at once on a button / the remote's Menu key and by itself after each lap; the 2D track stays as the
+     fallback when there is no WebGL ---------- */
+  .mx-3dv, .mx-h, .mx-hbtns{display:none}
+  body.mx-3d .mx-3dv{display:block; position:absolute; inset:0; z-index:1}
+  body.mx-3d .mx-3dv canvas{display:block}
+  body.mx-3d .mx-track, body.mx-3d .mx-lane, body.mx-3d .mx-gate, body.mx-3d .mx-dust{display:none}
+  body.mx-3d .mx-arena{background:#05060a; height:clamp(19rem,calc(100svh - 16.4rem),48rem)}
+  body.mx-3d .mx-rhead, body.mx-3d .mx-tower, body.mx-3d .mx-log{display:none}
+  body.mx-3d .mx-h{display:block; position:absolute; inset:0; z-index:5; pointer-events:none}
+  body.mx-3d .mx-hbtns{display:flex; position:absolute; right:.45rem; top:2.9rem; z-index:7; gap:.4rem}
+  body.mx-3d:not(.mx-cards) .mx-table{display:none}
+  body.mx-3d .mx-table{z-index:7}
+  /* the corner of the screen: the timing tower (top left), the track (top right) with its two buttons */
+  .mx-h-tl{position:absolute; left:.45rem; top:.45rem; width:min(53%,13.2rem)}
+  .mx-h-lap{display:flex; align-items:baseline; justify-content:space-between; gap:.5rem; padding:.18rem .5rem .16rem; border-radius:var(--r-sm) var(--r-sm) 0 0; background:rgba(9,12,18,.9);
+    box-shadow:inset 0 2px 0 #f72d2e; font:800 var(--fs-micro)/1.25 var(--font-ui); letter-spacing:.05em; text-transform:uppercase; color:var(--text-1); white-space:nowrap}
+  .mx-h-lap b{font-weight:800; color:#ecb967} .mx-h-lap b i{font-style:normal; color:var(--text-2); font-weight:700}
+  .mx-h-lap b.is-white{color:#fffdf6}
+  .mx-h-lap span{overflow:hidden; text-overflow:ellipsis; color:var(--text-2)} .mx-h-lap span.is-yellow{color:#ffd84a} .mx-h-lap span.is-white{color:#fffdf6}
+  .mx-h-lap.is-yellow{box-shadow:inset 0 2px 0 #ffd21f}
+  .mx-h-tw{margin:0; padding:.12rem .15rem .15rem; list-style:none; background:rgba(9,12,18,.8); border-radius:0 0 var(--r-sm) var(--r-sm)}
+  .mx-h-tw:empty{display:none}
+  .mx-h-row{display:grid; grid-template-columns:1.15rem auto minmax(0,1fr) auto; align-items:center; gap:.3rem; min-height:1.3rem; padding:0 .25rem; border-radius:.25rem;
+    font:var(--fw-ui-strong) var(--fs-micro)/1.2 var(--font-ui); color:var(--text-1); font-variant-numeric:tabular-nums}
+  .mx-h-row .p{text-align:right; color:#ecb967; font-weight:800}
+  .mx-h-row .n{min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .mx-h-row .g{text-align:right; color:#aeb5bf; font-weight:700; white-space:nowrap}
+  .mx-h-row .k{text-align:right; color:#d6c9a8; font-weight:700}
+  .mx-h-row .mx-pl{font-size:var(--fs-micro); min-width:2.1em; padding:0 .2rem 0 .5em}
+  .mx-h-row.is-me{background:rgba(236,185,103,.22); box-shadow:inset 0 0 0 1px #ecb967}
+  .mx-h-row.is-out{color:#8d94a0} .mx-h-row.is-out .g{color:#ff8a7a}
+  .mx-h-row.is-cr .g{color:#ffd84a; font-weight:800}
+  .mx-h-gap{height:.3rem; margin:.05rem .25rem; border-top:1px dashed rgba(236,185,103,.4)}
+  .mx-h-tr{position:absolute; right:.45rem; top:.45rem; max-width:min(46%,14rem); text-align:right}
+  .mx-h-trk{display:inline-grid; gap:0; padding:.2rem .55rem .22rem; border-radius:var(--r-sm); background:rgba(9,12,18,.86); font:var(--fw-ui-strong) var(--fs-micro)/1.25 var(--font-ui); color:var(--text-1); max-width:100%}
+  .mx-h-trk:empty{display:none} .mx-h-trk b{font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; letter-spacing:.03em; text-transform:uppercase}
+  .mx-h-trk span{color:#aeb5bf; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .mx-hbtn{display:inline-flex; align-items:center; justify-content:center; gap:.4rem; min-width:var(--tap,2.75rem); min-height:var(--tap,2.75rem); padding:0 .6rem; border:0; border-radius:var(--r-md); cursor:pointer;
+    background:rgba(9,12,18,.86); box-shadow:inset 0 0 0 1px rgba(236,185,103,.45); color:#ecb967; font:800 var(--fs-micro)/1 var(--font-ui); letter-spacing:.04em; text-transform:uppercase; -webkit-tap-highlight-color:transparent}
+  .mx-hbtn .bg-ico{width:1.3rem; height:1.3rem}
+  .mx-hbtn .tx{display:none}
+  .mx-hbtn[aria-pressed="true"]{background:#ecb967; color:#14110a}
+  .mx-hbtn:focus-visible{outline:none; box-shadow:inset 0 0 0 1px rgba(236,185,103,.45),0 0 0 3px var(--gold-100,#f0d48a)}
+  /* the event pill: the war's tiny flash, the lap's news */
+  .mx-h-evt{position:absolute; left:50%; bottom:.7rem; transform:translateX(-50%) translateY(.4rem); max-width:calc(100% - 1rem); padding:.28rem .8rem; border-radius:var(--r-pill); opacity:0; visibility:hidden;
+    background:rgba(9,12,18,.92); box-shadow:inset 0 0 0 1.5px #ecb967; font:800 var(--fs-micro)/1.25 var(--font-ui); letter-spacing:.03em; color:var(--text-1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    transition:opacity .18s ease-out, transform .18s ease-out}
+  .mx-h-evt.is-on{opacity:1; visibility:visible; transform:translateX(-50%)}
+  .mx-h-evt b{color:#ecb967; font-weight:800} .mx-h-evt .up{color:#9be564} .mx-h-evt .dn{color:#ff8a7a}
+  .mx-h-evt.is-war{box-shadow:inset 0 0 0 1.5px #f72d2e; background:rgba(40,8,10,.94)} .mx-h-evt.is-war b{color:#ff8a7a}
+  .mx-h-evt.is-hot{background:#7c160f; box-shadow:inset 0 0 0 1.5px #ffd0c0}
+  html[data-effects="reduced"] .mx-h-evt, html[data-motion="reduce"] .mx-h-evt{transition:none}
+  /* the FULL standings: every rider, two columns, sized to fit (no scrolling) */
+  .mx-h-full{position:absolute; inset:.45rem .45rem auto .45rem; display:flex; flex-direction:column; padding:.4rem .5rem .5rem; border-radius:var(--r-lg); z-index:6; pointer-events:auto;
+    background:rgba(9,12,18,.95); box-shadow:inset 0 0 0 1px rgba(236,185,103,.4), 0 .6rem 2rem rgba(0,0,0,.6)}
+  .mx-h-full[hidden]{display:none}
+  body.mx-3d .mx-h.has-full{z-index:9}   /* the full standings over the arena's buttons */
+  .mx-h-full__h{display:flex; align-items:baseline; gap:.7rem; flex:none; padding:.1rem .25rem .4rem; font:var(--fw-ui) var(--fs-micro)/1.15 var(--font-ui); color:#aeb5bf; white-space:nowrap}
+  .mx-h-full__h b{font:400 var(--fs-lg)/1.1 var(--font-display); color:var(--text-1); letter-spacing:.01em}
+  .mx-h-full__h span{overflow:hidden; text-overflow:ellipsis; min-width:0} .mx-h-full__h .is-gold{margin-left:auto; color:#ecb967; font-weight:800; letter-spacing:.05em; text-transform:uppercase}
+  .mx-h-full__cols{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.5rem; align-content:start}
+  .mx-h-full__cols[data-cols="1"]{grid-template-columns:minmax(0,1fr)}
+  .mx-h-col{display:grid; grid-template-rows:repeat(var(--rows,20),var(--rh,1.3rem)); gap:.08rem; margin:0; padding:0; list-style:none; min-width:0}
+  .mx-h-col .mx-h-row{grid-template-columns:1.4rem auto minmax(0,1fr) 1.7rem auto; min-height:0; padding:0 .35rem; background:rgba(255,255,255,.04)}
+  .mx-h-col .mx-h-row:nth-child(even){background:rgba(255,255,255,.075)}
+  .mx-h-col .mx-h-row.is-me{background:rgba(236,185,103,.24)}
+  .mx-h-col .mx-h-row .g{min-width:2.6rem}
+  /* banners in the lower third of the picture (the news, never over the bikes' road) */
+  body.mx-3d .mx-banner{top:auto; bottom:18%; padding:.4rem 1.1rem .5rem; z-index:8}
+  body.mx-3d .mx-banner b{font-size:var(--fs-2xl)}
+  body.mx-3d .mx-banner.is-yellow{background:linear-gradient(180deg,rgba(84,66,6,.96),rgba(40,30,4,.96)); box-shadow:inset 0 0 0 1.5px #ffd84a,0 .6rem 1.6rem rgba(0,0,0,.6)}
+  body.mx-3d .mx-banner.is-yellow b{color:#ffe36e} body.mx-3d .mx-banner.is-yellow span{color:#fff3c4}
+  html:not([data-tv]) body.mx-3d .mx-hints{display:none}
+  .mx-skipq{margin:0 0 .75rem; font:var(--fw-body) var(--fs-sm)/1.5 var(--font-ui); color:var(--text-2)}
+  #updBtn{flex:1 1 100%; min-height:3rem}
+  /* body.mx-3d: the lower part of the page is just the controls and one line of words */
+  body.mx-3d .mx-stat{min-height:1.2em; margin-top:.3rem}
+  html[data-tv] body.mx-3d .mx-race{grid-template-columns:minmax(0,1fr) auto; grid-template-rows:minmax(0,1fr) auto auto; grid-template-areas:"arena arena" "acts acts" "stat log"; row-gap:.35rem;
+    padding:.5rem 4.8rem 1.9rem}
+  html[data-tv] body.mx-3d .mx-arena{height:auto; min-height:0}
+  html[data-tv] body.mx-3d .mx-stat{grid-area:stat; align-self:center; margin:0}
+  html[data-tv] body.mx-3d .mx-logw{grid-area:log; align-self:center}
+  html[data-tv] body.mx-3d .mx-acts{gap:1.5rem; margin-top:.2rem}
+  html[data-tv] body.mx-3d .mx-h-tl{left:.9rem; top:.9rem; width:17.5rem}
+  html[data-tv] body.mx-3d .mx-h-tr{right:.9rem; top:.9rem; max-width:19rem}
+  html[data-tv] body.mx-3d .mx-hbtns{right:.9rem; top:4.2rem}
+  html[data-tv] body.mx-3d .mx-hbtn .tx{display:inline}
+  html[data-tv] body.mx-3d .mx-h-row{grid-template-columns:1.6rem auto minmax(0,1fr) auto; min-height:1.55rem}
+  html[data-tv] body.mx-3d .mx-h-evt{bottom:1.1rem}
+  html[data-tv] body.mx-3d .mx-banner b{font-size:var(--fs-3xl)}
+  html[data-tv] body.mx-3d .mx-table{right:1rem; bottom:1rem}
+  html[data-tv] .mx-h-full{inset:.9rem .9rem auto .9rem; padding:.6rem .8rem .8rem}
+  html[data-tv] body.mx-3d .mx-h-col .mx-h-row{grid-template-columns:1.8rem auto minmax(0,1fr) 2.2rem auto; min-height:0}
+  @media (orientation: landscape) and (max-height: 31.25em){
+    html:not([data-tv]) body.mx-3d .mx-arena{height:var(--ls-game)}
+    html:not([data-tv]) body.mx-3d .mx-h-tl{width:min(36%,12rem)}
+    html:not([data-tv]) body.mx-3d .mx-hbtns{top:2.75rem}
+  }
+  @media (orientation: portrait) and (max-width: 36em){
+    html:not([data-tv]) body.mx-3d .mx-race{padding-top:.2rem}
+    html:not([data-tv]) body.mx-3d .mx-h-full__cols{gap:.3rem} html:not([data-tv]) body.mx-3d .mx-h-col .mx-h-row{grid-template-columns:1.2rem auto minmax(0,1fr) 1.2rem auto; gap:.2rem; padding:0 .2rem}
+  }
+
   /* ---------- phone upright: the arena nearly edge to edge ---------- */
   @media (orientation: portrait) and (max-width: 36em){
     html:not([data-tv]) .mx-race{padding-inline:.5rem}
@@ -781,6 +888,7 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
       <span class="mx-chip mx-ychip" id="yelChip"></span>
     </div>
     <div class="mx-arena" id="arena" data-stage-solid aria-label="The track">
+      <div class="mx-3dv" id="view3d" aria-hidden="true"></div>
       <div class="mx-track" id="trackArt" aria-hidden="true"></div>
       <div class="mx-lane" id="lane" aria-hidden="true"></div>
       <div class="mx-dust" id="dust" aria-hidden="true"></div>
@@ -795,12 +903,14 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
         <button class="mx-pipbtn" id="pipBtn" type="button" aria-expanded="false" aria-label="Show the cards bigger"><span class="mx-pipbtn__ic" id="pipIc"></span></button>
       </div>
       <div class="mx-banner" id="banner" aria-live="polite"><b id="bannerT"></b><span id="bannerS"></span></div>
+      <div class="mx-hbtns" id="hbtns"><button class="mx-hbtn" id="standBtn" type="button" aria-pressed="false" aria-label="All riders: the full standings"><span class="ic" id="standIc"></span><span class="tx">Standings</span></button><button class="mx-hbtn" id="cardsBtn" type="button" aria-pressed="false" aria-label="Show the cards"><span class="ic" id="cardsIc"></span><span class="tx">Cards</span></button><button class="mx-hbtn" id="camBtn" type="button" aria-label="Camera: the TV director"><span class="ic" id="camIc"></span><span class="tx" id="camTx">Camera</span></button></div>
     </div>
     <div class="mx-acts" id="acts" data-toast-avoid>
       <button class="bg-btn bg-btn--primary bg-btn--lg" id="flipBtn" type="button" data-focus-first><span class="bg-btn__label" id="flipLabel">Flip</span><span class="bg-btn__sub" id="flipSub"></span></button>
       <button class="bg-row mx-auto" id="autoBtn" type="button" role="switch" aria-checked="false"><span class="bg-row__main"><span class="bg-row__title">Auto</span></span><span class="bg-toggle" aria-hidden="true"></span></button>
       <button class="bg-btn bg-btn--secondary" id="boardBtn" type="button" data-icon="board" aria-haspopup="dialog">Battle board</button>
       <button class="bg-btn bg-btn--secondary" id="skipBtn" type="button" aria-haspopup="dialog" hidden>Skip to the finish</button>
+      <button class="bg-btn bg-btn--primary" id="updBtn" type="button" hidden>New version ready: tap to update</button>
     </div>
     <p class="mx-stat" id="stat" data-stage-text aria-live="polite"></p>
     <section class="mx-tower" aria-labelledby="towerHead">
@@ -851,6 +961,13 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
 <script src="brain.js"></script>
 <script src="art.js"></script>
 <script src="track.js"></script>
+<script src="gl3d.js"></script>
+<script src="data/tracks.js"></script>
+<script src="tracks3d.js"></script>
+<script src="director3d.js"></script>
+<script src="race3d.js"></script>
+<script src="hud.js"></script>
+<script src="update.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

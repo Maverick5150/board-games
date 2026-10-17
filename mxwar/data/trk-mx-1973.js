@@ -1,0 +1,4 @@
+/* MOTOCROSS WAR — the track layouts of season mx-1973 (packed by BG_audit/sprint/mxbuild/layouts-pack.js from the researchers' files; facts traced into
+   our own coordinates, no track-map image is used). rounds: round key -> layout of that round; fb: round key -> the same venue's layout of another
+   year ({id, year}) or 0 = a built-in track of our own design in the era's style. */
+(function(g){ var T=g.MXWarTracks; if(T&&T.add) T.add({"key":"mx-1973","layouts":[],"rounds":{},"fb":{"mx-1973-r1":0,"mx-1973-r2":0,"mx-1973-r3":0,"mx-1973-r4":0,"mx-1973-r5":0,"mx-1973-r6":0,"mx-1973-r7":0,"mx-1973-r8":0,"mx-1973-r9":0,"mx-1973-r10":0,"mx-1973-r11":0,"mx-1973-r12":0,"mx-1973-r13":0,"mx-1973-r14":0,"mx-1973-r15":0,"mx-1973-r16":0,"mx-1973-r17":0,"mx-1973-r18":0,"mx-1973-r19":0,"mx-1973-r20":0,"mx-1973-r21":0,"mx-1973-r22":0,"mx-1973-r23":0}}); })(typeof window!=="undefined"?window:globalThis);

@@ -1,0 +1,14 @@
+/* MOTOCROSS WAR — the real track layouts: the index (packed 2026-10-17 by BG_audit/sprint/mxbuild/layouts-pack.js from BG_audit/games/mxwar/track-layouts*.json;
+   the layout format: BG_audit/games/mxwar/LAYOUT-FORMAT.md). Each season's layouts and its round -> layout map are in data/trk-<season id>.js, loaded with the season
+   file (game.js loadSeason) and cached by sw.js; MXWarTracks.add() takes one in; need() loads one synchronously under node (the tests).
+   Facts traced into our own coordinates: no track-map image is used. */
+(function(g){
+  var D=g.MXWarTracks&&g.MXWarTracks.add?g.MXWarTracks:{format:2,layouts:[],rounds:{},fb:{},byId:{},loaded:{}};
+  D.packed="2026-10-17"; D.files={"mx-1972":0,"mx-1973":0,"mx-1974":1,"mx-1975":0,"mx-1976":1,"mx-1977":1,"mx-1978":2,"mx-1979":4,"mx-1980":4,"mx-1981":4,"mx-1982":4,"mx-1983":6,"mx-1984":5,"mx-1985":6,"mx-1986":3,"mx-1987":2,"mx-1988":3,"mx-1989":4,"mx-1990":4,"mx-1991":4,"mx-1992":3,"mx-1993":2,"mx-1994":8,"mx-1995":8,"mx-1996":8,"mx-1997":8,"mx-1998":8,"mx-1999":8,"mx-2000":8,"mx-2001":8,"mx-2002":8,"mx-2003":8,"mx-2004":8,"mx-2005":9,"mx-2006":9,"mx-2007":9,"mx-2008":9,"mx-2009":9,"mx-2010":10,"mx-2011":10,"mx-2012":9,"mx-2013":9,"mx-2014":8,"mx-2015":8,"mx-2016":9,"mx-2017":9,"mx-2018":9,"mx-2019":10,"mx-2020":4,"mx-2021":10,"mx-2022":10,"mx-2023":10,"mx-2024":10,"mx-2025":10,"mx-2026":10,"smx-2023":2,"smx-2024":1,"smx-2025":2,"smx-2026":0,"sx-1974":3,"sx-1975":4,"sx-1976":6,"sx-1977":10,"sx-1978":11,"sx-1979":12,"sx-1980":17,"sx-1981":12,"sx-1982":12,"sx-1983":16,"sx-1984":17,"sx-1985":11,"sx-1986":12,"sx-1987":14,"sx-1988":10,"sx-1989":15,"sx-1990":18,"sx-1991":18,"sx-1992":16,"sx-1993":16,"sx-1994":15,"sx-1995":15,"sx-1996":15,"sx-1997":15,"sx-1998":16,"sx-1999":16,"sx-2000":16,"sx-2001":16,"sx-2002":16,"sx-2003":16,"sx-2004":16,"sx-2005":16,"sx-2006":16,"sx-2007":16,"sx-2008":14,"sx-2009":13,"sx-2010":13,"sx-2011":14,"sx-2012":15,"sx-2013":14,"sx-2014":14,"sx-2015":13,"sx-2016":13,"sx-2017":15,"sx-2018":17,"sx-2019":16,"sx-2020":10,"sx-2021":12,"sx-2022":17,"sx-2023":17,"sx-2024":16,"sx-2025":17,"sx-2026":17}; D.summary={"rounds":1383,"traced":203,"sketched":149,"eraLayout":390,"venue":396,"builtin":245,"layouts":579};
+  D.add=function(P){ if(!P) return; (P.layouts||[]).forEach(function(L){ if(L&&L.id&&!D.byId[L.id]){ D.byId[L.id]=L; D.layouts.push(L); } }); var r=P.rounds||{}, k; for(k in r) D.rounds[k]=r[k]; r=P.fb||{}; for(k in r) D.fb[k]=r[k]; if(P.key) D.loaded[P.key]=1; };
+  D.has=function(id){ return !!D.files[id]; };
+  D.need=function(series,year){ var id=series+"-"+year; if(!D.files[id]||D.loaded[id]) return true;
+    if(typeof module!=="undefined"&&module.exports&&typeof require==="function"){ try{ require(__dirname+"/trk-"+id+".js"); }catch(e){} }
+    return !!D.loaded[id]; };
+  g.MXWarTracks=D; if(typeof module!=="undefined"&&module.exports) module.exports=D;
+})(typeof window!=="undefined"?window:globalThis);
