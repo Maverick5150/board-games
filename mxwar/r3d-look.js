@@ -189,7 +189,8 @@ export function createLook(renderer,opts){
     root.traverse(m=>{ if(!m.isMesh||!m.userData||!m.userData.mxPhong) return; const u=m.userData; if(on){ if(!u.mxPbr) u.mxPbr=pbrFromPhong(u.mxPhong,F.post==="full"?"high":"mid"); m.material=u.mxPbr; } else m.material=u.mxPhong; });
   }
   L.upgrade=function(root){
-    root.traverse(m=>{ if(m.isMesh&&m.material&&m.material.isMeshPhongMaterial&&!m.userData.mxPhong){ m.userData.mxPhong=m.material; } });
+    /* only plain Phong materials: one with its own onBeforeCompile patch (a specialist's skin, number atlas ...) keeps its own look */
+    root.traverse(m=>{ if(m.isMesh&&m.material&&m.material.isMeshPhongMaterial&&!m.userData.mxPhong&&m.material.onBeforeCompile===THREE.Material.prototype.onBeforeCompile){ m.userData.mxPhong=m.material; } });
     upRoots=[root]; swapPBR(root,F.pbr);
   };
   /* every part of the bike and the rider receives the key's shadow (the helmet's on the shoulders, the rider's on the tank): instanced body parts only */
