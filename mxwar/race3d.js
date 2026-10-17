@@ -103,7 +103,7 @@ export function create(host,hooks){
   V.setRace=function(o){
     // [hook:perf]
     lastRace=o;
-    const lo=motion()!=="full"; if(lo!==LO){ LO=lo; worldKey=""; LOOK.setShadows(QUAL.shadowsWanted(LO)); }   /* Reduce effects changed: the next race is built simpler (or richer), the shadows follow */
+    const lo=motion()!=="full"; if(lo!==LO){ LO=lo; worldKey=""; LOOK.setShadows(QUAL.shadowsWanted(LO)); if(typeof driveLook==="function") driveLook(); }   /* Reduce effects changed: the next race is built simpler (or richer), the shadows follow */
     // [/hook:perf]
     const pick=MX.Layouts.pick(o.series,o.year,o.round,o.cal||{});
     // [hook:perf]
@@ -665,7 +665,17 @@ export function create(host,hooks){
   };
   V.bench=o=>QUAL.bench.start(o);
   V.benchResult=()=>QUAL.bench.result;
-  QUAL.bindLook(LOOK);
+  /* The look (r3d-look.js) may have its own tier table (high / medium / low / stick): our tier drives it, and the ladder's cuts (post chain, bloom, depth of field) are forwarded as flags it understands.
+     Guarded: a look without setTier / setFlags is left alone (the base look). The post flags of a tier are the MOST it may draw; the ladder only switches them off. */
+  const LOOKTIER={firetv:()=>QUAL.dev.tv?"stick":"low",balanced:()=>"medium",high:()=>(QUAL.dev.mobile||QUAL.dev.tv)?"medium":"high",ultra:()=>"high"};
+  function driveLook(){ if(LOOK.setTier&&LOOK.tiers){ try{ const nm=LOOKTIER[LO?"firetv":QUAL.tierName](); LOOK.setTier(nm); driveLive(); }catch(e){} } }
+  function driveLive(){
+    if(!LOOK.setFlags||!LOOK.tiers) return;
+    try{ const base=LOOK.tiers[LOOK.tier], lv=QUAL.live; if(!base) return;
+      LOOK.setFlags({post:lv.post.on?base.post:"off",dof:!!(lv.post.dof&&base.dof),bloom:lv.post.bloom?base.bloom*(lv.post.bloomScale<1?0.6:1):0}); }catch(e){}
+  }
+  QUAL.onChange((what)=>{ if(what==="tier") driveLook(); else if(what==="rung") driveLive(); });
+  QUAL.bindLook(LOOK); driveLook();
   QUAL.attach({V:V,cam:cam,mode:()=>mode,T:()=>T,W:()=>W,H:()=>H,count:()=>N,lodList:()=>RST});
   // [/hook:perf]
   V.dispose=function(){ V.stop(); if(world) disposeTree(world.root); if(R) disposeTree(R.grp); if(FX) disposeTree(FX.group); renderer.dispose(); cv.remove(); };

@@ -80,7 +80,7 @@ export const TIERS={
     note:"today's full look: real shadows (1024), full-resolution bloom + SMAA slots, 520 particles, animated crowd",
     res:{maxPR:1.75,tvW:1280,start:1,min:0.5},
     shadow:{real:true,size:1024,soft:false},
-    post:{on:true,bloom:true,bloomScale:1,aa:"smaa",dof:false,shafts:true},
+    post:{on:true,bloom:true,bloomScale:1,aa:"smaa",dof:true,shafts:true},
     fog:{on:true,far:1},
     fx:{particles:520,scale:1},
     crowd:{detail:1,anim:true},
@@ -344,6 +344,7 @@ export function createQuality(env){
     live.scale=STEPS[r.si]; Object.assign(live.post,{on:!!(e.post.on&&r.post),bloom:!!(e.post.bloom&&r.bloom>0),bloomScale:r.bloom||e.post.bloomScale,aa:r.post?e.post.aa:"none",dof:!!(e.post.dof&&r.dof),shafts:!!(e.post.shafts&&r.post)});
   }
   setRung();
+  if(gpu0.cls===0&&source!=="url"&&!LO0&&RG.k0>0){ ladder.k=ladder.k+1; rung=RG.rungs[ladder.k]; recompute(); }   /* a GPU known to be weak starts one step lower (853x480 of 1280): climbing is invisible, dropping is a stutter */
   if(stored&&stored.gpu===gpu0.string&&stored.tier===tierId&&stored.rung!=null&&!LO0&&source!=="url"){ try{ ladder.k=Math.max(0,Math.min(RG.rungs.length-1,stored.rung|0)); rung=RG.rungs[ladder.k]; recompute(); }catch(e){} }
 
   Object.defineProperty(Q,"pr",{get:()=>pr}); Object.defineProperty(Q,"prCap",{get:()=>prCap});
@@ -389,7 +390,8 @@ export function createQuality(env){
   let shadowSizeApplied=0;
   Q.bindLook=function(LOOK){ Q._look=LOOK; applyShadowMap(); };
   function applyShadowMap(){
-    const L=Q._look; if(!L||!L.sun) return; const want=live.shadowSize||1024, sh=L.sun.shadow;
+    const L=Q._look; if(!L||!L.sun||L.setTier) return;   /* (a look with its own tier table, r3d-look.js of the lead, sets its own shadow map size) */
+    const want=live.shadowSize||1024, sh=L.sun.shadow;
     if(shadowSizeApplied===want||want<=0) return; shadowSizeApplied=want;
     if(sh.mapSize.x!==want){ sh.mapSize.set(want,want); if(sh.map){ sh.map.dispose(); sh.map=null; } }
   }
@@ -422,6 +424,10 @@ export function createQuality(env){
     if(ladder.k>=ladder.n-1&&source!=="url"&&source!=="manual"&&tier.rank>0&&ladder.mean>ladder.T*1.25){ lowT+=dt; if(lowT>10){ lowT=0; Q.demote("the ladder is at its floor and frames still run "+ladder.mean.toFixed(0)+" ms"); } } else lowT=0;
   };
   let lowT=0;
+  /* a frame cap for a 30 fps target: the view asks at the top of every rAF callback (REQUEST for race3d.js tick); true = do nothing this time and wait for the next vsync.
+     On a 60 Hz TV it gives an even 33.3 ms cadence instead of a 16 / 33 / 50 ms mix, and the GPU idles half the time (a Fire TV Stick throttles when it runs hot). */
+  let lastDraw=-1e9;
+  Q.skipFrame=function(t){ if(targetFps()>30||Q.fixed) return false; if(t-lastDraw<28.3) return true; lastDraw=t; return false; };
   Q.save=function(){ if(source==="url") return; writeStore({gpu:gpu0.string,tier:tierId,rung:ladder.k,src:source,t:Date.now()}); };
 
   /* ---- choosing a tier by hand / by the system ---- */
