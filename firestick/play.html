@@ -60,6 +60,10 @@
   .join-card input::placeholder{color:var(--text-3);}
   .join-card input:focus{outline:none;box-shadow:var(--focus-ring);}
   #rc{letter-spacing:.35em;text-transform:uppercase;}
+  #sc{letter-spacing:.35em;}
+  /* getting back in: the line under "The game has started" (the host's answer, a code that did not work) */
+  .ph-rjmsg{margin:0;width:100%;padding:.6rem .8rem;border-radius:var(--r-md);background:var(--ink-2);box-shadow:var(--well-edge);font:var(--fw-ui-strong) var(--fs-sm)/1.35 var(--font-ui);color:var(--text-1);}
+  .ph-rjmsg.is-warn{box-shadow:inset 0 0 0 1px rgba(245,196,81,.55);color:#ffe3a3;}
   .pill{display:inline-flex;align-items:center;gap:.4rem;margin:0;font:var(--fw-ui-strong) var(--fs-sm)/1.2 var(--font-ui);}
   .ph-wait{display:grid;place-items:center;width:4.5rem;height:4.5rem;border-radius:50%;background:var(--ink-3);box-shadow:inset 0 0 0 1.5px var(--line-gold),0 10px 26px -12px rgba(231,202,144,.5);color:var(--gold-100);}
   .ph-wait .bg-ico{width:2rem;height:2rem;}
@@ -445,8 +449,15 @@ var myPid=BGNet.pid();
 var myName=null, myColor=null, net=null, curReq=null, started=false;
 var joined=false, joinTick=0, joinTimer=null;
 var wantJoin=false, netReady=false, netRoom=null;   /* step 10: the relays open while the name is typed; "Sit down" then only knocks */
-
-/* the player types their name fresh every time — it is never saved or pre-filled */
+/* getting back in (the CEO, 2026-10-16): a seat code from the TV's invite (typed, or ?seat= from the invite's QR) rides along in the join */
+var seatCode=(params.get("seat")||"").replace(/\D/g,"").slice(0,4)||null, viewSeen=false;
+/* a reloaded phone keeps its name (FOLLOWUPS party-phone-name-memory): the field shows the one remembered name of all the games (BGUI.names'
+   key "bg_player_name"), and a phone that sat down in this room ("bgfs_seat": {room, name, at}; forgotten on Leave) goes straight back to its seat */
+function nameGet(){ try{ return String(localStorage.getItem("bg_player_name")||"").replace(/[\u0000-\u001f\u007f<>]/g,"").replace(/\s+/g," ").trim().slice(0,12); }catch(e){ return ""; } }
+function nameSet(v){ try{ if(v) localStorage.setItem("bg_player_name",v); }catch(e){} }
+function seatMem(){ try{ var o=JSON.parse(localStorage.getItem("bgfs_seat")||"null"); return o&&o.room&&o.name&&Date.now()-(+o.at||0)<12*3600000?o:null; }catch(e){ return null; } }
+function seatSave(){ try{ localStorage.setItem("bgfs_seat",JSON.stringify({room:room,name:myName,at:Date.now()})); }catch(e){} }
+function seatForget(){ try{ localStorage.removeItem("bgfs_seat"); }catch(e){} }
 
 function setConn(s){ connEl.textContent = s==="online"?"connected":(s==="connecting"?"connecting…":"reconnecting…"); connEl.setAttribute("data-state",s==="online"?"online":"wait"); }
 function setRoom(t){ roomEl.textContent=t; }
@@ -473,7 +484,7 @@ function stopNet(){
   curGame=null; stageGame("party"); if(barName) barName.textContent="Party Mode";
 }
 function leaveRoom(){
-  var r=room;
+  var r=room; seatForget(); seatCode=null;
   try{ if(net) net.send({t:"leave", pid:myPid}); }catch(e){}
   stopNet(); askRoom("You left room "+r+".");
 }
@@ -486,11 +497,28 @@ function showNoJoin(o){
   $("again").onclick=function(){ setRoom("Room "+room); connect(); };
   $("other").onclick=function(){ askRoom(); };
 }
-function startJoin(){ askName(); }
+/* getting back in: the game started without this phone (it left, was let go, or is new): ask the host for an invite and type its seat code here.
+   The relays stay open, so the host's "Let them back in" on the TV seats this phone too */
+function showRejoin(o){
+  main.className="big"; chrome(false);
+  var msg=o.bumped?"Another phone has your seat now. To come back, ask the host for an invite.":o.declined?"The host said not now. Ask them for an invite code.":o.bad==="expired"?"That invite ran out. Ask the host for a new seat code.":o.bad==="taken"?"That seat is taken now. Ask the host for another invite.":o.bad==="wrong"?"That seat code is not right. Check the 4 numbers on the TV.":o.bad==="wait"?"Too many tries. Wait half a minute, then type the code again.":o.asked?"The TV is asking the host to let you back in…":"";
+  var okMsg=o.asked&&!o.bad&&!o.declined&&!o.bumped;
+  put('<div class="join-card bg-card bg-spot"><h1 class="title">The game has started</h1><p class="sub">Ask the host to invite you back: on the TV, Menu, then Invite a player back. Then type the seat code here.</p>'+
+    (msg?'<p class="ph-rjmsg'+(okMsg?"":" is-warn")+'" role="status">'+esc(msg)+'</p>':'')+
+    '<input id="sc" maxlength="4" inputmode="numeric" pattern="[0-9]*" autocomplete="off" aria-label="Seat code" placeholder="Seat code">'+
+    '<button class="opt bg-btn bg-btn--primary bg-btn--cta bg-btn--block" id="scgo" type="button"><span class="bg-btn__label">Take my seat</span><span class="bg-btn__sub">Room '+esc(room)+(myName?' · '+esc(myName):'')+'</span></button>'+
+    (o.declined||o.bumped?'<button class="opt ghost bg-btn bg-btn--secondary bg-btn--block" type="button" id="rjask">Ask the host again</button>':'')+
+    '<button class="opt ghost bg-btn bg-btn--secondary bg-btn--block" type="button" id="other">Enter another room code</button></div>'+hubLink());
+  var go=function(){ var v=($("sc").value||"").replace(/\D/g,"").slice(0,4); if(v.length!==4){ toast("The seat code has 4 numbers"); $("sc").focus(); return; } seatCode=v; if(!myName) myName=nameGet()||"Player"; connect(); };
+  $("scgo").onclick=go; $("sc").onkeydown=function(e){ if(e.key==="Enter") go(); };
+  var ak=$("rjask"); if(ak) ak.onclick=function(){ seatCode=null; if(!myName) myName=nameGet()||"Player"; connect(); };
+  $("other").onclick=function(){ seatCode=null; stopNet(); askRoom(); };
+}
+function startJoin(){ var m=seatMem(); if(m&&m.room===room&&!seatCode){ myName=m.name; connect(); return; } askName(); }   // reloaded in its room: back to its seat
 function askName(){
   main.className="big"; chrome(false);
-  put('<div class="join-card bg-card bg-spot"><h1 class="title">Type your name</h1><p class="sub">Room '+esc(room)+'</p><input id="nm" maxlength="12" placeholder="Your name" aria-label="Your name" autocomplete="off" autocapitalize="words" value=""><button class="opt bg-btn bg-btn--primary bg-btn--cta bg-btn--block" id="go" type="button"><span class="bg-btn__label">Sit down</span><span class="bg-btn__sub">Room '+esc(room)+'</span></button></div>');
-  var go=function(){ var v=($("nm").value||"").trim().slice(0,12); if(!v){ toast("Type your name first"); $("nm").focus(); return; } myName=v; connect(); };
+  put('<div class="join-card bg-card bg-spot"><h1 class="title">Type your name</h1><p class="sub">Room '+esc(room)+(seatCode?' · seat code '+esc(seatCode):'')+'</p><input id="nm" maxlength="12" placeholder="Your name" aria-label="Your name" autocomplete="off" autocapitalize="words" value="'+esc(nameGet())+'"><button class="opt bg-btn bg-btn--primary bg-btn--cta bg-btn--block" id="go" type="button"><span class="bg-btn__label">'+(seatCode?"Take my seat":"Sit down")+'</span><span class="bg-btn__sub">Room '+esc(room)+'</span></button></div>');
+  var go=function(){ var v=($("nm").value||"").trim().slice(0,12); if(!v){ toast("Type your name first"); $("nm").focus(); return; } myName=v; nameSet(v); connect(); };
   $("go").onclick=go; $("nm").onkeydown=function(e){ if(e.key==="Enter") go(); };
   $("nm").focus();
   setTimeout(function(){ if(room&&!wantJoin&&$("nm")) openNet(); },60);   // the relays connect while the name is typed (nothing is sent, nothing shown, until "Sit down"); after the form is drawn
@@ -519,12 +547,12 @@ function knock(){
   },2000);
 }
 function connect(){
-  joined=false; joinTick=0; if(joinTimer){ clearInterval(joinTimer); joinTimer=null; }
+  joined=false; joinTick=0; viewSeen=false; if(joinTimer){ clearInterval(joinTimer); joinTimer=null; }
   showWaiting(netReady&&net&&netRoom===room?"Joining room "+room+"…":"Connecting to the TV…", true);
   openNet(); wantJoin=true;
   if(netReady) knock();   // already connected while the name was typed: knock now (otherwise the relay's ready does)
 }
-function sendJoin(){ net && net.send({t:"join", pid:myPid, name:myName}); }
+function sendJoin(){ net && net.send(seatCode&&!joined?{t:"join", pid:myPid, name:myName, code:seatCode}:{t:"join", pid:myPid, name:myName}); }
 /* step 10: instant feedback on the phone. The control the player pressed dims the moment its choice goes to the TV
    (the TV's answer redraws or clears it); presentation only, the message and the flow are unchanged */
 var lastPress=null;
@@ -536,8 +564,13 @@ function unSent(){ Array.prototype.forEach.call(main.querySelectorAll(".ph-sent"
 var overShown=false;   // the "X wins!" screen stays until the host is back in the lobby (a keep-alive re-join must not replace it)
 function onMsg0(o){
   if(o.game) stageGame(o.game);
-  if(o.t==="nojoin" && o.pid===myPid){ if(!joined){ var r=room; stopNet(); room=r; showNoJoin(o); } }
-  else if(o.t==="you" && o.pid===myPid){ chrome(true); myColor=o.color; if(o.name) myName=o.name; joined=true; if(!started && !isAsking() && !overShown) showLobby({players:[{pid:myPid,name:myName,color:myColor}]}); }
+  if(o.pid===myPid&&/^(ask|rvs|rks|ups|pgs|scs|wait|first)$/.test(o.t)) viewSeen=true;   // this phone has a game screen from the TV
+  if(o.t==="nojoin" && o.pid===myPid){ if(!joined){ if(o.rejoin){ if(joinTimer){ clearInterval(joinTimer); joinTimer=null; } seatCode=null; showRejoin(o); } else { var r=room; stopNet(); room=r; seatForget(); showNoJoin(o); } } else if(o.rejoin&&started){ var rn=room; seatForget(); stopNet(); room=rn; setRoom("Room "+room); showRejoin({bumped:1}); } }   // a started game: the seat code / the host's answer (the relays stay open)
+  else if(o.t==="bumped" && o.pid===myPid){ var rb=room; seatForget(); stopNet(); room=rb; setRoom("Room "+room); showRejoin({bumped:1}); }   // another phone took this seat by invite
+  else if(o.t==="you" && o.pid===myPid){ var first=!joined; chrome(true); myColor=o.color; if(o.name) myName=o.name; joined=true; seatCode=null; if(first) seatSave(); if(o.started) started=true;
+    if(first&&o.started&&!isAsking()&&!overShown&&!viewSeen) showWaiting("You’re back in the game. Waiting for the TV…", false);   // reloaded / let back in: its game, never the lobby (FOLLOWUPS party-reload-lobby-screen)
+    if(!joinTimer&&wantJoin) knock();   // seated by the host after a request: the keep-alive starts again
+    if(!started && !isAsking() && !overShown) showLobby({players:[{pid:myPid,name:myName,color:myColor}]}); }
   else if(o.t==="lobby"){ if(overShown) closeVictory(); overShown=false; if(!started && !isAsking()) showLobby(o); }   // never fall back to lobby once the game is on
   else if(o.t==="ask" && o.pid===myPid){ started=true; if(KIND_GAME[o.kind]) stageGame(KIND_GAME[o.kind]); showAsk(o); }
   else if(o.t==="rvs" && o.pid===myPid){ started=true; curReq=null; stageGame("rummy500"); rvShow(o.st,false,null); }
@@ -750,7 +783,7 @@ function showPlayers(){
 $("plbtn").onclick=showPlayers;
 $("lvbtn").onclick=function(){
   ovMode="leave";
-  ovShow('<h2 class="bg-sheet__title">Leave the game?</h2><p class="sub">'+(started?"The computer will play your seat.":"Your seat will be freed for someone else.")+'</p>'+
+  ovShow('<h2 class="bg-sheet__title">Leave the game?</h2><p class="sub">'+(started?"The computer will play your seat. The host can invite you back from the TV's Menu.":"Your seat will be freed for someone else.")+'</p>'+
     '<button type="button" class="opt sm bg-btn bg-btn--danger bg-btn--block" id="lvy"><span data-icon="close" aria-hidden="true"></span>Leave</button>'+ghostHTML("Stay","lvn"));
   $("lvy").onclick=leaveRoom; $("lvn").onclick=closeOv;
 };
