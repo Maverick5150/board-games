@@ -600,14 +600,14 @@ function rejoinTry(o){
   if(code){
     var iv=invites[code];
     if(bt.n>=6&&now-bt.at<30000) bad="wait";   // six wrong codes in a row: half a minute before the next try (a 4-digit code is not guessed)
-    else if(!iv&&ivOld[code]===room) bad="expired";   // a code that ran out says so (not "wrong")
+    else if(!iv&&ivOld[code]&&ivOld[code].room===room) bad=ivOld[code].why==="used"?"taken":ivOld[code].why;   // a code that ran out, was used (two phones racing for one seat), cancelled or replaced says so (not "wrong")
     else if(!iv||iv.room!==room){ bad="wrong"; badTries[o.pid]={n:bt.n+1,at:now}; }
-    else if(now>iv.exp){ bad="expired"; dropInvites(iv.c); menuRefresh(); }
-    else if(!seatOpen(iv.c)){ bad="taken"; dropInvites(iv.c); menuRefresh(); }
+    else if(now>iv.exp){ bad="expired"; dropInvites(iv.c,"expired"); menuRefresh(); }
+    else if(!seatOpen(iv.c)){ bad="taken"; dropInvites(iv.c,"used"); menuRefresh(); }
     else { delete badTries[o.pid]; takeSeat(o.pid,o.name,iv.c); return true; }
   }
   var kc=knownSeat(o.pid,o.name), asked=kc?askHost(o.pid,o.name,kc):false;
-  send({t:"nojoin", pid:o.pid, why:"started", max:maxPlayers(), rejoin:1, bad:bad||undefined, asked:asked?1:undefined});
+  send({t:"nojoin", pid:o.pid, why:"started", max:maxPlayers(), rejoin:1, bad:bad||undefined, asked:asked===true?1:undefined, declined:asked==="soon"?1:undefined, soon:asked==="soon"?1:undefined});   // soon: asked again right after a Not now (the phone keeps its Ask again)
   return false;
 }
 /* the phone takes seat c: never two phones on one seat (the phone that held it, away or quiet, is told and forgotten); a person's seat keeps its
@@ -616,7 +616,7 @@ function takeSeat(pid,name,c){
   if(!rjLive()||!seatOpen(c)) return false;
   var old=seat[c], nm=seatPerson(c)||rjClean(name);
   if(old&&old!==pid){ send({t:"bumped", pid:old, msg:"Another phone took your seat."}); delete lastAsk[old]; delete players[old]; delete seat[c]; settlePending(old); }
-  players[pid]={pid:pid,name:nm,color:c}; seat[c]=pid; lastSeen[pid]=Date.now(); delete gone[c]; dropInvites(c);
+  players[pid]={pid:pid,name:nm,color:c}; seat[c]=pid; lastSeen[pid]=Date.now(); delete gone[c]; dropInvites(c,"used");
   if(rjAsks[pid]) rjAsks[pid].state="done";
   rjCloseAsk(null,c);
   send({t:"you", pid:pid, color:c, name:nm, started:1});
@@ -630,8 +630,9 @@ function takeSeat(pid,name,c){
 }
 /* the seat codes: 4 digits, one per seat, for INVITE_MS (a new invite for the seat replaces the old one; used = gone) */
 function inviteFor(c){ var r=null; Object.keys(invites).forEach(function(k){ if(invites[k].c===c&&invites[k].room===room) r=invites[k]; }); return r; }
-function dropInvites(c){ Object.keys(invites).forEach(function(k){ if(c==null||invites[k].c===c) delete invites[k]; }); }
-function makeInvite(c){ dropInvites(c); var code; do{ code=String(1000+Math.floor(Math.random()*9000)); }while(invites[code]||ivOld[code]); invites[code]={c:c,code:code,room:room,exp:Date.now()+INVITE_MS}; rjTickOn(); return invites[code]; }
+/* why: a dropped code is remembered (ivOld: code -> {room, why}) so a phone that types it hears what happened: "used" (another phone was first), "cancel", "new" (replaced), "expired" */
+function dropInvites(c,why){ Object.keys(invites).forEach(function(k){ if(c==null||invites[k].c===c){ if(why) ivOld[k]={room:invites[k].room,why:why}; delete invites[k]; } }); }
+function makeInvite(c){ dropInvites(c,"new"); var code; do{ code=String(1000+Math.floor(Math.random()*9000)); }while(invites[code]||ivOld[code]); invites[code]={c:c,code:code,room:room,exp:Date.now()+INVITE_MS}; rjTickOn(); return invites[code]; }
 function mmss(ms){ var s=Math.max(0,Math.ceil(ms/1000)); return Math.floor(s/60)+":"+("0"+(s%60)).slice(-2); }
 function rjReset(){ var B=BG(); ["pmInvite","rjAsk","pmMenu"].forEach(function(id){ var el=$(id); if(!el) return; if(B&&B.sheet&&B.sheet.isOpen(el)){ el._quiet=true; try{ B.sheet.close(el); }catch(e){} el._quiet=false; } if(el.parentNode) el.parentNode.removeChild(el); });   // a new game or the picker: the old sheets go (no old room code left in the page)
   gone={}; invites={}; ivOld={}; rjAsks={}; rjQ=[]; badTries={}; rejoinHandler=null; awayFn=null; gameCols=[]; rjTickOff(); }
@@ -646,7 +647,7 @@ function rjTickOn(){ if(!rjTimer) rjTimer=setInterval(rjTick,1000); }
 function rjTickOff(){ if(rjTimer){ clearInterval(rjTimer); rjTimer=0; } }
 function rjTick(){
   var now=Date.now(), B=BG(), ie=$("pmInvite"), invOpen=!!(ie&&B&&B.sheet&&B.sheet.isOpen(ie));
-  Object.keys(invites).forEach(function(k){ if(now>invites[k].exp){ ivOld[k]=invites[k].room; delete invites[k]; } });
+  Object.keys(invites).forEach(function(k){ if(now>invites[k].exp){ ivOld[k]={room:invites[k].room,why:"expired"}; delete invites[k]; } });
   if(invOpen) inviteTime();
   Object.keys(rjAsks).forEach(function(p){ var a=rjAsks[p]; if(a.state==="open"&&now-a.at>ASK_MS) answerAsk(p,false,"time"); });
   if(menuOpen()){ var sig=menuSig(); if(sig!==rjSig) renderMenu(); else Array.prototype.forEach.call(document.querySelectorAll("#pmMenu [data-exp]"),function(el){ var iv=inviteFor(el.getAttribute("data-exp")); if(iv) el.textContent="Seat code "+iv.code+" · "+mmss(iv.exp-now)+" left"; }); }
@@ -713,7 +714,7 @@ function renderInvite(c,iv){
   paintIcons(el); inviteTime();
   var B=BG(), close=function(){ if(B&&B.sheet&&B.sheet.isOpen(el)) B.sheet.close(el); };
   $("piDone").onclick=close;
-  var st=$("piStop"); if(st) st.onclick=function(){ dropInvites(c); close(); menuRefresh(); };
+  var st=$("piStop"); if(st) st.onclick=function(){ dropInvites(c,"cancel"); close(); menuRefresh(); };
   var nw=$("piNew"); if(nw) nw.onclick=function(){ if(!rjLive()||!seatOpen(c)){ close(); menuRefresh(); return; } renderInvite(c,makeInvite(c)); var d=$("piDone"); if(d){ if(B&&B.focus&&B.focus.enabled&&B.focus.set) B.focus.set(d); else d.focus(); } menuRefresh(); };
 }
 function inviteTime(){ var el=$("pmInvite"); if(!el||!el._c) return; var iv=inviteFor(el._c), ex=$("piExp");
@@ -723,7 +724,7 @@ function inviteTime(){ var el=$("pmInvite"); if(!el||!el._c) return; var iv=invi
 function askHost(pid,name,c){
   var a=rjAsks[pid], now=Date.now();
   if(a&&a.state==="open"){ a.c=c; return true; }
-  if(a&&a.state==="no"&&now-a.at<10000) return false;   // just declined: a knock straight after is not a new question
+  if(a&&a.state==="no"&&now-a.at<10000) return "soon";   // just declined: a knock straight after is not a new question (the phone hears "just said not now")
   rjAsks[pid]={pid:pid,name:rjClean(name),c:c,at:now,state:"open"}; if(rjQ.indexOf(pid)<0) rjQ.push(pid);
   showNextAsk(); rjTickOn(); return true;
 }
@@ -735,7 +736,7 @@ function showNextAsk(){
   var a=rjAsks[rjQ[0]], c=a.c, person=seatPerson(c)||cpuName(c), w=seatWhy(c);
   el._pid=a.pid;
   el.innerHTML='<div class="bg-sheet__grip" aria-hidden="true"></div><div class="rj-who" style="'+seatStyle(COL[c]||"#888888")+'"><span class="bg-token" aria-hidden="true">'+esc((a.name.charAt(0)||"?").toUpperCase())+'</span><div>'+
-    '<h2 class="bg-sheet__title" id="rjTitle">'+esc(a.name)+' wants to come back</h2><p class="bg-sheet__sub">A phone asks for '+esc(person)+'’s seat ('+esc(CNAME[c]||c)+'). '+(w==="away"||w==="quiet"?"The computer is playing for "+esc(person)+" now.":"The computer plays it now.")+'</p></div></div>'+
+    '<h2 class="bg-sheet__title" id="rjTitle">'+esc(a.name)+' wants to come back</h2><p class="bg-sheet__sub">A phone asks for '+esc(person)+'’s seat ('+esc(CNAME[c]||c)+'). '+(w==="away"?"The computer is playing for "+esc(person)+" now.":w==="quiet"?esc(person)+"’s phone lost the connection.":"The computer plays it now.")+'</p></div></div>'+
     '<div class="pm-acts"><button type="button" class="bg-btn bg-btn--primary bg-btn--lg" id="rjYes" data-autofocus><span data-icon="check" aria-hidden="true"></span>Let them back in</button><button type="button" class="bg-btn bg-btn--secondary bg-btn--lg" id="rjNo"><span data-icon="close" aria-hidden="true"></span>Not now</button></div>';
   paintIcons(el); Sound.sfx("bell");
   $("rjYes").onclick=function(){ answerAsk(a.pid,true); };
@@ -754,7 +755,7 @@ function answerAsk(pid,yes,how){
   var B=BG(), el=$("rjAsk");
   if(el&&el._pid===pid&&B&&B.sheet&&B.sheet.isOpen(el)){ el._pid=null; el._quiet=true; B.sheet.close(el); el._quiet=false; }
   if(yes&&rjLive()&&seatOpen(a.c)){ a.state="done"; takeSeat(pid,a.name,a.c); }
-  else { a.state="no"; a.at=Date.now(); send({t:"nojoin", pid:pid, why:"started", max:maxPlayers(), rejoin:1, declined:yes?undefined:1, bad:yes?"taken":undefined}); if(!yes) toast("Not now: "+a.name+" can still join with an invite"); }
+  else { a.state="no"; a.at=Date.now(); send({t:"nojoin", pid:pid, why:"started", max:maxPlayers(), rejoin:1, declined:yes?undefined:1, noanswer:how==="time"?1:undefined, bad:yes?"taken":undefined}); if(!yes) toast((how==="time"?"No answer, so not now: ":"Not now: ")+a.name+" can still join with an invite"); }
   setTimeout(showNextAsk,300);
 }
 

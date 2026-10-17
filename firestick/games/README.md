@@ -174,7 +174,7 @@ attrs, color)` (a seat-coloured button), `api.afkHTML(id)` (the "computer is pla
 - The host does it for every game, built-in and plugin. During a game the TV's top bar has **Menu** (also the remote's Menu key):
   Resume, New game and **Invite a player back**, the seats a computer plays (the phone left, is away, or has been quiet for 25 s; or a
   computer from the start), each with **Invite**. The TV then shows the room code, a 4-digit seat code and a QR
-  (`play.html?room=ABCDE&seat=1234`); the code works once, for 5 minutes.
+  (`play.html?room=ABCDE&seat=1234`); the code works once, for 5 minutes. A code that was used (two phones racing: the slower hears "taken"), cancelled or ran out says so on the phone; seated, the phone drops `seat=` from its address so a reload goes straight back.
 - A phone that joins a started game gets `{t:"nojoin", why:"started", rejoin:1}` and shows "The game has started. Ask the host to invite
   you back" with a seat-code field. A valid code takes the seat: a person's seat keeps its name and colour, a computer's seat takes the
   phone's name; the phone that held it (away or quiet) gets `{t:"bumped"}` ("Another phone has your seat now": never two phones on one
