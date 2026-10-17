@@ -89,7 +89,7 @@ vec3 transformed=vec3(dot(mxR0,mxP),dot(mxR1,mxP),dot(mxR2,mxP));
  vMxP=position; vMxK=clamp(0.25+aFx.y*1.4,0.0,1.0);
 #endif
 #ifdef MX_ROWS
- { float fl=aFx.y*aInstB.w; if(fl>0.0){ float ph=dot(position,vec3(41.0,53.0,29.0))+aInstA.x*2.7; transformed+=objectNormal*(fl*0.022*(0.6*sin(uTime*17.0+ph)+0.4*sin(uTime*29.0+ph*1.7))); } }
+ { float fl=aFx.y*aInstB.w; if(fl>0.0){ float ph=dot(position,vec3(5.0,8.0,4.0))+aInstA.x*2.7; transformed+=objectNormal*(fl*0.015*(0.6*sin(uTime*12.0+ph)+0.4*sin(uTime*19.0+ph*1.6))); } }
 #endif
 `;
 const SKIN_COLOR=`
