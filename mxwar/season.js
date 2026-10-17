@@ -222,13 +222,16 @@ function simRace(G){
 function endRace(G){
   var R=G.race, RG=G.round, r=Round.current(RG), ev=[];
   var order=R.res.slice(), hs=R.hs>=0?R.r[R.hs].id:null, fin=r.st<0;
-  var tr=Round.record(RG,order,hs,R.why);
-  order.forEach(function(id,p){ var s=stOf(G,id); s.races++; if(fin){ s.finals++; } });
+  /* crashes (CRASH-CONTRACT.md): who went down (remounts and outs) and who did not finish; a save from before crashes has none */
+  var dnf={}, cr={};
+  R.r.forEach(function(p){ if(p.dnf) dnf[p.id]={lap:p.dnf.lap,why:p.dnf.why}; if(p.crashes) cr[p.id]=p.crashes; });
+  var tr=Round.record(RG,order,hs,R.why,dnf);
+  order.forEach(function(id,p){ var s=stOf(G,id); s.races++; if(fin){ s.finals++; } if(cr[id]) s.crashes=(s.crashes|0)+cr[id]; if(dnf[id]&&dnf[id].why==="crash") s.dnfs=(s.dnfs|0)+1; });
   if(hs!=null){ var sh=stOf(G,hs); sh.hsAll++; if(fin) sh.hs++; }
-  G.last={ri:G.ri,key:r.key,label:r.label,kind:r.kind,order:order,hs:hs,why:R.why,battles:R.battle,len:R.o.len,wars:R.wars,toMain:tr.toMain,toNext:tr.toNext,out:tr.out};
+  G.last={ri:G.ri,key:r.key,label:r.label,kind:r.kind,order:order,hs:hs,why:R.why,battles:R.battle,len:R.o.len,wars:R.wars,toMain:tr.toMain,toNext:tr.toNext,out:tr.out,dnf:dnf,crashes:cr};
   var cal=G.cal[G.ri];
   log(G,(cal.city||cal.venue)+" "+r.label+": "+G.riders[order[0]].name+" wins"+(hs!=null?" (holeshot "+G.riders[hs].name+")":"")+".","race");
-  ev.push({e:"raceDone",ri:G.ri,key:r.key,label:r.label,kind:r.kind,order:order,hs:hs,why:R.why,toMain:tr.toMain,toNext:tr.toNext,out:tr.out,walkover:tr.walkover||null});
+  ev.push({e:"raceDone",ri:G.ri,key:r.key,label:r.label,kind:r.kind,order:order,hs:hs,why:R.why,toMain:tr.toMain,toNext:tr.toNext,out:tr.out,walkover:tr.walkover||null,dnf:dnf,crashes:cr});
   G.race=null; G.rmap=null; G.rkey=null;
   if(RG.done) ev=ev.concat(endRound(G));
   return ev;

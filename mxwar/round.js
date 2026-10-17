@@ -122,13 +122,16 @@ function entrants(RG,k){
   return r.ent?r.ent.slice():null;
 }
 /* the result of the current race: order = rider ids, place 1 first. Returns what happened (transfers) for the page. */
-function record(RG,order,hs,why){
+function record(RG,order,hs,why,dnf){
   var r=RG.races[RG.cur], out={race:r.key,toMain:[],toNext:[],out:[]};
   if(!r||RG.done) throw new Error("No race to record.");
   var ent=entrants(RG,RG.cur), u={};
   if(order.length!==ent.length) throw new Error("Result size "+order.length+" != "+ent.length);
   order.forEach(function(id){ if(ent.indexOf(id)<0||u[id]) throw new Error("Bad result "+id); u[id]=1; });
   r.res=order.slice(); r.hs=hs==null?null:hs; r.why=why||null;
+  /* crashes (CRASH-CONTRACT.md): the riders who did not finish {id: {lap, why: "crash" | "cards"}}, already classified behind the finishers
+     by race.js; they score the points of their place (the series' tables pay by place) */
+  if(dnf&&typeof dnf==="object"&&Object.keys(dnf).length) r.dnf=JSON.parse(JSON.stringify(dnf));
   if(r.st>=0){
     var s=RG.st[r.st], nm=s.toMain, nn=s.toNext==="rest"?1e9:(+s.toNext||0), last=r.st===RG.st.length-1;
     if(last) nn=0;
