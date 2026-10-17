@@ -29,7 +29,7 @@ function makeRows(C,n,K){
   const L=C.L, ds=L/n, at=sampler(C), R={n:n,ds:ds};
   const f=()=>new Float32Array(n);
   Object.assign(R,{hw:f(),side:f(),A:f(),k:f(),la:f(),line:f(),bank:f(),F:f(),Fs:f(),rough:f(),sand:f(),acc:f(),whoop:f(),brake:f(),accel:f(),
-    gc0:f(),gc1:f(),gc2:f(),ga0:f(),ga1:f(),ga2:f(),gw:f(),bph:f(),blam:f(),aph:f(),alam:f(),wind:f(),wnd:f(),swirl:f(),hi:f(),gen:f()});
+    gc0:f(),gc1:f(),gc2:f(),ga0:f(),ga1:f(),ga2:f(),gw:f(),bph:f(),blam:f(),aph:f(),alam:f(),wind:f(),wnd:f(),swirl:f(),hi:f(),gen:f(),land:f(),pile:f()});
   const feats=C.feats||[], vA=C.v, N=C.N;
   let bp=0, ap=0;
   for(let i=0;i<n;i++){
@@ -61,6 +61,9 @@ function makeRows(C,n,K){
     /* the windrow of loose dirt at each edge: how tall, and the second noise that breaks it up */
     R.wind[i]=0.03+0.07*sstep(0.35,0.75,K.n2(s*0.3,111.1)); R.wnd[i]=K.n2(s*1.1,5.7);
   }
+  /* where a jump's arc touches down: the bikes' wheels scoop the face (a shallow dish, tyre-scuffed) and push a pile of dirt ahead of it */
+  (C.arcs||[]).forEach(A=>{ if(A.kind==="drop"||A.kind==="stepup") return; const b=A.b;
+    for(let i=0;i<n;i++){ const s=i*ds; let d=s-b; if(d>L/2) d-=L; if(d<-L/2) d+=L; R.land[i]=Math.max(R.land[i],Math.exp(-Math.pow((d-0.3)/1.15,2))); R.pile[i]=Math.max(R.pile[i],Math.exp(-Math.pow((d-2.3)/0.8,2))); } });
   /* the ruts fade in before a corner and trail off 16 m after it (the bikes keep digging on the way out): the strongest recent corner decides the amount and the side;
      the racing line is smoothed over the few metres a rider takes to move across */
   const nT=Math.max(1,Math.round(16/ds)), A0=R.A.slice(), S0=R.side.slice();
@@ -151,6 +154,9 @@ function fineMap(Rl,nt,nv){
       if(bk>0.01){ const en=Math.exp(-Math.pow((lat-line*0.5)/1.8,2)); f+=bk*0.05*en*Math.cos(ph+lat*1.9); }
       /* roost ripples where the bikes dig out of a corner */
       if(ac>0.01){ const en=Math.exp(-Math.pow((lat-line*0.5)/1.1,2)); f+=ac*0.02*en*Math.cos(aph+lat*2.4); }
+      /* the landing: a scoop with scuffs across it, a pile of loose dirt just ahead */
+      const ld=rows.land[i], pl=rows.pile[i];
+      if(ld>0.02||pl>0.02){ const en=Math.exp(-Math.pow(lat/1.9,2)), sc=0.5+0.5*Math.cos(s*21+lat*3.7); f-=ld*en*(0.022+0.012*sc); f+=pl*en*0.028*(0.6+0.4*K.n2(s*4,lat*3)); }
       /* whoops: chopped scallops down the faces */
       if(wh>0){ const fs=rows.Fs[i]; if(fs<-0.04){ f+=0.03*Math.cos(s*12.2+lat*2.1+Math.floor(s/3.75)*1.7)*clamp(-fs*3,0,1)*sstep(0.1,0.7,1-Math.abs(lat)/hw); } }
       /* clods and crumbs: more of them at the edges and where the dirt is loose */
