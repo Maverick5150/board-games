@@ -357,10 +357,10 @@ export function createFx(opts){
   /* how much the camera cares about a rider (weaker tiers only: the pools are small, so the dirt goes where the viewer looks): 1 near, less far, little behind */
   const cpos={x:0,z:0,fx:0,fz:1};
   function camNote(){ if(!CAM) return; const e=CAM.matrixWorld.elements; cpos.x=CAM.position.x; cpos.z=CAM.position.z; const fx=-e[8], fz=-e[10], l=Math.hypot(fx,fz)||1; cpos.fx=fx/l; cpos.fz=fz/l; }
-  const focus={x:0,z:0,on:false};
-  FX.focus=function(p){ if(p){ focus.x=p.x; focus.z=p.z; focus.on=true; } else focus.on=false; };   /* the director's subject: the high tiers send the dirt where the viewer looks without ever reading the camera */
+  const focus=[{x:0,z:0,on:false},{x:0,z:0,on:false}];
+  FX.focus=function(a,b){ const f=[a,b]; for(let i=0;i<2;i++){ const p=f[i], o=focus[i]; if(p){ o.x=p.x; o.z=p.z; o.on=true; } else o.on=false; } };   /* the leader and the person (race state only): the high tiers send the dirt where the viewer mostly looks without ever reading the camera */
   function care(x,z){
-    if(!CAM){ if(!focus.on) return 1; const fx=x-focus.x, fz=z-focus.z, fd=Math.sqrt(fx*fx+fz*fz); return fd<22?1:fd<55?1-0.55*(fd-22)/33:0.45-0.3*Math.min(1,(fd-55)/60); }
+    if(!CAM){ let fd=1e9; for(let i=0;i<2;i++){ const o=focus[i]; if(!o.on) continue; const fx=x-o.x, fz=z-o.z, d=Math.sqrt(fx*fx+fz*fz); if(d<fd) fd=d; } if(fd>=1e9) return 1; return fd<22?1:fd<55?1-0.55*(fd-22)/33:0.45-0.3*Math.min(1,(fd-55)/60); }
     const dx=x-cpos.x, dz=z-cpos.z, d=Math.sqrt(dx*dx+dz*dz), f=(dx*cpos.fx+dz*cpos.fz)/(d+1e-3);
     let w=d<18?1:d<45?1-0.62*(d-18)/27:Math.max(0.1,0.38-0.28*(d-45)/50); if(f<0.1&&d>5) w*=0.25;
     return w;
