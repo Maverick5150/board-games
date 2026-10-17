@@ -346,6 +346,12 @@ function lapFrom(src,sec,c){
   if(src==="venue") return "a lap about "+lapWords(sec)+" (estimated)";
   return lapWords(sec)+" a lap";
 }
+/* mxtimewire review (2026-10-17): what happened to a race (pack.js ev / us / rf / ts): "shortened from 20 min + 1 lap", "stopped early",
+   "red-flagged and restarted"; a printed race time that runs through a stoppage says so; a race whose average lap was set aside
+   (round.js lapOff: px) says what it rides instead */
+function evWords(R){ if(!R||!R.ev) return ""; return R.ev==="e"?"stopped early":R.ev==="s"?(R.us?"shortened from "+R.us:"shortened"):R.ev==="r"?"red-flagged and restarted"+(R.rf>1?" "+R.rf+" times":""):""; }
+function wonIn(R){ return R&&R.t?"won in "+raceTime(R.t)+(R.ts?" (the clock ran through the stoppage)":""):""; }
+function pxWords(x,c){ return x&&x.px>0?"its laps average "+lapWords(x.px)+", far off the night's other races (a stoppage or a timing fault): it rides "+lapFrom(x.lsrc,x.lapS>0?x.lapS:x.lap,c):""; }
 function realLine(x){
   var R=x.real, lab=esc(x.label), half=cfg.length==="half"||(G&&G.o&&G.o.length==="half"), c=x.round||(G&&G.cal[G.ri]);
   var lapNote=esc(lapFrom(x.lsrc,x.lapS,c));
@@ -356,10 +362,10 @@ function realLine(x){
   }
   if(x.src==="min"&&R&&R.mr) return "<b>"+lab+" in real life:</b> "+esc((R.u||R.m+" min")+(R.w?", won by "+R.w:""))+" (no lap count or times survive): "+esc(plural(x.len,"lap"))+" at "+lapNote+".";
   if(x.src==="real"&&R){
-    var t=[plural(R.l,"lap")];
-    if(R.p) t.push(lapWords(R.p)+" a lap"+(R.pk==="m"?"":" (average)"));
-    if(R.w) t.push((R.t?"won in "+raceTime(R.t)+" by ":"won by ")+R.w);
-    return "<b>"+lab+" in real life:</b> "+esc(t.join(", "))+"."+(half?" Half length: "+esc(plural(x.len,"lap"))+".":"")+(R.p?"":" No lap times survive: "+lapNote+".")+(R.f&&!half?" First lap "+esc(lapWords(R.f))+".":"");
+    var ev=evWords(R), t=[plural(R.l,"lap")+(ev?" ("+ev+")":"")];
+    if(R.p&&!(x.px>0)) t.push(lapWords(R.p)+" a lap"+(R.pk==="m"?"":" (average)"));
+    if(R.w) t.push((R.t?wonIn(R)+" by ":"won by ")+R.w);
+    return "<b>"+lab+" in real life:</b> "+esc(t.join(", "))+"."+(half?" Half length: "+esc(plural(x.len,"lap"))+".":"")+(x.px>0?" "+esc(pxWords(x,c).replace(/^i/,"I"))+".":R.p?"":" No lap times survive: "+lapNote+".")+(R.f&&!half?" First lap "+esc(lapWords(R.f))+".":"");
   }
   if(x.src==="min"&&R) return "<b>"+lab+" in real life:</b> "+esc(R.m+" minutes"+(R.pl?" + "+plural(R.pl,"lap"):""))+" (no lap count survives): "+esc(plural(x.len,"lap"))+" at "+lapNote+".";
   var sp=RD.realSpec(S.calFormat(G,x.round||G.cal[G.ri]),x.kind,x.i|0,G.year);
@@ -373,7 +379,7 @@ function openTimes(){
   var rows=list.map(function(x){
     var R=x.real, top="<b>"+esc(x.label)+"</b> · "+esc(plural(x.len,"lap"))+" · "+esc(lapWords(x.lap))+" a lap"+(x.fl?" · first lap "+esc(lapWords(x.fl)):"")+(x.done?" · raced":x.live?" · on now":"");
     var sub;
-    if(x.src==="real"&&R) sub="Real: "+(R.u?R.u+", ":"")+plural(R.l,"lap")+" run"+(R.w?", won "+(R.t?"in "+raceTime(R.t)+" ":"")+"by "+R.w:"")+(R.b?"; best lap "+lapWords(R.b)+(R.bb?" by "+R.bb:""):"")+(R.p?"":"; no lap times survive ("+lapFrom(x.lsrc,x.lap,c)+")")+(half?"; half length":"")+".";
+    if(x.src==="real"&&R) sub="Real: "+(R.u?R.u+(evWords(R)?" ("+evWords(R)+")":"")+", ":evWords(R)?evWords(R)+", ":"")+plural(R.l,"lap")+" run"+(R.w?", "+(R.t?wonIn(R)+" ":"won ")+"by "+R.w:"")+(R.b?"; best lap "+lapWords(R.b)+(R.bb?" by "+R.bb:""):"")+(x.px>0?"; "+pxWords(x,c):R.p?"":"; no lap times survive ("+lapFrom(x.lsrc,x.lap,c)+")")+(half?"; half length":"")+".";
     else if(x.src==="time"&&R) sub="Real: won in "+raceTime(R.t)+(R.w?" by "+R.w:"")+(R.u?" ("+R.u+")":"")+"; no lap chart survives: the laps worked out from that time"+(x.b>0?" at "+lapFrom(x.bs,x.b,c):"")+(half?"; half length":"")+".";
     else if(x.src==="min"&&R) sub="Real: "+(R.u||R.m+" minutes")+(R.w?", won by "+R.w:"")+"; no lap count"+(R.mr?" or times survive":" survives")+": laps at "+lapFrom(x.lsrc,x.lap,c)+".";
     else sub="No researched times for this race: "+specWords(x.rule)+" by the "+G.year+" rules"+(x.lsrc==="night"?", at the night's real lap":x.lsrc==="era"?", at the era's typical lap":x.lsrc==="venue"?", a lap estimated":"")+".";
@@ -387,7 +393,7 @@ function openTimes(){
     (tm&&tm.pm?" The real program: about "+progMins(tm.pm)+(tm.pe?" (estimated)":"")+".":"");
   $("timesSheet").innerHTML='<div class="bg-sheet__grip" aria-hidden="true"></div><div class="mx-shd"><span class="bg-eyebrow">'+esc("Round "+(G.ri+1)+" · "+(c.city||c.venue)+(c.date?" · "+fmtDate(c.date):""))+'</span><h2 class="bg-sheet__title" id="timesTitle">Race times</h2><p class="bg-sheet__sub">'+esc(subTop)+"</p></div>"+
     '<ol class="mx-res mx-ttl">'+rows+"</ol>"+
-    '<p class="mx-note">'+esc(real+" of "+list.length+" races with their laps researched"+(byT?", "+byT+" from the winning time":"")+(byM?", "+byM+" from the timed rule":"")+(tm&&tm.s?" ("+tm.s.toLowerCase()+")":"")+". Lap time = "+(real?"the winner's median lap (else the average)"+(byT?"; from a winning time: that time / the laps":""):byT?"the winning time / the laps":"as said for each race")+"; a race takes about its laps x its lap time.")+"</p>"+
+    '<p class="mx-note">'+esc(real+" of "+list.length+" races with their laps researched"+(byT?", "+byT+" from the winning time":"")+(byM?", "+byM+" from the timed rule":"")+(tm&&tm.s?" ("+tm.s.toLowerCase()+")":"")+". Lap time = "+(real?"the winner's median lap (else the average)"+(byT?"; from a winning time: that time / the laps":""):byT?"the winning time / the laps":"as said for each race")+(list.some(function(x){ return x.px>0; })?"; an average far off the night's other races (a stoppage or a timing fault) rides the night's real lap":"")+"; a race takes about its laps x its lap time.")+"</p>"+
     '<div class="mx-sacts"><button class="bg-btn bg-btn--primary bg-btn--lg" id="timesClose" type="button">Close</button></div>';
   sheetOpen($("timesBox"),{focus:"#timesClose",onClose:function(){ setTimeout(function(){ if(onTV()&&!sheetUp()) focusTV($("timesBtn")); },60); }});
   $("timesClose").addEventListener("click",function(){ sheetClose($("timesBox")); });
@@ -567,7 +573,7 @@ function loadSaved(d){
   showSetup(false); drawSetup(); armBack();
   if(G.over){ ui.finished=gen; setView("season"); setTimeout(function(){ if(G&&G.over&&!setupShown()) openWin(); },300); }
   /* mxtimewire: a save from before the per-round timing: attach it from the season file (the race under way keeps its length) */
-  if(!G.tmv){ var g0=G, my=gen; loadSeason(G.sid).then(function(Dd){ if(G!==g0||my!==gen) return; var n=S.attachTiming(G,Dd); save(); if(n&&ui.view==="season"&&!setupShown()) renderSeason(); },function(){}); }
+  if(!(G.tmv>=2)){ var g0=G, my=gen; loadSeason(G.sid).then(function(Dd){ if(G!==g0||my!==gen) return; var n=S.attachTiming(G,Dd); save(); if(n&&ui.view==="season"&&!setupShown()) renderSeason(); },function(){}); }
 }
 function resetUI(){ ui.winShown=-1; ui.result=false; ui.finished=-1; ui.order=[]; ui.lastCards={}; ui.bikes={}; ui.pendRound=null; ui.pendSeason=null; ui.log=[]; ui.rc=null; ui.rmap=null; ui.hs=null; ui.trkKey=null; disp=null; trackShow(); renderLog(); }
 function dressSaveBar(){
