@@ -117,7 +117,7 @@ export function createBike(n,lo,mk,q){
   if(!lo) mkSet(0,d2); mkSet(1,d1); mkSet(2,buildFarBike(),true);
   M.bk={n:n,lo:!!lo,sets:sets,cur:new Int8Array(n).fill(-1),lastI:1e9,pc:new Float32Array(n*3).fill(1),ac:new Float32Array(n*3).fill(1),
     /* the distances at which a bike leaves one set for the next (m): hysteresis of 8% */
-    th:lo?[8]:[9.5,36],sp:new Float32Array(n*2)};
+    th:lo?[q.bikeLod&&q.bikeLod[0]||8]:(q.bikeLod&&q.bikeLod.length>1?q.bikeLod:[9.5,36]),sp:new Float32Array(n*2)};
   return M;
 }
 /* the team colours of rider i's bike: the plastics in the team colour, the graphics in the accent colour (written into the sets' instance attributes as the bikes are posed) */
