@@ -183,14 +183,16 @@ function next(G){
 /* the lap time of the round on now (seconds; mxlaps): the race's, the round's, else the track's */
 function lapOf(G){ if(G.race&&G.race.lapS>0) return G.race.lapS; if(G.round&&G.round.lapS>0) return G.round.lapS; var c=G.cal[Math.min(G.ri,G.cal.length-1)]; return Round.lapTime(G.series,G.year,c); }
 /* an old save (before real lengths): the options' length mapped (short -> half, standard / long -> real), the round gets its lap time and
-   its races still to run their real lengths; a race under way keeps its laps run and ends at its real length (never before the lap on now) */
+   its races still to run their real lengths; a race under way keeps its laps run and ends at its real length (never before the lap on now).
+   A save from the first real-length build (round lv < 2: timed races one lap short): the races still to run are counted again; the race
+   under way keeps the length it is racing to (its white flag may already be out). */
 function upgrade(G){
   if(!G||!G.o) return G;
   G.o.length=Round.MODE_OF[G.o.length]||"real";
-  if(G.round&&!(G.round.lapS>0)){
-    var live=G.race&&!G.race.over?Round.current(G.round):null;
+  if(G.round&&!(G.round.lapS>0&&G.round.lv>=2)){
+    var battles=!(G.round.lapS>0), live=G.race&&!G.race.over?Round.current(G.round):null;
     Round.upgrade(G.round,G.o,{series:G.series,year:G.year,cal:G.cal[G.ri]});
-    if(live&&G.race){ G.race.o.len=Math.max(G.race.battle+1,live.len); live.len=G.race.o.len; }
+    if(live&&G.race){ G.race.o.len=battles?Math.max(G.race.battle+1,live.len):G.race.o.len; live.len=G.race.o.len; }
   }
   if(G.race&&!(G.race.lapS>0)&&G.round) G.race.lapS=G.round.lapS;
   return G;

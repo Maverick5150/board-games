@@ -709,8 +709,8 @@ function layoutArena(){
   cw=Math.max(cw,tv?Math.round(2.6*rem):big?34:26);
   tb.style.setProperty("--cw",cw+"px");
   var you=$("youSlot"), top=$("topSlot"), mid=$("midNote");
-  you.style.left=big?"24%":"26%"; top.style.left=big?"76%":"74%"; you.style.top=top.style.top=Math.round(rem*(big?.35:.25))+"px";
-  you.style.width=top.style.width=Math.round(bw*(big?.4:.47))+"px";
+  you.style.top=top.style.top=Math.round(rem*(big?.35:.25))+"px";
+  if(big){ you.style.left="24%"; top.style.left="76%"; you.style.width=top.style.width=Math.round(bw*.4)+"px"; }
   mid.style.top=Math.round(bh*.48)+"px"; mid.hidden=!big;
   GEO={W:W,H:H,laneH:H,cw:cw,tw:bw,th:bh};
   relabel();
@@ -718,8 +718,19 @@ function layoutArena(){
   return true;
 }
 /* the slot labels: full words in the big window, short ones in the small corner window */
-function lab(el,long,short){ el.setAttribute("data-l",long); el.setAttribute("data-s",short||long); el.textContent=pipBig()?long:(short||long); }
-function relabel(){ ["youLab","topLab"].forEach(function(id){ var el=$(id); if(el.hasAttribute("data-l")) el.textContent=pipBig()?el.getAttribute("data-l"):el.getAttribute("data-s"); }); }
+function lab(el,long,short){ el.setAttribute("data-l",long); el.setAttribute("data-s",short||long); el.textContent=pipBig()?long:(short||long); placeSlots(); }
+function relabel(){ ["youLab","topLab"].forEach(function(id){ var el=$(id); if(el.hasAttribute("data-l")) el.textContent=pipBig()?el.getAttribute("data-l"):el.getAttribute("data-s"); }); placeSlots(); }
+/* review fix (task2): in the small window the two slots sit from their labels' real widths: the top slot's label and card stay left of the
+   expand icon in the top-right corner (.mx-pipbtn__ic: phone right .25rem + 1.3rem, TV .4rem + 2.4rem; "TOP" ran under it and read "TO"),
+   the left slot as far right as 26% but never into the top slot ("LEADER" next to "TOP"); the cards keep their size */
+function placeSlots(){
+  if(!GEO||pipBig()) return;
+  var rem=remPx(), tv=onTV(), bw=GEO.tw, cw=GEO.cw, you=$("youSlot"), top=$("topSlot");
+  var wl=Math.max(cw,$("youLab").offsetWidth||0), wr=Math.max(cw,$("topLab").offsetWidth||0), iz=rem*(tv?2.9:1.65), pad=rem*.35, gap=rem*.3;
+  var tx=Math.round(Math.min(bw*.74,bw-iz-wr/2-rem*.1)), yx=Math.round(Math.max(pad+wl/2,Math.min(bw*.26,tx-wr/2-gap-wl/2)));
+  you.style.left=yx+"px"; top.style.left=tx+"px";
+  you.style.width=Math.round(Math.max(wl,rem*3.2))+"px"; top.style.width=Math.round(Math.max(wr,rem*3.2))+"px";
+}
 function setPip(big,focus){
   var tb=$("table"), was=pipBig(); if(!!big===was) return;
   var r0=tb.getBoundingClientRect();
@@ -830,7 +841,7 @@ function chips(){
   $("lapChip").innerHTML=rc.phase==="gate"?"On the gate":rc.over?A.flag()+"Checkered flag":(last?A.wflag():"")+"Lap "+lp+" of "+rc.o.len+(last?" · last lap":"");
   $("lapChip").classList.toggle("is-white",last);
   $("hsChip").innerHTML=ui.hs!=null?"Holeshot: "+esc(G.riders[seatId(ui.hs)].name):"";
-  var T=track(), yon=!rc.over&&(T&&T.live&&T.ready()>=0?T.yellowOn():!!rc.yellow);
+  var T=track(), yon=!rc.over&&rc.phase!=="gate"&&(T&&T.live&&T.ready()>=0?T.yellowOn():!!rc.yellow);   /* review fix: never on the gate (a stale chip from a race skipped under a yellow) */
   $("yelChip").innerHTML=yon?A.yflag()+"Yellow flag":""; $("yelChip").classList.toggle("is-yellow",!!yon);
   $("fieldChip").textContent=fieldWords();
 }
@@ -1146,8 +1157,12 @@ function colOf(cols,s){ for(var i=0;i<cols.length;i++) if(+cols[i].getAttribute(
 /* the war's cards in the card window: up to 3 fighters in the small window on a phone (4 on TV), 4 / 5 in the big one; "+n more" */
 function warCw(cols,more){
   var rem=remPx(), W=GEO?GEO.tw:300, H=GEO?GEO.th:160, big=pipBig(), tv=onTV();
-  var colW=(W-rem*.6)/(cols+(more?0.7:0))-rem*.4, extra=big?3.3:(tv?2.6:1.9);
-  return Math.round(Math.max(tv?2.4*rem:big?30:22,Math.min(colW*(big?.62:.6),(H-rem*extra)/1.55,GEO?GEO.cw:70)));
+  var colW=(W-rem*.6)/(cols+(more?0.7:0))-rem*.4;
+  /* review fix (task2): a column fits the window's height: the war's insets (index.html .mx-war: small .3rem / TV .5rem at the bottom, below
+     the expand icon at the top; big 2rem + .5rem / TV 3rem + .75rem), the plate row (+ the "tied with" row in the big window) and the pile
+     (1.4 cw, the face-down cards lean a little lower): the cards hung out of the window's bottom on TV */
+  var ins=big?(tv?3.75:2.5):(tv?3.3:2.3), rows=big?2.7:1.4, hcw=(H-rem*(ins+rows))/1.49;
+  return Math.round(Math.max(tv?2.4*rem:big?30:22,Math.min(colW*(big?.62:.6),hcw,GEO?GEO.cw:70)));
 }
 function drawWar(seats,tb,fresh){
   $("youSlot").hidden=true; $("topSlot").hidden=true; $("midNote").hidden=true;
