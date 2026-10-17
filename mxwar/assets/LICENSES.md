@@ -30,6 +30,7 @@ Add your lines between your heading and its end marker only (this keeps the role
 <!-- end stadium -->
 
 ## bike
+- Nothing third-party. The motorcycle is original code (`mxwar/r3d-bike-model.js`, `mxwar/r3d-bike.js`): geometry, the knob pattern, the livery mask, the night-stadium reflection map and the mud are all drawn / generated in code at run time. No photographs, no brand shapes, no logos, no sponsor marks, no downloaded textures or models.
 <!-- end bike -->
 
 ## rider
