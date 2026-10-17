@@ -60,16 +60,19 @@ function flush(limit) {
 
 /* ---------------- the view: loaded as it is; without the camera hook it is patched in memory ---------------- */
 const NEEDLE_V = "const V={lost:false};";
-const NEEDLE_C = "cam.position.copy(cPos); cam.lookAt(cTarget);";
+const NEEDLE_C = "cam.position.copy(cPos); cam.lookAt(cTarget);";   /* race3d.js as one file (mxvis) */
+const NEEDLE_CAMS = "CAMS.camera(dt);";                                 /* race3d.js after the split (r3d-cams.js): the camera is CAMS.camera(dt) and CAMS.target the look-at */
 async function loadView(rel) {
   const url = new URL(rel, location.href).href, src = await (await fetch(url, { cache: "no-store" })).text();
   if (/camHook/.test(src)) return { mod: await import(url), hook: "native", url };
-  if (src.indexOf(NEEDLE_V) < 0 || src.indexOf(NEEDLE_C) < 0) return { mod: await import(url), hook: "none", url };   /* no anchor: the director's cameras only */
+  const split = src.indexOf(NEEDLE_CAMS) >= 0;
+  if (src.indexOf(NEEDLE_V) < 0 || (!split && src.indexOf(NEEDLE_C) < 0)) return { mod: await import(url), hook: "none", url };   /* no anchor: the director's cameras only */
   let p = src.replace(NEEDLE_V, "const V={lost:false,camHook:null};");
-  p = p.replace(NEEDLE_C, "{const h=V.camHook&&V.camHook(dt,rs,T);if(h){cPos.set(h.eye[0],h.eye[1],h.eye[2]);cTarget.set(h.target[0],h.target[1],h.target[2]);camS.fov=h.fov||camS.fov;}} " + NEEDLE_C);
+  if (split) p = p.replace(NEEDLE_CAMS, NEEDLE_CAMS + " {const h=V.camHook&&V.camHook(dt,rs,T);if(h){cam.position.set(h.eye[0],h.eye[1],h.eye[2]);CAMS.target.set(h.target[0],h.target[1],h.target[2]);cam.lookAt(CAMS.target);if(h.fov&&Math.abs(cam.fov-h.fov)>1e-4){cam.fov=h.fov;cam.updateProjectionMatrix();}}}");
+  else p = p.replace(NEEDLE_C, "{const h=V.camHook&&V.camHook(dt,rs,T);if(h){cPos.set(h.eye[0],h.eye[1],h.eye[2]);cTarget.set(h.target[0],h.target[1],h.target[2]);camS.fov=h.fov||camS.fov;}} " + NEEDLE_C);
   p = p.replace(/(\bfrom\s*|\bimport\s*\(\s*)(["'])(\.{1,2}\/[^"']+)\2/g, (m, a, q, s) => a + q + new URL(s, url).href + q).replace(/import\.meta\.url/g, JSON.stringify(url));
   const blob = URL.createObjectURL(new Blob([p], { type: "text/javascript" }));
-  return { mod: await import(blob), hook: "patched-in-memory", url };
+  return { mod: await import(blob), hook: split ? "patched-in-memory (split view)" : "patched-in-memory", url };
 }
 
 /* ---------------- state ---------------- */
@@ -172,6 +175,9 @@ function newRace() {
 }
 function tickOnce(draw) {
   clock.tick++; if (clock.virt) clock.v = clock.tick * 1000 / 60;
+  /* the sim's random numbers depend on the tick number only: three.js draws its object UUIDs from Math.random when it first renders / builds something, so a render
+     (or its timing) must never shift the stream the next tick sees; the stream restarts every tick */
+  Math.random = mulberry32((0x4D585752 ^ Math.imul(P.seed | 0, 2654435761) ^ Math.imul(clock.tick, 0x9E3779B1)) | 0);
   V.advance(TICK, !draw);
   if (clock.virt) flush();
 }
@@ -204,9 +210,13 @@ Object.assign(DEMO, {
   setBookmarks(json) { DEMO._bm = typeof json === "string" ? JSON.parse(json) : json; return (DEMO._bm.bookmarks || []).map(b => b.id); },
   bookmark(id, o) {
     o = o || {}; const b = findBookmark(id); BM = b;
-    DEMO.seek(b.t < 0 ? -1 : b.t - 1 / 60 > 0 ? b.t - 1 / 60 : 0);
-    DEMO.camera(b.cam);
-    if (o.draw !== false) DEMO.step(1 / 60, true);
+    /* a still is a rigid mount (no smoothing) and the camera is set 3 ticks before the frame: the view's blob shadows and its shadow box read the PREVIOUS tick's camera, so
+       the frame must not depend on which bookmark was drawn before it (checked by tools/determinism.js: alone in a fresh page = in one session) */
+    const lead = 3, spec = b.cam ? JSON.parse(JSON.stringify(b.cam)) : null;
+    if (spec && spec.seat !== undefined) spec.damp = 0; if (spec && spec.follow) spec.follow.damp = 0;
+    DEMO.seek(b.t < 0 ? -1 : Math.max(0, b.t - lead / 60));
+    DEMO.camera(spec);
+    if (o.draw !== false) { DEMO.step((lead - 1) / 60, false); DEMO.step(1 / 60, true); }
     return { id: b.id, name: b.name, t: raceT(), cam: CAM ? CAM.kind : "director" };
   },
   capture(id, type, q) { DEMO.bookmark(id, { draw: true }); return DEMO.grab(type, q); },
