@@ -324,8 +324,14 @@ export function hideRider(R,i){
   for(let k=0;k<3;k++) M.plate.setMatrixAt(i*3+k,z);
   M.shadow.setMatrixAt(i*2,z); M.shadow.setMatrixAt(i*2+1,z); M.tag.setMatrixAt(i,z);
 }
-export function shadowAt(R,k,x,y,z,th,sx,sz,alpha){
-  _q1.setFromAxisAngle(_up,-th); _m1.compose(_a.set(x,y+0.03,z),_q1,_sc.set(sx*alpha+0.001,1,sz*alpha+0.001)); R.M.shadow.setMatrixAt(k,_m1);
+export function shadowAt(R,k,x,y,z,th,sx,sz,alpha,gs,gl){
+  /* a quad lying ON the ground: tilted to the slope along the bike (gs = dy/ds) and across it (gl = dy/dlat), so a berm or a mound face
+     never half-buries it */
+  const c=Math.cos(th), s2=Math.sin(th), a=sx*alpha+0.001, b=sz*alpha+0.001; gs=gs||0; gl=gl||0;
+  const fl=Math.hypot(1,gs), ll=Math.hypot(1,gl);
+  const fx=c/fl, fy=gs/fl, fz=s2/fl, lx=-s2/ll, ly=gl/ll, lz=c/ll;
+  let ux=ly*fz-lz*fy, uy=lz*fx-lx*fz, uz=lx*fy-ly*fx; const ul=Math.hypot(ux,uy,uz)||1; ux/=ul; uy/=ul; uz/=ul;
+  _m1.set(fx*a,ux,lx*b,x+ux*0.05, fy*a,uy,ly*b,y+uy*0.05, fz*a,uz,lz*b,z+uz*0.05, 0,0,0,1); R.M.shadow.setMatrixAt(k,_m1);
 }
 export function tagAt(R,i,pos,size){ if(!size){ R.M.tag.setMatrixAt(i,_m1.makeScale(0,0,0)); return; } _m1.makeScale(size,size,size); _m1.setPosition(pos); R.M.tag.setMatrixAt(i,_m1); }
 export function commit(R){

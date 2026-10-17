@@ -153,6 +153,22 @@ function fromShared(S){
   var out={id:S.id,name:S.name||S.venue||S.id,kind:S.kind==="stadium"?"stadium":"outdoor",width:w,berm:S.kind==="stadium"?1.5:1.8,vtop:S.kind==="stadium"?15.5:22.5,acc:S.kind==="stadium"?0.72:0.86,grip:S.kind==="stadium"?0.74:0.86,
     pts:rot(pts,Math.round(fin*pts.length)),features:feats,shared:true,status:S.status,source:S.source,soil:S.soil,around:S.surroundings,
     gateS:sOf(gate),gateW:S.kind==="stadium"?17:36,startLen:((startT1-gate+1)%1)*L,minR:7,vavg:S.kind==="stadium"?10.0:15.5};
+  if(S.kind==="stadium"){
+    /* a real stadium lap is 50-60 s (the CEO): from the track's length at a stadium's average speed, kept inside that range */
+    out.vavg=L/Math.max(48,Math.min(58,L/10.5));
+    /* the floor: the track's bounding box with room for the outside berms and the wall, at least the researched floor size */
+    var bx0=1e9, bx1=-1e9, bz0=1e9, bz1=-1e9; pts.forEach(function(p){ bx0=Math.min(bx0,p[0]); bx1=Math.max(bx1,p[0]); bz0=Math.min(bz0,p[1]); bz1=Math.max(bz1,p[1]); });
+    var mg=w/2+5, W0=bx1-bx0+2*mg, D0=bz1-bz0+2*mg;
+    if(S.floorM&&S.floorM.length===2){ W0=Math.max(W0,+S.floorM[0]||0); D0=Math.max(D0,+S.floorM[1]||0); }
+    var mx=(bx0+bx1)/2, mz=(bz0+bz1)/2; out.floor=[mx-W0/2,mx+W0/2,mz-D0/2,mz+D0/2];
+  }
+  /* a gate well behind the loop (the researcher's gate {x, y, behindM}): a start path from the gate that merges into the loop where the
+     start straight begins; the loop's own start straight then runs on to turn 1 (the holeshot) */
+  if(S.gate&&S.gate.x!=null&&S.gate.y!=null&&(+S.gate.behindM||0)>=15){
+    var gx=(S.gate.x-cx)*k, gz=(S.gate.y-cz)*k;
+    out.start={pts:[[gx,gz,elevAt(elev,0)],[0,0,0]],joinF:sOf(gate)/L,gateW:out.gateW,gateAt:2};
+    out.startHs=out.startLen;
+  }
   return out;
 }
 function rot(a,n){ n=((n%a.length)+a.length)%a.length; return a.slice(n).concat(a.slice(0,n)); }

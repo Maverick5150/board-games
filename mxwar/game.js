@@ -719,7 +719,7 @@ function layoutArena(){
     /* 3D: the race fills the arena; the cards are a small window in the corner (bigger when tapped) */
     var tb=$("table"), big=tb.classList.contains("is-big"), pw=Math.round(Math.min(W*(big?0.66:(tv?0.24:0.46)),big?44*rem:(tv?24*rem:14.5*rem))), ph=Math.round(Math.min(H*(big?0.62:(tv?0.27:0.3)),pw*0.64));
     tb.style.setProperty("--pip-w",pw+"px"); tb.style.setProperty("--pip-h",ph+"px");
-    var cw3=Math.max(tv?Math.round(1.9*rem):24,Math.round(Math.min((ph-rem*(tv?2.4:2.3))/1.4,pw*0.21)));
+    var cw3=Math.max(tv?Math.round(1.9*rem):24,Math.round(Math.min((ph-rem*(tv?3.2:2.6))/1.4,pw*0.21)));   /* the label, the card and the rider's plate all fit inside the window */
     tb.style.setProperty("--cw",cw3+"px");
     var you=$("youSlot"), top=$("topSlot"), mid=$("midNote");
     you.style.left="22%"; top.style.left="78%"; you.style.top=top.style.top=Math.round(rem*.2)+"px"; you.style.width=top.style.width=Math.round(pw*.42)+"px";
@@ -757,7 +757,7 @@ function trackRiders(){
     ui.trkKey=key3;
     var c3=G.cal[Math.min(G.ri,G.cal.length-1)], red3=redId();
     try{
-      V3.setRace({series:G.series,year:G.year,round:c3.n||(G.ri+1),cal:c3,len:rc.o.len,riders:rc.r.map(function(p,s){ var R=G.riders[seatId(s)], m=A.mk(R.bike); return {s:s,color:m[0],accent:m[0]==="#f2f4f8"?"#183a8c":(m[1]==="#0b0a12"?"#16161c":"#f2f2f6"),num:R.plate,name:R.name,red:R.id===red3,me:R.kind==="human"}; })});
+      V3.setRace({series:G.series,year:G.year,round:c3.n||(G.ri+1),cal:c3,len:rc.o.len,lapT:(G.round&&G.round.lapT)||0,riders:rc.r.map(function(p,s){ var R=G.riders[seatId(s)], m=A.mk(R.bike); return {s:s,color:m[0],accent:m[0]==="#f2f4f8"?"#183a8c":(m[1]==="#0b0a12"?"#16161c":"#f2f2f6"),num:R.plate,name:R.name,red:R.id===red3,me:R.kind==="human"}; })});
     }catch(e){ try{ console.warn("mxwar: 3D race",e); }catch(x){} v3state="failed"; mode3D(); ui.trkKey=null; renderRace(); return; }
     ui.show=null; ui.yellowNext=null; ui.lapReady=0; ui.finish3=false;
     if(rc.phase!=="gate"){ /* a race restored mid-way: the field placed by the standings at the start of this lap, riding on */
@@ -898,6 +898,8 @@ function renderOverlay(order){
     return '<li class="'+(me?"is-me":"")+(p.out?" is-out":"")+'"><span class="mx-otw__p">'+(i+1)+"</span>"+plateHTML(R)+'<span class="mx-otw__n">'+esc(shortNm(R.name))+"</span>"+(p.out?'<span class="mx-otw__x">'+(dn&&dn.why==="crash"?"DNF":"out")+"</span>":"")+"</li>"; }
   order.slice(0,max).forEach(function(s,i){ rows.push(row(s,i)); });
   hs.filter(function(s){ return !shown[s]; }).forEach(function(s){ rows.push('<li class="is-sep" aria-hidden="true"></li>'); rows.push(row(s,order.indexOf(s))); });
+  /* a rider who just crashed out stays on the tower with DNF through the yellow lap */
+  order.filter(function(s){ var p=rc.r[s]; return !shown[s]&&p&&p.out&&p.dnf&&p.dnf.why==="crash"&&(rc.battle|0)-(p.dnf.lap|0)<=1; }).slice(0,2).forEach(function(s,k){ if(!k) rows.push('<li class="is-sep" aria-hidden="true"></li>'); rows.push(row(s,order.indexOf(s))); });
   ol.innerHTML=rows.join("");
 }
 function lapBug(){
@@ -1098,7 +1100,9 @@ async function anim3D(my,e,evs,ei,rc){
       logLine((e.n>1?(e.n===2?"Double war! ":e.n===3?"Triple war! ":"War again! "):"War! ")+whoList(e.tied)+" tie"+(tiedR?" with "+rankPlural(tiedR):"")+".");
       drawWar(e.seats,null,true); renderTower({fight:e.seats});
       V3.hold({war:e.seats});
-      await queueBanner(e.n>1?(e.n===2?"Double war!":e.n===3?"Triple war!":"War again!"):"War!",whoList(e.tied)+(tiedR?" · "+rankPlural(tiedR):"")+(e.n===1?" · lose the next tie: a crash":e.n===2?" · lose this one: a crash, the next: out":" · the loser crashes out"),dl(e.n>1?900:800),"is-war");
+      /* a plain war stays in the corner window (the CEO: "no one will wanna see it"); a double or triple war is a crash in the making: a banner */
+      if(e.n>1) await queueBanner(e.n===2?"Double war!":e.n===3?"Triple war!":"War again!",whoList(e.tied)+(tiedR?" · "+rankPlural(tiedR):"")+(e.n===2?" · the loser crashes":" · the loser crashes out"),dl(1000),"is-war");
+      else await sleep(dl(450));
       return true;
     }
     case "win": {

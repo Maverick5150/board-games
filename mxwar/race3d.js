@@ -26,7 +26,7 @@
    {at(name): Promise (holeshot | pass | crash | yellow | line | done)}, V.hold(o), V.standings(order, cnt, lap), V.setFlag(k), V.setRed(s),
    V.markOut(s), V.show(on), V.resize(), V.skip(), V.state(), V.stats(), V.shot(name) (tests). */
 import * as THREE_NS from "../ui/vendor/three-0.160.0.module.min.js";
-import {buildWorld,gateBuild,flaggerBuild,flagTex,clear} from "./r3d-world.js";
+import {buildWorld,gateBuild,flaggerBuild,flagTex,clear,clearDist} from "./r3d-world.js";
 import {createRiders,poseRider,hideRider,shadowAt,tagAt,commit,emit,stepParticles,BIKE,setRed as atlasRed} from "./r3d-riders.js";
 const THREE=THREE_NS;
 const GL=typeof window!=="undefined"?window:globalThis;
@@ -73,10 +73,12 @@ export function create(host,hooks){
   V.setRace=function(o){
     const lo=motion()!=="full"; if(lo!==LO){ LO=lo; worldKey=""; }   /* Reduce effects changed: the next race is built simpler (or richer) */
     const pick=MX.Layouts.pick(o.series,o.year,o.round,o.cal||{});
-    const key=pick.layout.id+"|"+(pick.look.around)+"|"+(LO?"lo":"hi");
+    const key=pick.layout.id+"|"+(pick.look.around)+"|"+(LO?"lo":"hi")+"|"+(o.lapT>0?Math.round(o.lapT):"");
     if(key!==worldKey){
       if(world){ disposeTree(world.root); scene.remove(world.root); }
       C=MX.Course.build(pick.layout); look=pick.look; worldKey=key;
+      /* the round's real average lap (the timing research), when it differs: the speeds tuned to it, within believable bounds */
+      if(o.lapT>0&&Math.abs(C.Tlap/o.lapT-1)>0.04){ const want=clamp(o.lapT,C.Tlap*0.87,C.Tlap*1.15); C=MX.Course.build(Object.assign({},pick.layout,{vavg:C.L/want})); }
       world=buildWorld(C,look,{lo:LO}); scene.add(world.root);
       lights();
       scene.fog=world.ctx.fogC?new THREE.Fog(world.ctx.fogC[0],world.ctx.fogC[1],world.ctx.fogC[2]):null;
@@ -331,7 +333,8 @@ export function create(host,hooks){
     const crouch=clamp((compF+compR)*1.6,0,0.6)+(isGate?0.5:0);
     poseRider(R,i,BW,{stand:isGate?0:r.stand,dab:r.dab,lean:roll,crouch:crouch,spinF:r.spinF,spinR:r.spinR,compF:compF,compR:compR});
     const gy=Math.min(tF,tR), hAir=Math.max(0,oy-gy);
-    shadowAt(R,i*2,x,gy,z,th,2.1,0.9,clamp(1-hAir/5,0.25,1));
+    const gl=onStart?0:(MX.Course.ground(C,s,lat+0.5)-MX.Course.ground(C,s,lat-0.5));
+    shadowAt(R,i*2,x,(tF+tR)/2,z,th,2.1,0.9,clamp(1-hAir/5,0.25,1),clamp((tF-tR)/BIKE.WB,-1.2,1.2),clamp(gl,-1.2,1.2));
     shadowAt(R,i*2+1,0,-999,0,0,0,0,0);
     r.pos=r.pos||new THREE.Vector3(); r.pos.set(x,oy+1.0,z); r.th=th; r.oy=oy; r.gy=gy;
     if(!LO&&!isGate&&!r.air&&dt>0){
@@ -437,7 +440,7 @@ export function create(host,hooks){
 
   /* ---------------- the camera director: the whole lap at real speed, cut between sections as the leader rides them ---------------- */
   function leaderIdx(){ let b=-1, bd=-1e9; rs.forEach((r,i)=>{ if(!r.gone&&!r.crash&&r.D>bd){ bd=r.D; b=i; } }); return b; }
-  function setShot(s){ shot=s; shot.t=0; camS.snap=true; shot.cam=typeof s.cam==="function"?s.cam():(s.cam||null); shotLog.push(s.type+(s.why?":"+s.why:"")); if(shotLog.length>12) shotLog.shift(); }
+  function setShot(s){ shot=s; shot.t=0; camS.snap=true; if(s.why==="yellow"&&yellow) yellow.shown=true; shot.cam=typeof s.cam==="function"?s.cam():(s.cam||null); shotLog.push(s.type+(s.why?":"+s.why:"")); if(shotLog.length>12) shotLog.shift(); }
   function nextFeat(s){
     let best=null, bd=1e9; C.feats.forEach(f=>{ if(f.k!=="whoops"&&f.k!=="jump"&&f.k!=="rhythm"&&f.k!=="sand"&&f.k!=="step") return; const d=MX.Course.wrap(C,f.from-s); if(d<bd){ bd=d; best=f; } }); return best?{f:best,d:bd}:null;
   }
@@ -446,8 +449,12 @@ export function create(host,hooks){
   /* a trackside camera beside loop distance s: the side with room, off the track (inside the wall in a stadium) */
   function trackCam(s,h,distA){
     const f=MX.Course.frame(C,s,tmpO);
-    for(const side of [1,-1]) for(const dist of (distA||[11,15,19,24])){ const lat=side*(f.hw+dist), x=f.x-Math.sin(f.th)*lat, z=f.z+Math.cos(f.th)*lat; if(clear(C,x,z,1.6)){ const p=inFloor({x:x,z:z}); return new THREE.Vector3(p.x,terrainAt(p.x,p.z,f.y)+h,p.z); } }
-    const p=inFloor({x:f.x+14,z:f.z+14}); return new THREE.Vector3(p.x,terrainAt(p.x,p.z,f.y)+h,p.z);
+    /* the first spot with room (3 m from any lane: nobody rides through the lens); else the roomiest, raised to look over the riders */
+    let best=null, bd=-1e9;
+    for(const side of [1,-1]) for(const dist of (distA||[11,15,19,24])){ const lat=side*(f.hw+dist); const p=inFloor({x:f.x-Math.sin(f.th)*lat,z:f.z+Math.cos(f.th)*lat}); const cd=clearDist(C,p.x,p.z);
+      if(cd>=3) return new THREE.Vector3(p.x,terrainAt(p.x,p.z,f.y)+h,p.z);
+      if(cd>bd){ bd=cd; best=p; } }
+    return new THREE.Vector3(best.x,terrainAt(best.x,best.z,f.y)+h+clamp(3-bd,0,3)*1.2,best.z);
   }
   function featCam(f){
     const sp=(C.spots||[]).find(x=>Math.abs(x.mid-(f.from+f.to)/2)<3);
@@ -466,12 +473,15 @@ export function create(host,hooks){
   function candidates(urgent){
     const L=[], lead=leaderIdx(); if(lead<0) return L;
     const r=rs[lead], me=meSeats.filter(s=>rs[s]&&!rs[s].gone&&!rs[s].crash);
-    if(!urgent&&lapNo===1&&r.D<C.hsD&&C.hsD-r.D<75) L.push({type:"turn1",subj:lead,pri:8,min:4,max:7.5,cam:turn1Cam});
+    if(lapNo===1&&r.D<C.hsD&&C.hsD-r.D<62&&!(shot&&shot.type==="turn1")) L.push({type:"turn1",subj:lead,pri:9.2,min:4.5,max:8,cam:turn1Cam});   /* the holeshot: never missed */
     rs.forEach((k,i)=>{ if(k.crashPlan&&!k.crash&&!k.gone&&!k.onStart&&k.lapN>=k.crashPlan.lap){ const d=MX.Course.wrap(C,k.crashPlan.s-k.s); if(d>0&&d<Math.max(10,k.v*2.6)){ const out=k.crashPlan.kind==="out"; const cs=k.crashPlan.s; L.push({type:"crash",subj:i,pri:10,min:out?7:8.2,max:out?9:10.5,cam:()=>trackCam(cs-4,6.0,[6,9,12,16])}); } } });
     if(!r.onStart){ const toLine=C.L-r.s, tl=toLine/Math.max(4,r.v), over=lapPlan&&lapPlan.over&&lapPlan.n>=lapNo;
       if(tl<3.4&&(over||lapNo===lenLaps-1||lapNo%3===0)) L.push({type:"line",subj:lead,pri:over?9:lapNo===lenLaps-1?7:4,min:3.2,max:over?7:5,cam:lineCam}); }
+    /* the yellow lap: once, the first rider (in running order) about to ride through the yellow section, with the marshal in the frame */
+    if(yellow&&yellow.lap===lapNo&&!yellow.shown){ const ys=yellow.s; let yi=-1;
+      rs.map((k,i)=>i).filter(i=>!rs[i].gone&&!rs[i].crash&&!rs[i].onStart).sort((a,b)=>rs[b].D-rs[a].D).some(i=>{ const k=rs[i], d=MX.Course.wrap(C,yellow.s0-k.s); if(d>2&&d<Math.max(14,k.v*4.5)){ yi=i; return true; } return false; });
+      if(yi>=0) L.push({type:"track",subj:yi,pri:6.5,min:4.5,max:7,cam:()=>trackCam(ys-6,4.2,[9,12,15,19]),why:"yellow"}); }
     if(urgent) return L;
-    if(yellow&&yellow.lap===lapNo&&!r.onStart){ const d=MX.Course.wrap(C,yellow.s0-r.s); if(d>0&&d<r.v*3){ const ys=yellow.s; L.push({type:"track",subj:lead,pri:6,min:4,max:6.5,cam:()=>trackCam(ys-6,4.2,[9,12,15,19]),why:"yellow"}); } }
     [lead].concat(me).forEach((j,ix)=>{ const qq=rs[j]; if(!qq||qq.onStart) return; const nf=nextFeat(qq.s); if(!nf) return; const tt=nf.d/Math.max(4,qq.v);
       if(tt<3.0&&tt>0.2){ const f=nf.f, seen=featLog.slice(-2).indexOf(f.from)>=0; L.push({type:f.k==="whoops"?"whoops":f.k==="jump"?"jump":"track",subj:j,pri:(ix?4.6:5)-(seen?1.6:0)+(f.big?0.4:0),min:3.2,max:6.5,cam:()=>featCam(f),feat:f,why:f.k}); } });
     const ord=rs.filter(x=>!x.gone&&!x.crash&&!x.onStart).sort((a,b)=>b.D-a.D);
@@ -501,7 +511,7 @@ export function create(host,hooks){
     shot.t+=dt;
     if(mode!=="race") return;
     if(shot.type==="gate"&&shot.t<shot.min) return;
-    if(shot.pri<9&&shot.t>0.6){ const L=candidates(true).filter(c=>c.pri>=9&&c.pri>shot.pri); if(L.length){ setShot(L[0]); return; } }
+    if(shot.pri<9&&shot.t>0.6){ const L=candidates(true).filter(c=>c.pri>shot.pri&&(c.pri>=9||(c.pri>shot.pri+2.5&&shot.t>1.2))).sort((a,b)=>b.pri-a.pri); if(L.length){ setShot(L[0]); return; } }   /* a crash, the holeshot, the checkered flag cut in at once; the white flag or the yellow section over a filler shot */
     if(shot.t>=shot.max){ pickShot(); return; }
     if(shot.t>=shot.min){
       const r=rs[shot.subj];
@@ -555,18 +565,23 @@ export function create(host,hooks){
     if(world.ctx.skyMesh) world.ctx.skyMesh.position.copy(cam.position);
   }
   /* number tags over riders that are small on screen (always the person's and the red plate), at most 7, a constant size on screen */
-  const tagV=new THREE.Vector3();
+  const tagV=new THREE.Vector3(), tagP=new THREE.Vector3();
   function tags(){
     if(!R) return;
+    cam.updateMatrixWorld();
     const show2=[], camP=cam.position, th=Math.tan(cam.fov*PI/360)*2, px=tv()?30:24;
     rs.forEach((r,i)=>{ if((r.gone&&!r.crash)||!r.pos){ tagAt(R,i,null,0); return; } show2.push([camP.distanceTo(r.pos),i]); });
-    show2.sort((a,b)=>a[0]-b[0]);
     const max=LO?5:7, mine=new Set(meSeats.concat(redSeat>=0?[redSeat]:[]));
-    let k=0;
+    show2.sort((a,b)=>(mine.has(b[1])-mine.has(a[1]))||a[0]-b[0]);   /* the person's and the red plate first, then the nearest */
+    let k=0; const placed=[], pw=px*1.6*0.9, ph=px*0.8;
     show2.forEach(([d,i])=>{
       const r=rs[i], view=d*th, riderPx=2.0/view*H, small=riderPx<95;
       const vis=(k<max||mine.has(i))&&small&&d>6&&!(mode==="gate"&&!mine.has(i));
-      if(vis){ const size=view*(px*(mine.has(i)?1.12:1))/H; tagV.copy(r.pos); tagV.y+=0.9+size*0.55; tagAt(R,i,tagV,size*1.6); k++; } else tagAt(R,i,null,0);
+      if(vis){ const size=view*(px*(mine.has(i)?1.12:1))/H; tagV.copy(r.pos); tagV.y+=0.9+size*0.55;
+        /* never a pile of tags: one that would overlap a tag already shown is left out */
+        tagP.copy(tagV).project(cam); const sx=(tagP.x*0.5+0.5)*W, sy=(0.5-tagP.y*0.5)*H;
+        if(tagP.z>1||placed.some(p=>Math.abs(p[0]-sx)<pw&&Math.abs(p[1]-sy)<ph)){ tagAt(R,i,null,0); return; }
+        placed.push([sx,sy]); tagAt(R,i,tagV,size*1.6); k++; } else tagAt(R,i,null,0);
     });
     R.M.tag.instanceMatrix.needsUpdate=true;
   }
@@ -593,6 +608,10 @@ export function create(host,hooks){
     renderOnce(); return {type:type,T:+T.toFixed(1),subj:j};
   };
   V.release=function(){ if(shot){ shot.pri=1; shot.min=0.5; shot.max=1; } };
+  /* test hook: where seat k is on screen (NDC -1..1; in = inside the frame) and how far from the camera; the marshal too */
+  V.proj=function(k){ const i=rs.findIndex(r=>r.seat===k); if(i<0||!rs[i].pos) return null; cam.updateMatrixWorld(); const d=cam.position.distanceTo(rs[i].pos), p=rs[i].pos.clone().project(cam);
+    let m=null; if(marshal&&marshal.grp.visible){ const q=marshal.grp.position.clone(); q.y+=1.4; const mp=q.project(cam); m={x:+mp.x.toFixed(2),y:+mp.y.toFixed(2),in:Math.abs(mp.x)<1&&Math.abs(mp.y)<1&&mp.z<1}; }
+    return {x:+p.x.toFixed(2),y:+p.y.toFixed(2),in:Math.abs(p.x)<1&&Math.abs(p.y)<1&&p.z<1,d:+d.toFixed(1),marshal:m}; };
   V.renderNow=renderOnce;
   V.fixPR=function(p){ prCap=p; pr=p; renderer.setPixelRatio(p); renderer.setSize(W,H,false); V.prFixed=true; };
   V.dispose=function(){ V.stop(); if(world) disposeTree(world.root); if(R) disposeTree(R.grp); renderer.dispose(); cv.remove(); };

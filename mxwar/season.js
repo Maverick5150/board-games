@@ -104,7 +104,7 @@ function newSeason(season,index,opts,humans,seed){
     if(!r.title&&!o.nonTitle) return;
     if(r.format) need(r.format);
     G.cal.push({n:r.n,date:r.date,city:r.city,state:r.state,country:r.country,venue:r.venue,name:r.name,stage:r.stage||null,title:!!r.title,tc:!!r.tc,mult:r.mult||1,motos:r.motos||null,format:r.format||null,winner:r.winner||null,
-      entry:(r.entry||[]).map(function(k){ return "r"+k; })});
+      timing:compactTiming(r.timing),entry:(r.entry||[]).map(function(k){ return "r"+k; })});
   });
   if(!G.cal.length) throw new Error("No rounds to race.");
   /* SMX: the 20 seeds start from the seed points (seed 1 = 25 ... seed 20 = 1); the human riders take the last seeds (20, 19 ...) and the
@@ -142,12 +142,22 @@ function calFormat(G,cal){ return Round.formatFor({formats:G.formats},G.fmt,cal)
 /* the round's lap time: its own track (course.js + layouts.js when they are loaded: the game, the 3D view, the tests), else the series' usual
    lap; cached by layout */
 var lapCache={};
+/* the round's researched timing, kept small in the save: the laps run and the average lap of each race */
+function compactTiming(t){
+  if(!t||typeof t!=="object") return null;
+  var one=function(x){ return x&&(+x.laps>0||+x.avgLap>0)?{laps:+x.laps||null,avgLap:+x.avgLap||null}:null; }, many=function(a){ return Array.isArray(a)?a.map(one).filter(Boolean):[]; };
+  var o={heats:many(t.heats),semis:many(t.semis),lcq:one(t.lcq),main:one(t.main),motos:many(t.motos)};
+  return o.heats.length||o.semis.length||o.lcq||o.main||o.motos.length?o:null;
+}
 function lapTime(G,cal){
+  /* the round's researched average lap (the Main's, or the first moto's), where the timing research has it */
+  var T=cal&&cal.timing, tr=T&&(G.series==="mx"?(T.motos&&T.motos[0]):T.main), al=tr&&+tr.avgLap;
+  if(al>=35&&al<=200) return Math.round(al*10)/10;
   var C0=MX.Course, L0=MX.Layouts;
   if(C0&&L0){ try{ var pk=L0.pick(G.series,G.year,cal.n||(G.ri+1),cal), id=pk.layout.id; if(lapCache[id]==null) lapCache[id]=Math.round(C0.build(pk.layout).Tlap*10)/10; return lapCache[id]; }catch(e){} }
   return Round.nominalLap(G.series);
 }
-function roundCtx(G,cal){ return {series:G.series,year:G.year,lapT:lapTime(G,cal)}; }
+function roundCtx(G,cal){ return {series:G.series,year:G.year,lapT:lapTime(G,cal),timing:(cal&&cal.timing)||null}; }
 function startRound(G){
   var cal=G.cal[G.ri], F=calFormat(G,cal), full=Round.fieldSize(F), H=G.humans.length;
   /* candidates: this round's real riders, then the roster (most starts, then the real final position), then privateers */

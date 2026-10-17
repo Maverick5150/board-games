@@ -55,6 +55,10 @@ function nominalLap(series){ return series==="mx"?118:series==="smx"?58:54; }
 function realLens(o,F,ctx){
   var half=o&&(o.length==="half"||o.length==="short"), out={}, lapT=(ctx&&ctx.lapT)||nominalLap(ctx&&ctx.series);   /* v2's Short = half; Standard / Long = real */
   ["heat","semi","lcq","qual","main","moto"].forEach(function(k){ out[k]=lapsFor(spec(ctx&&ctx.series,ctx&&ctx.year,k,F),lapT,half,k===F.finals.kind?(F.finals.lenF&&!F.isTC?F.finals.lenF:1):1); });
+  /* the round's researched timing (TIMING-FORMAT.md: rounds[i].timing), where it exists: the laps that race really ran */
+  var T=ctx&&ctx.timing;
+  if(T){ var first=function(a){ return a&&a.length?a[0]:null; }, tl={heat:first(T.heats),semi:first(T.semis),lcq:T.lcq,main:T.main,moto:first(T.motos)};
+    for(var k2 in tl){ var n=tl[k2]&&+tl[k2].laps; if(n>=2&&n<=80) out[k2]=half?Math.max(2,Math.ceil(n/2)):Math.floor(n); } }
   if(o&&o.len) for(var k in o.len) if(out[k]!=null&&+o.len[k]>=1) out[k]=Math.min(2000,Math.floor(+o.len[k]));
   return out;
 }

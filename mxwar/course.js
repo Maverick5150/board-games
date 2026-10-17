@@ -312,7 +312,7 @@ function startPath(C,Lo){
     for(var s2=g0-6;s2<=g0+Lo.startLen+6;s2+=C.ds){ var i2=Math.round(wrap(C,s2)/C.ds)%C.N; C.hw[i2]=Math.max(C.hw[i2],lerp((S.gateW||24)/2,C.hw[i2],sstep(g0+8,g0+Lo.startLen,s2))); }
   }
   C.S=St; C.join=S.join||0; C.gateW=S.gateW||24; C.gateAt=S.gateAt!=null?S.gateAt:2;   /* the gate stands gateAt metres along the start */
-  C.startLen=St.n?0:(Lo.startLen||0); C.hsD=St.n?(St.n-1)*C.ds:Math.max(40,C.startLen||80);   /* the run to turn 1 (the holeshot) ends here */
+  C.startLen=St.n?0:(Lo.startLen||0); C.hsD=St.n?(St.n-1)*C.ds+(Lo.startHs||0):Math.max(40,C.startLen||80);   /* the run to turn 1 (the holeshot) ends here */
   var join=C.join, m=St.n?St.n-1:0;
   C.Ls=m*C.ds; C.m1=m;
   /* lap 1 = the start path, then the loop from join to the finish line; with the gate ON the loop just before the line, the first crossing

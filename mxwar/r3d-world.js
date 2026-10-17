@@ -103,14 +103,17 @@ function trackMesh(C,look,q,matTrack){
   /* lateral stations: the shoulders go down to the surroundings; outdoors a grass apron blends into the terrain */
   const fr=[-1.85,-1.35,-1,-0.72,-0.42,-0.15,0,0.15,0.42,0.72,1,1.35,1.85];
   const nl=fr.length, pos=[], col=[], uv=[], idx=[];
-  const st=C.ds*(q.lo?2:1), segs=Math.floor(C.L/st), o={};
+  const st=C.ds*(q.lo?2:1), segs=Math.floor(C.L/st), o={}, o2={};
   for(let k=0;k<=segs;k++){
     const s=k*st, f=Co.frame(C,s,o), hw=f.hw, nx=-Math.sin(f.th), nz=Math.cos(f.th), sand=C.sand[Math.round(s/C.ds)%C.N]||0;
     const rough=C.rough[Math.round(s/C.ds)%C.N]||0;
-    const Rk=1/Math.max(1e-4,Math.abs(f.k)), inSide=f.k>0?1:-1;   /* the inside of a right turn is the right (+) */
+    /* the tightest radius near here (the curvature is sampled, so look a little either side) */
+    const kk=Math.max(Math.abs(f.k),Math.abs(Co.frame(C,s-1.5,o2).k),Math.abs(Co.frame(C,s+1.5,o2).k)), Rk=1/Math.max(1e-4,kk), inSide=f.k>0?1:-1;   /* the inside of a right turn is the right (+) */
+    const lim=0.8*Rk, knee=0.55*lim;
     for(let j=0;j<nl;j++){
       const u=fr[j], a=Math.abs(u); let lat=a<=1?u*hw:Math.sign(u)*(hw+(a-1)*2.6);
-      if(Math.sign(lat)===inSide&&Math.abs(lat)>Rk-0.6) lat=inSide*Math.max(0,Rk-0.6-(1-Math.min(1,a))*0.01);
+      /* inside a tight turn the stations are squeezed smoothly (never past 80% of the radius, never crossing): no folded triangles */
+      if(Math.sign(lat)===inSide&&Math.abs(lat)>knee){ const xx=Math.abs(lat); lat=inSide*(knee+(lim-knee)*Math.tanh((xx-knee)/Math.max(0.01,lim-knee))); }
       let y;
       if(a<=1) y=Co.ground(C,s,lat);
       else { const edge=Co.ground(C,s,Math.sign(u)*hw); const t=(a-1)/0.85; y=edge+(f.y-0.06-edge)*sstep(0,1,t); }
@@ -131,7 +134,8 @@ function trackMesh(C,look,q,matTrack){
       uv.push(lat/5,s/5);
     }
   }
-  for(let k=0;k<segs;k++) for(let j=0;j<nl-1;j++){ const a=k*nl+j, b=a+1, c2=a+nl, d=c2+1; idx.push(a,c2,b,b,c2,d); }
+  /* wound so the faces look UP (lat runs to the right of the direction of travel): from above they are front faces, lit by the sun */
+  for(let k=0;k<segs;k++) for(let j=0;j<nl-1;j++){ const a=k*nl+j, b=a+1, c2=a+nl, d=c2+1; idx.push(a,b,c2,b,d,c2); }
   /* close the loop: the last ring is the first */
   const g=new THREE.BufferGeometry(); g.setAttribute("position",new THREE.Float32BufferAttribute(pos,3)); g.setAttribute("color",new THREE.Float32BufferAttribute(col,3));
   g.setAttribute("uv",new THREE.Float32BufferAttribute(uv,2)); g.setIndex(idx); g.computeVertexNormals();
@@ -140,10 +144,14 @@ function trackMesh(C,look,q,matTrack){
   if(C.S&&C.S.n){
     const P2=[], C2=[], U2=[], I2=[], S2=C.S, fr2=[-1.5,-1,-0.6,-0.2,0,0.2,0.6,1,1.5], nl2=fr2.length, st2=Math.max(1,Math.round(st/S2.ds));
     let rows=0;
+    /* where the start path lies on the loop (where it merges, or where a stadium start crosses other lanes) it tucks just under the loop's
+       dirt, so the two surfaces never fight for the same pixels */
+    const lst=Math.max(1,Math.round(1/C.ds)), onLoop=(x,z)=>{ for(let i=0;i<C.N;i+=lst){ const dx=C.x[i]-x, dz=C.z[i]-z, r=C.hw[i]+0.3; if(dx*dx+dz*dz<r*r) return true; } return false; };
     for(let i=0;i<S2.n;i+=st2){ rows++; const th=S2.th[i], nx=-Math.sin(th), nz=Math.cos(th), hw=S2.hw[i], y0=S2.y[i]||0;
-      for(let j=0;j<nl2;j++){ const u=fr2[j], a=Math.abs(u), lat=u*hw+(a>1?(a-1)*3*Math.sign(u):0); const y=a<=1?y0+0.02+(vnoise(i*0.4,lat)-0.5)*0.04:y0-0.06;
-        P2.push(S2.x[i]+nx*lat,y,S2.z[i]+nz*lat); const c=a>1?(outdoor?grassEdge:mixc(base,dark,0.25)):mixc(base,dark,Math.exp(-u*u*3)*0.25); C2.push(c[0],c[1],c[2]); U2.push(lat/5,i*S2.ds/5); } }
-    for(let k=0;k<rows-1;k++) for(let j=0;j<nl2-1;j++){ const a=k*nl2+j, b=a+1, c2=a+nl2, d=c2+1; I2.push(a,c2,b,b,c2,d); }
+      for(let j=0;j<nl2;j++){ const u=fr2[j], a=Math.abs(u), lat=u*hw+(a>1?(a-1)*3*Math.sign(u):0); let y=a<=1?y0+0.02+(vnoise(i*0.4,lat)-0.5)*0.04:y0-0.06;
+        const px=S2.x[i]+nx*lat, pz=S2.z[i]+nz*lat; if(onLoop(px,pz)) y=Math.min(y,y0-0.14);
+        P2.push(px,y,pz); const c=a>1?(outdoor?grassEdge:mixc(base,dark,0.25)):mixc(base,dark,Math.exp(-u*u*3)*0.25); C2.push(c[0],c[1],c[2]); U2.push(lat/5,i*S2.ds/5); } }
+    for(let k=0;k<rows-1;k++) for(let j=0;j<nl2-1;j++){ const a=k*nl2+j, b=a+1, c2=a+nl2, d=c2+1; I2.push(a,b,c2,b,d,c2); }
     const g2=new THREE.BufferGeometry(); g2.setAttribute("position",new THREE.Float32BufferAttribute(P2,3)); g2.setAttribute("color",new THREE.Float32BufferAttribute(C2,3)); g2.setAttribute("uv",new THREE.Float32BufferAttribute(U2,2)); g2.setIndex(I2); g2.computeVertexNormals();
     parts.push(g2);
   }
@@ -186,6 +194,14 @@ function clear(C,x,z,margin){
   return true;
 }
 
+/* how far (x, z) is from the nearest edge of the track (negative = on it) */
+function clearDist(C,x,z){
+  const st=Math.max(1,Math.round(1/C.ds)); let best=1e9;
+  for(let i=0;i<C.N;i+=st){ const dx=C.x[i]-x, dz=C.z[i]-z, d=Math.sqrt(dx*dx+dz*dz)-C.hw[i]; if(d<best) best=d; }
+  if(C.S&&C.S.n) for(let i=0;i<C.S.n;i+=st){ const dx=C.S.x[i]-x, dz=C.S.z[i]-z, d=Math.sqrt(dx*dx+dz*dz)-C.S.hw[i]; if(d<best) best=d; }
+  return best;
+}
+
 /* ---------------- the starting gate: a long beam, one pad per rider slot, the concrete pad behind it ---------------- */
 function gateBuild(C,look,n){
   const Co=CO(), grp=new THREE.Group(), o={};
@@ -196,8 +212,8 @@ function gateBuild(C,look,n){
   const pads=new THREE.InstancedMesh(padG,new THREE.MeshLambertMaterial({color:0xb9bcc4}),slots);
   pads.frustumCulled=false;
   /* the concrete pad behind the gate */
-  const conc=new THREE.Mesh(new THREE.PlaneGeometry(6,gw+1.2),new THREE.MeshLambertMaterial({color:0x8f8e8a}));
-  conc.rotation.x=-Math.PI/2; conc.position.set(-3.1,0.025,0); grp.add(conc);
+  const conc=new THREE.Mesh(new THREE.PlaneGeometry(4.2,gw+1.0),new THREE.MeshLambertMaterial({color:0x5f5c57}));
+  conc.rotation.x=-Math.PI/2; conc.position.set(-2.2,0.025,0); grp.add(conc);
   grp.add(pads);
   grp.position.set(f.x,(f.y||0)+0.01,f.z); grp.rotation.y=-th;
   const state={grp:grp,pads:pads,slots:slots,pad:pad,gw:gw,th:th,x:f.x,z:f.z,y:f.y||0,drop:0,dropT:-1};
@@ -312,7 +328,7 @@ function stadium(C,look,q,root,ctx){
   screen.position.set(x0-20,30,cz); screen.rotation.y=Math.PI/2; root.add(screen);
   const frame=new THREE.Mesh(new THREE.BoxGeometry(1,12.4,23.4),new THREE.MeshLambertMaterial({color:0x15151a})); frame.position.set(x0-20.6,30,cz); root.add(frame);
   ctx.screen=function(lap,len,num){ sx.fillStyle="#0b0e1a"; sx.fillRect(0,0,256,128); sx.fillStyle="#f0d48a"; sx.font="800 30px Manrope, system-ui, sans-serif"; sx.textAlign="center";
-    sx.fillText(len?("LAP "+lap+" / "+len):"",128,52); sx.fillStyle="#ffffff"; sx.font="800 44px Manrope, system-ui, sans-serif"; sx.fillText(num!=null?("#"+num):"",128,104); st.needsUpdate=true; };
+    sx.fillText(len?(lap>0?("LAP "+lap+" / "+len):(len+" LAPS")):"",128,52); sx.fillStyle="#ffffff"; sx.font="800 44px Manrope, system-ui, sans-serif"; sx.fillText(num!=null?("#"+num):"",128,104); st.needsUpdate=true; };
   ctx.screen(0,0,null);
   /* the night sky (open stadiums) */
   ctx.sky(0x05060c,0x141a30,0x24233a);
@@ -323,7 +339,8 @@ function stadium(C,look,q,root,ctx){
 /* ---------------- outdoors: terrain carved round the track, trees, spectators, the paddock, far hills, a day sky ---------------- */
 function terrainHeightFn(C,look){
   /* a smooth elevation field from the track's own heights (so the hills are where the track climbs), plus noise hills away from it */
-  const pts=[], st=Math.max(1,Math.round(12/C.ds));
+  /* fine samples (every ~3 m) for the carve along the track, every fourth one for the smooth elevation field */
+  const pts=[], st=Math.max(1,Math.round(3/C.ds));
   for(let i=0;i<C.N;i+=st) pts.push([C.x[i],C.z[i],C.y[i],C.hw[i]]);
   if(C.S&&C.S.n) for(let i=0;i<C.S.n;i+=st) pts.push([C.S.x[i],C.S.z[i],C.S.y[i]||0,C.S.hw[i]]);
   const amp=look.around==="beach-speedway"?0.4:look.around==="farmland"?2.5:7;
@@ -333,7 +350,7 @@ function terrainHeightFn(C,look){
     for(let r=0;r<4&&bi<0||r<2;r++) for(let a=-r;a<=r;a++) for(let b=-r;b<=r;b++){ if(Math.max(Math.abs(a),Math.abs(b))!==r) continue; const L=H[(cx+a)+","+(cz+b)]; if(!L) continue; L.forEach(i=>{ const p=pts[i], d=(p[0]-x)*(p[0]-x)+(p[1]-z)*(p[1]-z); if(d<best){ best=d; bi=i; } }); }
     return bi<0?null:{d:Math.sqrt(best),p:pts[bi]}; }
   return function(x,z){
-    let sw=0, sy=0; for(let i=0;i<pts.length;i+=3){ const p=pts[i], d2=(p[0]-x)*(p[0]-x)+(p[1]-z)*(p[1]-z), w=1/(d2+2500); sw+=w; sy+=w*p[2]; }
+    let sw=0, sy=0; for(let i=0;i<pts.length;i+=12){ const p=pts[i], d2=(p[0]-x)*(p[0]-x)+(p[1]-z)*(p[1]-z), w=1/(d2+2500); sw+=w; sy+=w*p[2]; }
     let y=sy/sw+(fbm(x/140,z/140,4)-0.45)*amp*2.2;
     const n=nearest(x,z);
     if(n){ const t=sstep(n.p[3]+2,n.p[3]+46,n.d); y=(n.p[2]-0.18)*(1-t)+y*t; }
@@ -484,4 +501,4 @@ export function buildWorld(C,look,q){
   const fin=finishBuild(C,look); root.add(fin.grp);
   return {root,ctx,track,fin,info,matTrack};
 }
-export {gateBuild,clear,lin,mixc,fbm,vnoise,glowTex,canvas,tex,rngf};
+export {gateBuild,clear,clearDist,lin,mixc,fbm,vnoise,glowTex,canvas,tex,rngf};
