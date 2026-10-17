@@ -1,0 +1,257 @@
+/* MOTOCROSS WAR in Party Mode: the phone side (firestick/games/README.md; the TV side is games/mxwar.js).
+   Each phone is a rider. The sign-up: a team (the makes that season raced) and a number free that season (the taken numbers are listed:
+   the season's real riders keep theirs, and two phones never share one; empty = the TV picks a free one). The race: this rider's place,
+   cards held and the lap, the Auto switch (the TV flips for you every lap), a big Flip each lap (it turns as the leader starts the lap)
+   and in a war ("3 down, the 4th decides"), the card this rider turned, the war (the 3 down + the 4th up), the crash and the yellow flag,
+   the front of the running order with this rider's own place. Between races: the result, the podium, the season place and points.
+   The cards are mxwar/art.js's own faces. Text >= 12 px, targets >= 44 px. */
+(function () {
+  "use strict";
+  var P = window.PartyGames; if (!P) return;
+  var ID = "mxwar", MXA = window.MXWar && window.MXWar.Art;
+  var sentStep = "", autoLocal = null, autoAt = 0, su = { key: "", num: "", bike: "" }, LKEY = "bg_mxwar_party";
+  function css() {
+    if (document.getElementById("mxph-css")) return;
+    var st = document.createElement("style"); st.id = "mxph-css";
+    var Q = ".mxph ";
+    st.textContent = [
+      ".mxph{width:100%;max-width:26rem;margin:0 auto;display:grid;gap:.7rem;text-align:center}",
+      Q + ".mx-mk{display:inline-flex;align-items:center;flex:none;padding:.1rem .45rem;border-radius:var(--r-xs);font:var(--fw-caps) var(--fs-micro)/1.25 var(--font-ui);color:var(--mk-ink,#fff);background:var(--mk,#3a3a44);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18);white-space:nowrap}",
+      Q + ".mx-pl{display:inline-grid;place-items:center;flex:none;min-width:2.6em;padding:.1rem .3rem .1rem .55em;border-radius:var(--r-xs);font:800 var(--fs-sm)/1.1 var(--font-ui);font-variant-numeric:tabular-nums;color:#121216;background:#f4f1e8;box-shadow:inset .3em 0 0 var(--mk,#3a3a44),inset 0 0 0 1px rgba(0,0,0,.4)}",
+      Q + ".mx-pl.is-red{color:#fff;background:#c8101c;box-shadow:inset .3em 0 0 var(--mk,#3a3a44),inset 0 0 0 1px rgba(255,255,255,.35)}",
+      Q + ".mx-card{width:var(--cw,3.6rem);height:calc(var(--cw,3.6rem) * 1.4);perspective:40rem;flex:none}",
+      Q + ".mx-ci{position:relative;width:100%;height:100%;transform-style:preserve-3d}",
+      Q + ".mx-cf," + Q + ".mx-cb{position:absolute;inset:0;border-radius:calc(var(--cw,3.6rem) * .1);backface-visibility:hidden;-webkit-backface-visibility:hidden;box-shadow:0 .25rem .6rem rgba(0,0,0,.5)}",
+      Q + ".mx-cf{background:linear-gradient(180deg,#fffdf7,#ece2cb);color:#1d1a24}",
+      Q + ".mx-cf.is-red{color:#b3202a}",
+      Q + ".mx-card:not(.is-up) .mx-cf{transform:rotateY(180deg)}",
+      Q + ".mx-card.is-up .mx-cb{transform:rotateY(-180deg)}",
+      Q + ".mx-cb{background:repeating-conic-gradient(#1d1b22 0 25%,#34313b 0 50%) 0 0/calc(var(--cw,3.6rem) * .22) calc(var(--cw,3.6rem) * .22);box-shadow:inset 0 0 0 calc(var(--cw,3.6rem) * .05) #2a2730,inset 0 0 0 calc(var(--cw,3.6rem) * .065) #c99f5e}",
+      Q + ".mx-ck{position:absolute;left:calc(var(--cw,3.6rem) * .07);top:calc(var(--cw,3.6rem) * .05);display:grid;justify-items:center;line-height:1}",
+      Q + ".mx-ck.is-b{left:auto;top:auto;right:calc(var(--cw,3.6rem) * .07);bottom:calc(var(--cw,3.6rem) * .05);transform:rotate(180deg)}",
+      Q + ".mx-ck b{font:800 max(var(--fs-micro), calc(var(--cw,3.6rem) * .26))/1 var(--font-ui)}",
+      Q + ".mx-ck svg{width:max(.7rem, calc(var(--cw,3.6rem) * .17));height:max(.7rem, calc(var(--cw,3.6rem) * .17))}",
+      Q + ".mx-cs{position:absolute;left:50%;top:50%;width:calc(var(--cw,3.6rem) * .48);height:calc(var(--cw,3.6rem) * .48);transform:translate(-50%,-50%)}",
+      Q + ".mx-cf.is-jk .mx-cs{color:#c99f5e}",
+      Q + ".mx-card.is-win .mx-cf{box-shadow:0 0 0 3px #f0d48a,0 0 0 5px #0b0a12}",
+      Q + ".mx-tw__c{display:inline-flex;align-items:center;gap:.1rem;padding:.1rem .3rem;border-radius:.3rem;font:800 var(--fs-micro)/1 var(--font-ui);color:#1d1a24;background:#f3ead6}",
+      Q + ".mx-tw__c.is-red{color:#b3202a}",
+      Q + ".mx-tw__c svg{width:.8em;height:.8em}",
+      Q + ".mxph-who{display:flex;align-items:center;gap:.65rem;margin:0;text-align:left}",
+      Q + ".mxph-who .mx-pl{font-size:var(--fs-xl);min-width:2.4em;padding:.25rem .4rem .25rem .6em}",
+      Q + ".mxph-who .mxph-tok{flex:none;display:grid;place-items:center;width:2.75rem;height:2.75rem;border-radius:50%;background:var(--seat,#e7ca90);color:#0b0a12;font:var(--fw-caps) var(--fs-md)/1 var(--font-ui)}",
+      Q + ".mxph-who.is-turn .mx-pl," + Q + ".mxph-who.is-turn .mxph-tok{box-shadow:0 0 0 2px var(--ink-1),0 0 0 4px var(--seat,#e7ca90),0 0 0 6px #fff3d1}",
+      Q + ".mxph-who h1{margin:0;font:400 var(--fs-2xl)/1.1 var(--font-display);color:var(--text-1)}",
+      Q + ".mxph-who p{margin:.15rem 0 0;font:var(--fw-body) var(--fs-sm)/1.35 var(--font-ui);color:var(--text-2)}",
+      Q + ".mxph-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem}",
+      Q + ".mxph-stat{display:grid;gap:.15rem;padding:.55rem .4rem;border-radius:var(--r-md);background:var(--ink-2);box-shadow:var(--well-edge)}",
+      Q + ".mxph-stat b{font:400 var(--fs-2xl)/1 var(--font-display);color:var(--gold-100);font-variant-numeric:tabular-nums}",
+      Q + ".mxph-stat span{font:var(--fw-caps) var(--fs-micro)/1.2 var(--font-ui);letter-spacing:.06em;text-transform:uppercase;color:var(--text-2)}",
+      Q + ".mxph-go{flex-direction:column;gap:.15rem;min-height:5.5rem !important;font-size:var(--fs-2xl) !important}",
+      Q + ".mxph-go small{display:block;margin-top:.15rem;font:var(--fw-ui) var(--fs-sm)/1.2 var(--font-ui);opacity:.92}",
+      Q + ".mxph-alt{min-height:3rem !important}",
+      Q + ".mxph-auto{display:flex;align-items:center;justify-content:space-between;gap:.75rem;width:100%;min-height:3rem;padding:.5rem .85rem;border:0;border-radius:var(--r-md);background:var(--ink-2);box-shadow:inset 0 0 0 1px var(--line-1);color:var(--text-1);font:var(--fw-ui-strong) var(--fs-md)/1.2 var(--font-ui);text-align:left;cursor:pointer}",
+      Q + ".mxph-auto small{display:block;font:var(--fw-ui) var(--fs-xs)/1.3 var(--font-ui);color:var(--text-2)}",
+      Q + ".mxph-auto[aria-checked=true]{box-shadow:inset 0 0 0 2px var(--gold-300)}",
+      Q + ".mxph-auto:focus-visible{outline:none;box-shadow:var(--focus-ring)}",
+      Q + ".mxph-box{display:flex;align-items:center;justify-content:center;gap:.85rem;min-height:5.5rem;margin:0;padding:.75rem 1rem;border-radius:var(--r-lg);background:var(--ink-2);box-shadow:var(--well-edge);font:var(--fw-ui-strong) var(--fs-md)/1.35 var(--font-ui);color:var(--text-1);text-align:left}",
+      Q + ".mxph-box.is-war{background:linear-gradient(180deg,#4a1216,#22080a);box-shadow:inset 0 0 0 1.5px #ff9d8a}",
+      Q + ".mxph-box.is-yellow{background:linear-gradient(180deg,#4f3f06,#231b02);box-shadow:inset 0 0 0 1.5px #ffd21f}",
+      Q + ".mxph-pile{position:relative;flex:none;width:calc(var(--cw) * 1.7);height:calc(var(--cw) * 1.4);--cw:3rem}",
+      Q + ".mxph-pile > span{position:absolute;top:0}",
+      Q + ".mxph-pile .mx-card{--cw:3rem}",
+      Q + ".mxph-lbl{margin:0;font:var(--fw-caps) var(--fs-micro)/1.2 var(--font-ui);letter-spacing:.08em;text-transform:uppercase;color:var(--gold-200)}",
+      Q + ".mxph-last{margin:0;font:var(--fw-ui) var(--fs-sm)/1.4 var(--font-ui);color:var(--text-2)}",
+      Q + ".mxph-foot{margin:0;font:var(--fw-ui) var(--fs-xs)/1.35 var(--font-ui);color:var(--text-2)}",
+      Q + ".mxph-run{list-style:none;margin:0;padding:.4rem;display:grid;gap:.25rem;border-radius:var(--r-md);background:var(--ink-2);box-shadow:var(--well-edge)}",
+      Q + ".mxph-run li{display:flex;align-items:center;gap:.5rem;min-height:2rem;padding:0 .5rem;border-radius:.5rem;background:var(--ink-3);font:var(--fw-ui-strong) var(--fs-sm)/1.2 var(--font-ui);color:var(--text-1);text-align:left}",
+      Q + ".mxph-run li.is-me{box-shadow:inset 0 0 0 2px var(--gold-300)}",
+      Q + ".mxph-run li.is-gap{min-height:.8rem;background:none;justify-content:center;color:var(--text-2)}",
+      Q + ".mxph-run .mxph-p{flex:none;min-width:1.6rem;font:400 var(--fs-lg)/1 var(--font-display);color:var(--gold-100);text-align:center}",
+      Q + ".mxph-run .mxph-n{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+      Q + ".mxph-run .mxph-k{flex:none;color:var(--gold-100);font-variant-numeric:tabular-nums}",
+      Q + ".mxph-teams{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem}",
+      Q + ".mxph-team{display:flex;align-items:center;justify-content:center;gap:.4rem;min-height:3rem;padding:.4rem .5rem;border:0;border-radius:var(--r-md);background:var(--ink-2);box-shadow:inset 0 0 0 1px var(--line-1);color:var(--text-1);font:var(--fw-ui-strong) var(--fs-sm)/1.2 var(--font-ui);cursor:pointer}",
+      Q + ".mxph-team[aria-pressed=true]{box-shadow:inset 0 0 0 2.5px var(--gold-300);background:var(--ink-3)}",
+      Q + ".mxph-team i{display:block;width:1.1rem;height:1.1rem;border-radius:.25rem;background:var(--mk,#888);box-shadow:inset 0 0 0 1px rgba(255,255,255,.3)}",
+      Q + ".mxph-team:focus-visible{outline:none;box-shadow:var(--focus-ring)}",
+      Q + ".mxph-num{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.5rem;align-items:center}",
+      Q + ".mxph-num input{min-height:3rem;font:800 var(--fs-xl)/1 var(--font-ui);text-align:center;letter-spacing:.05em}",
+      Q + ".mxph-num input[aria-invalid=true]{box-shadow:inset 0 0 0 2px #ff9d8a}",
+      Q + ".mxph-nst{margin:0;min-height:1.2em;font:var(--fw-ui) var(--fs-sm)/1.35 var(--font-ui);color:var(--text-2)}",
+      Q + ".mxph-nst.is-bad{color:#ffb4a6}",
+      Q + ".mxph-nst.is-ok{color:#9fe0a8}",
+      Q + ".mxph-free{display:flex;flex-wrap:wrap;justify-content:center;gap:.4rem}",
+      Q + ".mxph-free:empty{display:none}",
+      Q + ".mxph-free button{min-width:3.2rem;min-height:2.75rem !important}",
+      Q + ".mxph-taken{margin:0;text-align:left;border-radius:var(--r-md);background:var(--ink-2);box-shadow:var(--well-edge)}",
+      Q + ".mxph-taken summary{min-height:2.75rem;display:flex;align-items:center;padding:0 .85rem;font:var(--fw-ui-strong) var(--fs-sm)/1.2 var(--font-ui);color:var(--text-1);cursor:pointer}",
+      Q + ".mxph-taken ul{list-style:none;margin:0;padding:.2rem .7rem .7rem;display:flex;flex-wrap:wrap;gap:.3rem .5rem;max-height:12rem;overflow:auto}",
+      Q + ".mxph-taken li{font:var(--fw-ui) var(--fs-xs)/1.35 var(--font-ui);color:var(--text-2)}",
+      Q + ".mxph-taken li b{color:var(--text-1)}",
+      Q + ".mxph-rs{list-style:none;margin:0;padding:0;display:grid;gap:.3rem;text-align:left}",
+      Q + ".mxph-rs li{display:flex;align-items:center;gap:.5rem;min-height:2rem;padding:.2rem .5rem;border-radius:.5rem;background:var(--ink-2);font:var(--fw-ui) var(--fs-sm)/1.2 var(--font-ui);color:var(--text-1)}",
+      Q + ".mxph-rs li i{flex:none;width:.85rem;height:.85rem;border-radius:50%;background:var(--seat,#888)}",
+      Q + ".mxph-rs li span{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+      Q + ".mxph-rs li em{flex:none;font-style:normal;color:var(--text-2)}"
+    ].join("\n");
+    document.head.appendChild(st);
+  }
+  function ord(n) { var t = n % 100; return n + ((t >= 11 && t <= 13) ? "th" : (["th", "st", "nd", "rd"][n % 10] || "th")); }
+  function plural(n, w) { return n + " " + w + (n === 1 ? "" : "s"); }
+  function mkStyle(mk) { return mk ? "--mk:" + mk[0] + ";--mk-ink:" + mk[1] : ""; }
+  function mkOf(b) { return MXA && MXA.mk ? MXA.mk(b) : ["#3a3a44", "#fff"]; }
+  function card(id, cls) { return '<div class="mx-card' + (id != null ? " is-up" : "") + (cls ? " " + cls : "") + '">' + (MXA && MXA.cardInner ? MXA.cardInner(id) : "") + "</div>"; }
+  function chip(id) { return id == null || !MXA ? "" : '<span class="mx-tw__c' + (MXA.chipRed(id) ? " is-red" : "") + '">' + MXA.chip(id) + "</span>"; }
+  function plate(p, mk, red) { return p == null ? "" : '<span class="mx-pl' + (red ? " is-red" : "") + '" style="' + mkStyle(mk) + '">' + p + "</span>"; }
+  function cardName(id) { if (id == null || !MXA) return ""; var c = MXA.info(id), R = { 11: "Jack", 12: "Queen", 13: "King", 14: "Ace", 15: "Joker" }; return c.r === 15 ? "a Joker" : (c.r === 14 || c.r === 8 ? "an " : "a ") + (R[c.r] || c.r) + ({ S: " of Spades", H: " of Hearts", D: " of Diamonds", C: " of Clubs", J: "" }[c.s] || ""); }
+  function remember() { try { return JSON.parse(localStorage.getItem(LKEY) || "null") || {}; } catch (e) { return {}; } }
+  function keepPick(num, bike) { try { localStorage.setItem(LKEY, JSON.stringify({ num: num, bike: bike })); } catch (e) { } }
+  function cleanNum(v) { return String(v == null ? "" : v).replace(/\D/g, "").slice(0, 3); }
+
+  P.definePhone(ID, {
+    show: function (st, ask, api) {
+      css();
+      var esc = api.esc, me = st.me || {}, R = st.race, se = st.season, pn = st.panel;
+      var A = api.ask && api.ask.st ? api.ask : null;
+      var asking = !st.afk && api.asking() && !!A && A.st.step === st.step && sentStep !== st.step;
+      var kind = asking ? A.st.ask : null;
+      if (autoLocal != null && autoLocal === !!st.auto) autoLocal = null;
+      if (autoLocal != null && Date.now() - autoAt > 2000) { autoAt = Date.now(); api.view({ auto: autoLocal }); }   // the TV has not confirmed the switch yet: say it again
+      var isAuto = autoLocal != null ? autoLocal : !!st.auto;
+      var title = "Motocross War", sub = "Watch the TV.";
+      if (st.ph === "signup") {
+        var my = (st.su && st.su.mine) || {};
+        if (asking) { title = "Your bike"; sub = "Pick a team and a number for " + (st.su ? st.su.year + " " + st.su.series : "the season") + "."; }
+        else if (my.ready) { title = "#" + my.num + " · " + (my.bike || ""); sub = "Ready. Waiting for the other riders."; }
+        else { title = "Sign-up"; sub = "Pick your number and team when the TV asks."; }
+      } else if (st.ph === "over" || (se && se.over)) { title = "Season over"; sub = pn && pn.title ? pn.title : se ? "You finished " + ord(se.place) + " with " + plural(se.pts, "point") : ""; }
+      else if (R && (st.ph === "race" || st.ph === "gate")) {
+        if (!R.inRace) { title = "Watching " + R.label; sub = "You're not in this race."; }
+        else if (R.gate) { title = "On the gate"; sub = R.label + " · " + R.n + " riders. The gate drops on the TV."; }
+        else if (asking && kind === "war") { title = R.warN > 1 ? (R.warN === 2 ? "Double war!" : R.warN === 3 ? "Triple war!" : "War x" + R.warN + "!") : "War!"; sub = "Lay 3 face down, then turn the 4th: it decides."; }
+        else if (asking) { title = "Flip!"; sub = "Lap " + R.lap + " of " + R.len + " · your card turns as the leader starts the lap."; }
+        else if (R.out) { title = R.dnf === "crash" ? "Crashed out" : "Out of cards"; sub = "Watch the rest of " + R.label + " on the TV."; }
+        else if (R.over) { title = ord(R.place) + " of " + R.n; sub = "Checkered flag. Watch the TV."; }
+        else { title = ord(R.place) + " of " + R.n; sub = R.label + " · lap " + R.lap + " of " + R.len + (isAuto ? " · Auto flips for you" : ""); }
+      } else if (pn) {
+        var mr = pn.res && pn.res.mine ? pn.res.mine[api.color()] : null;
+        if (pn.kind === "results") { title = pn.title; sub = mr ? "You finished " + ord(mr.p) + " of " + mr.of + (mr.tag ? " · " + mr.tag : "") + (mr.dnf ? " · DNF: crash" : "") + (mr.pts ? " · +" + mr.pts + " pts" : "") : (pn.res ? pn.res.win + " wins" : ""); }
+        else if (pn.kind === "podium" || pn.kind === "final") { title = pn.title; sub = (pn.pod || []).map(function (x, i) { return (i + 1) + ". " + x; }).join(" · "); }
+        else { title = pn.title || "Season standings"; sub = pn.next ? "Next: " + pn.next : "Watch the TV."; }
+      }
+      var who = '<div class="mxph-who' + (asking ? " is-turn" : "") + '" style="--seat:' + esc(me.hex || "#e7ca90") + '">' + (me.plate != null ? plate(me.plate, me.mk, me.red) : '<span class="mxph-tok" aria-hidden="true">' + esc(((me.name || "?").trim().charAt(0) || "?").toUpperCase()) + "</span>") +
+        "<div><h1>" + esc(title) + "</h1><p>" + esc(sub) + "</p></div></div>";
+      var html = '<div class="pgph mxph">' + (st.afk ? api.afkHTML("mxTake") : "") + who;
+      if (st.ph === "signup" && st.su) html += asking && kind === "signup" ? signupHTML(st, api) : readyHTML(st, api);
+      else if (R && (st.ph === "race" || st.ph === "gate")) {
+        if (R.inRace) {
+          html += '<div class="mxph-stats"><div class="mxph-stat"><b>' + (R.out ? "Out" : R.gate ? "-" : ord(R.place)) + "</b><span>of " + R.n + '</span></div><div class="mxph-stat"><b>' + (R.out ? 0 : R.cnt) + "</b><span>" + (R.cnt === 1 ? "card" : "cards") + '</span></div><div class="mxph-stat"><b>' + (R.gate ? 0 : R.lap) + "</b><span>lap of " + R.len + "</span></div></div>";
+          if (!R.out && !R.over) html += '<button type="button" class="mxph-auto" role="switch" aria-checked="' + isAuto + '" id="mxAuto"><span>Auto<small>' + (isAuto ? "On: the TV flips for you every lap" : "Off: you press Flip every lap") + '</small></span><span class="bg-toggle" aria-hidden="true"></span></button>';
+          if (asking && (kind === "flip" || kind === "war")) html += '<button type="button" class="opt bg-btn bg-btn--block opt--seat mxph-go" data-seat="' + (api.seat() || 1) + '" id="mxGo">' + (kind === "war" ? "Lay war cards" : "Flip") + "<small>" + (kind === "war" ? "3 face down + the 4th up" : "Lap " + R.lap + " of " + R.len) + "</small></button>" + (R.war && (R.war.won || R.war.lost || R.war.won === false) ? warHTML(R.war) : "");
+          else if (R.war && (R.warOn || R.war.won || R.war.lost)) html += warHTML(R.war);
+          else if (!R.gate) html += '<div class="mxph-box' + (R.yellow ? " is-yellow" : "") + '" role="status">' + (R.last != null ? card(R.last) : "") + "<span>" + (R.last != null ? "Your card: " + esc(cardName(R.last)) + ". " : "") + (R.out ? (R.dnf === "crash" ? "You crashed out of the race." : "You're out of cards.") : R.yellow ? "Yellow flag: no passing there." : R.need && !isAuto ? "Wait for the TV to ask you..." : "Watch the TV.") + "</span></div>";
+          if (R.cr && !R.out) html += '<p class="mxph-last">' + (R.cr > 1 ? "You crashed " + R.cr + " times and got back on." : "You crashed and got back on.") + "</p>";
+        }
+        if (R.hs) html += '<p class="mxph-last">Holeshot: ' + esc(R.hs) + "</p>";
+        html += runHTML(R.top, api);
+      } else if (se) {
+        html += '<div class="mxph-stats"><div class="mxph-stat"><b>' + (se.place ? ord(se.place) : "-") + "</b><span>season</span></div><div class=\"mxph-stat\"><b>" + se.pts + "</b><span>points</span></div><div class=\"mxph-stat\"><b>" + se.ri + "</b><span>round of " + se.nr + "</span></div></div>";
+        if (se.leader) html += '<p class="mxph-last">Red plate (the points leader): ' + esc(se.leader) + "</p>";
+      }
+      if (st.line && st.ph !== "signup") html += '<p class="mxph-last">' + esc(st.line) + "</p>";
+      if (se) html += '<p class="mxph-foot">' + esc(se.year + " " + se.name + " · round " + se.ri + " of " + se.nr + " · " + se.city) + "</p>";
+      html += "</div>";
+      var act = document.activeElement, numFocus = act && act.id === "mxNum";
+      api.put(html);
+      // ---- the controls ----
+      var go = document.getElementById("mxGo");
+      if (go) go.onclick = function () { if (!api.act("flip", {})) return; sentStep = st.step; go.disabled = true; go.innerHTML = "Sent<small>" + (kind === "war" ? "Your war cards go down" : "Your card turns at the line") + "</small>"; };
+      var au = document.getElementById("mxAuto");
+      if (au) au.onclick = function () { autoLocal = !isAuto; autoAt = Date.now(); api.view({ auto: autoLocal }); au.setAttribute("aria-checked", String(autoLocal)); au.querySelector("small").textContent = autoLocal ? "On: the TV flips for you every lap" : "Off: you press Flip every lap"; };
+      var tk = document.getElementById("mxTake"); if (tk) tk.onclick = function () { api.take(); tk.disabled = true; };
+      if (st.ph === "signup" && asking && kind === "signup") wireSignup(st, api, numFocus);
+      else if (asking && isAuto && (kind === "flip" || kind === "war")) {   // Auto is on but the TV still asked (the switch crossed the ask): answer it
+        var stepNow = st.step;
+        setTimeout(function () { if (sentStep === stepNow || !api.asking()) return; if (api.act("flip", {})) sentStep = stepNow; }, 350);
+      } else if (asking) api.focusFirst();
+    },
+    reset: function () { sentStep = ""; autoLocal = null; su = { key: "", num: "", bike: "" }; }
+  });
+
+  function warHTML(w) {
+    var down = Math.min(3, w.down || 0), h = '<div class="mxph-box is-war" role="status"><span class="mxph-pile" aria-hidden="true">';
+    for (var i = 0; i < down; i++) h += '<span style="left:' + (i * 0.35) + 'rem">' + card(null) + "</span>";
+    h += '<span style="left:' + (down * 0.35 + .2) + 'rem">' + card(w.up, w.won ? "is-win" : "") + "</span></span><span>" +
+      (w.n > 1 ? (w.n === 2 ? "Double war" : "Triple war") : "War") + ": " + (w.down || 0) + " down, the 4th up: " + cardName(w.up) + "." +
+      (w.won ? " You win the war!" : w.lost === "out" ? " You lose it: crashed out." : w.lost === "remount" ? " You lose it: down, and you remount." : w.won === false ? " You lose the war." : "") + "</span></div>";
+    return h;
+  }
+  function runHTML(top, api) {
+    if (!top || !top.length) return "";
+    var esc = api.esc, h = '<p class="mxph-lbl">Running order · cards held</p><ol class="mxph-run" aria-label="Running order">';
+    top.forEach(function (r, i) {
+      if (i > 0 && r.p > top[i - 1].p + 1) h += '<li class="is-gap" aria-hidden="true">...</li>';
+      h += '<li class="' + (r.me ? "is-me" : "") + '"><span class="mxph-p">' + r.p + "</span>" + plate(r.pl, r.mk, r.red) + '<span class="mxph-n">' + esc(r.nm) + (r.me ? " (you)" : "") + '</span><span class="mxph-k">' + (r.k < 0 ? "out" : r.k) + "</span></li>";
+    });
+    return h + "</ol>";
+  }
+  function readyHTML(st, api) {
+    var esc = api.esc, rs = st.su.riders || [];
+    return '<p class="mxph-lbl">This table · ' + rs.filter(function (r) { return r.ready; }).length + " of " + rs.length + ' ready</p><ul class="mxph-rs">' + rs.map(function (r) {
+      return '<li style="--seat:' + esc(r.hex) + '"><i aria-hidden="true"></i><span>' + esc(r.n) + (r.cpu ? " · computer" : "") + "</span>" + (r.ready ? plate(r.num, mkOf(r.bike), false) + '<span class="mx-mk" style="' + mkStyle(mkOf(r.bike)) + '">' + esc(r.bike) + "</span>" : "<em>choosing...</em>") + "</li>";
+    }).join("") + "</ul>";
+  }
+  /* the sign-up: the season's teams, the number (empty = any free one), its check against the taken numbers, Ready */
+  function takenMap(st) { var m = {}; (st.su.taken || []).forEach(function (t) { m[t[0]] = t[1]; }); return m; }
+  function numCheck(st) {
+    var v = su.num, m = takenMap(st);
+    if (v === "") return { ok: true, t: "Any free number: the TV picks one for you." };
+    var n = +v; if (m[n]) return { ok: false, n: n, t: "#" + n + " is taken: " + m[n] + "." };
+    return { ok: true, n: n, t: "#" + n + " is free in " + st.su.year + "." };
+  }
+  function freeNear(st, n, k) { var m = takenMap(st), out = []; for (var d = 1; d < 1000 && out.length < k; d++) { if (n - d >= 1 && !m[n - d]) out.push(n - d); if (out.length < k && n + d <= 999 && !m[n + d]) out.push(n + d); } return out.sort(function (a, b) { return a - b; }); }
+  function signupHTML(st, api) {
+    var esc = api.esc, S0 = st.su, mine = S0.mine || {}, key = S0.year + "|" + S0.series;
+    if (su.key !== key) {   // the first ask of this sign-up: the remembered pick when it fits this season
+      var r = remember(); su.key = key;
+      su.bike = S0.makes.indexOf(mine.bike) >= 0 ? mine.bike : S0.makes[0];
+      if (r.bike && S0.makes.indexOf(r.bike) >= 0) su.bike = r.bike;
+      su.num = r.num != null && r.num !== "" && !takenMap(st)[+r.num] ? String(r.num) : "";
+    }
+    if (S0.makes.indexOf(su.bike) < 0) su.bike = S0.makes[0];
+    var taken = S0.taken || [];
+    return (mine.err ? '<p class="mxph-nst is-bad" role="alert">' + esc(mine.err) + "</p>" : "") +
+      '<p class="mxph-lbl">Team · the makes of ' + esc(String(S0.year)) + '</p><div class="mxph-teams" role="group" aria-label="Team">' + S0.makes.map(function (b) {
+        return '<button type="button" class="mxph-team" data-bike="' + esc(b) + '" aria-pressed="' + (b === su.bike) + '" style="' + mkStyle(mkOf(b)) + '"><i aria-hidden="true"></i>' + esc(b) + "</button>";
+      }).join("") + "</div>" +
+      '<p class="mxph-lbl">Number</p><div class="mxph-num"><input class="bg-input" id="mxNum" type="text" inputmode="numeric" maxlength="3" autocomplete="off" aria-label="Your number (empty: any free number)" placeholder="Any" value="' + esc(su.num) + '">' +
+      '<button type="button" class="bg-btn bg-btn--secondary mxph-alt" id="mxAny">Pick for me</button></div>' +
+      '<p class="mxph-nst" id="mxNst" aria-live="polite"></p><div class="mxph-free" id="mxFree"></div>' +
+      '<details class="mxph-taken"><summary>Taken numbers in ' + esc(String(S0.year)) + " (" + taken.length + ")</summary><ul>" + taken.map(function (t) { return "<li><b>" + t[0] + "</b> " + esc(t[1]) + "</li>"; }).join("") + "</ul></details>" +
+      '<button type="button" class="opt bg-btn bg-btn--block opt--seat mxph-go" data-seat="' + (api.seat() || 1) + '" id="mxReady">Ready<small id="mxReadySub"></small></button>';
+  }
+  function wireSignup(st, api, numFocus) {
+    var inp = document.getElementById("mxNum"), nst = document.getElementById("mxNst"), fr = document.getElementById("mxFree"), rd = document.getElementById("mxReady"), any = document.getElementById("mxAny");
+    function paint() {
+      var x = numCheck(st);
+      nst.textContent = x.t; nst.className = "mxph-nst" + (!x.ok ? " is-bad" : su.num !== "" ? " is-ok" : "");
+      inp.setAttribute("aria-invalid", String(!x.ok));
+      var want = !x.ok ? freeNear(st, x.n, 4) : [];
+      fr.innerHTML = want.map(function (n) { return '<button type="button" class="bg-btn bg-btn--secondary" data-free="' + n + '" aria-label="Take number ' + n + '">' + n + "</button>"; }).join("");
+      Array.prototype.forEach.call(fr.querySelectorAll("[data-free]"), function (b) { b.onclick = function () { su.num = b.getAttribute("data-free"); inp.value = su.num; paint(); }; });
+      rd.disabled = !x.ok;
+      document.getElementById("mxReadySub").textContent = (su.num === "" ? "Any free number" : "#" + su.num) + " · " + su.bike;
+    }
+    inp.addEventListener("input", function () { var v = cleanNum(inp.value); if (v !== inp.value) inp.value = v; su.num = v; paint(); });
+    any.onclick = function () { su.num = ""; inp.value = ""; paint(); };
+    Array.prototype.forEach.call(document.querySelectorAll(".mxph-team"), function (b) { b.onclick = function () { su.bike = b.getAttribute("data-bike"); Array.prototype.forEach.call(document.querySelectorAll(".mxph-team"), function (x) { x.setAttribute("aria-pressed", String(x === b)); }); paint(); }; });
+    rd.onclick = function () {
+      if (!numCheck(st).ok) return;
+      if (!api.act("ready", { num: su.num === "" ? null : +su.num, bike: su.bike })) return;
+      sentStep = st.step; keepPick(su.num, su.bike); rd.disabled = true; rd.innerHTML = "Sent<small>Waiting for the TV</small>";
+    };
+    paint();
+    if (numFocus) { try { inp.focus({ preventScroll: true }); var L = inp.value.length; inp.setSelectionRange(L, L); } catch (e) { } }
+  }
+})();
