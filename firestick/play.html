@@ -450,7 +450,9 @@ var myName=null, myColor=null, net=null, curReq=null, started=false;
 var joined=false, joinTick=0, joinTimer=null;
 var wantJoin=false, netReady=false, netRoom=null;   /* step 10: the relays open while the name is typed; "Sit down" then only knocks */
 /* getting back in (the CEO, 2026-10-16): a seat code from the TV's invite (typed, or ?seat= from the invite's QR) rides along in the join */
-var seatCode=(params.get("seat")||"").replace(/\D/g,"").slice(0,4)||null, viewSeen=false;
+var seatCode=(params.get("seat")||"").replace(/\D/g,"").slice(0,4)||null, viewSeen=false, rjAgain=false;
+/* seated: the invite's seat code leaves the address, so a reload goes straight back to the seat (not "Take my seat" again) */
+function dropSeatParam(){ try{ if(!params.get("seat")) return; params.delete("seat"); var q=params.toString(); history.replaceState(history.state,"",location.pathname+(q?"?"+q:"")+location.hash); }catch(e){} }
 /* a reloaded phone keeps its name (FOLLOWUPS party-phone-name-memory): the field shows the one remembered name of all the games (BGUI.names'
    key "bg_player_name"), and a phone that sat down in this room ("bgfs_seat": {room, name, at}; forgotten on Leave) goes straight back to its seat */
 function nameGet(){ try{ return String(localStorage.getItem("bg_player_name")||"").replace(/[\u0000-\u001f\u007f<>]/g,"").replace(/\s+/g," ").trim().slice(0,12); }catch(e){ return ""; } }
@@ -501,7 +503,8 @@ function showNoJoin(o){
    The relays stay open, so the host's "Let them back in" on the TV seats this phone too */
 function showRejoin(o){
   main.className="big"; chrome(false);
-  var msg=o.bumped?"Another phone has your seat now. To come back, ask the host for an invite.":o.declined?"The host said not now. Ask them for an invite code.":o.bad==="expired"?"That invite ran out. Ask the host for a new seat code.":o.bad==="taken"?"That seat is taken now. Ask the host for another invite.":o.bad==="wrong"?"That seat code is not right. Check the 4 numbers on the TV.":o.bad==="wait"?"Too many tries. Wait half a minute, then type the code again.":o.asked?"The TV is asking the host to let you back in…":"";
+  var again=rjAgain; rjAgain=false;   // "Ask the host again" was pressed: an answer with nothing to ask about says so
+  var msg=o.bumped?"Another phone has your seat now. To come back, ask the host for an invite.":o.declined&&o.soon?"The host just said not now. Ask again in a few seconds, or ask them for an invite code.":o.declined&&o.noanswer?"Nobody answered on the TV. Ask again, or ask the host for an invite code.":o.declined?"The host said not now. Ask them for an invite code.":o.bad==="expired"?"That invite ran out. Ask the host for a new seat code.":o.bad==="taken"?"That seat is taken now. Ask the host for another invite.":o.bad==="cancel"?"The host cancelled that invite. Ask them for a new seat code.":o.bad==="new"?"That code was replaced by a newer one. Type the seat code the TV shows now.":o.bad==="wrong"?"That seat code is not right. Check the 4 numbers on the TV.":o.bad==="wait"?"Too many tries. Wait half a minute, then type the code again.":o.asked?"The TV is asking the host to let you back in…":again?"No seat is open for "+(myName||"you")+" right now. Ask the host for an invite code.":"";
   var okMsg=o.asked&&!o.bad&&!o.declined&&!o.bumped;
   put('<div class="join-card bg-card bg-spot"><h1 class="title">The game has started</h1><p class="sub">Ask the host to invite you back: on the TV, Menu, then Invite a player back. Then type the seat code here.</p>'+
     (msg?'<p class="ph-rjmsg'+(okMsg?"":" is-warn")+'" role="status">'+esc(msg)+'</p>':'')+
@@ -511,7 +514,7 @@ function showRejoin(o){
     '<button class="opt ghost bg-btn bg-btn--secondary bg-btn--block" type="button" id="other">Enter another room code</button></div>'+hubLink());
   var go=function(){ var v=($("sc").value||"").replace(/\D/g,"").slice(0,4); if(v.length!==4){ toast("The seat code has 4 numbers"); $("sc").focus(); return; } seatCode=v; if(!myName) myName=nameGet()||"Player"; connect(); };
   $("scgo").onclick=go; $("sc").onkeydown=function(e){ if(e.key==="Enter") go(); };
-  var ak=$("rjask"); if(ak) ak.onclick=function(){ seatCode=null; if(!myName) myName=nameGet()||"Player"; connect(); };
+  var ak=$("rjask"); if(ak) ak.onclick=function(){ seatCode=null; rjAgain=true; if(!myName) myName=nameGet()||"Player"; connect(); };
   $("other").onclick=function(){ seatCode=null; stopNet(); askRoom(); };
 }
 function startJoin(){ var m=seatMem(); if(m&&m.room===room&&!seatCode){ myName=m.name; connect(); return; } askName(); }   // reloaded in its room: back to its seat
@@ -567,7 +570,7 @@ function onMsg0(o){
   if(o.pid===myPid&&/^(ask|rvs|rks|ups|pgs|scs|wait|first)$/.test(o.t)) viewSeen=true;   // this phone has a game screen from the TV
   if(o.t==="nojoin" && o.pid===myPid){ if(!joined){ if(o.rejoin){ if(joinTimer){ clearInterval(joinTimer); joinTimer=null; } seatCode=null; showRejoin(o); } else { var r=room; stopNet(); room=r; seatForget(); showNoJoin(o); } } else if(o.rejoin&&started){ var rn=room; seatForget(); stopNet(); room=rn; setRoom("Room "+room); showRejoin({bumped:1}); } }   // a started game: the seat code / the host's answer (the relays stay open)
   else if(o.t==="bumped" && o.pid===myPid){ var rb=room; seatForget(); stopNet(); room=rb; setRoom("Room "+room); showRejoin({bumped:1}); }   // another phone took this seat by invite
-  else if(o.t==="you" && o.pid===myPid){ var first=!joined; chrome(true); myColor=o.color; if(o.name) myName=o.name; joined=true; seatCode=null; if(first) seatSave(); if(o.started) started=true;
+  else if(o.t==="you" && o.pid===myPid){ var first=!joined; chrome(true); myColor=o.color; if(o.name) myName=o.name; joined=true; seatCode=null; if(first){ seatSave(); dropSeatParam(); } if(o.started) started=true;
     if(first&&o.started&&!isAsking()&&!overShown&&!viewSeen) showWaiting("You’re back in the game. Waiting for the TV…", false);   // reloaded / let back in: its game, never the lobby (FOLLOWUPS party-reload-lobby-screen)
     if(!joinTimer&&wantJoin) knock();   // seated by the host after a request: the keep-alive starts again
     if(!started && !isAsking() && !overShown) showLobby({players:[{pid:myPid,name:myName,color:myColor}]}); }
