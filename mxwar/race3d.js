@@ -216,7 +216,7 @@ function create(host,opt){
       if(i*C.DS<C.startLen+6) nf=Math.min(nf,2);
       i+=nf;
     }
-    var nc=U.length+2, vRep=C.L/Math.max(1,Math.round(C.L/7));
+    var nc=U.length+2, vRep=C.L/Math.max(1,Math.round(C.L/7)), W0=(C.layout.widthM||(C.outdoor?10:8.5))/2;
     /* polish 2: the ruts wander slowly across the line over tens of metres (a lateral drift of the texture, periodic over the lap) instead of
        the texture's own short zigzag */
     var wn1=Math.max(1,Math.round(C.L/27)), wn2=Math.max(1,Math.round(C.L/11)), wph=Rn()*TAU;
@@ -236,7 +236,10 @@ function create(host,opt){
         var u, lat, y, tint=1, groove=0;
         if(c===0||c===nc-1){ var e=c===0?0:U.length-1, he=ys[e]-E; lat=off+(c===0?-1:1)*(hw+0.35+Math.max(0,he)*0.95); y=E-0.06; u=c===0?-1.25:1.25; tint=0.66*(0.5+0.5*cav);
           if(dk){ lat=off+(c===0?-1:1)*(hw+0.3); y=ys[e]-0.55; tint=0.5; } }
-        else { u=U[c-1]; lat=off+u*hw; y=ys[c-1]; groove=Math.max(0,1-Math.abs(u-lineU)*2.3); tint=(1+0.06*Math.max(0,(ys[c-1]-ys[3])))*cav*(0.94+0.06*Math.cos(u*1.4)); if(hiF>0.3) tint*=0.95; }
+        else { u=U[c-1]; lat=off+u*hw; y=ys[c-1]; groove=Math.max(0,1-Math.abs(u-lineU)*2.3); tint=(1+0.06*Math.max(0,(ys[c-1]-ys[3])))*cav*(0.94+0.06*Math.cos(u*1.4)); if(hiF>0.3) tint*=0.95;
+          /* polish 2: the start funnel's extra width sits a few cm low, so where it overlaps another part of the lap (the built-in stadium's last
+             turn) that lane wins instead of the two fighting in the depth buffer (dark jagged streaks in the gate shot) */
+          if(s<C.startLen+1){ var ext=Math.abs(lat)-(W0+0.4); if(ext>0) y-=Math.min(0.05,ext*0.03); } }
         var px=cx+nx*lat, pz=cz+nz*lat;
         minx=Math.min(minx,px); maxx=Math.max(maxx,px); minz=Math.min(minz,pz); maxz=Math.max(maxz,pz);
         T.vert(px,y,pz,0,1,0,1,1,1,0,(u+1.25)/2.5+wu,s/vRep,0,groove,tint,sand);
