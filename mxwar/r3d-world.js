@@ -18,8 +18,25 @@ function hash2(x,z){ let h=Math.imul((x|0)*73856093^(z|0)*19349663,1597334677)>>
 function vnoise(x,z){ const xi=Math.floor(x), zi=Math.floor(z), xf=x-xi, zf=z-zi, u=xf*xf*(3-2*xf), v=zf*zf*(3-2*zf);
   const a=hash2(xi,zi), b=hash2(xi+1,zi), c=hash2(xi,zi+1), d=hash2(xi+1,zi+1); return a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v; }
 function fbm(x,z,o){ let s=0, a=0.5, f=1; for(let i=0;i<(o||4);i++){ s+=a*vnoise(x*f,z*f); f*=2.03; a*=0.5; } return s; }
+/* periodic value noise: a texture drawn with it tiles with no seam (polish: the old dirt showed a hard edge every 5 m, like planks) */
+function hashp(x,z,p){ x=((x%p)+p)%p; z=((z%p)+p)%p; return hash2(x,z); }
+function pnoise(x,z,p){ const xi=Math.floor(x), zi=Math.floor(z), xf=x-xi, zf=z-zi, u=xf*xf*(3-2*xf), v=zf*zf*(3-2*zf);
+  const a=hashp(xi,zi,p), b=hashp(xi+1,zi,p), c=hashp(xi,zi+1,p), d=hashp(xi+1,zi+1,p); return a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v; }
+function pfbm(x,z,p,o){ let s=0, a=0.5, f=1, n=0; for(let i=0;i<o;i++){ s+=a*pnoise(x*f,z*f,p*f); n+=a; f*=2; a*=0.5; } return s/n; }
 function canvas(w,h){ const c=document.createElement("canvas"); c.width=w; c.height=h; return c; }
-function tex(c,rep){ const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.wrapS=t.wrapT=rep?THREE.RepeatWrapping:THREE.ClampToEdgeWrapping; t.anisotropy=4; t.needsUpdate=true; return t; }
+let ANISO=4;   /* the renderer's best anisotropic filtering (race3d.js sets it): the dirt and the crowd stay crisp at a low angle */
+export function setAniso(a){ ANISO=Math.max(1,Math.min(8,a|0||1)); }
+function tex(c,rep){ const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.wrapS=t.wrapT=rep?THREE.RepeatWrapping:THREE.ClampToEdgeWrapping; t.anisotropy=ANISO; t.needsUpdate=true; return t; }
+/* a tangent-space normal map from a height field (wraps; strength = how steep the relief looks) */
+function normalTex(Hh,W,strength){
+  const c=canvas(W,W), x=c.getContext("2d"), id=x.createImageData(W,W), d=id.data;
+  for(let j=0;j<W;j++){ const ju=((j-1+W)%W)*W, jd=((j+1)%W)*W, jr=j*W;
+    for(let i=0;i<W;i++){ const l=Hh[jr+(i-1+W)%W], r=Hh[jr+(i+1)%W], u=Hh[ju+i], dn=Hh[jd+i];
+      let nx=(l-r)*strength, ny=(dn-u)*strength; const L=Math.sqrt(nx*nx+ny*ny+1); const p=(jr+i)*4;
+      d[p]=(nx/L*0.5+0.5)*255; d[p+1]=(ny/L*0.5+0.5)*255; d[p+2]=(1/L*0.5+0.5)*255; d[p+3]=255; } }
+  x.putImageData(id,0,0);
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.NoColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=ANISO; t.needsUpdate=true; return t;
+}
 function rngf(seed){ let t=seed>>>0; return ()=>{ t=(t+0x6D2B79F5)>>>0; let x=Math.imul(t^(t>>>15),t|1); x^=x+Math.imul(x^(x>>>7),x|61); return ((x^(x>>>14))>>>0)/4294967296; }; }
 /* merge plain geometries (position, normal, color, uv) into one non-indexed BufferGeometry */
 export function merge(list){
@@ -40,45 +57,85 @@ const SOIL={ /* dirt colours (sRGB): the groomed track, a lighter worn line, the
 };
 /* the dirt's DETAIL (a warm near-white with darker ruts, tyre tracks and stones): the colour is in the vertex colours / the material,
    so the two don't multiply into mud */
-function dirtTex(soil,lo,floor){
-  const W=lo?256:512, c=canvas(W,W), x=c.getContext("2d"), R=rngf(1234+soil.length+(floor?7:0)), id=x.createImageData(W,W), d=id.data;
-  for(let j=0;j<W;j++) for(let i=0;i<W;i++){
-    const n=fbm(i/W*8,j/W*8,4), m=fbm(i/W*48+7,j/W*48+3,2), p=(j*W+i)*4;
-    const band=Math.sin(i/W*Math.PI*8+fbm(0,j/W*3,2)*2.5)*0.5+0.5, rut=floor?0:Math.pow(band,16)*0.12;
-    let v=0.86+(n-0.5)*0.32+(m-0.5)*0.18-rut; v=clamp(v,0.45,1.0);
-    const k=v*255+(R()-0.5)*10; d[p]=clamp(k*1.0,0,255); d[p+1]=clamp(k*0.97,0,255); d[p+2]=clamp(k*0.93,0,255); d[p+3]=255;
+/* the dirt's DETAIL as two maps that tile with no seam: a warm near-white colour (the soil's colour is in the vertex colours, so the two
+   don't multiply into mud) and a NORMAL map from the same relief, so the light rakes across real-looking dirt: knobby tyre grooves along
+   the lanes (every which way on the floor), clods and stones that catch the light, a soft lumpy base. Polish: the old detail had a
+   periodic "rut" band that drew tree rings in every turn and a hard seam every 5 m that looked like planks. */
+function dirtMaps(soil,lo,floor){
+  const W=lo?256:512, N=W*W, R=rngf(1234+soil.length*17+(floor?7:0)), Hh=new Float32Array(N), A=new Float32Array(N), Gv=new Float32Array(N), Bv=new Float32Array(N);
+  const sandy=soil==="sand", hard=soil==="hardpack";
+  for(let j=0;j<W;j++) for(let i=0;i<W;i++){ const u=i/W, v=j/W, k=j*W+i;
+    const n=pfbm(u*4,v*4,4,4), m=pfbm(u*24,v*24,24,2);
+    Hh[k]=n*0.7+m*0.35; A[k]=0.86+(n-0.5)*0.24+(m-0.5)*(sandy?0.2:0.12); }
+  const stamp=(cx,cy,rx,ry,fn)=>{ const x0=Math.floor(cx-rx), x1=Math.ceil(cx+rx), y0=Math.floor(cy-ry), y1=Math.ceil(cy+ry);
+    for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++){ const dx=(x-cx)/rx, dy=(y-cy)/ry, r2=dx*dx+dy*dy; if(r2>=1) continue; fn((((y%W)+W)%W)*W+(((x%W)+W)%W),1-r2); } };
+  /* knobby tyre grooves: along the lanes (v = the direction of travel), crossing every way on the floor */
+  const nT=floor?(lo?5:10):(lo?6:12);
+  for(let t=0;t<nT;t++){
+    let px=R()*W, py=R()*W; const ang=floor?R()*Math.PI*2:(R()-0.5)*0.08, dx=Math.sin(ang), dy=Math.cos(ang), w=W*(0.007+R()*0.006), dep=(sandy?0.5:0.35)+R()*0.3, kn=W*0.011, len=floor?W*(0.35+R()*0.5):W;
+    for(let s=0;s<len;s+=1){ px+=dx+(floor?0:(R()-0.5)*0.12); py+=dy; const knob=Math.floor(s/kn)%2?1:0.62;
+      stamp(px,py,w,w,(k,f)=>{ const g=dep*Math.sqrt(f)*knob; if(g>Gv[k]) Gv[k]=g; }); }
   }
+  /* clods and stones */
+  const nC=lo?600:2400;
+  for(let c=0;c<nC;c++){ const cx=R()*W, cy=R()*W, r=(lo?0.5:1)*(0.7+R()*R()*(sandy?1.6:3.4)), h=(sandy?0.12:0.22)+R()*0.4;
+    stamp(cx,cy,r*1.25,r,(k,f)=>{ const b=h*Math.sqrt(f); if(b>Bv[k]) Bv[k]=b; }); }
+  if(hard||soil==="loam") for(let c=0;c<(lo?60:220);c++){ const cx=R()*W, cy=R()*W, r=0.8+R()*1.6; stamp(cx,cy,r,r*0.8,(k,f)=>{ Bv[k]=Math.max(Bv[k],0.5*f); A[k]=Math.max(A[k],0.98+0.06*f); }); }
+  const c=canvas(W,W), x=c.getContext("2d"), id=x.createImageData(W,W), d=id.data;
+  for(let k=0;k<N;k++){ Hh[k]+=Bv[k]-Gv[k]; const v=clamp(A[k]-Gv[k]*0.22+Bv[k]*0.1,0.5,1.06)*255, p=k*4; d[p]=clamp(v,0,255); d[p+1]=clamp(v*0.965,0,255); d[p+2]=clamp(v*0.92,0,255); d[p+3]=255; }
   x.putImageData(id,0,0);
-  for(let i=0;i<W*1.4;i++){ const px=R()*W, py=R()*W, r=0.6+R()*R()*2.4; x.fillStyle=R()<0.45?"rgba(255,250,240,.35)":"rgba(40,30,22,.30)"; x.beginPath(); x.ellipse(px,py,r*1.3,r,R()*3,0,7); x.fill(); }
-  /* knobby tyre tracks: along the track on the lanes, every way on the floor (footprints and tracks where the crew walk) */
-  for(let t=0;t<(lo?5:10);t++){ let px=R()*W, py=R()*W; const w=1.6+R()*1.6, ang=floor?R()*6.28:0, dx=Math.sin(ang), dy=Math.cos(ang); x.fillStyle="rgba(50,38,28,.16)";
-    for(let k=0;k<W/4;k++){ px+=dx*4+(R()-0.5)*1.2; py+=dy*4; x.fillRect(((px%W)+W)%W,((py%W)+W)%W,w,2.2); } }
-  return tex(c,true);
+  return {map:tex(c,true),normal:normalTex(Hh,W,(lo?2.2:3.2)*(sandy?0.8:1))};
 }
 function grassTex(lo){
-  const W=lo?256:512, c=canvas(W,W), x=c.getContext("2d"), id=x.createImageData(W,W), d=id.data;
-  for(let j=0;j<W;j++) for(let i=0;i<W;i++){ const n=fbm(i/W*10,j/W*10,4), m=fbm(i/W*70,j/W*70,2), p=(j*W+i)*4, v=clamp(0.78+(n-0.5)*0.35+(m-0.5)*0.3,0.4,1);
-    d[p]=clamp(v*235,0,255); d[p+1]=clamp(v*255,0,255); d[p+2]=clamp(v*215,0,255); d[p+3]=255; }
+  /* a lawn that tiles: soft clumps, blades, a little dry straw; the green itself is in the vertex colours */
+  const W=lo?256:512, c=canvas(W,W), x=c.getContext("2d"), id=x.createImageData(W,W), d=id.data, R=rngf(99);
+  /* polish: calmer (the fine noise was a fuzzy carpet up close), a soft clump scale and a little dry straw */
+  for(let j=0;j<W;j++) for(let i=0;i<W;i++){ const u=i/W, v=j/W, n=pfbm(u*6,v*6,6,4), m=pfbm(u*48,v*48,48,2), p=(j*W+i)*4, s=pfbm(u*12+5,v*12,12,2), c2=pfbm(u*20+3,v*20+7,20,2);
+    const lv=clamp(0.84+(n-0.5)*0.3+(c2-0.5)*0.16+(m-0.5)*0.16+(R()-0.5)*0.05,0.5,1.06), dry=clamp((s-0.58)*2.2,0,0.6);
+    d[p]=clamp(lv*(232+dry*30),0,255); d[p+1]=clamp(lv*252,0,255); d[p+2]=clamp(lv*(200-dry*40),0,255); d[p+3]=255; }
   x.putImageData(id,0,0);
   return tex(c,true);
 }
+/* the crowd: people at real size (a seat 0.55 m, a row 0.85 m up the slope), round heads and shoulders in soft shading, empty seats,
+   aisles every 16 seats, the row risers in shadow; at night darker, with the odd phone light. Polish: the old crowd packed four people
+   into a metre with hard rectangles, a shimmering mosaic up close. */
+const CROWD={cols:64,rows:16,seat:0.55,row:0.85};
 function crowdTex(lo,night){
-  const W=lo?256:1024, H=lo?128:512, c=canvas(W,H), x=c.getContext("2d"), R=rngf(77);
-  x.fillStyle=night?"#1a1620":"#34343c"; x.fillRect(0,0,W,H);
-  const rows=lo?12:24, cols=lo?40:96, cw=W/cols, rh=H/rows;
-  const shirts=night?["#8f8a84","#7a2a34","#2c3f78","#9a8648","#2e2e34","#3f6a3c","#9a5a2e","#5a5a64","#a4a4aa","#4a3428","#34466c","#5e3a62","#2e2e34","#3a3a42"]:["#e6e2da","#c8102e","#1f4fc4","#f2cf1d","#2a2a2a","#57b947","#ff7a1a","#8a8a96","#f2f2f4","#6b3f2a","#3a5ba0"];
+  const cols=CROWD.cols, rows=CROWD.rows, cw=lo?8:16, rh=lo?14:28, W=cols*cw, H=rows*rh, c=canvas(W,H), x=c.getContext("2d"), R=rngf(77);
+  x.fillStyle=night?"#16141c":"#3a3b44"; x.fillRect(0,0,W,H);
+  const shirts=night?["#9a958e","#8a2a34","#2e4384","#a08a4a","#34343c","#3f6e40","#a2602e","#62626e","#b0b0b6","#54382a","#38507a","#6a3e6c","#2c2c34","#7a7a80"]:
+    ["#ece8e0","#c8102e","#1f4fc4","#f2cf1d","#2a2a2a","#57b947","#ff7a1a","#8a8a96","#f4f4f6","#6b3f2a","#3a5ba0","#d6d0c6","#9a1c28"];
+  const skin=["#e0b48c","#8d5a3b","#c58c63","#5a3a26","#ecc8a2","#a8714c"], hair=["#2a1e16","#4a3020","#141216","#7a5a36","#b89a6a"];
+  const seatC=night?"#23233a":"#2f3a5a";
   for(let r=0;r<rows;r++){
-    x.fillStyle=night?"rgba(70,62,84,.55)":"rgba(110,110,120,.6)"; x.fillRect(0,r*rh+rh*0.8,W,rh*0.2);
+    const y0=r*rh;
+    x.fillStyle=night?"#0c0b10":"#262630"; x.fillRect(0,y0+rh*0.86,W,rh*0.14);   /* the riser in shadow */
     for(let k=0;k<cols;k++){
-      if(k%12===0){ x.fillStyle=night?"rgba(120,110,130,.5)":"rgba(170,170,176,.6)"; x.fillRect(k*cw,r*rh,cw*0.9,rh); continue; }
-      if(R()<0.1) continue;
-      const px=k*cw+cw*0.1, py=r*rh+rh*0.12;
-      x.fillStyle=shirts[Math.floor(R()*shirts.length)]; x.globalAlpha=0.85; x.fillRect(px,py+rh*0.34,cw*0.8,rh*0.46); x.globalAlpha=1;
-      x.fillStyle=["#d9ae86","#8d5a3b","#c58c63","#5a3a26","#e3c09a"][Math.floor(R()*5)]; x.beginPath(); x.ellipse(px+cw*0.4,py+rh*0.2,cw*0.26,rh*0.18,0,0,7); x.fill();
+      const px=k*cw;
+      if(k%16===0){ x.fillStyle=night?"#2a2832":"#6a6a72"; x.fillRect(px,y0,cw,rh); x.fillStyle=night?"#38363f":"#7c7c84"; x.fillRect(px,y0+rh*0.8,cw,rh*0.06); continue; }   /* an aisle */
+      if(R()<0.12){ x.fillStyle=seatC; x.fillRect(px+cw*0.12,y0+rh*0.42,cw*0.76,rh*0.4); continue; }   /* an empty seat */
+      const sh=shirts[Math.floor(R()*shirts.length)], up=R()<0.07, lean=(R()-0.5)*cw*0.12;
+      /* shoulders and body: a rounded block, lighter on top */
+      const g=x.createLinearGradient(0,y0+rh*0.36,0,y0+rh*0.86); g.addColorStop(0,sh); g.addColorStop(1,night?"#0e0d12":"#20202a");
+      x.fillStyle=g; x.beginPath(); x.ellipse(px+cw*0.5+lean,y0+rh*0.62,cw*0.42,rh*0.27,0,0,7); x.fill();
+      if(up){ x.fillStyle=sh; x.fillRect(px+cw*0.1+lean,y0+rh*0.06,cw*0.14,rh*0.4); x.fillRect(px+cw*0.76+lean,y0+rh*0.06,cw*0.14,rh*0.4); }
+      /* the head: skin, hair or a cap */
+      x.fillStyle=skin[Math.floor(R()*skin.length)]; x.beginPath(); x.ellipse(px+cw*0.5+lean,y0+rh*0.3,cw*0.21,rh*0.13,0,0,7); x.fill();
+      x.fillStyle=R()<0.3?shirts[Math.floor(R()*shirts.length)]:hair[Math.floor(R()*hair.length)]; x.beginPath(); x.ellipse(px+cw*0.5+lean,y0+rh*0.24,cw*0.22,rh*0.08,0,Math.PI,0); x.fill();
     }
   }
-  if(night) for(let i=0;i<(lo?20:60);i++){ x.fillStyle="rgba(255,250,230,"+(0.6+R()*0.4)+")"; x.fillRect(R()*W,R()*H,1.5,1.5); }
-  const t=tex(c,true); t.anisotropy=2; return t;
+  if(night) for(let i=0;i<(lo?16:50);i++){ x.fillStyle="rgba(255,250,232,"+(0.7+R()*0.3)+")"; x.beginPath(); x.arc(R()*W,R()*H,lo?0.8:1.3,0,7); x.fill(); }
+  const t=tex(c,true); t.anisotropy=ANISO; return t;
+}
+/* the suites between the decks: a band of lit windows (warm at night) */
+function suitesTex(night){
+  const W=512, H=64, c=canvas(W,H), x=c.getContext("2d"), R=rngf(31);
+  x.fillStyle="#121218"; x.fillRect(0,0,W,H);
+  for(let i=0;i<32;i++){ const lit=R()<0.82, px=i*16;
+    x.fillStyle=lit?(night?["#f6dca0","#ffe8b8","#e8c890","#fff2d0"][Math.floor(R()*4)]:"#9fb4c8"):"#23232c"; x.fillRect(px+2,14,12,30);
+    x.fillStyle="rgba(0,0,0,.35)"; x.fillRect(px+2,36,12,8); }
+  x.fillStyle="#2a2a34"; x.fillRect(0,0,W,8); x.fillRect(0,52,W,12);
+  return tex(c,true);
 }
 function wallTex(){
   const c=canvas(256,32), x=c.getContext("2d");
@@ -100,50 +157,69 @@ function checkerTex(){
 function trackMesh(C,look,q,matTrack){
   const Co=CO(), S=SOIL[look.soil]||SOIL["stadium-dirt"], base=lin(S[0]), dark=lin(S[2]), lite=lin(S[1]), sandc=lin(SOIL.sand[1]), grassEdge=lin("#4f6b33");
   const outdoor=C.kind!=="stadium";
-  /* lateral stations: the shoulders go down to the surroundings; outdoors a grass apron blends into the terrain */
-  const fr=[-1.85,-1.35,-1,-0.72,-0.42,-0.15,0,0.15,0.42,0.72,1,1.35,1.85];
-  const nl=fr.length, pos=[], col=[], uv=[], idx=[], prevX=new Float64Array(nl), prevZ=new Float64Array(nl);
-  const st=C.ds*(q.lo?2:1), segs=Math.floor(C.L/st), o={}, o2={};
-  for(let k=0;k<=segs;k++){
-    const s=k*st, f=Co.frame(C,s,o), hw=f.hw, nx=-Math.sin(f.th), nz=Math.cos(f.th), sand=C.sand[Math.round(s/C.ds)%C.N]||0;
-    const rough=C.rough[Math.round(s/C.ds)%C.N]||0;
+  /* lateral stations (17 in a stadium: the berms' curve is smooth; 13 on a wide outdoor track): the shoulders go down to the surroundings;
+     outdoors a grass apron blends into the terrain */
+  const fr=outdoor?[-1.85,-1.35,-1,-0.8,-0.56,-0.28,0,0.28,0.56,0.8,1,1.35,1.85]:[-1.85,-1.35,-1,-0.86,-0.72,-0.57,-0.42,-0.21,0,0.21,0.42,0.57,0.72,0.86,1,1.35,1.85];
+  const nl=fr.length, pos=[], col=[], uv=[], pl=[], idx=[], prevX=new Float64Array(nl), prevZ=new Float64Array(nl), o={}, o2={};
+  /* along the loop: a row every ds (2 ds with Reduce effects) where the dirt has shape (a feature, sand, braking bumps; a turn or a berm
+     in a stadium), every 2 ds in an outdoor turn, up to 1.6 m apart on a plain straight outdoors (polish: RedBud's ribbon was 81k
+     triangles); the last row is the first (the loop closes) */
+  const st=C.ds*(q.lo?2:1), coarse=outdoor?Math.max(st,1.6):st, mid=outdoor?Math.max(st,C.ds*2):st, sv=[];
+  const shaped=i=>C.F[i]>0.004||C.sand[i]>0.01||C.rough[i]>0, turning=i=>Math.abs(C.k[i])>1/45||C.bank[i]>0.04;
+  for(let s=0;s<C.L-st*0.5;){ sv.push(s); let w=coarse;
+    for(let t=s;t<=s+coarse+C.ds;t+=C.ds){ const i=Math.round(t/C.ds)%C.N; if(shaped(i)){ w=st; break; } if(turning(i)) w=Math.min(w,mid); }
+    s+=w; }
+  sv.push(C.L);
+  for(let k=0;k<sv.length;k++){
+    const s=sv[k], f=Co.frame(C,s,o), hw=f.hw, nx=-Math.sin(f.th), nz=Math.cos(f.th), ii=Math.round(s/C.ds)%C.N, sand=C.sand[ii]||0, rough=C.rough[ii]||0;
     /* the tightest radius near here (the curvature is sampled, so look a little either side) */
     const kk=Math.max(Math.abs(f.k),Math.abs(Co.frame(C,s-1.5,o2).k),Math.abs(Co.frame(C,s+1.5,o2).k)), Rk=1/Math.max(1e-4,kk), inSide=f.k>0?1:-1;   /* the inside of a right turn is the right (+) */
     const lim=0.8*Rk, knee=0.55*lim;
+    const Fh=C.F[ii]||0, Fs=Math.abs((C.F[(ii+1)%C.N]||0)-(C.F[(ii-1+C.N)%C.N]||0))/(2*C.ds);
+    /* outdoors a tall feature gets wider shoulders (a jump's sides slope down like a real pile of dirt, not a wall), as far as the room
+       beside it allows */
+    const sideW=[2.6,2.6];
+    if(outdoor) [-1,1].forEach((sd,m)=>{ const eh=Co.ground(C,s,sd*hw)-f.y; if(eh<0.45) return; let w=2.6*(1+Math.min(eh,4)*0.55);
+      const room=roomBeside(C,f.x+nx*sd*hw,f.z+nz*sd*hw,s,30); w=Math.max(2.6,Math.min(w,room-1.5)); sideW[m]=w; });
     for(let j=0;j<nl;j++){
-      const u=fr[j], a=Math.abs(u); let lat=a<=1?u*hw:Math.sign(u)*(hw+(a-1)*2.6);
+      const u=fr[j], a=Math.abs(u); let lat=a<=1?u*hw:Math.sign(u)*(hw+(a-1)*sideW[u<0?0:1]);
       /* inside a tight turn the stations are squeezed smoothly (never past 80% of the radius, never crossing): no folded triangles */
       if(Math.sign(lat)===inSide&&Math.abs(lat)>knee){ const xx=Math.abs(lat); lat=inSide*(knee+(lim-knee)*Math.tanh((xx-knee)/Math.max(0.01,lim-knee))); }
-      let y;
+      let y, edge=0;
       if(a<=1) y=Co.ground(C,s,lat);
-      else { const edge=Co.ground(C,s,Math.sign(u)*hw); const t=(a-1)/0.85; y=edge+(f.y-(outdoor?0.55:0.3)-edge)*sstep(0,1,t); }   /* the shoulder dips under the ground at its outer edge */
-      /* small ruts and braking bumps */
-      if(a<0.9) y+=(vnoise(s*0.9,lat*1.7)-0.5)*0.05+rough*0.06*Math.sin(s*2.4)*(1-a);
+      else { edge=Co.ground(C,s,Math.sign(u)*hw); const t=(a-1)/0.85; y=edge+(f.y-(outdoor?0.55:0.3)-edge)*sstep(0,1,t); }   /* the shoulder dips under the ground at its outer edge */
+      let vx=f.x+nx*lat, vz=f.z+nz*lat;
+      /* small lumps and braking bumps (in world space: no stripes along the stations) */
+      if(a<0.9) y+=(vnoise(vx*0.9,vz*0.9)-0.5)*0.05+rough*0.06*Math.sin(s*2.4)*(1-a);
       /* never behind the same station of the row before (a hairpin tighter than the track is wide): the inside fans round a point
          instead of folding back over itself */
-      let vx=f.x+nx*lat, vz=f.z+nz*lat;
       if(k>0){ const al=(vx-prevX[j])*Math.cos(f.th)+(vz-prevZ[j])*Math.sin(f.th); if(al<0.02){ vx+=Math.cos(f.th)*(0.02-al); vz+=Math.sin(f.th)*(0.02-al); } }
       prevX[j]=vx; prevZ[j]=vz;
       pos.push(vx,y,vz);
-      /* colour: the groove darker, the edges lighter and drier, berm faces packed, sand pale, the outside shoulders grass outdoors */
-      const ii=Math.round(s/C.ds)%C.N, groove=Math.exp(-Math.pow(u*2.2,2)), bermFace=a>0.55&&a<=1?C.bank[ii]/2:0;
-      const Fh=C.F[ii]||0, Fs=Math.abs((C.F[(ii+1)%C.N]||0)-(C.F[(ii-1+C.N)%C.N]||0))/(2*C.ds);
-      let c=mixc(base,dark,groove*0.22+bermFace*0.35);
-      c=mixc(c,lite,(a>0.8&&a<=1)?0.3:0);
+      /* colour: the main line darker and moist, the edges lighter and drier, berm faces packed, sand pale, the outside shoulders grass outdoors
+         (only near the ground: a jump's sides are dirt) */
+      const groove=Math.exp(-Math.pow(u*2.0,2)), bermFace=a>0.55&&a<=1?C.bank[ii]/2:0;
+      let c=mixc(base,dark,groove*0.2+bermFace*0.3);
+      c=mixc(c,lite,(a>0.78&&a<=1)?0.32:0);
       /* the tops of whoops, mounds and jumps catch the light, the troughs and steep faces are darker */
-      const hs=Fh>0.05?clamp(0.82+0.32*clamp(Fh/1.4,0,1)-0.18*clamp(Fs,0,1),0.6,1.18):1;
+      const hs=Fh>0.05?clamp(0.86+0.26*clamp(Fh/1.4,0,1)-0.16*clamp(Fs,0,1),0.66,1.14):1;
       c=[c[0]*hs,c[1]*hs,c[2]*hs];
       if(sand>0) c=mixc(c,sandc,sand*0.85);
-      if(a>1) c=outdoor?mixc(mixc(base,lite,0.3),grassEdge,sstep(1.05,1.8,a)):mixc(mixc(base,dark,0.4),mixc(dark,dark,1).map(v=>v*0.78),sstep(1.0,1.85,a));
-      const nz2=0.92+vnoise(s*0.31+j,lat*0.5)*0.16; col.push(c[0]*nz2,c[1]*nz2,c[2]*nz2);
+      if(a>1){ const hAbove=y-(f.y-0.55);
+        c=outdoor?mixc(mixc(base,lite,0.3),grassEdge,sstep(1.05,1.8,a)*(1-sstep(0.35,1.1,hAbove))):mixc(mixc(base,dark,0.4),dark.map(v=>v*0.78),sstep(1.0,1.85,a)); }
+      const wn=0.9+(vnoise(vx*0.13,vz*0.13)*0.65+vnoise(vx*0.41+11,vz*0.41)*0.35)*0.2;   /* damp and dry patches, in world space */
+      col.push(c[0]*wn,c[1]*wn,c[2]*wn);
       uv.push(lat/5,s/5);
+      /* the inside of a hairpin: the dirt's detail is drawn flat in world space there (polish: the lane-following grooves wound into a
+         whorl round the apex) */
+      const rIn=Math.sign(lat)===inSide?Rk-Math.abs(lat):1e9; pl.push(Rk<16?1-sstep(2.5,7.5,rIn):0);
     }
   }
   /* wound so the faces look UP (lat runs to the right of the direction of travel): from above they are front faces, lit by the sun */
-  for(let k=0;k<segs;k++) for(let j=0;j<nl-1;j++){ const a=k*nl+j, b=a+1, c2=a+nl, d=c2+1; idx.push(a,b,c2,b,d,c2); }
+  for(let k=0;k<sv.length-1;k++) for(let j=0;j<nl-1;j++){ const a=k*nl+j, b=a+1, c2=a+nl, d=c2+1; idx.push(a,b,c2,b,d,c2); }
   /* close the loop: the last ring is the first */
   const g=new THREE.BufferGeometry(); g.setAttribute("position",new THREE.Float32BufferAttribute(pos,3)); g.setAttribute("color",new THREE.Float32BufferAttribute(col,3));
-  g.setAttribute("uv",new THREE.Float32BufferAttribute(uv,2)); g.setIndex(idx); g.computeVertexNormals();
+  g.setAttribute("uv",new THREE.Float32BufferAttribute(uv,2)); g.setAttribute("aPlan",new THREE.Float32BufferAttribute(pl,1)); g.setIndex(idx); g.computeVertexNormals();
   const parts=[g];
   /* the start path */
   if(C.S&&C.S.n){
@@ -157,11 +233,16 @@ function trackMesh(C,look,q,matTrack){
         const px=S2.x[i]+nx*lat, pz=S2.z[i]+nz*lat; if(onLoop(px,pz)) y=Math.min(y,y0-0.14);
         P2.push(px,y,pz); const c=a>1?(outdoor?grassEdge:mixc(base,dark,0.25)):mixc(base,dark,Math.exp(-u*u*3)*0.25); C2.push(c[0],c[1],c[2]); U2.push(lat/5,i*S2.ds/5); } }
     for(let k=0;k<rows-1;k++) for(let j=0;j<nl2-1;j++){ const a=k*nl2+j, b=a+1, c2=a+nl2, d=c2+1; I2.push(a,b,c2,b,d,c2); }
-    const g2=new THREE.BufferGeometry(); g2.setAttribute("position",new THREE.Float32BufferAttribute(P2,3)); g2.setAttribute("color",new THREE.Float32BufferAttribute(C2,3)); g2.setAttribute("uv",new THREE.Float32BufferAttribute(U2,2)); g2.setIndex(I2); g2.computeVertexNormals();
+    const g2=new THREE.BufferGeometry(); g2.setAttribute("position",new THREE.Float32BufferAttribute(P2,3)); g2.setAttribute("color",new THREE.Float32BufferAttribute(C2,3)); g2.setAttribute("uv",new THREE.Float32BufferAttribute(U2,2)); g2.setAttribute("aPlan",new THREE.Float32BufferAttribute(new Float32Array(P2.length/3),1)); g2.setIndex(I2); g2.computeVertexNormals();
     parts.push(g2);
   }
-  const mesh=new THREE.Mesh(parts.length>1?merge(parts):parts[0],matTrack);
-  mesh.receiveShadow=false;
+  let geo=parts[0];
+  if(parts.length>1){ /* one mesh (merge() keeps position, normal, colour, uv; the hairpin weight is carried here) */
+    const nonI=parts.map(q=>q.index?q.toNonIndexed():q); geo=merge(nonI);
+    const A=new Float32Array(geo.attributes.position.count); let o3=0; nonI.forEach(q=>{ const c=q.attributes.position.count, a=q.attributes.aPlan; if(a) A.set(a.array,o3); o3+=c; });
+    geo.setAttribute("aPlan",new THREE.BufferAttribute(A,1)); }
+  const mesh=new THREE.Mesh(geo,matTrack);
+  mesh.receiveShadow=true;
   return mesh;
 }
 
@@ -199,6 +280,13 @@ function clear(C,x,z,margin){
   return true;
 }
 
+/* how far (x, z) is from the nearest OTHER part of the track: samples within skip m of loop distance s don't count (its own section) */
+function roomBeside(C,x,z,s,skip){
+  const st=Math.max(1,Math.round(1/C.ds)); let best=1e9;
+  for(let i=0;i<C.N;i+=st){ let dd=Math.abs(i*C.ds-s); dd=Math.min(dd,C.L-dd); if(dd<skip) continue; const dx=C.x[i]-x, dz=C.z[i]-z, d=Math.sqrt(dx*dx+dz*dz)-C.hw[i]; if(d<best) best=d; }
+  if(C.S&&C.S.n) for(let i=0;i<C.S.n;i+=st){ const dx=C.S.x[i]-x, dz=C.S.z[i]-z, d=Math.sqrt(dx*dx+dz*dz)-C.S.hw[i]; if(d<best) best=d; }
+  return best;
+}
 /* how far (x, z) is from the nearest edge of the track (negative = on it) */
 function clearDist(C,x,z){
   const st=Math.max(1,Math.round(1/C.ds)); let best=1e9;
@@ -254,24 +342,34 @@ function finishBuild(C,look){
 }
 
 /* ---------------- a flagger (a person on a stand or beside the track) waving a flag; one mesh each ---------------- */
-export function flaggerBuild(flagTex){
-  const grp=new THREE.Group();
-  const body=merge([
-    xf(paint(new THREE.BoxGeometry(0.36,0.5,0.22),lin("#e8e4dc")),0,1.2,0),            /* shirt */
-    xf(paint(new THREE.BoxGeometry(0.32,0.62,0.2),lin("#2a2c34")),0,0.62,0),           /* trousers */
-    xf(paint(new THREE.SphereGeometry(0.12,8,6),lin("#c58c63")),0,1.6,0),              /* head */
-    xf(paint(new THREE.SphereGeometry(0.13,8,4,0,Math.PI*2,0,1.3),lin("#1d2a4a")),0,1.66,0)   /* cap */
-  ]);
-  const man=new THREE.Mesh(body,new THREE.MeshLambertMaterial({vertexColors:true})); grp.add(man);
+export function flaggerBuild(flagTex,o){
+  o=o||{}; const mar=!!o.marshal, grp=new THREE.Group();
+  /* the starter in a white shirt; a track marshal in a hi-vis orange vest over a dark shirt, with a big flag that shows from across the
+     floor (polish: the yellow flag was a speck) */
+  const shirt=lin(mar?"#2a2c34":"#e8e4dc"), vest=lin("#ff7418"), strip=lin("#e9ecef");
+  const parts=[
+    xf(paint(new THREE.BoxGeometry(0.36,0.5,0.22),shirt),0,1.2,0),
+    xf(paint(new THREE.BoxGeometry(0.15,0.8,0.17),lin("#23252c")),0.085,0.42,0), xf(paint(new THREE.BoxGeometry(0.15,0.8,0.17),lin("#23252c")),-0.085,0.42,0),
+    xf(paint(new THREE.BoxGeometry(0.14,0.08,0.22),lin("#141416")),0.085,0.04,0.02), xf(paint(new THREE.BoxGeometry(0.14,0.08,0.22),lin("#141416")),-0.085,0.04,0.02),
+    xf(paint(new THREE.BoxGeometry(0.09,0.5,0.09),shirt),-0.22,1.17,0,0,0,-0.08),
+    xf(paint(new THREE.SphereGeometry(0.115,10,8),lin("#c58c63")),0,1.6,0),
+    xf(paint(new THREE.SphereGeometry(0.125,10,5,0,Math.PI*2,0,1.3),lin(mar?"#ff7418":"#1d2a4a")),0,1.65,0),
+    xf(paint(new THREE.BoxGeometry(0.16,0.02,0.12),lin(mar?"#ff7418":"#1d2a4a")),0,1.64,0.12)];
+  if(mar) parts.push(xf(paint(new THREE.BoxGeometry(0.38,0.42,0.24),vest),0,1.24,0), xf(paint(new THREE.BoxGeometry(0.385,0.04,0.245),strip),0,1.16,0), xf(paint(new THREE.BoxGeometry(0.385,0.04,0.245),strip),0,1.3,0));
+  const man=new THREE.Mesh(merge(parts),new THREE.MeshLambertMaterial({vertexColors:true})); grp.add(man);
   const arm=new THREE.Group(); arm.position.set(0.2,1.4,0);
-  const armM=new THREE.Mesh(paint(new THREE.BoxGeometry(0.09,0.55,0.09),lin("#e8e4dc")),new THREE.MeshLambertMaterial({vertexColors:true})); armM.position.set(0,0.25,0); arm.add(armM);
-  const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.015,0.015,1.1,5),new THREE.MeshLambertMaterial({color:0xcccccc})); pole.position.set(0,0.75,0); arm.add(pole);
-  const fg=new THREE.PlaneGeometry(0.9,0.6,6,1); fg.translate(0.45,0,0);
-  const flag=new THREE.Mesh(fg,new THREE.MeshLambertMaterial({map:flagTex,side:THREE.DoubleSide})); flag.position.set(0,1.0,0); arm.add(flag);
+  const armM=new THREE.Mesh(paint(new THREE.BoxGeometry(0.09,0.55,0.09),mar?vest:shirt),new THREE.MeshLambertMaterial({vertexColors:true})); armM.position.set(0,0.25,0); arm.add(armM);
+  const fw=mar?1.25:0.9, fh=mar?0.86:0.6, pl=mar?1.5:1.1;
+  const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.015,0.015,pl,5),new THREE.MeshLambertMaterial({color:0xcccccc})); pole.position.set(0,0.2+pl/2,0); arm.add(pole);
+  const fg=new THREE.PlaneGeometry(fw,fh,8,2); fg.translate(fw/2,0,0);
+  /* the cloth glows a little of its own colour: it reads under the lights and in the shade */
+  const flag=new THREE.Mesh(fg,new THREE.MeshLambertMaterial({map:flagTex,side:THREE.DoubleSide,emissive:0xffffff,emissiveMap:flagTex,emissiveIntensity:mar?0.5:0.3})); flag.position.set(0,0.2+pl-fh/2,0); arm.add(flag);
   grp.add(arm);
   const P=fg.attributes.position, X0=Float32Array.from(P.array);
-  return {grp,arm,flag,wave(t,amp){ for(let i=0;i<P.count;i++){ const x=X0[i*3]; P.array[i*3+2]=Math.sin(t*9-x*5)*0.12*x*amp; } P.needsUpdate=true; arm.rotation.z=-0.35+Math.sin(t*6)*0.55*amp; arm.rotation.x=Math.sin(t*3)*0.1*amp; },
-    setTex(t){ flag.material.map=t; flag.material.needsUpdate=true; }};
+  return {grp,arm,flag,wave(t,amp){ for(let i=0;i<P.count;i++){ const x=X0[i*3]; P.array[i*3+2]=Math.sin(t*9-x*5)*0.13*x*amp; P.array[i*3+1]=X0[i*3+1]-Math.abs(Math.sin(t*4.5))*0.06*x*amp; } P.needsUpdate=true;
+      if(mar){ arm.rotation.z=-0.15+Math.sin(t*5.2)*0.75*amp; arm.rotation.x=Math.sin(t*2.6)*0.22*amp; flag.rotation.y=Math.sin(t*5.2+0.9)*0.95*amp; }   /* a marshal waves it hard, side to side over the head, the cloth sweeping round the pole (it shows from every side) */
+      else { arm.rotation.z=-0.35+Math.sin(t*6)*0.55*amp; arm.rotation.x=Math.sin(t*3)*0.1*amp; } },
+    setTex(t){ flag.material.map=t; flag.material.emissiveMap=t; flag.material.needsUpdate=true; }};
 }
 export function flagTex(kind){
   const c=canvas(96,64), x=c.getContext("2d");
@@ -285,9 +383,10 @@ function stadium(C,look,q,root,ctx){
   const [x0,x1,z0,z1]=C.layout.floor||[-66,66,-48,32], cx=(x0+x1)/2, cz=(z0+z1)/2, W=x1-x0, D=z1-z0;
   const night=true, dome=look.around==="stadium-dome";
   /* the dirt floor */
-  const floorT=dirtTex(look.soil,q.lo,true); floorT.repeat.set(W/9,D/9);
-  const floor=new THREE.Mesh(new THREE.PlaneGeometry(W+4,D+4),new THREE.MeshLambertMaterial({map:floorT,color:new THREE.Color(SOIL[look.soil]?SOIL[look.soil][2]:"#5e432c").multiplyScalar(0.78)}));
-  floor.rotation.x=-Math.PI/2; floor.position.set(cx,-0.16,cz); root.add(floor);   /* under the deepest rut of the track, so it never shows through the dirt */
+  const fm=dirtMaps(look.soil,q.lo,true); fm.map.repeat.set(W/7,D/7); fm.normal.repeat.set(W/7,D/7);
+  const Sx=SOIL[look.soil]||SOIL["stadium-dirt"], fc=mixc(lin(Sx[0]),lin(Sx[2]),0.6);
+  const floor=new THREE.Mesh(new THREE.PlaneGeometry(W+4,D+4),new THREE.MeshLambertMaterial({map:fm.map,normalMap:fm.normal,normalScale:new THREE.Vector2(0.8,0.8),color:new THREE.Color().setRGB(fc[0]*0.86,fc[1]*0.86,fc[2]*0.86)}));
+  floor.rotation.x=-Math.PI/2; floor.position.set(cx,-0.16,cz); floor.receiveShadow=true; root.add(floor);   /* under the deepest rut of the track, so it never shows through the dirt */
   /* the padded wall round the floor */
   const wt=wallTex(); wt.repeat.set((W+D)*2/14,1);
   const wallG=[]; const h=1.4;
@@ -300,13 +399,23 @@ function stadium(C,look,q,root,ctx){
     const e=4, px=Math.sign(ca)*Math.pow(Math.abs(ca),2/e)*rx, pz=Math.sign(sa)*Math.pow(Math.abs(sa),2/e)*rz; const nx=Math.sign(ca)*Math.pow(Math.abs(ca),e/2-1)*0+ca, nz=sa;
     const L=Math.hypot(nx,nz)||1; ring.push([cx+px,cz+pz,nx/L,nz/L]); }
   const prof=[[0,h+0.2],[2,h+1.6],[30,18],[31,18.4],[32,22.5],[34,23],[62,42],[64,44]];   /* distance back, height: the lower bowl, the suites, the upper deck */
-  const pos=[], uv=[], col=[], idx=[]; let uAcc=0;
+  /* the crowd's rows follow the slope (a row 0.85 m up it, a seat 0.55 m along it); under the lights the lower bowl is bright and the
+     upper deck falls away into the dark */
+  const slopeV=[0]; for(let j=1;j<prof.length;j++) slopeV.push(slopeV[j-1]+Math.hypot(prof[j][0]-prof[j-1][0],prof[j][1]-prof[j-1][1]));
+  const shadeJ=night?[0.95,1,0.66,0.2,0.2,0.56,0.34,0.22]:[1,1,0.88,0.3,0.3,0.84,0.72,0.5];
+  const pos=[], uv=[], col=[], idx=[], spos=[], suv=[]; let uAcc=0;
   for(let i=0;i<=segs;i++){ const r=ring[i%segs], rp=ring[(i+segs-1)%segs]; if(i) uAcc+=Math.hypot(r[0]-rp[0],r[1]-rp[1]);
-    prof.forEach((p,j)=>{ pos.push(r[0]+r[2]*p[0],p[1],r[1]+r[3]*p[0]); uv.push(uAcc/22,j<3?(p[1]/18)*1.5:1.9+(p[1]-22)/22*1.6); const shade=(j===3||j===4)?0.22:1; col.push(shade,shade*0.95,shade*0.9); }); }
+    prof.forEach((p,j)=>{ pos.push(r[0]+r[2]*p[0],p[1],r[1]+r[3]*p[0]); uv.push(uAcc/(CROWD.cols*CROWD.seat),slopeV[j]/(CROWD.rows*CROWD.row)); const sh=shadeJ[j]; col.push(sh,sh*0.96,sh*0.92); });
+    /* the suites' windows: a band just in front of the face between the decks */
+    [[30.86,18.6],[31.86,22.4]].forEach((p,j)=>{ spos.push(r[0]+r[2]*p[0],p[1],r[1]+r[3]*p[0]); suv.push(uAcc/48,j); }); }
   const np=prof.length; for(let i=0;i<segs;i++) for(let j=0;j<np-1;j++){ const a=i*np+j, b=a+1, c2=a+np, d=c2+1; idx.push(a,b,c2,b,d,c2); }
   const bg=new THREE.BufferGeometry(); bg.setAttribute("position",new THREE.Float32BufferAttribute(pos,3)); bg.setAttribute("uv",new THREE.Float32BufferAttribute(uv,2)); bg.setAttribute("color",new THREE.Float32BufferAttribute(col,3)); bg.setIndex(idx); bg.computeVertexNormals();
   const ct=crowdTex(q.lo,night);
   const bowl=new THREE.Mesh(bg,new THREE.MeshLambertMaterial({map:ct,vertexColors:true,side:THREE.DoubleSide})); root.add(bowl);
+  const si=[]; for(let i=0;i<segs;i++){ const a=i*2; si.push(a,a+1,a+2,a+1,a+3,a+2); }
+  const sg=new THREE.BufferGeometry(); sg.setAttribute("position",new THREE.Float32BufferAttribute(spos,3)); sg.setAttribute("uv",new THREE.Float32BufferAttribute(suv,2)); sg.setIndex(si);
+  const sTex=suitesTex(night); sTex.wrapT=THREE.ClampToEdgeWrapping;
+  root.add(new THREE.Mesh(sg,new THREE.MeshBasicMaterial({map:sTex,side:THREE.DoubleSide,color:night?0xd8d0c0:0x9a9aa0})));
   /* the rim and the light banks: glows round the top of the bowl, a few truss bars over the floor */
   const glows=[]; for(let i=0;i<segs;i+=q.lo?4:2){ const r=ring[i]; glows.push([r[0]+r[2]*63,46,r[1]+r[3]*63,7]); }
   if(dome){ /* a dome roof: dark, with the light rig hanging from it */
@@ -374,13 +483,13 @@ function outdoorWorld(C,look,q,root,ctx){
   const [x0,x1,z0,z1]=C.layout.floor||[-500,600,-400,520], W=x1-x0, D=z1-z0, cx=(x0+x1)/2, cz=(z0+z1)/2;
   const hf=terrainHeightFn(C,look), cs=q.lo?11:8, nx=Math.ceil(W/cs), nz=Math.ceil(D/cs);
   const pos=new Float32Array((nx+1)*(nz+1)*3), col=new Float32Array((nx+1)*(nz+1)*3), uv=new Float32Array((nx+1)*(nz+1)*2), idx=[];
-  const g1=lin(look.around==="beach-speedway"?"#6f7f45":"#4a6b2c"), g2=lin(look.around==="beach-speedway"?"#a59a6a":"#36551f"), dry=lin("#7d7a48");
+  const g1=lin(look.around==="beach-speedway"?"#6f7f45":"#587a35"), g2=lin(look.around==="beach-speedway"?"#a59a6a":"#3f5f28"), dry=lin("#8f8a55");
   for(let j=0;j<=nz;j++) for(let i=0;i<=nx;i++){ const x=x0+i*cs, z=z0+j*cs, y=hf(x,z), k=j*(nx+1)+i; pos[k*3]=x; pos[k*3+1]=y; pos[k*3+2]=z; uv[k*2]=x/9; uv[k*2+1]=z/9;
     const n=fbm(x/60,z/60,3); let c=mixc(g1,g2,n); c=mixc(c,dry,clamp((fbm(x/25+9,z/25,2)-0.55)*2,0,0.5)); col[k*3]=c[0]; col[k*3+1]=c[1]; col[k*3+2]=c[2]; }
   for(let j=0;j<nz;j++) for(let i=0;i<nx;i++){ const a=j*(nx+1)+i, b=a+1, c2=a+nx+1, d=c2+1; idx.push(a,c2,b,b,c2,d); }
   const tg=new THREE.BufferGeometry(); tg.setAttribute("position",new THREE.BufferAttribute(pos,3)); tg.setAttribute("color",new THREE.BufferAttribute(col,3)); tg.setAttribute("uv",new THREE.BufferAttribute(uv,2)); tg.setIndex(idx); tg.computeVertexNormals();
   const gt=grassTex(q.lo);
-  const terr=new THREE.Mesh(tg,new THREE.MeshLambertMaterial({map:gt,vertexColors:true})); root.add(terr);
+  const terr=new THREE.Mesh(tg,new THREE.MeshLambertMaterial({map:gt,vertexColors:true})); terr.receiveShadow=true; root.add(terr);
   ctx.hf=hf;
   /* far hills: a ring of low hills at the horizon */
   const fh=[], R0=Math.max(W,D)*0.95, nseg=q.lo?36:64; for(let i=0;i<=nseg;i++){ const a=i/nseg*Math.PI*2; const h=30+fbm(i*0.3,4,3)*90; fh.push([cx+Math.cos(a)*R0,cz+Math.sin(a)*R0,h]); }
@@ -395,14 +504,21 @@ function outdoorWorld(C,look,q,root,ctx){
   const leafy=merge([xf(paint(new THREE.IcosahedronGeometry(3.0,0),lin("#35562a")),0,5.6,0),xf(paint(new THREE.IcosahedronGeometry(2.2,0),lin("#3f6630")),1.2,6.6,0.6),xf(paint(new THREE.CylinderGeometry(0.3,0.4,3.6,5),lin("#4a3424")),0,1.8,0)]);
   const tmat=new THREE.MeshLambertMaterial({vertexColors:true});
   [pine,leafy].forEach((geo,type)=>{ const L=trees.filter(t=>t[4]===type); if(!L.length) return; const m=new THREE.InstancedMesh(geo,tmat,L.length), M=new THREE.Matrix4(), Q=new THREE.Quaternion(), E=new THREE.Euler(), V=new THREE.Vector3(), S=new THREE.Vector3();
-    L.forEach((t,i)=>{ E.set(0,t[0]*1.7,0); Q.setFromEuler(E); V.set(t[0],t[2]-0.2,t[1]); S.set(t[3],t[3]*(0.85+0.3*((i*37)%10)/10),t[3]); M.compose(V,Q,S); m.setMatrixAt(i,M); });
-    m.instanceMatrix.needsUpdate=true; root.add(m); });
+    const tc=new THREE.Color();
+    L.forEach((t,i)=>{ E.set(0,t[0]*1.7,0); Q.setFromEuler(E); V.set(t[0],t[2]-0.2,t[1]); S.set(t[3],t[3]*(0.85+0.3*((i*37)%10)/10),t[3]); M.compose(V,Q,S); m.setMatrixAt(i,M);
+      const k=0.82+((i*53)%17)/17*0.36; tc.setRGB(k*(type?1.04:0.96),k,k*(type?0.9:1.0)); m.setColorAt(i,tc); });
+    m.instanceMatrix.needsUpdate=true; if(m.instanceColor) m.instanceColor.needsUpdate=true; root.add(m); });
+  /* the track's edges: stakes and a ribbon, as at a national */
+  stakesRibbon(C,look,q,root);
+  /* a few soft clouds */
+  ctx.clouds(C,q);
   /* spectators along the fence at the jumps and the finish */
   spectators(C,look,q,root,hf,R);
   /* the paddock: trucks and tents near the start */
   paddock(C,look,q,root,hf,R);
-  ctx.sky(look.around==="desert"?0x8fb6e0:0x4f86d4,0xa9c7ec,0xdfe6ec,true);
-  ctx.fog(0xd3dee8,280,1400);
+  /* a deeper blue overhead, a soft haze at the horizon (polish: the old sky washed out to white under the tone mapping) */
+  ctx.sky(look.around==="desert"?0x6f9fd6:0x2e6cc4,0x78a9e0,0xcbd9e6,true);
+  ctx.fog(0xc6d4e2,320,1600);
   return {cx:cx,cz:cz};
 }
 function spectators(C,look,q,root,hf,R){
@@ -411,11 +527,59 @@ function spectators(C,look,q,root,hf,R){
   spots.forEach(s0=>{ for(let k=0;k<(q.lo?14:34);k++){ const s=s0+(R()-0.5)*40, f=Co.frame(C,s,o), side=R()<0.5?-1:1, lat=side*(f.hw+7+R()*7);
     const x=f.x-Math.sin(f.th)*lat, z=f.z+Math.cos(f.th)*lat; if(!clear(C,x,z,5)) continue; list.push([x,z,hf?hf(x,z):0,R()]); } });
   if(!list.length) return;
-  const body=merge([xf(paint(new THREE.BoxGeometry(0.42,0.75,0.26),[1,1,1]),0,1.05,0),xf(paint(new THREE.BoxGeometry(0.34,0.7,0.22),lin("#2c2f3a")),0,0.35,0),xf(paint(new THREE.SphereGeometry(0.13,6,4),lin("#c58c63")),0,1.58,0)]);
-  const m=new THREE.InstancedMesh(body,new THREE.MeshLambertMaterial({vertexColors:true}),list.length), M=new THREE.Matrix4(), Q=new THREE.Quaternion(), V=new THREE.Vector3(), S=new THREE.Vector3(1,1,1), cl=new THREE.Color();
+  /* a person: shirt (the instance colour), arms, trousers, shoes, a head with hair or a cap (their own colours: aFix) */
+  const shirt=xf(paint(new THREE.CylinderGeometry(0.2,0.17,0.62,7),[1,1,1]),0,1.1,0); shirt.scale(1,1,0.7);
+  const parts=[shirt,
+    xf(paint(new THREE.BoxGeometry(0.09,0.56,0.1),[1,1,1]),0.25,1.08,0,0,0,0.12),xf(paint(new THREE.BoxGeometry(0.09,0.56,0.1),[1,1,1]),-0.25,1.08,0,0,0,-0.12),
+    xf(paint(new THREE.BoxGeometry(0.15,0.8,0.16),lin("#2c3040")),0.09,0.4,0),xf(paint(new THREE.BoxGeometry(0.15,0.8,0.16),lin("#2c3040")),-0.09,0.4,0),
+    xf(paint(new THREE.SphereGeometry(0.12,8,6),lin("#c58c63")),0,1.56,0),xf(paint(new THREE.SphereGeometry(0.125,8,4,0,Math.PI*2,0,1.25),lin("#2a2018")),0,1.6,0)];
+  const fixN=[0,0,0,1,1,1,1];
+  parts.forEach((g,k)=>{ const n=g.attributes.position.count; g.setAttribute("aFix",new THREE.BufferAttribute(new Float32Array(n).fill(fixN[k]),1)); });
+  const body=mergeFix(parts);
+  const m=new THREE.InstancedMesh(body,fixMat(),list.length), M=new THREE.Matrix4(), Q=new THREE.Quaternion(), V=new THREE.Vector3(), S=new THREE.Vector3(1,1,1), cl=new THREE.Color();
   const shirts=["#d8d4cc","#c8102e","#1f4fc4","#f2cf1d","#2a2a2a","#57b947","#ff7a1a","#e6e6ea","#3a5ba0","#7a3b8f"];
   list.forEach((p,i)=>{ Q.setFromAxisAngle(new THREE.Vector3(0,1,0),p[3]*6.28); V.set(p[0],p[2],p[1]); M.compose(V,Q,S); m.setMatrixAt(i,M); cl.set(shirts[i%shirts.length]); m.setColorAt(i,cl); });
   m.instanceMatrix.needsUpdate=true; root.add(m);
+}
+/* a Lambert material where vertices marked aFix keep their own colour (not tinted by the instance colour): skin, trousers */
+export function fixMat(){
+  const m=new THREE.MeshLambertMaterial({vertexColors:true});
+  m.onBeforeCompile=sh=>{ sh.vertexShader=sh.vertexShader.replace("#include <common>","#include <common>\nattribute float aFix;").replace("#include <color_vertex>","#include <color_vertex>\n#ifdef USE_INSTANCING_COLOR\n vColor.rgb=mix(vColor.rgb,color.rgb,aFix);\n#endif"); };
+  m.customProgramCacheKey=()=>"mx-wfix";
+  return m;
+}
+/* merge() that carries an aFix attribute along (non-indexed, in the same vertex order as merge) */
+function mergeFix(list){ const g=merge(list), F=new Float32Array(g.attributes.position.count); let n=0;
+  list.forEach(q=>{ const a=q.attributes.aFix, ix=q.index, c=ix?ix.count:q.attributes.position.count; for(let i=0;i<c;i++) F[n+i]=a?a.array[ix?ix.array[i]:i]:0; n+=c; });
+  g.setAttribute("aFix",new THREE.BufferAttribute(F,1)); return g; }
+/* outdoors: white stakes every few metres along both edges with a coloured ribbon between them (plain colours, no marks); none on another
+   lane, the start or a jump's run-out */
+function stakesRibbon(C,look,q,root){
+  const Co=CO(), o={}, step=q.lo?8:5.5, rows={"-1":[],"1":[]};
+  for(let s=0;s<C.L;s+=step){ const f=Co.frame(C,s,o), ii=Math.round(s/C.ds)%C.N;
+    for(const side of [-1,1]){
+      const out=(f.k>0?-1:1)===side, ext=1.3+(out?C.bank[ii]*0.7:0), lat=side*(f.hw+ext), x=f.x-Math.sin(f.th)*lat, z=f.z+Math.cos(f.th)*lat;
+      if(!clear(C,x,z,1.0)){ rows[side].push(null); continue; }
+      const edge=Co.ground(C,s,side*f.hw), y=edge+(f.y-0.55-edge)*sstep(0,1,ext/2.21);
+      rows[side].push([x,y-0.12,z]); } }
+  const post=merge([xf(paint(new THREE.BoxGeometry(0.06,1.05,0.06),lin("#ecebe6")),0,0.52,0),xf(paint(new THREE.BoxGeometry(0.07,0.14,0.07),lin("#ff6a10")),0,1.05,0)]);
+  const all=rows["-1"].concat(rows["1"]).filter(Boolean);
+  if(!all.length) return;
+  const pm=new THREE.InstancedMesh(post,new THREE.MeshLambertMaterial({vertexColors:true}),all.length), M=new THREE.Matrix4();
+  all.forEach((p,i)=>{ M.makeTranslation(p[0],p[1],p[2]); pm.setMatrixAt(i,M); }); pm.instanceMatrix.needsUpdate=true; root.add(pm);
+  const P=[], Cc=[], rc=lin(look.around==="desert"?"#2a62d6":"#ff7a1a"), rc2=lin("#f4f2ea");
+  ["-1","1"].forEach(sd=>{ const L=rows[sd]; for(let i=0;i<L.length;i++){ const a=L[i], b=L[(i+1)%L.length]; if(!a||!b) continue; if(Math.hypot(a[0]-b[0],a[2]-b[2])>step*1.7) continue;
+    const c=(i%2)?rc:rc2; [[a,0.6],[a,0.74],[b,0.6],[b,0.74]].forEach(v=>{ P.push(v[0][0],v[0][1]+v[1],v[0][2]); Cc.push(c[0],c[1],c[2]); }); } });
+  if(!P.length) return;
+  const I=[]; for(let k=0;k<P.length/12;k++){ const a=k*4; I.push(a,a+2,a+1,a+1,a+2,a+3); }
+  const g=new THREE.BufferGeometry(); g.setAttribute("position",new THREE.Float32BufferAttribute(P,3)); g.setAttribute("color",new THREE.Float32BufferAttribute(Cc,3)); g.setIndex(I); g.computeVertexNormals();
+  root.add(new THREE.Mesh(g,new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide})));
+}
+function cloudTex(){
+  const W=256, H=128, c=canvas(W,H), x=c.getContext("2d"), R=rngf(5);
+  for(let i=0;i<30;i++){ const u=0.14+R()*0.72, px=W*u, py=H*(0.62-Math.sin(u*Math.PI)*0.22+R()*0.12), r=H*(0.12+R()*0.18), g=x.createRadialGradient(px,py,0,px,py,r);
+    g.addColorStop(0,"rgba(255,255,255,.5)"); g.addColorStop(0.55,"rgba(255,255,255,.26)"); g.addColorStop(1,"rgba(255,255,255,0)"); x.fillStyle=g; x.beginPath(); x.arc(px,py,r,0,7); x.fill(); }
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t;
 }
 function paddock(C,look,q,root,hf,R){
   const Co=CO(), o={}; let f;
@@ -448,7 +612,7 @@ function speedway(C,look,q,root,ctx){
   const og=new THREE.BufferGeometry(); og.setAttribute("position",new THREE.Float32BufferAttribute(op,3)); og.setAttribute("color",new THREE.Float32BufferAttribute(oc,3)); og.setIndex(oi); og.computeVertexNormals();
   root.add(new THREE.Mesh(og,new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide})));
   /* the grandstand along the front stretch (south), with the crowd */
-  const gsW=900, gs=new THREE.Mesh(new THREE.PlaneGeometry(gsW,60),new THREE.MeshLambertMaterial({map:(()=>{ const t=crowdTex(q.lo,true); t.repeat.set(gsW/30,3); return t; })(),side:THREE.DoubleSide}));
+  const gsW=900, gs=new THREE.Mesh(new THREE.PlaneGeometry(gsW,60),new THREE.MeshLambertMaterial({map:(()=>{ const t=crowdTex(q.lo,true); t.repeat.set(gsW/(CROWD.cols*CROWD.seat),60/(CROWD.rows*CROWD.row)); return t; })(),side:THREE.DoubleSide}));
   gs.position.set(cx,22,cz+B+40+28); gs.rotation.x=-0.78; root.add(gs);
   const gsBack=new THREE.Mesh(new THREE.BoxGeometry(gsW,4,4),new THREE.MeshLambertMaterial({color:0x22222a})); gsBack.position.set(cx,44,cz+B+40+50); root.add(gsBack);
   /* the infield ground */
@@ -458,7 +622,7 @@ function speedway(C,look,q,root,ctx){
   for(let i=0;i<P.count;i++){ const x=P.getX(i), z=P.getZ(i); P.setY(i,hf(x,z)-0.15); const n=fbm(x/50,z/50,3); const c=mixc(g1,g2,n*0.8); cl[i*3]=c[0]; cl[i*3+1]=c[1]; cl[i*3+2]=c[2]; }
   g.setAttribute("color",new THREE.BufferAttribute(cl,3)); g.computeVertexNormals();
   const gt=grassTex(q.lo); gt.repeat.set(W/12,D/12);
-  root.add(new THREE.Mesh(g,new THREE.MeshLambertMaterial({map:gt,vertexColors:true})));
+  { const ig=new THREE.Mesh(g,new THREE.MeshLambertMaterial({map:gt,vertexColors:true})); ig.receiveShadow=true; root.add(ig); }
   /* the lake (north of the track) */
   const lake=new THREE.Mesh(new THREE.CircleGeometry(160,40),new THREE.MeshLambertMaterial({color:0x0a1a2c,emissive:0x02060c}));
   lake.rotation.x=-Math.PI/2; lake.scale.set(1.6,1,1); lake.position.set(cx+60,0.02,cz-220); root.add(lake);
@@ -484,10 +648,19 @@ function speedway(C,look,q,root,ctx){
 /* ---------------- the whole world ---------------- */
 export function buildWorld(C,look,q){
   const root=new THREE.Group(), ctx={};
-  ctx.dirt=dirtTex(look.soil,q.lo);
-  const tm=ctx.dirt.clone(); tm.needsUpdate=true;
-  /* both sides: at a traced hairpin tighter than the track is wide the inside folds over itself; drawn from both sides it never shows a hole */
-  const matTrack=new THREE.MeshLambertMaterial({map:tm,vertexColors:true,side:THREE.DoubleSide});
+  const dm=dirtMaps(look.soil,q.lo,false); ctx.dirt=dm.map;
+  /* both sides: at a traced hairpin tighter than the track is wide the inside folds over itself; drawn from both sides it never shows a hole.
+     The normal map rakes the light across the grooves and clods (polish) */
+  const matTrack=new THREE.MeshLambertMaterial({map:dm.map,normalMap:dm.normal,normalScale:new THREE.Vector2(1,1),vertexColors:true,side:THREE.DoubleSide});
+  /* aPlan (the inside of a hairpin): the detail sampled flat in world space there, its relief faded (no whorl of grooves at the apex) */
+  matTrack.onBeforeCompile=sh=>{
+    sh.vertexShader=sh.vertexShader.replace("#include <common>","#include <common>\nattribute float aPlan;\nvarying float vPlan;\nvarying vec2 vWxz;")
+      .replace("#include <begin_vertex>","#include <begin_vertex>\nvPlan=aPlan; vWxz=(modelMatrix*vec4(transformed,1.0)).xz*0.2;");
+    sh.fragmentShader=sh.fragmentShader.replace("#include <common>","#include <common>\nvarying float vPlan;\nvarying vec2 vWxz;")
+      .replace("#include <map_fragment>","#ifdef USE_MAP\n vec4 sampledDiffuseColor=mix(texture2D(map,vMapUv),texture2D(map,vWxz),vPlan);\n diffuseColor*=sampledDiffuseColor;\n#endif")
+      .replace("#include <normal_fragment_maps>",THREE.ShaderChunk.normal_fragment_maps.replace("mapN.xy *= normalScale;","mapN.xy *= normalScale*(1.0-vPlan);"));
+  };
+  matTrack.customProgramCacheKey=()=>"mx-track";
   ctx.glowTex=glowTex();
   ctx.glow=function(list,color){
     if(q.lo) list=list.filter((g,i)=>i%2===0);
@@ -506,6 +679,18 @@ export function buildWorld(C,look,q){
       s.scale.set(420,420,1); ctx.sunMesh=s; root.add(s); }
   };
   ctx.fog=function(col,near,far){ ctx.fogC=[col,near,far]; };
+  /* soft clouds: camera-facing quads far out in the sky (one draw call; no fog) */
+  ctx.clouds=function(C2,q2){
+    const n=q2.lo?7:14, R=rngf((C2.L|0)+3), geo=new THREE.PlaneGeometry(1,1), M=new THREE.Matrix4(), list=[];
+    const F=C2.layout.floor||[-500,600,-400,520], cx=(F[0]+F[1])/2, cz=(F[2]+F[3])/2;
+    for(let i=0;i<n;i++){ const a=i/n*Math.PI*2+R()*0.4, d=1500+R()*600; list.push([cx+Math.cos(a)*d,240+R()*300,cz+Math.sin(a)*d,520+R()*480,150+R()*120]); }
+    const mat=new THREE.ShaderMaterial({uniforms:{map:{value:cloudTex()},col:{value:new THREE.Color(0xffffff)}},transparent:true,depthWrite:false,fog:false,
+      vertexShader:"varying vec2 vUv; void main(){ vUv=uv; vec4 c=modelViewMatrix*instanceMatrix*vec4(0.,0.,0.,1.); c.x+=position.x*length(instanceMatrix[0].xyz); c.y+=position.y*length(instanceMatrix[1].xyz); gl_Position=projectionMatrix*c; }",
+      fragmentShader:"uniform sampler2D map; uniform vec3 col; varying vec2 vUv; void main(){ vec4 t=texture2D(map,vUv); gl_FragColor=vec4(col*mix(0.8,1.0,vUv.y),t.a*0.9); }"});
+    const m=new THREE.InstancedMesh(geo,mat,list.length);
+    list.forEach((c,i)=>{ M.makeScale(c[3],c[4],1); M.setPosition(c[0],c[1],c[2]); m.setMatrixAt(i,M); });
+    m.instanceMatrix.needsUpdate=true; m.frustumCulled=false; m.renderOrder=-5; root.add(m);
+  };
   let info;
   if(C.kind==="stadium") info=stadium(C,look,q,root,ctx);
   else if(look.around==="beach-speedway"||C.kind==="hybrid") info=speedway(C,look,q,root,ctx);

@@ -663,7 +663,7 @@ function enterRace(){
   if(!G||G.over) return;
   if(!G.race){ S.startRace(G); }
   skipQ=false; ui.rc=G.race; ui.rmap=G.rmap.slice(); ui.label=raceLabel(); ui.hs=null; ui.lap=0; ui.lastWin=null; disp=null; ui.lastCards={}; ui.bikes={}; ui.order=[]; ui.flagged=false; ui.trkKey=null;
-  ui.show=null; ui.yellowNext=null; ui.lapReady=0; ui.finish3=false; ui.lapAt=0; clearGrace();
+  ui.show=null; ui.yellowNext=null; ui.yellowOn=null; ui.lapReady=0; ui.finish3=false; ui.lapAt=0; clearGrace();
   save();
   setView("race");
   logLine((G.cal[G.ri].city||G.cal[G.ri].venue)+" "+ui.label+": "+ui.rc.n+" riders behind the gate.");
@@ -717,7 +717,8 @@ function layoutArena(){
   var rem=remPx(), tv=onTV();
   if(use3D()){
     /* 3D: the race fills the arena; the cards are a small window in the corner (bigger when tapped) */
-    var tb=$("table"), big=tb.classList.contains("is-big"), pw=Math.round(Math.min(W*(big?0.66:(tv?0.24:0.46)),big?44*rem:(tv?24*rem:14.5*rem))), ph=Math.round(Math.min(H*(big?0.62:(tv?0.27:0.3)),pw*0.64));
+    /* polish (the CEO: "a tiny box window ... Put it in a corner"): about a third of a phone's width, a fifth of a TV's */
+    var tb=$("table"), big=tb.classList.contains("is-big"), pw=Math.round(Math.min(W*(big?0.66:(tv?0.18:0.36)),big?44*rem:(tv?19*rem:11.5*rem))), ph=Math.round(Math.min(H*(big?0.62:(tv?0.24:0.26)),pw*0.64));
     tb.style.setProperty("--pip-w",pw+"px"); tb.style.setProperty("--pip-h",ph+"px");
     var cw3=Math.max(tv?Math.round(1.9*rem):24,Math.round(Math.min((ph-rem*(tv?3.2:2.6))/1.4,pw*0.21)));   /* the label, the card and the rider's plate all fit inside the window */
     tb.style.setProperty("--cw",cw3+"px");
@@ -759,7 +760,7 @@ function trackRiders(){
     try{
       V3.setRace({series:G.series,year:G.year,round:c3.n||(G.ri+1),cal:c3,len:rc.o.len,lapT:(G.round&&G.round.lapT)||0,riders:rc.r.map(function(p,s){ var R=G.riders[seatId(s)], m=A.mk(R.bike); return {s:s,color:m[0],accent:m[0]==="#f2f4f8"?"#183a8c":(m[1]==="#0b0a12"?"#16161c":"#f2f2f6"),num:R.plate,name:R.name,red:R.id===red3,me:R.kind==="human"}; })});
     }catch(e){ try{ console.warn("mxwar: 3D race",e); }catch(x){} v3state="failed"; mode3D(); ui.trkKey=null; renderRace(); return; }
-    ui.show=null; ui.yellowNext=null; ui.lapReady=0; ui.finish3=false;
+    ui.show=null; ui.yellowNext=null; ui.yellowOn=null; ui.lapReady=0; ui.finish3=false;
     if(rc.phase!=="gate"){ /* a race restored mid-way: the field placed by the standings at the start of this lap, riding on */
       rc.r.forEach(function(p,s){ if(p.out&&p.pk.length===0&&p.dnf) V3.markOut(s); });
       var nb=Math.min(rc.battle+1,rc.o.len); V3.standings(RC.standings(rc).map(function(r){ return r.s; }),rc.r.map(function(p){ return p.pk.length; }),nb);
@@ -907,8 +908,9 @@ function lapBug(){
   if(!use3D()||!rc){ b.hidden=true; return; }
   b.hidden=false;
   var lp=Math.min(ui.lap||1,rc.o.len), last=rc.phase!=="gate"&&!ui.finish3&&lp===rc.o.len&&rc.o.len>1;
-  b.innerHTML=rc.phase==="gate"?"<b>Gate</b><span>"+plural(rc.o.len,"lap")+"</span>":ui.finish3?A.flag()+"<b>Finish</b>":(last?A.wflag():"")+"<b>Lap "+lp+"</b><span>of "+rc.o.len+"</span>";
-  b.classList.toggle("is-white",last);
+  var yel=!!(ui.yellowOn&&!ui.finish3&&(ui.lap||1)<=ui.yellowOn.lap); if(!yel) ui.yellowOn=null;
+  b.innerHTML=rc.phase==="gate"?"<b>Gate</b><span>"+plural(rc.o.len,"lap")+"</span>":ui.finish3?A.flag()+"<b>Finish</b>":(yel?A.yflag():last?A.wflag():"")+"<b>Lap "+lp+"</b><span>of "+rc.o.len+(yel?" · yellow":"")+"</span>";
+  b.classList.toggle("is-white",last&&!yel); b.classList.toggle("is-yellow",yel);
 }
 /* "You" is the person when they raced without a name: "You win", never "You wins" */
 function youVerb(t){ return String(t).replace(/\bYou (wins|takes|moves|gets|grabs|turns|leads|holds|keeps|pulls|snaps|runs|flips)\b/g,function(m,v){ return "You "+v.slice(0,-1); }).replace(/\bYou has\b/g,"You have").replace(/\bYou is\b/g,"You are").replace(/\bYou's\b/g,"Your"); }
@@ -1135,7 +1137,7 @@ async function anim3D(my,e,evs,ei,rc){
     case "crashCards": { logLine(nm(e.s)+" takes "+plural(e.n,"card")+" from the crash."); return true; }
     case "yellow": {
       if(ui.yellowBanner===evs) return true; ui.yellowBanner=evs;
-      showAt("yellow").then(function(){ if(my!==gen) return; logLine("Yellow flag: no passing at the crash next lap."); queueBanner("Yellow flag","No passing at the crash",dl(1400),"is-yellow"); });
+      showAt("yellow").then(function(){ if(my!==gen) return; logLine("Yellow flag: no passing at the crash next lap."); ui.yellowOn=ui.yellowNext; lapBug(); queueBanner("Yellow flag","No passing at the crash",dl(1400),"is-yellow"); });
       return true;
     }
     case "dnf": { return true; }

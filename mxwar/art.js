@@ -112,6 +112,12 @@ function wflag(){
     '<path d="M8 4C20 1 30 9 42 5C47 3.5 51 3 54 4V28C51 27 47 27.5 42 29C30 33 20 25 8 28Z" fill="#fbfaf5" stroke="#22222a" stroke-width="1.2"/></svg>';
 }
 
+/* the yellow flag (3D: in the lap bug while a crash's yellow flag is out) */
+function yflag(){
+  return '<svg class="mx-flag mx-yflag" viewBox="0 0 60 40" aria-hidden="true" focusable="false"><rect x="4" y="2" width="3" height="37" rx="1.5" fill="#c99f5e"/>'+
+    '<path d="M8 4C20 1 30 9 42 5C47 3.5 51 3 54 4V28C51 27 47 27.5 42 29C30 33 20 25 8 28Z" fill="#f6d21c" stroke="#22222a" stroke-width="1.2"/></svg>';
+}
+
 /* ---------------- cards ---------------- */
 var SUIT={
   S:'<path fill="currentColor" d="M50 5C50 5 13 38 13 62C13 76 24 85 36 85C42 85 47 82 49 79C48 89 44 94 35 97H65C56 94 52 89 51 79C53 82 58 85 64 85C76 85 87 76 87 62C87 38 50 5 50 5Z"/>',
@@ -133,6 +139,6 @@ function chip(id){ if(id==null) return ""; var c=info(id); return '<span class="
 function chipRed(id){ return id!=null&&info(id).red; }
 function short(id){ var c=info(id); return rankLabel(c.r)+({S:"♠",H:"♥",D:"♦",C:"♣",J:""}[c.s]); }
 
-MX.Art={MK:MK,MODERN:MODERN,mk:mk,mkStyle:mkStyle,bike:bike,track:track,gate:gate,flag:flag,wflag:wflag,suit:suit,info:info,rankLabel:rankLabel,face:face,cardInner:cardInner,chip:chip,chipRed:chipRed,short:short};
+MX.Art={MK:MK,MODERN:MODERN,mk:mk,mkStyle:mkStyle,bike:bike,track:track,gate:gate,flag:flag,wflag:wflag,yflag:yflag,suit:suit,info:info,rankLabel:rankLabel,face:face,cardInner:cardInner,chip:chip,chipRed:chipRed,short:short};
 if(typeof module!=="undefined"&&module.exports) module.exports=MX.Art;
 })(typeof window!=="undefined"?window:globalThis);
