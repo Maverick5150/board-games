@@ -160,7 +160,7 @@ export function poseRide(rig,Bm,st,dt,out,base){
   /* idle life: the rider works on the bike: shifts a little, faster with speed */
   const sw=Math.sin(rig.tw*(2.3+0.05*v)+rig.ph)*0.7+Math.sin(rig.tw*(5.1+0.1*v)+rig.ph*2.1)*0.3, spd=clamp(v/14,0,1);
   tr+=sw*0.025*(0.4+spd); tp+=Math.sin(rig.tw*3.7+rig.ph*1.3)*0.012*(0.4+spd);
-  const hyT=clamp(kk*9,-0.55,0.55), hpT=-(tp*0.78)+0.12-0.2*pitchB;
+  const hyT=clamp(kk*9,-0.55,0.55), hpT=-tp+0.02-0.15*pitchB;
   if(!rig.init||teleport){ S[0]=tx; S[1]=0; S[2]=ty; S[3]=0; S[4]=tz; S[5]=0; S[6]=tp; S[7]=0; S[8]=tr; S[9]=0; S[10]=hpT; S[11]=0; S[12]=hyT; S[13]=0; rig.init=true; }
   rig.fl0=false;
   if(dt>0){
@@ -183,7 +183,7 @@ export function poseRide(rig,Bm,st,dt,out,base){
   o.foot[0]=bp.px-0.095; o.foot[1]=bp.py+0.115; o.foot[2]=-bp.pz; o.foot[3]=bp.px-0.095; o.foot[4]=bp.py+0.115; o.foot[5]=bp.pz;
   if(adab>0.01){ const R=dab>0, k=adab, i=R?3:0, s=R?1:-1; o.foot[i]=lerp(o.foot[i],0.30,k); o.foot[i+1]=lerp(o.foot[i+1],0.52,k); o.foot[i+2]=lerp(o.foot[i+2],s*0.46,k); }
   o.toe[0]=o.toe[1]=0.12+0.28*(air?1:0)-0.1*stand; if(adab>0.01){ const k=adab; if(dab>0) o.toe[1]=lerp(o.toe[1],-0.35,k); else o.toe[0]=lerp(o.toe[0],-0.35,k); }
-  o.toeOut=0.12+0.15*adab; o.kneeOut=0.28+0.1*stand; o.elbowOut=1.0; o.elbowUp=lerp(0.06,0.30,stand); o.elbowBack=0.12;
+  o.toeOut=0.12+0.15*adab; o.kneeOut=0.28+0.1*stand; o.elbowOut=0.85; o.elbowUp=lerp(0.0,0.22,stand); o.elbowBack=0.12;
   /* the reach: the pelvis is pulled / pushed along the line to the pegs so the legs neither overstretch nor fold flat */
   { const hx=P[0], hy=P[1]-0.03, hz=P[2], ax=(o.foot[0]+o.foot[3])*0.5, ay=(o.foot[1]+o.foot[4])*0.5, az=(o.foot[2]+o.foot[5])*0.5;
     let dx=ax-hx, dy=ay-hy, dz=az-hz, d=Math.sqrt(dx*dx+dy*dy+dz*dz)||1;
