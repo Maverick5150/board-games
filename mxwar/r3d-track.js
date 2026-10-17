@@ -30,14 +30,14 @@ const TRK={ "stadium-dirt":["#74461f","#a56c35","#3b2210"], loam:["#4e3320","#6e
 /* the dirt's detail maps for the stadium FLOOR and the starting pad (r3d-world.js multiplies them by the soil colour and repeats them every 7 m): the same scans as the track, laid as a
    mosaic of k x k tiles, each turned or mirrored its own way, so no big blotch repeats across the floor. {map: a warm near-white luma detail (sRGB), normal: a tangent-space normal map}. */
 export function dirtMaps(soil,lo,floor){
-  const T=soilTiles(!!lo), TW=T.W, A=T.A.image.data, B=T.B.image.data, W=lo?256:512, k=lo?2:3, sw=W/k, N=W*W, c=new Uint8Array(N*4), n=new Uint8Array(N*4), sandy=soil==="sand", g=(lo?0.7:0.9)*(sandy?0.6:1);
+  const T=soilTiles(!!lo), TW=T.W, A=T.A.image.data, B=T.B.image.data, W=lo?256:512, k=lo?2:3, sw=W/k, N=W*W, c=new Uint8Array(N*4), n=new Uint8Array(N*4), sandy=soil==="sand", g=(lo?0.9:1.3)*(sandy?0.6:1);
   const tex2=(arr,u,v,ch)=>{ const x=u*TW, y=v*TW, x0=Math.floor(x), y0=Math.floor(y), fx=x-x0, fy=y-y0, xa=((x0%TW)+TW)%TW, xb=(xa+1)%TW, ya=((y0%TW)+TW)%TW, yb=(ya+1)%TW;
     return (arr[(ya*TW+xa)*4+ch]*(1-fx)+arr[(ya*TW+xb)*4+ch]*fx)*(1-fy)+(arr[(yb*TW+xa)*4+ch]*(1-fx)+arr[(yb*TW+xb)*4+ch]*fx)*fy; };
   for(let y=0;y<W;y++) for(let x=0;x<W;x++){
     const ti=Math.floor(x/sw), tj=Math.floor(y/sw), d=(ti*5+tj*3+ti*tj*2)%8, sp=d&1, fx=(d>>1)&1, fy=(d>>2)&1, up=(x%sw)/sw, vp=(y%sw)/sw;
     const u0=sp?vp:up, v0=sp?up:vp, u=fx?1-u0:u0, v=fy?1-v0:v0;
     const J00=sp?0:(fx?-1:1), J01=sp?(fx?-1:1):0, J10=sp?(fy?-1:1):0, J11=sp?0:(fy?-1:1);
-    const ra=tex2(A,u,v,0)/128, rb=tex2(B,u,v,0)/128, val=clamp(Math.pow(0.5*ra+0.5*rb,1.15)*0.92,0.3,1.0)*255, p=(y*W+x)*4;
+    const ra=tex2(A,u,v,0)/128, rb=tex2(B,u,v,0)/128, macro=0.86+0.28*pfbm(x/W*4,y/W*4,4,3), val=clamp(Math.pow(0.5*ra+0.5*rb,1.5)*0.92*macro,0.3,1.0)*255, p=(y*W+x)*4;
     c[p]=val; c[p+1]=val*0.985; c[p+2]=val*0.96; c[p+3]=255;
     const sx=((tex2(A,u,v,1)-128)*0.5+(tex2(B,u,v,1)-128)*0.9)/127*g, sy=((tex2(A,u,v,2)-128)*0.5+(tex2(B,u,v,2)-128)*0.9)/127*g;
     const gx=sx*J00+sy*J10, gy=sx*J01+sy*J11, l=Math.sqrt(gx*gx+gy*gy+1);
