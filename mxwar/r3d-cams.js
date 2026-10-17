@@ -308,7 +308,8 @@ export function createCams(VIEW){
       case "chase": return {type:"chase",subj:subj,pri:2,min:1e9,max:1e9,why:"preset"};
       case "onboard": return {type:"onboard",subj:subj,pri:2,min:1e9,max:1e9,why:"preset"};
       case "stadium": return {type:"wide",subj:subj,pri:2,min:1e9,max:1e9,why:"preset"};
-      case "broadcast": { const rsd=(r.s||0)+Math.max(10,(r.v||10)*2.6); return {type:"track",subj:subj,pri:2,min:4,max:7.5,cam:()=>trackCam(rsd,3.6,[14,18,23,29],5.5,9),why:"preset"}; }
+      case "broadcast": { if(r.onStart) return {type:"gate",subj:subj,pri:2,min:0.1,max:1e9,why:"preset"};   /* still on the start path: the gate camera follows the launch */
+        const rsd=(r.s||0)+Math.max(10,(r.v||10)*2.6); return {type:"track",subj:subj,pri:2,min:4,max:7.5,cam:()=>trackCam(rsd,3.6,[14,18,23,29],5.5,9),why:"preset"}; }
     }
     return null;
   }
