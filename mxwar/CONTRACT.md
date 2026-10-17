@@ -568,14 +568,17 @@ Materials made with the kit take the tier that is current when `buildWorld` / `c
 - A shader that outputs NaN or Inf (for example `pow(x, 1.6)` with x slightly below 0: the stadium's light beams do) is clamped to 0 in the chain (Direct3D drops a NaN in `min` / `max`; `isnan()` is folded away by its compiler and warns X3577).
 - Do not rely on `renderer.toneMapping` with the chain on: three.js ignores it for targets; `renderer.toneMappingExposure` is read by the final pass.
 
-### 11.7 What the lead measured (this laptop, Intel UHD, the interleaved minimum of 4 rounds, the other lanes' load included: ratios, not absolutes)
+### 11.7 What the lead measured (this laptop, Intel UHD 0x46D2, the interleaved minimum of 3 rounds, the other lanes' load included: ratios, not absolutes; `lead/prof2-final.md`, `lead/perf-final.md`)
 
-| 1280x720 | ms (sim + draw + GPU sync) | fps |
+| ms per frame (sim + draw + GPU sync) | 1280x720 | 1920x1080 |
 |---|---|---|
-| plain frame (`post: "off"`) | 21.5 | 47 |
-| high (everything) | 27.9 | 36 |
-| high without depth of field | 24.4 | 41 |
-| high without bloom | 24.8 | 40 |
-| high without FXAA | 27.8 | 36 (the inline FXAA is free) |
+| plain frame, the new light rig (`post: "off"`) | 18.5 (54 fps) | 27.4 (37 fps) |
+| stick (lite rig, Reduce effects world, no post) | 15.1 (66 fps) | 22.7 (44 fps) |
+| medium (HDR + bloom + grade + inline FXAA) | 19.1 (52 fps) | 32.4 (31 fps) |
+| high (everything) | 27.3 (37 fps) | 52.3 (19 fps) |
+| high without depth of field | 24.6 | 42.2 |
+| high without depth of field, motion blur and haze (no depth texture) | 21.7 | 38.2 |
 
-At 1920x1080 the high chain costs +22 ms on this iGPU (30.6 -> 52.8 ms; the depth of field about 11 ms of it): `high` is a laptop / tablet tier, not a TV tier. The adaptive ladder lowers the pixel ratio and the chain follows it. Draw calls per whole frame: 49-58 on high (the base 43); the triangles do not change (198.2k).
+So: `medium` costs +0.6 ms at 720p and +5 ms at 1080p; `high` costs +9 ms at 720p and +25 ms at 1080p (depth of field about 3 / 10 ms of it, the depth texture and haze / motion blur about 3 / 4 ms): `high` is a laptop / tablet tier at 720p-class render sizes; at 1080p the adaptive ladder must lower the pixel ratio (the chain follows it: it rebuilds its targets
+from the drawing buffer, about 50 MB at 1080p). The whole-frame counters: high 52-58 draw calls (the base 43), medium 51-57, stick 30; triangles do not change (198.2k high, 100.9k stick). The official `perf.js` rows (contended run, calibration under 150): high 960x540 22.6 ms (the base 21.1), high 1920x1080 61.3 ms (the base 23.8), stick 960x540 17.9 ms, stick 1920x1080 18.4 ms.
+Nothing here is a Fire TV or a phone measurement: the Stick runs `stick` (no post chain) until a device says otherwise.
