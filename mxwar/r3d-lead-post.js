@@ -55,7 +55,7 @@ uniform vec2 uTexel; uniform float uDof; uniform float uFocus; uniform float uAp
 varying vec2 vUv;
 float ign(vec2 p){ return fract(52.9829189*fract(dot(p,vec2(0.06711056,0.00583715)))); }
 float zAt(vec2 uv){ return -perspectiveDepthToViewZ(texture2D(tDepth,uv).x,uNear,uFar); }
-float coc(float z){ float d=1.0/max(z,0.05)-1.0/uFocus; return d>0.0?clamp((d-uDead)*uAper,0.0,1.0):clamp((-d-uDead)*uAper*0.5,0.0,0.42); }   /* near: full blur; far: at most 42% (the stands stay a stadium, thin light strings do not turn to noise) */
+float coc(float z){ float d=1.0/max(z,0.05)-1.0/uFocus; return d>0.0?clamp((d-uDead)*uAper,0.0,1.0):clamp((-d-uDead)*uAper*0.5,0.0,0.30); }   /* near: full blur; far: at most 30% (the stands stay a stadium, thin light strings do not turn to noise) */
 void main(){
   vec3 c=texture2D(tScene,vUv).rgb;
   float z0=zAt(vUv), c0=coc(z0)*uDof, rot=ign(gl_FragCoord.xy)*6.2831853;
@@ -66,8 +66,8 @@ void main(){
     float zt=zAt(uv), ct=coc(zt)*uDof;
     float cr=zt<z0?ct:c0;
     float w=clamp((cr-r)/0.18+1.0,0.0,1.0);
-    vec3 tc=min(max(texture2D(tScene,uv).rgb,vec3(0.0)),vec3(64.0));
-    w*=1.0+min(dot(tc,vec3(0.2126,0.7152,0.0722)),3.0)*0.2;
+    vec3 tc=min(max(texture2D(tScene,uv).rgb,vec3(0.0)),vec3(2.5));   /* (a tap on a thin bright light string is clamped: it would flicker under the random tap pattern: integrate:merge, director note D5) */
+    w*=1.0+min(dot(tc,vec3(0.2126,0.7152,0.0722)),2.5)*0.05;
     acc+=tc*w; ws+=w;
   }
   gl_FragColor=vec4(acc/ws,1.0);
@@ -87,7 +87,7 @@ float ign(vec2 p){ return fract(52.9829189*fract(dot(p,vec2(0.06711056,0.0058371
 #ifdef DOF
 uniform sampler2D tBlur;
 float zAt(vec2 uv){ return -perspectiveDepthToViewZ(texture2D(tDepth,uv).x,uNear,uFar); }
-float coc(float z){ float d=1.0/max(z,0.05)-1.0/uFocus; return d>0.0?clamp((d-uDead)*uAper,0.0,1.0):clamp((-d-uDead)*uAper*0.5,0.0,0.42); }   /* near: full blur; far: at most 42% (the stands stay a stadium, thin light strings do not turn to noise) */
+float coc(float z){ float d=1.0/max(z,0.05)-1.0/uFocus; return d>0.0?clamp((d-uDead)*uAper,0.0,1.0):clamp((-d-uDead)*uAper*0.5,0.0,0.30); }   /* near: full blur; far: at most 30% (the stands stay a stadium, thin light strings do not turn to noise) */
 #endif
 float lm(vec3 c){ return dot(c,vec3(0.299,0.587,0.114)); }
 float pl(vec3 c){ float l=lm(c); return l/(1.0+l); }

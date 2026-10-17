@@ -11,7 +11,7 @@
    poseRider(R, i, B, st) with B = the bike's world Matrix4 and st = the per-frame state (CONTRACT.md); commit(R, cam, dt) once a frame after posing. */
 import * as THREE_NS from "../ui/vendor/three-0.160.0.module.min.js";
 const THREE=THREE_NS;
-import {canvas} from "./r3d-util.js";
+import {canvas,MAT,getKitTier} from "./r3d-util.js";
 import {BIKE,createBike,colorBike,poseBike,hideBike,plateGeo,drawPlate} from "./r3d-bike.js";
 import {buildRider,NB} from "./r3d-rider-model.js";
 import {newRig,poseRide,poseBody} from "./r3d-rider-pose.js";
@@ -136,8 +136,11 @@ export function createRiders(list,opts){
   const U={uBones:{value:boneTex},uTime:{value:0}};
   const hiModel=buildRider(1), loModel=buildRider(0);
   const hiInst=instAttrs(n), loInst=instAttrs(n);
-  const cloth=skinMat(lo?new THREE.MeshLambertMaterial({vertexColors:true}):new THREE.MeshPhongMaterial({vertexColors:true,shininess:22,specular:0x262626}),U,"main",{tag:"cloth",rim:lo?0:0.34,wrinkle:!lo});
-  const shell=skinMat(lo?new THREE.MeshLambertMaterial({vertexColors:true}):new THREE.MeshPhongMaterial({vertexColors:true,shininess:120,specular:0x9a9a9a}),U,"main",{tag:"shell",rim:lo?0:0.22});
+  /* THE LEAD'S MATERIAL KIT on the gear (integrate step): the jersey, pants and gloves are physically based cloth (rough, a touch of the stadium's light from the environment map), the helmet is a glossy clear-coat shell that reflects the floodlights; the kit tier follows the quality tier (r3d-look.js), "low" / Reduce effects keep the old Lambert / Phong parts.
+     The skinning patch (skinMat) works on any of them: the same chunks. The riders' own rim light is lighter than in the rider branch (the lead's rim and the bloom do that work now). */
+  const KT=lo?"low":getKitTier();
+  const cloth=skinMat(KT==="low"?(lo?new THREE.MeshLambertMaterial({vertexColors:true}):new THREE.MeshPhongMaterial({vertexColors:true,shininess:22,specular:0x262626})):new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.9,metalness:0,envMapIntensity:0.5}),U,"main",{tag:"cloth"+KT,rim:lo?0:(KT==="low"?0.34:0.16),wrinkle:!lo});
+  const shell=skinMat(KT==="low"?(lo?new THREE.MeshLambertMaterial({vertexColors:true}):new THREE.MeshPhongMaterial({vertexColors:true,shininess:120,specular:0x9a9a9a})):MAT.gloss(null,{vertexColors:true}),U,"main",{tag:"shell"+KT,rim:lo?0:(KT==="low"?0.22:0.08)});
   const decal=skinMat(new THREE.MeshLambertMaterial({map:A.tex,vertexColors:true,alphaTest:0.4}),U,"main",{tag:"decal",atlas:new THREE.Vector2(1/A.cols,1/A.rows)});
   const depth=skinMat(new THREE.MeshDepthMaterial({depthPacking:THREE.RGBADepthPacking}),U,"depth",{tag:"shadow"});
   cloth.addEventListener("dispose",()=>{ boneTex.dispose(); depth.dispose(); });   /* (the bone texture and the shadow pass material are not reached by a tree walk) */

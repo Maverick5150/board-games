@@ -321,7 +321,8 @@ function edgeBlocks(C,look,q){
   const geo=look.bales?baleGeo():blockGeo(1.3,0.44,0.5,0.06), hi=!q.lo;
   const mat=hi?new THREE.MeshStandardMaterial({color:0xffffff,vertexColors:true,roughness:0.62,metalness:0}):new THREE.MeshLambertMaterial({color:0xffffff,vertexColors:true});
   const m=new THREE.InstancedMesh(geo,mat,Math.max(1,list.length)), M=new THREE.Matrix4(), Q=new THREE.Quaternion(), E=new THREE.Euler(0,0,0,"YXZ"), V=new THREE.Vector3(), Sx=new THREE.Vector3(1,1,1), cl=new THREE.Color();
-  const tints=look.bales?["#c9a55a","#b8944e","#d4b066"]:["#e6e6e8","#e0e1e5","#d6d8de","#e6e6e8","#a3b6d6","#e0e1e5","#d3d4d9"];
+  /* tuff blocks in plain colours (the CEO's broadcast photo: yellow, red, blue, white), every albedo at 0.6 or less in linear light (the near-white blocks reached 1.4-1.7 under the key and glowed neon: lead's request, director note D5); no brand, no lettering */
+  const tints=look.bales?["#c9a55a","#b8944e","#d4b066"]:["#c8a010","#b82430","#2a5cb8","#bfc1c8","#c8a010","#b82430","#2a5cb8"];
   const rnd=rngf(7919+list.length);
   list.forEach((b,i)=>{ const jy=(rnd()-0.5)*0.09, jr=(rnd()-0.5)*0.05, jl=(rnd()-0.5)*0.18, drop=0.025+rnd()*0.03; E.set(0,-b[2]+jy,jr); Q.setFromEuler(E);
     V.set(b[0]+Math.cos(b[2])*jl,b[3]+(look.bales?0.25:0.22)-drop,b[1]+Math.sin(b[2])*jl); M.compose(V,Q,Sx); m.setMatrixAt(i,M); cl.set(tints[i%tints.length]); m.setColorAt(i,cl); });
