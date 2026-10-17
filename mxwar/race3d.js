@@ -56,6 +56,9 @@ export function create(host,hooks){
   // [hook:perf]
   const QUAL=createQuality({host:host,lo:LO,setShadows:on=>LOOK.setShadows(on),shadowsOn:()=>LOOK.shadows,W:()=>W,H:()=>H,resized:(w,h,p)=>LOOK.resize(w,h,p),redraw:()=>{ if(C&&!V.lost) LOOK.render(scene,cam); }});   /* the renderer, the tier (GPU class + probe + ?quality=), anisotropy, the adaptive ladder (r3d-quality.js) */
   const renderer=QUAL.renderer;
+  /* THE FRAME CAP: a 30 fps target (FIRE TV always; BALANCED on a TV) draws every second vsync (an even 33 ms cadence instead of a 16 / 33 / 50 ms mix, and the GPU idles half the time: a Fire TV Stick throttles when it
+     runs hot). Done by shadowing requestAnimationFrame inside this view: the loop (tick, start) calls this one; QUAL.skipFrame(t) says "not this time" and the request is simply renewed. 60 fps targets, tests (fixed ratio) and the harness are untouched. */
+  const requestAnimationFrame=cb=>GL.requestAnimationFrame(t=>{ if(QUAL.skipFrame(t)){ requestAnimationFrame(cb); return; } cb(t); });
   let lastRace=null, builtTier="";   /* the last setRace argument and the tier key the current world was built with (V.setQuality rebuilds when they differ) */
   // [/hook:perf]
   const LOOK=createLook(renderer,{shadows:QUAL.shadowsWanted(LO)});   /* colour space, tone mapping, shadow map, the lights, fog, the post-processing slot (r3d-look.js) */
