@@ -24,17 +24,25 @@
      clock stops while the page is hidden or the race isn't on screen; reduced motion = a still wide frame every 2 s, no camera moves.
    API (game.js): supported(); create(host, hooks {onLap(n), onFinish()}) -> V: V.setRace(o), V.gate(), V.drop(), V.lap(result) -> show
    {at(name): Promise (holeshot | pass | crash | yellow | line | done)}, V.hold(o), V.standings(order, cnt, lap), V.setFlag(k), V.setRed(s),
-   V.markOut(s), V.show(on), V.resize(), V.skip(), V.state(), V.stats(), V.shot(name) (tests). */
+   V.markOut(s), V.show(on), V.resize(), V.skip(), V.state(), V.stats(), V.shot(name) (tests).
+   THE FILE SPLIT (2026-10-17, no visual change): this file is the view's core (create(), the race state machine, rider motion and the cards
+   sync, crash scripts, the frame loop). Everything a specialist owns lives in its own module and is created / called from a marked hook
+   zone ("// [hook:<role>]" ... "// [/hook:<role>]") here: r3d-util.js (shared helpers), r3d-look.js (renderer settings, lights, fog, the post
+   slot), r3d-quality.js (adaptive pixel ratio, weak GPU), r3d-track.js (the dirt surface), r3d-world.js (the stadium and everything round
+   the track), r3d-bike.js, r3d-riders.js, r3d-fx.js (roost, dust), r3d-cams.js (the director and every camera). See CONTRACT.md. */
 import * as THREE_NS from "../ui/vendor/three-0.160.0.module.min.js";
-import {buildWorld,gateBuild,flaggerBuild,flagTex,clear,clearDist,setAniso} from "./r3d-world.js";
-import {createRiders,poseRider,hideRider,shadowAt,tagAt,commit,emit,stepParticles,BIKE,setRed as atlasRed} from "./r3d-riders.js";
+import {clamp,sstep,now,clear} from "./r3d-util.js";
+import {isTV,motionMode,createQuality} from "./r3d-quality.js";
+import {createLook} from "./r3d-look.js";
+import {buildWorld,gateBuild,flaggerBuild,flagTex} from "./r3d-world.js";
+import {createRiders,poseRider,hideRider,shadowAt,tagAt,commit,setRed as atlasRed} from "./r3d-riders.js";
+import {BIKE} from "./r3d-bike.js";
+import {createFx} from "./r3d-fx.js";
+import {createCams} from "./r3d-cams.js";
 const THREE=THREE_NS;
 const GL=typeof window!=="undefined"?window:globalThis;
 const MX=GL.MXWar;
 const G=9.81, PI=Math.PI, GRATE=0.16;
-function clamp(x,a,b){ return x<a?a:x>b?b:x; }
-function sstep(a,b,x){ const t=clamp((x-a)/(b-a),0,1); return t*t*(3-2*t); }
-function now(){ return (GL.performance&&performance.now)?performance.now():Date.now(); }
 
 export function supported(){
   try{ const c=document.createElement("canvas"); return !!(GL.WebGLRenderingContext&&(c.getContext("webgl2")||c.getContext("webgl"))); }catch(e){ return false; }
@@ -42,128 +50,113 @@ export function supported(){
 
 export function create(host,hooks){
   hooks=hooks||{};
-  const tv=()=>document.documentElement.hasAttribute("data-tv");
-  const motion=()=>{ const B=GL.BGUI; if(document.documentElement.getAttribute("data-motion")==="reduce"||(B&&B.reducedMotion&&B.reducedMotion())) return "off"; return document.documentElement.getAttribute("data-effects")==="reduced"?"lo":"full"; };
+  const tv=isTV, motion=motionMode;   /* (r3d-quality.js) */
   let LO=motion()!=="full";
-  /* ---------------- renderer ---------------- */
-  const renderer=new THREE.WebGLRenderer({antialias:!LO,powerPreference:"high-performance",alpha:false,stencil:false,preserveDrawingBuffer:false});
-  setAniso(LO?2:Math.min(8,renderer.capabilities.getMaxAnisotropy()||1));
-  renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.08;
-  /* real shadows (polish): the riders cast them on the dirt from the main light (a 1024 map over a box round what the camera looks at:
-     sharp where it matters); off with Reduce effects, on a GPU known to be slow, and dropped by itself when frames run long (adapt) */
-  const weakGPU=(()=>{ try{ const gl=renderer.getContext(), d=gl.getExtension("WEBGL_debug_renderer_info"), s=String(d?gl.getParameter(d.UNMASKED_RENDERER_WEBGL):gl.getParameter(gl.RENDERER)); return /GE8|GX6|SGX|Mali-(4|T[67]|G31|G51)|Adreno \(TM\) [345]\d\d\b|VideoCore|PowerVR Rogue G/i.test(s); }catch(e){ return false; } })();
-  let SHADOWS=!LO&&!weakGPU;
-  renderer.shadowMap.enabled=SHADOWS; renderer.shadowMap.type=THREE.PCFShadowMap;
-  renderer.setClearColor(0x05060a,1);
+  /* ---------------- renderer, look, quality ---------------- */
+  // [hook:perf]
+  const QUAL=createQuality({host:host,lo:LO,setShadows:on=>LOOK.setShadows(on),shadowsOn:()=>LOOK.shadows,W:()=>W,H:()=>H});   /* the renderer, anisotropy, the weak-GPU test, the pixel-ratio ladder (r3d-quality.js) */
+  const renderer=QUAL.renderer;
+  // [/hook:perf]
+  const LOOK=createLook(renderer,{shadows:QUAL.shadowsWanted(LO)});   /* colour space, tone mapping, shadow map, the lights, fog, the post-processing slot (r3d-look.js) */
+  const scene=LOOK.scene, SUN=LOOK.SUN;   /* SUN = the sun's direction (LOOK.apply updates it for each venue) */
   const cv=renderer.domElement; cv.className="mx-v3__cv"; cv.setAttribute("aria-hidden","true"); host.appendChild(cv);
   const V={lost:false};
+  Object.defineProperty(V,"prFixed",{get:()=>QUAL.fixed,set:v=>{ QUAL.fixed=!!v; },enumerable:true});   /* (tests freeze the pixel-ratio ladder with V.prFixed = true; V.fixPR(p) does it too) */
   cv.addEventListener("webglcontextlost",e=>{ e.preventDefault(); V.lost=true; V.stop(); if(hooks.lost) hooks.lost(); },false);
-  const scene=new THREE.Scene();
   const cam=new THREE.PerspectiveCamera(50,1,0.5,4200);
-  const hemi=new THREE.HemisphereLight(0xb8c4e0,0x3a2a1c,1.0); scene.add(hemi);
-  const sun=new THREE.DirectionalLight(0xfff2dc,2.2); sun.position.set(-60,120,40); scene.add(sun); scene.add(sun.target);
-  sun.castShadow=SHADOWS; sun.shadow.mapSize.set(1024,1024); sun.shadow.bias=-0.0008; sun.shadow.normalBias=0.03;
-  sun.shadow.camera.near=1; sun.shadow.camera.far=320; let shHalf=0;
-  const fill=new THREE.DirectionalLight(0x9fb4ff,0.45); fill.position.set(80,40,-60); scene.add(fill);
-  const amb=new THREE.AmbientLight(0xffffff,0.0); scene.add(amb);
-  const SUN=new THREE.Vector3(0.5,0.8,0.3);
-  let W=0,H=0,pr=1,prCap=1;
+  let W=0,H=0;
   /* ---------------- state ---------------- */
-  let C=null, look=null, world=null, worldKey="", R=null, rs=[], N=0, list=[], gate=null, flagger=null, marshal=null, HG=null;
+  let C=null, look=null, world=null, worldKey="", R=null, FX=null, rs=[], N=0, list=[], gate=null, flagger=null, marshal=null;
   let T=0, lapNo=1, lenLaps=30, mode="idle", show=null, holdInfo=null, flag=null, running=false, want=false, raf=0, lastT=0, yellow=null, lapPlan=null, finished=false, stillT=0;
-  let shot=null, shotLog=[], featLog=[];
-  const camS={pos:new THREE.Vector3(),look:new THREE.Vector3(),fov:50,snap:true};
   let meSeats=[], redSeat=-1;
   const texFlags={};
-  const stats={frames:0,ms:0,msMax:0,calls:0,tris:0,fpsT0:now(),fpsN:0,fps:0,prDrops:0,ft:[]};
+  const stats={frames:0,ms:0,msMax:0,calls:0,tris:0,fpsT0:now(),fpsN:0,fps:0,ft:[]};
   const tmpO={}, tmpO2={}, q=new THREE.Quaternion(), eul=new THREE.Euler(0,0,0,"YZX"), v3=new THREE.Vector3(), sc1=new THREE.Vector3(1,1,1);
+
+  /* ---------------- the cameras (r3d-cams.js) read the view's LIVE state through VIEW (getters: always the current value) ---------------- */
+  // [hook:cams]
+  const VIEW={cam:cam,leaderIdx:leaderIdx,
+    get C(){ return C; }, get world(){ return world; }, get rs(){ return rs; }, get gate(){ return gate; }, get marshal(){ return marshal; },
+    get T(){ return T; }, get lapNo(){ return lapNo; }, get lenLaps(){ return lenLaps; }, get mode(){ return mode; },
+    get holdInfo(){ return holdInfo; }, get yellow(){ return yellow; }, get lapPlan(){ return lapPlan; }, get meSeats(){ return meSeats; },
+    get W(){ return W; }, get H(){ return H; }};
+  const CAMS=createCams(VIEW);
+  // [/hook:cams]
+
+  /* ---------------- the per-rider state the modules read every frame (CONTRACT.md "Per-rider state"): one object per rider, refilled in
+     rider() / crashPose(); read-only for everyone but the zones marked [hook:...] below ---------------- */
+  let RST=[];
+  function newState(k,r0){ return {i:k,seat:r0.s,me:!!r0.me,red:!!r0.red,visible:true,
+    x:0,y:0,z:0,th:0,yaw:0,pitch:0,lean:0, v:0,acc:0,throttle:0,slip:0,roost:0, lat:0,s:0,D:0,onStart:true,k:0,tag:"",sand:0,gate:false,
+    air:false,landed:false,impact:0,hAir:0,gF:0,gR:0,tF:0,tR:0,gy:0, compF:0,compR:0,spinF:0,spinR:0, stand:0,dab:0,crouch:0, mud:0, crash:null,body:null,limbs:null}; }
+  /* a fallen rider's state: the bike where it lies (bx, by, bz, heading bth), the rider's hip where he is (hx, hy, hz) */
+  function crashState(i,c,t,bx,by,bz,bth,hx,hy,hz){
+    const st=RST[i]; st.visible=true; st.x=bx; st.y=by; st.z=bz; st.th=bth; st.yaw=-bth; st.pitch=0; st.lean=0; st.v=0; st.acc=0; st.throttle=0; st.slip=0; st.roost=0;
+    st.air=false; st.landed=false; st.impact=0; st.gate=false; st.hAir=0; st.gy=by; st.crash={kind:c.kind,t:t,hx:hx,hy:hy,hz:hz};
+  }
 
   /* ---------------- the round -> the course and the world (built once per layout) ---------------- */
   V.setRace=function(o){
-    const lo=motion()!=="full"; if(lo!==LO){ LO=lo; worldKey=""; setShadows(!LO&&!weakGPU&&!stats.shadowDrop); }   /* Reduce effects changed: the next race is built simpler (or richer), the shadows follow */
+    // [hook:perf]
+    const lo=motion()!=="full"; if(lo!==LO){ LO=lo; worldKey=""; LOOK.setShadows(QUAL.shadowsWanted(LO)); }   /* Reduce effects changed: the next race is built simpler (or richer), the shadows follow */
+    // [/hook:perf]
     const pick=MX.Layouts.pick(o.series,o.year,o.round,o.cal||{});
-    const key=pick.layout.id+"|"+(pick.look.around)+"|"+(LO?"lo":"hi")+"|"+(o.lapT>0?Math.round(o.lapT):"");
+    // [hook:perf]
+    const key=pick.layout.id+"|"+(pick.look.around)+"|"+(LO?"lo":"hi")+"|"+(o.lapT>0?Math.round(o.lapT):"");   /* what makes a world new: the layout, its look, Reduce effects, the round's lap time */
+    // [/hook:perf]
     if(key!==worldKey){
       if(world){ disposeTree(world.root); scene.remove(world.root); }
       C=MX.Course.build(pick.layout); look=pick.look; worldKey=key;
       /* the round's real average lap (the timing research), when it differs: the speeds tuned to it, within believable bounds */
       if(o.lapT>0&&Math.abs(C.Tlap/o.lapT-1)>0.04){ const want=clamp(o.lapT,C.Tlap*0.87,C.Tlap*1.15); C=MX.Course.build(Object.assign({},pick.layout,{vavg:C.L/want})); }
-      world=buildWorld(C,look,{lo:LO}); scene.add(world.root);
-      HG=heightGrid();
-      lights();
-      scene.fog=world.ctx.fogC?new THREE.Fog(world.ctx.fogC[0],world.ctx.fogC[1],world.ctx.fogC[2]):null;
+      // [hook:perf]
+      world=buildWorld(C,look,QUAL.options(LO)); scene.add(world.root);   /* the quality options (r3d-quality.js) */
+      // [/hook:perf]
+      // [hook:cams]
+      CAMS.buildGrid();   /* the grid of the dirt's heights: no camera ever sits inside a jump */
+      // [/hook:cams]
+      LOOK.apply(C,look,world);   /* the venue's lights, exposure, sun disc and fog (r3d-look.js) */
+      // [hook:stadium]
       flagger=flaggerBuild(flagT("white")); flagger.grp.position.copy(world.fin.flagAt).add(v3.set(0,-0.02,0)); flagger.grp.rotation.y=-world.fin.th+(world.fin.side>0?PI:0); world.root.add(flagger.grp);
       marshal=flaggerBuild(flagT("yellow"),{marshal:true}); marshal.grp.visible=false; world.root.add(marshal.grp);
+      // [/hook:stadium]
     }
     V.layout=pick; V.courseInfo={id:C.id,L:+C.L.toFixed(1),Tlap:+C.Tlap.toFixed(1),D1:+C.D1.toFixed(1),T1:+C.T1.toFixed(1),kind:C.kind,shared:pick.shared,name:pick.layout.name};
     if(R){ disposeTree(R.grp); scene.remove(R.grp); }
+    // [hook:fx]
+    if(FX){ disposeTree(FX.group); scene.remove(FX.group); }
+    // [/hook:fx]
     list=o.riders.map((r,k)=>({s:r.s!=null?r.s:k,color:r.color,accent:r.accent,num:r.num,name:r.name,red:!!r.red,me:!!r.me}));
     N=list.length; meSeats=list.filter(r=>r.me).map(r=>r.s); redSeat=(list.find(r=>r.red)||{s:-1}).s;
-    R=createRiders(list,{lo:LO}); scene.add(R.grp);
-    ["wheel","chassis","plastic","trim","fork","swing","helmet","torso","uarm","farm","thigh","shin"].forEach(k=>{ if(R.M[k]) R.M[k].castShadow=true; });
+    R=createRiders(list,QUAL.options(LO)); scene.add(R.grp);
+    // [hook:fx]
+    FX=createFx(Object.assign({C:C,look:look},QUAL.options(LO))); scene.add(FX.group);   /* the roost and dust particles: a new system for every race (r3d-fx.js) */
+    // [/hook:fx]
     if(gate){ world.root.remove(gate.grp); disposeTree(gate.grp); }
-    gate=gateBuild(C,look,N); world.root.add(gate.grp); camS.gp=null;
+    gate=gateBuild(C,look,N); world.root.add(gate.grp);
     rs=list.map((r,k)=>({k:k,seat:r.s,g:0,tg:null,boot:null,lat:gate.slotLat(slotOf(k)),latT:0,bias:(((k*7919)%11)/10-0.5)*0.7,D:-0.95,Dp:-0.95,s:0,onStart:true,v:0,vp:0,
       F:{y:0,v:0},Rr:{y:0,v:0},stand:0,lean:0,dab:0,spinF:0,spinR:0,gone:false,crash:null,crashPlan:null,air:false,init:false,lapN:1}));
-    lenLaps=o.len||30; lapNo=1; T=0; holdInfo=null; flag=null; yellow=null; lapPlan=null; finished=false; show=null; shotLog=[]; featLog=[];
+    RST=list.map((r0,k)=>newState(k,r0));
+    lenLaps=o.len||30; lapNo=1; T=0; holdInfo=null; flag=null; yellow=null; lapPlan=null; finished=false; show=null;
+    // [hook:cams]
+    CAMS.reset();
+    // [/hook:cams]
+    // [hook:stadium]
     if(world.ctx.screen) world.ctx.screen(0,lenLaps,null);
+    // [/hook:stadium]
     gate.set(0); gate.drop=0; gate.dropT=-1; V.setFlag(null); marshal.grp.visible=false;
-    mode="gate"; setShot({type:"gate",subj:-1,pri:0,min:1e9,max:1e9});
+    mode="gate"; CAMS.setShot({type:"gate",subj:-1,pri:0,min:1e9,max:1e9});
     V.resize(); renderOnce();
     return V.courseInfo;
   };
   function slotOf(k){ const n=gate.slots, mid=Math.floor(n/2); return clamp(mid+(k%2?1:-1)*Math.ceil(k/2),0,n-1); }
   function flagT(k){ return texFlags[k]||(texFlags[k]=flagTex(k)); }
-  function lights(){
-    const night=look.night||C.kind==="stadium";
-    if(C.kind==="stadium"){ hemi.color.set(0xc8d0ee); hemi.groundColor.set(0x6a5038); hemi.intensity=1.5; sun.color.set(0xfff3e0); sun.intensity=3.3; sun.position.set(-70,62,40); fill.color.set(0xb8c8ff); fill.intensity=1.1; amb.intensity=0.35; renderer.toneMappingExposure=1.3; }
-    else if(night){ hemi.color.set(0x8a96c0); hemi.groundColor.set(0x5a4430); hemi.intensity=1.3; sun.color.set(0xffefd2); sun.intensity=2.8; sun.position.set(-60,70,50); fill.color.set(0xa8b8ff); fill.intensity=0.8; amb.intensity=0.3; renderer.toneMappingExposure=1.22; }
-    else { hemi.color.set(0xcfe0ff); hemi.groundColor.set(0x4a3a24); hemi.intensity=1.2; sun.color.set(0xfff4e0); sun.intensity=2.8; sun.position.set(-160,150,90); fill.color.set(0x9fb4ff); fill.intensity=0.35; amb.intensity=0.12; renderer.toneMappingExposure=1.05; }
-    if(world.ctx.sunMesh){ world.ctx.sunMesh.position.copy(sun.position).normalize().multiplyScalar(2300); world.ctx.sunMesh.lookAt(0,0,0); }
-    SUN.copy(sun.position).normalize();
-  }
   /* free a world or a rider set: geometries, materials and every texture they hold (normal and glow maps, shader uniforms too: a new
      layout each round must not leave the old one's textures on the GPU) */
   function disposeTree(o){ o.traverse(m=>{ if(m.geometry) m.geometry.dispose(); if(m.material){ const ms=Array.isArray(m.material)?m.material:[m.material]; ms.forEach(x=>{
     if(!x.userData||!x.userData.keepMaps) ["map","normalMap","emissiveMap","alphaMap"].forEach(k=>{ if(x[k]) x[k].dispose(); });
     if(x.uniforms) Object.values(x.uniforms).forEach(u=>{ if(u&&u.value&&u.value.isTexture) u.value.dispose(); });
     x.dispose(); }); } }); }
-  /* the highest dirt in every 2 m cell (the track, its berms and shoulders, the start path): no camera ever sits inside a jump or under a
-     landing (polish: a chase camera behind a rider who had just landed could end up under the jump's face, and the screen showed the
-     dirt's underside as a black wedge) */
-  function heightGrid(){
-    let x0=1e9,x1=-1e9,z0=1e9,z1=-1e9; const S=C.S&&C.S.n?C.S:null;
-    const grow=(x,z)=>{ if(x<x0) x0=x; if(x>x1) x1=x; if(z<z0) z0=z; if(z>z1) z1=z; };
-    for(let i=0;i<C.N;i++) grow(C.x[i],C.z[i]); if(S) for(let i=0;i<S.n;i++) grow(S.x[i],S.z[i]);
-    const cs=2, m=16; x0-=m; z0-=m; x1+=m; z1+=m;
-    const nx=Math.ceil((x1-x0)/cs)+1, nz=Math.ceil((z1-z0)/cs)+1, H=new Float32Array(nx*nz).fill(-1e9);
-    const put=(x,z,y)=>{ const i=Math.floor((x-x0)/cs), j=Math.floor((z-z0)/cs); if(i<0||j<0||i>=nx||j>=nz) return; const k=j*nx+i; if(y>H[k]) H[k]=y; };
-    const o={};
-    const out=C.kind!=="stadium";
-    for(let i=0;i<C.N;i++){ const s=i*C.ds, f=MX.Course.frame(C,s,o), ax=-Math.sin(f.th), az=Math.cos(f.th), hw=f.hw;
-      for(let l=-hw;l<=hw+0.01;l+=1) put(f.x+ax*l,f.z+az*l,MX.Course.ground(C,s,l));
-      /* the shoulders as the dirt is drawn (r3d-world trackMesh): from the edge down to the ground, wider beside a tall jump outdoors */
-      for(const sd of [-1,1]){ const edge=MX.Course.ground(C,s,sd*hw), eh=edge-f.y, sw=out&&eh>=0.45?2.6*(1+Math.min(eh,4)*0.55):2.6, ext=0.85*sw;
-        for(let e=0;e<=ext+1.01;e+=1){ const y=edge+(f.y-(out?0.55:0.3)-edge)*sstep(0,1,e/ext), l=sd*(hw+e); put(f.x+ax*l,f.z+az*l,y); } } }
-    if(S) for(let i=0;i<S.n;i++){ const ax=-Math.sin(S.th[i]), az=Math.cos(S.th[i]); for(let l=-S.hw[i]-1;l<=S.hw[i]+1.01;l+=1) put(S.x[i]+ax*l,S.z[i]+az*l,(S.y[i]||0)+0.1); }
-    return {x0:x0,z0:z0,cs:cs,nx:nx,nz:nz,H:H};
-  }
-  function dirtTop(x,z){
-    if(!HG) return -1e9; const i=Math.floor((x-HG.x0)/HG.cs), j=Math.floor((z-HG.z0)/HG.cs); let y=-1e9;
-    for(let b=j-1;b<=j+1;b++){ if(b<0||b>=HG.nz) continue; for(let a=i-1;a<=i+1;a++){ if(a<0||a>=HG.nx) continue; const v=HG.H[b*HG.nx+a]; if(v>y) y=v; } }
-    return y;
-  }
-  /* the dirt's height in the one cell under (x, z) (no neighbours: for sight lines) */
-  function dirtCell(x,z){ if(!HG) return -1e9; const i=Math.floor((x-HG.x0)/HG.cs), j=Math.floor((z-HG.z0)/HG.cs); if(i<0||j<0||i>=HG.nx||j>=HG.nz) return -1e9; return HG.H[j*HG.nx+i]; }
-  /* can a camera at a see b over the dirt (a jump, a landing, a berm in between)? the far end's own cell doesn't count */
-  function sees(a,b,margin){
-    const d=Math.hypot(b.x-a.x,b.z-a.z), n=Math.max(2,Math.ceil(d/1.2)), m=margin!=null?margin:0.25;
-    const hf=world&&world.ctx.hf;
-    for(let k=1;k<n;k++){ const t=k/n; if(t*d>d-2.2) break; const x=a.x+(b.x-a.x)*t, z=a.z+(b.z-a.z)*t, y=a.y+(b.y-a.y)*t; if(dirtCell(x,z)>y-m) return false; if(hf&&hf(x,z)>y-m-0.3) return false; }   /* the dirt, and outdoors the hills */
-    return true;
-  }
-  /* a camera at p stays at least clr above the dirt and the ground under it */
-  function safeCam(p,clr){ const y=Math.max(dirtTop(p.x,p.z),world&&world.ctx.hf?world.ctx.hf(p.x,p.z):-1e9,C&&C.kind==="stadium"?-0.16:-1e9); if(p.y<y+clr) p.y=y+clr; return p; }
 
   /* ---------------- the clock, the laps, the gaps ---------------- */
   function lapStartT(n){ return MX.Course.tOfD(C,MX.Course.lapStartD(C,n)); }
@@ -199,7 +192,9 @@ export function create(host,hooks){
     else if(yellow&&yellow.lap<n){ yellow=null; if(!rs.some(r=>r.crash)) marshal.grp.visible=false; }
     lapPlan={n:n,win:req.win,over:!!req.over,last:!!req.last,rank0:trackRank(req.win)};
     S.n=n; S.Tend=lapStartT(n+1); S.over=!!req.over;
-    if(n>=2&&world.ctx.screen) world.ctx.screen(n,lenLaps,null);
+    // [hook:stadium]
+    if(n>=2&&world.ctx.screen) world.ctx.screen(n,lenLaps,null);   /* the big screen: the lap */
+    // [/hook:stadium]
     if(finished){ const S2=S; setTimeout(()=>{ ["holeshot","pass","crash","yellow","line"].forEach(k=>S2.fire(k)); S2.fire("done"); },0); }   /* the leader already finished: nothing left to wait for */
     if(motion()==="off"){ rs.forEach(r=>{ if(r.tg){ r.g=r.tg.g1; r.tg.p=1; } r.init=false; }); renderOnce(); }
     return S;
@@ -213,6 +208,7 @@ export function create(host,hooks){
   }
   function makeShow(){ const S={fired:{},waits:{},ended:false}; S.at=n=>S.fired[n]?Promise.resolve():new Promise(r=>(S.waits[n]=S.waits[n]||[]).push(r)); S.fire=n=>{ if(S.fired[n]) return; S.fired[n]=true; (S.waits[n]||[]).splice(0).forEach(f=>{ try{ f(); }catch(e){} }); }; S.done=S.at("done"); return S; }
   function endShow(){ if(!show) return; show.ended=true; ["holeshot","pass","crash","yellow","line"].forEach(k=>show.fire(k)); show.fire("done"); }
+  function leaderIdx(){ let b=-1, bd=-1e9; rs.forEach((r,i)=>{ if(!r.gone&&!r.crash&&r.D>bd){ bd=r.D; b=i; } }); return b; }
   function trackRank(seat){ if(seat==null||seat<0||!rs[seat]) return -1; const D=rs[seat].D; let k=0; rs.forEach(r=>{ if(!r.gone&&r.D>D) k++; }); return k; }
   /* waiting on the cards (a person's flip, a war): the riders ride on; the director looks at the war's riders */
   V.hold=function(o){ holdInfo=o||null; };
@@ -222,16 +218,16 @@ export function create(host,hooks){
     const alive=order.filter(s=>rs[s]&&!rs[s].gone), gg=MX.Course.gaps(alive,cnt,C.Tlap,{base:0.5,extra:1.4});
     rs.forEach((r,i)=>{ r.g=gg[i]!=null?gg[i]:r.g+3; r.tg=null; r.init=false; });
     lapNo=Math.max(1,n||1); T=lapStartT(lapNo)+0.05; mode="race"; finished=false; gate.set(1); gate.drop=1; gate.dropT=1;
-    pickShot(true); renderOnce();
+    CAMS.pickShot(true); renderOnce();
   };
   V.markOut=function(seat){ const r=rs[seat]; if(r) r.gone=true; };
-  V.gate=function(){ mode="gate"; gate.set(0); gate.drop=0; gate.dropT=-1; T=0; lapNo=1; rs.forEach((r,k)=>{ r.lat=gate.slotLat(slotOf(k)); r.init=false; r.crash=null; r.crashPlan=null; r.g=0; r.tg=null; }); setShot({type:"gate",subj:-1,pri:0,min:1e9,max:1e9}); renderOnce(); };
+  V.gate=function(){ mode="gate"; gate.set(0); gate.drop=0; gate.dropT=-1; T=0; lapNo=1; rs.forEach((r,k)=>{ r.lat=gate.slotLat(slotOf(k)); r.init=false; r.crash=null; r.crashPlan=null; r.g=0; r.tg=null; }); CAMS.setShot({type:"gate",subj:-1,pri:0,min:1e9,max:1e9}); renderOnce(); };
   /* the gate drops: the pads fall, the clock starts (resolves once the riders are away) */
   V.drop=function(){
     return new Promise(res=>{
       if(!C){ res(); return; }
       mode="race"; lapNo=1; T=0; finished=false; gate.dropT=now();
-      if(shot&&shot.type==="gate"){ shot.min=2.6; shot.max=3.4; shot.pri=1; shot.t=0; }
+      { const shot=CAMS.shot; if(shot&&shot.type==="gate"){ shot.min=2.6; shot.max=3.4; shot.pri=1; shot.t=0; } }
       if(motion()==="off"){ gate.set(1); renderOnce(); res(); return; }
       setTimeout(res,650);
     });
@@ -255,53 +251,27 @@ export function create(host,hooks){
     if(!off||(stillT+=dt)>=2){ stillT=0; render(); }
     const ms=now()-c0; stats.ms=stats.ms*0.95+ms*0.05; stats.msMax=Math.max(stats.msMax*0.995,ms); stats.frames++;
     stats.ft.push(dt*1000); if(stats.ft.length>120) stats.ft.shift();
-    if(!off) adapt(dt);
+    // [hook:perf]
+    if(!off) QUAL.adapt(dt);   /* the adaptive pixel-ratio ladder (r3d-quality.js) */
+    // [/hook:perf]
     raf=requestAnimationFrame(tick);
   }
   function start(){ if(running||V.lost) return; if(document.hidden) return; running=true; lastT=0; raf=requestAnimationFrame(tick); }
   V.stop=function(){ running=false; if(raf){ cancelAnimationFrame(raf); raf=0; } };
   V.show=function(on){ want=!!on; if(on) start(); else V.stop(); };
   document.addEventListener("visibilitychange",()=>{ if(document.hidden) V.stop(); else if(want) start(); });
-  let slowT=0, fastT=0, longPrev=false;
-  function adapt(dt){
-    if(V.prFixed) return;
-    const ft=dt*1000;
-    if(ft>220&&!longPrev){ longPrev=true; return; }   /* a one-off hitch (a shader compiling, the tab waking up) is not a slow device; two in a row are */
-    longPrev=ft>220;
-    if(ft>34){ slowT+=dt; fastT=0; } else if(ft<18){ fastT+=dt; slowT=Math.max(0,slowT-dt*0.5); }
-    if(slowT>1.2&&SHADOWS){ setShadows(false); stats.shadowDrop=true; slowT=0; return; }   /* the real shadows go first (the blobs stay) */
-    if(slowT>1.5&&pr>prCap*0.5){ pr=Math.max(prCap*0.5,pr*0.85); renderer.setPixelRatio(pr); renderer.setSize(W,H,false); slowT=0; stats.prDrops++; }
-    else if(fastT>5&&pr<prCap){ pr=Math.min(prCap,pr*1.1); renderer.setPixelRatio(pr); renderer.setSize(W,H,false); fastT=0; }
-  }
-  function setShadows(on){ SHADOWS=!!on; renderer.shadowMap.enabled=SHADOWS; sun.castShadow=SHADOWS; }
-  /* the shadow box: round what the camera looks at (pulled a little toward the lens), its size from how far the camera is, snapped to
-     whole texels in the light's view so the edges never shimmer as it follows the action */
-  const shR=new THREE.Vector3(), shU=new THREE.Vector3(), shF=new THREE.Vector3(), shC=new THREE.Vector3(), YUP=new THREE.Vector3(0,1,0);
-  function fitShadow(){
-    const sc=sun.shadow.camera, half=clamp(Math.round(cam.position.distanceTo(cTarget)*0.95/4)*4,16,52);
-    if(half!==shHalf){ shHalf=half; sc.left=-half; sc.right=half; sc.top=half; sc.bottom=-half; sc.updateProjectionMatrix(); }
-    shC.copy(cTarget).lerp(cam.position,0.2);
-    shF.copy(SUN).negate(); shR.crossVectors(YUP,SUN).normalize(); shU.crossVectors(SUN,shR);
-    const tx=2*half/sun.shadow.mapSize.x, a=shC.dot(shR), b=shC.dot(shU);
-    shC.addScaledVector(shR,Math.round(a/tx)*tx-a).addScaledVector(shU,Math.round(b/tx)*tx-b);
-    sun.target.position.copy(shC); sun.position.copy(shC).addScaledVector(SUN,160); sun.target.updateMatrixWorld(); sun.updateMatrixWorld();
-  }
-  /* how much of a blob shadow to keep at (x, z): faint inside the real shadows' box, whole outside it (and with no real shadows) */
-  function blobOp(x,y,z){
-    if(!SHADOWS||!shHalf) return 1;
-    const dx=x-shC.x, dy=y-shC.y, dz=z-shC.z, a=Math.abs(dx*shR.x+dy*shR.y+dz*shR.z), b=Math.abs(dx*shU.x+dy*shU.y+dz*shU.z);
-    return 0.42+0.58*sstep(0.72*shHalf,0.94*shHalf,Math.max(a,b));
-  }
   V.resize=function(){
     const w=Math.max(1,Math.round(host.clientWidth)), h=Math.max(1,Math.round(host.clientHeight));
-    const dpr=GL.devicePixelRatio||1;
-    if(!V.prFixed){ if(tv()) prCap=Math.min(dpr,(LO?960:1280)/w); else prCap=Math.min(dpr,LO?1.0:1.75); prCap=Math.max(0.5,prCap); if(w!==W||h!==H||!pr) pr=prCap; }
+    // [hook:perf]
+    const pr=QUAL.resize(w,h,W,H,LO);   /* the pixel ratio: a cap per device (TV, phone, Reduce effects) */
+    // [/hook:perf]
     W=w; H=h; renderer.setPixelRatio(pr); renderer.setSize(W,H,false); cv.style.width=W+"px"; cv.style.height=H+"px";
-    cam.aspect=W/H; cam.updateProjectionMatrix(); camS.snap=true; renderOnce();
+    LOOK.resize(W,H,pr);
+    cam.aspect=W/H; cam.updateProjectionMatrix(); CAMS.snap(); renderOnce();
   };
   function renderOnce(){ if(!C||V.lost) return; step(0); render(); }
   function render(){
-    renderer.render(scene,cam);
+    LOOK.render(scene,cam);   /* the frame (through the post-processing slot when one is set) */
     const inf=renderer.info.render; stats.calls=inf.calls; stats.tris=inf.triangles;
     stats.fpsN++; const tn=now(); if(tn-stats.fpsT0>1000){ stats.fps=stats.fpsN*1000/(tn-stats.fpsT0); stats.fpsN=0; stats.fpsT0=tn; }
   }
@@ -319,7 +289,9 @@ export function create(host,hooks){
         if(lapNo>=lenLaps||(lapPlan&&lapPlan.over&&lapPlan.n>=lapNo)){ finished=true; if(show) show.fire("done"); if(hooks.onFinish) setTimeout(()=>hooks.onFinish(),0); break; }
         if(show) show.fire("done");
         lapNo++;
-        if(world.ctx.screen) world.ctx.screen(lapNo,lenLaps,null);
+        // [hook:stadium]
+        if(world.ctx.screen) world.ctx.screen(lapNo,lenLaps,null);   /* the big screen: the lap */
+        // [/hook:stadium]
         const n=lapNo; if(hooks.onLap) setTimeout(()=>hooks.onLap(n),0);
       }
     }
@@ -379,13 +351,26 @@ export function create(host,hooks){
       if(lapNo===1&&L>=0&&rs[L].D>=C.hsD-6) show.fire("holeshot");
       if(lapPlan&&lapPlan.win!=null&&lapPlan.win>=0&&!show.fired.pass){ const rk=trackRank(lapPlan.win); if(lapPlan.rank0>=0&&rk<lapPlan.rank0) show.fire("pass"); }
     }
-    for(let i=0;i<N;i++){ const r=rs[i]; if((r.gone&&!r.crash)||!r.fr){ hideRider(R,i); continue; } rider(i,r,dt,atGate,tw); }
-    stepParticles(R,dt);
-    commit(R);
+    for(let i=0;i<N;i++){ const r=rs[i]; if((r.gone&&!r.crash)||!r.fr){ hideRider(R,i); RST[i].visible=false; continue; } rider(i,r,dt,atGate,tw); }
+    // [hook:fx]
+    FX.step(dt);   /* the particles move on (r3d-fx.js) */
+    // [/hook:fx]
+    // [hook:rider]
+    commit(R);   /* every instanced mesh of the riders and bikes is uploaded (r3d-riders.js) */
+    // [/hook:rider]
+    // [hook:dirt]
+    if(world.dirt&&world.dirt.frame) world.dirt.frame(dt,RST);   /* per-frame work for the track surface: tyre tracks, ruts (r3d-track.js addTrack().frame) */
+    // [/hook:dirt]
+    // [hook:stadium]
     if(flagger&&flagger.grp.visible) flagger.wave(tw,flag?1:0.05);
     if(marshal&&marshal.grp.visible) marshal.wave(tw*1.2,1);
-    director(dt);
-    camera(dt);
+    if(world.frame) world.frame(dt,tw,cam);   /* per-frame work for the surroundings: the crowd, lights, the screen (r3d-world.js buildWorld().frame) */
+    // [/hook:stadium]
+    // [hook:cams]
+    CAMS.director(dt);   /* which shot next */
+    CAMS.camera(dt);     /* the camera: position, look-at, field of view */
+    // [/hook:cams]
+    if(CAMS.shot){ if(world.ctx.skyMesh) world.ctx.skyMesh.position.copy(cam.position); if(LOOK.shadows) LOOK.fitShadow(cam,CAMS.target); }   /* the sky follows the lens; the shadow box follows the action */
     tags();
   }
   /* one rider: speed, the axles (sprung masses on the wheels), the stance, the bike and body matrices */
@@ -399,15 +384,17 @@ export function create(host,hooks){
     const gF=ride(r,s,onStart,BIKE.WB/2), gR=ride(r,s,onStart,-BIKE.WB/2), tF=gnd(r,s,onStart,BIKE.WB/2), tR=gnd(r,s,onStart,-BIKE.WB/2);
     const aF=onStart?null:MX.Course.airAt(C,s+BIKE.WB/2), aR=onStart?null:MX.Course.airAt(C,s-BIKE.WB/2);
     if(r.crash){ crashPose(i,r,tw,dt); return; }
+    let landed=false, impact=0;   /* this frame the bike touches down, and how hard: the axles' downward speed just before (m/s) */
     if(!r.init||dt<=0){
       initAxle(r.F,gF,aF,r.v); initAxle(r.Rr,gR,aR,r.v); r.init=true;
       r.stand=standTarget(r,aF||aR); r.lean=leanTarget(r); r.dab=0; r.gF=gF; r.gR=gR;
     } else {
       const sub=Math.max(1,Math.ceil(dt/(1/120))), h=dt/sub, vgF=(gF-r.gF)/dt, vgR=(gR-r.gR)/dt;
+      const vyIn=(r.F.v+r.Rr.v)*0.5;
       for(let k=0;k<sub;k++){ axle(r.F,aF,gF,vgF,h,r.v); axle(r.Rr,aR,gR,vgR,h,r.v); }
       r.gF=gF; r.gR=gR;
       const inAir=!!(aF||aR);
-      if(r.air&&!inAir&&!LO){ for(let k=0;k<6;k++) emit(R,x+(Math.random()-0.5)*1.2,gR+0.1,z+(Math.random()-0.5)*1.2,(Math.random()-0.5)*2,0.6+Math.random(),(Math.random()-0.5)*2,0.5+Math.random()*0.5,1.2,dustCol()); }
+      landed=r.air&&!inAir; if(landed) impact=Math.max(0,-vyIn);   /* (the dust: r3d-fx.js, FX.rider below) */
       r.air=inAir;
       r.stand+=clamp(standTarget(r,inAir)-r.stand,-dt*3.5,dt*3.5);
       r.lean+=clamp(leanTarget(r)-r.lean,-dt*1.6,dt*1.6);
@@ -427,25 +414,38 @@ export function create(host,hooks){
     const compF=clamp(LsEq-(yF-Math.max(tF+BIKE.WR,yF-BIKE.TRAVEL)),-0.12,BIKE.TRAVEL-0.02), compR=clamp(LsEq-(yR-Math.max(tR+BIKE.WR,yR-BIKE.TRAVEL)),-0.12,BIKE.TRAVEL-0.02);
     r.spinF+=r.v*dt/BIKE.WR; r.spinR+=r.v*dt/BIKE.WR;
     const crouch=clamp((compF+compR)*1.6,0,0.6)+(isGate?0.5:0);
-    poseRider(R,i,BW,{stand:isGate?0:r.stand,dab:r.dab,lean:roll,crouch:crouch,spinF:r.spinF,spinR:r.spinR,compF:compF,compR:compR});
     const gy=Math.min(tF,tR), hAir=Math.max(0,oy-gy);
+    /* the per-rider state every module reads (CONTRACT.md) */
+    const st=RST[i];
+    st.visible=true; st.me=!!list[i].me; st.red=!!list[i].red; st.x=x; st.y=oy; st.z=z; st.th=th; st.yaw=yaw; st.pitch=pz;
+    st.v=r.v; st.acc=acc; st.lat=r.lat; st.s=s; st.D=r.D; st.onStart=onStart; st.k=fr.k; st.tag=fr.tag||""; st.sand=fr.sand||0; st.gate=isGate;
+    st.air=r.air; st.landed=landed; st.impact=impact; st.hAir=hAir; st.gF=gF; st.gR=gR; st.tF=tF; st.tR=tR; st.gy=gy;
+    st.compF=compF; st.compR=compR; st.spinF=r.spinF; st.spinR=r.spinR; st.stand=isGate?0:r.stand; st.dab=r.dab; st.lean=roll; st.crouch=crouch;
+    st.crash=null; st.body=null; st.limbs=null;
+    // [hook:fx]
+    /* the effects inputs (the fx specialist owns these formulas): how hard the rear wheel throws dirt (roost), the throttle and the wheelspin
+       as 0..1; st.mud (0..1, kept between frames) is raised by nobody yet */
+    st.roost=(acc>1.0?acc*0.9:0)+(fr.sand>0.3?r.v*0.25:0)+(r.D<14&&r.v>2?6:0);
+    st.throttle=clamp(Math.max(acc,0)/3+(r.D<14&&r.v>2?1:0),0,1);
+    st.slip=clamp(st.roost/6,0,1);
+    // [/hook:fx]
+    // [hook:bike]
+    /* extra pose inputs for the bike (read by r3d-bike.js poseBike): st.compF / st.compR (suspension compression, m), st.spinF / st.spinR (wheel spin, rad) */
+    // [/hook:bike]
+    // [hook:rider]
+    /* extra pose inputs for the rider (read by r3d-riders.js poseRider): st.stand 0..1, st.dab -1..1, st.crouch, st.lean */
+    // [/hook:rider]
+    poseRider(R,i,BW,st);   /* the bike, then the rider on it (r3d-riders.js, r3d-bike.js) */
     const gl=onStart?0:(MX.Course.ground(C,s,lat+0.5)-MX.Course.ground(C,s,lat-0.5));
     let shx=x, shz=z, shy=(tF+tR)/2;
     if(hAir>0.25&&!onStart){ const k=Math.min(6,hAir)/Math.max(0.35,SUN.y), ox=-SUN.x*k, oz=-SUN.z*k, al=ox*cth+oz*sth, lt=ox*nx+oz*nz; shx=x+ox; shz=z+oz; shy=MX.Course.ground(C,s+al,lat+lt); }
-    shadowAt(R,i*2,shx,shy,shz,th,2.1,0.9,clamp(1-hAir/6,0.3,1),clamp((tF-tR)/BIKE.WB,-1.2,1.2),clamp(gl,-1.2,1.2),blobOp(shx,shy,shz));
+    shadowAt(R,i*2,shx,shy,shz,th,2.1,0.9,clamp(1-hAir/6,0.3,1),clamp((tF-tR)/BIKE.WB,-1.2,1.2),clamp(gl,-1.2,1.2),LOOK.blobOp(shx,shy,shz));
     shadowAt(R,i*2+1,0,-999,0,0,0,0,0);
     r.pos=r.pos||new THREE.Vector3(); r.pos.set(x,oy+1.0,z); r.th=th; r.oy=oy; r.gy=gy;
-    if(!LO&&!isGate&&!r.air&&dt>0){
-      const want2=(acc>1.0?acc*0.9:0)+(fr.sand>0.3?r.v*0.25:0)+(r.D<14&&r.v>2?6:0);
-      let nE=want2*dt*(R.part.n>300?5:2); while(nE>0){ if(Math.random()<nE){ const bx=x-cth*0.85, bz=z-sth*0.85, sp=2.5+r.v*0.35;
-          emit(R,bx+(Math.random()-0.5)*0.3,gR+0.08,bz+(Math.random()-0.5)*0.3,-cth*sp+(Math.random()-0.5)*1.6,1.4+Math.random()*2.2,-sth*sp+(Math.random()-0.5)*1.6,0.05+Math.random()*0.07,0.55+Math.random()*0.4,fr.sand>0.3?[0.62,0.52,0.36]:dirtCol());
-          if(Math.random()<0.18) emit(R,bx,gR+0.3,bz,-cth*sp*0.3,0.5,-sth*sp*0.3,0.5+Math.random()*0.6,1.4,dustCol()); }
-        nE-=1; }
-    }
+    // [hook:fx]
+    FX.rider(st,dt);   /* landing dust, the roost off the rear wheel (r3d-fx.js) */
+    // [/hook:fx]
   }
-  /* roost chunks a little darker than the lit dirt, dust paler than it (display colours: the particle shader writes them as they are) */
-  function dirtCol(){ const s=look&&look.soil; return s==="sand"?[0.74,0.63,0.45]:s==="hardpack"?[0.55,0.43,0.3]:C.kind==="stadium"?[0.45,0.33,0.22]:[0.36,0.27,0.18]; }
-  function dustCol(){ const s=look&&look.soil; return s==="sand"?[0.86,0.79,0.64]:C.kind==="stadium"?[0.7,0.6,0.48]:[0.74,0.67,0.55]; }
   function gnd(r,s,onStart,off){ if(onStart) return (r.fr.y||0)+0.02; return MX.Course.ground(C,s+off,r.lat); }
   function ride(r,s,onStart,off){
     if(onStart) return (r.fr.y||0)+0.02;
@@ -487,10 +487,14 @@ export function create(host,hooks){
     r.crash={T:T,lap:lapNo,kind:c.kind,tau:T-r.g,D:Math.max(0,r.D),side:c.side,v0:Math.max(6,r.v||MX.Course.vOfD(C,r.D)),lat:r.lat,down:c.kind==="out"?1e9:4.6,th:r.fr?r.fr.th:0,fx:0};
     r.tg=null;
     const f=r.fr||{x:0,z:0,th:0};
-    if(!LO) for(let k=0;k<26;k++) emit(R,f.x+(Math.random()-0.5)*1.2,(r.gy||0)+0.3,f.z+(Math.random()-0.5)*1.2,(Math.random()-0.5)*5,1+Math.random()*3,(Math.random()-0.5)*5,k<18?0.06+Math.random()*0.08:0.8+Math.random()*0.7,k<18?0.8:1.8,k<18?dirtCol():dustCol());
-    placeMarshalS(r.s,r.crash.side,shot&&shot.type==="crash"?shot.cam:null,r.crash.kind);
+    // [hook:fx]
+    FX.crashStart(f,r.gy||0);   /* the burst of dirt and dust where the rider goes down (r3d-fx.js) */
+    // [/hook:fx]
+    { const shot=CAMS.shot; placeMarshalS(r.s,r.crash.side,shot&&shot.type==="crash"?shot.cam:null,r.crash.kind); }
     if(show){ show.fire("crash"); const S=show; setTimeout(()=>S.fire("yellow"),2400); }
-    if(shot&&shot.type!=="crash") pickShot(true);
+    // [hook:cams]
+    { const shot=CAMS.shot; if(shot&&shot.type!=="crash") CAMS.pickShot(true); }
+    // [/hook:cams]
   }
   /* the marshal: beside the track a little past the crash, on the far side from the camera that shows it (never in front of the lens) */
   function placeMarshalS(s,side,camP,kind){
@@ -504,7 +508,7 @@ export function create(host,hooks){
       let sc=ds===8?1:ds===3?0.7:ds===13?0.45:0.2;
       if(camP){ const ax=fc.x-camP.x, az=fc.z-camP.z, bx=x-camP.x, bz=z-camP.z, da=Math.hypot(ax,az)||1, db=Math.hypot(bx,bz)||1, cosA=(ax*bx+az*bz)/(da*db);
         if(db<da+1.5) sc-=4; else if(cosA<0.86) sc-=1.5; else sc+=1+(db-da)*0.02;
-        if(!sees(camP,v3.set(x,MX.Course.ground(C,s+ds,sd*f.hw)+1.8,z),0.1)) sc-=3; }   /* hidden behind a jump from the crash camera */
+        if(!CAMS.sees(camP,v3.set(x,MX.Course.ground(C,s+ds,sd*f.hw)+1.8,z),0.1)) sc-=3; }   /* hidden behind a jump from the crash camera */
       else sc+=sd===(side||1)?0.5:0;   /* on the bike's side (the rider tumbles the other way) */
       if(kind==="out"&&sd===-(side||1)&&ds>=3&&ds<=13) sc-=2.5;   /* never where a crashed-out rider walks off the track */
       cands.push({sc:sc,f:f,lat:lat,x:x,z:z,s:s+ds});
@@ -512,7 +516,7 @@ export function create(host,hooks){
     if(!cands.length){ const f=MX.Course.frame(C,s+8,{}), lat=-(side||1)*(f.hw+1.5); cands.push({sc:0,f:f,lat:lat,x:f.x-Math.sin(f.th)*lat,z:f.z+Math.cos(f.th)*lat,s:s+8}); }
     cands.sort((a,b)=>b.sc-a.sc);
     const c=cands[0], f=c.f, lat=c.lat, x=c.x, z=c.z;
-    const edge=MX.Course.ground(C,c.s,Math.sign(lat)*f.hw), y=Math.max(edge+((f.y||0)-(C.kind==="stadium"?0.3:0.55)-edge)*sstep(0,1,(Math.abs(lat)-f.hw)/2.2),terrainAt(x,z,-1e9),C.kind==="stadium"?-0.16:-1e9);   /* on the shoulder's slope as the dirt is drawn, or the ground beside it */
+    const edge=MX.Course.ground(C,c.s,Math.sign(lat)*f.hw), y=Math.max(edge+((f.y||0)-(C.kind==="stadium"?0.3:0.55)-edge)*sstep(0,1,(Math.abs(lat)-f.hw)/2.2),CAMS.terrainAt(x,z,-1e9),C.kind==="stadium"?-0.16:-1e9);   /* on the shoulder's slope as the dirt is drawn, or the ground beside it */
     /* facing the riders coming at the crash, turned toward the track */
     const fx=-Math.cos(f.th)*0.6+Math.sin(f.th)*Math.sign(lat)*0.8, fz=-Math.sin(f.th)*0.6-Math.cos(f.th)*Math.sign(lat)*0.8;
     marshal.grp.position.set(x,y-0.03,z); marshal.grp.rotation.y=Math.atan2(fx,fz); marshal.grp.visible=true; marshal.s=s;
@@ -526,7 +530,7 @@ export function create(host,hooks){
   function surfY(s,lat,f,x,z){ const a=Math.abs(lat); let y;
     if(a<=f.hw) y=MX.Course.ground(C,s,lat);
     else { const edge=MX.Course.ground(C,s,Math.sign(lat)*f.hw); y=edge+((f.y||0)-(C.kind==="stadium"?0.3:0.55)-edge)*sstep(0,1,(a-f.hw)/2.2); }
-    return Math.max(y,terrainAt(x,z,-1e9),C.kind==="stadium"?-0.16:-1e9); }
+    return Math.max(y,CAMS.terrainAt(x,z,-1e9),C.kind==="stadium"?-0.16:-1e9); }
   function trackXZ(D,lat,o){ const l=MX.Course.atD(C,Math.max(0,D),o), on=l.onStart, sl=l.s;
     const f=on?MX.Course.startFrame(C,Math.max(0,D),o):MX.Course.frame(C,sl,o);
     o.px=f.x-Math.sin(f.th)*lat; o.pz=f.z+Math.cos(f.th)*lat; o.py=on?(f.y||0)+0.02:surfY(sl,lat,f,o.px,o.pz); return o; }
@@ -558,7 +562,7 @@ export function create(host,hooks){
     else { hy=0.96; stand=1;
       const D0=c.D+thrownEnd+0.6, L0=clamp(c.lat+rsd*2.1,-hw0-1,hw0+1);
       if(c.kind==="remount"){
-        if(t>=3.9){ poseRider(R,i,BM,{stand:0.3,dab:0,lean:rollB,crouch:0.2,spinF:r.spinF,spinR:r.spinR}); shadowAt(R,i*2,bx,gy,bz,thB,2.1,0.9,1,0,0,blobOp(bx,gy,bz)); shadowAt(R,i*2+1,0,-999,0,0,0,0,0); r.pos=r.pos||new THREE.Vector3(); r.pos.set(bx,gy+1,bz); r.th=thB; r.gy=gy; r.bikeP=(r.bikeP||new THREE.Vector3()).set(bx,gy+0.4,bz); return; }
+        if(t>=3.9){ poseRider(R,i,BM,{stand:0.3,dab:0,lean:rollB,crouch:0.2,spinF:r.spinF,spinR:r.spinR}); shadowAt(R,i*2,bx,gy,bz,thB,2.1,0.9,1,0,0,LOOK.blobOp(bx,gy,bz)); shadowAt(R,i*2+1,0,-999,0,0,0,0,0); r.pos=r.pos||new THREE.Vector3(); r.pos.set(bx,gy+1,bz); r.th=thB; r.gy=gy; r.bikeP=(r.bikeP||new THREE.Vector3()).set(bx,gy+0.4,bz); crashState(i,c,t,bx,gy,bz,thB,bx,gy+1,bz); return; }
         const D1=c.D+slideEnd-0.1, L1=latB+rsd*0.7, u=sstep(2.7,3.3,t);
         Dr=D0+(D1-D0)*u; latR=L0+(L1-L0)*u; walk=t<3.3?1:0; phase=t*9; reach=sstep(3.1,3.5,t);
         face=t<3.3?Math.atan2(L1-L0,D1-D0):t<3.6?Math.atan2(-rsd,0.25):Math.atan2(-rsd*(1-sstep(3.6,3.9,t)),0.25+sstep(3.6,3.9,t));   /* walk back, face the bike, swing on */
@@ -570,245 +574,17 @@ export function create(host,hooks){
     }
     trackXZ(Dr,latR,tmpCR); const hx=tmpCR.px, hz=tmpCR.pz, hgy=tmpCR.py, thR=tmpCR.th, bodyYaw=-(thR+(face!=null?face:0));
     c.bD=c.D+slide; c.bL=latB; c.rD=Dr; c.rL=latR;   /* where the bike and the rider are (the others steer round them) */
-    if(!LO&&dt>0){ /* dust: a burst where the rider hits the dirt and at each bounce; a trail behind the sliding bike */
-      const ev=[0.62,1.01,1.4]; while(c.fx<ev.length&&t>=ev[c.fx]){ const nb=c.fx?6:14; for(let k=0;k<nb;k++) emit(R,hx+(Math.random()-0.5)*0.9,hgy+0.15,hz+(Math.random()-0.5)*0.9,(Math.random()-0.5)*2.4,0.4+Math.random()*1.2,(Math.random()-0.5)*2.4,0.55+Math.random()*0.7,1.3+Math.random()*0.7,dustCol()); c.fx++; }
-      if(t<ts&&Math.random()<Math.min(1,dt*40)) emit(R,bx+(Math.random()-0.5)*0.7,gy+0.12,bz+(Math.random()-0.5)*0.7,-Math.cos(thB)*1.2+(Math.random()-0.5),0.3+Math.random()*0.7,-Math.sin(thB)*1.2+(Math.random()-0.5),0.45+Math.random()*0.5,1.1,dustCol()); }
+    // [hook:fx]
+    FX.crashStep(c,t,dt,hx,hgy,hz,bx,gy,bz,thB,ts);   /* dust where the rider hits the dirt, a trail behind the sliding bike (r3d-fx.js) */
+    // [/hook:fx]
     ce.set(bodyRoll,bodyYaw,bodyPitch,"YZX"); cq.setFromEuler(ce); CM.compose(cv4.set(hx,hgy+hy,hz),cq,sc1);
     poseRider(R,i,BM,{body:CM,limbs:{spread:spread,walk:walk,phase:phase,stand:stand,reach:reach},spinF:r.spinF,spinR:r.spinR});
-    shadowAt(R,i*2,bx,gy,bz,thB+yawB,2.0,1.0,1,0,0,blobOp(bx,gy,bz)); shadowAt(R,i*2+1,hx,hgy,hz,thR,1.0,0.8,clamp(1-hy/2,0.3,1),0,0,blobOp(hx,hgy,hz));
+    shadowAt(R,i*2,bx,gy,bz,thB+yawB,2.0,1.0,1,0,0,LOOK.blobOp(bx,gy,bz)); shadowAt(R,i*2+1,hx,hgy,hz,thR,1.0,0.8,clamp(1-hy/2,0.3,1),0,0,LOOK.blobOp(hx,hgy,hz));
     r.bikeP=(r.bikeP||new THREE.Vector3()).set(bx,gy+0.4,bz);
     r.pos=r.pos||new THREE.Vector3(); r.pos.set(hx,hgy+hy+0.4,hz); r.th=thR; r.gy=gy;
+    crashState(i,c,t,bx,gy,bz,thB,hx,hgy+hy,hz);
   }
 
-  /* ---------------- the camera director: the whole lap at real speed, cut between sections as the leader rides them ---------------- */
-  function leaderIdx(){ let b=-1, bd=-1e9; rs.forEach((r,i)=>{ if(!r.gone&&!r.crash&&r.D>bd){ bd=r.D; b=i; } }); return b; }
-  function setShot(s){ shot=s; shot.t=0; camS.snap=true; if(s.why==="yellow"&&yellow) yellow.shown=true; shot.cam=typeof s.cam==="function"?s.cam():(s.cam||null); shotLog.push(s.type+(s.why?":"+s.why:"")); if(shotLog.length>12) shotLog.shift(); }
-  function nextFeat(s){
-    let best=null, bd=1e9; C.feats.forEach(f=>{ if(f.k!=="whoops"&&f.k!=="jump"&&f.k!=="rhythm"&&f.k!=="sand"&&f.k!=="step") return; const d=MX.Course.wrap(C,f.from-s); if(d<bd){ bd=d; best=f; } }); return best?{f:best,d:bd}:null;
-  }
-  /* a camera inside the stadium: on the floor and inside the bowl of stands, whose rounded corners cut across the floor's corners
-     (polish: a corner camera could stand inside the stands and film the crowd's backs; r3d-world builds the bowl as this superellipse) */
-  function inFloor(p){ if(C.kind!=="stadium"||!C.layout.floor) return p; const F=C.layout.floor; p.x=clamp(p.x,F[0]+2.2,F[1]-2.2); p.z=clamp(p.z,F[2]+2.2,F[3]-2.2);
-    const cx=(F[0]+F[1])/2, cz=(F[2]+F[3])/2, rx=(F[1]-F[0])/2+1.5-3.5, rz=(F[3]-F[2])/2+1.5-3.5, dx=(p.x-cx)/rx, dz=(p.z-cz)/rz, q=Math.pow(dx*dx*dx*dx+dz*dz*dz*dz,0.25);
-    if(q>1){ p.x=cx+(p.x-cx)/q; p.z=cz+(p.z-cz)/q; }
-    return p; }
-  function terrainAt(x,z,y){ if(world.ctx.hf) return world.ctx.hf(x,z); return y||0; }
-  /* a trackside camera beside loop distance s: the side with room, off the track (inside the wall in a stadium) */
-  /* a trackside camera beside loop distance s: a spot with room (no lane within `room` m: nobody rides through the lens) at least minOff m
-     from the subject's line (a wall may pull a spot in: the real distance counts), the side with more room; inside the wall in a stadium.
-     Where the floor is packed with lanes it becomes a crane, raised over the riders (polish: a spot pulled in by the wall could put the
-     rider 3 m from the lens) */
-  function trackCam(s,h,distA,room,minOff,tgtH,xt){
-    const f=MX.Course.frame(C,s,tmpO), want=room!=null?room:(C.kind==="stadium"?5.5:4.5), mo=f.hw+(minOff!=null?minOff:7);
-    const tg=new THREE.Vector3(f.x,MX.Course.ground(C,s,0)+(tgtH!=null?tgtH:1.0),f.z), fx=f.x, fz=f.z, fth=f.th, fhw=f.hw, fy=f.y;
-    let best=null, bs=-1e9;
-    for(const dist of (distA||[10,14,18,23,29,36])) for(const side of [1,-1]){
-      const lat=side*(fhw+dist), p=inFloor({x:fx-Math.sin(fth)*lat,z:fz+Math.cos(fth)*lat});
-      const cd=clearDist(C,p.x,p.z), off=Math.hypot(p.x-fx,p.z-fz), base=terrainAt(p.x,p.z,fy);
-      /* the spot must see the subject's spot over the dirt (polish: a camera behind a landing showed nothing but the mound); higher if it must */
-      let vis=-1; for(const up of [0,2.5,5,9]){ const c=safeCam(new THREE.Vector3(p.x,base+h+up,p.z),1.2); if(sees(c,tg)&&(!xt||xt.every(t=>sees(c,t)))){ vis=up; if(cd>=want&&off>=mo&&up<9) return c; break; } }
-      const sc=Math.min(cd,want)*2+Math.min(off,mo)*0.8-Math.max(0,off-mo-12)*0.1-(vis<0?20:vis*0.6);
-      if(sc>bs){ bs=sc; best={p:p,cd:cd,off:off,vis:vis,base:base}; } }
-    const raise=clamp(want-best.cd,0,want)*1.3+(best.off<mo?2.5:0)+(best.vis>0?best.vis:best.vis<0?9:0);
-    return safeCam(new THREE.Vector3(best.p.x,best.base+h+1.5+raise,best.p.z),1.2);
-  }
-  /* a point of the section to keep in sight: on the centre-line at loop distance s, h above the dirt */
-  function secPt(s,h){ const f=MX.Course.frame(C,s,{}); return new THREE.Vector3(f.x,MX.Course.ground(C,s,0)+h,f.z); }
-  function featCam(f){
-    const sp=(C.spots||[]).find(x=>Math.abs(x.mid-(f.from+f.to)/2)<3), out=C.kind!=="stadium";
-    /* the whole section in sight, not just its middle: the whoops from end to end, a jump's lip and its landing */
-    const xt=f.k==="whoops"?[secPt(f.from+4,1),secPt(f.to-4,1)]:f.k==="jump"?[secPt(f.lip!=null?f.lip:f.from+3,1.2),secPt(f.to-2,0.8)]:null;
-    /* a jump: from below the landing side, looking up at the riders against the sky (outdoors higher and further back: the hills' big
-       faces would hide them) */
-    if(f.k==="jump"){ const at=f.lip!=null?f.lip+(f.to-f.lip)*0.55:(f.from+f.to)/2; return out?trackCam(at,3.6,[12,16,21,27],4.5,10,(f.h||2)+1.5,xt):trackCam(at,1.5,[9,12,15,19],undefined,undefined,(f.h||2)+1.5,xt); }
-    if(f.k==="whoops"&&sp){ const p=inFloor({x:sp.x,z:sp.z}), fm=MX.Course.frame(C,sp.mid,tmpO), c=safeCam(new THREE.Vector3(p.x,terrainAt(p.x,p.z,sp.y)+5.5,p.z),1.5);
-      if(clearDist(C,p.x,p.z)>=4&&Math.hypot(p.x-fm.x,p.z-fm.z)>=fm.hw+7&&sees(c,new THREE.Vector3(fm.x,MX.Course.ground(C,sp.mid,0)+1,fm.z))&&xt.every(t=>sees(c,t))) return c; }
-    if(f.k==="whoops") return trackCam((f.from+f.to)/2,C.kind==="stadium"?5.5:7.5,undefined,undefined,undefined,undefined,xt);
-    /* a rhythm lane, the sand, a step-up: further back and higher, a third of the way along, looking down on the lane (the riders ahead
-       must not fill the lens) */
-    return trackCam(f.from+(f.to-f.from)*0.35,C.kind==="stadium"?7:5,[14,18,23,29,36],5.5,11,1.6);
-  }
-  /* a camera round a spot: on rings of the given distances, at the first height that sees every target over the dirt and the hills, clear
-     of the lanes (raised over a lane that passes close); scored for the wanted distance and for standing ahead along fdir (the riders come
-     toward the lens) */
-  function spotCam(cx,cz,fy,fdir,targets,dists,heights,want,avoid){
-    /* every spot scored first on what is cheap (room, distance, standing ahead), then the sight lines tested best first: a spot whose
-       best possible score can't beat the best found is never tested (the sight tests are what cost: this keeps the cut to a crash smooth) */
-    const cand=[];
-    for(const d of dists) for(let k=0;k<16;k++){ const a=k/16*PI*2, p=inFloor({x:cx+Math.cos(a)*d,z:cz+Math.sin(a)*d}), dd=Math.hypot(p.x-cx,p.z-cz);
-      if(dd<d*0.6) continue;
-      if(avoid&&avoid.some(o=>Math.hypot(p.x-o.x,p.z-o.z)<o.d)) continue;   /* too close to someone who must be in the frame */
-      const cd=clearDist(C,p.x,p.z); if(cd<1.2) continue;
-      const ahead=((p.x-cx)*fdir.x+(p.z-cz)*fdir.z)/dd; cand.push({p:p,cd:cd,sc:Math.min(cd,3.5)*1.2-Math.abs(dd-want)*0.4+ahead*0.9}); }
-    cand.sort((a,b)=>b.sc-a.sc);
-    let best=null, bs=-1e9;
-    for(const c0 of cand){ if(c0.sc<=bs) break;
-      const base=terrainAt(c0.p.x,c0.p.z,fy); let hi=0;
-      for(const h of heights){ if(c0.sc-hi*0.8<=bs) break; const q=safeCam(new THREE.Vector3(c0.p.x,base+h+(c0.cd<3?1:0),c0.p.z),1.2); if(targets.every(t=>sees(q,t))){ bs=c0.sc-hi*0.8; best=q; break; } hi++; } }
-    return best;
-  }
-  /* the crash camera: close (about 9.5 m from where the rider lands), a crane at about 5 m looking down over the riders passing the crash,
-     beside or a little ahead of the crash so the rider tumbles toward the lens */
-  function crashCam(s){
-    const f=MX.Course.frame(C,s+3,tmpO), tgt=new THREE.Vector3(f.x,MX.Course.ground(C,s+3,0)+0.7,f.z);
-    return spotCam(f.x,f.z,f.y,{x:Math.cos(f.th),z:Math.sin(f.th)},[tgt],[8,9.5,11.5,14],[5,7,9],9.5)||trackCam(s+5,2.4,[6,8.5,11,14,18],3.2,5);
-  }
-  /* the yellow lap: the marshal waving the flag and the riders coming into the section, both in sight */
-  function yellowCam(ys){
-    const f=MX.Course.frame(C,ys,{}), fa=MX.Course.frame(C,ys-14,{}), T=[new THREE.Vector3(f.x,MX.Course.ground(C,ys,0)+1,f.z),new THREE.Vector3(fa.x,MX.Course.ground(C,ys-14,0)+1,fa.z)];
-    let av=null, cx=f.x, cz=f.z, dir={x:Math.cos(f.th),z:Math.sin(f.th)};
-    if(marshal&&marshal.grp.visible){ const m=marshal.grp.position; T.push(m.clone().add(v3.set(0,1.5,0))); av=[{x:m.x,z:m.z,d:9}]; cx=(f.x+m.x)/2; cz=(f.z+m.z)/2;   /* the marshal 9 m or more from the lens */
-      /* across the track from him, a little ahead: the riders pass between the lens and the flag (the classic shot; polish: from his own
-         side the frame was grass and his back) */
-      const ax=f.x-m.x, az=f.z-m.z, al=Math.hypot(ax,az)||1; dir={x:ax/al*0.8+Math.cos(f.th)*0.6,z:az/al*0.8+Math.sin(f.th)*0.6}; const dl=Math.hypot(dir.x,dir.z)||1; dir.x/=dl; dir.z/=dl; }
-    return spotCam(cx,cz,f.y,dir,T,[11,14,17,21,26],[3.5,6,9,12],15,av)||trackCam(ys+2,3.4,[8,11,14,18,23],3.5,6);
-  }
-  /* the gate camera: low, a few metres beyond the start straight's edge and a little ahead of the gate (the side with more room) */
-  function gateCam(g){
-    const fx=Math.cos(g.th), fz=Math.sin(g.th), rx=-fz, rz=fx, fwd=6+g.gw*0.22, lat=g.gw*0.5+4.5, ht=1.6+g.gw*0.035;
-    let best=null, bd=-1e9;
-    for(const sd of [1,-1]){ const p=inFloor({x:g.x+fx*fwd+rx*lat*sd,z:g.z+fz*fwd+rz*lat*sd}), cd=clearDist(C,p.x,p.z); if(cd>bd){ bd=cd; best=p; } }
-    return new THREE.Vector3(best.x,terrainAt(best.x,best.z,g.y)+ht+(bd<2?2.5:0),best.z);
-  }
-  function turn1Cam(){
-    let f; if(C.S.n){ f=MX.Course.startFrame(C,Math.max(0,C.Ls-16),tmpO); } else f=MX.Course.frame(C,C.join+Math.max(10,C.hsD-16),tmpO);
-    const side=-Math.sign(f.k||1)||1;
-    for(const dist of [14,20,26]){ const lat=side*(f.hw+dist), x=f.x-Math.sin(f.th)*lat, z=f.z+Math.cos(f.th)*lat; if(clear(C,x,z,2)){ const p=inFloor({x:x,z:z}); return new THREE.Vector3(p.x,terrainAt(p.x,p.z,f.y)+10,p.z); } }
-    const p=inFloor({x:f.x+20,z:f.z+20}); return new THREE.Vector3(p.x,terrainAt(p.x,p.z,0)+10,p.z);
-  }
-  /* the line: from beyond it, low, across the track from the flagger: the riders come at the lens over the stripe, the flagger and the
-     flag up on the tower behind them */
-  function lineCam(){ const fin=world.fin, f=MX.Course.frame(C,0,{}), th=f.th, sd0=-Math.sign(fin.lat||1);
-    /* it must see the riders coming to the line and the flag over any jump or landing just past it (polish: at a traced track with a
-       jump right after the line the lens saw only the landing's back); the first spot that does, from the classic low one up */
-    const T=[secPt(0,1),secPt(-22,1),fin.flagAt.clone().add(v3.set(0,1.2,0))];
-    for(const h of [2.1,3.6,5.5,8]) for(const fw of [11,8,15,20]) for(const sd of [sd0,-sd0]){ const lat=sd*(f.hw+3.5);
-      const p=inFloor({x:f.x+Math.cos(th)*fw-Math.sin(th)*lat,z:f.z+Math.sin(th)*fw+Math.cos(th)*lat}); if(clearDist(C,p.x,p.z)<1.5) continue;
-      const c=safeCam(new THREE.Vector3(p.x,terrainAt(p.x,p.z,f.y)+h,p.z),1.2); if(T.every(t=>sees(c,t))) return c; }
-    const lat=sd0*(f.hw+3.5), p=inFloor({x:f.x+Math.cos(th)*11-Math.sin(th)*lat,z:f.z+Math.sin(th)*11+Math.cos(th)*lat}); return safeCam(new THREE.Vector3(p.x,terrainAt(p.x,p.z,f.y)+5.5,p.z),1.2); }
-  function candidates(urgent){
-    const L=[], lead=leaderIdx(); if(lead<0) return L;
-    const r=rs[lead], me=meSeats.filter(s=>rs[s]&&!rs[s].gone&&!rs[s].crash);
-    if(lapNo===1&&r.D<C.hsD&&C.hsD-r.D<62&&!(shot&&shot.type==="turn1")) L.push({type:"turn1",subj:lead,pri:9.2,min:4.5,max:8,cam:turn1Cam});   /* the holeshot: never missed */
-    rs.forEach((k,i)=>{ if(k.crashPlan&&!k.crash&&!k.gone&&!k.onStart&&k.lapN>=k.crashPlan.lap){ const d=MX.Course.wrap(C,k.crashPlan.s-k.s); if(d>0&&d<Math.max(10,k.v*2.6)){ const out=k.crashPlan.kind==="out"; const cs=k.crashPlan.s; L.push({type:"crash",subj:i,pri:10,min:out?7.5:8.4,max:out?9.5:10.5,cam:()=>crashCam(cs)}); } } });
-    if(!r.onStart){ const toLine=C.L-r.s, tl=toLine/Math.max(4,r.v), over=lapPlan&&lapPlan.over&&lapPlan.n>=lapNo;
-      if(tl<3.4&&(over||lapNo===lenLaps-1||lapNo%3===0)) L.push({type:"line",subj:lead,pri:over?9:lapNo===lenLaps-1?7:4,min:3.2,max:over?7:5,cam:lineCam}); }
-    /* the yellow lap: once, the first rider (in running order) about to ride through the yellow section, with the marshal in the frame */
-    if(yellow&&yellow.lap===lapNo&&!yellow.shown){ const ys=yellow.s; let yi=-1;
-      rs.map((k,i)=>i).filter(i=>!rs[i].gone&&!rs[i].crash&&!rs[i].onStart).sort((a,b)=>rs[b].D-rs[a].D).some(i=>{ const k=rs[i], d=MX.Course.wrap(C,yellow.s0-k.s); if(d>2&&d<Math.max(14,k.v*4.5)){ yi=i; return true; } return false; });
-      if(yi>=0) L.push({type:"track",subj:yi,pri:6.5,min:4.5,max:7,cam:()=>yellowCam(ys),why:"yellow"}); }
-    if(urgent) return L;
-    [lead].concat(me).forEach((j,ix)=>{ const qq=rs[j]; if(!qq||qq.onStart) return; const nf=nextFeat(qq.s); if(!nf) return; const tt=nf.d/Math.max(4,qq.v);
-      if(tt<3.0&&tt>0.2){ const f=nf.f, seen=featLog.slice(-2).indexOf(f.from)>=0; L.push({type:f.k==="whoops"?"whoops":f.k==="jump"?"jump":"track",subj:j,pri:(ix?4.6:5)-(seen?1.6:0)+(f.big?0.4:0),min:3.2,max:6.5,cam:()=>featCam(f),feat:f,why:f.k}); } });
-    const ord=rs.filter(x=>!x.gone&&!x.crash&&!x.onStart).sort((a,b)=>b.D-a.D);
-    for(let k=1;k<Math.min(ord.length,14);k++){ const a=ord[k-1], b=ord[k], gap=a.D-b.D, closing=b.v-a.v;
-      if(gap<8&&gap>0.5&&closing>0.25){ const imp=(k<=4?2:0)+(meSeats.indexOf(a.seat)>=0||meSeats.indexOf(b.seat)>=0?2:0)+(lapPlan&&(lapPlan.win===a.seat||lapPlan.win===b.seat)?2:0);
-        if(imp>=2){ const bs=b.s+b.v*2.2; L.push({type:"track",subj:b.k,victim:a.k,pri:4.2+imp*0.3,min:3.5,max:6.5,cam:()=>trackCam(bs,2.6),why:"battle"}); break; } } }
-    if(holdInfo&&holdInfo.war) holdInfo.war.forEach((j,ix)=>{ if(rs[j]&&!rs[j].gone&&!rs[j].onStart) L.push({type:"chase",subj:j,pri:3.6-ix*0.1,min:3,max:4.5,why:"war"}); });
-    L.push({type:"chase",subj:lead,pri:2,min:4,max:7});
-    if(me.length) L.push({type:"chase",subj:me[0],pri:2.3,min:4,max:7,why:"you"});
-    L.push({type:"heli",subj:lead,pri:1.8,min:4,max:6.5});
-    if(!r.onStart){ const rsd=r.s+Math.max(8,r.v*2.2); L.push({type:"track",subj:lead,pri:2.1,min:3.5,max:6,cam:()=>trackCam(rsd,2.4),why:"roving"}); }
-    return L;
-  }
-  function pickShot(force){
-    const L=candidates(); if(!L.length) return;
-    const last=shotLog.slice(-2);
-    L.forEach(c=>{ const k=c.type+(c.why?":"+c.why:""); if(last.indexOf(k)>=0&&c.pri<6) c.pri-=1.2; c.pri+=Math.random()*0.15; });
-    L.sort((a,b)=>b.pri-a.pri);
-    const c=L[0];
-    if(!force&&shot&&c.type===shot.type&&c.subj===shot.subj&&c.why===shot.why&&!c.cam){ shot.t=0; return; }   /* the same moving camera: just keep it */
-    if(c.feat){ featLog.push(c.feat.from); if(featLog.length>6) featLog.shift(); }
-    setShot(c);
-  }
-  const dirA=new THREE.Vector3(), fwA=new THREE.Vector3();
-  function director(dt){
-    if(!shot) return;
-    shot.t+=dt;
-    if(mode!=="race") return;
-    if(shot.type==="gate"&&shot.t<shot.min) return;
-    if(shot.pri<9&&shot.t>0.6){ const L=candidates(true).filter(c=>c.pri>shot.pri&&(c.pri>=9||(c.pri>shot.pri+2.5&&shot.t>1.2))).sort((a,b)=>b.pri-a.pri); if(L.length){ setShot(L[0]); return; } }   /* a crash, the holeshot, the checkered flag cut in at once; the white flag or the yellow section over a filler shot */
-    if(shot.t>=shot.max){ pickShot(); return; }
-    if(shot.t>=shot.min){
-      const r=rs[shot.subj];
-      if(shot.feat&&r&&!r.onStart){ const d=MX.Course.wrap(C,r.s-shot.feat.to); if(d<C.L/2&&d>3){ pickShot(); return; } }
-      if(shot.cam&&r&&r.pos&&shot.type!=="crash"&&shot.type!=="line"){ dirA.subVectors(shot.cam,r.pos); fwA.set(Math.cos(r.th||0),0,Math.sin(r.th||0)); if(dirA.dot(fwA)<-6||dirA.length()<5){ pickShot(); return; } }
-      if(!shot.cam&&shot.t>=shot.min+1.5) pickShot();
-    }
-  }
-  const cTarget=new THREE.Vector3(), cPos=new THREE.Vector3(), tv3=new THREE.Vector3(), tv4=new THREE.Vector3(), tv2=new THREE.Vector3();
-  function camera(dt){
-    if(!shot) return;
-    const sh=shot.type, snap=camS.snap||dt<=0; let fov=50;
-    const off=motion()==="off";
-    const j=shot.subj>=0?shot.subj:leaderIdx();
-    const have=j>=0&&rs[j]&&rs[j].pos; if(have) tv3.copy(rs[j].pos);
-    if(off&&mode==="race"){
-      /* reduced motion: a still wide frame, re-placed every few seconds (inside the wall in a stadium, never in the stands) */
-      if(have&&(snap||!camS.offT||now()-camS.offT>6000)){ camS.offT=now(); cTarget.copy(tv3); const p=inFloor({x:tv3.x+24,z:tv3.z+20}); cPos.set(p.x,tv3.y+24,p.z); safeCam(cPos,6); }
-      fov=50;
-    } else if(sh==="gate"&&gate){
-      const g=gate, fx=Math.cos(g.th), fz=Math.sin(g.th), rx=-fz, rz=fx;
-      if(!camS.gp||camS.gk!==g){ camS.gk=g; camS.gp=safeCam(gateCam(g),1.2); }
-      cPos.copy(camS.gp);
-      tv4.set(g.x-fx*0.4,g.y+0.85,g.z-fz*0.4);
-      if(mode==="race"&&have) cTarget.lerpVectors(tv4,tv3,sstep(0.25,2.0,shot.t)); else cTarget.copy(tv4);
-      /* wide enough for both ends of the gate (and the pack once it's away) */
-      const e1=v3.set(g.x+rx*g.gw*0.5,g.y,g.z+rz*g.gw*0.5).sub(cPos), e2=tv2.set(g.x-rx*g.gw*0.5,g.y,g.z-rz*g.gw*0.5).sub(cPos), ang=e1.angleTo(e2)*1.18;
-      const asp0=W/Math.max(1,H); fov=clamp(2*Math.atan(Math.tan(ang/2)/Math.max(0.6,asp0))*180/PI,22,70);
-    } else if(!have){ /* nothing to follow */ }
-    else if(sh==="chase"||sh==="heli"){
-      /* chase: low behind the rider, the track ahead in the frame; heli: a cable-cam view from behind and above (inside the wall in a
-         stadium), tight enough that the rider reads */
-      const r=rs[j], th=r.th||0, heli=sh==="heli", back=heli?16:7.2, up=heli?10:2.6, clr=heli?3.5:1.5;
-      tv4.set(tv3.x-Math.cos(th)*back,Math.max(tv3.y+up,(r.gy||0)+1.9),tv3.z-Math.sin(th)*back);
-      if(C.kind==="stadium"&&C.layout.floor){ const p=inFloor({x:tv4.x,z:tv4.z}); tv4.x=p.x; tv4.z=p.z; }
-      safeCam(tv4,clr);
-      if(snap) cPos.copy(tv4); else cPos.lerp(tv4,1-Math.exp(-dt/0.32));
-      safeCam(cPos,clr);
-      const ah=heli?3:6;
-      tv4.set(tv3.x+Math.cos(th)*ah,tv3.y-(heli?0.5:0.15),tv3.z+Math.sin(th)*ah);
-      if(snap) cTarget.copy(tv4); else cTarget.lerp(tv4,1-Math.exp(-dt/0.12));
-      fov=heli?40:54;
-    } else {
-      if(!shot.cam) shot.cam=trackCam(rs[j].s||0,3);
-      cPos.copy(shot.cam); safeCam(cPos,1.2);
-      tv4.copy(tv3); let spread=0, base=sh==="whoops"?6:sh==="jump"?6.5:sh==="turn1"?10:sh==="line"?3.2:sh==="crash"?2.6:2.4;
-      const cr=sh==="crash"?rs[j].crash:null;
-      if(cr){ /* the crash: tight on the rider and the bike while it happens; once the rider is down the marshal's yellow flag joins the frame */
-        const t=T-cr.T, bp=rs[j].bikeP;
-        if(bp){ tv4.lerp(bp,0.35); spread=Math.min(7,bp.distanceTo(tv3))*0.9; }
-        if(marshal&&marshal.grp.visible){ const mp=marshal.grp.position, k=sstep(1.3,2.6,t), dm=Math.hypot(mp.x-tv3.x,mp.z-tv3.z);
-          if(dm<22){ tv4.x+=(mp.x-tv4.x)*0.32*k; tv4.y+=(mp.y+1.5-tv4.y)*0.32*k; tv4.z+=(mp.z-tv4.z)*0.32*k; spread=Math.max(spread,Math.min(9,dm*0.7)*k); } }
-        base=2.2;
-      }
-      else if(shot.victim!=null&&rs[shot.victim]&&rs[shot.victim].pos){ tv4.lerp(rs[shot.victim].pos,0.45); spread=Math.min(14,rs[shot.victim].pos.distanceTo(tv3)); }
-      else if(sh==="line"&&world.fin){ /* the flagger's flag in the frame with the rider */
-        const fp=world.fin.flagAt, dm=Math.hypot(fp.x-tv3.x,fp.z-tv3.z); tv4.set(tv4.x+(fp.x-tv4.x)*0.4,tv4.y+(fp.y+1.6-tv4.y)*0.4,tv4.z+(fp.z-tv4.z)*0.4); spread=Math.min(18,dm*0.9+2); }
-      else if(shot.why==="yellow"&&marshal&&marshal.grp.visible){ /* the yellow section: the marshal waving the flag, the riders coming through
-          (the riders join the frame as they arrive; a rider still far off doesn't pull the marshal out of it) */
-        const mp=marshal.grp.position, dm=Math.hypot(mp.x-tv3.x,mp.z-tv3.z);
-        if(dm<26){ tv4.set((tv4.x+mp.x)/2,(tv4.y+mp.y+1.4)/2,(tv4.z+mp.z)/2); spread=Math.min(14,dm*0.8); }
-        else if(yellow){ const sp=secPt(yellow.s,1); tv4.set((sp.x+mp.x)/2,(sp.y+mp.y+1.3)/2,(sp.z+mp.z)/2); spread=Math.min(8,Math.hypot(sp.x-mp.x,sp.z-mp.z)); }   /* the section and the flag, waiting for the riders */
-        else { const k=4/dm; tv4.set(mp.x+(tv3.x-mp.x)*k,mp.y+1.3,mp.z+(tv3.z-mp.z)*k); spread=4; } }
-      tv4.y-=0.3;
-      if(snap) cTarget.copy(tv4); else cTarget.lerp(tv4,1-Math.exp(-dt/(cr?0.18:0.1)));
-      const dist=cPos.distanceTo(cTarget), wantW=2.6+spread*0.8+base+(cr?0:Math.max(0,dist-22)*0.05);   /* a far subject: a little more of the scene round it */
-      fov=clamp(2*Math.atan(wantW/(2*dist))*180/PI*1.6,sh==="line"?12:19,64);
-      if(sh==="turn1") fov=clamp(fov,26,64);
-      if(shot.why==="yellow"){ const asp=Math.max(0.8,W/Math.max(1,H)); fov=clamp(2*Math.atan((11+spread*0.5)/asp/(2*dist))*180/PI,14,52); }   /* the yellow section about 12 m across */
-      if(sh==="crash"){ /* the crash: framed by the scene's width (the rider, the bike, then the marshal): about 7 m across, never a speck */
-        /* (the width across the screen whatever its shape: an upright phone gets the same scene, taller) */
-        const visW=(cr?6.2+spread*1.25:8+Math.max(0,dist-12)*0.3)*(W<H?0.85:1), asp=W/Math.max(1,H);
-        fov=clamp(2*Math.atan(visW/asp/(2*dist))*180/PI,8,W<H?75:55); }
-    }
-    /* a portrait screen: a little wider vertically, the sides cropped (the riders stay big) */
-    const asp=W/Math.max(1,H); if(asp<1&&sh!=="gate"&&sh!=="crash") fov=clamp(2*Math.atan(Math.tan(fov*PI/360)/Math.max(0.78,Math.pow(asp,0.55)))*180/PI,10,80);
-    if(snap){ camS.fov=fov; camS.snap=false; } else camS.fov+=(fov-camS.fov)*Math.min(1,dt*4);
-    cam.position.copy(cPos); cam.lookAt(cTarget); if(Math.abs(cam.fov-camS.fov)>0.01){ cam.fov=camS.fov; cam.updateProjectionMatrix(); }
-    if(world.ctx.skyMesh) world.ctx.skyMesh.position.copy(cam.position);
-    if(SHADOWS) fitShadow();
-  }
   /* number tags over riders that are small on screen (always the person's and the red plate), at most 7, a constant size on screen */
   const tagV=new THREE.Vector3(), tagP=new THREE.Vector3();
   function tags(){
@@ -832,11 +608,11 @@ export function create(host,hooks){
   }
 
   /* ---------------- tests and tools ---------------- */
-  V.state=function(){ return {mode:mode,lap:lapNo,len:lenLaps,T:+T.toFixed(2),lapT:C?+(T-lapStartT(lapNo)).toFixed(1):0,finished:finished,shot:shot?{type:shot.type,t:+shot.t.toFixed(2),subj:shot.subj,why:shot.why||""}:null,shots:shotLog.slice(),
+  V.state=function(){ const shot=CAMS.shot, shotLog=CAMS.shotLog; return {mode:mode,lap:lapNo,len:lenLaps,T:+T.toFixed(2),lapT:C?+(T-lapStartT(lapNo)).toFixed(1):0,finished:finished,shot:shot?{type:shot.type,t:+shot.t.toFixed(2),subj:shot.subj,why:shot.why||""}:null,shots:shotLog.slice(),
     yellow:yellow?{lap:yellow.lap,s:+yellow.s.toFixed(0)}:null,riders:rs.map(r=>({s:r.seat,D:+r.D.toFixed(1),ls:+(r.s||0).toFixed(1),g:+r.g.toFixed(2),v:+(r.v||0).toFixed(1),lat:+r.lat.toFixed(2),air:!!r.air,stand:+r.stand.toFixed(2),crash:r.crash?r.crash.kind:null,ct:r.crash?+(T-r.crash.T).toFixed(2):null,plan:r.crashPlan?r.crashPlan.kind:null,gone:r.gone})),
     course:V.courseInfo,running:running,flag:flag,lo:LO}; };
   V.order=function(){ return rs.filter(r=>!r.gone).slice().sort((a,b)=>b.D-a.D).map(r=>r.seat); };
-  V.stats=function(){ const ft=stats.ft.slice().sort((a,b)=>a-b); return {calls:stats.calls,tris:stats.tris,jsMs:+stats.ms.toFixed(2),jsMsMax:+stats.msMax.toFixed(2),fps:+stats.fps.toFixed(1),frameMs50:ft.length?+ft[Math.floor(ft.length/2)].toFixed(1):0,frameMs90:ft.length?+ft[Math.floor(ft.length*0.9)].toFixed(1):0,pr:+pr.toFixed(2),prCap:+prCap.toFixed(2),prDrops:stats.prDrops,W:W,H:H,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures,frames:stats.frames}; };
+  V.stats=function(){ const ft=stats.ft.slice().sort((a,b)=>a-b); return {calls:stats.calls,tris:stats.tris,jsMs:+stats.ms.toFixed(2),jsMsMax:+stats.msMax.toFixed(2),fps:+stats.fps.toFixed(1),frameMs50:ft.length?+ft[Math.floor(ft.length/2)].toFixed(1):0,frameMs90:ft.length?+ft[Math.floor(ft.length*0.9)].toFixed(1):0,pr:+QUAL.pr.toFixed(2),prCap:+QUAL.prCap.toFixed(2),prDrops:QUAL.stats.prDrops,W:W,H:H,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures,frames:stats.frames}; };
   V.lapTime=function(){ return C?C.Tlap:0; };
   /* tests: move the clock (T) to where the subject meets a section, and hold a named shot there */
   V.shot=function(name,o){
@@ -845,30 +621,30 @@ export function create(host,hooks){
     const n=Math.max(2,o.lap||lapNo); mode="race";
     const r=rs[j];
     let s, type=name, cam=null;
-    if(name==="whoops"||name==="jump"||name==="rhythm"||name==="sand"){ const feat=C.feats.filter(f=>f.k===(name==="jump"?"jump":name)).sort((a,b)=>(b.big?1:0)-(a.big?1:0))[0]; if(!feat) return null; s=(feat.lip!=null?feat.lip:feat.from)-(o.ahead!=null?o.ahead:8); cam=featCam(feat); if(name!=="whoops"&&name!=="jump") type="track"; }
-    else if(name==="line"){ s=C.L-(o.ahead!=null?o.ahead:14); cam=lineCam(); }
-    else { s=o.s!=null?o.s:C.L*0.3; if(name==="track") cam=trackCam(s+12,2.6); }
+    if(name==="whoops"||name==="jump"||name==="rhythm"||name==="sand"){ const feat=C.feats.filter(f=>f.k===(name==="jump"?"jump":name)).sort((a,b)=>(b.big?1:0)-(a.big?1:0))[0]; if(!feat) return null; s=(feat.lip!=null?feat.lip:feat.from)-(o.ahead!=null?o.ahead:8); cam=CAMS.featCam(feat); if(name!=="whoops"&&name!=="jump") type="track"; }
+    else if(name==="line"){ s=C.L-(o.ahead!=null?o.ahead:14); cam=CAMS.lineCam(); }
+    else { s=o.s!=null?o.s:C.L*0.3; if(name==="track") cam=CAMS.trackCam(s+12,2.6); }
     const D=MX.Course.lapStartD(C,n)+s; T=MX.Course.tOfD(C,D)+r.g; lapNo=n; rs.forEach(x=>x.init=false);
-    setShot({type:type,subj:j,pri:99,min:1e9,max:1e9,cam:cam,why:"test"});
+    CAMS.setShot({type:type,subj:j,pri:99,min:1e9,max:1e9,cam:cam,why:"test"});
     renderOnce(); return {type:type,T:+T.toFixed(1),subj:j};
   };
-  V.release=function(){ if(shot){ shot.pri=1; shot.min=0.5; shot.max=1; } };
+  V.release=function(){ const shot=CAMS.shot; if(shot){ shot.pri=1; shot.min=0.5; shot.max=1; } };
   /* tests: move the race on by sec seconds in 1/60 s steps (the director and the camera run as in the game), then draw one frame */
   V.advance=function(sec,noDraw){ if(!C) return null; const n=Math.max(1,Math.round(sec*60)); for(let k=0;k<n;k++) step(sec/n); if(!noDraw) render(); return V.state(); };
   /* tests: run the race for sec seconds without drawing and report the lowest the camera came to the dirt (and where) */
-  V.sweep=function(sec){ if(!C) return null; let lo=1e9, at=null; const n=Math.max(1,Math.round(sec*30)); for(let k=0;k<n;k++){ step(sec/n); const p=cam.position, a=p.y-Math.max(dirtTop(p.x,p.z),-50); if(a<lo){ lo=a; at={shot:shot?shot.type+(shot.why?":"+shot.why:""):"",x:+p.x.toFixed(1),z:+p.z.toFixed(1),T:+T.toFixed(1)}; } } return {lowest:+lo.toFixed(2),at:at,shots:shotLog.slice()}; };
+  V.sweep=function(sec){ const shotLog=CAMS.shotLog, dirtTop=CAMS.dirtTop; if(!C) return null; let lo=1e9, at=null; const n=Math.max(1,Math.round(sec*30)); for(let k=0;k<n;k++){ step(sec/n); const p=cam.position, a=p.y-Math.max(dirtTop(p.x,p.z),-50); if(a<lo){ lo=a; at={shot:CAMS.shot?CAMS.shot.type+(CAMS.shot.why?":"+CAMS.shot.why:""):"",x:+p.x.toFixed(1),z:+p.z.toFixed(1),T:+T.toFixed(1)}; } } return {lowest:+lo.toFixed(2),at:at,shots:shotLog.slice()}; };
   /* test hook: where seat k is on screen (NDC -1..1; in = inside the frame) and how far from the camera; the marshal too */
   V.proj=function(k){ const i=rs.findIndex(r=>r.seat===k); if(i<0||!rs[i].pos) return null; cam.updateMatrixWorld(); const d=cam.position.distanceTo(rs[i].pos), p=rs[i].pos.clone().project(cam);
     let m=null; if(marshal&&marshal.grp.visible){ const q=marshal.grp.position.clone(); q.y+=1.4; const mp=q.project(cam); m={x:+mp.x.toFixed(2),y:+mp.y.toFixed(2),in:Math.abs(mp.x)<1&&Math.abs(mp.y)<1&&mp.z<1}; }
     return {x:+p.x.toFixed(2),y:+p.y.toFixed(2),in:Math.abs(p.x)<1&&Math.abs(p.y)<1&&p.z<1,d:+d.toFixed(1),marshal:m}; };
   V.renderNow=renderOnce;
   /* tests: where the camera is, how far above the dirt under it, the shadows */
-  V.camInfo=function(){ const p=cam.position; return {x:+p.x.toFixed(1),y:+p.y.toFixed(2),z:+p.z.toFixed(1),aboveDirt:+(p.y-Math.max(dirtTop(p.x,p.z),-50)).toFixed(2),fov:+cam.fov.toFixed(1),shot:shot?shot.type+(shot.why?":"+shot.why:""):"",shadows:SHADOWS,shHalf:shHalf,weakGPU:weakGPU}; };
-  V.setShadows=function(on){ setShadows(on); };
-  V.fixPR=function(p){ prCap=p; pr=p; renderer.setPixelRatio(p); renderer.setSize(W,H,false); V.prFixed=true; };
-  V.dispose=function(){ V.stop(); if(world) disposeTree(world.root); if(R) disposeTree(R.grp); renderer.dispose(); cv.remove(); };
+  V.camInfo=function(){ const p=cam.position, shot=CAMS.shot, dirtTop=CAMS.dirtTop; return {x:+p.x.toFixed(1),y:+p.y.toFixed(2),z:+p.z.toFixed(1),aboveDirt:+(p.y-Math.max(dirtTop(p.x,p.z),-50)).toFixed(2),fov:+cam.fov.toFixed(1),shot:shot?shot.type+(shot.why?":"+shot.why:""):"",shadows:LOOK.shadows,shHalf:LOOK.shHalf,weakGPU:QUAL.weakGPU}; };
+  V.setShadows=function(on){ LOOK.setShadows(on); };
+  V.fixPR=function(p){ QUAL.fix(p,W,H); };
+  V.dispose=function(){ V.stop(); if(world) disposeTree(world.root); if(R) disposeTree(R.grp); if(FX) disposeTree(FX.group); renderer.dispose(); cv.remove(); };
   V.renderer=renderer; V.scene=scene; V.camera=cam;
-  V._dbg={riders:()=>R,gate:()=>gate,world:()=>world,marshal:()=>marshal,target:()=>cTarget.clone(),sees:(a,b)=>sees(a,b),dirt:(x,z)=>dirtTop(x,z),hf:(x,z)=>world.ctx.hf?world.ctx.hf(x,z):null,yellow:()=>yellow,shot:()=>shot,pos:k=>{ const r=rs.find(x=>x.seat===k); return r&&r.pos?{x:+r.pos.x.toFixed(2),y:+r.pos.y.toFixed(2),z:+r.pos.z.toFixed(2),crash:r.crash?r.crash.kind:null}:null; },
+  V._dbg={riders:()=>R,fx:()=>FX,state:()=>RST,gate:()=>gate,world:()=>world,marshal:()=>marshal,target:()=>CAMS.target.clone(),sees:(a,b)=>CAMS.sees(a,b),dirt:(x,z)=>CAMS.dirtTop(x,z),hf:(x,z)=>world.ctx.hf?world.ctx.hf(x,z):null,yellow:()=>yellow,shot:()=>CAMS.shot,pos:k=>{ const r=rs.find(x=>x.seat===k); return r&&r.pos?{x:+r.pos.x.toFixed(2),y:+r.pos.y.toFixed(2),z:+r.pos.z.toFixed(2),crash:r.crash?r.crash.kind:null}:null; },
     clearance:(k,full)=>{ const r=rs.find(x=>x.seat===k); if(!r||!r.crash||!r.pos) return null; const P=[r.pos,r.bikeP].filter(Boolean); let m=1e9, who=null;
       rs.forEach(o=>{ if(o===r||o.crash||o.gone||!o.pos) return; P.forEach((p,pi)=>{ const d=Math.hypot(o.pos.x-p.x,o.pos.z-p.z); if(d<m){ m=d; who={seat:o.seat,D:+o.D.toFixed(1),lat:+o.lat.toFixed(2),latT:+o.latT.toFixed(2),what:pi?"bike":"rider"}; } }); });
       if(!full) return +m.toFixed(2); const c=r.crash; return {m:+m.toFixed(2),who:who,crash:{D:+c.D.toFixed(1),bD:c.bD!=null?+c.bD.toFixed(1):null,bL:c.bL!=null?+c.bL.toFixed(2):null,rD:c.rD!=null?+c.rD.toFixed(1):null,rL:c.rL!=null?+c.rL.toFixed(2):null,t:+(T-c.T).toFixed(2)},hw:r.fr?+r.fr.hw.toFixed(2):null}; }};   /* tests only */

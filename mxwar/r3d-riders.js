@@ -1,116 +1,28 @@
-/* MOTOCROSS WAR 3D — the RIDERS: bikes and riders as low-poly ORIGINAL models (no logos, no sponsor marks; team = colours, numbers as
-   plain text). Every part type is ONE InstancedMesh (all riders in one draw call): wheels, chassis, plastics (team colour), trim (accent),
-   fork, swingarm, plates (a number atlas drawn in code: white plates, the points leader's RED plate), helmet, torso, upper arms, forearms,
-   thighs, shins, the jersey-back number; plus blob shadows, floating number tags and the roost (dirt spray) particles.
+/* MOTOCROSS WAR 3D — THE RIDERS (owner: rider): the rider as an ORIGINAL low-poly model (no logos, no sponsor marks; team = colours,
+   numbers as plain text): the helmet, the torso, the arms and legs (rounded limbs, one InstancedMesh per part type: every rider in one draw
+   call per part), the number atlas (plates, jersey-back numbers, floating tags, drawn in code), the blob shadows and number tags, and the
+   posing: two-bone IK (hands on the grips, feet on the pegs, an inside foot out in flat turns), seated in turns, standing in the whoops,
+   the rhythm and the air; a crash pose from the crash script in race3d.js (poseBody). createRiders() is the instancing glue: it makes the
+   bike's meshes (r3d-bike.js createBike) and the rider's, poseRider() poses the bike (poseBike) and then the rider. The roost / dust
+   particles are r3d-fx.js (they used to be made here). Moved out of the old one-file r3d-riders.js byte for byte (the file split: no visual change).
    Bike local axes: +X forward, +Y up, +Z right (heading th: rotation.y = -th; roll + = lean right; pitch + = nose up; Euler order YZX).
-   createRiders(THREE, n, opts) -> R with R.set(i, look), R.pose(i, state), R.commit(), R.dispose(). The arms and legs are solved with
-   two-bone IK (hands on the grips, feet on the pegs, an inside foot out in flat turns), seated in turns, standing in the whoops, the
-   rhythm and the air; a crash pose comes from the crash script in race3d.js. */
+   createRiders(list, {lo}) -> R {grp, M (every InstancedMesh by name), A (atlas), n, list}; poseRider(R, i, B, st) with B = the bike's world
+   Matrix4 and st = the per-frame state (CONTRACT.md). */
 import * as THREE_NS from "../ui/vendor/three-0.160.0.module.min.js";
-import {merge,paint,xf,lin,canvas} from "./r3d-world.js";
 const THREE=THREE_NS;
+import {merge,paint,xf,lin,canvas,bone} from "./r3d-util.js";
+import {BIKE,createBike,colorBike,poseBike,hideBike,plateGeo,drawPlate} from "./r3d-bike.js";
+export {BIKE} from "./r3d-bike.js";   /* (the old import path) */
+export {emit,stepParticles} from "./r3d-fx.js";   /* (the old import path: the particles moved to r3d-fx.js; the first argument is now the particle system FX.part, no longer the rider set) */
 
-const WB=1.48, WR=0.34;   /* wheelbase, wheel radius (m) */
-export const BIKE={WB:WB,WR:WR,FA:new THREE.Vector3(0.74,WR,0),RA:new THREE.Vector3(-0.74,WR,0),HEAD:new THREE.Vector3(0.43,1.04,0),PIVOT:new THREE.Vector3(-0.08,0.46,0),
-  GRIP:new THREE.Vector3(0.40,1.12,0.37),PEG:new THREE.Vector3(-0.07,0.43,0.21),TRAVEL:0.30,SAG:0.10};
-
-/* ---------------- geometry of one bike and one rider (unit limbs along +Y) ----------------
-   Polish: knobby tyres, a fork crown and a high front fender, flared radiator shrouds, a long seat and an upswept rear fender, the engine
-   with fins and covers, the exhaust round the right side; the rider in baggy gear (jersey and pants in the team colour, knee braces,
-   white boots with a toe, dark gloves), a helmet with a big peak, a chin bar and goggles. Plastics and helmets are glossy (Phong), the
-   metal parts have a sheen, the gear is cloth (Lambert). Parts marked aFix keep their own colour instead of the team colour. */
+/* ---------------- geometry of one rider (unit limbs along +Y) ----------------
+   Polish: the rider in baggy gear (jersey and pants in the team colour, knee braces, white boots with a toe, dark gloves), a helmet with a
+   big peak, a chin bar and goggles. Helmets are glossy (Phong), the gear is cloth (Lambert). Parts marked aFix keep their own colour
+   instead of the team colour. */
 function fixed(g,rgb){ const q=paint(g,rgb); q.setAttribute("aFix",new THREE.BufferAttribute(new Float32Array(q.attributes.position.count).fill(1),1)); return q; }
 function tinted(g,rgb){ const q=paint(g,rgb||[1,1,1]); q.setAttribute("aFix",new THREE.BufferAttribute(new Float32Array(q.attributes.position.count),1)); return q; }
 function mergeF(list){ const g=merge(list), F=new Float32Array(g.attributes.position.count); let n=0;
   list.forEach(q=>{ const c=q.attributes.position.count, a=q.attributes.aFix; if(a) F.set(a.array,n); n+=c; }); g.setAttribute("aFix",new THREE.BufferAttribute(F,1)); return g; }
-const V3=(x,y,z)=>new THREE.Vector3(x,y,z);
-/* a tube from a to b (open ended: its ends are inside other parts; half the triangles) */
-function tube(a,b,r,c,seg,capped){ const d=new THREE.Vector3().subVectors(b,a), len=d.length(), g=paint(new THREE.CylinderGeometry(r,r,len,seg||6,1,!capped),c); g.translate(0,len/2,0);
-  g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize())); g.translate(a.x,a.y,a.z); return g; }
-function wheelGeo(){
-  /* polish: the tyre's tread is ONE torus with every other step of its outer ring pushed out (knobby in silhouette, the old 12 knob boxes
-     cost more than the tyre), the rim, the hub, two crossed spokes, the brake disc: about 400 triangles a wheel instead of 630 */
-  const NT=24, tire=new THREE.TorusGeometry(0.272,0.07,5,NT), TP=tire.attributes.position;
-  for(let i=0;i<TP.count;i++){ const x=TP.getX(i), y=TP.getY(i), r=Math.hypot(x,y); if(r<0.3) continue; const a=Math.atan2(y,x), j=Math.round(a/(Math.PI*2)*NT);
-    if(((j%2)+2)%2===0){ const k=1+0.034*(r-0.3)/0.042; TP.setX(i,x*k); TP.setY(i,y*k); } }
-  tire.computeVertexNormals();
-  const L=[paint(tire,lin("#18181b"))];
-  L.push(paint(new THREE.TorusGeometry(0.212,0.017,3,16),lin("#c6cad1")));
-  const hub=paint(new THREE.CylinderGeometry(0.05,0.05,0.17,8,1,true),lin("#9a9da6")); hub.rotateX(Math.PI/2); L.push(hub);
-  for(let i=0;i<2;i++){ const b=paint(new THREE.BoxGeometry(0.008,0.42,0.008),lin("#b4b7be")); b.rotateZ(i*Math.PI/2+0.4); L.push(b); }
-  const disc=paint(new THREE.CylinderGeometry(0.115,0.115,0.008,10,1,true),lin("#aeb2ba")); disc.rotateX(Math.PI/2); disc.translate(0,0,-0.075); L.push(disc);
-  const dface=paint(new THREE.CircleGeometry(0.115,10),lin("#aeb2ba")); dface.translate(0,0,-0.071); L.push(dface);
-  return merge(L);
-}
-function chassisGeo(){
-  const dk=lin("#26272c"), mt=lin("#9ea2ac"), bl=lin("#111113"), ex=lin("#c4beb2"), L=[];
-  /* the frame: twin spars from the head to the pivot, the cradle under the engine, the subframe to the back */
-  [-1,1].forEach(sd=>{ const z=sd*0.075;
-    L.push(tube(V3(0.40,1.0,z*0.5),V3(0.10,0.86,z),0.028,mt)); L.push(tube(V3(0.10,0.86,z),V3(-0.08,0.44,z),0.028,mt));
-    L.push(tube(V3(0.38,0.96,z*0.5),V3(0.26,0.34,z*0.9),0.022,mt)); L.push(tube(V3(0.26,0.34,z*0.9),V3(-0.04,0.28,z*0.9),0.02,mt));
-    L.push(tube(V3(0.06,0.84,z),V3(-0.66,0.93,z*1.3),0.018,mt)); L.push(tube(V3(-0.10,0.52,z),V3(-0.62,0.9,z*1.3),0.016,mt)); });
-  /* the engine: the cases with round covers, the cylinder with fins, the airbox */
-  L.push(xf(paint(new THREE.BoxGeometry(0.40,0.26,0.24),dk),0.04,0.42,0));
-  L.push(xf(paint(new THREE.CylinderGeometry(0.075,0.085,0.24,10),lin("#3c3d44")),0.18,0.66,0,0,0,-0.3));
-  for(let k=0;k<4;k++) L.push(xf(paint(new THREE.BoxGeometry(0.17,0.012,0.2),lin("#5a5b63")),0.16+k*0.016,0.58+k*0.045,0,0,0,-0.3));
-  L.push(xf(paint(new THREE.CylinderGeometry(0.1,0.1,0.03,9),lin("#70727a")),0.02,0.42,0.13,Math.PI/2,0,0));
-  L.push(xf(paint(new THREE.CylinderGeometry(0.08,0.08,0.03,9),lin("#70727a")),0.08,0.44,-0.13,Math.PI/2,0,0));
-  [-1,1].forEach(sd=>L.push(xf(paint(new THREE.BoxGeometry(0.06,0.26,0.16),lin("#34353b")),0.30,0.74,sd*0.1,0,sd*0.25,-0.22)));   /* the radiators */
-  L.push(xf(paint(new THREE.BoxGeometry(0.34,0.2,0.22),bl),-0.34,0.8,0));
-  /* the seat: long and flat, the cover slightly rounded */
-  const seat=new THREE.BoxGeometry(0.8,0.075,0.22,8,1,2), SP=seat.attributes.position; for(let i=0;i<SP.count;i++){ if(SP.getY(i)>0) SP.setZ(i,SP.getZ(i)*0.82); } seat.computeVertexNormals();
-  L.push(xf(paint(seat,bl),-0.27,0.975,0,0,0,-0.045));
-  /* the exhaust: the header out of the cylinder, round the right side, the silencer along the rear fender */
-  L.push(tube(V3(0.26,0.66,0.06),V3(0.32,0.46,0.13),0.03,ex,8)); L.push(tube(V3(0.32,0.46,0.13),V3(0.12,0.40,0.17),0.03,ex,8));
-  L.push(tube(V3(0.12,0.40,0.17),V3(-0.22,0.66,0.18),0.032,ex,8));
-  L.push(tube(V3(-0.22,0.66,0.18),V3(-0.88,0.9,0.18),0.058,lin("#acaeb5"),10,true)); L.push(tube(V3(-0.88,0.9,0.18),V3(-0.95,0.925,0.18),0.036,lin("#26262a"),8,true));
-  /* the handlebar and its clamp, the lower fork clamp, the grips and the levers */
-  L.push(xf(paint(new THREE.CylinderGeometry(0.014,0.014,0.8,6),bl),0.40,1.12,0,Math.PI/2,0,0));
-  L.push(xf(paint(new THREE.BoxGeometry(0.12,0.05,0.26),mt),0.43,1.05,0));
-  L.push(xf(paint(new THREE.BoxGeometry(0.09,0.035,0.26),mt),0.535,0.80,0,0,0,0.42));
-  [-0.37,0.37].forEach(z=>{ L.push(xf(paint(new THREE.CylinderGeometry(0.021,0.021,0.12,6),lin("#1e1e22")),0.40,1.12,z,Math.PI/2,0,0)); L.push(xf(paint(new THREE.BoxGeometry(0.12,0.012,0.02),lin("#3a3a40")),0.47,1.11,z*0.86,0,z>0?-0.45:0.45,0)); });
-  /* the footpegs, the rear shock's spring */
-  [-0.21,0.21].forEach(z=>L.push(xf(paint(new THREE.BoxGeometry(0.1,0.025,0.09),mt),-0.07,0.42,z)));
-  L.push(tube(V3(-0.04,0.52,0),V3(-0.16,0.88,0),0.046,lin("#d9b02e"),8));
-  return merge(L);
-}
-function plasticsGeo(){
-  const W=[1,1,1], S=[0.86,0.86,0.86], L=[];
-  /* the front fender: a long blade from under the fork clamp over the wheel, the tip curling up */
-  const fp=[[0.47,0.80],[0.6,0.792],[0.74,0.786],[0.88,0.782],[1.0,0.79],[1.1,0.82]];
-  for(let i=0;i<fp.length-1;i++){ const a=fp[i], b=fp[i+1], len=Math.hypot(b[0]-a[0],b[1]-a[1])+0.012; L.push(xf(paint(new THREE.BoxGeometry(len,0.016,0.155-i*0.008),W),(a[0]+b[0])/2,(a[1]+b[1])/2,0,0,0,Math.atan2(b[1]-a[1],b[0]-a[0]))); }
-  /* the tank and the radiator shrouds: the widest part of the bike, flaring forward and down */
-  const tank=new THREE.BoxGeometry(0.42,0.16,0.26,2,1,2); const P=tank.attributes.position; for(let i=0;i<P.count;i++){ const x=P.getX(i), y=P.getY(i); P.setZ(i,P.getZ(i)*(1+(x>0?0.25:0)+(y>0?-0.18:0.1))); } tank.computeVertexNormals();
-  L.push(xf(paint(tank,W),0.21,0.98,0,0,0,-0.12));
-  [-1,1].forEach(sd=>{ L.push(xf(paint(new THREE.BoxGeometry(0.38,0.28,0.026),W),0.31,0.83,sd*0.175,sd*0.16,0,-0.42)); L.push(xf(paint(new THREE.BoxGeometry(0.15,0.13,0.022),W),0.47,0.67,sd*0.158,sd*0.24,0,-0.62)); });
-  /* the side panels under the seat (the side plates sit on them) */
-  [-1,1].forEach(sd=>L.push(xf(paint(new THREE.BoxGeometry(0.44,0.27,0.025),S),-0.42,0.79,sd*0.14,0,0,-0.08)));
-  /* the rear fender: long and swept up */
-  L.push(xf(paint(new THREE.BoxGeometry(0.44,0.022,0.21),W),-0.79,0.995,0,0,0,0.1)); L.push(xf(paint(new THREE.BoxGeometry(0.3,0.02,0.18),W),-1.1,1.045,0,0,0,0.24));
-  /* the front plate's backing */
-  L.push(xf(paint(new THREE.BoxGeometry(0.03,0.27,0.3),W),0.50,1.0,0,0,0,-0.28));
-  return merge(L);
-}
-function trimGeo(){
-  const W=[1,1,1], L=[];
-  /* graphics in the accent colour: a sweep down each shroud and along each side panel, the fork guards, the seat cover's stripe, a stripe on the rear fender */
-  [-1,1].forEach(sd=>{ L.push(xf(paint(new THREE.BoxGeometry(0.34,0.045,0.012),W),0.31,0.86,sd*0.192,sd*0.16,0,-0.42)); L.push(xf(paint(new THREE.BoxGeometry(0.42,0.035,0.012),W),-0.42,0.66,sd*0.157,0,0,-0.08)); });
-  [-1,1].forEach(sd=>L.push(xf(paint(new THREE.BoxGeometry(0.05,0.26,0.04),W),0.69,0.52,sd*0.1,0,0,0.42)));
-  L.push(xf(paint(new THREE.BoxGeometry(0.46,0.012,0.22),W),-0.3,1.014,0,0,0,-0.045));
-  L.push(xf(paint(new THREE.BoxGeometry(0.4,0.012,0.06),W),-0.8,1.008,0,0,0,0.1));
-  return merge(L);
-}
-function forkGeo(){
-  /* unit length along +Y: the lower legs (dark, the bottom 45%) and the gold tubes; local Z = the bike's right (bone() keeps it so) */
-  const L=[]; [-0.095,0.095].forEach(z=>{ L.push(xf(paint(new THREE.CylinderGeometry(0.032,0.032,0.46,8),lin("#2a2b30")),0,0.23,z)); L.push(xf(paint(new THREE.CylinderGeometry(0.025,0.025,0.56,8),lin("#d6b24c")),0,0.72,z)); });
-  return merge(L);
-}
-function swingGeo(){
-  const L=[]; [-0.08,0.08].forEach(z=>L.push(xf(paint(new THREE.BoxGeometry(1,0.075,0.035),lin("#a3a7b0")),-0.5,0,z))); L.push(xf(paint(new THREE.BoxGeometry(0.08,0.06,0.18),lin("#a3a7b0")),-0.04,0,0));
-  L.push(xf(paint(new THREE.BoxGeometry(0.34,0.05,0.008),lin("#1c1c20")),-0.62,0.0,-0.1));   /* the chain */
-  return merge(L);
-}
-function plateGeo(){ const g=new THREE.PlaneGeometry(1,1); return g; }
 function helmetGeo(){
   const W=[1,1,1], dk=lin("#0f1115"), L=[];
   const shell=new THREE.SphereGeometry(0.152,14,10), P=shell.attributes.position;
@@ -180,6 +92,7 @@ function fixMat(){
 }
 
 /* ---------------- the number atlas: plates (white / red) and the jersey-back numbers, drawn in code ---------------- */
+/* ---------------- the number atlas: plates (white / red) and the jersey-back numbers, drawn in code ---------------- */
 function atlas(riders){
   const cols=16, cell=128, rows=Math.ceil((riders.length*3+2)/cols), c=canvas(cols*cell,Math.max(1,rows)*cell), x=c.getContext("2d");
   const cells={};
@@ -188,12 +101,8 @@ function atlas(riders){
   function fit(t,max,base){ let fs=base; x.font="800 "+fs+"px Manrope, system-ui, sans-serif"; while(x.measureText(t).width>max&&fs>30){ fs-=4; x.font="800 "+fs+"px Manrope, system-ui, sans-serif"; } return fs; }
   riders.forEach(R=>{
     const t=String(R.num==null?"":R.num);
-    /* the plate: white (or red for the points leader) with the team colour down its top, a black (white on red) number */
     const p=k++, px=(p%cols)*cell, py=Math.floor(p/cols)*cell;
-    x.fillStyle=R.red?"#c8101c":"#f4f1e8"; rr(px+4,py+10,cell-8,cell-20,14); x.fill();
-    x.fillStyle=R.color||"#444"; x.fillRect(px+4,py+10,cell-8,13);
-    x.lineWidth=4; x.strokeStyle=R.me?"#f0c040":"rgba(0,0,0,.55)"; rr(px+4,py+10,cell-8,cell-20,14); x.stroke();
-    x.fillStyle=R.red?"#ffffff":"#121216"; x.textAlign="center"; x.textBaseline="middle"; fit(t,cell-22,84); x.fillText(t,px+cell/2,py+cell/2+8);
+    drawPlate(x,rr,fit,px,py,cell,R,t);   /* the plate: r3d-bike.js */
     /* the jersey back: the number in white with a dark edge (transparent around it) */
     const d=k++, dx=(d%cols)*cell, dy=Math.floor(d/cols)*cell;
     fit(t,cell-14,88); x.lineWidth=9; x.strokeStyle="rgba(10,10,14,.9)"; x.strokeText(t,dx+cell/2,dy+cell/2+4); x.fillStyle=R.red?"#ff5a5a":"#ffffff"; x.fillText(t,dx+cell/2,dy+cell/2+4);
@@ -218,34 +127,21 @@ function atlasMat(T,cols,rows,opts){
   return m;
 }
 
-/* four soft, lumpy dust puffs in a 2 x 2 atlas (white; the particle's colour tints them) */
-let PUFF=null;
-function puffTex(){
-  if(PUFF) return PUFF;
-  const c=canvas(128,128), x=c.getContext("2d");
-  for(let v=0;v<4;v++){ const ox=(v%2)*64, oy=Math.floor(v/2)*64; let sd=17+v*31; const R=()=>{ sd=(sd*16807)%2147483647; return sd/2147483647; };
-    x.save(); x.beginPath(); x.rect(ox,oy,64,64); x.clip();
-    for(let k=0;k<9;k++){ const a=R()*6.28, d=R()*8, px=ox+32+Math.cos(a)*d, py=oy+32+Math.sin(a)*d, r=9+R()*12, g=x.createRadialGradient(px,py,0,px,py,r);
-      const sh=Math.round(200+R()*55); g.addColorStop(0,"rgba("+sh+","+sh+","+sh+",.42)"); g.addColorStop(0.6,"rgba("+sh+","+sh+","+sh+",.18)"); g.addColorStop(1,"rgba("+sh+","+sh+","+sh+",0)"); x.fillStyle=g; x.beginPath(); x.arc(px,py,r,0,7); x.fill(); } x.restore(); }
-  PUFF=new THREE.CanvasTexture(c); return PUFF;
-}
 /* ---------------- the rider set ---------------- */
 export function createRiders(list,opts){
   opts=opts||{};
   const n=list.length, lo=!!opts.lo, grp=new THREE.Group();
-  const lam=new THREE.MeshLambertMaterial({vertexColors:true});
-  /* glossy plastics and helmets, a sheen on the metal, cloth gear (polish) */
-  const gloss=new THREE.MeshPhongMaterial({vertexColors:true,shininess:lo?30:70,specular:0x5c5c5c});
-  const shell=new THREE.MeshPhongMaterial({vertexColors:true,shininess:lo?40:110,specular:0x8c8c8c});
-  const metal=new THREE.MeshPhongMaterial({vertexColors:true,shininess:45,specular:0x484848});
-  const cloth=fixMat();
-  const mk=(geo,count,mat)=>{ const m=new THREE.InstancedMesh(geo,mat||lam,count); m.frustumCulled=false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); grp.add(m); return m; };
+  const mk=(geo,count,mat)=>{ const m=new THREE.InstancedMesh(geo,mat,count); m.frustumCulled=false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); grp.add(m); return m; };
   const A=atlas(list);
-  const M={
-    wheel:mk(wheelGeo(),n*2), chassis:mk(chassisGeo(),n,metal), plastic:mk(plasticsGeo(),n,gloss), trim:mk(trimGeo(),n,gloss), fork:mk(forkGeo(),n,metal), swing:mk(swingGeo(),n,metal),
+  const M=createBike(n,lo,mk);   /* wheel, chassis, plastic, trim, fork, swing (r3d-bike.js: it makes the bike's materials first) */
+  /* glossy helmets, cloth gear (polish); then the rider's meshes */
+  const shell=new THREE.MeshPhongMaterial({vertexColors:true,shininess:lo?40:110,specular:0x8c8c8c});
+  const cloth=fixMat();
+  Object.assign(M,{
     helmet:mk(helmetGeo(),n,shell), torso:mk(torsoGeo(),n,cloth), uarm:mk(limbGeo(0.056,0.048,0.29),n*2,cloth), farm:mk(limbGeo(0.048,0.042,0.29,lin("#24252b"),0.2),n*2,cloth),
     thigh:mk(limbGeo(0.088,0.07,0.43),n*2,cloth), shin:mk(shinGeo(),n*2,cloth)
-  };
+  });
+  ["helmet","torso","uarm","farm","thigh","shin"].forEach(k=>{ M[k].castShadow=true; });   /* the rider's parts cast the sun's shadow too */
   /* plates (3 a bike) and the jersey back (1) use the atlas */
   const pg=plateGeo(), cellA=new Float32Array(n*3*2), cellB=new Float32Array(n*2);
   list.forEach((R,i)=>{ const c=A.cells[R.s]; for(let k=0;k<3;k++){ cellA[(i*3+k)*2]=c.plate%A.cols; cellA[(i*3+k)*2+1]=Math.floor(c.plate/A.cols); } cellB[i*2]=c.decal%A.cols; cellB[i*2+1]=Math.floor(c.decal/A.cols); });
@@ -256,9 +152,9 @@ export function createRiders(list,opts){
   /* team colours */
   const col=new THREE.Color();
   list.forEach((R,i)=>{
-    col.set(R.color||"#888"); M.plastic.setColorAt(i,col); M.helmet.setColorAt(i,col); M.torso.setColorAt(i,col); M.uarm.setColorAt(i*2,col); M.uarm.setColorAt(i*2+1,col); M.farm.setColorAt(i*2,col); M.farm.setColorAt(i*2+1,col);
+    colorBike(M,i,R);   /* the bike's plastics and trim: r3d-bike.js */
+    col.set(R.color||"#888"); M.helmet.setColorAt(i,col); M.torso.setColorAt(i,col); M.uarm.setColorAt(i*2,col); M.uarm.setColorAt(i*2+1,col); M.farm.setColorAt(i*2,col); M.farm.setColorAt(i*2+1,col);
     const pc=col.clone().multiplyScalar(0.62); M.thigh.setColorAt(i*2,pc); M.thigh.setColorAt(i*2+1,pc); M.shin.setColorAt(i*2,pc); M.shin.setColorAt(i*2+1,pc);
-    col.set(R.accent||"#f2f2f6"); M.trim.setColorAt(i,col);
   });
   Object.values(M).forEach(m=>{ if(m.instanceColor) m.instanceColor.needsUpdate=true; });
   /* blob shadows: one quad under each bike and one under each rider (for crashes); a soft dark ellipse */
@@ -279,33 +175,15 @@ export function createRiders(list,opts){
     vertexShader:"attribute vec2 aCell; uniform vec2 uGrid; varying vec2 vUv; void main(){ vUv=vec2((aCell.x+uv.x)*uGrid.x,1.0-(aCell.y+1.0-uv.y)*uGrid.y); vec4 c=modelViewMatrix*instanceMatrix*vec4(0.,0.,0.,1.); float s=length(instanceMatrix[0].xyz); c.xyz+=normalize(-c.xyz)*min(1.8,0.25*length(c.xyz)); c.xy+=position.xy*s; gl_Position=projectionMatrix*c; }",
     fragmentShader:"uniform sampler2D map; varying vec2 vUv; void main(){ vec4 t=texture2D(map,vUv); if(t.a<0.05) discard; gl_FragColor=t; }"});
   M.tag=new THREE.InstancedMesh(tagG,tagMat,n); M.tag.frustumCulled=false; M.tag.renderOrder=20; grp.add(M.tag);
-  /* roost: dirt chunks and dust as points */
-  const P=lo?160:520, pp=new Float32Array(P*3), pa=new Float32Array(P), ps=new Float32Array(P), pc=new Float32Array(P*3), pv=new Float32Array(P);
-  const pgeo=new THREE.BufferGeometry(); pgeo.setAttribute("position",new THREE.BufferAttribute(pp,3)); pgeo.setAttribute("aAlpha",new THREE.BufferAttribute(pa,1)); pgeo.setAttribute("aSize",new THREE.BufferAttribute(ps,1)); pgeo.setAttribute("aCol",new THREE.BufferAttribute(pc,3)); pgeo.setAttribute("aVar",new THREE.BufferAttribute(pv,1));
-  const pmat=new THREE.ShaderMaterial({uniforms:{uScale:{value:300},uPuff:{value:puffTex()}},transparent:true,depthWrite:false,
-    vertexShader:"attribute float aAlpha; attribute float aSize; attribute vec3 aCol; attribute float aVar; varying float vA; varying vec3 vC; varying float vV; varying float vD; uniform float uScale; void main(){ vA=aAlpha; vC=aCol; vV=aVar; vD=aSize>0.3?1.0:0.0; vec4 mv=modelViewMatrix*vec4(position,1.); gl_PointSize=clamp(aSize*uScale/max(0.5,-mv.z),1.0,96.0); gl_Position=projectionMatrix*mv; }",
-    fragmentShader:"uniform sampler2D uPuff; varying float vA; varying vec3 vC; varying float vV; varying float vD; void main(){ vec2 d=gl_PointCoord-0.5; float r=dot(d,d); if(vD<0.5){ if(r>0.25) discard; float f=1.0-r*4.0; gl_FragColor=vec4(vC,vA*f*sqrt(f)); return; } vec4 t=texture2D(uPuff,(gl_PointCoord+vec2(mod(vV,2.0),floor(vV*0.5)))*0.5); if(t.a<0.01) discard; gl_FragColor=vec4(vC*(0.82+0.24*t.r),vA*t.a); }"});   /* clods: small round; dust: soft irregular puffs (display sRGB colours) */
-  const pts=new THREE.Points(pgeo,pmat); pts.frustumCulled=false; pts.renderOrder=3; grp.add(pts);
-  const part={n:P,pos:pp,alpha:pa,size:ps,col:pc,vari:pv,vel:new Float32Array(P*3),life:new Float32Array(P),max:new Float32Array(P),next:0,geo:pgeo,mat:pmat};
-  const R={grp,M,A,n,part,list,hidden:new Uint8Array(n)};
+  const R={grp,M,A,n,list,hidden:new Uint8Array(n)};
   /* scratch */
   R._m=new THREE.Matrix4(); R._q=new THREE.Quaternion(); R._e=new THREE.Euler(0,0,0,"YZX"); R._v=new THREE.Vector3(); R._s=new THREE.Vector3(1,1,1);
   return R;
 }
 
 /* ---------------- posing ---------------- */
-const _a=new THREE.Vector3(), _b=new THREE.Vector3(), _c=new THREE.Vector3(), _d=new THREE.Vector3(), _e=new THREE.Vector3(), _f=new THREE.Vector3(), _up=new THREE.Vector3(0,1,0);
-const _m1=new THREE.Matrix4(), _m2=new THREE.Matrix4(), _q1=new THREE.Quaternion(), _sc=new THREE.Vector3();
-const _bd=new THREE.Vector3(), _bq=new THREE.Quaternion(), _bm1=new THREE.Matrix4(), _bs=new THREE.Vector3(), _ka=new THREE.Vector3(), _kb=new THREE.Vector3(), _kc=new THREE.Vector3();
-/* the bone mesh (unit +Y) from a to b (own scratch: a and b may be any vectors) */
-const _bx=new THREE.Vector3(), _bz=new THREE.Vector3();
-function bone(m,i,a,b,thick,fw){
-  _bd.subVectors(b,a); const len=_bd.length()||1e-4; _bd.multiplyScalar(1/len);
-  if(fw){ /* local +X toward fw (the rider's or the bike's front), +Z = X x Y: the limb never spins about its own axis */
-    _bx.copy(fw).addScaledVector(_bd,-fw.dot(_bd)); if(_bx.lengthSq()<1e-6) _bx.set(0,1,0).addScaledVector(_bd,-_bd.y); _bx.normalize(); _bz.crossVectors(_bx,_bd);
-    const t=thick||1; _bm1.set(_bx.x*t,_bd.x*len,_bz.x*t,a.x, _bx.y*t,_bd.y*len,_bz.y*t,a.y, _bx.z*t,_bd.z*len,_bz.z*t,a.z, 0,0,0,1); m.setMatrixAt(i,_bm1); return; }
-  _bq.setFromUnitVectors(_up,_bd); _bs.set(thick||1,len,thick||1); _bm1.compose(a,_bq,_bs); m.setMatrixAt(i,_bm1);
-}
+const _a=new THREE.Vector3(), _c=new THREE.Vector3(), _d=new THREE.Vector3(), _e=new THREE.Vector3(), _f=new THREE.Vector3();
+const _m1=new THREE.Matrix4(), _m2=new THREE.Matrix4(), _sc=new THREE.Vector3(), _ka=new THREE.Vector3(), _kb=new THREE.Vector3(), _kc=new THREE.Vector3();
 /* two-bone IK: root a, target t, lengths l1 l2, pole direction p (world) -> the middle joint into out */
 function ik(a,t,l1,l2,p,out){
   _ka.subVectors(t,a); let d=_ka.length(); const dmax=l1+l2-0.002, dmin=Math.abs(l1-l2)+0.002;
@@ -315,12 +193,6 @@ function ik(a,t,l1,l2,p,out){
   out.copy(a).addScaledVector(e,x).addScaledVector(nrm,h);
   return d;
 }
-/* the plates' and the jersey number's fixed local matrices */
-const PLATE_L=[new THREE.Matrix4().compose(new THREE.Vector3(0.522,1.0,0),new THREE.Quaternion().setFromEuler(new THREE.Euler(0,Math.PI/2,0.28,"ZYX")),new THREE.Vector3(0.25,0.22,1)),
-  new THREE.Matrix4().compose(new THREE.Vector3(-0.42,0.78,0.155),new THREE.Quaternion().setFromEuler(new THREE.Euler(0,0,-0.08)),new THREE.Vector3(0.3,0.21,1)),
-  new THREE.Matrix4().compose(new THREE.Vector3(-0.42,0.78,-0.155),new THREE.Quaternion().setFromEuler(new THREE.Euler(0,Math.PI,0.08)),new THREE.Vector3(0.3,0.21,1))];
-const BACK_ROT=new THREE.Matrix4().makeRotationY(-Math.PI/2);
-const _fa=new THREE.Vector3(), _fh=new THREE.Vector3(), _ffw=new THREE.Vector3();
 /* the rider's joints in bike-local space for a stance (stand 0..1, dab -1..1 the inside foot out, lean for the counter-lean) */
 const J={hip:new THREE.Vector3(),sh:new THREE.Vector3(),head:new THREE.Vector3(),gL:new THREE.Vector3(),gR:new THREE.Vector3(),fL:new THREE.Vector3(),fR:new THREE.Vector3()};
 function localJoints(stand,dab,lean,crouch){
@@ -337,24 +209,12 @@ function localJoints(stand,dab,lean,crouch){
   return J;
 }
 const W={hip:new THREE.Vector3(),sh:new THREE.Vector3(),shL:new THREE.Vector3(),shR:new THREE.Vector3(),head:new THREE.Vector3(),gL:new THREE.Vector3(),gR:new THREE.Vector3(),fL:new THREE.Vector3(),fR:new THREE.Vector3(),hipL:new THREE.Vector3(),hipR:new THREE.Vector3(),el:new THREE.Vector3(),kn:new THREE.Vector3(),pole:new THREE.Vector3(),fw:new THREE.Vector3(),rt:new THREE.Vector3(),upv:new THREE.Vector3()};
-/* place one rider: B = the bike's world matrix (a Matrix4), st = {stand, dab, lean, crouch, spinF, spinR, compF, compR, hide, crash: {body matrix, limbs}} */
+/* place one rider: B = the bike's world matrix (a Matrix4), st = {stand, dab, lean, crouch, spinF, spinR, compF, compR, hide, body, limbs}
+   (a crash: body = the rider's body matrix, limbs = {spread, walk, phase, stand, reach}) */
 export function poseRider(R,i,B,st){
   const M=R.M;
   if(st.hide){ hideRider(R,i); return; }
-  /* ---- the bike (unless the crash script has thrown the rider clear: then B is the bike and st.body the rider) ---- */
-  /* wheels with spin and suspension: the front axle slides up the fork, the rear axle swings on the swingarm */
-  const cf=st.compF||0, cr=st.compR||0;
-  const fa=_a.set(BIKE.FA.x-cf*0.42,BIKE.FA.y+cf*0.9,0), ra=_b.set(BIKE.RA.x,BIKE.RA.y+cr,0);
-  _q1.setFromAxisAngle(_c.set(0,0,1),-(st.spinF||0)); _m1.compose(fa,_q1,_sc.set(1,1,1)); _m2.multiplyMatrices(B,_m1); M.wheel.setMatrixAt(i*2,_m2);
-  _q1.setFromAxisAngle(_c.set(0,0,1),-(st.spinR||0)); _m1.compose(ra,_q1,_sc.set(1,1,1)); _m2.multiplyMatrices(B,_m1); M.wheel.setMatrixAt(i*2+1,_m2);
-  M.chassis.setMatrixAt(i,B); M.plastic.setMatrixAt(i,B); M.trim.setMatrixAt(i,B);
-  /* fork: from the front axle to the clamp */
-  _fa.copy(fa).applyMatrix4(B); _fh.copy(BIKE.HEAD).applyMatrix4(B); _ffw.set(1,0,0).transformDirection(B); bone(M.fork,i,_fa,_fh,1,_ffw);
-  /* swingarm: from the pivot to the rear axle (unit geometry runs to -X); rotate in the bike's XY plane */
-  const ang=Math.atan2(ra.y-BIKE.PIVOT.y,ra.x-BIKE.PIVOT.x)-Math.PI, len=Math.hypot(ra.x-BIKE.PIVOT.x,ra.y-BIKE.PIVOT.y);
-  _q1.setFromAxisAngle(_c.set(0,0,1),ang); _m1.compose(BIKE.PIVOT,_q1,_sc.set(len,1,1)); _m2.multiplyMatrices(B,_m1); M.swing.setMatrixAt(i,_m2);
-  /* plates: front (facing forward, tilted back), sides (facing out) */
-  for(let k=0;k<3;k++){ _m2.multiplyMatrices(B,PLATE_L[k]); M.plate.setMatrixAt(i*3+k,_m2); }
+  poseBike(M,i,B,st);   /* the bike: wheels, suspension, fork, swingarm, plates (r3d-bike.js) */
   /* ---- the rider ---- */
   if(st.body){ poseBody(R,i,st.body,st.limbs); return; }
   const j=localJoints(st.stand||0,st.dab||0,st.lean||0,st.crouch||0);
@@ -389,7 +249,6 @@ function limbs(R,i,fw,rt,upv,st){
     ik(h,t,0.43,0.45,W.pole,W.kn); bone(M.thigh,i*2+a[3],h,W.kn,1,fw); bone(M.shin,i*2+a[3],W.kn,t,1,fw); });
 }
 /* a crash: the rider's body frame (world Matrix4: origin the hip, +Y up the spine, +X the chest's front, +Z right) and limb spread 0..1 */
-const _bm=new THREE.Matrix4();
 function poseBody(R,i,body,lim){
   const L=lim||{};
   _f.set(1,0,0).transformDirection(body); _d.set(0,1,0).transformDirection(body); _e.set(0,0,1).transformDirection(body);
@@ -404,9 +263,9 @@ function poseBody(R,i,body,lim){
 }
 export function hideRider(R,i){
   const M=R.M, z=_m1.makeScale(0,0,0);
-  M.wheel.setMatrixAt(i*2,z); M.wheel.setMatrixAt(i*2+1,z); ["chassis","plastic","trim","fork","swing","helmet","torso","back"].forEach(k=>M[k].setMatrixAt(i,z));
+  hideBike(M,i);
+  ["helmet","torso","back"].forEach(k=>M[k].setMatrixAt(i,z));
   ["uarm","farm","thigh","shin"].forEach(k=>{ M[k].setMatrixAt(i*2,z); M[k].setMatrixAt(i*2+1,z); });
-  for(let k=0;k<3;k++) M.plate.setMatrixAt(i*3+k,z);
   M.shadow.setMatrixAt(i*2,z); M.shadow.setMatrixAt(i*2+1,z); M.tag.setMatrixAt(i,z);
 }
 const _sCol=new THREE.Color();
@@ -424,20 +283,5 @@ export function tagAt(R,i,pos,size){ if(!size){ R.M.tag.setMatrixAt(i,_m1.makeSc
 export function commit(R){
   const M=R.M; Object.keys(M).forEach(k=>{ if(M[k].instanceMatrix) M[k].instanceMatrix.needsUpdate=true; });
   if(M.shadow.instanceColor) M.shadow.instanceColor.needsUpdate=true;
-}
-/* ---------------- roost ---------------- */
-export function emit(R,x,y,z,vx,vy,vz,size,life,dirt){
-  const P=R.part, k=P.next; P.next=(P.next+1)%P.n;
-  P.pos[k*3]=x; P.pos[k*3+1]=y; P.pos[k*3+2]=z; P.vel[k*3]=vx; P.vel[k*3+1]=vy; P.vel[k*3+2]=vz; P.life[k]=life; P.max[k]=life; P.size[k]=size;
-  const c=dirt||[0.36,0.27,0.19]; P.col[k*3]=c[0]; P.col[k*3+1]=c[1]; P.col[k*3+2]=c[2]; P.vari[k]=(k*7)%4;
-}
-export function stepParticles(R,dt){
-  const P=R.part;
-  for(let k=0;k<P.n;k++){ if(P.life[k]<=0){ P.alpha[k]=0; continue; } P.life[k]-=dt; const t=P.life[k]/P.max[k];
-    P.vel[k*3+1]-=9.81*dt*(P.size[k]>0.3?0.15:1); const dr=P.size[k]>0.3?1-1.6*dt:1-0.4*dt; P.vel[k*3]*=dr; P.vel[k*3+2]*=dr;
-    P.pos[k*3]+=P.vel[k*3]*dt; P.pos[k*3+1]+=P.vel[k*3+1]*dt; P.pos[k*3+2]+=P.vel[k*3+2]*dt;
-    if(P.size[k]>0.3) P.size[k]+=dt*0.9;   /* dust grows */
-    P.alpha[k]=Math.max(0,Math.min(1,t*1.6))*(P.size[k]>0.3?0.32:0.9); }
-  P.geo.attributes.position.needsUpdate=true; P.geo.attributes.aAlpha.needsUpdate=true; P.geo.attributes.aSize.needsUpdate=true; P.geo.attributes.aCol.needsUpdate=true; P.geo.attributes.aVar.needsUpdate=true;
 }
 export function setRed(R,list){ /* the red plate moved: redraw the atlas */ const A=atlas(list); R.A.tex.image=A.canvas; R.A.tex.needsUpdate=true; }
