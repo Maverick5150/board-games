@@ -21,7 +21,18 @@
    Play is simultaneous: every human rider in G.need turns a card ({t:"flip",s}); the computer riders never block. step(G) resolves the next
    phase for everyone still pending (auto play, sims, a quiet Party phone). A race starts in phase "gate": {t:"drop"} drops the gate.
    State G is plain JSON (G.rs = the seedable RNG), so a race saves and continues exactly. snapshot(G, seat) = the public view (no packet
-   contents: in War nobody sees a face-down card, not even its owner). */
+   contents: in War nobody sees a face-down card, not even its owner).
+   CRASHES (the CEO, 2026-10-16 20:06; BG_audit/games/mxwar/CRASH-CONTRACT.md): a war that ties again is a DOUBLE war (depth 2), again a
+   TRIPLE war (depth 3) and so on. When a war of depth 2 is won, every rider who fought it and lost it CRASHES and REMOUNTS (kind "remount":
+   they race on; their cards follow War's normal outcome). When a war of depth 3 or more is won, every rider who fought it and lost it
+   CRASHES OUT (kind "out": DNF for the rest of the race; their remaining cards go to the war's winner, the simplest reading). A war that
+   ends in a deadlock (nobody wins it) crashes nobody, and a war nobody had to fight (Rule B: the only other fighter was short of cards)
+   counts at the depth actually fought. DNF riders are classified behind every finisher: the later exit ahead of the earlier one, then the
+   cards held at the exit, then the higher last card, then the gate. Every crash raises a YELLOW FLAG for the next lap at the crash location
+   (sector 0..1 along the lap, drawn from the race RNG): no position changes in that section on that lap (the renderer holds the order; the
+   engine records G.yellow). Riders out of cards (War's normal way out) are out too but not a crash: no yellow, why "cards".
+   Events: {e:"crash",s,lap,kind,depth,by}, {e:"yellow",lap:n+1,s,sector}, {e:"dnf",s,lap,why:"crash"|"cards"}; state: G.r[s].dnf = {lap,why},
+   G.r[s].crashes = n, G.yellow = {lap,sector} | null (a save from before the crash rules simply has none). */
 (function(g){
 "use strict";
 var MX=g.MXWar=g.MXWar||{};
@@ -210,7 +221,7 @@ function reveal(G,ev){
   var cards=[]; G.part=[]; G.tb=[]; G.cur={}; G.warN=0;
   G.lap={b:G.battle+1,c:{},w:{}};   /* v2 battle board: the card every rider turned this lap, and the war cards */
   for(var s=0;s<G.n;s++){ var p=G.r[s]; if(!canPlay(G,s)) continue; p.bn=p.pk.length; var c=p.pk.shift(); G.part.push(s); G.tb.push({s:s,c:c,up:true,w:0}); G.cur[s]=c; G.lap.c[s]=c; cards.push({s:s,c:c}); }
-  G.bpart=G.part.slice(); G.pick={}; G.need=[];
+  G.bpart=G.part.slice(); G.pick={}; G.need=[]; G.wd=0; G.wpart=[];
   ev.push({e:"reveal",w:0,b:G.battle+1,cards:cards});
   settle(G,ev);
 }
@@ -264,7 +275,7 @@ function warFlip(G,ev){
     laid.push({s:s,down:nd,c:up,held:held});
     if(G.lap){ (G.lap.w[s]=G.lap.w[s]||[]).push([nd,held?null:up]); }
   });
-  G.pick={}; G.need=[];
+  G.pick={}; G.need=[]; G.wd=G.warN; G.wpart=G.part.slice();   /* the depth of the war actually fought, and its fighters (crashes) */
   ev.push({e:"reveal",w:G.warN,cards:laid});
   settle(G,ev);
 }
@@ -281,15 +292,27 @@ function deadlock(G,tied,ev){
   return endBattle(G,-1,ev);
 }
 function win(G,w,ev){
-  var war=G.warN>0, pot=G.tb.map(function(e){ return e.c; }), kit=0;
+  var war=G.warN>0, pot=G.tb.map(function(e){ return e.c; }), kit=0, lap=G.battle+1;
   if(war&&G.kitty.length){ kit=G.kitty.length; G.kitty.forEach(function(c){ pot.push(c); }); G.kitty=[]; ev.push({e:"kitty",s:w,n:kit}); }
+  /* the CEO's crash rules: the losers of a double war crash and remount; of a triple war (or deeper) crash out, their cards to the winner */
+  var depth=G.wd|0, crashed=depth>=2?(G.wpart||[]).filter(function(s){ return s!==w&&!G.r[s].out; }):[], kind=depth>=3?"out":"remount", gone=0;
+  if(kind==="out") crashed.forEach(function(s){ var q=G.r[s]; q.outN=q.pk.length; gone+=q.pk.length; q.pk.forEach(function(c){ pot.push(c); }); q.pk=[]; });
   shuffle(G,pot);
   var p=G.r[w]; pot.forEach(function(c){ p.pk.push(c); });
   G.st.won[w]++; if(G.warN>G.st.chain) G.st.chain=G.warN; if(pot.length>G.st.pot) G.st.pot=pot.length;
-  G.last={b:G.battle+1,w:w,n:pot.length,war:G.warN,how:"win",c:G.cur[w]};
+  G.last={b:lap,w:w,n:pot.length,war:G.warN,how:"win",c:G.cur[w]};
   ev.push({e:"win",s:w,n:pot.length,war:G.warN,c:G.cur[w]});
-  if(G.hs<0){ G.hs=w; ev.push({e:"holeshot",s:w,b:G.battle+1}); log(G,"Holeshot: "+nm(G,w)+"!","holeshot"); }
+  if(G.hs<0){ G.hs=w; ev.push({e:"holeshot",s:w,b:lap}); log(G,"Holeshot: "+nm(G,w)+"!","holeshot"); }
   else log(G,nm(G,w)+(war?" wins the war":" wins")+" with "+shortName(G.cur[w])+(isWild(G,G.cur[w])?" (wild)":"")+" and takes "+pot.length+" cards.",war?"war":"win");
+  if(crashed.length){
+    var sector=Math.round(rnd(G)*1000)/1000;
+    crashed.forEach(function(s){ var q=G.r[s]; q.crashes=(q.crashes|0)+1; ev.push({e:"crash",s:s,lap:lap,kind:kind,depth:depth,by:w}); });
+    G.yellow={lap:lap+1,sector:sector};
+    crashed.forEach(function(s){ ev.push({e:"yellow",lap:lap+1,s:s,sector:sector}); });
+    if(kind==="out") crashed.forEach(function(s){ var q=G.r[s]; q.out=true; q.outAt=lap; q.dnf={lap:lap,why:"crash"}; ev.push({e:"dnf",s:s,lap:lap,why:"crash"}); });
+    log(G,names(G,crashed)+(kind==="out"?" crash"+(crashed.length>1?"":"es")+" out of the race ("+warWord(depth).replace("!","")+(gone?", "+gone+" cards to "+nm(G,w):"")+")":
+      " crash"+(crashed.length>1?"":"es")+" ("+warWord(depth).replace("!","").toLowerCase()+" lost) and remount"+(crashed.length>1?"":"s"))+". Yellow flag.","crash");
+  }
   G.tb=[];
   endBattle(G,w,ev);
 }
@@ -303,10 +326,11 @@ function endBattle(G,w,ev){
   if(!G.laps) G.laps=[];
   G.laps.push({b:lap.b,win:w,n:lap.n,war:lap.war,c:lap.wc,aside:lap.aside}); if(G.laps.length>12) G.laps.splice(0,G.laps.length-12);
   G.bpart.forEach(function(x){ var c=G.cur[x]; if(c!=null) P[x].lc=val(G,c); });
-  G.tb=[]; G.cur={}; G.part=[]; G.pick={}; G.need=[]; G.warN=0; G.down=0;
+  G.tb=[]; G.cur={}; G.part=[]; G.pick={}; G.need=[]; G.warN=0; G.down=0; G.wd=0; G.wpart=[];
+  if(G.yellow&&G.yellow.lap<=G.battle) G.yellow=null;   /* the yellow flag waves for the one lap after a crash */
   var outs=[];
-  for(s=0;s<G.n;s++){ var p=P[s]; if(p.out) continue; if(p.pk.length===0){ p.out=true; p.outAt=G.battle; p.outN=p.bn; outs.push(s); } }
-  if(outs.length){ ev.push({e:"out",seats:outs,b:G.battle}); log(G,names(G,outs)+(outs.length>1?" are":" is")+" out of cards.","out"); }
+  for(s=0;s<G.n;s++){ var p=P[s]; if(p.out) continue; if(p.pk.length===0){ p.out=true; p.outAt=G.battle; p.outN=p.bn; p.dnf={lap:G.battle,why:"cards"}; outs.push(s); } }
+  if(outs.length){ ev.push({e:"out",seats:outs,b:G.battle}); outs.forEach(function(x){ ev.push({e:"dnf",s:x,lap:G.battle,why:"cards"}); }); log(G,names(G,outs)+(outs.length>1?" are":" is")+" out of cards.","out"); }
   G.bpart=[];
   var L=standings(G), lead=L[0].s; G.st.led[lead]++;
   if(lead!==G.st.leader){ if(G.st.leader>=0){ G.st.changes++; ev.push({e:"lead",s:lead,from:G.st.leader}); } G.st.leader=lead; }
@@ -348,10 +372,10 @@ function firstPlayer(G){ return {rule:"none",simultaneous:true,show:"gate",why:"
 /* ---------------- snapshot (Party phones; seat -1 = the TV): nothing is private in a race ---------------- */
 function snapshot(G,seat){
   return {v:G.v,id:"mxrace",o:G.o,n:G.n,me:seat,phase:G.phase,battle:G.battle,len:G.o.len,need:needList(G),acted:Object.keys(G.pick).map(Number),
-    riders:G.r.map(function(p,i){ return {s:i,id:p.id,name:p.name,human:p.human,out:p.out,count:p.pk.length,cur:G.cur[i]!=null?G.cur[i]:null}; }),
+    riders:G.r.map(function(p,i){ return {s:i,id:p.id,name:p.name,human:p.human,out:p.out,count:p.pk.length,cur:G.cur[i]!=null?G.cur[i]:null,dnf:p.dnf||null,crashes:p.crashes|0}; }),
     table:G.tb.map(function(e){ return {s:e.s,w:e.w,up:e.up,c:e.up?e.c:null}; }),
     warN:G.warN,down:G.down,wars:G.wars,kitty:G.kitty.length,aside:G.aside.length,holeshot:G.hs,last:G.last,
-    standings:standings(G),over:G.over,why:G.why,log:G.log.slice(-8).map(function(e){ return e.t; }),lastLap:G.lastLap||null,laps:(G.laps||[]).slice(),
+    standings:standings(G),yellow:G.yellow||null,over:G.over,why:G.why,log:G.log.slice(-8).map(function(e){ return e.t; }),lastLap:G.lastLap||null,laps:(G.laps||[]).slice(),
     legal:seat>=0?legal(G,seat):[]};
 }
 

@@ -25,6 +25,23 @@ if(MX.Round) return;
    extra. (v1, ~16:55: Short 10/8/8/25/20, Standard 15/12/12/40/30, Long 20/15/15/60/40.) A season saved with v1 lengths races its next race
    at the new lengths; a race already under way keeps its own. */
 var LEN={short:{heat:15,semi:12,lcq:12,main:40,moto:30},standard:{heat:30,semi:25,lcq:25,main:80,moto:60},long:{heat:50,semi:40,lcq:40,main:150,moto:100}};
+/* REAL LENGTHS (the CEO, 2026-10-16 ~21:10: "Races have their REAL LENGTH for the year's format"): the documented race lengths of every era
+   (BG_audit/games/mxwar/data/formats*.json "program"): [minutes, extra laps] for a timed race, {laps:n} for a lap-count race. The lap count of
+   a timed race = its minutes / the round's track lap time (the clock runs from the gate drop) + the extra laps. "half" = half the laps
+   (still at real lap speed). A format the research gives no length for takes its series' default (a Supercross heat 8 laps, a semi or LCQ
+   6, a Main 20; an outdoor moto 30 minutes + 2 laps; an SMX moto 20 minutes + 1 lap). The old Short / Standard / Long choices map to
+   Half / Real / Real. */
+var DUR={
+  "sx-2024-2026":{heat:[6,1],qual:[6,1],lcq:[5,1],main:[20,1]}, "sx-2018-2023":{heat:[6,1],qual:[6,1],lcq:[5,1],main:[20,1]},
+  "sx-2017":{heat:[5,1],semi:[4,1],lcq:[3,1],main:[20,1]}, "sx-2016":{heat:{laps:6},semi:{laps:5},lcq:{laps:4},main:{laps:20}},
+  "sx-2014-2015":{main:{laps:20}}, "sx-2007-2013":{main:{laps:20}}, "sx-2001-2006":{heat:{laps:8},semi:{laps:6},main:{laps:20}},
+  "sx-1986-2000":{main:{laps:20}}, "sx-1985":{main:{laps:10}}, "sx-1984":{main:{laps:20}}, "sx-1983":{semi:{laps:10},main:{laps:20}},
+  "sx-1977":{lcq:{laps:15},main:{laps:20}}, "smx-2023-2026":{moto:[20,1]}
+};
+var DEF={sx:{heat:{laps:8},qual:{laps:6},semi:{laps:6},lcq:{laps:6},main:{laps:20},moto:{laps:10}},mx:{moto:[30,2],main:[30,2],heat:{laps:8},lcq:{laps:6},semi:{laps:6},qual:{laps:6}},
+  smx:{moto:[20,1],main:[20,1],heat:{laps:8},lcq:{laps:6},semi:{laps:6},qual:{laps:6}}};
+var LAP_DEF={sx:55,mx:120,smx:70};
+function lenMode(o){ var m=o&&o.length; return m==="half"||m==="short"?"half":"real"; }
 
 function clone(x){ return JSON.parse(JSON.stringify(x)); }
 /* the format for one round: the round's own override (1976 Anaheim, Daytona 1979-85), the Triple Crown night (formats.json: a 40-rider
@@ -39,13 +56,28 @@ function formatFor(index,fmtId,cal){
 }
 /* how many riders the night needs: the direct places (SMX seeds) + the first stage's races x size, or the finals' gate */
 function fieldSize(F){ return (F.direct|0)+(F.qual.length?F.qual[0].races*F.qual[0].size:F.finals.size-(F.direct|0)); }
-function lengths(o){ var base=LEN[o&&o.length]||LEN.standard, out={}, k; for(k in base) out[k]=base[k]; if(o&&o.len) for(k in o.len) if(out[k]!=null&&+o.len[k]>=1) out[k]=Math.min(2000,Math.floor(+o.len[k])); return out; }
+/* the laps of every race kind for a format: lengths(o, F) (o.length "real" | "half", o.lapS the round's lap time in seconds; o.len per-kind
+   overrides). Without a format (an old caller) the old fixed table. The finals' length factor (lenF: a Triple Crown Main is 0.6 of a Main) is
+   applied to the minutes of a timed race: lenFor(kind, lenF). */
+function lengths(o,F){
+  var out={}, k;
+  if(!F){ var base=LEN[o&&o.length]||LEN.standard; for(k in base) out[k]=base[k]; }
+  else {
+    var ser=String(F.series||(F.id||"sx").split("-")[0]), d=DUR[F.id]||{}, df=DEF[ser]||DEF.sx, lap=Math.max(20,+(o&&o.lapS)||LAP_DEF[ser]||55), half=lenMode(o)==="half";
+    out.lenFor=function(kind,lenF){ var sp=d[kind]||df[kind]||df.heat, f=lenF||1, n;
+      if(sp.laps) n=Math.round(sp.laps*f); else n=Math.ceil(sp[0]*60*f/lap)+sp[1];
+      if(half) n=Math.round(n/2); return Math.max(2,Math.min(2000,n)); };
+    ["heat","qual","semi","lcq","main","moto"].forEach(function(q){ out[q]=out.lenFor(q,1); });
+  }
+  if(o&&o.len) for(k in o.len) if(out[k]!=null&&+o.len[k]>=1) out[k]=Math.min(2000,Math.floor(+o.len[k]));
+  return out;
+}
 
 /* ---------------- a new round ----------------
    entry: rider ids in SEED order (the season's standings / form); n = the night's field (fill === "roster" may make it smaller than the
    format's full program: the first stage's races keep their count and get smaller). */
 function newRound(F,ri,entry,o,team){
-  var L=lengths(o), RG={ri:ri,fmt:F.id,tc:!!F.isTC,F:F,entry:entry.slice(),races:[],cur:0,send:[],main:[],elim:[],fin:null,done:false,res:null};
+  var L=lengths(o,F), RG={ri:ri,fmt:F.id,lapS:o&&o.lapS?Math.round(o.lapS*10)/10:null,tc:!!F.isTC,F:F,entry:entry.slice(),races:[],cur:0,send:[],main:[],elim:[],fin:null,done:false,res:null};
   /* the CEO (~18:25): "at the start of the heat races, there has to be an equal amount of teams": team = {riderId: make} balances the
      first stage's races by team (season.js passes it; without it the plain odd / even seed split, as qualifying splits them) */
   if(team&&typeof team==="object"){ RG.team={}; entry.forEach(function(id){ RG.team[id]=String(team[id]||"Privateer"); }); }
@@ -61,7 +93,7 @@ function newRound(F,ri,entry,o,team){
   var f=F.finals;
   for(var i=0;i<f.races;i++){
     var lbl=f.races===1&&f.kind!=="moto"?f.label:(F.isTC?"Main "+(i+1):f.label+" "+(i+1));
-    RG.races.push({key:"final-"+(i+1),label:lbl,kind:f.kind,st:-1,i:i,len:Math.max(5,Math.round((L[f.kind]||L.main)*(f.lenF||1))),ent:null,res:null,hs:null,why:null});
+    RG.races.push({key:"final-"+(i+1),label:lbl,kind:f.kind,st:-1,i:i,len:L.lenFor?L.lenFor(f.kind,f.lenF||1):Math.max(5,Math.round((L[f.kind]||L.main)*(f.lenF||1))),ent:null,res:null,hs:null,why:null});
   }
   if(!st.length) RG.fin=entry.slice(0,f.size);
   else assign(RG,0,rest.slice(0,st[0].races*st[0].size));
@@ -204,6 +236,6 @@ function score(RG,title){
   return {cls:cls,pts:pts,wins:wins,places:places,finals:mot,hs:hs,winner:ov[0],title:!!title,main:RG.fin.slice()};
 }
 
-MX.Round={LEN:LEN,teamSplit:teamSplit,formatFor:formatFor,fieldSize:fieldSize,lengths:lengths,newRound:newRound,current:current,entrants:entrants,record:record,score:score,overall:overall};
+MX.Round={LEN:LEN,DUR:DUR,LAP_DEF:LAP_DEF,lenMode:lenMode,teamSplit:teamSplit,formatFor:formatFor,fieldSize:fieldSize,lengths:lengths,newRound:newRound,current:current,entrants:entrants,record:record,score:score,overall:overall};
 if(typeof module!=="undefined"&&module.exports) module.exports=MX.Round;
 })(typeof window!=="undefined"?window:globalThis);

@@ -309,14 +309,14 @@ function create(host,opt){
   /* a lap is decided (battle n done): the leader is due at the finish line; the lap time learnt for the pace */
   V.lap=function(n,len){
     var t=now(), d=t-V.lapT;
-    if(n>V.laps&&V.laps>0&&d>200&&d<20000) V.exp=clamp(V.exp*0.6+d*0.4,400,12000);
+    if(n>V.laps&&V.laps>0&&d>200&&d<240000) V.exp=clamp(V.exp*0.6+d*0.4,400,200000);   /* real lap times (the CEO ~21:10): up to minutes */
     if(n>V.laps){ V.laps=n; V.lapT=t; }
     if(len) V.lapsN=len;
     if(motion()==="off"){ V.X=V.pFin+V.laps+0.5; }
     V.dirty=true; if(!V.run) drawFrame(0,true);
   };
   V.setLaps=function(n,len){ V.laps=n; V.lapsN=len||V.lapsN; V.lapT=now(); V.X=n>0?V.pFin+n:V.pGate; V.riders.forEach(function(r){ r.off=r.offT; r.lane=r.laneT; }); };
-  V.setPace=function(ms){ if(ms>0) V.exp=clamp(ms,400,12000); };
+  V.setPace=function(ms){ if(ms>0) V.exp=clamp(ms,400,200000); };
   V.setFlag=function(f){ V.flag=f||null; V.flagT=now(); if(f==="checkered") V.phase="over"; V.dirty=true; if(!V.run) drawFrame(0,true); };
   V.setRed=function(s){ V.riders.forEach(function(r){ var on=r.s===s; if(on!==r.red){ r.red=on; r.plate=null; } }); V.dirty=true; };
   /* the loop */

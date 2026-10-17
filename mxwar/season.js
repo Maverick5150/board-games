@@ -29,7 +29,7 @@ function clone(x){ return JSON.parse(JSON.stringify(x)); }
 
 function defaultOpts(){
   return {
-    length:"standard",   // short | standard | long (round.js LEN, v2: heat 15/30/50, semi + LCQ 12/25/40, Main 40/80/150, moto 30/60/100 laps)
+    length:"real",       // real | half (the CEO ~21:10: real race lengths at real lap times; round.js DUR); the old short | standard | long still load
     len:{},              // per race kind overrides {heat, semi, lcq, main, moto}
     war:{},              // race.js options (Version, House rows, cards per rider, Real form)
     fill:"full",         // full: the era's full program (privateers fill a short roster) | roster: smaller races, real riders only
@@ -40,7 +40,7 @@ function defaultOpts(){
 function normalize(o){
   var d=defaultOpts(), k; o=o||{};
   for(k in d) if(o[k]!==undefined) d[k]=o[k];
-  if(!Round.LEN[d.length]) d.length="standard";
+  if(d.length!=="real"&&d.length!=="half") d.length=d.length==="short"?"half":"real";
   d.len=(d.len&&typeof d.len==="object")?clone(d.len):{};
   d.war=Race.mergeOpts(d.war||{}); delete d.war.len;
   d.fill=d.fill==="roster"?"roster":"full";
@@ -139,6 +139,10 @@ function privateer(G){
 
 /* ---------------- a round ---------------- */
 function calFormat(G,cal){ return Round.formatFor({formats:G.formats},G.fmt,cal); }
+/* the round's lap time in seconds: the page's track layout for that round (MXWar.lapTime, set by the page from tracks3d.js) or the series'
+   typical lap (a stadium about 55 s, an outdoor national about 2 minutes); the race lengths follow from it */
+function lapTimeFor(G,cal){ var f=MX.lapTime, t=0; if(typeof f==="function"){ try{ t=+f(G.series,G.year,cal); }catch(e){ t=0; } } return t>20&&t<400?t:(Round.LAP_DEF[G.series]||55); }
+function roundOpts(G,cal){ return {length:G.o.length,len:G.o.len,lapS:lapTimeFor(G,cal)}; }
 function startRound(G){
   var cal=G.cal[G.ri], F=calFormat(G,cal), full=Round.fieldSize(F), H=G.humans.length;
   /* candidates: this round's real riders, then the roster (most starts, then the real final position), then privateers */
@@ -164,7 +168,7 @@ function startRound(G){
     entry.sort(function(a,b){ return (G.pts[b]||0)-(G.pts[a]||0)||seedPos(G,a)-seedPos(G,b)||idx[a]-idx[b]; });
   }
   var team={}; entry.forEach(function(id){ team[id]=G.riders[id].bike||"Privateer"; });
-  G.round=Round.newRound(F,G.ri,entry,G.o,team);
+  G.round=Round.newRound(F,G.ri,entry,roundOpts(G,cal),team);
   log(G,"Round "+(G.ri+1)+": "+(cal.city||cal.venue)+(cal.title?"":" (no points)")+".","round");
   return G.round;
 }
@@ -176,7 +180,7 @@ function next(G){
   if(G.over) return {t:"over"};
   var cal=G.cal[G.ri], RG=G.round, r, ent;
   if(G.race) return {t:"race",live:true,ri:G.ri,round:cal,key:G.rkey,label:raceLabel(G),kind:G.race.kind,len:G.race.o.len,n:G.race.n,humanIn:G.rmap.some(isHuman.bind(null,G))};
-  if(!RG){ var F=calFormat(G,cal), L=Round.lengths(G.o); r=F.qual.length?{label:F.qual[0].label+(F.qual[0].races>1?" 1":""),kind:F.qual[0].kind,len:L[F.qual[0].kind]}:{label:F.finals.races>1?F.finals.label+" 1":F.finals.label,kind:F.finals.kind,len:Math.round(L[F.finals.kind]*(F.finals.lenF||1))}; return {t:"race",live:false,ri:G.ri,round:cal,key:null,label:r.label,kind:r.kind,len:r.len,n:null,humanIn:true,newRound:true}; }
+  if(!RG){ var F=calFormat(G,cal), L=Round.lengths(roundOpts(G,cal),F); r=F.qual.length?{label:F.qual[0].label+(F.qual[0].races>1?" 1":""),kind:F.qual[0].kind,len:L[F.qual[0].kind]}:{label:F.finals.races>1?F.finals.label+" 1":F.finals.label,kind:F.finals.kind,len:L.lenFor(F.finals.kind,F.finals.lenF||1)}; return {t:"race",live:false,ri:G.ri,round:cal,key:null,label:r.label,kind:r.kind,len:r.len,n:null,humanIn:true,newRound:true,lapS:lapTimeFor(G,cal)}; }
   r=Round.current(RG); ent=Round.entrants(RG)||[];
   return {t:"race",live:false,ri:G.ri,round:cal,key:r.key,label:r.label,kind:r.kind,len:r.len,n:ent.length,humanIn:ent.some(isHuman.bind(null,G))};
 }
@@ -330,6 +334,6 @@ function check(G){
 }
 
 MX.Season={VER:VER,MAXH:MAXH,defaultOpts:defaultOpts,normalize:normalize,newSeason:newSeason,next:next,startRound:startRound,startRace:startRace,apply:apply,step:step,simRace:simRace,
-  standings:standings,redPlate:redPlate,snapshot:snapshot,check:check,raceSeat:raceSeat,humanSeats:humanSeats,rider:rider,calFormat:calFormat};
+  standings:standings,redPlate:redPlate,snapshot:snapshot,check:check,raceSeat:raceSeat,humanSeats:humanSeats,rider:rider,calFormat:calFormat,lapTimeFor:lapTimeFor};
 if(typeof module!=="undefined"&&module.exports) module.exports=MX.Season;
 })(typeof window!=="undefined"?window:globalThis);

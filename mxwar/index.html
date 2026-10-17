@@ -588,6 +588,76 @@
     html:not([data-tv]) .mx-hero{padding-top:5.5rem}
     html:not([data-tv]) .mx-hero .bg-hero__layer{bottom:0; aspect-ratio:auto; background-size:cover; background-position:50% 40%}
   }
+
+  /* ---------- MOTOCROSS WAR 3D (the CEO 2026-10-16 20:06): the race in 3D fills the arena; the card flip and every war in a small corner
+     window (tap / OK makes it big: "wars will be in a tiny box window ... Put it in a corner"), the lap and a compact timing tower over the
+     view like a broadcast; the 2D track stays as the fallback when there is no WebGL ---------- */
+  .mx-3dv, .mx-ovl, .mx-pip__h{display:none}
+  body.mx-3d .mx-3dv{display:block; position:absolute; inset:0; z-index:1}
+  body.mx-3d .mx-3dv canvas{display:block}
+  body.mx-3d .mx-track, body.mx-3d .mx-lane, body.mx-3d .mx-gate, body.mx-3d .mx-dust, body.mx-3d .mx-flash{display:none}
+  body.mx-3d .mx-arena{background:#05060a; height:clamp(19rem,calc(100svh - 13.5rem),46rem)}
+  body.mx-3d #lapChip, body.mx-3d #fieldChip{display:none}
+  body.mx-3d .mx-table{top:auto; left:auto; right:.45rem; bottom:.45rem; width:min(52%,15rem); height:auto; padding:.3rem .35rem .4rem; border-radius:var(--r-md); z-index:6;
+    display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:auto auto; column-gap:.3rem; row-gap:.15rem; align-items:start; justify-items:center;
+    background:rgba(7,7,11,.86); box-shadow:inset 0 0 0 1px rgba(231,202,144,.32),0 .35rem 1rem rgba(0,0,0,.55); cursor:pointer; -webkit-tap-highlight-color:transparent}
+  body.mx-3d .mx-pip__h{grid-column:1 / -1; justify-self:stretch; display:flex; align-items:center; justify-content:space-between; gap:.4rem; min-width:0;
+    font:var(--fw-caps) var(--fs-micro)/1.25 var(--font-ui); letter-spacing:.04em; text-transform:uppercase; color:var(--gold-200)}
+  body.mx-3d .mx-pip__h span{flex:none; white-space:nowrap}
+  body.mx-3d .mx-pip__h b{min-width:0; font-weight:800; color:var(--text-1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:right}
+  body.mx-3d .mx-pip__h.is-war{color:#ffb4a6}
+  body.mx-3d .mx-pip__h.is-war b{color:#ffd2c8}
+  body.mx-3d .mx-slot{position:static; transform:none; width:100%; min-width:0; gap:.12rem; left:auto; top:auto}
+  body.mx-3d .mx-slot__lab{padding:0 .3rem; max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  body.mx-3d .mx-slot__who{display:flex; max-width:100%; min-width:0; overflow:hidden; font-size:var(--fs-micro)}
+  body.mx-3d .mx-slot__who .mx-pl{font-size:var(--fs-micro)}
+  body.mx-3d .mx-mid{display:none}
+  body.mx-3d .mx-war{position:static; inset:auto; grid-column:1 / -1; grid-row:2; width:100%; gap:.25rem}
+  body.mx-3d .mx-war:not(:empty) ~ .mx-slot{display:none}
+  body.mx-3d .mx-fight__tie{display:none}
+  body.mx-3d .mx-table.is-big{right:50%; bottom:50%; transform:translate(50%,50%); width:min(94%,36rem); padding:.6rem .7rem .7rem}
+  body.mx-3d .mx-table.is-big .mx-fight__tie{display:block}
+  body.mx-3d .mx-table:focus-visible{outline:none; box-shadow:inset 0 0 0 1px rgba(231,202,144,.32),0 0 0 3px var(--gold-100)}
+  body.mx-3d .mx-ovl{display:block; position:absolute; left:.45rem; top:.45rem; z-index:5; pointer-events:none; max-width:min(50%,14rem)}
+  .mx-lap3{display:inline-flex; align-items:center; gap:.35rem; padding:.18rem .5rem; border-radius:var(--r-sm) var(--r-sm) 0 0; background:rgba(7,7,11,.9);
+    font:800 var(--fs-micro)/1.25 var(--font-ui); letter-spacing:.05em; text-transform:uppercase; color:var(--gold-100); white-space:nowrap}
+  .mx-lap3.is-white{color:#fffdf6; box-shadow:inset 0 0 0 1.5px #fffdf6}
+  .mx-lap3.is-yellow{color:#ffe36e; box-shadow:inset 0 0 0 1.5px #ffd84a}
+  .mx-lap3 .mx-flag{width:1.5em; height:1em}
+  .mx-tw3{margin:0; padding:.12rem; list-style:none; background:rgba(7,7,11,.82); border-radius:0 var(--r-sm) var(--r-sm) var(--r-sm)}
+  .mx-tw3:empty{display:none}
+  .mx-tw3 li{display:grid; grid-template-columns:1.3rem auto minmax(0,1fr) auto; align-items:center; gap:.3rem; padding:.04rem .25rem; border-radius:.3rem;
+    font:var(--fw-ui-strong) var(--fs-micro)/1.3 var(--font-ui); color:var(--text-1)}
+  .mx-tw3 li.is-me{background:rgba(231,202,144,.22); box-shadow:inset 0 0 0 1px var(--gold-200)}
+  .mx-tw3 li.is-out{color:var(--text-2)}
+  .mx-tw3 li.is-gap{display:block; height:.25rem; padding:0}
+  .mx-tw3__p{text-align:right; color:var(--gold-100); font-variant-numeric:tabular-nums}
+  .mx-tw3__n{min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .mx-tw3__x{color:#ff8a7a; font-weight:800}
+  .mx-tw3 .mx-pl{font-size:var(--fs-micro); min-width:2.1em; padding:0 .2rem 0 .45em}
+  body.mx-3d .mx-banner{top:21%; padding:.4rem 1.1rem .5rem}
+  @media (orientation: portrait){ html:not([data-tv]) body.mx-3d .mx-banner{top:52%} }
+  body.mx-3d .mx-banner b{font-size:var(--fs-2xl)}
+  body.mx-3d .mx-banner.is-yellow{background:linear-gradient(180deg,rgba(84,66,6,.96),rgba(40,30,4,.96)); box-shadow:inset 0 0 0 1.5px #ffd84a,0 .6rem 1.6rem rgba(0,0,0,.6)}
+  body.mx-3d .mx-banner.is-yellow b{color:#ffe36e}
+  body.mx-3d .mx-banner.is-yellow span{color:#fff3c4}
+  html:not([data-tv]) body.mx-3d .mx-log{display:none}
+  .mx-skipq{margin:0 0 .75rem; font:var(--fw-body) var(--fs-sm)/1.5 var(--font-ui); color:var(--text-2)}
+  html[data-tv] body.mx-3d .mx-race{grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr) auto auto auto; grid-template-areas:"head" "arena" "acts" "stat" "log"}
+  html[data-tv] body.mx-3d .mx-tower, html[data-tv] body.mx-3d .mx-log{display:none}
+  html[data-tv] body.mx-3d .mx-arena{height:auto}
+  html[data-tv] body.mx-3d .mx-table{width:21rem; right:.75rem; bottom:.75rem; padding:.45rem .55rem .55rem}
+  html[data-tv] body.mx-3d .mx-table.is-big{width:46rem}
+  html[data-tv] body.mx-3d .mx-ovl{left:.75rem; top:.75rem; max-width:20rem}
+  html[data-tv] body.mx-3d .mx-tw3 li{grid-template-columns:1.6rem auto minmax(0,1fr) auto}
+  html[data-tv] body.mx-3d .mx-banner b{font-size:var(--fs-3xl)}
+  html[data-tv] body.mx-3d .mx-acts{gap:1.5rem; margin-top:.4rem}
+  @media (orientation: landscape) and (max-height: 31.25em){
+    html:not([data-tv]) body.mx-3d .mx-arena{height:var(--ls-game)}
+    html:not([data-tv]) body.mx-3d .mx-tw3{display:none}
+    html:not([data-tv]) body.mx-3d .mx-table{width:min(40%,12rem); padding:.2rem .3rem .3rem}
+    html:not([data-tv]) body.mx-3d .mx-slot__lab{display:none}
+  }
 </style>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
@@ -728,11 +798,14 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
       <span class="mx-chip" id="fieldChip"></span>
     </div>
     <div class="mx-arena" id="arena" data-stage-solid aria-label="The track">
+      <div class="mx-3dv" id="view3d" aria-hidden="true"></div>
+      <div class="mx-ovl" id="ovl" aria-hidden="true"><div class="mx-lap3" id="lap3d"></div><ol class="mx-tw3" id="tower3d"></ol></div>
       <div class="mx-track" id="trackArt" aria-hidden="true"></div>
       <div class="mx-lane" id="lane" aria-hidden="true"></div>
       <div class="mx-dust" id="dust" aria-hidden="true"></div>
       <div class="mx-gate" id="gate" aria-hidden="true"></div>
       <div class="mx-table" id="table">
+        <div class="mx-pip__h" id="pipHead"></div>
         <div class="mx-slot" id="youSlot"><span class="mx-slot__lab" id="youLab">Your card</span><div class="mx-card" id="youCard"></div><span class="mx-slot__who" id="youWho"></span></div>
         <div class="mx-mid" id="midNote"><b id="midBig"></b><span id="midSmall"></span></div>
         <div class="mx-slot" id="topSlot"><span class="mx-slot__lab" id="topLab">Top card</span><div class="mx-card" id="topCard"></div><span class="mx-slot__who" id="topWho"></span></div>
@@ -764,6 +837,7 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
   <section class="bg-sheet" id="newBox" aria-labelledby="newTitle"><div id="newSheet"></div></section>
   <section class="bg-sheet" id="boardBox" aria-labelledby="boardTitle"><div id="boardSheet"></div></section>
   <section class="bg-sheet" id="lineBox" aria-labelledby="lineTitle"><div id="lineSheet"></div></section>
+  <section class="bg-sheet" id="skipBox" aria-labelledby="skipTitle"><div id="skipSheet"></div></section>
 
   <div class="bg-win" id="winBox" aria-labelledby="winTitle">
     <div class="bg-win__scrim"></div>
@@ -794,6 +868,10 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
 <script src="brain.js"></script>
 <script src="art.js"></script>
 <script src="track.js"></script>
+<script src="gl3d.js"></script>
+<script src="data/tracks.js"></script>
+<script src="tracks3d.js"></script>
+<script src="race3d.js"></script>
 <script src="game.js"></script>
 </body>
 </html>
