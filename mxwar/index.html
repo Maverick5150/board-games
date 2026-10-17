@@ -598,7 +598,7 @@
   body.mx-3d .mx-track, body.mx-3d .mx-lane, body.mx-3d .mx-gate, body.mx-3d .mx-dust, body.mx-3d .mx-flash{display:none}
   body.mx-3d .mx-arena{background:#05060a; height:clamp(19rem,calc(100svh - 13.5rem),46rem)}
   body.mx-3d #lapChip, body.mx-3d #fieldChip{display:none}
-  body.mx-3d .mx-table{top:auto; left:auto; right:.45rem; bottom:.45rem; width:min(52%,15rem); height:auto; padding:.3rem .35rem .4rem; border-radius:var(--r-md); z-index:6;
+  body.mx-3d .mx-table{top:auto; left:auto; right:.4rem; bottom:.4rem; width:min(44%,12.5rem); height:auto; padding:.25rem .3rem .32rem; border-radius:var(--r-md); z-index:6;
     display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:auto auto; column-gap:.3rem; row-gap:.15rem; align-items:start; justify-items:center;
     background:rgba(7,7,11,.86); box-shadow:inset 0 0 0 1px rgba(231,202,144,.32),0 .35rem 1rem rgba(0,0,0,.55); cursor:pointer; -webkit-tap-highlight-color:transparent}
   body.mx-3d .mx-pip__h{grid-column:1 / -1; justify-self:stretch; display:flex; align-items:center; justify-content:space-between; gap:.4rem; min-width:0;
@@ -617,6 +617,10 @@
   body.mx-3d .mx-fight__tie{display:none}
   body.mx-3d .mx-table.is-big{right:50%; bottom:50%; transform:translate(50%,50%); width:min(94%,36rem); padding:.6rem .7rem .7rem}
   body.mx-3d .mx-table.is-big .mx-fight__tie{display:block}
+  /* polish: the small window is smaller still (the CEO: "a tiny box window ... Put it in a corner"): no slot captions, no first names (three or
+     more fighters: plates only); a tap / OK makes it big with everything */
+  body.mx-3d .mx-table:not(.is-big) .mx-slot__lab, body.mx-3d .mx-table:not(.is-big) .mx-fn, body.mx-3d .mx-table:not(.is-big) .mx-war.is-many .mx-sn{display:none}
+  html:not([data-tv]) body.mx-3d .mx-table:not(.is-big) .mx-sn:not(.is-me){display:none}   /* the phone's small window: the plate says who, a person keeps their name */
   body.mx-3d .mx-table:focus-visible{outline:none; box-shadow:inset 0 0 0 1px rgba(231,202,144,.32),0 0 0 3px var(--gold-100)}
   body.mx-3d .mx-ovl{display:block; position:absolute; left:.45rem; top:.45rem; z-index:5; pointer-events:none; max-width:min(50%,14rem)}
   .mx-lap3{display:inline-flex; align-items:center; gap:.35rem; padding:.18rem .5rem; border-radius:var(--r-sm) var(--r-sm) 0 0; background:rgba(7,7,11,.9);
@@ -636,7 +640,7 @@
   .mx-tw3__x{color:#ff8a7a; font-weight:800}
   .mx-tw3 .mx-pl{font-size:var(--fs-micro); min-width:2.1em; padding:0 .2rem 0 .45em}
   body.mx-3d .mx-banner{top:21%; padding:.4rem 1.1rem .5rem}
-  @media (orientation: portrait){ html:not([data-tv]) body.mx-3d .mx-banner{top:52%} }
+  @media (orientation: portrait){ html:not([data-tv]) body.mx-3d .mx-banner{top:73%} }   /* polish: a lower third, between the action (mid-frame) and the corner window */
   body.mx-3d .mx-banner b{font-size:var(--fs-2xl)}
   body.mx-3d .mx-banner.is-yellow{background:linear-gradient(180deg,rgba(84,66,6,.96),rgba(40,30,4,.96)); box-shadow:inset 0 0 0 1.5px #ffd84a,0 .6rem 1.6rem rgba(0,0,0,.6)}
   body.mx-3d .mx-banner.is-yellow b{color:#ffe36e}
@@ -649,8 +653,8 @@
   html[data-tv] body.mx-3d .mx-logw{grid-area:log; align-self:center}
   html[data-tv] body.mx-3d .mx-tower, html[data-tv] body.mx-3d .mx-log{display:none}
   html[data-tv] body.mx-3d .mx-arena{height:auto}
-  html[data-tv] body.mx-3d .mx-table{width:21rem; right:.75rem; bottom:.75rem; padding:.45rem .55rem .55rem}
-  html[data-tv] body.mx-3d .mx-table.is-big{width:46rem}
+  html[data-tv] body.mx-3d .mx-table{width:16.5rem; right:.7rem; bottom:.7rem; padding:.35rem .45rem .45rem}
+  html[data-tv] body.mx-3d .mx-table.is-big{width:46rem; right:50%; bottom:50%}   /* polish: the TV corner rule's right / bottom must not beat the centred big window */
   html[data-tv] body.mx-3d .mx-ovl{left:.75rem; top:.75rem; max-width:20rem}
   html[data-tv] body.mx-3d .mx-tw3 li{grid-template-columns:1.6rem auto minmax(0,1fr) auto}
   html[data-tv] body.mx-3d .mx-banner b{font-size:var(--fs-3xl)}
@@ -660,6 +664,7 @@
     html:not([data-tv]) body.mx-3d .mx-tw3{display:none}
     html:not([data-tv]) body.mx-3d .mx-table{width:min(40%,12rem); padding:.2rem .3rem .3rem}
     html:not([data-tv]) body.mx-3d .mx-slot__lab{display:none}
+    html:not([data-tv]) body.mx-3d .mx-table.is-big{width:min(70%,30rem); padding:.4rem .5rem .5rem}   /* polish: big stays big sideways */
   }
 </style>
 <script src="../sound.js"></script>

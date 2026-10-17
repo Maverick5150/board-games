@@ -170,60 +170,83 @@ var LIT_VS=[
 "  vEm=(k>1.5&&k<2.5)?1.0:0.0; vCol=c; vW=w; vK=k;",
 "  gl_Position=uVP*vec4(w,1.0);",
 "}"].join("\n");
+/* the light (polish pass): a key light, a cooler fill from the other side (a stadium is lit from every side; outdoors the sky bounce), the
+   sky / ground ambient, the stadium's pool of light on the floor, specular + rim on the bikes; then the air: a low HAZE of lit dust that
+   thickens with distance near the floor (uFogR.z = its density) and the far fog; TONE: a soft shoulder so a white tuff block or a lit
+   plate keeps its shading instead of clipping to flat white */
 var LIGHT=[
-"uniform vec3 uSun; uniform vec3 uSunCol; uniform vec3 uSky; uniform vec3 uGnd; uniform vec3 uFog; uniform vec2 uFogR; uniform vec3 uCam; uniform vec4 uSpot;",
+"uniform vec3 uSun; uniform vec3 uSunCol; uniform vec3 uFill; uniform vec3 uFillCol; uniform vec3 uSky; uniform vec3 uGnd; uniform vec3 uFog; uniform vec3 uHaze; uniform vec3 uFogR; uniform vec3 uCam; uniform vec4 uSpot;",
 "vec3 shade(vec3 c, vec3 n, vec3 w, float spec){",
-"  float d=max(dot(n,uSun),0.0); vec3 amb=mix(uGnd,uSky,n.y*0.5+0.5);",
+"  float d=max(dot(n,uSun),0.0), d2=max(dot(n,uFill),0.0); vec3 amb=mix(uGnd,uSky,n.y*0.5+0.5);",
 "  float sp=uSpot.w>0.0?clamp(1.15-length(w.xz-uSpot.xy)/uSpot.z,0.55,1.0):1.0;",
-"  vec3 o=c*(amb+uSunCol*d)*sp;",
+"  vec3 o=c*(amb+uSunCol*d+uFillCol*d2)*sp;",
 "  if(spec>0.0){ vec3 v=normalize(uCam-w); vec3 h=normalize(uSun+v); o+=uSunCol*pow(max(dot(n,h),0.0),28.0)*spec*sp; float rim=pow(1.0-max(dot(n,v),0.0),3.0); o+=(uSky*0.45+c*0.35)*rim*spec; }",
 "  return o;",
 "}",
-"vec3 fog(vec3 c, vec3 w){ float f=clamp((length(uCam-w)-uFogR.x)/(uFogR.y-uFogR.x),0.0,1.0); return mix(c,uFog,f*f*(3.0-2.0*f)); }"].join("\n");
+"vec3 fog(vec3 c, vec3 w){ float dd=length(uCam-w); float hz=(1.0-exp(-dd*uFogR.z))*(1.0-0.55*clamp(w.y/38.0,0.0,1.0)); c=mix(c,uHaze,hz);",
+"  float f=clamp((dd-uFogR.x)/(uFogR.y-uFogR.x),0.0,1.0); return mix(c,uFog,f*f*(3.0-2.0*f)); }"].join("\n");
+var TONE="uniform float uExpo; vec3 tone(vec3 c){ c*=uExpo; vec3 hi=max(c-0.62,0.0); return min(c-hi+hi/(1.0+hi*1.6),vec3(1.0)); }";
+/* colour codes in aCol.a: 0 own colour, 1 x team, 2 emissive, 3 x accent, 4 CROWD (a seat pattern: shirts, heads, empty seats; partly
+   self-lit by the house lights; far away it settles to the crowd's mean colour instead of shimmering), 5 LED RIBBON BOARD (panels of
+   colour that change every few seconds with a light sweep running along: original, no text or marks), 6 ROOF / TRUSS steel, 7 SUITES (dark
+   glass with warm lit windows, some dark) */
 var LIT_FS=[
-"precision mediump float;", LIGHT,
+"precision mediump float;", LIGHT, TONE,
+"uniform float uTime; uniform sampler2D uNoise;",
 "varying vec3 vCol; varying vec3 vNor; varying vec3 vW; varying float vEm; varying float vK;",
-"float hsh(vec3 p){ return fract(sin(dot(p,vec3(12.9898,78.233,37.719)))*43758.5453); }",
-"void main(){ vec3 n=normalize(vNor); vec3 b=vCol;",
-"  if(vK>3.5){ vec3 cell=floor(vec3(vW.x*2.1,vW.y*2.6,vW.z*2.1)); float h=hsh(cell), h2=hsh(cell+7.1);",
-"    vec3 hue=0.5+0.5*cos(6.2832*(h+vec3(0.0,0.33,0.67))); vec3 p=mix(vec3(0.38),hue,0.42)*(0.45+0.4*h2);",
-"    float head=step(0.62,fract(vW.y*2.6))*step(0.3,h2); p=mix(p,vec3(0.78,0.6,0.48),head*0.55); b=mix(vec3(0.07,0.075,0.1),p,step(0.16,hsh(cell+3.3)))*vCol;",
-"    b=mix(b,vec3(0.24,0.235,0.25)*vCol,clamp((length(uCam-vW)-22.0)/70.0,0.0,0.9)); }",
-"  vec3 c=mix(shade(b,n,vW,vK>3.5?0.0:0.35),b,vEm); gl_FragColor=vec4(fog(c,vW),1.0); }"].join("\n");
+"vec4 nz(vec3 p){ return texture2D(uNoise,(p.xz+p.y*vec2(17.0,29.0)+0.5)/64.0); }",
+"void main(){ vec3 n=normalize(vNor); vec3 b=vCol; float em=vEm, spec=0.35;",
+"  if(vK>4.5&&vK<5.5){ float a=(vW.x+vW.z)*0.5, seg=floor(a/6.0)+floor(uTime*0.18)*5.0, h=nz(vec3(seg,1.0,3.0)).r;",
+"    vec3 c1=h<0.3?vec3(0.12,0.38,1.0):h<0.55?vec3(1.0,0.8,0.32):h<0.8?vec3(0.95,0.95,1.0):vec3(1.0,0.28,0.2);",
+"    float sweep=smoothstep(0.9,1.0,fract(a*0.02-uTime*0.3)), px=1.0-0.32*(1.0-step(0.3,fract(a*3.0))*step(0.3,fract(vW.y*3.0)))*clamp(1.0-length(uCam-vW)/55.0,0.0,1.0);",
+"    b=(c1*px*0.85+sweep*0.5)*vCol; em=1.0; spec=0.0; }",
+"  else if(vK>3.5&&vK<4.5){ vec3 cell=floor(vec3(vW.x*2.1,vW.y*2.6,vW.z*2.1)); vec4 hn=nz(cell); float h=hn.r, h2=hn.g;",
+"    vec3 hue=0.5+0.5*cos(6.2832*(h+vec3(0.0,0.33,0.67))); vec3 p=mix(vec3(0.4),hue,0.38)*(0.46+0.5*h2);",
+"    float head=step(0.62,fract(vW.y*2.6))*step(0.3,h2); p=mix(p,vec3(0.8,0.62,0.5),head*0.5); b=mix(vec3(0.08,0.085,0.11),p,step(0.14,hn.b))*vCol;",
+"    b=mix(b,vec3(0.34,0.31,0.32)*vCol,clamp((length(uCam-vW)-30.0)/90.0,0.0,0.72)); em=0.42; spec=0.0; }",
+"  else if(vK>6.5){ float a=(vW.x+vW.z)*0.5, cx=floor(a*0.42), wl=step(0.16,fract(a*0.42))*step(0.22,fract(vW.y*0.95))*step(0.12,1.0-fract(vW.y*0.95));",
+"    float h=nz(vec3(cx,floor(vW.y*0.95),5.0)).b; b=mix(vec3(0.035,0.04,0.055),vec3(0.95,0.74,0.48)*(0.45+0.55*h),wl*step(0.22,h))*vCol; em=1.0; spec=0.0; }",
+"  else if(vK>5.5){ spec=0.12; }",
+"  vec3 c=mix(shade(b,n,vW,spec),b,em); gl_FragColor=vec4(tone(fog(c,vW)),1.0); }"].join("\n");
 /* the ground: dirt (the code-made texture: ruts and tyre marks along the track), sand, grass; aMat = (grass, groove, tint, sand) */
 var DIRT_VS=[
 "attribute vec3 aPos; attribute vec3 aNor; attribute vec2 aUV; attribute vec4 aMat;",
 "uniform mat4 uVP;",
 "varying vec3 vW; varying vec3 vNor; varying vec2 vUV; varying vec4 vMat;",
 "void main(){ vW=aPos; vNor=aNor; vUV=aUV; vMat=aMat; gl_Position=uVP*vec4(aPos,1.0); }"].join("\n");
+/* polish: the packed racing line darker and with a damp sheen under the lights (uWet), loose dry dirt lighter; vMat.z carries the tint
+   and the cavity light baked by the scene (the troughs of the whoops and the bottoms of the landings darker, the crests and lips lighter) */
 var DIRT_FS=[
-"precision mediump float;", LIGHT,
-"uniform sampler2D uTex; uniform vec3 uDirt; uniform vec3 uSand; uniform vec3 uGrass; uniform float uDetail;",
+"precision mediump float;", LIGHT, TONE,
+"uniform sampler2D uTex; uniform vec3 uDirt; uniform vec3 uSand; uniform vec3 uGrass; uniform float uWet;",
 "varying vec3 vW; varying vec3 vNor; varying vec2 vUV; varying vec4 vMat;",
 "void main(){",
 "  vec4 t=texture2D(uTex,vUV); vec4 m=texture2D(uTex,vW.xz*0.031);",
-"  float macro=0.82+0.36*m.b;",
-"  vec3 dirt=uDirt*(0.55+0.9*t.r)*macro; dirt*=1.0-(0.2+0.45*vMat.y)*t.g;",
+"  float macro=0.8+0.4*m.b, gr=(0.2+0.5*vMat.y)*t.g;",
+"  vec3 dirt=uDirt*(0.5+0.95*t.r)*macro; dirt*=1.0-gr; dirt=mix(dirt,dirt*vec3(1.1,1.06,1.0),(1.0-vMat.y)*m.r*0.5);",
 "  vec3 sand=uSand*(0.8+0.35*t.r)*macro;",
 "  vec3 grass=uGrass*(0.7+0.45*m.r)*(0.8+0.35*m.b)*(0.92+0.16*t.r);",
 "  vec3 c=mix(mix(dirt,sand,vMat.w),grass,vMat.x)*vMat.z;",
-"  vec3 n=normalize(vNor);",
-"  gl_FragColor=vec4(fog(shade(c,n,vW,0.0),vW),1.0);",
+"  vec3 n=normalize(vNor); vec3 o=shade(c,n,vW,0.0);",
+"  vec3 v=normalize(uCam-vW); vec3 h=normalize(uSun+v);",
+"  o+=uSunCol*pow(max(dot(n,h),0.0),12.0)*uWet*(0.3+gr*1.8)*(1.0-vMat.x)*(1.0-0.7*vMat.w);",
+"  gl_FragColor=vec4(tone(fog(o,vW)),1.0);",
 "}"].join("\n");
 var SKY_VS=[
 "attribute vec2 aXY; uniform mat4 uIVP; varying vec3 vRay;",
 "void main(){ vec4 a=uIVP*vec4(aXY,1.0,1.0); vec4 b=uIVP*vec4(aXY,-1.0,1.0); vRay=a.xyz/a.w-b.xyz/b.w; gl_Position=vec4(aXY,0.9999,1.0); }"].join("\n");
 var SKY_FS=[
-"precision mediump float;",
-"uniform vec3 uTop; uniform vec3 uHor; uniform vec3 uSun; uniform vec3 uSunCol; uniform float uNight; uniform sampler2D uTex; uniform float uClouds;",
+"precision mediump float;", TONE,
+"uniform vec3 uTop; uniform vec3 uHor; uniform vec3 uSun; uniform vec3 uSunCol; uniform float uNight; uniform sampler2D uTex; uniform sampler2D uNoise; uniform float uClouds;",
 "varying vec3 vRay;",
 "void main(){ vec3 r=normalize(vRay); float h=clamp(r.y,0.0,1.0);",
 "  vec3 c=mix(uHor,uTop,pow(h,0.55));",
 "  float sd=max(dot(r,uSun),0.0); c+=uSunCol*(pow(sd,400.0)*1.6+pow(sd,12.0)*0.22)*(1.0-uNight);",
 "  if(uClouds>0.0&&r.y>0.0){ vec2 p=r.xz/(r.y+0.12)*0.16; float n=texture2D(uTex,p).b*0.6+texture2D(uTex,p*2.7).r*0.4;",
-"    float cl=smoothstep(0.52,0.78,n)*uClouds*smoothstep(0.0,0.25,r.y); c=mix(c,vec3(0.96,0.95,0.93),cl*0.8); }",
-"  if(uNight>0.0){ c+=vec3(0.05,0.045,0.04)*uNight*(1.0-smoothstep(0.0,0.5,r.y)); }",
-"  gl_FragColor=vec4(c,1.0); }"].join("\n");
+"    float cl=smoothstep(0.52,0.78,n)*uClouds*smoothstep(0.0,0.25,r.y); vec3 cc=mix(vec3(0.98,0.97,0.95),vec3(0.7,0.72,0.78),smoothstep(0.6,0.95,n)); c=mix(c,cc,cl*0.85); }",
+"  if(uNight>0.0){ c+=vec3(0.06,0.05,0.045)*uNight*(1.0-smoothstep(0.0,0.45,r.y));",
+"    vec2 q=floor(r.xz/(r.y+0.3)*260.0); float st=texture2D(uNoise,(q+0.5)/64.0).g; c+=vec3(0.75)*step(0.9965,st)*uNight*smoothstep(0.25,0.5,r.y); }",
+"  gl_FragColor=vec4(tone(c),1.0); }"].join("\n");
 /* sprites: roost dust (world-size soft discs), labels (fixed pixel size, from the atlas), blob shadows (flat oval decals) */
 var PART_VS=[
 "attribute vec2 aXY; attribute vec4 iP; attribute vec4 iCol;",
@@ -257,9 +280,9 @@ var PLATE_VS=[
 "void main(){ vec3 w=vec3(dot(iA.xyz,aPos)+iA.w, dot(iB.xyz,aPos)+iB.w, dot(iC.xyz,aPos)+iC.w);",
 "  vUV=mix(iUV.xy,iUV.zw,aUV); vW=w; gl_Position=uVP*vec4(w,1.0); }"].join("\n");
 var PLATE_FS=[
-"precision mediump float;", LIGHT,
+"precision mediump float;", LIGHT, TONE,
 "uniform sampler2D uAtlas; varying vec2 vUV; varying vec3 vW;",
-"void main(){ vec4 t=texture2D(uAtlas,vec2(vUV.x,1.0-vUV.y)); if(t.a<0.5) discard; gl_FragColor=vec4(fog(t.rgb*(0.55+0.5*(uSky.r+uSunCol.r)*0.5),vW),1.0); }"].join("\n");
+"void main(){ vec4 t=texture2D(uAtlas,vec2(vUV.x,1.0-vUV.y)); if(t.a<0.5) discard; gl_FragColor=vec4(tone(fog(t.rgb*(0.5+0.42*(uSky.r+uSunCol.r)),vW)),1.0); }"].join("\n");
 
 function create(canvas,opt){
   opt=opt||{};
@@ -331,6 +354,7 @@ function create(canvas,opt){
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,src);
     var wrap=o.clamp?gl.CLAMP_TO_EDGE:gl.REPEAT;
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,wrap); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,wrap);
+    if(o.nearest){ gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST); return t; }
     if(o.mip!==false){ gl.generateMipmap(gl.TEXTURE_2D); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR); }
     else gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);

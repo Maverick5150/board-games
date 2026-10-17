@@ -729,9 +729,11 @@ function onNeed3d(lap){
 /* the 2D fallback at real lap times too: a lap lasts the track's lap time from the moment the leader starts it */
 function lapWait2d(){ var t=lapTimes(), ms=(ui.lap<=1?t.open:t.lap)*1000, left=(ui.lapT0||0)+ms-Date.now(); return left>0?sleep(left):Promise.resolve(); }
 /* the corner window: its header (the lap, whose card), big on a tap / OK */
+/* polish: the phone's small window has room for "Lap 3" and the hint; the TV's says what the cards are doing too */
+function lapTag(n,what){ return "Lap "+n+(onTV()&&what?" · "+what:""); }
 function pipHead(t,war){ var h=$("pipHead"); if(!h) return; h.innerHTML=t; h.classList.toggle("is-war",!!war); }
 function pipBig(on){ var t=$("table"); if(on==null) on=!t.classList.contains("is-big"); t.classList.toggle("is-big",on); t.setAttribute("aria-expanded",String(on)); if(is3d()) layoutArena(); if(ui.rc){ if(ui.rc.phase==="war"&&ui.rc.part&&ui.rc.part.length) drawWar(ui.rc.part,ui.rc.tb,false); } }
-function pipCw(){ var big=$("table").classList.contains("is-big"), rem=remPx(), tv=onTV(), side=!tv&&innerWidth>innerHeight&&innerHeight<520; return Math.round(big?(tv?4.6*rem:Math.min(76,rem*4.6)):(tv?2.3*rem:side?30:Math.max(34,rem*2.2))); }
+function pipCw(){ var big=$("table").classList.contains("is-big"), rem=remPx(), tv=onTV(), side=!tv&&innerWidth>innerHeight&&innerHeight<520; return Math.round(big?(tv?4.6*rem:Math.min(76,rem*4.6)):(tv?2.0*rem:side?30:Math.max(30,rem*1.9))); }
 function layoutArena(){
   var ar=$("arena"), W=ar.clientWidth, H=ar.clientHeight; if(!W||!H) return false;
   if(is3d()){
@@ -802,7 +804,9 @@ function flipCard(el,id,ms,zoom){
   if(zoom){ try{ ps.push(el.animate([{transform:"scale(1)"},{transform:"scale(1.18)",offset:.5},{transform:"scale(1)"}],{duration:Math.round(ms*1.4),easing:"ease-in-out"}).finished); }catch(e){} }
   return Promise.all(ps).then(function(){},function(){});
 }
-function whoHTML(s){ var id=seatId(s), R=G.riders[id]; return plateHTML(R)+'<span class="mx-sn">'+esc(R.name)+"</span>"+(R.kind==="human"&&G.humans.length===1&&!/^you$/i.test(R.name)?' <span class="mx-you">You</span>':""); }
+/* the corner window (polish): the first names in their own span, hidden while the window is small */
+function splitNameHTML(n){ n=String(n||""); var i=n.lastIndexOf(" "); return i>0?'<span class="mx-fn">'+esc(n.slice(0,i+1))+"</span>"+esc(n.slice(i+1)):esc(n); }
+function whoHTML(s){ var id=seatId(s), R=G.riders[id]; return plateHTML(R)+'<span class="mx-sn'+(R.kind==="human"?" is-me":"")+'">'+splitNameHTML(R.name)+"</span>"+(R.kind==="human"&&G.humans.length===1&&!/^you$/i.test(R.name)?' <span class="mx-you">You</span>':""); }
 function focusHuman(){ var hs=raceHumans(); if(!hs.length) return -1; var rc=ui.rc, need=RC.need(rc); if(need.length) return need[0]; var al=hs.filter(function(s){ return !rc.r[s].out; }); return al.length?al[0]:hs[0]; }
 function renderRace(){
   var rc=ui.rc; if(!rc||!G) return;
@@ -820,7 +824,7 @@ function renderRace(){
   if(rc.phase==="war"&&rc.part&&rc.part.length) drawWar(rc.part,rc.tb,false);
   else { $("warRow").innerHTML=""; drawDuel(); }
   renderTower(null);
-  if(is3d()) pipHead(gate?"<span>The gate</span><b>"+esc(rc.n+" riders")+"</b>":"<span>Lap "+Math.min(ui.lap,rc.o.len)+" · cards</span><b>"+(onTV()?"OK: bigger":"Tap: bigger")+"</b>");
+  if(is3d()) pipHead(gate?"<span>The gate</span><b>"+esc(rc.n+" riders")+"</b>":"<span>"+lapTag(Math.min(ui.lap,rc.o.len),"cards")+"</span><b>"+(onTV()?"OK: bigger":"Tap: bigger")+"</b>");
   syncControls();
   barTitle();
 }
@@ -1046,10 +1050,10 @@ async function animEvent(my,e){
         else { var L0=ui.order.length?ui.order[0]:e.cards[0].s; $("youLab").textContent="Race leader"; $("youWho").innerHTML=whoHTML(L0); ps.push(flipCard($("youCard"),ui.lastCards[L0]!=null?ui.lastCards[L0]:null,sp(360))); }
         $("topCard").classList.remove("is-win");
         renderTower(null);
-        if(is3d()) pipHead("<span>Lap "+Math.min(ui.lap,rc.o.len)+" · cards</span><b>"+(onTV()?"OK: bigger":"Tap: bigger")+"</b>");
+        if(is3d()) pipHead("<span>"+lapTag(Math.min(ui.lap,rc.o.len),"cards")+"</span><b>"+(onTV()?"OK: bigger":"Tap: bigger")+"</b>");
         await Promise.all(ps);
         if(best.length===1){ $("topLab").textContent=best[0]===left&&G.humans.length===1?"Top card: yours":"Top card"; $("topWho").innerHTML=whoHTML(best[0]); await flipCard($("topCard"),ui.lastCards[best[0]],sp(300)); }
-        else { $("topLab").textContent="Tie for the top"; $("topWho").innerHTML='<span class="mx-sn">'+esc(whoList(best))+"</span>"; await flipCard($("topCard"),ui.lastCards[best[0]],sp(300)); }
+        else { $("topLab").textContent="Tie for the top"; $("topWho").innerHTML=(is3d()?best.slice(0,3).map(function(s){ return plateHTML(G.riders[seatId(s)]); }).join(""):"")+'<span class="mx-sn">'+esc(whoList(best))+"</span>"; await flipCard($("topCard"),ui.lastCards[best[0]],sp(300)); }
         await sleep(dl(best.length>1?260:200));
       } else {
         /* a war: each fighter lays its face-down cards, then the 4th turns (the CEO's war: 3 down, the 4th decides) */
@@ -1102,7 +1106,7 @@ async function animEvent(my,e){
       Sound.sfx(me?"coin":e.war?"slide":"tick");
       ui.order=RC.standings(rc).map(function(r){ return r.s; });
       renderTower({win:e.s});
-      if(is3d()){ send3d(e.s,e.war); pipHead("<span>Lap "+Math.min(ui.lap,rc.o.len)+": "+esc(nm(e.s))+"</span><b>+"+(e.n-1)+"</b>",e.war>1); }
+      if(is3d()){ send3d(e.s,e.war); pipHead("<span>Lap "+Math.min(ui.lap,rc.o.len)+": "+esc(onTV()?nm(e.s):String(nm(e.s)).split(" ").slice(-1)[0])+"</span><b>+"+(e.n-1)+"</b>",e.war>1); }
       else { trackSync(false); var T1=track(); if(T1) T1.lap(ui.lap,rc.o.len); }
       refreshBoard();
       await sleep(dl(e.war?520:300));
@@ -1129,7 +1133,7 @@ async function animEvent(my,e){
       if(is3d()) await V3.lapDone(e.b-1); else await lapWait2d();
       if(my!==gen||!ui.rc) return;
       ui.lap=e.b; ui.lapT0=Date.now(); chips();
-      if(is3d()) pipHead("<span>Lap "+Math.min(e.b,rc.o.len)+" · "+(RC.need(rc).length?(G.humans.length>1?"flip":"your flip"):"cards")+"</span><b>"+(onTV()?"OK: bigger":"Tap: bigger")+"</b>");
+      if(is3d()) pipHead("<span>"+lapTag(Math.min(e.b,rc.o.len),RC.need(rc).length?(G.humans.length>1?"flip":"your flip"):"cards")+"</span><b>"+(onTV()?"OK: bigger":"Tap: bigger")+"</b>");
       /* the white flag: the last lap (the CEO v2: "Lap 7 of 30", the white flag on the last lap, the checkered flag at the end) */
       if(e.b===rc.o.len&&rc.o.len>1){ if(is3d()) V3.setFlag("white"); var T3=track(); if(T3) T3.setFlag("white"); Sound.sfx("bell"); logLine("White flag: last lap!"); await banner("White flag","Last lap · "+e.b+" of "+rc.o.len,dl(1300),"is-calm is-white",false,true); }
       return;
@@ -1164,8 +1168,8 @@ function drawWar(seats,tb,fresh){
   var hs=seats.filter(function(s){ return isHumanId(seatId(s)); }), rest=seats.filter(function(s){ return hs.indexOf(s)<0; });
   var big=$("table").classList.contains("is-big"), vis=hs.concat(rest).slice(0,is3d()&&!big?(onTV()?4:3):(onTV()?5:4)), more=seats.length-vis.length;
   var row=$("warRow"), rem=remPx(), W=GEO?GEO.W:300, H=GEO?GEO.H-GEO.laneH:160;
-  var colW=(W-rem)/(vis.length+(more?0.7:0))-rem*.5, cw=Math.round(Math.max(onTV()?2.4*rem:30,Math.min(colW*.62,(H-rem*3.3)/1.55,GEO?GEO.cw:70)));
-  row.style.setProperty("--cw",cw+"px");
+  var colW=(W-rem)/(vis.length+(more?0.7:0))-rem*.5, cw=Math.round(Math.max(onTV()?(is3d()&&!big?2.0:2.4)*rem:30,Math.min(colW*.62,(H-rem*3.3)/1.55,GEO?GEO.cw:70)));
+  row.style.setProperty("--cw",cw+"px"); row.classList.toggle("is-many",vis.length>=3);   /* polish: three or more fighters in the small window: plates only */
   row.innerHTML=vis.map(function(s){ var c=ui.lastCards[s]; return '<div class="mx-fight" data-s="'+s+'"><span class="mx-fight__who">'+whoHTML(s)+'</span><div class="mx-fight__pile"><div class="mx-card is-up is-top">'+A.cardInner(c)+'</div></div><span class="mx-fight__tie">tied with '+(c!=null?'<span class="mx-tw__c'+(A.chipRed(c)?" is-red":"")+'">'+A.chip(c)+"</span>":"")+"</span></div>"; }).join("")+
     (more?'<span class="mx-fight__more">+'+more+" more</span>":"");
   if(tb&&!fresh){ /* a reload in a war: show the face-down cards already laid */
