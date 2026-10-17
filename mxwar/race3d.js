@@ -54,8 +54,9 @@ export function create(host,hooks){
   let LO=motion()!=="full";
   /* ---------------- renderer, look, quality ---------------- */
   // [hook:perf]
-  const QUAL=createQuality({host:host,lo:LO,setShadows:on=>LOOK.setShadows(on),shadowsOn:()=>LOOK.shadows,W:()=>W,H:()=>H});   /* the renderer, anisotropy, the weak-GPU test, the pixel-ratio ladder (r3d-quality.js) */
+  const QUAL=createQuality({host:host,lo:LO,setShadows:on=>LOOK.setShadows(on),shadowsOn:()=>LOOK.shadows,W:()=>W,H:()=>H,resized:(w,h,p)=>LOOK.resize(w,h,p)});   /* the renderer, the tier (GPU class + probe + ?quality=), anisotropy, the adaptive ladder (r3d-quality.js) */
   const renderer=QUAL.renderer;
+  let lastRace=null, builtTier="";   /* the last setRace argument and the tier key the current world was built with (V.setQuality rebuilds when they differ) */
   // [/hook:perf]
   const LOOK=createLook(renderer,{shadows:QUAL.shadowsWanted(LO)});   /* colour space, tone mapping, shadow map, the lights, fog, the post-processing slot (r3d-look.js) */
   const scene=LOOK.scene, SUN=LOOK.SUN;   /* SUN = the sun's direction (LOOK.apply updates it for each venue) */
@@ -101,11 +102,12 @@ export function create(host,hooks){
   /* ---------------- the round -> the course and the world (built once per layout) ---------------- */
   V.setRace=function(o){
     // [hook:perf]
+    lastRace=o;
     const lo=motion()!=="full"; if(lo!==LO){ LO=lo; worldKey=""; LOOK.setShadows(QUAL.shadowsWanted(LO)); }   /* Reduce effects changed: the next race is built simpler (or richer), the shadows follow */
     // [/hook:perf]
     const pick=MX.Layouts.pick(o.series,o.year,o.round,o.cal||{});
     // [hook:perf]
-    const key=pick.layout.id+"|"+(pick.look.around)+"|"+(LO?"lo":"hi")+"|"+(o.lapT>0?Math.round(o.lapT):"");   /* what makes a world new: the layout, its look, Reduce effects, the round's lap time */
+    const key=pick.layout.id+"|"+(pick.look.around)+"|"+(LO?"lo":"hi")+"|"+(o.lapT>0?Math.round(o.lapT):"")+"|"+QUAL.buildKey(LO);   /* what makes a world new: the layout, its look, Reduce effects, the round's lap time, the quality tier's build flags */
     // [/hook:perf]
     if(key!==worldKey){
       if(world){ disposeTree(world.root); scene.remove(world.root); }
@@ -113,7 +115,7 @@ export function create(host,hooks){
       /* the round's real average lap (the timing research), when it differs: the speeds tuned to it, within believable bounds */
       if(o.lapT>0&&Math.abs(C.Tlap/o.lapT-1)>0.04){ const want=clamp(o.lapT,C.Tlap*0.87,C.Tlap*1.15); C=MX.Course.build(Object.assign({},pick.layout,{vavg:C.L/want})); }
       // [hook:perf]
-      world=buildWorld(C,look,QUAL.options(LO)); scene.add(world.root);   /* the quality options (r3d-quality.js) */
+      world=buildWorld(C,look,QUAL.options(LO)); scene.add(world.root); builtTier=QUAL.buildKey(LO); QUAL.fitTextures(world.root);   /* the quality options (r3d-quality.js); canvas textures over the tier's size are shrunk */
       // [/hook:perf]
       // [hook:cams]
       CAMS.buildGrid();   /* the grid of the dirt's heights: no camera ever sits inside a jump */
@@ -255,7 +257,7 @@ export function create(host,hooks){
     const ms=now()-c0; stats.ms=stats.ms*0.95+ms*0.05; stats.msMax=Math.max(stats.msMax*0.995,ms); stats.frames++;
     stats.ft.push(dt*1000); if(stats.ft.length>120) stats.ft.shift();
     // [hook:perf]
-    if(!off) QUAL.adapt(dt);   /* the adaptive pixel-ratio ladder (r3d-quality.js) */
+    if(!off) QUAL.adapt(dt,ms);   /* the adaptive ladder, the benchmark, the riders' level of detail (r3d-quality.js) */
     // [/hook:perf]
     raf=requestAnimationFrame(tick);
   }
@@ -649,8 +651,22 @@ export function create(host,hooks){
   V.setShadows=function(on){ LOOK.setShadows(on); };
   V.fixPR=function(p){ QUAL.fix(p,W,H); };
   // [hook:perf]
-  /* the quality tiers (perf adds them here): V.qualityNames() -> ["high","medium","low","stick"] and V.setQuality(name). The capture harness (demo.js, perf.js) and game.js use them
-     as soon as they exist; until then the harness stands in with data-effects / data-tv and V.setShadows (CONTRACT.md "How to capture", the quality tiers). */
+  /* THE QUALITY TIERS (r3d-quality.js, CONTRACT.md section 3 and 9.4): V.qualityNames() -> ["firetv","balanced","high","ultra"]; V.setQuality(name) (also "auto", and the old names stick / low / medium) applies the
+     run-time flags at once (render scale, shadows, the ladder) and rebuilds the world when the tier's build flags differ and no race is running; V.quality() = what was chosen and why;
+     V.bench({seconds}) / V.benchResult(): the in-game benchmark (?bench=1 starts it by itself). The capture harness (demo.js, perf.js, shots.js) calls V.setQuality(name) right after V.setRace. */
+  V.qualityNames=()=>QUAL.names();
+  V.qualityLabel=name=>QUAL.label(name);
+  V.quality=()=>QUAL.summary();
+  V.setQuality=function(name){
+    const was=QUAL.tierName, r=QUAL.set(name);
+    let rebuilt=false;
+    if(lastRace&&QUAL.buildKey(LO)!==builtTier&&(mode==="gate"||mode==="idle")){ V.setRace(lastRace); rebuilt=true; }   /* the build flags changed and nothing is racing: build the new world now (a race in progress keeps its world until the next setRace) */
+    return {tier:QUAL.tierName,label:QUAL.label(QUAL.tierName),was:was,changed:r.changed,rebuilt:rebuilt,pendingRebuild:QUAL.buildKey(LO)!==builtTier};
+  };
+  V.bench=o=>QUAL.bench.start(o);
+  V.benchResult=()=>QUAL.bench.result;
+  QUAL.bindLook(LOOK);
+  QUAL.attach({V:V,cam:cam,mode:()=>mode,T:()=>T,W:()=>W,H:()=>H,count:()=>N,lodList:()=>RST});
   // [/hook:perf]
   V.dispose=function(){ V.stop(); if(world) disposeTree(world.root); if(R) disposeTree(R.grp); if(FX) disposeTree(FX.group); renderer.dispose(); cv.remove(); };
   V.renderer=renderer; V.scene=scene; V.camera=cam;
