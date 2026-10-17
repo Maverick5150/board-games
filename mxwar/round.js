@@ -123,12 +123,25 @@ function lapsFromTime(T,base,R){
   if(R&&R.m>0&&T>R.m*60) for(n=2;n<100;n++) if(lapsFor({min:R.m,plus:R.pl|0},"real",T/n)===n&&(!best||Math.abs(n-w)<Math.abs(best-w))) best=n;
   return best||N;
 }
-/* the night's own real lap (s): its first final with a lap time, else the first race with one; 0 = none researched */
-function nightLap(cal){
+/* the night's own real lap (s): its first final with a lap time, else the first race with one; 0 = none researched. skip = a race whose
+   own lap is set aside (lapOff) */
+function nightLap(cal,skip){
   var t=cal&&cal.tm&&cal.tm.r; if(!t) return 0;
   var ks=["main","mains","moto","lcq","heat","semi"], k, j;
-  for(k=0;k<ks.length;k++){ var L=t[ks[k]]||[]; for(j=0;j<L.length;j++) if(L[j]&&L[j].p>0) return L[j].p; }
+  for(k=0;k<ks.length;k++){ var L=t[ks[k]]||[]; for(j=0;j<L.length;j++) if(L[j]&&L[j].p>0&&L[j]!==skip&&!lapOff(cal,L[j])) return L[j].p; }
   return 0;
+}
+/* mxtimewire review (2026-10-17): the sanity filter on a race's own lap. A lap that is only an AVERAGE (pk a / d: the race time / its laps)
+   and sits over 1.4 x the median of the night's other researched laps (at least 2) is a stoppage or a timing fault in that time, not a lap
+   (sx-1998 Daytona Heat 1: 8 laps in 16:15.97 = 2:02 a lap against 1:16-1:20 in the night's other races); the race then rides the night's
+   real lap and the page says why. A median lap (pk m: the lap chart itself) is never set aside. */
+function lapOff(cal,R){
+  if(!R||!(R.p>0)||!R.pk||R.pk==="m") return false;
+  var t=cal&&cal.tm&&cal.tm.r; if(!t) return false;
+  var v=[], k, j; for(k in t){ var L=t[k]||[]; for(j=0;j<L.length;j++) if(L[j]&&L[j]!==R&&L[j].p>0) v.push(L[j].p); }
+  if(v.length<2) return false;
+  v.sort(function(a,b){ return a-b; }); var m=v.length%2?v[v.length>>1]:(v[v.length/2-1]+v[v.length/2])/2;
+  return R.p>m*1.4;
 }
 /* one race: {len, lap (s), fl (first lap s, 0 = none), src: real | min | rule, lsrc: m | a | d (its own) | night | venue, R, spec, rule} */
 function raceInfo(F,kind,i,o,lapS,year,cal){
@@ -136,18 +149,18 @@ function raceInfo(F,kind,i,o,lapS,year,cal){
      own timed rule, R.mr) | rule (nothing researched: the era's rule). lsrc: m | a | d (its own lap) | t (its race time / its laps) | night
      (the night's real lap) | era (the era's typical lap, cal.tm.ep) | venue (the track estimate). base / bsrc: the lap a time-derived
      count was worked from. */
-  var R=realRace(cal,F,kind,i), rule=realSpec(F,kind,i,year), spec=rule, src="rule", T=R?secOf(R.t):0, base=0, bsrc="";
-  var lap=R&&R.p>0?R.p:0, lsrc=lap?(R.pk||"m"):"";
-  if(!lap){ lap=nightLap(cal); lsrc=lap?"night":""; }
+  var R=realRace(cal,F,kind,i), rule=realSpec(F,kind,i,year), spec=rule, src="rule", T=R&&!R.ts?secOf(R.t):0, base=0, bsrc="";   /* ts: the time runs through a stoppage */
+  var px=lapOff(cal,R)?R.p:0, lap=R&&R.p>0&&!px?R.p:0, lsrc=lap?(R.pk||"m"):"";
+  if(!lap){ lap=nightLap(cal,R); lsrc=lap?"night":""; }
   if(!lap&&cal&&cal.tm&&cal.tm.ep>0){ lap=cal.tm.ep; lsrc="era"; }
   if(!lap){ lap=lapS>0?lapS:55; lsrc="venue"; }
   if(R&&R.l>0){ spec={laps:R.l,st:"real"}; src="real"; }
   else if(R&&T>0){ var N=lapsFromTime(T,lap,R); spec={laps:N,st:"time"}; src="time";
-    if(!(R.p>0)){ base=lap; bsrc=lsrc; lap=Math.round(T/N*1000)/1000; lsrc="t"; } }   /* the race takes its real race time */
+    if(!(R.p>0)||px){ base=lap; bsrc=lsrc; lap=Math.round(T/N*1000)/1000; lsrc="t"; } }   /* the race takes its real race time */
   else if(R&&R.m>0){ spec={min:R.m,plus:R.pl|0,st:R.mr?"round":"real"}; src="min"; }
   var L=lapsFor(spec,o&&o.length,lap);
   if(o&&o.len&&+o.len[kind]>=1) L=Math.min(2000,Math.floor(+o.len[kind]));   /* a per-kind override (tests, Party) */
-  return {len:L,lap:lap,fl:R&&R.f>0?R.f:0,src:src,lsrc:lsrc,R:R,spec:spec,rule:rule,base:base,bsrc:bsrc};
+  return {len:L,lap:lap,fl:R&&R.f>0?R.f:0,src:src,lsrc:lsrc,R:R,spec:spec,rule:rule,base:base,bsrc:bsrc,px:px};
 }
 function raceLen(F,kind,i,o,lapS,year,cal){ return raceInfo(F,kind,i,o,lapS,year,cal).len; }
 
@@ -173,11 +186,11 @@ function lengths(o,F,lapS,year){ var out={}, kinds=["heat","semi","lcq","qual","
 function newRound(F,ri,entry,o,team,meta){
   meta=meta||{};
   var lapS=meta.lapS>0?Math.round(meta.lapS):(nightLap(meta.cal)||lapTime(meta.series||(/^mx-/.test(F.id)?"mx":"sx"),meta.year,meta.cal));
-  var RG={ri:ri,fmt:F.id,tc:!!F.isTC,F:F,entry:entry.slice(),races:[],cur:0,send:[],main:[],elim:[],fin:null,done:false,res:null,lapS:lapS,mode:MODE_OF[o&&o.length]||"real",year:meta.year|0,lv:3};
+  var RG={ri:ri,fmt:F.id,tc:!!F.isTC,F:F,entry:entry.slice(),races:[],cur:0,send:[],main:[],elim:[],fin:null,done:false,res:null,lapS:lapS,mode:MODE_OF[o&&o.length]||"real",year:meta.year|0,lv:4};
   /* mxtimewire: every race its own laps, lap time and first lap (raceInfo) */
   function race(key,label,kind,si,i){ var inf=raceInfo(F,kind,i,o,lapS,RG.year,meta.cal);
     var x={key:key,label:label,kind:kind,st:si,i:i,len:inf.len,lap:inf.lap,fl:inf.fl,src:inf.src,lsrc:inf.lsrc,ent:null,res:null,hs:null,why:null};
-    if(inf.base>0){ x.b=inf.base; x.bs=inf.bsrc; } return x; }
+    if(inf.base>0){ x.b=inf.base; x.bs=inf.bsrc; } if(inf.px>0) x.px=inf.px; return x; }
   /* the CEO (~18:25): "at the start of the heat races, there has to be an equal amount of teams": team = {riderId: make} balances the
      first stage's races by team (season.js passes it; without it the plain odd / even seed split, as qualifying splits them) */
   if(team&&typeof team==="object"){ RG.team={}; entry.forEach(function(id){ RG.team[id]=String(team[id]||"Privateer"); }); }
@@ -352,13 +365,14 @@ function upgrade(RG,o,meta){
     RG.races.forEach(function(r){ if(!r.res) r.len=raceLen(F,r.kind,r.i,o,RG.lapS,RG.year); });
     RG.lv=2;
   }
-  if(RG.lv<3&&meta.cal&&meta.cal.tm){
+  /* mxtimewire review: lv 4 = counted with the sanity filter (lapOff) and the stoppage flags (ts); a lv 3 round recounts its races to come */
+  if(RG.lv<4&&meta.cal&&meta.cal.tm){
     RG.races.forEach(function(r){ if(r.res||(meta.live&&r.key===meta.live)) return;
-      var inf=raceInfo(F,r.kind,r.i,o,RG.lapS,RG.year,meta.cal); r.len=inf.len; r.lap=inf.lap; r.fl=inf.fl; r.src=inf.src; r.lsrc=inf.lsrc; if(inf.base>0){ r.b=inf.base; r.bs=inf.bsrc; } });
-    RG.lv=3;
+      var inf=raceInfo(F,r.kind,r.i,o,RG.lapS,RG.year,meta.cal); r.len=inf.len; r.lap=inf.lap; r.fl=inf.fl; r.src=inf.src; r.lsrc=inf.lsrc; if(inf.base>0){ r.b=inf.base; r.bs=inf.bsrc; } else { delete r.b; delete r.bs; } if(inf.px>0) r.px=inf.px; else delete r.px; });
+    RG.lv=4;
   }
   return RG.lapS;
 }
-MX.Round={LEN:LEN,MODE_OF:MODE_OF,REAL:REAL,realSpec:realSpec,realRace:realRace,nightLap:nightLap,raceInfo:raceInfo,secOf:secOf,lapsFromTime:lapsFromTime,lapTime:lapTime,lapsFor:lapsFor,raceLen:raceLen,upgrade:upgrade,teamSplit:teamSplit,formatFor:formatFor,fieldSize:fieldSize,lengths:lengths,newRound:newRound,current:current,entrants:entrants,record:record,score:score,overall:overall};
+MX.Round={LEN:LEN,MODE_OF:MODE_OF,REAL:REAL,realSpec:realSpec,realRace:realRace,nightLap:nightLap,lapOff:lapOff,raceInfo:raceInfo,secOf:secOf,lapsFromTime:lapsFromTime,lapTime:lapTime,lapsFor:lapsFor,raceLen:raceLen,upgrade:upgrade,teamSplit:teamSplit,formatFor:formatFor,fieldSize:fieldSize,lengths:lengths,newRound:newRound,current:current,entrants:entrants,record:record,score:score,overall:overall};
 if(typeof module!=="undefined"&&module.exports) module.exports=MX.Round;
 })(typeof window!=="undefined"?window:globalThis);
