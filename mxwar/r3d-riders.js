@@ -89,7 +89,7 @@ vec3 transformed=vec3(dot(mxR0,mxP),dot(mxR1,mxP),dot(mxR2,mxP));
 const SKIN_COLOR=`
 #include <color_vertex>
 #ifdef USE_COLOR
- { float sl=aFx.x; vec3 tint=sl<0.5?aInstA.yzw:(sl<1.5?aInstB.xyz:vec3(1.0)); vColor.rgb*=tint; vColor.rgb=mix(vColor.rgb,vec3(0.26,0.17,0.10),aFx.z*aInstC.x*0.78); }
+ { float sl=aFx.x; int sty=int(aInstC.y+0.5); vec3 tint=sl<0.5?aInstA.yzw:(sl<1.5?aInstB.xyz:(sl<2.5?vec3(1.0):(sl<3.5?(((sty&1)!=0)?aInstB.xyz:aInstA.yzw):(sl<4.5?(((sty&2)!=0)?aInstB.xyz:aInstA.yzw):(((sty&4)!=0)?aInstB.xyz:aInstA.yzw))))); vColor.rgb*=tint; vColor.rgb=mix(vColor.rgb,vec3(0.26,0.17,0.10),aFx.z*aInstC.x*0.78); }
 #endif
 `;
 /* patch a three.js material: kind "main" (lit), "depth" (the shadow pass), opts.atlas (the number patch's atlas cell from aInstC.zw) */
@@ -97,13 +97,15 @@ function skinMat(mat,U,kind,opts){
   opts=opts||{};
   mat.onBeforeCompile=sh=>{
     sh.uniforms.uBones=U.uBones; sh.uniforms.uTime=U.uTime;
+    /* a rim of the rider's own colour on the edges facing away from the camera: the riders stand out of the dark stands as in a backlit cover */
+    if(opts.rim){ sh.uniforms.uRim={value:opts.rim}; sh.fragmentShader="uniform float uRim;\n"+sh.fragmentShader.replace("#include <emissivemap_fragment>","#include <emissivemap_fragment>\n float mxRim=pow(1.0-clamp(dot(normalize(normal),normalize(vViewPosition)),0.0,1.0),3.0); totalEmissiveRadiance+=diffuseColor.rgb*mxRim*uRim;"); }
     if(opts.atlas) sh.uniforms.uGrid={value:opts.atlas};
     let vs=sh.vertexShader.replace("#include <common>","#include <common>\n"+SKIN_DECL+(opts.atlas?"uniform vec2 uGrid;\n":""));
     vs=vs.replace("#include <beginnormal_vertex>",SKIN_NORMAL).replace("#include <begin_vertex>",SKIN_POS).replace("#include <color_vertex>",SKIN_COLOR);
     if(opts.atlas) vs=vs.replace("#include <uv_vertex>","#include <uv_vertex>\n#ifdef USE_MAP\n vMapUv=vec2((aInstC.z+uv.x)*uGrid.x,1.0-(aInstC.w+1.0-uv.y)*uGrid.y);\n#endif");
     sh.vertexShader=vs;
   };
-  mat.customProgramCacheKey=()=>"mx-skin-"+kind+(opts.atlas?"-atlas":"");
+  mat.customProgramCacheKey=()=>"mx-skin-"+kind+(opts.atlas?"-atlas":"")+(opts.rim?"-rim":"");
   return mat;
 }
 /* an instanced geometry (a plain Mesh drawn instanced: no instance matrix) over a source geometry, sharing the per-instance attributes */
@@ -126,8 +128,8 @@ export function createRiders(list,opts){
   const U={uBones:{value:boneTex},uTime:{value:0}};
   const hiModel=buildRider(1), loModel=buildRider(0);
   const hiInst=instAttrs(n), loInst=instAttrs(n);
-  const cloth=skinMat(new THREE.MeshLambertMaterial({vertexColors:true}),U,"main");
-  const shell=skinMat(lo?new THREE.MeshLambertMaterial({vertexColors:true}):new THREE.MeshPhongMaterial({vertexColors:true,shininess:120,specular:0x9a9a9a}),U,"main");
+  const cloth=skinMat(lo?new THREE.MeshLambertMaterial({vertexColors:true}):new THREE.MeshPhongMaterial({vertexColors:true,shininess:22,specular:0x262626}),U,"main",{rim:lo?0:0.34});
+  const shell=skinMat(lo?new THREE.MeshLambertMaterial({vertexColors:true}):new THREE.MeshPhongMaterial({vertexColors:true,shininess:120,specular:0x9a9a9a}),U,"main",{rim:lo?0:0.22});
   const decal=skinMat(new THREE.MeshLambertMaterial({map:A.tex,vertexColors:true,alphaTest:0.4}),U,"main",{atlas:new THREE.Vector2(1/A.cols,1/A.rows)});
   const depth=skinMat(new THREE.MeshDepthMaterial({depthPacking:THREE.RGBADepthPacking}),U,"depth");
   cloth.addEventListener("dispose",()=>{ boneTex.dispose(); });
@@ -139,12 +141,12 @@ export function createRiders(list,opts){
   const pgA=pg.clone(); pgA.setAttribute("aCell",new THREE.InstancedBufferAttribute(cellA,2));
   M.plate=mk(pgA,n*3,atlasMat(A.tex,A.cols,A.rows,{side:THREE.DoubleSide}));
   /* team colours: the bike's plastics and trim (r3d-bike.js), the riders' tints (linear rgb) */
-  const col=new THREE.Color(), team=new Float32Array(n*3), acc=new Float32Array(n*3), cell=new Float32Array(n*2);
+  const col=new THREE.Color(), team=new Float32Array(n*3), acc=new Float32Array(n*3), cell=new Float32Array(n*2), style=new Uint8Array(n);
   list.forEach((R,i)=>{
     colorBike(M,i,R);
     col.set(R.color||"#888"); team[i*3]=col.r; team[i*3+1]=col.g; team[i*3+2]=col.b;
     col.set(R.accent||"#f2f2f6"); acc[i*3]=col.r; acc[i*3+1]=col.g; acc[i*3+2]=col.b;
-    const c=A.cells[R.s]; cell[i*2]=c.decal%A.cols; cell[i*2+1]=Math.floor(c.decal/A.cols);
+    const c=A.cells[R.s]; cell[i*2]=c.decal%A.cols; cell[i*2+1]=Math.floor(c.decal/A.cols); style[i]=((R.s|0)*5+2)&7;   /* which zones (chest band and biceps / side panels / pants) take the accent colour */
   });
   Object.values(M).forEach(m=>{ if(m.instanceColor) m.instanceColor.needsUpdate=true; });
   /* blob shadows: one quad under each bike and one under each rider (for crashes); a soft dark ellipse */
@@ -165,7 +167,7 @@ export function createRiders(list,opts){
     vertexShader:"attribute vec2 aCell; uniform vec2 uGrid; varying vec2 vUv; void main(){ vUv=vec2((aCell.x+uv.x)*uGrid.x,1.0-(aCell.y+1.0-uv.y)*uGrid.y); vec4 c=modelViewMatrix*instanceMatrix*vec4(0.,0.,0.,1.); float s=length(instanceMatrix[0].xyz); c.xyz+=normalize(-c.xyz)*min(1.8,0.25*length(c.xyz)); c.xy+=position.xy*s; gl_Position=projectionMatrix*c; }",
     fragmentShader:"uniform sampler2D map; varying vec2 vUv; void main(){ vec4 t=texture2D(map,vUv); if(t.a<0.05) discard; gl_FragColor=t; }"});
   M.tag=new THREE.InstancedMesh(tagG,tagMat,n); M.tag.frustumCulled=false; M.tag.renderOrder=20; grp.add(M.tag);
-  const R={grp,M,A,n,list,S,hidden:new Uint8Array(n),vis:new Uint8Array(n),pos:new Float32Array(n*3),team,acc,cell,wind:new Float32Array(n),mud:new Float32Array(n),
+  const R={grp,M,A,n,list,S,hidden:new Uint8Array(n),vis:new Uint8Array(n),pos:new Float32Array(n*3),team,acc,cell,style,wind:new Float32Array(n),mud:new Float32Array(n),
     rig:list.map((r,i)=>newRig(i)),bones:boneData,boneTex,U,hiInst,loInst,nHi:Math.max(0,opts.riderHi!=null?opts.riderHi:(lo?3:8)),dt:1/60,t:0,order:[],lod:new Int8Array(n),stats:{hi:0,lo:0,tris:hiModel.tris}};
   /* scratch */
   R._m=new THREE.Matrix4(); R._q=new THREE.Quaternion(); R._e=new THREE.Euler(0,0,0,"YZX"); R._v=new THREE.Vector3(); R._s=new THREE.Vector3(1,1,1);
@@ -214,7 +216,7 @@ export function commit(R,cam,dt){
   for(let q=0;q<k;q++){ const i=order[idx[q]*2], hi=q<R.nHi, I=hi?H:L, s=hi?nh++:nl++;
     I.A.array[s*4]=i; I.A.array[s*4+1]=R.team[i*3]; I.A.array[s*4+2]=R.team[i*3+1]; I.A.array[s*4+3]=R.team[i*3+2];
     I.B.array[s*4]=R.acc[i*3]; I.B.array[s*4+1]=R.acc[i*3+1]; I.B.array[s*4+2]=R.acc[i*3+2]; I.B.array[s*4+3]=R.wind[i];
-    I.C.array[s*4]=R.mud[i]; I.C.array[s*4+1]=0; I.C.array[s*4+2]=R.cell[i*2]; I.C.array[s*4+3]=R.cell[i*2+1]; }
+    I.C.array[s*4]=R.mud[i]; I.C.array[s*4+1]=R.style[i]; I.C.array[s*4+2]=R.cell[i*2]; I.C.array[s*4+3]=R.cell[i*2+1]; }
   H.A.needsUpdate=H.B.needsUpdate=H.C.needsUpdate=true; L.A.needsUpdate=L.B.needsUpdate=L.C.needsUpdate=true;
   const S=R.S; S.hiBody.geometry.instanceCount=nh; S.hiHelmet.geometry.instanceCount=nh; S.hiBack.geometry.instanceCount=nh; S.loBody.geometry.instanceCount=nl;
   S.hiBody.visible=S.hiHelmet.visible=S.hiBack.visible=nh>0; S.loBody.visible=nl>0; R.stats.hi=nh; R.stats.lo=nl;

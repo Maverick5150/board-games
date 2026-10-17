@@ -86,21 +86,21 @@ const K1=[1,1,1];
 function skinY(y,stops){ if(y>=stops[0][0]) return [stops[0][1],stops[0][1],0]; for(let i=1;i<stops.length;i++){ if(y>=stops[i][0]){ const a=stops[i-1], b=stops[i], t=(a[0]-y)/(a[0]-b[0]); return [a[1],b[1],t]; } } const l=stops[stops.length-1]; return [l[1],l[1],0]; }
 const SK_TORSO=[[0.62,BN.NECK],[0.50,BN.CHEST],[0.26,BN.CHEST],[0.10,BN.SPINE],[0.0,BN.PELVIS]];
 /* the jersey's surface at height y (the back number is laid on it) */
-const TORSO=[[-0.050,0.000,0.150,0.190],[0.020,0.000,0.138,0.178],[0.100,0.002,0.128,0.165],[0.190,0.008,0.136,0.176],[0.280,0.016,0.150,0.196],[0.380,0.020,0.152,0.214],[0.455,0.012,0.135,0.228],[0.510,0.004,0.100,0.165],[0.545,0.004,0.072,0.095]];
+const TORSO=[[0.000,0.000,0.150,0.188],[0.060,0.002,0.134,0.168],[0.120,0.004,0.128,0.160],[0.190,0.008,0.134,0.170],[0.280,0.016,0.150,0.196],[0.380,0.020,0.152,0.216],[0.455,0.012,0.132,0.232],[0.510,0.004,0.098,0.162],[0.545,0.004,0.072,0.095]];
 function torsoAt(y){ for(let i=1;i<TORSO.length;i++) if(y<=TORSO[i][0]||i===TORSO.length-1){ const a=TORSO[i-1], b=TORSO[i], t=Math.max(0,Math.min(1,(y-a[0])/(b[0]-a[0]))), s=t*t*(3-2*t); return {cx:a[1]+(b[1]-a[1])*s,rx:a[2]+(b[2]-a[2])*s,rz:a[3]+(b[3]-a[3])*s}; } }
 
 /* ---------------- the parts ---------------- */
 function addTorso(g,seg,lo){
   /* the rows (y) of the jersey: the key profile in TORSO, sampled finer where the bands and the number go */
-  const Y=lo?[-0.05,0.10,0.28,0.40,0.51,0.545]:[-0.05,0.02,0.10,0.19,0.25,0.30,0.345,0.40,0.455,0.51,0.545];
+  const Y=lo?[0.0,0.12,0.28,0.40,0.51,0.545]:[0.0,0.06,0.12,0.19,0.25,0.30,0.345,0.40,0.455,0.51,0.545];
   const rows=Y.map(y=>{ const t=torsoAt(y), sk=skinY(y,SK_TORSO);
-    return ring([t.cx,y,0],t.rx,t.rz,{bones:sk,fold:lo?0:(y<0.15?0.008:0.004),flap:y<0.0?1:y<0.1?0.55:0,mud:a=>Math.max(0,Math.cos(a))*0.42*(1-sstp(0.08,0.5,y)),
+    return ring([t.cx,y,0],t.rx,t.rz,{bones:sk,fold:lo?0:(y<0.15?0.008:0.004),flap:y<0.02?1:y<0.12?0.5:0,mud:a=>Math.max(0,Math.cos(a))*0.42*(1-sstp(0.08,0.5,y)),
       /* the jersey in the team colour; the side panels under the arms, a band across the chest and the shoulder yoke in the accent colour */
-      slot:a=>(y>0.5||(y<0.40&&Math.abs(Math.sin(a))>0.8)||(y>0.29&&y<0.36&&Math.cos(a)>0.15))?1:0,
-      col:a=>{ let c=1; if(y<0.09) c=0.86+0.14*sstp(-0.05,0.09,y); if(y>0.20&&y<0.30&&Math.cos(a)<-0.2) c*=0.95; if(Math.abs(Math.sin(a))>0.93&&y>0.15&&y<0.45) c*=0.82; return [c,c,c]; } }); });
+      slot:a=>y>0.45?1:(y<0.40&&Math.abs(Math.sin(a))>0.8)?4:(y>0.29&&y<0.36&&Math.cos(a)>0.15)?3:0,
+      col:a=>{ let c=1; if(y<0.09) c=0.86+0.14*sstp(-0.05,0.09,y); if(y>0.20&&y<0.30&&Math.cos(a)<-0.2) c*=0.95; if(Math.abs(Math.sin(a))>0.9&&y>0.15&&y<0.45) c*=0.72; if(Math.cos(a)<-0.985&&y>0.1&&y<0.45) c*=0.86; return [c,c,c]; } }); });
   loft(g,rows,seg,"t");
   /* the belt and the pants' waist under the jersey hem, the pelvis */
-  const pel=[[-0.17,0.0,0.112,0.168,0.8],[-0.10,0.0,0.128,0.184,0.9],[-0.03,0.0,0.134,0.182,1],[0.04,0.0,0.128,0.172,1]].map(t=>ring([t[1],t[0],0],t[2],t[3],{bones:[BN.PELVIS,BN.PELVIS,0],col:[0.5*t[4],0.5*t[4],0.5*t[4]],slot:0}));
+  const pel=[[-0.17,0.0,0.112,0.168],[-0.10,0.0,0.128,0.184],[-0.03,0.0,0.136,0.184],[0.04,0.0,0.132,0.176]].map(t=>ring([t[1],t[0],0],t[2],t[3],{bones:[BN.PELVIS,BN.PELVIS,0],col:[0.46,0.46,0.46],slot:a=>Math.abs(Math.sin(a))>0.9?4:5,fold:lo?0:0.006}));
   loft(g,thin(pel,lo),seg,"b");
 }
 function addNeck(g,seg,lo){
@@ -108,19 +108,19 @@ function addNeck(g,seg,lo){
   const nb=[[0.462,0.018,0.118,0.158],[0.500,0.012,0.108,0.140],[0.545,0.006,0.082,0.100],[0.585,0.008,0.070,0.078]].map(t=>ring([t[1],t[0],0],t[2],t[3],{bones:[BN.CHEST,BN.NECK,sstp(0.42,0.62,t[0])],col:COL.mid,slot:2,k:a=>1+0.05*Math.pow(Math.abs(Math.cos(a)),6)}));
   loft(g,thin(nb,lo),seg,"t");
   const nk=[[0.53,0.008,0.050],[0.62,0.012,0.046]].map(t=>ring([t[1],t[0],0],t[2],t[2],{bones:[BN.NECK,BN.HEAD,sstp(0.54,0.62,t[0])],col:COL.dark,slot:2}));
-  loft(g,nk,Math.max(6,seg-2),"t");
+  loft(g,nk,lo?5:Math.max(6,seg-2),"t");
 }
 function addArm(g,sd,seg,lo){
   const z=0.215*sd, UA=sd<0?BN.UAL:BN.UAR, FA=sd<0?BN.FAL:BN.FAR, HA=sd<0?BN.HAL:BN.HAR;
   /* the sleeve: shoulder cap, upper arm, elbow, forearm, cuff (the accent colour); the elbow gets a bulge so the bend doesn't pinch */
   const S=[[0.565,0.048,0.048,[BN.CHEST,UA,0.5],0],[0.520,0.066,0.064,[BN.CHEST,UA,0.55],0],[0.470,0.064,0.062,[BN.CHEST,UA,0.7],0.006],[0.400,0.058,0.056,[UA,UA,0],0.006],[0.300,0.052,0.050,[UA,UA,0],0.006],[0.235,0.052,0.050,[UA,FA,0.18],0.007],
     [0.200,0.058,0.056,[UA,FA,0.5],0.008],[0.165,0.054,0.052,[UA,FA,0.82],0.007],[0.090,0.052,0.050,[FA,FA,0],0.006],[0.010,0.050,0.048,[FA,FA,0],0.004],[-0.040,0.046,0.046,[FA,HA,0.2],0],[-0.075,0.043,0.044,[FA,HA,0.5],0]];
-  const rows=thin(S,lo).map(t=>{ const y=t[0]; return ring([0,y,z],t[1],t[2],{bones:t[3],fold:lo?0:t[4],flap:y<0.15?0.7:y<0.3?0.25:0,mud:y<0.1?0.35:0,slot:(y>0.29&&y<0.40)||y<0.03?1:0,col:K1}); });
+  const rows=thin(S,lo).map(t=>{ const y=t[0]; return ring([0,y,z],t[1],t[2],{bones:t[3],fold:lo?0:t[4],flap:y<0.15?0.7:y<0.3?0.25:0,mud:y<0.1?0.35:0,slot:(y>0.29&&y<0.40)?3:y<0.03?1:0,col:K1}); });
   loft(g,rows,seg,"tb");
   /* the glove: a fist on the bar (wide across the bar, along z), the cuff in the accent colour above it */
   const G=[[-0.060,0.047,0.052,[FA,HA,0.5],1],[-0.095,0.047,0.058,[HA,HA,0],2],[-0.140,0.052,0.062,[HA,HA,0],2],[-0.180,0.042,0.054,[HA,HA,0],2],[-0.198,0.026,0.036,[HA,HA,0],2]];
   const gr=thin(G,lo).map(t=>ring([0.006,t[0],z],t[1],t[2],{bones:t[3],col:t[4]===1?[0.9,0.9,0.9]:COL.glove,slot:t[4]===1?1:2,n:2.6,mud:0.45}));
-  loft(g,gr,Math.max(6,seg-2),"b");
+  loft(g,gr,lo?5:Math.max(6,seg-2),"b");
   if(!lo){ /* the elbow guard under the sleeve: a dark bump on the back of the elbow */ }
 }
 function addLeg(g,sd,seg,lo){
@@ -128,7 +128,7 @@ function addLeg(g,sd,seg,lo){
   /* pants: thigh, knee, calf to the boot top; the team colour darkened */
   const P=[[0.030,0.098,0.096,[BN.PELVIS,TH,0.55],0],[-0.060,0.100,0.095,[BN.PELVIS,TH,0.9],0.01],[-0.180,0.094,0.090,[TH,TH,0],0.012],[-0.300,0.084,0.080,[TH,TH,0],0.012],[-0.395,0.078,0.075,[TH,SH,0.2],0.012],
     [-0.460,0.082,0.078,[TH,SH,0.5],0.012],[-0.530,0.074,0.070,[TH,SH,0.85],0.01],[-0.600,0.066,0.063,[SH,SH,0],0.01]];
-  const pr=thin(P,lo).map(t=>{ const y=t[0]; return ring([0.003+(y<-0.2?0.006:0),y,z],t[1],t[2],{bones:t[3],fold:lo?0:t[4],col:[0.46,0.46,0.46],slot:0,flap:0.18,mud:sstp(-0.30,-0.62,y)*0.6}); });
+  const pr=thin(P,lo).map(t=>{ const y=t[0]; return ring([0.003+(y<-0.2?0.006:0),y,z],t[1],t[2],{bones:t[3],fold:lo?0:t[4],col:[0.46,0.46,0.46],slot:5,flap:0.18,mud:sstp(-0.30,-0.62,y)*0.6}); });
   loft(g,pr,seg,"");
   /* the knee brace: a shell over the knee, a cup in front (the accent colour), a dark band round, a hinge on each side */
   const kb=[-0.385,-0.425,-0.465,-0.505,-0.545].map((y,i)=>{ const f=1-Math.abs(i-2)/2.6; return ring([0.012,y,z],0.082+0.012*f,0.080+0.010*f,{bones:[TH,SH,sstp(-0.40,-0.52,y)],col:a=>Math.cos(a)>0.45?[0.9,0.9,0.9]:COL.mid,slot:a=>Math.cos(a)>0.45?1:2,
@@ -141,13 +141,13 @@ function addLeg(g,sd,seg,lo){
   /* the foot: a loft along +x from the heel (rings stand in the y-z plane, the toe box and the dark sole) */
   const F=[[-0.080,-0.946,0.044,0.048],[-0.045,-0.940,0.052,0.060],[0.030,-0.952,0.044,0.064],[0.110,-0.962,0.036,0.067],[0.170,-0.968,0.030,0.062],[0.208,-0.975,0.019,0.042]];
   const fr=thin(F,lo).map(t=>ring([t[0],t[1],z],t[2],t[3],{u:Y,v:Z,bones:[FT,FT,0],mud:0.9,n:2.4,col:a=>Math.cos(a)<-0.5?COL.sole:(t[0]>0.12&&Math.cos(a)>0.55?COL.mid:COL.boot),slot:2}));
-  loft(g,fr,Math.max(8,seg),"tb");
+  loft(g,fr,lo?6:Math.max(8,seg),"tb");
   if(!lo){ /* the buckles: three straps across the shin, small dark / accent boxes on the outer front */
     [-0.655,-0.735,-0.815].forEach((y,i)=>{ const bk=[0,1].map(q=>ring([0.040+0.004*i+q*0.014,y,z+sd*0.022],0.014,0.030-q*0.008,{bones:[SH,SH,0],col:COL.dark,slot:i===1?1:2,n:3})); loft(g,bk,6,"tb"); }); }
 }
 /* the helmet: a modified sphere (a long shell with a chin bar, an eye port), a peak, the goggles' frame and lens, the strap */
 function addHelmet(g,hi){
-  const c=[0.026,0.742,0], rx=0.158, ry=0.144, rz=0.131, nlon=hi?22:10, nlat=hi?13:6, H=BN.HEAD, sk=[H,H,1,0];
+  const c=[0.026,0.742,0], rx=0.158, ry=0.144, rz=0.131, nlon=hi?22:8, nlat=hi?13:5, H=BN.HEAD, sk=[H,H,1,0];
   const rows=[]; const th0=-0.95, th1=Math.PI/2;
   for(let j=0;j<=nlat;j++){ const th=th0+(th1-th0)*j/nlat; rows.push(th); }
   const base=g.n;
@@ -155,14 +155,14 @@ function addHelmet(g,hi){
     for(let k=0;k<nlon;k++){ const ph=k/nlon*Math.PI*2, dx=Math.cos(th)*Math.cos(ph), dy=Math.sin(th), dz=Math.cos(th)*Math.sin(ph);
       let px=c[0]+rx*dx, py=c[1]+ry*dy, pz=c[2]+rz*dz;
       const fr=sstp(-0.1,0.9,dx), low=sstp(0.15,-0.7,dy), chin=fr*low;
-      px+=0.052*chin; py-=0.024*chin; pz*=1-0.20*chin;
+      px+=0.038*chin; py-=0.022*chin; pz*=1-0.20*chin;
       const port=sstp(0.55,0.70,dx)*sstp(-0.12,0.0,dy)*(1-sstp(0.40,0.50,dy));
       px-=0.010*port; py+=0.0*port;
       px+=0.010*sstp(0.5,0.62,dx)*sstp(0.42,0.5,dy);   /* the brow */
       /* colours: the shell in the team colour, a stripe over the top and a swoosh on each side in the accent colour, the eye port and the chin vent dark */
       let slot=0, col=K1;
-      if(Math.abs(dz)<0.11&&dy>0.15&&dx>-0.8) slot=1;
-      else if(Math.abs(dz)>0.80&&dy>-0.45&&dy<0.32&&dx<0.35&&dx>-0.55) slot=1;
+      if(Math.abs(dz)<0.11&&dy>0.15&&dx>-0.8) slot=3;
+      else if(Math.abs(dz)>0.80&&dy>-0.45&&dy<0.32&&dx<0.35&&dx>-0.55) slot=4;
       if(port>0.35){ slot=2; col=COL.dark; }
       if(dx>0.70&&dy<-0.30){ slot=2; col=COL.dark; }
       if(dx<-0.5&&dy<-0.22){ slot=2; col=COL.mid; }
@@ -176,9 +176,9 @@ function addHelmet(g,hi){
     for(let k=0;k<nlon;k++) g.I.push(ph0+k,ph0+(k+1)%nlon,ci); { /* orient downward */ const n0=g.I.length-nlon*3, P=g.P, a=g.I[n0]*3, b=g.I[n0+1]*3, cc=g.I[n0+2]*3; const ny=(P[b+2]-P[a+2])*(P[cc]-P[a])-(P[b]-P[a])*(P[cc+2]-P[a+2]); if(ny>0) for(let t=n0;t<g.I.length;t+=3){ const s=g.I[t+1]; g.I[t+1]=g.I[t+2]; g.I[t+2]=s; } } }
   /* the peak: a thick curved plate above the eyes, angled up, in the accent colour (a darker underside, a rim) */
   { const nu=hi?5:2, nv=hi?8:4, p0=g.n, W=nv+1;
-    for(let side=0;side<2;side++){ const off=side?0.0065:-0.0065;
+    for(let side=0;side<2;side++){ const off=side?0.0085:-0.0085;
       for(let i=0;i<=nu;i++){ const u=i/nu; for(let j=0;j<=nv;j++){ const v=-1+2*j/nv, w=1-Math.abs(v);
-        const x=0.100+0.205*u+0.022*w*u, y=0.848+0.066*u*u*0.5+0.052*u-0.020*v*v*(0.4+u)-0.0, z=v*(0.094+0.020*u);
+        const x=0.100+0.175*u+0.022*w*u, y=0.842+0.016*u-0.040*v*v*(0.35+0.9*u), z=v*(0.098+0.022*u);
         const cc=side?[0.95,0.95,0.95]:[0.55,0.55,0.55];
         g.vert([x,y+off,z],cc,[BN.HEAD,BN.HEAD,1,0],[1,0,0]); } } }
     const idx=(s2,i,j)=>p0+s2*(nu+1)*W+i*W+j;
@@ -216,8 +216,8 @@ function addBack(g,hi){
 /* ---------------- the whole rider ---------------- */
 /* detail 1: the near rider (own helmet mesh, buckles, folds); 0: the far pack (one mesh, thin rings). Returns the geometries and the triangle counts */
 export function buildRider(detail){
-  const hi=detail>0, seg=hi?14:7, lo=!hi, body=new GB();
-  addTorso(body,seg,lo); addNeck(body,seg,lo); addArm(body,-1,hi?12:6,lo); addArm(body,1,hi?12:6,lo); addLeg(body,-1,hi?12:7,lo); addLeg(body,1,hi?12:7,lo);
+  const hi=detail>0, seg=hi?20:6, lo=!hi, body=new GB();
+  addTorso(body,seg,lo); addNeck(body,seg,lo); addArm(body,-1,hi?12:5,lo); addArm(body,1,hi?12:5,lo); addLeg(body,-1,hi?12:6,lo); addLeg(body,1,hi?12:6,lo);
   let helmet=null;
   if(hi){ const h=new GB(); addHelmet(h,true); helmet=h.geometry(); } else addHelmet(body,false);
   const gb=body.geometry();
