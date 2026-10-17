@@ -98,6 +98,31 @@
   .ps-sec > .bg-section{margin:0;}
   .ps-line{margin:0;padding:.7rem 1rem;border-radius:var(--r-md);background:var(--ink-2);box-shadow:var(--well-edge);font:var(--fw-ui-strong) var(--fs-sm)/1.3 var(--font-ui);color:var(--text-1);}
   .ps-line.is-warn{box-shadow:inset 0 0 0 1px rgba(245,196,81,.55);color:#ffe3a3;}
+  /* getting back in (the CEO, 2026-10-16): the Menu during a game, a seat's invite (room code + seat code + QR), a returning player's request */
+  .ps-rj.bg-sheet{width:min(94vw,66rem);}
+  .pm-acts{display:flex;flex-wrap:wrap;gap:1.5rem;margin:.25rem calc(-1 * var(--focus-room)) .75rem;padding:var(--focus-room);}
+  .pm-sec{display:grid;gap:.7rem;margin-top:.25rem;}
+  .pm-sec > .bg-eyebrow{margin:0;}
+  .pm-note{margin:0;font:var(--fw-body) var(--fs-sm)/1.35 var(--font-ui);color:var(--text-2);}
+  .pm-seats{list-style:none;margin:calc(-1 * var(--focus-room));padding:var(--focus-room);display:grid;gap:1.5rem;}
+  .pm-seats.is-two{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .pm-seat{display:flex;align-items:center;gap:.9rem;min-width:0;padding:.65rem .8rem .65rem .9rem;border-radius:var(--r-lg);background:var(--ink-2);box-shadow:inset 0 0 0 1px var(--line-2),inset .3rem 0 0 var(--seat);}
+  .pm-seat > .bg-token{width:2.6rem;height:2.6rem;font-size:var(--fs-sm);}
+  .pm-seat__t{flex:1;min-width:0;display:grid;gap:.15rem;}
+  .pm-seat__nm{display:flex;align-items:center;gap:.45rem;min-width:0;font:var(--fw-ui-strong) var(--fs-md)/1.2 var(--font-ui);color:var(--text-1);}
+  .pm-seat__nm .bg-player__cpu{position:static;flex:none;width:1.4rem;height:1.4rem;box-shadow:none;}
+  .pm-seat__nm .bg-player__cpu .bg-ico{width:.95rem;height:.95rem;}
+  .pm-seat__why{font:var(--fw-body) var(--fs-sm)/1.3 var(--font-ui);color:var(--text-2);}
+  .pm-seat__exp{font:var(--fw-ui-strong) var(--fs-sm)/1.3 var(--font-ui);color:var(--gold-100);}
+  .pm-inv{flex:none;}
+  .pi-body{display:flex;gap:2.5rem;align-items:center;justify-content:center;margin:.25rem 0 .75rem;}
+  .pi-body .qrimg{width:min(15rem,40vh);}
+  .pi-codes{display:grid;gap:1rem;justify-items:center;}
+  .pi-exp,.pi-gone{margin:0;font:var(--fw-ui-strong) var(--fs-md)/1.3 var(--font-ui);color:var(--text-1);}
+  .pi-gone{padding:1rem 0;}
+  .rj-who{display:flex;gap:1.1rem;align-items:center;margin:.25rem 0 .75rem;}
+  .rj-who > .bg-token{width:3.5rem;height:3.5rem;font-size:var(--fs-lg);}
+  #menubtn{white-space:nowrap;}
   .players{display:grid;grid-template-columns:repeat(auto-fit,minmax(8.75rem,1fr));gap:.75rem;padding:var(--focus-room);margin:calc(-1 * var(--focus-room));}
   .players .bg-seatcard{padding:.9rem .5rem .75rem;gap:.35rem;}
   .players .bg-seatcard .bg-token{width:3rem;height:3rem;font-size:var(--fs-lg);}
@@ -245,7 +270,7 @@
   <header class="bg-topbar" id="topbar">
     <div class="bg-topbar__start"><button class="bg-btn bg-btn--secondary" id="backbtn" type="button" style="display:none"><span id="backicon" data-icon="back" aria-hidden="true"></span><span id="backlbl">Back</span></button></div>
     <div class="bg-topbar__title"><span class="bg-eyebrow" id="barEyebrow">Party Mode</span><span class="bg-topbar__name" id="barName">Pick a game</span><div class="status" id="status" role="status"></div></div>
-    <div class="bg-topbar__end"><span class="bg-chip" id="conn" role="status">connecting…</span></div>
+    <div class="bg-topbar__end"><button class="bg-btn bg-btn--secondary" id="menubtn" type="button" style="display:none" aria-label="Menu: invite a player back"><span data-icon="menu" aria-hidden="true"></span><span>Menu</span></button><span class="bg-chip" id="conn" role="status">connecting…</span></div>
   </header>
   <main class="wrap" id="wrap"></main>
   <div class="bg-sr" id="toast" aria-hidden="true"></div>
@@ -309,6 +334,7 @@ function setBar(eyebrow,name){ var e=$("barEyebrow"), n=$("barName"); if(e) e.te
 function setMode(mode){   /* "select" | "lobby" | "game": the page background, the wrap layout, the bar */
   var b=document.body; b.classList.toggle("bg-app--scene",mode!=="game"); b.classList.toggle("ps-ingame",mode==="game"); b.classList.toggle("ps-lobby",mode==="lobby"); b.classList.remove("ps-mono-side");
   wrap.className="wrap is-"+mode; var st=$("status"); if(st&&mode!=="game") st.innerHTML="";
+  var mb=$("menubtn"); if(mb) mb.style.display=(mode==="game"&&!gameOver)?"":"none";   // getting back in: the Menu (Invite a player back) during a game
   var B=BG(); if(B&&B.toast&&B.toast.place) B.toast.place();
 }
 function hintBar(text,legend){ return '<div class="bg-hintbar" data-stage-text><span id="hint">'+text+'</span><span><span class="bg-key">OK</span> Choose</span><span><span class="bg-key">Back</span> '+(legend||"Quit (press twice)")+'</span></div>'; }
@@ -364,7 +390,8 @@ var AISTAT={trouble:0,sorry:0,mono:0,fallback:0,errors:0};   // how often a Part
 /* step 10: the computers' names. startGame() draws a fresh set from names.js for the seats no phone holds (never a joined phone's name); every Party game reads cpuName(colour) */
 var CPUN={};
 function cpuName(c){ return CPUN[c]||CNAME[c]; }
-window.__fs={get PACE(){ return PACE; },get CPUN(){ return CPUN; },get SKILL(){ return CPU_SKILL; },get AI(){ return AISTAT; },drawCpuNames:function(){ drawCpuNames(); return CPUN; }};   // read-only view for the harnesses
+window.__fs={get PACE(){ return PACE; },get CPUN(){ return CPUN; },get SKILL(){ return CPU_SKILL; },get AI(){ return AISTAT; },drawCpuNames:function(){ drawCpuNames(); return CPUN; },
+  rejoin:{get gone(){ return gone; },get invites(){ return invites; },get asks(){ return rjAsks; },get seat(){ return seat; },open:function(){ return rjLive()?gameCols.filter(seatOpen):[]; }}};   // read-only view for the harnesses (getting back in)
 function drawCpuNames(){
   var humans=Object.keys(seat).map(function(c){ return players[seat[c]]&&players[seat[c]].name; }).filter(Boolean);
   var cpus=computeActive(ORDER()).filter(function(c){ return !seat[c]; }), got=[];
@@ -450,6 +477,16 @@ var lastAsk={};         // pid -> last ask message (for reconnect re-send)
 var leaveHandler=null;  // set by a game whose own state marks seats as human: called with the colour of a phone that left mid-game
 var reqSeq=1;
 var inLobby=true;
+/* ---------- getting back in (the CEO, 2026-10-16: "There has to be a way in case somebody gets kicked out of any game to get back in. Maybe an
+   invite from the host."). Every Party game, built-in and plugin. In a game the TV's Menu lists the seats a computer plays (a phone left, is away,
+   or went quiet; or a computer from the start) with an Invite each: the TV shows the room code, a 4-digit seat code and a QR for INVITE_MS.
+   A phone that joins a started game gets {t:"nojoin", rejoin:1}: it shows a seat-code field; a valid code takes that seat (a person's seat keeps
+   its name and colour, a computer's takes the phone's name), the game hands it back (rejoinHandler), the TV toasts "<name> is back". A phone whose
+   name (or stored pid) matches a seat that is open again also asks the host on the TV (Let them back in / Not now). Never two phones on one seat:
+   the phone that held it gets {t:"bumped"}. gone: colour -> {name, pid} of a phone that left mid-game; invites: code -> {c, code, exp};
+   rjAsks: pid -> {pid, name, c, at, state}; lastSeen: pid -> its last message (a seated phone sends a keep-alive every 8 s) ---------- */
+var gone={}, invites={}, ivOld={}, rjAsks={}, rjQ=[], lastSeen={}, badTries={}, rejoinHandler=null, awayFn=null, gameCols=[];
+var INVITE_MS=5*60*1000, QUIET_MS=25000, ASK_MS=60000;
 
 function send(o,retain){ if(net){ if(o&&o.game===undefined&&chosenGame) o.game=chosenGame; net.send(o,retain); } }   // every message says which game this room is, so a phone can theme itself (older phones ignore it)
 function showConn(s){ connEl.textContent = s==="online"?"relay connected":(s==="connecting"?"connecting…":"reconnecting…"); connEl.setAttribute("data-state",s); }
@@ -493,6 +530,7 @@ function pickColors(){ return chosenGame==="trouble"||chosenGame==="sorry"||!!(p
 function broadcastLobby(){ var m={t:"lobby", players:Object.keys(players).map(function(p){return players[p];})}; if(pickColors()) m.colors=ORDER().slice(); send(m, true); }
 
 function onMsg(o){
+  if(o&&o.pid&&typeof o.pid==="string") lastSeen[o.pid]=Date.now();
   if(o.t==="join"){
     if(players[o.pid]){ players[o.pid].name=o.name||players[o.pid].name; }
     else if(inLobby && Object.keys(players).length<maxPlayers()){
@@ -500,11 +538,12 @@ function onMsg(o){
       players[o.pid]={pid:o.pid,name:(o.name||"Player"),color:color};
       seat[color]=o.pid;
       toast((o.name||"Player")+" joined");
-    } else {
+    } else if(rjLive()){ rejoinTry(o); return; }   // the game is on: a seat code from the TV's invite, or the host is asked (getting back in)
+    else {
       send({t:"nojoin", pid:o.pid, why:inLobby?"full":"started", max:maxPlayers()});   // tell the phone why it can't sit down (room full / game already on)
       return;
     }
-    if(players[o.pid]) send({t:"you", pid:o.pid, color:players[o.pid].color, name:players[o.pid].name});
+    if(players[o.pid]) send({t:"you", pid:o.pid, color:players[o.pid].color, name:players[o.pid].name, started:inLobby?undefined:1});   // started: a reloaded phone shows its game, not the lobby
     if(inLobby){ broadcastLobby(); renderLobby(); }
     else {
       // reconnect during the game: re-send their pending prompt so they don't get stuck on the lobby
@@ -521,8 +560,10 @@ function onMsg(o){
     else {   // mid-game: a computer takes the seat; a prompt the phone was answering gets its safe default
       if(!CPUN[pl.color]){ try{ var ex=Object.keys(CPUN).map(function(k){ return CPUN[k]; }).concat(Object.keys(players).map(function(p){ return players[p].name; }),[pl.name]), g1=window.Names&&window.Names.pick(1,ex); if(g1&&g1[0]) CPUN[pl.color]=g1[0]; }catch(e){} }   // the seat now belongs to a computer: it gets a random name too
       toast(pl.name+" left — the computer plays "+cpuName(pl.color));
+      gone[pl.color]={name:pl.name,pid:o.pid};   // the Menu can invite them back to this seat
       if(leaveHandler) leaveHandler(pl.color);
       settlePending(o.pid);
+      menuRefresh();
     }
   } else if(o.t==="color"){
     var cp=players[o.pid], nc=o.color; if(!cp||!inLobby||!pickColors()) return;
@@ -535,6 +576,187 @@ function onMsg(o){
   }
 }
 function firstFreeColor(){ var order=ORDER(); for(var i=0;i<order.length;i++){ if(!seat[order[i]]) return order[i]; } return "red"; }
+
+/* ---------- getting back in: the seats that are open again, the seat codes, a phone taking a seat back ---------- */
+function rjLive(){ return !inLobby&&!gameOver&&screenState==="game"&&gameCols.length>0; }
+function rjAway(c){ try{ return !!(awayFn&&awayFn(c)); }catch(e){ return false; } }
+function rjQuiet(pid){ return !!pid&&Date.now()-(lastSeen[pid]||0)>QUIET_MS; }
+/* a seat a phone may take: in this game, and no phone holds it, or its phone is away (the computer plays for it) or has gone quiet */
+function seatOpen(c){ return gameCols.indexOf(c)>=0&&(!seat[c]||rjAway(c)||rjQuiet(seat[c])); }
+function seatWhy(c){ return gone[c]&&!seat[c]?"left":!seat[c]?"cpu":rjAway(c)?"away":"quiet"; }
+/* the person of a seat (its name is kept when they come back); "" = a computer's seat from the start (it takes the new phone's name) */
+function seatPerson(c){ if(seat[c]&&players[seat[c]]) return players[seat[c]].name; return gone[c]?gone[c].name:""; }
+function rjClean(n){ return String(n==null?"":n).replace(/[\u0000-\u001f\u007f<>]/g,"").replace(/\s+/g," ").trim().slice(0,12)||"Player"; }
+/* a known player's phone: it left this game from this pid, or its name is the name of a seat that is open again */
+function knownSeat(pid,name){
+  var nm=String(name||"").trim().toLowerCase(), hit=null;
+  gameCols.forEach(function(c){ if(!hit&&seatOpen(c)&&!seat[c]&&gone[c]&&gone[c].pid===pid) hit=c; });
+  if(!hit&&nm) gameCols.forEach(function(c){ var p=seatPerson(c); if(!hit&&p&&seatOpen(c)&&p.trim().toLowerCase()===nm) hit=c; });
+  return hit;
+}
+/* a phone joins the started game: a valid seat code takes the seat; a known player also asks the host; otherwise "ask the host for an invite" */
+function rejoinTry(o){
+  var code=String(o.code==null?"":o.code).replace(/\D/g,"").slice(0,4), bad="", now=Date.now(), bt=badTries[o.pid]||{n:0,at:0};
+  if(code){
+    var iv=invites[code];
+    if(bt.n>=6&&now-bt.at<30000) bad="wait";   // six wrong codes in a row: half a minute before the next try (a 4-digit code is not guessed)
+    else if(!iv&&ivOld[code]===room) bad="expired";   // a code that ran out says so (not "wrong")
+    else if(!iv||iv.room!==room){ bad="wrong"; badTries[o.pid]={n:bt.n+1,at:now}; }
+    else if(now>iv.exp){ bad="expired"; dropInvites(iv.c); menuRefresh(); }
+    else if(!seatOpen(iv.c)){ bad="taken"; dropInvites(iv.c); menuRefresh(); }
+    else { delete badTries[o.pid]; takeSeat(o.pid,o.name,iv.c); return true; }
+  }
+  var kc=knownSeat(o.pid,o.name), asked=kc?askHost(o.pid,o.name,kc):false;
+  send({t:"nojoin", pid:o.pid, why:"started", max:maxPlayers(), rejoin:1, bad:bad||undefined, asked:asked?1:undefined});
+  return false;
+}
+/* the phone takes seat c: never two phones on one seat (the phone that held it, away or quiet, is told and forgotten); a person's seat keeps its
+   name and colour; the game hands the seat back (rejoinHandler: its "human" flags, the hand / private view sent, the computer stops) */
+function takeSeat(pid,name,c){
+  if(!rjLive()||!seatOpen(c)) return false;
+  var old=seat[c], nm=seatPerson(c)||rjClean(name);
+  if(old&&old!==pid){ send({t:"bumped", pid:old, msg:"Another phone took your seat."}); delete lastAsk[old]; delete players[old]; delete seat[c]; settlePending(old); }
+  players[pid]={pid:pid,name:nm,color:c}; seat[c]=pid; lastSeen[pid]=Date.now(); delete gone[c]; dropInvites(c);
+  if(rjAsks[pid]) rjAsks[pid].state="done";
+  rjCloseAsk(null,c);
+  send({t:"you", pid:pid, color:c, name:nm, started:1});
+  if(!noWait) send({t:"wait", pid:pid, msg:"You’re back in. Waiting for your turn…"});
+  try{ if(rejoinHandler) rejoinHandler(c,nm); else if(gameSnap) gameSnap(); }catch(e){ try{ console.warn(e); }catch(x){} if(gameSnap) gameSnap(); }
+  resendFirst(pid);
+  toast(nm+" is back"); try{ Sound.sfx("turn"); }catch(e){}
+  var B=BG(), ie=$("pmInvite"); if(ie&&ie._c===c&&B&&B.sheet&&B.sheet.isOpen(ie)){ B.sheet.close(ie); closeMenu(); }   // the invite on screen was used: back to the game
+  menuRefresh();
+  return true;
+}
+/* the seat codes: 4 digits, one per seat, for INVITE_MS (a new invite for the seat replaces the old one; used = gone) */
+function inviteFor(c){ var r=null; Object.keys(invites).forEach(function(k){ if(invites[k].c===c&&invites[k].room===room) r=invites[k]; }); return r; }
+function dropInvites(c){ Object.keys(invites).forEach(function(k){ if(c==null||invites[k].c===c) delete invites[k]; }); }
+function makeInvite(c){ dropInvites(c); var code; do{ code=String(1000+Math.floor(Math.random()*9000)); }while(invites[code]||ivOld[code]); invites[code]={c:c,code:code,room:room,exp:Date.now()+INVITE_MS}; rjTickOn(); return invites[code]; }
+function mmss(ms){ var s=Math.max(0,Math.ceil(ms/1000)); return Math.floor(s/60)+":"+("0"+(s%60)).slice(-2); }
+function rjReset(){ var B=BG(); ["pmInvite","rjAsk","pmMenu"].forEach(function(id){ var el=$(id); if(!el) return; if(B&&B.sheet&&B.sheet.isOpen(el)){ el._quiet=true; try{ B.sheet.close(el); }catch(e){} el._quiet=false; } if(el.parentNode) el.parentNode.removeChild(el); });   // a new game or the picker: the old sheets go (no old room code left in the page)
+  gone={}; invites={}; ivOld={}; rjAsks={}; rjQ=[]; badTries={}; rejoinHandler=null; awayFn=null; gameCols=[]; rjTickOff(); }
+/* the game ended: invites and requests end; an open Menu offers See the result */
+function rjOver(){ var B=BG(); dropInvites();
+  ["pmInvite","rjAsk"].forEach(function(id){ var el=$(id); if(el&&B&&B.sheet&&B.sheet.isOpen(el)){ el._quiet=true; try{ B.sheet.close(el); }catch(e){} el._quiet=false; } });
+  Object.keys(rjAsks).forEach(function(p){ var a=rjAsks[p]; if(a.state==="open"){ a.state="no"; send({t:"nojoin", pid:p, why:"started", max:maxPlayers()}); } }); rjQ=[];
+  var mb=$("menubtn"); if(mb) mb.style.display="none"; if(menuOpen()) renderMenu(); }
+/* one 1-second tick while an invite, a request or the Menu is up: the countdowns, an invite running out, a request nobody answered */
+var rjTimer=0, rjSig="";
+function rjTickOn(){ if(!rjTimer) rjTimer=setInterval(rjTick,1000); }
+function rjTickOff(){ if(rjTimer){ clearInterval(rjTimer); rjTimer=0; } }
+function rjTick(){
+  var now=Date.now(), B=BG(), ie=$("pmInvite"), invOpen=!!(ie&&B&&B.sheet&&B.sheet.isOpen(ie));
+  Object.keys(invites).forEach(function(k){ if(now>invites[k].exp){ ivOld[k]=invites[k].room; delete invites[k]; } });
+  if(invOpen) inviteTime();
+  Object.keys(rjAsks).forEach(function(p){ var a=rjAsks[p]; if(a.state==="open"&&now-a.at>ASK_MS) answerAsk(p,false,"time"); });
+  if(menuOpen()){ var sig=menuSig(); if(sig!==rjSig) renderMenu(); else Array.prototype.forEach.call(document.querySelectorAll("#pmMenu [data-exp]"),function(el){ var iv=inviteFor(el.getAttribute("data-exp")); if(iv) el.textContent="Seat code "+iv.code+" · "+mmss(iv.exp-now)+" left"; }); }
+  if(!invOpen&&!menuOpen()&&!Object.keys(invites).length&&!rjQ.length) rjTickOff();
+}
+
+/* ---------- the TV's Menu during a game: Resume, Invite a player back, New game ---------- */
+function menuOpen(){ var B=BG(), el=$("pmMenu"); return !!(el&&B&&B.sheet&&B.sheet.isOpen(el)); }
+function rjSheet(id,label){ var el=$(id); if(!el){ el=document.createElement("section"); el.className="bg-sheet ps-rj"; el.id=id; el.setAttribute("aria-labelledby",label); document.body.appendChild(el); } return el; }
+function menuSig(){ return (gameOver?"over|":"")+gameCols.map(function(c){ var iv=inviteFor(c); return seatOpen(c)?c+":"+seatWhy(c)+":"+seatPerson(c)+":"+(iv?iv.code:""):""; }).join(","); }
+function openMenu(){
+  var B=BG(); if(screenState!=="game"||!B||!B.sheet) return false;
+  var el=rjSheet("pmMenu","pmTitle"); renderMenu();
+  if(!B.sheet.isOpen(el)) B.sheet.open(el,{dismissible:true,focus:gameOver?"#pmSee":"#pmResume",onClose:function(){ if(el._quiet) return; if(gameOver&&!winShown) setTimeout(openVictory,250); }});
+  rjTickOn(); return true;
+}
+function closeMenu(){ var B=BG(), el=$("pmMenu"); if(el&&B&&B.sheet&&B.sheet.isOpen(el)) B.sheet.close(el); }
+function menuRefresh(){ if(menuOpen()) renderMenu(); }
+function renderMenu(){
+  var el=$("pmMenu"); if(!el) return; rjSig=menuSig();
+  var fa=document.activeElement, fk=fa&&el.contains(fa)?(fa.getAttribute("data-inv")||fa.id):null, now=Date.now(), B=BG();
+  var rows=rjLive()?gameCols.filter(seatOpen):[];
+  var why={left:" left the game. The computer plays the seat.",away:" is away. The computer plays for them.",quiet:"’s phone lost the connection.",cpu:" is a computer. A new phone can take this seat."};
+  var list=rows.map(function(c){ var w=seatWhy(c), nm=seatPerson(c)||cpuName(c), iv=inviteFor(c);
+    return '<li class="pm-seat" style="'+seatStyle(COL[c]||"#888888")+'"><span class="bg-token" aria-hidden="true">'+esc((nm.trim().charAt(0)||"?").toUpperCase())+'</span>'+
+      '<span class="pm-seat__t"><span class="pm-seat__nm">'+esc(nm)+(w==="cpu"&&B&&B.icon?'<span class="bg-player__cpu" title="Computer">'+B.icon("cpu")+'</span>':"")+'</span><span class="pm-seat__why">'+esc(nm+why[w])+'</span>'+
+      (iv?'<span class="pm-seat__exp" data-exp="'+attr(c)+'">Seat code '+esc(iv.code)+' · '+mmss(iv.exp-now)+' left</span>':'')+'</span>'+
+      '<button type="button" class="bg-btn bg-btn--secondary pm-inv" data-inv="'+attr(c)+'" aria-label="'+attr((iv?"Show the invite for ":"Invite ")+nm+" back")+'"><span data-icon="qr" aria-hidden="true"></span>'+(iv?"Show code":"Invite")+'</button></li>'; }).join("");
+  el.innerHTML='<div class="bg-sheet__grip" aria-hidden="true"></div><div class="bg-sheet__head"><div><h2 class="bg-sheet__title" id="pmTitle">Menu</h2><p class="bg-sheet__sub">'+esc(gameTitle(chosenGame))+' · Room '+esc(room||"")+(gameOver?' · the game is over':' · the phones keep playing while this is open')+'</p></div></div>'+
+    '<div class="pm-acts">'+(gameOver?'<button type="button" class="bg-btn bg-btn--primary bg-btn--lg" id="pmSee"><span data-icon="trophy" aria-hidden="true"></span>See the result</button>':'<button type="button" class="bg-btn bg-btn--primary bg-btn--lg" id="pmResume"><span data-icon="resume" aria-hidden="true"></span>Resume</button>')+
+    '<button type="button" class="bg-btn bg-btn--secondary bg-btn--lg" id="pmNew"><span data-icon="play" aria-hidden="true"></span><span id="pmNewL">New game</span></button></div>'+
+    (gameOver?'':'<section class="pm-sec" aria-labelledby="pmInvT"><h3 class="bg-eyebrow" id="pmInvT">Invite a player back</h3>'+
+      (rows.length?'<p class="pm-note">Pick a seat. The TV shows its code; the player scans it or types it on their phone and takes the seat back.</p><ul class="pm-seats'+(rows.length>4?" is-two":"")+'">'+list+'</ul>'
+        :'<p class="pm-note">Everyone is at the table. A seat shows up here when a player leaves, is away or loses the connection, and for the computers.</p>')+'</section>');
+  paintIcons(el);
+  var rs=$("pmResume"); if(rs) rs.onclick=closeMenu;
+  var se=$("pmSee"); if(se) se.onclick=function(){ closeMenu(); };
+  var nb=$("pmNew"); nb.onclick=function(){
+    if(!gameOver&&!nb._armed){ nb._armed=true; $("pmNewL").textContent="Press again to end this game"; clearTimeout(nb._t); nb._t=setTimeout(function(){ nb._armed=false; var l=$("pmNewL"); if(l) l.textContent="New game"; },3000); return; }
+    clearTimeout(nb._t); el._quiet=true; closeMenu(); el._quiet=false; if(!gameOver){ try{ send({t:"wait", pid:"*", msg:"Host left the game"}); }catch(e){} runId++; settlePending(); lastAsk={}; } seat={}; players={}; screenSelect(); };   // as Back twice / New Game
+  Array.prototype.forEach.call(el.querySelectorAll("button[data-inv]"),function(b){ b.onclick=function(){ openInvite(b.getAttribute("data-inv")); }; });
+  if(fk){ var nf=el.querySelector('[data-inv="'+fk+'"]')||$(fk); if(!nf) nf=el.querySelector("button[data-inv]")||$("pmResume")||$("pmSee"); if(nf){ if(B&&B.focus&&B.focus.enabled&&B.focus.set) B.focus.set(nf); else nf.focus(); } }
+}
+/* the invite on the TV: the room code, the seat code and a QR that opens the phone page with both (play.html?room=...&seat=...) */
+function openInvite(c){
+  var B=BG(); if(!rjLive()||!seatOpen(c)||!B||!B.sheet) return;
+  var iv=inviteFor(c)||makeInvite(c), el=rjSheet("pmInvite","piTitle"); el._c=c;
+  renderInvite(c,iv);
+  if(!B.sheet.isOpen(el)) B.sheet.open(el,{dismissible:true,focus:"#piDone"});
+  menuRefresh(); rjTickOn();
+}
+function renderInvite(c,iv){
+  var el=$("pmInvite"); if(!el) return;
+  var nm=seatPerson(c)||cpuName(c), url=JOIN_URL+"&seat="+(iv?iv.code:""), qr="";
+  if(iv){ try{ qr=QR.svg(url,{margin:3,cls:"qrimg"}); }catch(e){ qr=""; } }
+  var digits=function(s){ return '<div class="code" aria-label="'+attr(s.split("").join(" "))+'">'+s.split("").map(function(ch){ return "<span>"+esc(ch)+"</span>"; }).join("")+'</div>'; };
+  el.innerHTML='<div class="bg-sheet__grip" aria-hidden="true"></div><div class="bg-sheet__head"><div><h2 class="bg-sheet__title" id="piTitle">'+(seatPerson(c)?"Invite "+esc(nm)+" back":"A new player for "+esc(nm)+"’s seat")+'</h2>'+
+    '<p class="bg-sheet__sub">On the phone: scan the code, or open <b>'+esc(SHORT_URL.replace(/\?.*$/,""))+'</b>, type the room code, then the seat code.</p></div></div>'+
+    (iv?'<div class="pi-body">'+(qr?'<div class="qrbox">'+qr+'</div>':'')+'<div class="pi-codes"><div class="codewrap"><span class="bg-eyebrow">Room code</span>'+digits(room)+'</div>'+
+      '<div class="codewrap"><span class="bg-eyebrow">Seat code</span>'+digits(iv.code)+'</div><p class="pi-exp" id="piExp" role="status"></p></div></div>'
+      :'<p class="pi-gone" role="status">This invite ran out. Make a new code for the seat.</p>')+
+    '<div class="pm-acts">'+(iv?'<button type="button" class="bg-btn bg-btn--primary bg-btn--lg" id="piDone"><span data-icon="check" aria-hidden="true"></span>Done</button><button type="button" class="bg-btn bg-btn--secondary bg-btn--lg" id="piStop"><span data-icon="close" aria-hidden="true"></span>Cancel the invite</button>'
+      :'<button type="button" class="bg-btn bg-btn--primary bg-btn--lg" id="piNew"><span data-icon="qr" aria-hidden="true"></span>New code</button><button type="button" class="bg-btn bg-btn--secondary bg-btn--lg" id="piDone"><span data-icon="back" aria-hidden="true"></span>Back</button>')+'</div>';
+  paintIcons(el); inviteTime();
+  var B=BG(), close=function(){ if(B&&B.sheet&&B.sheet.isOpen(el)) B.sheet.close(el); };
+  $("piDone").onclick=close;
+  var st=$("piStop"); if(st) st.onclick=function(){ dropInvites(c); close(); menuRefresh(); };
+  var nw=$("piNew"); if(nw) nw.onclick=function(){ if(!rjLive()||!seatOpen(c)){ close(); menuRefresh(); return; } renderInvite(c,makeInvite(c)); var d=$("piDone"); if(d){ if(B&&B.focus&&B.focus.enabled&&B.focus.set) B.focus.set(d); else d.focus(); } menuRefresh(); };
+}
+function inviteTime(){ var el=$("pmInvite"); if(!el||!el._c) return; var iv=inviteFor(el._c), ex=$("piExp");
+  if(!iv){ if(ex||!$("piNew")){ renderInvite(el._c,null); var B=BG(), n=$("piNew"); if(n){ if(B&&B.focus&&B.focus.enabled&&B.focus.set) B.focus.set(n); else n.focus(); } } return; }
+  if(ex) ex.textContent="Works once, for "+mmss(iv.exp-Date.now())+" more"; }
+/* a known player's phone asks to come back: the TV asks the host (Let them back in / Not now; Back = not now; nobody answers in ASK_MS = not now) */
+function askHost(pid,name,c){
+  var a=rjAsks[pid], now=Date.now();
+  if(a&&a.state==="open"){ a.c=c; return true; }
+  if(a&&a.state==="no"&&now-a.at<10000) return false;   // just declined: a knock straight after is not a new question
+  rjAsks[pid]={pid:pid,name:rjClean(name),c:c,at:now,state:"open"}; if(rjQ.indexOf(pid)<0) rjQ.push(pid);
+  showNextAsk(); rjTickOn(); return true;
+}
+function showNextAsk(){
+  var B=BG(); if(!B||!B.sheet) return; var el=rjSheet("rjAsk","rjTitle");
+  if(B.sheet.isOpen(el)) return;
+  while(rjQ.length&&(!rjAsks[rjQ[0]]||rjAsks[rjQ[0]].state!=="open")) rjQ.shift();
+  if(!rjQ.length||!rjLive()) return;
+  var a=rjAsks[rjQ[0]], c=a.c, person=seatPerson(c)||cpuName(c), w=seatWhy(c);
+  el._pid=a.pid;
+  el.innerHTML='<div class="bg-sheet__grip" aria-hidden="true"></div><div class="rj-who" style="'+seatStyle(COL[c]||"#888888")+'"><span class="bg-token" aria-hidden="true">'+esc((a.name.charAt(0)||"?").toUpperCase())+'</span><div>'+
+    '<h2 class="bg-sheet__title" id="rjTitle">'+esc(a.name)+' wants to come back</h2><p class="bg-sheet__sub">A phone asks for '+esc(person)+'’s seat ('+esc(CNAME[c]||c)+'). '+(w==="away"||w==="quiet"?"The computer is playing for "+esc(person)+" now.":"The computer plays it now.")+'</p></div></div>'+
+    '<div class="pm-acts"><button type="button" class="bg-btn bg-btn--primary bg-btn--lg" id="rjYes" data-autofocus><span data-icon="check" aria-hidden="true"></span>Let them back in</button><button type="button" class="bg-btn bg-btn--secondary bg-btn--lg" id="rjNo"><span data-icon="close" aria-hidden="true"></span>Not now</button></div>';
+  paintIcons(el); Sound.sfx("bell");
+  $("rjYes").onclick=function(){ answerAsk(a.pid,true); };
+  $("rjNo").onclick=function(){ answerAsk(a.pid,false); };
+  B.sheet.open(el,{dismissible:true,focus:"#rjYes",onClose:function(reason){ if(el._quiet) return; var p=el._pid; el._pid=null; if(p&&rjAsks[p]&&rjAsks[p].state==="open") answerAsk(p,false,"back"); else setTimeout(showNextAsk,300); }});
+}
+/* seat c was taken: another phone asking for it hears "taken"; the request on screen closes when it is no longer open */
+function rjCloseAsk(pid,c){
+  Object.keys(rjAsks).forEach(function(p){ var a=rjAsks[p]; if(a.state==="open"&&p!==pid&&a.c===c){ a.state="no"; a.at=Date.now(); send({t:"nojoin", pid:p, why:"started", max:maxPlayers(), rejoin:1, bad:"taken"}); } });
+  var B=BG(), el=$("rjAsk"); if(!el||!el._pid||!B||!B.sheet||!B.sheet.isOpen(el)) return;
+  var a=rjAsks[el._pid]; if(a&&a.state==="open") return;
+  el._pid=null; el._quiet=true; B.sheet.close(el); el._quiet=false; setTimeout(showNextAsk,300);
+}
+function answerAsk(pid,yes,how){
+  var a=rjAsks[pid]; if(!a||a.state!=="open") return;
+  var B=BG(), el=$("rjAsk");
+  if(el&&el._pid===pid&&B&&B.sheet&&B.sheet.isOpen(el)){ el._pid=null; el._quiet=true; B.sheet.close(el); el._quiet=false; }
+  if(yes&&rjLive()&&seatOpen(a.c)){ a.state="done"; takeSeat(pid,a.name,a.c); }
+  else { a.state="no"; a.at=Date.now(); send({t:"nojoin", pid:pid, why:"started", max:maxPlayers(), rejoin:1, declined:yes?undefined:1, bad:yes?"taken":undefined}); if(!yes) toast("Not now: "+a.name+" can still join with an invite"); }
+  setTimeout(showNextAsk,300);
+}
 
 /* ask a player's phone; resolves with their choice. Shows a TV hint while waiting,
    and auto-advances after a long timeout so a non-responding phone can't hang the game. */
@@ -617,7 +839,7 @@ function standCmp(a,b){ if(!!b.win!==!!a.win) return b.win?1:-1; var as=a.s||[],
   var aa=a.at==null?Infinity:+a.at, ba=b.at==null?Infinity:+b.at; if(aa!==ba) return aa<ba?-1:1; return (a.k||0)-(b.k||0); }
 function standHTML(rows){ if(!rows||!rows.length) return "";
   return '<ol class="ps-stand'+(rows.length>5?" is-two":"")+(rows.length>10?" is-many":"")+'" aria-label="Standings">'+rows.map(function(r,i){ return '<li><span class="ps-stand__n">'+(i+1)+'</span><span class="dot" style="background:'+attr(r.color)+'" aria-hidden="true"></span><span class="ps-stand__nm">'+esc(r.name)+'</span><span class="ps-stand__v">'+esc(r.v)+'</span></li>'; }).join("")+'</ol>'; }
-function announceOver(name){ gameOver=true; winnerName=name; lastStand=standRows(); Sound.sfx("win"); send({t:"over", winner:name, n:gamePlayers, ms:gameStartedAt?Date.now()-gameStartedAt:0, standings:lastStand}, true); }
+function announceOver(name){ gameOver=true; rjOver(); winnerName=name; lastStand=standRows(); Sound.sfx("win"); send({t:"over", winner:name, n:gamePlayers, ms:gameStartedAt?Date.now()-gameStartedAt:0, standings:lastStand}, true); }
 
 /* ---------- toast ---------- */
 var toastT;
@@ -631,7 +853,7 @@ function dressTiles(){ var B=BG(); if(!B||!B.icon) return;
   Array.prototype.forEach.call(document.querySelectorAll("#cards .gc"),function(t){ var g=t.getAttribute("data-game"), sl=t.querySelector(".bg-tile__seal"), bd=t.querySelector(".bg-tile__badge");
     if(sl&&!sl.firstChild&&B.icon.seal) sl.innerHTML=B.icon(B.icon.seal(g)); if(bd&&!bd.querySelector("svg")) bd.insertAdjacentHTML("afterbegin",B.icon("user")); }); }
 function screenSelect(){
-  runId++; pgEnd(); closeFirstShow(); closeRulingSheet(); settlePending(); noWait=false; inLobby=true; screenState="select"; gameSnap=null; viewHandler=null; leaveHandler=null; unguardHistory(); closeWin(); Skins.apply("party"); Sound.music("menu"); setBack(window.AndroidTV?"Exit":"Hub", true);
+  runId++; pgEnd(); closeFirstShow(); closeRulingSheet(); rjReset(); settlePending(); noWait=false; inLobby=true; screenState="select"; gameSnap=null; viewHandler=null; leaveHandler=null; unguardHistory(); closeWin(); Skins.apply("party"); Sound.music("menu"); setBack(window.AndroidTV?"Exit":"Hub", true);
   closeRoom("The host went back to the game menu.");                  // each game gets its own brand-new room
   setTimeout(function(){ if(screenState==="select") prepRoom(); },400);   // after the picker is on screen
   setMode("select"); setBar("Play together","Party Mode");
@@ -699,6 +921,19 @@ backbtn.onclick=function(){
     runId++; settlePending(); seat={}; players={}; lastAsk={}; screenSelect();
   }
 };
+/* getting back in: the Menu during a game (the top bar button, or the remote's Menu key) */
+$("menubtn").onclick=function(){ openMenu(); };
+/* the remote's Back as a KEY (FOLLOWUPS party-escape-back): Escape / GoBack / BrowserBack, and Backspace outside a text field, take the same
+   one step as window.__tvBack (a sheet, the who-goes-first show and the sound panel take their own Back key first); a TV browser that sends
+   the key AND history.back() for one press counts once (popstate below) */
+var backKeyAt=0;
+document.addEventListener("keydown",function(e){
+  if(e.defaultPrevented||e.altKey||e.ctrlKey||e.metaKey) return;
+  var k=e.key, t=e.target, field=!!t&&(t.tagName==="TEXTAREA"||t.isContentEditable||(t.tagName==="INPUT"&&!/^(checkbox|radio|button|submit|reset|range|color|image|file)$/i.test(t.type||"text")));
+  if(k==="ContextMenu"||k==="Menu"||e.keyCode===93){ if(screenState==="game"&&!gameOver&&!menuOpen()){ e.preventDefault(); openMenu(); } return; }
+  if(!(k==="Escape"||k==="Esc"||k==="GoBack"||k==="BrowserBack"||e.keyCode===27||e.keyCode===4||((k==="Backspace"||e.keyCode===8)&&!field))) return;
+  e.preventDefault(); backKeyAt=Date.now(); window.__tvBack();
+});
 /* Fire TV app: the remote Back button calls this */
 window.__tvBack=function(){   // one step per press: the sound panel, a sheet, the Victory screen, then this screen's own Back
   var B=BG(); if(B&&B.back&&B.back.step){ B.back.step("app"); return; }
@@ -712,6 +947,7 @@ function guardHistory(){ try{ if(!(history.state&&history.state.bgGuard)) histor
 function unguardHistory(){ try{ if(history.state&&history.state.bgGuard){ unguarding=true; history.back(); } }catch(e){} }
 window.addEventListener("popstate",function(){
   if(unguarding){ unguarding=false; if(screenState!=="select") guardHistory(); return; }
+  if(Date.now()-backKeyAt<700){ if(screenState!=="select") guardHistory(); return; }   // the same press already came as a Back key
   if(screenState==="select") return;
   window.__tvBack();
   if(screenState!=="select") guardHistory();
@@ -885,11 +1121,11 @@ function PG(){ return window.PartyGames||null; }
 function plugE(id){ var P=PG(); return (P&&P.get&&P.get(id||chosenGame))||null; }   // the registry line when the (chosen) game is a plugin
 function plugD(){ var P=PG(); return (plugE()&&P.tv(chosenGame))||null; }            // its TV side, once loaded
 function pgOrder(e){ var c=(e.colors&&e.colors.length?e.colors:ORDERU).slice(); return c.slice(0,Math.max(1,Math.min(c.length,e.max||c.length))); }
-var pgCfg={}, pgEnds=[], pgAfk={}, pgLoading=null, pgView=null, pgLeave=null, pgTake=null;
+var pgCfg={}, pgEnds=[], pgAfk={}, pgLoading=null, pgView=null, pgLeave=null, pgTake=null, pgRejoin=null;
 function pgDefaults(){ var d=plugD(); try{ return (d&&d.defaults&&d.defaults())||{}; }catch(e){ return {}; } }
 function pgRestore(s){ var d=plugD(); try{ return d&&d.restore?(d.restore(s)||pgDefaults()):s; }catch(e){ return pgDefaults(); } }
 function pgLobbyMark(){ var e=plugE(); if(e) document.documentElement.setAttribute("data-pgame",e.id); else document.documentElement.removeAttribute("data-pgame"); }   // a plugin's CSS is scoped by html[data-pgame="<id>"]
-function pgEnd(){ var f=pgEnds; pgEnds=[]; f.forEach(function(fn){ try{ fn(); }catch(e){} }); pgAfk={}; pgView=null; pgLeave=null; pgTake=null; document.documentElement.removeAttribute("data-pgame"); }
+function pgEnd(){ var f=pgEnds; pgEnds=[]; f.forEach(function(fn){ try{ fn(); }catch(e){} }); pgAfk={}; pgView=null; pgLeave=null; pgTake=null; pgRejoin=null; document.documentElement.removeAttribute("data-pgame"); }
 /* a plugin tile: load its TV files (once), then its lobby; a failed load stays on the picker with a toast */
 function pickPlugin(id,tile){
   var P=PG(), e=plugE(id); if(!P||!e||pgLoading) return;
@@ -914,12 +1150,17 @@ function pgLobbyApi(){ return {
 function pgRank(rows){ return (rows||[]).filter(Boolean).slice().sort(standCmp).map(function(r,i){ var o={}; for(var k in r) o[k]=r[k]; o.place=i+1; return o; }); }
 function pgSeatOf(pid){ var c=null; Object.keys(seat).forEach(function(k){ if(seat[k]===pid) c=k; }); return c; }
 function playPlugin(){
-  var myRun=++runId, d=plugD(), e=plugE(); noWait=d.noWait===true; pgAfk={}; pgView=null; pgLeave=null; pgTake=null;
+  var myRun=++runId, d=plugD(), e=plugE(); noWait=d.noWait===true; pgAfk={}; pgView=null; pgLeave=null; pgTake=null; pgRejoin=null;
   var H=pgHost(myRun,e);
   viewHandler=function(o){ var c=pgSeatOf(o.pid); if(!c||myRun!==runId) return;
     if(o.take){ if(pgAfk[c]){ pgAfk[c]=false; if(pgTake) pgTake(c); else if(gameSnap) gameSnap(); } return; }   // "Take over" on an away phone
     if(pgView&&o.pg!==undefined) pgView(c,o.pg,o); };
   leaveHandler=function(c){ delete pgAfk[c]; if(pgLeave&&myRun===runId) pgLeave(c); };   // the seat is a computer's now (H.isPhone(c) false)
+  /* getting back in: a phone took seat c (an invite, or the host let it back in); H.name(c) is that player's name again. A plugin's H.onRejoin(fn)
+     hands the seat back; without one the host runs its onLeave (it re-reads H.name(c): the name, the token) and then its onTakeOver (the seat's
+     "human" flag, the phone's view), the same two steps a leave and a Take over already take */
+  rejoinHandler=function(c){ delete pgAfk[c]; if(myRun!==runId) return; if(pgRejoin){ pgRejoin(c); return; } if(pgLeave) pgLeave(c); if(pgTake) pgTake(c); else if(gameSnap) gameSnap(); };
+  awayFn=function(c){ return !!pgAfk[c]; };
   enterGame(); Skins.apply(d.skin||e.id);
   var fail=function(err){ if(myRun!==runId) return; try{ console.error(err); }catch(x){} toast(e.title+" hit a problem. Back to the games.");
     setTimeout(function(){ if(myRun!==runId) return; try{ send({t:"wait", pid:"*", msg:"The host went back to the game menu."}); }catch(x){} runId++; settlePending(); seat={}; players={}; lastAsk={}; screenSelect(); },1800); };
@@ -957,7 +1198,7 @@ function pgHost(myRun,e){
     waitAll:function(except,turnC,msg){ if(!live()) return; cols.forEach(function(c){ if(c!==except&&seat[c]&&!pgAfk[c]) waitPhone(c,msg||(colName(turnC)+"’s turn…"),turnC); }); },
     info:function(c,msg){ var pid=seat[c]; if(pid&&live()) send({t:"info",pid:pid,msg:msg}); },
     onReconnect:function(fn){ gameSnap=fn?function(){ if(live()) fn(); }:null; },
-    onView:function(fn){ pgView=fn; }, onLeave:function(fn){ pgLeave=fn; }, onTakeOver:function(fn){ pgTake=fn; }, onEnd:function(fn){ pgEnds.push(fn); },
+    onView:function(fn){ pgView=fn; }, onLeave:function(fn){ pgLeave=fn; }, onTakeOver:function(fn){ pgTake=fn; }, onRejoin:function(fn){ pgRejoin=fn; }, onEnd:function(fn){ pgEnds.push(fn); },
     /* the TV */
     frame:function(html,hint){ enterGame(); wrap.innerHTML=html+hintBar(hint||"Players: use your phones"); paintIcons(wrap); return wrap; },
     status:setStatus, hint:function(t){ var h=$("hint"); if(h) h.textContent=t; }, toast:toast,
@@ -979,6 +1220,7 @@ function pgHost(myRun,e){
 
 function startGame(){
   drawCpuNames();   // step 10: fresh random names for this game's computers (also on "Play again")
+  rjReset(); gameCols=computeActive(ORDER()); Object.keys(seat).forEach(function(c){ lastSeen[seat[c]]=Date.now(); });   // getting back in: this game's seats; the games set rejoinHandler / awayFn
   inLobby=false; gameOver=false; leaveHandler=null; standFn=null; lastStand=null; Sound.skip(); winnerName=""; gameStartedAt=Date.now(); gamePhones=Object.keys(seat).length; gamePlayers=computeActive(ORDER()).length;   // each game sets its own leaveHandler
   send({t:"started"}, true);   // retained so a reconnecting phone knows the game is on (not the lobby)
   if(chosenGame==="trouble") playTrouble();
@@ -1009,6 +1251,7 @@ function playTrouble(){
   var active=computeActive(order);
   var human={}; active.forEach(function(c){ human[c]=!!seat[c]; });
   leaveHandler=function(c){ human[c]=false; };                // a phone left: the computer plays that colour
+  rejoinHandler=function(c){ human[c]=true; };                // getting back in: a phone took the seat (by invite): its turns go to the phone again
   var pegs={}; active.forEach(function(c){ pegs[c]=[null,null,null,null]; });
   var die=0, turn=0, sixStreak=0, over=false;
   standFn=function(){ return active.map(function(c,k){ var home=pegs[c].filter(function(d){ return d!==null&&d>=28; }).length, prog=pegs[c].reduce(function(a,d){ return a+(d==null?0:d+1); },0); return {name:colName(c),color:COL[c],k:k,s:[home,prog],v:home+" of 4 home"}; }); };
@@ -1295,6 +1538,7 @@ function playSorry(){
   standFn=function(){ return active.map(function(c,k){ var home=pawns[c].filter(function(p){ return p.loc.t==="home"; }).length, safe=pawns[c].filter(function(p){ return p.loc.t==="safe"; }).length, out=pawns[c].filter(function(p){ return p.loc.t!=="start"; }).length; return {name:colName(c),color:COL[c],k:k,s:[home,safe,out],v:home+" of 4 home"}; }); };
   var human={}; active.forEach(function(c){ human[c]=!!seat[c]; });
   leaveHandler=function(c){ human[c]=false; };                // a phone left: the computer plays that colour
+  rejoinHandler=function(c){ human[c]=true; };                // getting back in: a phone took the seat (by invite): its turns go to the phone again
   var deck=shuffle(buildDeck()), over=false;
 
   function allP(){ var a=[]; active.forEach(function(c){ a=a.concat(pawns[c]); }); return a; }
@@ -2043,6 +2287,7 @@ function playRummy(){
   var G=GM.newGame(fpCut?{names:names,humans:humans,opts:opts,dealer:(fpCut.winner-1+active.length)%active.length}:{names:names,humans:humans,opts:opts}); G.skill=CPU_SKILL;
   standFn=function(){ var U=G.units||G.players.map(function(p,i){ return [i]; }); return U.map(function(u,ui){ var sc=G.scores?G.scores[ui]:G.players[u[0]].score; return {name:u.map(function(i){ return G.players[i].name; }).join(" & "),color:COL[active[u[0]]],k:ui,s:[sc|0],v:(sc|0)+" pts"}; }); };   // step 10: the Computer skill row (rummy500/brain.js reads G.skill)
   leaveHandler=function(c){ var i=active.indexOf(c); if(i>=0) G.players[i].human=false; };   // a phone left: the computer plays that hand
+  rejoinHandler=function(c,nm){ var i=active.indexOf(c); if(i<0) return; G.players[i].human=true; G.players[i].name=nm; names[i]=nm; draw(); pushAll(askingIdx); };   // getting back in: the phone gets the hand, the computer stops
   if(G.o.teams){ var c0=COL[active[0]], c1=COL[active[1]]; G.colors=[c0,c1,c0,c1]; } else G.colors=active.map(function(c){ return COL[c]; });
   G.logText=[];
   var flashMeld=null, flashCard=null, mirrorPf=null, askingIdx=-1;
@@ -2172,6 +2417,8 @@ function playRisk(){
   function pushAll(skip){ G.players.forEach(function(p,i){ if(p.human&&seat[seatOf(i)]&&i!==skip){ var st=E.snapshot(G,i); if(afk[i]) st.afk=true; send({t:"rks",pid:seat[seatOf(i)],st:st}); } }); }
   gameSnap=function(){ pushAll(askingIdx); };
   viewHandler=function(o){ if(o.take){ G.players.forEach(function(p,i){ if(seat[seatOf(i)]===o.pid&&afk[i]){ afk[i]=false; pushAll(-1); } }); } };
+  rejoinHandler=function(c,nm){ var i=active.indexOf(c); if(i<0) return; afk[i]=false; G.players[i].human=true; G.players[i].name=nm; drawTv(); pushAll(askingIdx); };   // getting back in: the phone gets its cards and mission, the computer stops
+  awayFn=function(c){ var i=active.indexOf(c); return i>=0&&!!afk[i]; };
   function doAction(a){
     var res; try{ res=E.applyAction(G,a); }catch(e){ res={ok:false,msg:"That move isn't valid."}; }
     if(!res.ok) return res;
@@ -2268,6 +2515,8 @@ function playUno(){
   }
   function snapFor(i){ var st=UE.snapshot(G,i); st.cols=cols; st.seats=active.map(seatNo); if(afk[i]) st.afk=true; return st; }
   function pushAll(skip){ G.players.forEach(function(p,i){ if(p.human&&seat[active[i]]&&i!==skip) send({t:"ups",pid:seat[active[i]],st:snapFor(i)}); }); }
+  rejoinHandler=function(c,nm){ var i=active.indexOf(c); if(i<0) return; afk[i]=false; G.players[i].human=true; G.players[i].name=nm; drawTv(); pushAll(askingIdx); };   // getting back in: the phone gets the hand, the computer stops
+  awayFn=function(c){ var i=active.indexOf(c); return i>=0&&!!afk[i]; };
   gameSnap=function(){ pushAll(askingIdx); };
   function interrupt(pid){ Object.keys(pending).forEach(function(k){ if(pending[k].pid===pid){ var pr=pending[k]; delete pending[k]; pr.resolve({id:"interrupt"}); } }); }
   function afterApply(res){
@@ -2391,6 +2640,10 @@ function playScatter(){
     if(phase==="write"&&G.phase==="write"&&SE.inPlay(G,i)){ var B=window.Scatter&&Scatter.Brain, a=null; if(B&&B.decide){ try{ a=B.decide(G,G.players[i]); }catch(e){ a=null; } } SE.setAnswers(G,i,a||SE.cpuAnswers(G,i)); }   // step 10: the brain fills the sheet (the old code if it declines)
   };
   function idxOfPid(pid){ var r=-1; G.players.forEach(function(p,i){ if(seat[active[i]]===pid) r=i; }); return r; }
+  rejoinHandler=function(c,nm){   // getting back in: the phone writes from the next round (this round the sheet the computer wrote counts)
+    var i=active.indexOf(c); if(i<0) return; G.players[i].human=true; G.players[i].name=nm;
+    if(phase==="write"&&G.phase==="write"&&SE.inPlay(G,i)){ submittedSet[i]=true; var pid=seat[c]; if(pid) send({t:"info",pid:pid,msg:"You’re back. The computer’s answers count this round; you write from the next one."}); }
+    pushAll(-1); };
   function secLeft(){ return Math.max(0,(endAt-Date.now())/1000); }
   function snapFor(i,x){ var st=SE.snapshot(G,i,x||{}); if(st.challenges&&st.challenges.length) st.challenges=st.challenges.map(chLabel); var rl=rulingSnap(); if(rl) st.ruling=rl; if(phase==="roll"||phase==="star"){ st.phase=phase; st.letter=null; st.keyword=null; st.slots=[]; } else if(G.phase==="write") st.secLeft=secLeft(); st.seats=active.map(seatNo); return st; }
   function pushAll(skip){ G.players.forEach(function(p,i){ if(p.human&&seat[active[i]]&&i!==skip) send({t:"scs",pid:seat[active[i]],st:snapFor(i)}); }); }
@@ -2646,6 +2899,7 @@ function closeWin(){ var B=BG(); if(winEl){ try{ if(B&&B.win&&B.win.isOpen()) B.
 function fmtTime(ms){ var m=Math.floor(ms/60000), sc=Math.floor(ms/1000)%60; return m+":"+(sc<10?"0":"")+sc; }
 function openVictory(){
   var B=BG(); if(!B||!B.win||winShown||!gameOver) return false;
+  if(menuOpen()) return false;   // a win while the Menu is open: its See the result opens the Victory screen
   var wn=winnerName||"Someone", team=/ & /.test(wn);
   winShown=true; winEl=document.createElement("div"); winEl.className="bg-win"+(lastStand&&lastStand.length>10?" ps-many":""); winEl.id="winBox"; winEl.setAttribute("aria-labelledby","winTitle");
   winEl.innerHTML='<div class="bg-win__scrim"></div><div class="bg-win__rays"></div><div class="bg-win__card"><div class="bg-win__medal"></div><p class="bg-eyebrow">Game over · '+esc(gameTitle(chosenGame))+'</p><h2 class="bg-win__title" id="winTitle">Victory</h2>'+

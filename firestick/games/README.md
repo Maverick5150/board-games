@@ -68,6 +68,7 @@ are the host's own rows: nothing to do. Style the lobby with CSS scoped by `html
 | `H.onReconnect(fn)` | a phone came back: re-send snapshots (its open ask is re-sent by the host) |
 | `H.onView(fn(c, data))` | the phone's `api.view(data)` (taps that are not an answer: previews, "UNO!") |
 | `H.onTakeOver(fn(c))`, `H.onLeave(fn(c))`, `H.onEnd(fn)` | Take over pressed / a phone left mid-game / the game is left (clean up timers) |
+| `H.onRejoin(fn(c))` | optional: a phone took seat `c` back by invite (section 8); `H.name(c)` is that player's name again. Without it the host calls your `onLeave(c)`, then your `onTakeOver(c)` |
 | `H.send(o)`, `H.sendTo(c, o)` | raw messages (every message carries `game: id`) |
 
 | The TV | |
@@ -168,3 +169,23 @@ attrs, color)` (a seat-coloured button), `api.afkHTML(id)` (the "computer is pla
 - A game with no first player (everyone acts at once) plays its deal as the opening show instead of `H.first` (OK skips it).
 - Tests: `window.__warp` (counters, the seats' Auto map, `sync()`); rig a war by swapping cards between packets (the engine's check stays
   clean). A live game guards the TV page: quit it with Back before loading another page in a test, or the navigation waits on the prompt.
+
+## 8. Getting back in (every Party game; the CEO, 2026-10-16: "a way to get back in ... maybe an invite from the host")
+- The host does it for every game, built-in and plugin. During a game the TV's top bar has **Menu** (also the remote's Menu key):
+  Resume, New game and **Invite a player back**, the seats a computer plays (the phone left, is away, or has been quiet for 25 s; or a
+  computer from the start), each with **Invite**. The TV then shows the room code, a 4-digit seat code and a QR
+  (`play.html?room=ABCDE&seat=1234`); the code works once, for 5 minutes.
+- A phone that joins a started game gets `{t:"nojoin", why:"started", rejoin:1}` and shows "The game has started. Ask the host to invite
+  you back" with a seat-code field. A valid code takes the seat: a person's seat keeps its name and colour, a computer's seat takes the
+  phone's name; the phone that held it (away or quiet) gets `{t:"bumped"}` ("Another phone has your seat now": never two phones on one
+  seat); the TV toasts "<name> is back". A phone whose name (or stored pid) matches a seat that is open again also asks the host: a TV
+  sheet "Let them back in / Not now" (Back = Not now; nobody answers in 60 s = Not now).
+- What a plugin does: nothing, when its `onLeave(c)` re-reads `H.name(c)` / `H.isPhone(c)` and its `onTakeOver(c)` sets the seat's human
+  flag and pushes the phone's view (Snakes, Candy Land and War do): for a seat taken back the host calls `onLeave(c)` and then
+  `onTakeOver(c)`. A plugin with more to hand back registers `H.onRejoin(fn(c))` instead. Read seats live (`H.isPhone`, `H.isHuman`,
+  `H.name`) rather than keeping copies.
+- A reloaded phone goes straight back to its seat (it keeps the room in `bgfs_seat`, forgotten on Leave, and its name in the shared
+  `bg_player_name`), and the host's `{t:"you", started:1}` keeps it off the lobby screen. Escape / Backspace / GoBack on the TV host take the
+  same step as the remote's Back.
+- Test hooks: `window.__fs.rejoin` (read-only: `gone`, `invites`, `asks`, `open()` = the colours the Menu lists). Tests:
+  BG_audit/sprint/partyrejoin/.
