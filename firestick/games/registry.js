@@ -16,7 +16,11 @@
     {id:"war", title:"War", n:"2-16", min:2, max:16, meta:"Flip, tie, declare war", thumb:"../ui/art/hero-war.svg", felt:true,
      colors:["red","blue","green","yellow","orange","purple","teal","pink","black","brown","lime","sky","magenta","cream","mint","coral"],
      palette:{lime:["#b6e04e","Lime",3], sky:["#7cc8ff","Sky",2], magenta:["#ea6fe0","Magenta",8], cream:["#eadcb4","Cream",4], mint:["#86ecc4","Mint",6], coral:["#ff8f80","Coral",1]},   /* war/index.html's seats 11-16 */
-     files:{tv:["../war/engine.js","../war/brain.js","../war/cards.js","games/war.js"], phone:["../war/cards.js","games/war-phone.js"]}}
+     files:{tv:["../war/engine.js","../war/brain.js","../war/cards.js","games/war.js"], phone:["../war/cards.js","games/war-phone.js"]}},
+    {id:"mxwar", title:"Motocross War", n:"1-16", min:1, max:16, meta:"A real season, every lap a War flip",
+     colors:["red","blue","green","yellow","orange","purple","teal","pink","black","brown","lime","sky","magenta","cream","mint","coral"],
+     palette:{lime:["#b6e04e","Lime",3], sky:["#7cc8ff","Sky",2], magenta:["#ea6fe0","Magenta",8], cream:["#eadcb4","Cream",4], mint:["#86ecc4","Mint",6], coral:["#ff8f80","Coral",1]},   /* seats 11-16 as War */
+     files:{tv:["../mxwar/data/index.js","../mxwar/race.js","../mxwar/round.js","../mxwar/season.js","../mxwar/brain.js","../mxwar/art.js","../mxwar/track.js","../ui/picker.js","games/mxwar.js"], phone:["../mxwar/art.js","games/mxwar-phone.js"]}}   /* the race view: track.js today (the 3D merge: FOLLOWUPS "For integration: mxwar party") */
   ];
   var tvDefs = {}, phoneDefs = {}, loaded = {}, loading = {};
   function get(id) { for (var i = 0; i < LIST.length; i++) if (LIST[i].id === id) return LIST[i]; return null; }
