@@ -88,7 +88,7 @@ export function create(host,hooks){
     get st(){ return RST; }, get R(){ return R; }, get FX(){ return FX; }, get flag(){ return flag; }, get finished(){ return finished; }, get tv(){ return tv(); }};
   const CAMS=createCams(VIEW);
   /* the camera presets for the remote / phone button (game.js calls these; nothing here changes the race): V.camModes() -> [{id, name}], V.camMode(id?) -> the mode (sets it when given),
-     V.camNext() -> the next mode, V.camReplay() -> true when a replay started (a slow-motion replay of the last few seconds, drawn from recorded frames: render time only), V.camInfo2() -> {mode, shot, replay} */
+     V.camNext() -> the next mode, V.camReplay() -> true when a replay started (a slow-motion replay of the last few seconds, drawn from recorded frames: render time only), V.camState() -> {mode, shot, replay, replays, rec, recMB} (the HUD shows a REPLAY badge while replay is true) */
   V.camModes=function(){ return CAMS.modes(); }; V.camMode=function(m){ return CAMS.mode(m); }; V.camNext=function(){ return CAMS.nextMode(); }; V.camReplay=function(){ return CAMS.replayNow(); }; V.camState=function(){ return CAMS.state(); };
   // [/hook:cams]
 
