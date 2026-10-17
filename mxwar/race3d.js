@@ -132,13 +132,13 @@ export function create(host,hooks){
     V.layout=pick; V.courseInfo={id:C.id,L:+C.L.toFixed(1),Tlap:+C.Tlap.toFixed(1),D1:+C.D1.toFixed(1),T1:+C.T1.toFixed(1),kind:C.kind,shared:pick.shared,name:pick.layout.name};
     if(R){ disposeTree(R.grp); scene.remove(R.grp); }
     // [hook:fx]
-    if(FX){ disposeTree(FX.group); scene.remove(FX.group); }
+    if(FX){ if(FX.dispose) FX.dispose(); disposeTree(FX.group); scene.remove(FX.group); }
     // [/hook:fx]
     list=o.riders.map((r,k)=>({s:r.s!=null?r.s:k,color:r.color,accent:r.accent,num:r.num,name:r.name,red:!!r.red,me:!!r.me}));
     N=list.length; meSeats=list.filter(r=>r.me).map(r=>r.s); redSeat=(list.find(r=>r.red)||{s:-1}).s;
     R=createRiders(list,QUAL.options(LO)); scene.add(R.grp); LOOK.upgrade(R.grp); LOOK.receive(R.grp);   /* physically based stand-ins for Phong parts; the body parts receive the key's shadow (r3d-look.js) */
     // [hook:fx]
-    FX=createFx(Object.assign({C:C,look:look},QUAL.options(LO))); scene.add(FX.group);   /* the roost and dust particles: a new system for every race (r3d-fx.js) */
+    FX=createFx(Object.assign({C:C,look:look,cam:cam},QUAL.options(LO))); scene.add(FX.group);   /* the roost and dust particles: a new system for every race (r3d-fx.js) */
     // [/hook:fx]
     if(gate){ world.root.remove(gate.grp); disposeTree(gate.grp); }
     gate=gateBuild(C,look,N); world.root.add(gate.grp);
@@ -361,6 +361,7 @@ export function create(host,hooks){
     }
     for(let i=0;i<N;i++){ const r=rs[i]; if((r.gone&&!r.crash)||!r.fr){ hideRider(R,i); RST[i].visible=false; continue; } rider(i,r,dt,atGate,tw); }
     // [hook:fx]
+    { const sh=CAMS.shot, sr=sh&&sh.subj>=0?rs[sh.subj]:null; FX.focus(sr&&sr.pos?sr.pos:null); }   /* where the TV director is looking: the dirt goes where the viewer looks (r3d-fx.js) */
     FX.step(dt);   /* the particles move on (r3d-fx.js) */
     // [/hook:fx]
     // [hook:rider]
@@ -446,11 +447,9 @@ export function create(host,hooks){
     st.compF=compF; st.compR=compR; st.spinF=r.spinF; st.spinR=r.spinR; st.stand=isGate?0:r.stand; st.dab=r.dab; st.lean=roll; st.crouch=crouch;
     st.crash=null; st.body=null; st.limbs=null;
     // [hook:fx]
-    /* the effects inputs (the fx specialist owns these formulas): how hard the rear wheel throws dirt (roost), the throttle and the wheelspin
-       as 0..1; st.mud (0..1, kept between frames) is raised by nobody yet */
-    st.roost=(acc>1.0?acc*0.9:0)+(fr.sand>0.3?r.v*0.25:0)+(r.D<14&&r.v>2?6:0);
-    st.throttle=clamp(Math.max(acc,0)/3+(r.D<14&&r.v>2?1:0),0,1);
-    st.slip=clamp(st.roost/6,0,1);
+    /* the effects inputs (r3d-fx.js owns these formulas): the throttle and the rear wheel's wheelspin as 0..1 (st.throttle, st.slip), how hard it
+       throws dirt (st.roost); st.mud (0..1, kept between frames, raised when riding in another rider's roost) is raised in FX.rider */
+    FX.inputs(st,dt);
     // [/hook:fx]
     // [hook:bike]
     /* extra pose inputs for the bike (read by r3d-bike.js poseBike): st.compF / st.compR (suspension compression, m), st.spinF / st.spinR (wheel spin, rad), and
@@ -522,7 +521,7 @@ export function create(host,hooks){
     r.tg=null;
     const f=r.fr||{x:0,z:0,th:0};
     // [hook:fx]
-    FX.crashStart(f,r.gy||0);   /* the burst of dirt and dust where the rider goes down (r3d-fx.js) */
+    FX.crashStart(f,r.gy||0,r);   /* the burst of dirt and dust where the rider goes down (r3d-fx.js) */
     // [/hook:fx]
     { const shot=CAMS.shot; placeMarshalS(r.s,r.crash.side,shot&&shot.type==="crash"?shot.cam:null,r.crash.kind); }
     if(show){ show.fire("crash"); const S=show; setTimeout(()=>S.fire("yellow"),2400); }

@@ -38,6 +38,7 @@ Add your lines between your heading and its end marker only (this keeps the role
 <!-- end rider -->
 
 ## fx
+- No third-party assets. Everything the effects draw is original code made at run time: the dust puff atlas (blurred radial gradients turned into a normal / density map in code), the clod rocks (a jittered icosahedron / octahedron), the mud flecks (a procedural shader). No textures, models, fonts or photos are loaded.
 <!-- end fx -->
 
 ## cams
