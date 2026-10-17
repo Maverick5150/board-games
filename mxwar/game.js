@@ -353,7 +353,7 @@ function evWords(R){ if(!R||!R.ev) return ""; return R.ev==="e"?"stopped early":
 function wonIn(R){ return R&&R.t?"won in "+raceTime(R.t)+(R.ts?" (the clock ran through the stoppage)":""):""; }
 function pxWords(x,c){ return x&&x.px>0?"its laps average "+lapWords(x.px)+", far off the night's other races (a stoppage or a timing fault): it rides "+lapFrom(x.lsrc,x.lapS>0?x.lapS:x.lap,c):""; }
 function realLine(x){
-  var R=x.real, lab=esc(x.label), half=cfg.length==="half"||(G&&G.o&&G.o.length==="half"), c=x.round||(G&&G.cal[G.ri]);
+  var R=x.real, lab=esc(x.label), half=G&&G.o?G.o.length==="half":cfg.length==="half", c=x.round||(G&&G.cal[G.ri]);
   var lapNote=esc(lapFrom(x.lsrc,x.lapS,c));
   if(x.src==="time"&&R){
     var how=x.b>0?" at "+lapFrom(x.bs,x.b,c):"";
@@ -572,8 +572,30 @@ function loadSaved(d){
   Sound.music(GAME);
   showSetup(false); drawSetup(); armBack();
   if(G.over){ ui.finished=gen; setView("season"); setTimeout(function(){ if(G&&G.over&&!setupShown()) openWin(); },300); }
-  /* mxtimewire: a save from before the per-round timing: attach it from the season file (the race under way keeps its length) */
-  if(!(G.tmv>=2)){ var g0=G, my=gen; loadSeason(G.sid).then(function(Dd){ if(G!==g0||my!==gen) return; var n=S.attachTiming(G,Dd); save(); if(n&&ui.view==="season"&&!setupShown()) renderSeason(); },function(){}); }
+  /* mxtimewire: a save from before the per-round timing: attach it from the season file (mxsave: the race under way then takes its researched length) */
+  if(!(G.tmv>=2)){ var g0=G, my=gen; loadSeason(G.sid).then(function(Dd){ if(G!==g0||my!==gen) return; var r0=G.race, l0=r0?r0.o.len+"|"+r0.lapS:""; var n=S.attachTiming(G,Dd); save(); if(n&&ui.view==="season"&&!setupShown()) renderSeason(); if(r0&&r0===G.race&&l0!==r0.o.len+"|"+r0.lapS) lenSync(); lenNotice(my); },function(){ lenNotice(my); }); }
+  else lenNotice(gen);
+}
+/* mxsave: an old save's race under way now runs its real length (season.js realLive): say so ONCE (G.lenNote is cleared and saved at
+   once, so a later load of this save says nothing), after the "loaded" toast */
+function lenWords(n){
+  var len=n.half?"half its real length":"its real length";
+  if(n.done>=n.real) return "This race now runs "+len+": "+plural(n.real,"lap")+". "+n.done+" are done, so the checkered flag falls this lap.";
+  return "This race now runs "+len+": "+plural(n.len,"lap")+(n.done>0?" ("+n.done+" done)":"")+".";
+}
+/* the season file's research came after the race was drawn (a save from before the per-round timing): the race on screen takes its
+   researched laps and lap time (the lap chip, the track's lap count, pace and flag) */
+function lenSync(){
+  var rc=ui.rc, T=track(); if(!rc||!G||rc!==G.race) return;
+  if(T){ T.setPace(lapGuess()); if(T.setFirst) T.setFirst(firstMs()); if(rc.phase!=="gate") T.setLaps(rc.battle,rc.o.len); T.setFlag(rc.over?"checkered":(rc.phase!=="gate"&&rc.battle+1===rc.o.len?"white":null)); }
+  ui.white=rc.phase!=="gate"&&rc.battle+1>=rc.o.len?gen+"|"+G.rkey:null;
+  if(rc.phase!=="gate"&&!rc.over){ $("midBig").textContent="Lap "+Math.min(ui.lap,rc.o.len); $("midSmall").textContent="of "+rc.o.len; }   /* as drawDuel */
+  chips();
+}
+function lenNotice(my){
+  if(my!==gen||!G||!G.lenNote) return;
+  var n=G.lenNote; delete G.lenNote; save();
+  setTimeout(function(){ if(my===gen) toast(lenWords(n),{ms:5200}); },2600);
 }
 function resetUI(){ ui.winShown=-1; ui.result=false; ui.finished=-1; ui.order=[]; ui.lastCards={}; ui.bikes={}; ui.pendRound=null; ui.pendSeason=null; ui.log=[]; ui.rc=null; ui.rmap=null; ui.hs=null; ui.trkKey=null; disp=null; trackShow(); renderLog(); }
 function dressSaveBar(){

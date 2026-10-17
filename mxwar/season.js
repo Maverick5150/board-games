@@ -208,7 +208,7 @@ function attachTiming(G,season){
   var n=0;
   /* mxtimewire review: tmv 2 = the timing with the red-flag / shortened / stoppage flags (ts, ev, us, rf): a tmv 1 save takes every
      round's timing again from the season file (data only: the races already run keep their results) and the round under way recounts
-     its races to come (lv 3 -> 4; the race under way keeps its length, lap and first lap) */
+     its races to come (lv 3 -> 4), then the race under way is counted again at that research (realLive, lv 5) */
   var fresh=!(G.tmv>=2);
   G.cal.forEach(function(c){ if(c.tm!==undefined&&!fresh) return; var r=season.rounds.filter(function(x){ return x.n===c.n&&x.date===c.date; })[0];
     if(r) c.tm=r.tm?clone(r.tm):null; else if(c.tm===undefined) c.tm=null; if(c.tm) n++; });
@@ -221,10 +221,11 @@ function attachTiming(G,season){
 function lapOf(G){ if(G.race&&G.race.lapS>0) return G.race.lapS; var cr=G.round&&!G.round.done?Round.current(G.round):null; if(cr&&cr.lap>0) return cr.lap; if(G.round&&G.round.lapS>0) return G.round.lapS; var c=G.cal[Math.min(G.ri,G.cal.length-1)]; return Round.lapTime(G.series,G.year,c); }
 /* an old save (before real lengths): the options' length mapped (short -> half, standard / long -> real), the round gets its lap time and
    its races still to run their real lengths; a race under way keeps its laps run and ends at its real length (never before the lap on now).
-   A save from the first real-length build (round lv < 2: timed races one lap short): the races still to run are counted again; the race
-   under way keeps the length it is racing to (its white flag may already be out). */
+   A save from the first real-length build (round lv < 2: timed races one lap short): the races still to run are counted again.
+   mxsave (lv 5): the race under way of any older round is then moved to its real length (realLive below). */
 function upgrade(G){
   if(!G||!G.o) return G;
+  var was=G.race&&G.race.o?G.race.o.len:0;   /* mxsave: the length the race under way had in the save */
   G.o.length=Round.MODE_OF[G.o.length]||"real";
   if(G.round&&!(G.round.lapS>0&&G.round.lv>=2)){
     var battles=!(G.round.lapS>0), live=G.race&&!G.race.over?Round.current(G.round):null;
@@ -234,7 +235,29 @@ function upgrade(G){
   if(G.race&&!(G.race.lapS>0)&&G.round) G.race.lapS=G.round.lapS;
   /* mxtimewire: the races still to run get that night's real laps and lap times (the race under way keeps its own) */
   if(G.round&&G.round.lv<4) Round.upgrade(G.round,G.o,{series:G.series,year:G.year,cal:G.cal[G.ri],live:G.race&&!G.race.over?G.rkey:null});
+  if(G.round&&G.round.lv<5) realLive(G,was);
   return G;
+}
+/* mxsave (the CEO, 2026-10-17 ~05:15, a phone shot of an old save's "Lap 6 of 100": "This track is unacceptable"; the owner's ruling: "any
+   race still under way is moved to that round's REAL length (keep the laps already done; if more than the real length are done, the
+   checkered flag falls at the next line crossing), and say so once"): a round saved before lv 5 gets the race under way counted exactly as
+   the races still to come are (Round.raceInfo at the night's research and the Real / Half option): its laps, its lap time and its first
+   lap. Everything else stays as saved (cards, places, the pot, a war in progress, crashes, DNFs, the yellow flag). Laps run >= that length:
+   the race ends at the next line crossing (the lap on now; never 0 laps left). Runs once (lv 5); a save from before the per-round timing
+   is counted again when attachTiming brings the research (lv 3 -> 5). G.lenNote = {key, was, len, real, done, half} when the length
+   changed: the page says so once and clears it. */
+function realLive(G,was){
+  var RG=G.round, R=G.race, x=R&&!R.over?RG.races.filter(function(r){ return r.key===G.rkey; })[0]:null;
+  if(x&&!x.res){
+    var inf=Round.raceInfo(RG.F,x.kind,x.i,G.o,RG.lapS,RG.year,G.cal[G.ri]), done=R.battle|0, len=Math.max(inf.len,done+1);
+    x.len=len; x.lap=inf.lap; x.fl=inf.fl; x.src=inf.src; x.lsrc=inf.lsrc;
+    if(inf.base>0){ x.b=inf.base; x.bs=inf.bsrc; } else { delete x.b; delete x.bs; } if(inf.px>0) x.px=inf.px; else delete x.px;
+    R.o.len=len; R.lapS=inf.lap; R.fl=inf.fl>0?inf.fl:0;
+    var from=G.lenNote&&G.lenNote.key===G.rkey?G.lenNote.was:was;
+    if(from!==len) G.lenNote={key:G.rkey,was:from,len:len,real:inf.len,done:done,half:G.o.length==="half"};
+    else if(G.lenNote&&G.lenNote.key===G.rkey) delete G.lenNote;
+  }
+  RG.lv=5;
 }
 function isHuman(G,id){ return G.riders[id]&&G.riders[id].kind==="human"; }
 function raceLabel(G){ var RG=G.round; if(!RG) return ""; var r=RG.races.filter(function(x){ return x.key===G.rkey; })[0]; return r?r.label:""; }
