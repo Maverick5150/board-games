@@ -32,7 +32,7 @@ export function summarize(ms,target){
 export function createBench(Q,view){
   const mode=param("bench"), auto=!!mode&&mode!=="0"&&mode!=="off";
   const B={mode:mode,auto:auto,state:"idle",result:null,seconds:+(param("benchSeconds")||20),ui:null};
-  let samples=[],jsms=[],callsA=[],trisA=[],scales=new Map(),t=0,warm=1.0,armT=0,since=0,res=null,pending=null,events0=0,prDrops0=0,prRaises0=0,sheds0=0,reverts0=0,workA=[],keyH=null;
+  let samples=[],jsms=[],callsA=[],trisA=[],scales=new Map(),t=0,warm=1.0,armT=0,since=0,res=null,pending=null,events0=0,ups0=0,sheds0=0,reverts0=0,workA=[],keyH=null;
   B.running=()=>B.state==="running";
 
   /* ---------------- the overlay ---------------- */
@@ -88,7 +88,7 @@ export function createBench(Q,view){
 
   /* ---------------- the run ---------------- */
   function reset(){ samples=[]; jsms=[]; callsA=[]; trisA=[]; workA=[]; scales=new Map(); t=0; armT=0; since=0; res=null;
-    prDrops0=Q.stats.prDrops; prRaises0=Q.stats.prRaises; sheds0=Q.stats.sheds; reverts0=Q.stats.reverts; events0=Q.events.length; }
+    ups0=Q.stats.upMoves; sheds0=Q.stats.sheds; reverts0=Q.stats.reverts; events0=Q.events.length; }
   B.start=function(o){
     o=o||{}; if(o.seconds>0) B.seconds=o.seconds;
     reset(); B.state=o.immediate?"running":"armed"; B.result=null;
@@ -137,7 +137,7 @@ export function createBench(Q,view){
     R.canvas={w:cv.width,h:cv.height,cssW:view.W(),cssH:view.H(),pr:+Q.pr.toFixed(2),prCap:+Q.prCap.toFixed(2),scaleAvg:sw?sa/sw:Q.live.scale,scaleTime:Array.from(scales.entries()).map(e=>[+e[0].toFixed(2),+e[1].toFixed(1)])};
     let mem={}; try{ mem=Q.memory(view.V.scene); }catch(e){}
     R.memory={heapMB:mem.heapMB!=null?mem.heapMB:null,textures:mem.textures||0,texMB:mem.texMB||0,texBudgetMB:mem.texBudgetMB||0,geometries:mem.geometries||0};
-    R.ladder={rung:Q.rung,rungs:Q.ladder.n,downs:Q.stats.prDrops-prDrops0,ups:Q.stats.prRaises-prRaises0,sheds:Q.stats.sheds-sheds0,reverts:Q.stats.reverts-reverts0,shadows:Q.live.shadows,events:Q.events.slice(events0).slice(-12)};
+    R.ladder={rung:Q.rung,rungs:Q.ladder.n,downs:Q.stats.sheds-sheds0,ups:Q.stats.upMoves-ups0,sheds:Q.stats.sheds-sheds0,reverts:Q.stats.reverts-reverts0,shadows:Q.live.shadows,events:Q.events.slice(events0).slice(-12)};
     const st=R.stats, ok=st.fpsAvg>=S.target*0.95&&st.fps1Low>=S.target*0.8;
     R.verdict={pass:ok,text:ok?("Holds "+S.target+" fps: "+st.fpsAvg+" fps average, "+st.fps1Low+" at the 1% low, "+st.pctOnTarget+"% of frames on time."):
       ("Below the "+S.target+" fps target: "+st.fpsAvg+" fps average, "+st.fps1Low+" at the 1% low, "+st.pctOnTarget+"% of frames on time"+(Q.rung>=Q.ladder.n-1?"; the ladder is at its floor: this tier is too high for this device.":"; the ladder was still adjusting: run it again."))};

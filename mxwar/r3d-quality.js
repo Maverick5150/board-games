@@ -308,7 +308,7 @@ export function createQuality(env){
   const msaaWanted=!LO0&&TIERS[tierId].msaa;
   const renderer=new THREE.WebGLRenderer({antialias:msaaWanted,powerPreference:"high-performance",alpha:false,stencil:false,preserveDrawingBuffer:false});
   const maxAniso=renderer.capabilities.getMaxAnisotropy()||1;
-  const Q={renderer:renderer,dev:dev,gpu:gpu0,fixed:false,stats:{prDrops:0,prRaises:0,shadowDrop:false,sheds:0,reverts:0,probeMs:0},events:[]};
+  const Q={renderer:renderer,dev:dev,gpu:gpu0,fixed:false,stats:{prDrops:0,prRaises:0,shadowDrop:false,sheds:0,upMoves:0,reverts:0,probeMs:0},events:[]};
   Q.weakGPU=gpu0.cls<=0;
   /* 3. the probe: only when nobody decided and the GPU is not known to be weak (the probe may move the prior one tier either way) */
   Q.probe=null;
@@ -418,7 +418,7 @@ export function createQuality(env){
     if(Q.bench) Q.bench.frame(dt,ms,work);
     if(Q.fixed) return;
     const a=ladder.frame(dt,work);
-    if(a){ if(a.to>a.from&&a.why.indexOf("revert")<0) Q.stats.sheds++; if(a.why.indexOf("revert")===0) Q.stats.reverts++; applyRung(a.why); calmSince=0; }
+    if(a){ if(a.why.indexOf("revert")===0) Q.stats.reverts++; else if(a.to>a.from) Q.stats.sheds++; else Q.stats.upMoves++; applyRung(a.why); calmSince=0; }   /* sheds = every step down the chain (resolution or an effect), upMoves = every step back up, reverts = a try up that was undone */
     else { calmSince+=dt; if(calmSince>20&&nowMs()-persistT>15000){ persistT=nowMs(); Q.save(); calmSince=0; } }
     /* the ladder is at the bottom and frames still run long: the tier itself is too high for this device (an automatic choice only): drop it now, the world follows with the next race */
     if(ladder.k>=ladder.n-1&&source!=="url"&&source!=="manual"&&tier.rank>0&&ladder.mean>ladder.T*1.25){ lowT+=dt; if(lowT>10){ lowT=0; Q.demote("the ladder is at its floor and frames still run "+ladder.mean.toFixed(0)+" ms"); } } else lowT=0;
