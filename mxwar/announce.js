@@ -197,6 +197,15 @@ function create(o){
   function rstand(){ var R=A.R; if(!R||!RC()) return []; return RC().standings(R); }
   function placeIn(L,s){ for(var i=0;i<L.length;i++) if(L[i].s===s) return i+1; return 0; }
   function alive(L){ return L.filter(function(r){ return !r.out; }).length; }
+  /* mxtime: a race with a time model hands over rows with the gap in SECONDS (gs: behind the leader; t / laps: the race time at the line); the old card gap (cgap, or the
+     number in gap) is the fallback for a race without one and for the gate order. "Close" is within 2 s, a battle within 1 s, a bubble within 3 s. */
+  function gapS(r){ return r&&typeof r.gs==="number"&&r.gs>=0?r.gs:null; }
+  function gapC(r){ return r?(r.cgap!=null?r.cgap:(typeof r.gap==="number"?r.gap:null)):null; }
+  function gapN(r){ var g=gapS(r); return g!=null?g:(gapC(r)==null?0:gapC(r)); }
+  function isClose(r,n){ var g=gapS(r); return g!=null?g<=2:(gapC(r)!=null&&gapC(r)<=Math.max(2,Math.round(n/4))); }
+  function between(a,b){ if(a&&b&&typeof a.t==="number"&&typeof b.t==="number"&&a.laps===b.laps) return (b.t-a.t)/1000; return null; }   /* seconds from a to b (b behind a), same lap */
+  function bubbleNear(cr,bu){ var d=between(cr,bu); return d!=null?d<=3:cr.count-bu.count<=3; }
+  function nearRows(a,b){ var d=between(a,b); return d!=null?Math.abs(d)<=1:Math.abs(a.count-b.count)<=1; }
   function isHumanSeat(s){ var R=rider(seatId(s)); return !!(R&&R.kind==="human"); }
 
   /* ---------------- names, numbers, makes as slot values ---------------- */
@@ -377,12 +386,14 @@ function create(o){
     if(!L) return;
     ["p1","p2","p3","p4","p5"].forEach(function(k,i){ if(L[i]&&!L[i].out) sl[k]=nameRec(seatId(L[i].s)).full; });
     ["last1","last2","last3","last4"].forEach(function(k,i){ if(L[i]&&!L[i].out) sl[k]=nameRec(seatId(L[i].s)).last; });
-    if(L[1]&&!L[1].out) sl.gap=gapV(L[0].s,L[1].s,L[1].gap);
+    if(L[1]&&!L[1].out) sl.gap=gapV(L[0].s,L[1].s,gapC(L[1]),gapS(L[1]));
   }
   /* the gap between two riders: the race view's seconds when it gives them (o.gapAt), else the cards between them; level on cards = no gap
      to speak of (a line that needs {gap} is skipped) */
-  function gapV(sa,sb,cards){
-    if(typeof o.gapAt==="function"){ try{ var x=+o.gapAt(sa,sb); if(x>0) return x<10?V(x.toFixed(1)+" seconds",words(Math.floor(x))+" point "+words(Math.round((x-Math.floor(x))*10)%10)+" seconds"):cntV(Math.round(x),"second","seconds"); }catch(e){} }
+  function secV(x){ return x<10?V(x.toFixed(1)+" seconds",words(Math.floor(x))+" point "+words(Math.round((x-Math.floor(x))*10)%10)+" seconds"):cntV(Math.round(x),"second","seconds"); }
+  function gapV(sa,sb,cards,secs){
+    if(typeof o.gapAt==="function"){ try{ var x=+o.gapAt(sa,sb); if(x>0) return secV(x); }catch(e){} }
+    if(secs!=null) return secs>=0.05?secV(secs):null;   /* mxtime: the race's own seconds; level (under a twentieth) = no gap to speak of */
     if(cards==null||!(cards>0)||cards>Math.max(12,Math.round((A.race?A.race.n:20)/2))) return null;
     return cntV(cards,"card","cards");
   }
@@ -640,11 +651,11 @@ function create(o){
         var lo=5, hi=Math.min(al.length,r.cut>0?r.cut+1:15);
         for(var i=lo;i<hi-1;i++){
           var a1=al[i], b1=al[i+1], c1=al[i+2]; if(!a1||!b1) break;
-          if(Math.abs(a1.count-b1.count)>1) continue;
+          if(!nearRows(a1,b1)) continue;
           var na=nameRec(seatId(a1.s)), nb=nameRec(seatId(b1.s));
           if(ev==="teammates"){ if(!(na.make&&nb.make&&na.make.c===nb.make.c)) continue; if(i>=10) continue; sl.make=na.make; c.facts.make=na.make.c; }
           sl.a=na.full; sl.b=nb.full; sl.place=ordV(i+1); c.facts.place=i+1; c.facts.seats=[a1.s,b1.s]; c.facts.named=[na.id,nb.id];
-          if(ev==="midpack_battle"&&c1&&Math.abs(b1.count-c1.count)<=1){ var nc=nameRec(seatId(c1.s)); sl.c=nc.full; t.many=1; c.facts.seats.push(c1.s); c.facts.named.push(nc.id); }
+          if(ev==="midpack_battle"&&c1&&nearRows(b1,c1)){ var nc=nameRec(seatId(c1.s)); sl.c=nc.full; t.many=1; c.facts.seats.push(c1.s); c.facts.named.push(nc.id); }
           if(na.human||nb.human) c.human=true;
           c.story={kind:"battle",riders:c.facts.seats.slice()};
           return c;
@@ -656,8 +667,10 @@ function create(o){
         return null;
       }
       if(ev==="runaway"){
-        if(al.length<3) return null; var d=al[0].count-al[1].count; if(d<Math.max(6,Math.ceil(1.5*al.length))) return null; if((r.ledRun|0)<3) return null;
-        riderSlots(sl,seatId(al[0].s)); sl.gap=gapV(al[0].s,al[1].s,d); c.facts.rid=seatId(al[0].s); c.facts.gap=d; c.facts.named=[c.facts.rid]; c.story={kind:"runaway",riders:[al[0].s]}; if(c.slots.you) c.human=true; return c;
+        if(al.length<3) return null; var g1=gapS(al[1]), d=al[0].count-al[1].count;
+        if(g1!=null){ if(g1<Math.max(10,0.18*(r.lapS||55))) return null; d=g1; } else if(d<Math.max(6,Math.ceil(1.5*al.length))) return null;   /* mxtime: a runaway is 10 s (a fifth of a lap) clear */
+        if((r.ledRun|0)<3) return null;
+        riderSlots(sl,seatId(al[0].s)); sl.gap=g1!=null?gapV(al[0].s,al[1].s,null,g1):gapV(al[0].s,al[1].s,d); c.facts.rid=seatId(al[0].s); c.facts.gap=al[0].count-al[1].count; if(g1!=null) c.facts.secs=g1; c.facts.named=[c.facts.rid]; c.story={kind:"runaway",riders:[al[0].s]}; if(c.slots.you) c.human=true; return c;
       }
       return c;
     };
@@ -926,12 +939,12 @@ function create(o){
     if(!last&&b>1){
       var ro=Ls>=90?1:Ls>=40?2:Ls>=15?3:99; if(Ls>=15&&r.len-b<=3) ro=1;   /* the last laps: the order every lap */
       if(b-r.lastRO>=ro){ r.lastRO=b; q("running_order",{ctx:orderCtx("running_order"),due:t0+L*(main?0.62:0.45),ttl:8,pri:1}); }
-      var close=cur[1]&&!cur[1].out&&cur[1].gap<=Math.max(2,Math.round(alive(cur)/4));
+      var close=cur[1]&&!cur[1].out&&isClose(cur[1],alive(cur));
       r.closeRun=close?(r.closeRun|0)+1:0;
       if(close&&r.closeRun>=2&&b-r.lastLB>=3&&Ls>=12){ r.lastLB=b; q("lead_battle",{ctx:leadBattleCtx(),due:t0+L*0.72,ttl:8,pri:1,story:"battle-lead",subj:[cur[0].s,cur[1].s]}); }
-      if(r.cut>0&&!tcDone&&b-r.lastBubble>=(b>r.len*2/3?2:3)&&Ls>=12){ var cr=cur[r.cut-1], bu=cur[r.cut]; if(cr&&bu&&!bu.out&&cr.count-bu.count<=3){ r.lastBubble=b; q("bubble",{ctx:bubbleCtx(),due:t0+L*0.8,ttl:8,pri:1,story:"bubble",subj:[bu.s,cr.s]}); } }
+      if(r.cut>0&&!tcDone&&b-r.lastBubble>=(b>r.len*2/3?2:3)&&Ls>=12){ var cr=cur[r.cut-1], bu=cur[r.cut]; if(cr&&bu&&!bu.out&&bubbleNear(cr,bu)){ r.lastBubble=b; q("bubble",{ctx:bubbleCtx(),due:t0+L*0.8,ttl:8,pri:1,story:"bubble",subj:[bu.s,cr.s]}); } }
     }
-    if(cur[1]) (r.gapHist=r.gapHist||[]).push({s:cur[1].s,g:cur[1].gap});
+    if(cur[1]) (r.gapHist=r.gapHist||[]).push({s:cur[1].s,g:gapN(cur[1])});
     r.crashQ=[]; r.leadEv=null;
   }
   /* ---------------- line contexts (the facts are captured now, checked again when spoken) ---------------- */
@@ -1064,7 +1077,7 @@ function create(o){
       orderSlots(sl,cur);
       c.facts.order=al.slice(0,5).map(function(x){ return seatId(x.s); }); c.facts.named=c.facts.order.slice(0,3);
       if(prev.length&&prev[0]&&prev[0].s===cur[0].s&&ledRun>=2){ t.same1=1; sl.k=numV(ledRun); if(ledAll&&ev==="running_order"){ t.long1=1; c.facts.ledAll=true; } }
-      if(gh.length>=2&&cur[1]&&gh[gh.length-1].s===cur[1].s&&gh[gh.length-2].s===cur[1].s&&gh[gh.length-2].g>gh[gh.length-1].g&&gh[gh.length-1].g>cur[1].gap) t.closing=1;
+      if(gh.length>=2&&cur[1]&&gh[gh.length-1].s===cur[1].s&&gh[gh.length-2].s===cur[1].s&&gh[gh.length-2].g>gh[gh.length-1].g&&gh[gh.length-1].g>gapN(cur[1])) t.closing=1;
       if(ev==="first_lap_order"){
         sl.lap=numV(1);
         var star=null, L=sstand(); for(var i=0;i<Math.min(5,L.length);i++){ var s=A.rmap?A.rmap.indexOf(L[i].id):-1; if(s>=0&&L[i].pts>0&&L[i].kind!=="human"){ var p=placeIn(cur,s); if(p>10){ star={id:L[i].id,p:p}; break; } } }
@@ -1084,7 +1097,7 @@ function create(o){
       var al=cur.filter(function(x){ return !x.out; });
       if(al.length>=2){ c.facts.order=al.slice(0,3).map(function(x){ return seatId(x.s); }); }
       var left=r.len-r.lap+1; c.facts.left=left; if(left>=2) sl.left=numV(left);
-      if(r.cut>0){ var cr=cur[r.cut-1], bu=cur[r.cut]; if(cr&&bu&&!bu.out&&cr.count-bu.count<=3){ t.bubble=1; sl.bubble=nameRec(seatId(bu.s)).full; c.facts.bubble=seatId(bu.s); } }
+      if(r.cut>0){ var cr=cur[r.cut-1], bu=cur[r.cut]; if(cr&&bu&&!bu.out&&bubbleNear(cr,bu)){ t.bubble=1; sl.bubble=nameRec(seatId(bu.s)).full; c.facts.bubble=seatId(bu.s); } }
       var hs=al.filter(function(x){ return isHumanSeat(x.s); })[0]; if(hs){ t.you=1; sl.you=nameRec(seatId(hs.s)).full; sl.place=ordV(placeIn(cur,hs.s)); c.facts.you=seatId(hs.s); c.facts.place=placeIn(cur,hs.s); c.human=true; }
       c.story={kind:"leader",riders:al[0]?[al[0].s]:[]};
       return c;
@@ -1096,8 +1109,8 @@ function create(o){
       var c=baseCtx(), sl=c.slots, t=c.tags; c.facts.ev="white_flag"; c.facts.lap=r.lap; c.facts.named=[];
       orderSlots(sl,cur);
       var al=cur.filter(function(x){ return !x.out; });
-      if(al[1]&&al[1].gap<=Math.max(2,Math.round(al.length/4))) t.close=1;
-      if(r.cut>0){ var cr=cur[r.cut-1], bu=cur[r.cut]; if(cr&&bu&&!bu.out&&cr.count-bu.count<=3){ t.bubble=1; sl.bubble=nameRec(seatId(bu.s)).full; c.facts.bubble=seatId(bu.s); } }
+      if(al[1]&&isClose(al[1],al.length)) t.close=1;
+      if(r.cut>0){ var cr=cur[r.cut-1], bu=cur[r.cut]; if(cr&&bu&&!bu.out&&bubbleNear(cr,bu)){ t.bubble=1; sl.bubble=nameRec(seatId(bu.s)).full; c.facts.bubble=seatId(bu.s); } }
       var hs=al.filter(function(x){ var p=placeIn(cur,x.s); return isHumanSeat(x.s)&&(p<=5||(r.cut>0&&Math.abs(p-r.cut)<=1)); })[0]; if(hs){ t.you=1; sl.you=nameRec(seatId(hs.s)).full; sl.place=ordV(placeIn(cur,hs.s)); c.facts.you=seatId(hs.s); c.facts.place=placeIn(cur,hs.s); c.facts.atLine=true; c.human=true; }
       if(al.length>=2) c.facts.order=al.slice(0,2).map(function(x){ return seatId(x.s); });
       c.story={kind:"white-flag",riders:al[0]?[al[0].s]:[]};
@@ -1109,20 +1122,20 @@ function create(o){
     return function(){ var c=baseCtx(), sl=c.slots, t=c.tags; c.facts.ev="last_lap_lead"; c.facts.lap=r.lap; orderSlots(sl,cur);
       var al=cur.filter(function(x){ return !x.out; }); if(al.length<2) return null;
       c.facts.order=[seatId(al[0].s),seatId(al[1].s)]; c.facts.named=c.facts.order.slice();
-      if(al[1].gap<=Math.max(2,Math.round(al.length/4))) t.close=1; else t.clear=1;
+      if(isClose(al[1],al.length)) t.close=1; else t.clear=1;
       if(isHumanSeat(al[0].s)){ t.you=1; sl.you=nameRec(seatId(al[0].s)).full; c.facts.you=seatId(al[0].s); c.human=true; } else if(isHumanSeat(al[1].s)) c.human=true;
       c.story={kind:"leader",riders:[al[0].s,al[1].s]}; return c; };
   }
   function leadBattleCtx(){
     var r=A.race, cur=r.cur.slice();
-    return function(){ var c=baseCtx(), sl=c.slots; c.facts.ev="lead_battle"; c.facts.lap=r.lap; c.facts.order=[seatId(cur[0].s),seatId(cur[1].s)]; c.facts.gap=cur[1].gap; c.facts.named=c.facts.order.slice();
+    return function(){ var c=baseCtx(), sl=c.slots; c.facts.ev="lead_battle"; c.facts.lap=r.lap; c.facts.order=[seatId(cur[0].s),seatId(cur[1].s)]; c.facts.gap=cur[1].gap; if(gapS(cur[1])!=null) c.facts.secs=gapS(cur[1]); c.facts.named=c.facts.order.slice();
       if(rstand()[0].s!==cur[0].s) return null; if(isHumanSeat(cur[0].s)||isHumanSeat(cur[1].s)) c.human=true; c.story={kind:"battle-lead",riders:[cur[0].s,cur[1].s]}; return c; };
   }
   function bubbleCtx(){
     var r=A.race, cur=r.cur.slice(), cr=cur[r.cut-1], bu=cur[r.cut];
     return function(){ var c=baseCtx(), sl=c.slots, t=c.tags; c.facts.ev="bubble"; c.facts.lap=r.lap; c.facts.cutRider=seatId(cr.s); c.facts.bubble=seatId(bu.s); c.facts.named=[seatId(cr.s),seatId(bu.s)];
-      sl.cutRider=nameRec(seatId(cr.s)).full; sl.bubble=nameRec(seatId(bu.s)).full; sl.cards=cntV(Math.max(0,cr.count-bu.count),"card","cards"); c.facts.cards=cr.count-bu.count;
-      if(cr.count===bu.count) sl.cards=null;
+      sl.cutRider=nameRec(seatId(cr.s)).full; sl.bubble=nameRec(seatId(bu.s)).full; var bd=between(cr,bu); sl.cards=bd!=null?(bd>=0.05?secV(bd):null):cntV(Math.max(0,cr.count-bu.count),"card","cards"); c.facts.cards=cr.count-bu.count; if(bd!=null) c.facts.secs=bd;
+      if(bd==null&&cr.count===bu.count) sl.cards=null;
       if(isHumanSeat(bu.s)){ t.you=1; sl.you=nameRec(seatId(bu.s)).full; c.human=true; } else if(isHumanSeat(cr.s)) c.human=true;
       c.story={kind:"bubble",riders:[bu.s,cr.s]}; return c; };
   }
@@ -1155,7 +1168,9 @@ function create(o){
     var b=r.lap, L=lapLen(b), at=Math.max(A.now,r.lapAt+L);
     if(r.leadEv||r.crashQ.length) { /* handled by onLapDone below (same batch) */ }
     var order=e.order.slice(), R=A.R, photo=false;
-    if(R&&e.why==="flag"&&order.length>=2){ var a=R.r[order[0]], c2=R.r[order[1]]; photo=!a.out&&!c2.out&&a.pk.length===c2.pk.length; }
+    if(R&&e.why==="flag"&&order.length>=2){ var a=R.r[order[0]], c2=R.r[order[1]];
+      if(R.tm&&MX.Time){ try{ var mg=MX.Time.result(R).margin; photo=mg!=null&&mg<0.3; }catch(x){ photo=false; } }   /* mxtime: a photo finish is under 0.3 s */
+      else photo=!a.out&&!c2.out&&a.pk.length===c2.pk.length; }
     r.final={order:order,why:e.why,photo:photo};
     var ck=q(photo?"photo_finish":"checkered",{role:"C",ctx:flagCtx(order,e.why),due:at,ttl:7,followP:photo?0.8:0,story:"checkered"});
     r.flagItem=ck?ck.id:null;
