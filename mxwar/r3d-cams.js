@@ -48,7 +48,7 @@ const CHASE={back:3.5,up:1.5,side:-1.1,fov:70};
 const HERO={fov:72,mounts:[
   {id:"cover",b:2.6,s:-1.0,u:1.1,x:0.42,y:-0.28,pref:0},
   {id:"mirror",b:2.6,s:1.0,u:1.1,x:-0.42,y:-0.28,pref:0.55},   /* (the cover puts him in the RIGHT third: the mirror only when the cover's side is really in the way; at 0.30 it took half of the chase time) */
-  {id:"high",b:3.4,s:-0.8,u:3.4,x:0.30,y:-0.22,pref:0.45},   /* (over the roost of a pack ahead and over a rival's head: milestone 2 raised it from 2.7 m, the lens sat inside lap one's dust) */
+  {id:"high",b:3.4,s:-0.8,u:3.4,x:0.30,y:-0.22,pref:0.6},   /* (over the roost of a pack ahead and over a rival's head: milestone 2 raised it from 2.7 m, the lens sat inside lap one's dust) */
   {id:"wide",b:3.6,s:-1.2,u:1.6,x:0.32,y:-0.22,pref:0.62}],
   crash:{id:"crash",b:7,s:-2.4,u:2.8,x:0,y:-0.1,pref:0}};
 /* the lens of a frame: a phone held upright gets a wider vertical field (the sides crop, the riders stay big); not the gate, the crash or the broadcast, which frame their scene's width for the frame's shape themselves */
@@ -456,7 +456,7 @@ export function createCams(VIEW){
   function mountEye(m,S,yaw,gS,o){ const fx=Math.cos(yaw), fz=Math.sin(yaw); o.x=S.x-fx*m.b-fz*m.s; o.z=S.z-fz*m.b+fx*m.s; o.y=gS+m.u; return o; }
   /* what a mount costs now: its preference + 2.4 x how much a rival fills its lens + the track's edge (the lens over the blocks) + a berm or a jump face under the lens + the
      stadium's wall. The lens test is the picture itself: each rival within 8 m (a 2.2 x 0.8 x 1.9 m box, now and where he will be in 0.35 s) projected through the lens this
-     mount would have; its share of the frame (the box's screen rectangle, clipped to the frame; a box across the lens plane counts as 70%) over 5% costs, 30% or more is the
+     mount would have; its share of the frame (the box's screen rectangle, clipped to the frame; a box across the lens plane counts as 70%) over 12% costs, 32% or more is the
      worst (1). The subject himself is the picture and does not count. */
   const pc8=[[-1.1,-0.4],[1.1,-0.4],[-1.1,0.4],[1.1,0.4]];
   function mountCost(m,r,j,S,yaw,gS,tanH,tanV,kA,dust){
@@ -475,7 +475,7 @@ export function createCams(VIEW){
           const xn=(px*rX+pz*rZ)/(zz*tanH), yn=(px*uX+py*uY+pz*uZ)/(zz*tanV); if(xn<x0) x0=xn; if(xn>x1) x1=xn; if(yn<y0) y0=yn; if(yn>y1) y1=yn; }
         let cov=0;
         if(nf){ x0=Math.max(-1,x0); x1=Math.min(1,x1); y0=Math.max(-1,y0); y1=Math.min(1,y1); if(x1>x0&&y1>y0) cov=(x1-x0)*(y1-y0)/4; }   /* (all of him behind the lens: nothing) */
-        const k=clamp((cov-0.05)/0.25,0,1)*(w?0.7:1); if(k>I) I=k; } }
+        const k=clamp((cov-0.12)/0.2,0,1)*(w?0.7:1); if(k>I) I=k; } }   /* (from 12%: the riders ahead in the frame ARE the cover's picture; a rival filling the lens is 20-30%. From 5%, any rider ahead sent the rig up to the high mount and the hysteresis kept it there) */
     let P=m.pref+2.4*I+(m.s<0?1:-1)*clamp((kA||0)*3,-0.06,0.06)+(m.u<2?0.5*clamp((dust||0)-0.6,0,2.2):0);   /* a low lens behind a roosting pack films a wall of dust (milestone 2): the high mount looks down over it. (From 0.6: one or two riders ahead cost nothing,
        so the rig comes back down to the cover's framing as soon as the pack thins: measured on the real race, the dust ahead of seats 7 / 12 is 0.6 / 0.8 at the median and 2.1 / 3.1 at p90) */   /* a right turn ahead (kA > 0) leans a little toward the lens on his right (the composition looks into the turn by itself: xT) */
     const f=r.fr; if(f&&!r.crash){ const c=Math.cos(f.th), s=Math.sin(f.th), lt=(r.lat||0)+(hm.x-S.x)*-s+(hm.z-S.z)*c, over=Math.abs(lt)-(f.hw-0.35); if(over>0) P+=0.25+over*0.5;
