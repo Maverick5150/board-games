@@ -221,16 +221,16 @@ const GL_AO_HI=`float mxAO=clamp(mxT.b*mxAOd,0.0,1.0);
 reflectedLight.indirectDiffuse*=mxAO*mxAO;
 reflectedLight.directDiffuse*=mix(1.0,mxAO,0.9);
 float mxWs=smoothstep(0.4,0.92,mxWet);
-reflectedLight.directSpecular*=mix(0.12,1.25,mxWs)*mix(1.0,mxAO,0.9);
+reflectedLight.directSpecular*=mix(0.12,0.5,mxWs)*mix(1.0,mxAO,0.9)*vec3(1.0,0.8,0.55);   /* the wet rut walls caught the key light as a thin white line (a1-a5 captures): a warm, softer glint */
 reflectedLight.indirectSpecular*=mix(0.18,0.7,mxWs)*mxAO*vec3(1.0,0.84,0.62);   /* dry powdery dirt barely mirrors the floodlit environment: at a grazing angle the rut walls and lips read as a white ribbon (a2 captures) */
-float mxFr=pow(1.0-clamp(dot(mxNg,normalize(vViewPosition)),0.0,1.0),3.0);
+float mxFr=pow(1.0-clamp(dot(mxNg,normalize(vViewPosition)),0.0,1.0),5.0);
 reflectedLight.indirectSpecular+=uSheen*(mxFr*mxWs*uTun.z*mxAO);
 `;
 const GL_AO_LO=`float mxAO=clamp(mxT.b*mxAOd,0.0,1.0);
 reflectedLight.indirectDiffuse*=mxAO*mxAO;
 reflectedLight.directDiffuse*=mix(1.0,mxAO,0.9);
 `;
-const GL_ROUGH=`float roughnessFactor=clamp(mix(0.97,0.5,mxWet*mxWet)-0.1*mxWr,0.38,1.0);\n`;
+const GL_ROUGH=`float roughnessFactor=clamp(mix(0.97,0.62,mxWet*mxWet)-0.08*mxWr,0.5,1.0);\n`;
 
 /* a neutral wear map (no grooves) for the start strip */
 let NOWEAR=null;
@@ -242,7 +242,7 @@ function dirtMaterial(tier,tiles,sheen){
   const m=hi?new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.95,metalness:0,vertexColors:true,side:THREE.DoubleSide})
             :new THREE.MeshLambertMaterial({color:0xffffff,vertexColors:true,side:THREE.DoubleSide});
   const U={uTrack:{value:null},uTileA:{value:tiles.A},uTileB:{value:tiles.B},uClump:{value:tiles.K},uWearT:{value:noWear()},uTm:{value:new THREE.Vector4(1/500,4,0.125,1)},uSheen:{value:new THREE.Color(sheen)},
-    uTun:{value:new THREE.Vector4(hi?1.5:1.2,hi?1.15:0.9,0.5,hi?1.35:1.2)},uTun2:{value:new THREE.Vector4(1,hi?1:0,1,0)},uWear:{value:new THREE.Vector4(0,0,0,0)}};
+    uTun:{value:new THREE.Vector4(hi?1.5:1.2,hi?1.15:0.9,0.22,hi?1.35:1.2)},uTun2:{value:new THREE.Vector4(1,hi?1:0,1,0)},uWear:{value:new THREE.Vector4(0,0,0,0)}};
   m.userData.mx=U;
   m.onBeforeCompile=sh=>{
     Object.assign(sh.uniforms,U);
