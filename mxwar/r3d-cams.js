@@ -273,10 +273,10 @@ export function createCams(VIEW){
   function wideSpot(side){
     const C=VIEW.C, F=C.layout.floor;
     if(C.kind==="stadium"&&F){
-      const BY=VIEW.world&&VIEW.world.ctx&&VIEW.world.ctx.bowlY;   /* the stadium's own stands (r3d-stadium-bowl.js bowlY(x, z) -> {y, d}): the eye stands 2.8 m above the seats under it, in the lower tiers like a TV's main camera */
+      const BY=VIEW.world&&VIEW.world.ctx&&VIEW.world.ctx.bowlY;   /* the stadium's own stands (r3d-stadium-bowl.js bowlY(x, z) -> {y, d}): the eye stands 4.6 m above the seats under it, in the lower tiers like a TV's main camera (milestone 2: 4.6 m, over the heads of the near crowd cards) */
       const a=[PI/2,PI*1.5,PI*0.72,PI*0.28][side%4], d=BY?[20,20,18,18][side%4]:[46,46,38,38][side%4], cx=(F[0]+F[1])/2, cz=(F[2]+F[3])/2, rx=(F[1]-F[0])/2+1.5, rz=(F[3]-F[2])/2+1.5, ca=Math.cos(a), sa=Math.sin(a), e=4;
       const P=(VIEW.world&&VIEW.world.ctx&&VIEW.world.ctx.bowl&&VIEW.world.ctx.bowl.prof)||BOWL; let hS=P[P.length-1][1]; for(let i=1;i<P.length;i++){ if(d<=P[i][0]){ hS=lerp(P[i-1][1],P[i][1],(d-P[i-1][0])/(P[i][0]-P[i-1][0])); break; } }
-      const at=aa=>{ const c1=Math.cos(aa), s1=Math.sin(aa), px=cx+Math.sign(c1)*Math.pow(Math.abs(c1),2/e)*rx+c1*d, pz=cz+Math.sign(s1)*Math.pow(Math.abs(s1),2/e)*rz+s1*d; return new THREE.Vector3(px,BY?Math.max(BY(px,pz).y,0)+2.8:hS+2.8,pz); };   /* the bowl's own parametrisation (r3d-world stadium()): a point on the stands */
+      const at=aa=>{ const c1=Math.cos(aa), s1=Math.sin(aa), px=cx+Math.sign(c1)*Math.pow(Math.abs(c1),2/e)*rx+c1*d, pz=cz+Math.sign(s1)*Math.pow(Math.abs(s1),2/e)*rz+s1*d; return new THREE.Vector3(px,BY?Math.max(BY(px,pz).y,0)+4.6:hS+4.6,pz); };   /* the bowl's own parametrisation (r3d-world stadium()): a point on the stands */
       return {a:a,d:d,at:at,pos:at(a),mid:new THREE.Vector3(cx,0,cz-2),stadium:true};
     }
     let x0=1e9,x1=-1e9,z0=1e9,z1=-1e9; for(let i=0;i<C.N;i+=4){ x0=Math.min(x0,C.x[i]); x1=Math.max(x1,C.x[i]); z0=Math.min(z0,C.z[i]); z1=Math.max(z1,C.z[i]); }
@@ -563,12 +563,12 @@ export function createCams(VIEW){
     /* the pack's middle (the riders racing, the leader's end weighted a little) */
     let sx=0,sz=0,n=0,minx=1e9,maxx=-1e9,minz=1e9,maxz=-1e9; VIEW.rs.forEach(x=>{ if(x.gone||!x.pos) return; sx+=x.pos.x; sz+=x.pos.z; n++; minx=Math.min(minx,x.pos.x); maxx=Math.max(maxx,x.pos.x); minz=Math.min(minz,x.pos.z); maxz=Math.max(maxz,x.pos.z); });
     if(!n){ sx=w.mid.x; sz=w.mid.z; n=1; minx=maxx=sx; minz=maxz=sz; } else { sx/=n; sz/=n; }
-    const keep=port?0.92:0.3, tx=lerp(w.mid.x,sx,keep), tz=lerp(w.mid.z,sz,keep), ty=terrainAt(tx,tz,0)+0.4;
+    const keep=port?0.92:0.5, tx=lerp(w.mid.x,sx,keep), tz=lerp(w.mid.z,sz,keep), ty=terrainAt(tx,tz,0)+0.4;
     if(!K.init||snap){ K.tx.snap(tx); K.ty.snap(ty); K.tz.snap(tz); K.init=true; }
     T.set(K.tx.step(tx,1.4,dt),K.ty.step(ty,1.4,dt),K.tz.step(tz,1.4,dt));
     cFocus.copy(T);
-    /* the lens: the whole course in a landscape frame (50 degrees, the stadium_aerial preset); on a phone, the pack's width */
-    const dist=E.distanceTo(T); let fov=50;
+    /* the lens: the whole course in a landscape frame (46 degrees: the stadium_aerial preset's 50 a little tighter, the aim halfway to the pack (milestone 2: the pack was a few pixels wide)); on a phone, the pack's width */
+    const dist=E.distanceTo(T); let fov=46;
     if(port){ const wid=Math.max(18,Math.hypot(maxx-minx,maxz-minz)*1.2+12); fov=clamp(2*Math.atan(wid/asp/(2*dist))*R2D,24,72); }
     RG.fov=fov; RG.roll=0; RG.near=0.5; RG.clr=2.5; RG.follow=false;
   }
