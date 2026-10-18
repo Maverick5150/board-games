@@ -476,7 +476,8 @@ export function createCams(VIEW){
         let cov=0;
         if(nf){ x0=Math.max(-1,x0); x1=Math.min(1,x1); y0=Math.max(-1,y0); y1=Math.min(1,y1); if(x1>x0&&y1>y0) cov=(x1-x0)*(y1-y0)/4; }   /* (all of him behind the lens: nothing) */
         const k=clamp((cov-0.05)/0.25,0,1)*(w?0.7:1); if(k>I) I=k; } }
-    let P=m.pref+2.4*I+(m.s<0?1:-1)*clamp((kA||0)*3,-0.06,0.06)+(m.u<2?0.45*clamp((dust||0)-0.3,0,2.2):0);   /* a low lens behind a roosting pack films a wall of dust (milestone 2): the high mount looks down over it */   /* a right turn ahead (kA > 0) leans a little toward the lens on his right (the composition looks into the turn by itself: xT) */
+    let P=m.pref+2.4*I+(m.s<0?1:-1)*clamp((kA||0)*3,-0.06,0.06)+(m.u<2?0.5*clamp((dust||0)-0.6,0,2.2):0);   /* a low lens behind a roosting pack films a wall of dust (milestone 2): the high mount looks down over it. (From 0.6: one or two riders ahead cost nothing,
+       so the rig comes back down to the cover's framing as soon as the pack thins: measured on the real race, the dust ahead of seats 7 / 12 is 0.6 / 0.8 at the median and 2.1 / 3.1 at p90) */   /* a right turn ahead (kA > 0) leans a little toward the lens on his right (the composition looks into the turn by itself: xT) */
     const f=r.fr; if(f&&!r.crash){ const c=Math.cos(f.th), s=Math.sin(f.th), lt=(r.lat||0)+(hm.x-S.x)*-s+(hm.z-S.z)*c, over=Math.abs(lt)-(f.hw-0.35); if(over>0) P+=0.25+over*0.5;
       if(groundNear(r,hm.x-S.x,hm.z-S.z)>gS+0.75) P+=0.35; }
     if(VIEW.C.kind==="stadium"&&VIEW.C.layout.floor){ hw2.x=hm.x; hw2.z=hm.z; inFloor(hw2); if(Math.hypot(hw2.x-hm.x,hw2.z-hm.z)>0.3) P+=0.6; }
