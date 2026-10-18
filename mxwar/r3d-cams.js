@@ -53,7 +53,7 @@ function lensFov(fov,asp,sh){ return asp<1&&sh!=="gate"&&sh!=="crash"?clamp(2*Ma
 
 export function createCams(VIEW){
   /* ---------------- the cameras' own state ---------------- */
-  let shot=null, shotLog=[], featLog=[], HG=null, mode="auto", CORN=[], share=0.5, lapWide=-1, launched=false, onbCool=0, cornLog=[], wideSide=0, youOut=0;   /* youOut: seconds the person's rider has been out of the frame */
+  let shot=null, shotLog=[], featLog=[], HG=null, mode="auto", CORN=[], share=0.5, lapWide=-1, launched=false, onbCool=0, cornLog=[], wideSide=0, youOut=0, earlyT=-1e9;   /* youOut: seconds the person's rider has been out of the frame; earlyT: the race time of the last early cut back to him */
   const camS={pos:new THREE.Vector3(),look:new THREE.Vector3(),fov:50,snap:true,roll:0};
   const tmpO={}, v3=new THREE.Vector3();   /* scratch */
   const cam=VIEW.cam;   /* the THREE.PerspectiveCamera (race3d.js owns it; these functions move it) */
@@ -364,6 +364,9 @@ export function createCams(VIEW){
       else if(shot.type==="track"&&shot.cam){ const r=VIEW.rs[shot.subj]; if(r&&r.pos){ dirA.subVectors(shot.cam,r.pos); fwA.set(Math.cos(r.th||0),0,Math.sin(r.th||0)); if(dirA.dot(fwA)<-18||dirA.length()<4.5) pickShot(true); } }
       return; }
     if(shot.pri<9&&shot.t>0.6){ const L=candidates(true).filter(c=>c.pri>shot.pri&&(c.pri>=9||(c.pri>shot.pri+2.5&&shot.t>1.2))).sort((a,b)=>b.pri-a.pri); if(L.length){ if(L[0].why==="launch") launched=true; setShot(L[0]); return; } }   /* a crash, the holeshot, the checkered flag cut in at once; the white flag or the yellow section over a filler shot */
+    /* the person's rider out of the frame for over 6 s: a filler shot of somebody else ends early, and the next pick (his hero chase has the lift then) brings him back (milestone 2: the CEO
+       roots for his own rider; QD motion #6 measured him out of the frame for up to 13.7 s). At most once every 4 s of race */
+    if(youOut>6&&shot.pri<6&&shot.t>1.2&&!isMe(shot.subj)&&shot.why!=="yellow"&&VIEW.T-earlyT>4&&meList().some(i=>!VIEW.rs[i].crash&&!VIEW.rs[i].onStart)){ earlyT=VIEW.T; pickShot(); return; }
     if(shot.t>=shot.max){ pickShot(); return; }
     if(shot.t>=shot.min){
       const r=VIEW.rs[shot.subj];
@@ -856,7 +859,7 @@ export function createCams(VIEW){
     get shot(){ return shot; }, get shotLog(){ return shotLog; }, get featLog(){ return featLog; }, get target(){ return cTarget; }, get focus(){ return cFocus; }, camS:camS,
     /* a new course: the grid of the dirt's heights (so no camera sits inside a jump), the corners; a new race: forget the shots */
     buildGrid:function(){ HG=heightGrid(); buildCorners(); RAILS=null; },
-    reset:function(){ camS.gp=null; shotLog=[]; featLog=[]; cornLog=[]; share=0.5; youOut=0; lapWide=-1; launched=false; onbCool=0; wideSide=0; camS.offE=null; recDispose(); replayed.clear(); replays=0; },
+    reset:function(){ camS.gp=null; shotLog=[]; featLog=[]; cornLog=[]; share=0.5; youOut=0; earlyT=-1e9; lapWide=-1; launched=false; onbCool=0; wideSide=0; camS.offE=null; recDispose(); replayed.clear(); replays=0; },
     snap:function(){ camS.snap=true; },
     modes:function(){ return MODES.map(m=>({id:m.id,name:m.name})); }, mode:setMode, nextMode:nextMode, replayNow:replayNow,
     state:function(){ return {mode:mode,shot:shot?{type:shot.type,why:shot.why||"",subj:shot.subj,mount:shot.k&&shot.k.mount||""}:null,youOut:+youOut.toFixed(1),replay:!!RP,replays:replays,rec:REC?REC.Q.length:0,recMB:REC?+(REC.Q.length*REC.total*4/1048576).toFixed(1):0,share:+share.toFixed(2)}; },
