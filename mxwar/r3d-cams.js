@@ -303,7 +303,7 @@ export function createCams(VIEW){
     [lead].concat(me).forEach((j,ix)=>{ const qq=rs[j]; if(!qq||qq.onStart) return; const you=ix>0, nf=nextFeat(qq.s);
       if(nf){ const tt=nf.d/Math.max(4,qq.v);
         if(tt<3.0&&tt>0.2){ const f=nf.f, seen=featLog.slice(-2).indexOf(f.from)>=0, pri=(you?5.3+boost:4.6)-(seen?1.6:0)+(f.big?0.4:0);
-          if(you&&f.k==="jump"&&onbCool<=0&&VIEW.C.kind==="stadium"&&packAround(j,3.2)<2) L.push({type:"onboard",subj:j,pri:pri+0.4,min:3.6,max:5.4,why:"jump",feat:f});   /* over the big jump from the rider's own eyes */
+          if(you&&f.k==="jump"&&onbCool<=0&&VIEW.C.kind==="stadium"&&packAround(j,3.5)===0) L.push({type:"onboard",subj:j,pri:pri+0.4,min:3.6,max:5.4,why:"jump",feat:f});   /* over the big jump from the rider's own eyes */
           L.push({type:f.k==="whoops"?"whoops":f.k==="jump"?"jump":"track",subj:j,pri:pri,min:3.6,max:7,cam:()=>featCam(f),feat:f,why:f.k}); } }
       const nc=nextCorner(qq.s);   /* a corner coming up: low inside the berm as they rail it */
       if(nc&&cornerCam(nc.c)){ const tt=nc.d/Math.max(4,qq.v), recent=cornLog.slice(-3).indexOf(nc.c.sa)>=0;
@@ -316,7 +316,7 @@ export function createCams(VIEW){
     /* a wide establishing shot of the whole night: once a lap, and after the first corner of lap one */
     if(lapWide!==VIEW.lapNo&&!r.onStart&&(VIEW.lapNo>1||r.D>VIEW.C.hsD+20)&&VIEW.C.kind!==undefined&&motion()!=="off") L.push({type:"bcast",subj:lead,pri:3.7,min:4.8,max:7.2,why:"wide"});   /* (milestone 2: the high broadcast from the stands, framed wide) */
     L.push({type:"chase",subj:lead,pri:2,min:4,max:7,why:"lead"});
-    if(me.length) L.push({type:"chase",subj:me[0],pri:Math.min(8.5,3.4+boost+outB),min:4.5,max:8,why:"you"});   /* the hero chase on the person's rider: the default filler (milestone 2: 2.9 before) */
+    if(me.length) L.push({type:"chase",subj:me[0],pri:Math.min(8.5,4.0+boost+outB),min:4.5,max:8,why:"you"});   /* the hero chase on the person's rider: the default filler, above the leader's corners and the establishing shot (milestone 2: 2.9 before) */
     if(!r.onStart){ const rsd=r.s+Math.max(8,r.v*2.2); L.push({type:"track",subj:lead,pri:2.1,min:3.5,max:6,cam:()=>trackCam(rsd,3.4),why:"roving"}); }
     /* never an empty track: a chase with nobody near it, or a spot shot of a lone rider, is the last choice; nor a chase with riders right behind the subject (the lens would sit among them) */
     L.forEach(c=>{ if(c.pri>=9||c.type==="wide"||c.type==="bcast"||c.type==="crash") return; const n=packAround(c.subj,c.type==="chase"?34:22); if(n===0) c.pri-=2.2; else if(n===1) c.pri-=0.5;
@@ -356,7 +356,7 @@ export function createCams(VIEW){
     shot.t+=dt; if(onbCool>0) onbCool-=dt;
     if(VIEW.mode!=="race") return;
     replayAuto(); if(RP) return;
-    { const on=isMe(shot.subj)?1:0; share+=(on-share)*Math.min(1,dt/28); }   /* the person's share of the screen over about the last half minute */
+    { const on=meList().length?(youOut===0?1:0):(isMe(shot.subj)?1:0); share+=(on-share)*Math.min(1,dt/28); }   /* the person's share of the screen over about the last half minute: the time his rider was really in the frame (milestone 2; it counted the shots whose subject he was) */
     if(shot.type==="gate"&&shot.t<shot.min) return;
     if(mode!=="auto"){   /* a preset: it holds; the shot is only renewed when its rider changes (a crash out), and the broadcast re-picks its spot as the rider passes */
       const s=lockedShot(); if(!s){ return; }
@@ -540,6 +540,7 @@ export function createCams(VIEW){
     const yaw=K.yaw.stepA(look.th,0.1,dt), pitchB=st?st.pitch:0, pitch=K.pitch.step(pitchB*0.8-0.1,0.09,dt), lean=st?st.lean:(r.lean||0), roll=K.roll.step(lean*0.45,0.14,dt);
     if(st&&st.visible){ oEul.set(st.lean,st.yaw,st.pitch,"YZX"); oQ.setFromEuler(oEul); oV.set(0.4,1.32,0).applyQuaternion(oQ); E.set(st.x+oV.x,st.y+oV.y,st.z+oV.z); }   /* on the bars: rigid on the bike's own frame, whatever it does in the air (the rider's helmet is behind the lens) */
     else { const p=pathAt(r.D+0.15,r.lat,pa), cy0=Math.cos(yaw), sy0=Math.sin(yaw); E.set(p.x+cy0*0.4,(r.oy!=null?r.oy:S.y-1)+1.32,p.z+sy0*0.4); }
+    if(r.fr&&!r.crash) E.y=Math.max(E.y,groundNear(r,E.x-S.x,E.z-S.z)+0.25);   /* never below the dirt on a landing (QD motion #12: it dipped 13 cm) */
     const cp=Math.cos(pitch); T.set(E.x+Math.cos(yaw)*cp*20,E.y+Math.sin(pitch)*20,E.z+Math.sin(yaw)*cp*20);
     cFocus.copy(T);
     RG.fov=82; RG.roll=roll; RG.near=0.1; RG.clr=0.3; RG.follow=true;
