@@ -149,40 +149,71 @@ function finishBuild(C,look){
   return {grp:grp,flagAt:new THREE.Vector3(f.x+Math.cos(f.th)*0.9-Math.sin(f.th)*lat,(f.y||0)+2.47,f.z+Math.sin(f.th)*0.9+Math.cos(f.th)*lat),th:f.th,side:side,lat:lat};
 }
 
-/* ---------------- a flagger (a person on a stand or beside the track) waving a flag; one mesh each ---------------- */
+/* ---------------- a flagger (a person on a stand or beside the track) waving a flag ----------------
+   Milestone 2: a real figure instead of boxes (about 1.4k triangles, smooth low-poly limbs: shoes, shins, thighs, hips, a tapered torso, shoulders, a neck, a head with a cap
+   and its brim; the free arm hangs bent with a gloved hand; the starter in a white shirt and dark trousers, a marshal in a hi-vis orange vest with two reflective bands),
+   and the flag is CLOTH: a 14 x 8 grid that a wave travels along from the pole to the free edge, flutters at the edge, gathers toward the pole as it swings and sags when it
+   rests, with its normals recomputed every frame so the folds catch the floodlights (it used to be a flat square that glowed its own colour). API unchanged:
+   {grp, arm, flag, wave(t, amp), setTex(tex)}; front = +z, the flag arm at the right shoulder. */
 export function flaggerBuild(flagTex,o){
   o=o||{}; const mar=!!o.marshal, grp=new THREE.Group();
-  /* the starter in a white shirt; a track marshal in a hi-vis orange vest over a dark shirt, with a big flag that shows from across the
-     floor (polish: the yellow flag was a speck) */
-  const shirt=lin(mar?"#2a2c34":"#e8e4dc"), vest=lin("#ff7418"), strip=lin("#e9ecef");
-  const parts=[
-    xf(paint(new THREE.BoxGeometry(0.36,0.5,0.22),shirt),0,1.2,0),
-    xf(paint(new THREE.BoxGeometry(0.15,0.8,0.17),lin("#23252c")),0.085,0.42,0), xf(paint(new THREE.BoxGeometry(0.15,0.8,0.17),lin("#23252c")),-0.085,0.42,0),
-    xf(paint(new THREE.BoxGeometry(0.14,0.08,0.22),lin("#141416")),0.085,0.04,0.02), xf(paint(new THREE.BoxGeometry(0.14,0.08,0.22),lin("#141416")),-0.085,0.04,0.02),
-    xf(paint(new THREE.BoxGeometry(0.09,0.5,0.09),shirt),-0.22,1.17,0,0,0,-0.08),
-    xf(paint(new THREE.SphereGeometry(0.115,10,8),lin("#c58c63")),0,1.6,0),
-    xf(paint(new THREE.SphereGeometry(0.125,10,5,0,Math.PI*2,0,1.3),lin(mar?"#ff7418":"#1d2a4a")),0,1.65,0),
-    xf(paint(new THREE.BoxGeometry(0.16,0.02,0.12),lin(mar?"#ff7418":"#1d2a4a")),0,1.64,0.12)];
-  if(mar) parts.push(xf(paint(new THREE.BoxGeometry(0.38,0.42,0.24),vest),0,1.24,0), xf(paint(new THREE.BoxGeometry(0.385,0.04,0.245),strip),0,1.16,0), xf(paint(new THREE.BoxGeometry(0.385,0.04,0.245),strip),0,1.3,0));
+  const shirt=lin(mar?"#2a2c34":"#ecebe6"), pants=lin(mar?"#1c1e25":"#23252c"), shoe=lin("#131316"), skin=lin(mar?"#b07a52":"#c58c63"), cap=lin(mar?"#ff6a12":"#1d2a4a"), glove=lin(mar?"#2a2a30":"#e8e6e0");
+  const vest=lin("#ff6a12"), refl=[0.92,0.94,0.96], hair=lin("#2a1e16");
+  const cyl=(r0,r1,h,c,x,y,z,rx,rz,sz)=>{ const g=paint(new THREE.CylinderGeometry(r0,r1,h,10,1,false),c); if(sz) g.scale(1,1,sz); return xf(g,x,y,z,rx||0,0,rz||0); };
+  const sph=(r,c,x,y,z,sx,sy,sz)=>{ const g=paint(new THREE.SphereGeometry(r,12,9),c); g.scale(sx||1,sy||1,sz||1); return xf(g,x,y,z); };
+  const parts=[];
+  for(const s of [-1,1]){
+    parts.push(xf(paint(new THREE.BoxGeometry(0.11,0.075,0.27),shoe),s*0.1,0.038,0.04));                                   /* the shoes */
+    parts.push(cyl(0.056,0.046,0.46,pants,s*0.1,0.31,0,0,s*0.03));                                                          /* the shins */
+    parts.push(cyl(0.078,0.06,0.44,pants,s*0.1,0.74,0,0,s*0.03));                                                           /* the thighs */
+  }
+  parts.push(cyl(0.165,0.15,0.22,pants,0,0.98,0,0,0,0.7));                                                                    /* the hips */
+  parts.push(cyl(0.192,0.152,0.52,shirt,0,1.3,0,0,0,0.64));                                                                   /* the torso */
+  parts.push(sph(0.088,shirt,-0.19,1.5,0,1,0.85,0.9), sph(0.088,mar?vest:shirt,0.19,1.5,0,1,0.85,0.9));                       /* the shoulders */
+  parts.push(cyl(0.05,0.056,0.12,skin,0,1.61,0));                                                                             /* the neck */
+  parts.push(sph(0.104,skin,0,1.735,0.005,0.92,1.08,1.0));                                                                    /* the head */
+  { const h=paint(new THREE.SphereGeometry(0.111,12,6,0,Math.PI*2,0,Math.PI*0.5),cap); h.scale(1,0.9,1.04); parts.push(xf(h,0,1.755,0)); }   /* the cap */
+  { const b=paint(new THREE.CylinderGeometry(0.075,0.078,0.014,12),cap); b.scale(1,1,1.25); parts.push(xf(b,0,1.758,0.105)); }             /* its brim */
+  parts.push(sph(0.06,hair,0,1.70,-0.07,1.4,0.9,0.6));                                                                        /* the hair at the back */
+  /* the free (left) arm: hanging a little out and bent forward, a glove */
+  parts.push(cyl(0.05,0.044,0.3,mar?vest:shirt,-0.22,1.34,0.0,0,-0.1));
+  parts.push(cyl(0.044,0.037,0.27,skin,-0.24,1.07,0.06,-0.35,-0.06));
+  parts.push(sph(0.046,glove,-0.25,0.92,0.11,0.9,1.1,0.8));
+  if(mar){ parts.push(cyl(0.2,0.166,0.42,vest,0,1.32,0,0,0,0.7));                                                             /* the hi-vis vest */
+    parts.push(cyl(0.203,0.19,0.036,refl,0,1.23,0,0,0,0.71), cyl(0.2,0.196,0.036,refl,0,1.4,0,0,0,0.71)); }                 /* its reflective bands */
+  else parts.push(cyl(0.194,0.154,0.06,lin("#1d2a4a"),0,1.08,0,0,0,0.65));                                                 /* the starter's belt */
   const man=new THREE.Mesh(merge(parts),new THREE.MeshLambertMaterial({vertexColors:true})); grp.add(man);
-  const arm=new THREE.Group(); arm.position.set(0.2,1.4,0);
-  const armM=new THREE.Mesh(paint(new THREE.BoxGeometry(0.09,0.55,0.09),mar?vest:shirt),new THREE.MeshLambertMaterial({vertexColors:true})); armM.position.set(0,0.25,0); arm.add(armM);
+  /* the flag arm: a pivot at the right shoulder, the arm raised (upper arm, forearm, glove), the pole in the hand, the cloth on the pole */
+  const arm=new THREE.Group(); arm.position.set(0.2,1.49,0);
+  const ap=[cyl(0.05,0.045,0.3,mar?vest:shirt,0,0.15,0), cyl(0.045,0.038,0.27,mar?vest:shirt,0,0.43,0), sph(0.047,glove,0,0.6,0.01,0.9,1.1,0.85)];
+  const armM=new THREE.Mesh(merge(ap),new THREE.MeshLambertMaterial({vertexColors:true})); arm.add(armM);
   const fw=mar?1.25:0.9, fh=mar?0.86:0.6, pl=mar?1.5:1.1;
-  const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.015,0.015,pl,5),new THREE.MeshLambertMaterial({color:0xcccccc})); pole.position.set(0,0.2+pl/2,0); arm.add(pole);
-  const fg=new THREE.PlaneGeometry(fw,fh,8,2); fg.translate(fw/2,0,0);
-  /* the cloth glows a little of its own colour: it reads under the lights and in the shade */
-  const flag=new THREE.Mesh(fg,new THREE.MeshLambertMaterial({map:flagTex,side:THREE.DoubleSide,emissive:0xffffff,emissiveMap:flagTex,emissiveIntensity:mar?0.5:0.3})); flag.position.set(0,0.2+pl-fh/2,0); arm.add(flag);
+  const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.014,0.016,pl,6),new THREE.MeshLambertMaterial({color:0xd8d8dc})); pole.position.set(0,0.52+pl/2,0.0); arm.add(pole);
+  const NX=14, NY=8, fg=new THREE.PlaneGeometry(fw,fh,NX,NY); fg.translate(fw/2,0,0);
+  /* a little of the cloth's own colour so it reads in the shade; the folds are lit by the floodlights */
+  const flag=new THREE.Mesh(fg,new THREE.MeshLambertMaterial({map:flagTex,side:THREE.DoubleSide,emissive:0xffffff,emissiveMap:flagTex,emissiveIntensity:mar?0.2:0.13}));
+  flag.position.set(0.012,0.52+pl-fh/2-0.02,0); arm.add(flag);
   grp.add(arm);
   const P=fg.attributes.position, X0=Float32Array.from(P.array);
-  return {grp,arm,flag,wave(t,amp){ for(let i=0;i<P.count;i++){ const x=X0[i*3]; P.array[i*3+2]=Math.sin(t*9-x*5)*0.13*x*amp; P.array[i*3+1]=X0[i*3+1]-Math.abs(Math.sin(t*4.5))*0.06*x*amp; } P.needsUpdate=true;
+  return {grp,arm,flag,wave(t,amp){
+      const a=Math.min(1,amp), sag=(1-a)*0.42*fh;
+      for(let i=0;i<P.count;i++){ const x=X0[i*3], y=X0[i*3+1], u=x/fw, v=y/fh;
+        const w=Math.sin(t*7.4-u*6.2+v*1.3)*0.11*u*a*fw+Math.sin(t*13.1-u*11.0+v*3.1)*0.032*u*u*a*fw+Math.sin(t*1.7+v*2.0)*0.02*u;
+        P.array[i*3]=x-Math.abs(w)*0.4*u-sag*0.25*u*u;
+        P.array[i*3+1]=y-sag*u*u+Math.sin(t*4.6-u*4.2)*0.03*u*a*fw;
+        P.array[i*3+2]=w; }
+      P.needsUpdate=true; fg.computeVertexNormals();
       if(mar){ arm.rotation.z=-0.15+Math.sin(t*5.2)*0.75*amp; arm.rotation.x=Math.sin(t*2.6)*0.22*amp; flag.rotation.y=Math.sin(t*5.2+0.9)*0.95*amp; }   /* a marshal waves it hard, side to side over the head, the cloth sweeping round the pole (it shows from every side) */
       else { arm.rotation.z=-0.35+Math.sin(t*6)*0.55*amp; arm.rotation.x=Math.sin(t*3)*0.1*amp; } },
     setTex(t){ flag.material.map=t; flag.material.emissiveMap=t; flag.material.needsUpdate=true; }};
 }
 export function flagTex(kind){
-  const c=canvas(96,64), x=c.getContext("2d");
-  if(kind==="checkered"){ for(let i=0;i<6;i++) for(let j=0;j<4;j++){ x.fillStyle=(i+j)%2?"#111114":"#f6f2e8"; x.fillRect(i*16,j*16,16,16); } }
-  else { x.fillStyle=kind==="white"?"#fbfaf5":kind==="yellow"?"#f6d21c":kind==="green"?"#2fa84f":"#c8102e"; x.fillRect(0,0,96,64); }
+  /* the cloth: a plain colour with a hemmed edge and a little weave shading (the checkered flag keeps its squares) */
+  const c=canvas(128,96), x=c.getContext("2d");
+  if(kind==="checkered"){ for(let i=0;i<8;i++) for(let j=0;j<6;j++){ x.fillStyle=(i+j)%2?"#111114":"#f6f2e8"; x.fillRect(i*16,j*16,16,16); } }
+  else { x.fillStyle=kind==="white"?"#fbfaf5":kind==="yellow"?"#f6d21c":kind==="green"?"#2fa84f":"#c8102e"; x.fillRect(0,0,128,96);
+    x.fillStyle="rgba(0,0,0,0.10)"; for(let yy=0;yy<96;yy+=3) x.fillRect(0,yy,128,1); }
+  x.fillStyle="rgba(0,0,0,0.16)"; x.fillRect(0,0,6,96); x.fillRect(0,0,128,3); x.fillRect(0,93,128,3); x.fillRect(125,0,3,96);   /* the hem and the pole sleeve */
   return tex(c,false);
 }
 
