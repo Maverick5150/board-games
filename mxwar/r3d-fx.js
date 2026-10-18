@@ -33,10 +33,10 @@ const GL=typeof window!=="undefined"?window:globalThis;
    bank = how strongly the dust glows when it is seen against the ring of floodlight banks (forward scattering); size = crumbs and clods larger on the
    lower resolutions and smaller pools (FIRE TV draws 960x540: a 1 cm crumb there is under a pixel at 5 m) */
 const TIERS={
-  high:  {n:"high",   specks:12000, spk:1.00, clods:1400, puffs:300, haze:36, motes:170, lens:6, rock:20, rate:1.00, atlas:128, pbr:true,  depth:true,  veil:0.30, maxPx:12, bank:0.30, size:1.0},
+  high:  {n:"high",   specks:20000, spk:1.00, clods:1400, puffs:300, haze:36, motes:170, lens:6, rock:20, rate:1.00, atlas:128, pbr:true,  depth:true,  veil:0.30, maxPx:12, bank:0.30, size:1.0},
   medium:{n:"medium", specks:5000, spk:0.75, clods:640,  puffs:150, haze:14, motes:80,  lens:0, rock:20, rate:0.85, atlas:128, pbr:true,  depth:true,  veil:0.28, maxPx:11, bank:0.26, size:1.15},
   low:   {n:"low",    specks:1200, spk:0.55, clods:240,  puffs:64,  haze:0,  motes:0,   lens:0, rock:8,  rate:0.7,  atlas:96,  pbr:false, depth:false, veil:0.24, maxPx:9,  bank:0.22, size:1.5},
-  ultra: {n:"ultra",  specks:16000, spk:1.20, clods:2000, puffs:380, haze:44, motes:210, lens:6, rock:20, rate:1.00, atlas:128, pbr:true,  depth:true,  veil:0.32, maxPx:13, bank:0.30, size:1.0},
+  ultra: {n:"ultra",  specks:26000, spk:1.20, clods:2000, puffs:380, haze:44, motes:210, lens:6, rock:20, rate:1.00, atlas:128, pbr:true,  depth:true,  veil:0.32, maxPx:13, bank:0.30, size:1.0},
   stick: {n:"stick",  specks:1400, spk:0.55, clods:160,  puffs:40,  haze:0,  motes:0,   lens:0, rock:8,  rate:0.6,  atlas:96,  pbr:false, depth:false, veil:0.22, maxPx:9,  bank:0.22, size:1.7}
 };
 const ALIAS={firetv:"stick",stick:"stick",low:"low",balanced:"medium",medium:"medium",high:"high",ultra:"ultra"};
@@ -518,7 +518,7 @@ export function createFx(opts){
     }
     /* THE STORM (m2): hundreds of crumbs a second off the rear tyre. Under power a tight ROOSTER TAIL (thrown back at the wheelspin speed, a clear arc that reads
        from the chase and from the stands) inside a wider fan; in a berm the back end slides and sprays to the outside; at speed the knobs keep throwing a steady spray (up to 450 a second) */
-    e.kA+=(450*cruise+2400*pw+2000*bm+600*sand*cruise)*SPK*(0.22+0.78*(1-e.ls)*(1-e.ls))*dt*PS.k*imp;   /* (m2: 22% on the start pad, was 3%: the old cut was for milestone 1's big cream spray sprites; dark 1 cm crumbs do not veil the gate) */
+    e.kA+=(450*cruise+2400*pw+2000*bm+600*sand*cruise)*SPK*(0.4+0.6*(1-e.ls)*(1-e.ls))*dt*PS.k*imp;   /* (m2: 40% on the start pad, was 3%: the old cut was for milestone 1's big cream spray sprites; dark 1 cm crumbs do not veil the gate) */
     n=e.kA|0; e.kA-=n; if(n>KMAX) n=KMAX;
     while(n-->0){
       const tail=rnd()<0.5*ef, u=rnd(), chip=rnd()<0.25;
