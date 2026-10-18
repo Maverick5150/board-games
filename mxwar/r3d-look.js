@@ -15,16 +15,16 @@
 import * as THREE_NS from "../ui/vendor/three-0.160.0.module.min.js";
 const THREE=THREE_NS;
 import {clamp,sstep,setKitTier,pbrFromPhong} from "./r3d-util.js";
-import {makeEnvironment} from "./r3d-lead-env.js";
+import {makeEnvironment,captureEnvironment} from "./r3d-lead-env.js";
 import {createPost,postSupported} from "./r3d-lead-post.js";
 
 /* the tier table: every effect is one flag. post: "full" (HDR scene + bloom + DOF + SMAA + grade) | "lite" (HDR scene + bloom + grade, MSAA) | "off" (the renderer's own frame: nothing extra) */
 export const TIERS={
-  high:  {rig:"full",shadowRes:1024,softShadow:false,env:true, pbr:true, fog:"exp",post:"full",bloom:1.0,bloomDiv:4,dof:true, motionBlur:1.0,haze:0.011,hazeI:1.0,aa:"fxaa",msaa:0,grade:1,vignette:0.34,grain:0.035,exposure:1.0,cssVig:false},   /* (polish: 1024 and a plain filter, as the quality table says: a 2048 soft map was 4x the texels and 9 taps) */
-  ultra: {rig:"full",shadowRes:2048,softShadow:true, env:true, pbr:true, fog:"exp",post:"full",bloom:1.0,bloomDiv:2,dof:true, motionBlur:1.0,haze:0.011,hazeI:1.0,aa:"fxaa",msaa:0,grade:1,vignette:0.34,grain:0.035,exposure:1.0,cssVig:false},
-  medium:{motionBlur:0,haze:0,hazeI:1,rig:"full",shadowRes:1024,softShadow:false,env:true, pbr:true, fog:"exp",post:"lite",bloom:0.75,bloomDiv:4,dof:false,aa:"fxaa",msaa:0,grade:1,vignette:0.30,grain:0.0, exposure:1.0,cssVig:false},
-  low:   {motionBlur:0,haze:0,hazeI:1,rig:"lite",shadowRes:1024,softShadow:false,env:false,pbr:false,fog:"lin",post:"off", bloom:0,   dof:false,aa:"none",msaa:0,grade:0,vignette:0,   grain:0.0, exposure:1.0,cssVig:false},
-  stick: {motionBlur:0,haze:0,hazeI:1,rig:"lite",shadowRes:1024,softShadow:false,env:false,pbr:false,fog:"lin",post:"off", bloom:0,   dof:false,aa:"none",msaa:0,grade:0,vignette:0,   grain:0.0, exposure:1.0,cssVig:false}
+  high:  {rig:"full",shadowRes:1024,softShadow:false,env:true, pbr:true, fog:"exp",post:"full",bloom:1.0,bloomDiv:4,dof:true, motionBlur:1.0,haze:0.011,hazeI:1.0,aa:"fxaa",msaa:0,grade:1,vignette:0.34,grain:0.035,exposure:1.0,cssVig:false,half:true,ao:1.0,envCap:true,bikeCC:true},   /* (polish: 1024 and a plain filter, as the quality table says: a 2048 soft map was 4x the texels and 9 taps) */
+  ultra: {rig:"full",shadowRes:2048,softShadow:true, env:true, pbr:true, fog:"exp",post:"full",bloom:1.0,bloomDiv:2,dof:true, motionBlur:1.0,haze:0.011,hazeI:1.0,aa:"fxaa",msaa:0,grade:1,vignette:0.34,grain:0.035,exposure:1.0,cssVig:false,half:true,ao:1.0,envCap:true,bikeCC:true},
+  medium:{motionBlur:0,haze:0,hazeI:1,rig:"full",shadowRes:1024,softShadow:false,env:true, pbr:true, fog:"exp",post:"lite",bloom:0.75,bloomDiv:4,dof:false,aa:"fxaa",msaa:0,grade:1,vignette:0.30,grain:0.0, exposure:1.0,cssVig:false,half:true,ao:0,envCap:true},
+  low:   {motionBlur:0,haze:0,hazeI:1,rig:"lite",shadowRes:1024,softShadow:false,env:false,pbr:false,fog:"lin",post:"off", bloom:0,   dof:false,aa:"none",msaa:0,grade:0,vignette:0,   grain:0.0, exposure:1.0,cssVig:false,half:false,ao:0,envCap:false,tvaa:true},
+  stick: {motionBlur:0,haze:0,hazeI:1,rig:"lite",shadowRes:1024,softShadow:false,env:false,pbr:false,fog:"lin",post:"off", bloom:0,   dof:false,aa:"none",msaa:0,grade:0,vignette:0,   grain:0.0, exposure:1.0,cssVig:false,half:false,ao:0,envCap:false,tvaa:true}
 };
 const SUN_DIR=new THREE.Vector3(), V1=new THREE.Vector3(), V2=new THREE.Vector3(), V3=new THREE.Vector3(), UP=new THREE.Vector3(0,1,0);
 const DEG=Math.PI/180;
@@ -50,7 +50,7 @@ export function createLook(renderer,opts){
   const amb=new THREE.AmbientLight(0xffffff,0.0); scene.add(amb);
   const SUN=new THREE.Vector3(0.5,0.8,0.3);
   const base={key:4.4,hemi:0.9,fill:0.42,rim:2.2,kick:0.5,bounce:0.8,amb:0.0};   /* the venue's intensities (the flags scale / switch them) */
-  const lastCam=new THREE.Vector3(1e6,0,0); let focusD=8, venueExp=1.1, envRT=null, envKind="", envWant="night", post=null, canPost=false, upRoots=[], fogKind="exp", fogCol=0x0b1226, fogDen=0.0042, cssVig=null, venueNight=true, curDof=0;
+  const lastCam=new THREE.Vector3(1e6,0,0); let focusD=8, venueExp=1.1, envRT=null, envKind="", envWant="night", capRT=null, capWorld=null, post=null, canPost=false, upRoots=[], fogKind="exp", fogCol=0x0b1226, fogDen=0.0042, cssVig=null, venueNight=true, curDof=0;
   const L={scene:scene,hemi:hemi,sun:sun,fill:fill,rim:rim,kick:kick,bounce:bounce,amb:amb,SUN:SUN,post:null,flags:F,tiers:TIERS};
   Object.defineProperty(L,"shadows",{get:()=>SHADOWS}); Object.defineProperty(L,"shHalf",{get:()=>shHalf}); Object.defineProperty(L,"tier",{get:()=>tierName});
 
@@ -92,14 +92,20 @@ export function createLook(renderer,opts){
     if(renderer.shadowMap.type!==st){ renderer.shadowMap.type=st; renderer.shadowMap.needsUpdate=true; scene.traverse(o=>{ const ms=o.material?(Array.isArray(o.material)?o.material:[o.material]):[]; ms.forEach(m=>{ m.needsUpdate=true; }); }); }
     /* the environment map and the physically based stand-ins */
     if(F.env&&!envRT&&L._world) ensureEnv();
-    scene.environment=(F.env&&envRT)?envRT.texture:null;
+    if(!L._applying&&F.env&&F.envCap&&L._stadium&&envRT&&capWorld!==L._world) captureWorldEnv();   /* (a tier that wants it, raised mid-race: the capture is made now) */
+    scene.environment=(F.env&&envRT)?((F.envCap&&capRT&&capWorld===L._world)?capRT.texture:envRT.texture):null;
     setKitTier(F.pbr?(F.post==="full"?"high":"mid"):"low");
     upRoots.forEach(r=>swapPBR(r,F.pbr));
     /* the post chain */
     const wantPost=F.post!=="off"&&canPost;
-    if(wantPost){
+    /* (milestone 2) the TV tiers' anti-aliasing: one FXAA pass over the frame as the screen would get it (r3d-lead-post.js ldr), only where the canvas itself has no MSAA and never with
+       Reduce effects (the contract: no antialiasing there) */
+    const wantTvaa=!wantPost&&!!F.tvaa&&!LO&&canvasAA()===false&&!!renderer.capabilities.isWebGL2;
+    if(wantPost||wantTvaa){
       if(!post){ post=createPost(renderer,{}); }
-      post.setFlags({bloom:F.bloom,bloomDiv:F.bloomDiv||2,dof:F.post==="full"&&F.dof,motionBlur:F.post==="full"?F.motionBlur:0,haze:F.post==="full"?F.haze:0,hazeI:F.hazeI,aa:F.aa,grade:F.grade,vignette:F.vignette,grain:F.grain,exposure:null});
+      if(wantTvaa) post.setFlags({ldr:true});
+      else post.setFlags({ldr:false,bloom:F.bloom,bloomDiv:F.bloomDiv||2,dof:F.post==="full"&&F.dof,motionBlur:F.post==="full"?F.motionBlur:0,haze:F.post==="full"?F.haze:0,hazeI:F.hazeI,aa:F.aa,grade:F.grade,vignette:F.vignette,grain:F.grain,exposure:null,
+        half:!!F.half,ao:F.post==="full"?(F.ao||0):0,fmt:F.fmt||"rgba16f"});
       L.post=post; L._mine=post;
     } else if(L.post&&L.post===L._mine){ L.post=null; L._mine=null; }
     /* the stadium's glow sprites are written in HDR units: 2.5x when the chain's bloom is on (the floodlights bloom and star), 1x on the plain frame (no clipped white blobs on the TV tier) */
@@ -114,6 +120,26 @@ export function createLook(renderer,opts){
   function ensureEnv(){
     if(envRT||!envWant) return;
     try{ envRT=makeEnvironment(renderer,{kind:envWant,key:SUN,seed:11}).rt; envKind=envWant; L._envError=""; }catch(e){ envRT=null; L._envError=String(e&&e.stack||e).slice(0,400); }
+  }
+  /* is the canvas itself multisampled (the perf engineer's choice for the TV tier on a tiled GPU: then FXAA is not needed) */
+  function canvasAA(){ try{ const a=renderer.getContext().getContextAttributes(); return !!(a&&a.antialias); }catch(e){ return false; } }
+  /* (milestone 2) THE ENVIRONMENT IS THE REAL STADIUM: once per world, a 256 px cube is rendered from the middle of the floor (the world only: no riders, no particles), with the key light
+     dimmed so the lit floor does not swamp the light banks, and prefiltered (PMREM). Every physically based material then reflects the venue's own floodlight banks, crowd and boards:
+     the highlights on a helmet are the lights the frame shows. The procedural map stays as the fallback (and is what the capture itself is lit by: the same programs, no recompiles). */
+  function captureWorldEnv(){
+    const world=L._world; if(!world||!F.env||!F.envCap||!envRT||capWorld===world) return;
+    if(capRT){ capRT.dispose(); capRT=null; } capWorld=world;
+    try{
+      const info=world.info||{}, cx=info.cx||0, cz=info.cz||0, y=F.envY!=null?F.envY:3.5;   /* the middle of the floor, a rider's helmet height over the jumps */
+      /* the lit surfaces in the capture are dimmed (the key to a third, the fills to a half, the glow halos to 0.6) so the environment adds little flat ambient light (the cover is
+         high-contrast) and keeps its hot spots: the floodlight bulbs themselves are unlit discs and stay at their full HDR level */
+      const ek=F.envKey!=null?F.envKey:0.33, ef=F.envFill!=null?F.envFill:0.5, gm=world.ctx&&world.ctx.glowMesh, gu=gm&&gm.material&&gm.material.uniforms&&gm.material.uniforms.uHdr, gh=gu?gu.value:0;
+      if(gu) gu.value=gh*(F.envGlow!=null?F.envGlow:0.6);
+      let r;
+      try{ r=captureEnvironment(renderer,scene,{pos:new THREE.Vector3(cx,y,cz),keep:[world.root],size:256,dim:[{light:sun,k:ek},{light:hemi,k:ef},{light:fill,k:ef},{light:bounce,k:ef},{light:amb,k:ef},{light:rim,k:0},{light:kick,k:0}]}); }
+      finally { if(gu) gu.value=gh; }
+      capRT=r.rt; L._envCapMs=r.ms; L._envError="";
+    }catch(e){ capRT=null; L._envError="capture: "+String(e&&e.stack||e).slice(0,400); }
   }
   function setTier(name){ if(!TIERS[name]) return false; forced=name; tierName=name; setFlags(TIERS[name]); return true; }
   L.setFlags=setFlags; L.setTier=setTier;
@@ -161,6 +187,7 @@ export function createLook(renderer,opts){
       const has=subjD!=null?subjD>0:true, d=subjD>0?subjD:cam.position.distanceTo(target)*0.62, amt=has?(1-0.5*sstep(5,16,d))*(1-sstep(18,36,d)):0, k=Math.min(1,(dt||0.016)*5);
       curDof+=(amt-curDof)*(cut?1:k); if(subjD>0) focusD+=(d-focusD)*(cut?1:Math.min(1,dt*6)); else focusD=d;
       post.setDof(F.dof?curDof:0,clamp(focusD,2.6,40));
+      if(post.setAo) post.setAo(subjD>0&&subjD<(F.aoFar||30));
       post.setMotion(cut?curVP:lastVP,cut?0:curDof);
     }
     lastVP.copy(curVP);
@@ -179,7 +206,8 @@ export function createLook(renderer,opts){
     /* the stadium's light-bank glows are drawn at 1.0 or less: below the bloom's threshold. Lights that are not HDR-aware yet (their colour is at most 1.05) are made 2x brighter so the bloom
        makes them glow; a module that already outputs more than 1 (or sets userData.hdr) is left alone */
     const gm=world.ctx&&world.ctx.glowMesh; if(gm&&gm.material&&gm.material.uniforms&&gm.material.uniforms.col&&!gm.material.userData.hdr){ const c=gm.material.uniforms.col.value; if(Math.max(c.r,c.g,c.b)<=1.05){ c.multiplyScalar(2.0); gm.material.userData.hdr=true; } }
-    L._world=world; tierName=forced||autoTier(); setFlags(TIERS[tierName]); applyFog(world);
+    L._world=world; L._stadium=C.kind==="stadium"; tierName=forced||autoTier(); L._applying=true; try{ setFlags(TIERS[tierName]); } finally { L._applying=false; } applyFog(world);
+    if(F.env&&F.envCap&&L._stadium){ captureWorldEnv(); scene.environment=capRT?capRT.texture:(envRT?envRT.texture:null); }   /* (a stadium: the bowl is the venue; an outdoor track keeps the procedural sky) */
   };
   function applyFog(world){
     world=world||L._world; if(!world) return;
@@ -190,6 +218,25 @@ export function createLook(renderer,opts){
   /* ---- the physically based stand-ins: a Phong material (the base bike, the helmets) gets a Physical one that reflects the environment; the originals are kept for the low tiers ---- */
   function swapPBR(root,on){
     root.traverse(m=>{ if(!m.isMesh||!m.userData||!m.userData.mxPhong) return; const u=m.userData; if(on){ if(!u.mxPbr) u.mxPbr=pbrFromPhong(u.mxPhong,F.post==="full"?"high":"mid"); m.material=u.mxPbr; } else m.material=u.mxPhong; });
+    /* (milestone 2) the bike's plastics get a CLEAR COAT on the high tiers (a second, sharp specular layer: the floodlight banks in the fenders and shrouds) and reflect the scene's
+       environment (the captured stadium) instead of the bike's own generic map. The bike's material is the bike specialist's (r3d-bike.js): this is a stand-in made from it at run time,
+       the same shader patch plus one line that limits the coat to the painted plastics (not the tyres, the wheels, the metal, the mud). The original is kept for the other tiers. */
+    const cc=on&&!!F.bikeCC;
+    root.traverse(m=>{ if(!m.isMesh||!m.material) return; const u=m.userData;
+      if(!u.mxBikeStd&&m.material.isMeshStandardMaterial&&!m.material.isMeshPhysicalMaterial&&typeof m.material.customProgramCacheKey==="function"&&String(m.material.customProgramCacheKey())==="mxbike-std") u.mxBikeStd=m.material;
+      if(!u.mxBikeStd) return;
+      if(cc){ if(!u.mxBikeCC) u.mxBikeCC=bikeCoat(u.mxBikeStd); m.material=u.mxBikeCC; } else m.material=u.mxBikeStd; });
+  }
+  const coatCache=new WeakMap();
+  function bikeCoat(src){
+    if(coatCache.has(src)) return coatCache.get(src);
+    const p=new THREE.MeshPhysicalMaterial({vertexColors:true,roughness:src.roughness,metalness:src.metalness,envMap:null,envMapIntensity:F.bikeEnv!=null?F.bikeEnv:1.25,clearcoat:1.0,clearcoatRoughness:0.07});
+    p.userData=Object.assign({},src.userData,{mxCoat:true});
+    const ob=src.onBeforeCompile;
+    p.onBeforeCompile=function(sh,r){ ob.call(src,sh,r);
+      sh.fragmentShader=sh.fragmentShader.replace("#include <lights_physical_fragment>","#include <lights_physical_fragment>\n#ifdef USE_CLEARCOAT\n material.clearcoat*=step(0.5,bkTn)*(1.0-bkWl)*(1.0-metalnessFactor)*(1.0-mudK);\n#endif"); };
+    p.customProgramCacheKey=()=>"mxbike-coat";
+    coatCache.set(src,p); return p;
   }
   L.upgrade=function(root){
     /* only plain Phong materials: one with its own onBeforeCompile patch (a specialist's skin, number atlas ...) keeps its own look */
@@ -205,8 +252,10 @@ export function createLook(renderer,opts){
     if(L.post&&L.post.render) L.post.render(sc,cam,tw); else renderer.render(sc,cam);
   };
   L.resize=function(W,H,pr){ if(L.post&&L.post.resize) L.post.resize(W,H,pr); };
-  L.dispose=function(){ if(post) post.dispose(); post=null; if(envRT) envRT.dispose(); envRT=null; cssVigOn(false); };
-  L.info=function(){ return {tier:tierName,post:!!(L.post&&L.post===post),postInfo:post?post.info():null,env:!!envRT&&!!scene.environment,rig:F.rig,pbr:F.pbr,shadowRes:sun.shadow.mapSize.x,fog:scene.fog?(scene.fog.isFogExp2?"exp2 "+scene.fog.density:"linear"):"none",exposure:renderer.toneMappingExposure,envError:L._envError||""}; };
+  /* tests: make the capture again now (-> its time in ms, the real clock) */
+  L.envRecapture=function(){ capWorld=null; captureWorldEnv(); setFlags({}); return L._envCapMs||0; };
+  L.dispose=function(){ if(post) post.dispose(); post=null; if(envRT) envRT.dispose(); envRT=null; if(capRT) capRT.dispose(); capRT=null; capWorld=null; cssVigOn(false); };
+  L.info=function(){ return {tier:tierName,post:!!(L.post&&L.post===post),postInfo:post?post.info():null,env:!!envRT&&!!scene.environment,envCap:!!capRT&&scene.environment===capRT.texture,envCapMs:L._envCapMs||0,tvaa:!!(post&&L.post===post&&post.flags.ldr),rig:F.rig,pbr:F.pbr,shadowRes:sun.shadow.mapSize.x,fog:scene.fog?(scene.fog.isFogExp2?"exp2 "+scene.fog.density:"linear"):"none",exposure:renderer.toneMappingExposure,envError:L._envError||""}; };
   setFlags(TIERS[autoTierInit()]);
   function autoTierInit(){ tierName=autoTier(); return tierName; }
   return L;
