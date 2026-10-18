@@ -1211,11 +1211,11 @@ function drawYou(rows){
   var row=null, i; for(i=0;i<rows.length;i++) if(rows[i].s===s){ row=rows[i]; break; }
   if(!row){ box.hidden=true; return; }
   box.hidden=false;
-  var R=G.riders[seatId(s)], n=rows.length, y=ui.you[s], c=T.towerCells(row), who=hs.length>1?R.name:"You";
+  var R=G.riders[seatId(s)], n=rows.length, y=ui.you[s], c=T.towerCells(row), who=hs.length>1?R.name:"You", tv=onTV();
   var pre=rc.phase==="gate"||rc.tm.k===0;
   var pos=pre?"On the gate":c.tag==="out"?"DNF":c.tag==="pits"?"out of cards":T.ordText(row.place)+" of "+n;
-  var gap=pre?"the gate drops on your tap, then flip your card for lap 1":c.tag==="down"?"down: getting going again":c.tag==="out"?"crashed out of the race":c.tag==="pits"?"pulled off":row.place===1?"leading the race":c.gap+" to the leader"+(row.int!=null?" · "+T.secText(row.int,1)+" to the rider ahead":"");
-  $("youTag").textContent=who; $("youPos").textContent=pos; $("youGap").textContent=gap;
+  var gap=pre?"the gate drops on your tap, then flip your card for lap 1":c.tag==="down"?"down: getting going again":c.tag==="out"?"crashed out of the race":c.tag==="pits"?"pulled off":row.place===1?"leading the race":c.gap+(tv?" leader":" to the leader")+(row.int!=null?" · "+T.secText(row.int,1)+(tv?" ahead":" to the rider ahead"):"");
+  $("youTag").textContent=who; $("youPos").textContent=pos; $("youGap").textContent=gap; $("youLaps").hidden=pre;   /* no laps to show on the gate */
   $("youLast").textContent="Last lap "+(row.last!=null?T.fmtLap(row.last):"-"); $("youBest").textContent="Best "+(row.best!=null?T.fmtLap(row.best):"-")+(row.fl?" · fastest of the race":"");
   box.classList.toggle("is-down",c.tag==="down"); box.classList.toggle("is-out",c.tag==="out"||c.tag==="pits");
   var recap=y&&y.s===s?y:null;
