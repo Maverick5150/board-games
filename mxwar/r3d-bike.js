@@ -86,7 +86,27 @@ function liveryTexture(W){
   t.colorSpace=THREE.NoColorSpace; t.wrapS=t.wrapT=THREE.ClampToEdgeWrapping; t.anisotropy=4; t.generateMipmaps=true; t.minFilter=THREE.LinearMipmapLinearFilter; t.magFilter=THREE.LinearFilter; t.needsUpdate=true;
   return t;
 }
-function tex(lo){ const k=lo?"lo":"hi"; if(!TEX[k]) TEX[k]={env:lo?null:envTexture(256),liv:liveryTexture(lo?512:1024)}; return TEX[k]; }
+/* THE MUD FIELD (milestone 2): one tileable RGBA texture made once per page from a private seeded generator: r = splats flung back off the wheels (ellipses 1.7x longer
+   along the bike, each with a "level": a splat shows once st.mud passes its level, and it grows with st.mud: the value is a dome, the shader thresholds it), small satellite
+   drops round the big ones; g = smooth noise (6 and 24 cells a tile), b = finer noise (32 and 96 cells). Mipmapped, so a distant bike shows the mean, never a shimmer. */
+function mudTexture(S){
+  let sd=20261018; const rnd=()=>{ sd=(sd*16807)%2147483647; return sd/2147483647; };
+  const R=new Float32Array(S*S);
+  const dome=(cx,cy,r,v,ax)=>{ const x0=Math.floor(cx-r*ax), x1=Math.ceil(cx+r*ax), y0=Math.floor(cy-r), y1=Math.ceil(cy+r);
+    for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++){ const dx=(x+0.5-cx)/ax, dy=y+0.5-cy, q=(dx*dx+dy*dy)/(r*r); if(q>=1) continue; const val=v*(1-q), k=((y%S+S)%S)*S+((x%S+S)%S); if(val>R[k]) R[k]=val; } };
+  const n=Math.round(S*S/420);
+  for(let k=0;k<n;k++){ const cx=rnd()*S, cy=rnd()*S, r=(0.006+0.022*Math.pow(rnd(),1.6))*S, v=1-0.97*rnd(); dome(cx,cy,r,v,1.7);
+    const nd=Math.floor(rnd()*4); for(let j=0;j<nd;j++){ const a=rnd()*6.2832, dd=r*(1.25+rnd()*1.3); dome(cx+Math.cos(a)*dd*1.7,cy+Math.sin(a)*dd,r*(0.12+0.18*rnd()),v*(0.75+0.25*rnd()),1.3); } }
+  const lattice=P=>{ const g=new Float32Array(P*P); for(let i=0;i<P*P;i++) g[i]=rnd(); return g; };
+  const vn=(g,P,x,y)=>{ const fx=x*P/S, fy=y*P/S, ix=Math.floor(fx), iy=Math.floor(fy); let tx=fx-ix, ty=fy-iy; tx=tx*tx*(3-2*tx); ty=ty*ty*(3-2*ty);
+    const a=g[(iy%P)*P+(ix%P)], b=g[(iy%P)*P+((ix+1)%P)], c=g[((iy+1)%P)*P+(ix%P)], d=g[((iy+1)%P)*P+((ix+1)%P)]; return (a+(b-a)*tx)+((c+(d-c)*tx)-(a+(b-a)*tx))*ty; };
+  const g6=lattice(6), g24=lattice(24), g32=lattice(32), g96=lattice(96), D=new Uint8Array(S*S*4);
+  for(let y=0;y<S;y++) for(let x=0;x<S;x++){ const k=y*S+x, j=k*4;
+    D[j]=Math.round(Math.min(1,R[k])*255); D[j+1]=Math.round((vn(g6,6,x,y)*0.65+vn(g24,24,x,y)*0.35)*255); D[j+2]=Math.round((vn(g32,32,x,y)*0.6+vn(g96,96,x,y)*0.4)*255); D[j+3]=255; }
+  const t=new THREE.DataTexture(D,S,S,THREE.RGBAFormat,THREE.UnsignedByteType); t.colorSpace=THREE.NoColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=4;
+  t.generateMipmaps=true; t.minFilter=THREE.LinearMipmapLinearFilter; t.magFilter=THREE.LinearFilter; t.needsUpdate=true; return t;
+}
+function tex(lo){ const k=lo?"lo":"hi"; if(!TEX[k]) TEX[k]={env:lo?null:envTexture(256),liv:liveryTexture(lo?512:1024),mud:mudTexture(lo?256:512),mudS:lo?256:512}; return TEX[k]; }
 
 /* THE NUMBER ON THE SIDE PANELS (milestone 2): a per-race atlas, one cell per rider, three masks: r = the number background, g = the numerals and the rider's name, b = a thin
    border. The shader projects the cell onto both side panels (mirrored on the left so it reads the right way), paints the class colours (PLATE_CLASS: 450 = white
@@ -124,15 +144,6 @@ function styleOf(col){ let h=43; const s=String(col||"").toLowerCase(); for(let 
    the team's fine pattern; every high-frequency term fades to its mean where a pixel covers more than a cell (no shimmer on the FIRE TV tier, which has no anti-aliasing) */
 const GLSL_LIB=[
 "uint bkU(uvec3 v){ v=v*1664525u+1013904223u; v.x+=v.y*v.z; v.y+=v.z*v.x; v.z+=v.x*v.y; v^=v>>16u; v.x+=v.y*v.z; v.y+=v.z*v.x; v.z+=v.x*v.y; return v.x^v.y^v.z; }",
-"float bkHf(ivec3 c){ return float(bkU(uvec3(c+32768))&0xffffffu)*(1.0/16777216.0); }",
-"float bkVN(vec2 p,int s){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); ivec2 c=ivec2(i);",
-"  return mix(mix(bkHf(ivec3(c,s)),bkHf(ivec3(c+ivec2(1,0),s)),f.x),mix(bkHf(ivec3(c+ivec2(0,1),s)),bkHf(ivec3(c+ivec2(1,1),s)),f.x),f.y); }",
-"float bkSplat(vec2 p,float dens,float rmax,uint s){ vec2 i=floor(p), f=fract(p); float cov=0.0;",
-"  for(int j=-1;j<=1;j++) for(int k=-1;k<=1;k++){ ivec2 c=ivec2(i)+ivec2(k,j)+32768; uint h=bkU(uvec3(uvec2(c),s));",
-"    if(float(h&255u)*(1.0/255.0)>=dens) continue;",
-"    vec2 o=vec2(float((h>>8u)&255u),float((h>>16u)&255u))*(1.0/255.0); float r=rmax*(0.4+0.6*float(h>>24u)*(1.0/255.0));",
-"    cov=max(cov,1.0-smoothstep(r*0.62,r,length(vec2(float(k),float(j))+o-f))); }",
-"  return cov; }",
 "float bkPat(vec2 p,float sty,float fw){ float v=0.0, avg=0.3, cs=0.024;",
 "  if(sty<0.5){ vec2 q=p/0.024, r=vec2(1.0,1.7320508), h=r*0.5; vec2 a=mod(q,r)-h, b=mod(q-h,r)-h; vec2 g=dot(a,a)<dot(b,b)?a:b; vec2 qa=abs(g); float d=max(dot(qa,vec2(0.5,0.8660254)),qa.x); v=smoothstep(0.40,0.46,d); avg=0.32; }",
 "  else if(sty<1.5){ cs=0.016; vec2 g=fract(p/cs)-0.5; float rr=0.10+0.27*smoothstep(-0.85,0.55,p.x); v=1.0-smoothstep(rr-0.07,rr+0.07,length(g)); avg=3.14159*rr*rr; }",
@@ -150,11 +161,11 @@ function bikeMaterial(lo,D,U){
   const cl=PLATE_CLASS[plateClass]||PLATE_CLASS["450"], bg=new THREE.Color(cl.bg), fg=new THREE.Color(cl.fg);
   m.onBeforeCompile=sh=>{
     sh.uniforms.uLiv={value:T.liv}; sh.uniforms.uDec={value:D.t}; sh.uniforms.uDecG={value:new THREE.Vector4(D.cols,D.rows,0,0)}; sh.uniforms.uBkC={value:U.c}; sh.uniforms.uBkA={value:U.a};
-    sh.uniforms.uMudCol={value:new THREE.Vector3(0.115,0.066,0.032)}; sh.uniforms.uPlBg={value:new THREE.Vector3(bg.r,bg.g,bg.b)}; sh.uniforms.uPlFg={value:new THREE.Vector3(fg.r,fg.g,fg.b)};
+    sh.uniforms.uMudCol={value:new THREE.Vector3(0.115,0.066,0.032)}; sh.uniforms.uMudT={value:T.mud}; sh.uniforms.uPlBg={value:new THREE.Vector3(bg.r,bg.g,bg.b)}; sh.uniforms.uPlFg={value:new THREE.Vector3(fg.r,fg.g,fg.b)};
     sh.vertexShader=sh.vertexShader
       .replace("#include <common>","#include <common>\nattribute vec4 aMat;\nuniform vec4 uBkC["+NBK+"];\nuniform vec4 uBkA["+NBK+"];\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec4 vMud;\nvarying vec3 vLoc;\nvarying vec3 vNl;")
       .replace("#include <color_vertex>","#include <color_vertex>\n{ int bi=int(instanceColor.r); vec4 kc=uBkC[bi], ka=uBkA[bi]; float sty=mod(kc.w,8.0), red=step(7.5,kc.w);\n  float wl=step(31.5,aMat.z); float rr=aMat.z-32.0*wl; float kd=floor((rr+0.5)/4.0); float tn=rr-4.0*kd; vec3 fc=sty>0.5&&sty<1.5?vec3(0.86):(sty>1.5&&sty<2.5?ka.rgb:kc.rgb); vec3 tint=tn<0.5?vec3(1.0):(tn<1.5?kc.rgb:(tn<2.5?ka.rgb:fc)); vColor.rgb=color.rgb*tint;\n  vAcc=ka.rgb; vMud=vec4(instanceColor.b,sty,instanceColor.g,float(bi)+0.5*red); }\nvMat=aMat; vLoc=position; vNl=normal;");
-    let fs=sh.fragmentShader.replace("#include <common>","#include <common>\nuniform sampler2D uLiv;\nuniform sampler2D uDec;\nuniform vec4 uDecG;\nuniform vec3 uMudCol;\nuniform vec3 uPlBg;\nuniform vec3 uPlFg;\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec4 vMud;\nvarying vec3 vLoc;\nvarying vec3 vNl;\n"+GLSL_LIB);
+    let fs=sh.fragmentShader.replace("#include <common>","#include <common>\nuniform sampler2D uLiv;\nuniform sampler2D uDec;\nuniform vec4 uDecG;\nuniform vec3 uMudCol;\nuniform sampler2D uMudT;\nuniform vec3 uPlBg;\nuniform vec3 uPlFg;\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec4 vMud;\nvarying vec3 vLoc;\nvarying vec3 vNl;\n"+GLSL_LIB);
     const f=n=>n.toFixed(4);
     fs=fs.replace("#include <color_fragment>",[
       "#include <color_fragment>",
@@ -177,13 +188,11 @@ function bikeMaterial(lo,D,U){
       "float bkDin=step(0.0,bkDu.x)*step(bkDu.x,1.0)*step(0.0,bkDu.y)*step(bkDu.y,1.0)*step(0.5,bkAN.z)*step(0.5,bkTn)*(1.0-step(1.5,bkTn))*(1.0-step(0.5,bkK));",
       "bkDu=clamp(bkDu,0.0,1.0); if(vLoc.z<0.0) bkDu.x=1.0-bkDu.x;",
       "float bkCi=floor(vMud.w+0.01), bkRed=step(0.25,vMud.w-bkCi), bkCol=mod(bkCi,uDecG.x), bkRow=floor(bkCi/uDecG.x+0.001);",
-      "vec3 bkD=texture2D(uDec,vec2((bkCol+bkDu.x)/uDecG.x,1.0-(bkRow+1.0-bkDu.y)/uDecG.y)).rgb*bkDin;",
-      "b0=mix(b0,mix(uPlBg,vec3(0.578,0.005,0.012),bkRed),bkD.r); b0=mix(b0,mix(uPlFg,vec3(0.86),bkRed),bkD.g); b0=mix(b0,mix(vAcc,vec3(0.86),bkRed),bkD.b);",
-      /* the front plate's face: the same cell, in the plate's own frame (across = -z, up leaning back 0.30 rad), over the plate below a band of the team colour */
+      /* (the front plate's face, kind 6: the same cell in the plate's own frame (across = -z, up leaning back 0.30 rad), below a band of the team colour; one fetch for both) */
       "vec3 bkFr=vLoc-vec3(0.508,1.035,0.0); vec2 bkFu=vec2((-bkFr.z/0.25+0.5-0.06)/0.88,(dot(bkFr.xy,vec2(-0.29552,0.95534))/0.215+0.5-0.07)/0.60);",
-      "float bkFin=step(5.5,bkK)*(1.0-step(6.5,bkK))*step(0.0,bkFu.x)*step(bkFu.x,1.0)*step(0.0,bkFu.y)*step(bkFu.y,1.0); bkFu=clamp(bkFu,0.0,1.0);",
-      "vec3 bkF=texture2D(uDec,vec2((bkCol+bkFu.x)/uDecG.x,1.0-(bkRow+1.0-bkFu.y)/uDecG.y)).rgb*bkFin;",
-      "b0=mix(b0,mix(uPlBg,vec3(0.578,0.005,0.012),bkRed),bkF.r); b0=mix(b0,mix(uPlFg,vec3(0.86),bkRed),bkF.g); b0=mix(b0,mix(vAcc,vec3(0.86),bkRed),bkF.b);",
+      "float bkFin=step(5.5,bkK)*(1.0-step(6.5,bkK))*step(0.0,bkFu.x)*step(bkFu.x,1.0)*step(0.0,bkFu.y)*step(bkFu.y,1.0); bkDu=mix(bkDu,clamp(bkFu,0.0,1.0),step(5.5,bkK));",
+      "vec3 bkD=texture2D(uDec,vec2((bkCol+bkDu.x)/uDecG.x,1.0-(bkRow+1.0-bkDu.y)/uDecG.y)).rgb*max(bkDin,bkFin);",
+      "b0=mix(b0,mix(uPlBg,vec3(0.578,0.005,0.012),bkRed),bkD.r); b0=mix(b0,mix(uPlFg,vec3(0.86),bkRed),bkD.g); b0=mix(b0,mix(vAcc,vec3(0.86),bkRed),bkD.b);",
       /* the radiator vent behind the louvre fins */
       "float bkVx=vLoc.x+(vLoc.y-0.742)*0.447; float bkVent=step(0.5,bkTn)*(1.0-step(1.5,bkTn))*(1.0-step(0.5,bkK))*step(0.6,bkAN.z)*step(0.286,bkVx)*step(bkVx,0.462)*step(abs(vLoc.y-0.742),0.060);",
       "b0=mix(b0,vec3(0.012),bkVent); diffuseColor.rgb=b0;",
@@ -200,9 +209,11 @@ function bikeMaterial(lo,D,U){
       "if(vMud.x>0.002){ float mud=vMud.x; float low=1.0-smoothstep(0.28,0.86,vLoc.y), rear=smoothstep(0.15,-0.95,vLoc.x)*0.35, under=smoothstep(0.15,-0.7,bkN.y)*0.55;",
       "  float w=mix(clamp(low*0.85+rear+under,0.0,1.4),0.80,bkW); if(bkK>3.5) w=max(w,1.15); if(bkK>1.5&&bkK<2.5) w=max(w,0.95);",
       "  vec2 sp=bkPP*vec2(bkAN.y>0.8?1.0:0.55,1.0); float d1=clamp(mud*(0.20+0.95*w),0.0,0.9), d2=clamp(mud*(0.28+1.15*w),0.0,0.94);",
-      "  float nz=bkVN(bkPP*21.0,3)"+(std?"*0.62+bkVN(bkPP*63.0,4)*0.38":"")+"; float thr=1.0-mud*w*1.02; float coat=smoothstep(thr-0.13,thr+0.13,nz);",
-      "  float f1=smoothstep(0.6,1.6,bkFW*36.0), c1=f1<0.999?mix(bkSplat(sp*36.0,d1,0.50,1u),d1*0.30,f1):d1*0.30;",
-      std?"  float f2=smoothstep(0.6,1.6,bkFW*110.0), c2=f2<0.999?mix(bkSplat(sp*110.0,d2,0.46,2u),d2*0.30,f2):d2*0.30;\n  mudK=max(coat,max(c1,c2*0.9)); bkWet=bkVN(bkPP*14.0,6);"
+      "  vec4 bkM1=texture2D(uMudT,sp*2.5); float nz=bkM1.g;",   /* a 0.40 m tile: the big splats, the coat's noise */
+      std?"  vec4 bkM2=texture2D(uMudT,sp*7.7+0.37); nz=nz*0.62+bkM2.b*0.38;":"",   /* a 0.13 m tile: the drops, the finer noise */
+      "  float thr=1.0-mud*w*1.02; float coat=smoothstep(thr-0.13,thr+0.13,nz);",
+      "  float c1=mix(smoothstep(0.965-d1,1.035-d1,bkM1.r),d1*0.30,smoothstep(1.0,3.0,bkFW*2.5*"+(lo?"256.0":"512.0")+"));",
+      std?"  float c2=mix(smoothstep(0.965-d2,1.035-d2,bkM2.r),d2*0.30,smoothstep(1.0,3.0,bkFW*7.7*512.0));\n  mudK=max(coat,max(c1,c2*0.9)); bkWet=bkM1.b;"
          :"  mudK=max(coat,c1);",
       "  diffuseColor.rgb=mix(diffuseColor.rgb,uMudCol*(0.58+0.85*nz)*mix(1.25,0.75,bkWet),mudK); }",
       ""].join("\n"));
@@ -224,7 +235,7 @@ function bikeMaterial(lo,D,U){
 /* the wheel's blur disc (milestone 2, director note: "airborne and fast-spinning wheels are hollow hoops"): a translucent, lit disc in each plane of spokes, densest at the hub
    (where the spokes crowd), as the spokes thin out; one instanced draw per level of detail for both wheels of every bike, no shadow, faded near the lens like the bike */
 function blurMaterial(){
-  const m=new THREE.MeshLambertMaterial({color:0x9a9da6,transparent:true,depthWrite:false,side:THREE.DoubleSide});
+  const m=new THREE.MeshLambertMaterial({color:0x9a9da6,transparent:true,depthWrite:false,side:THREE.DoubleSide}); m.forceSinglePass=true;   /* (a transparent double-sided material is two draws in three.js; the disc has no inside to sort) */
   m.onBeforeCompile=sh=>{
     sh.vertexShader=sh.vertexShader.replace("#include <common>","#include <common>\nvarying float vBl;\nvarying vec2 vRd;").replace("#include <begin_vertex>","#include <begin_vertex>\nvBl=instanceColor.r; vRd=position.xy;");
     sh.fragmentShader=sh.fragmentShader.replace("#include <common>","#include <common>\nvarying float vBl;\nvarying vec2 vRd;").replace("#include <color_fragment>",
