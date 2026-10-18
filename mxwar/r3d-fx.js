@@ -26,13 +26,14 @@ import {motionMode,isTV} from "./r3d-quality.js";
 const GL=typeof window!=="undefined"?window:globalThis;
 
 /* ---------------- the tiers: how much of everything (perf: pass {tier: "high" | "medium" | "low" | "stick"} or {fx: {...overrides}} in Q.options) ----------------
-   specks = the GPU crumb pool (spk = its emission scale); clods = mesh rocks; puffs / haze = dust sprites; veil = the dust layer's coverage cap; depth = the specks' cores write depth (the depth of field) */
+   specks = the GPU crumb pool (spk = its emission scale); clods = mesh rocks; puffs / haze = dust sprites; veil = the dust layer's coverage cap; depth = the specks' cores write depth (the depth of field);
+   bank = how strongly the dust glows when it is seen against the ring of floodlight banks (forward scattering) */
 const TIERS={
-  high:  {n:"high",   specks:6000, spk:1.00, clods:1400, puffs:300, haze:36, motes:170, lens:6, rock:20, rate:1.00, atlas:128, pbr:true,  depth:true,  veil:0.30, maxPx:12},
-  medium:{n:"medium", specks:2800, spk:0.75, clods:640,  puffs:150, haze:14, motes:80,  lens:0, rock:20, rate:0.85, atlas:128, pbr:true,  depth:true,  veil:0.28, maxPx:11},
-  low:   {n:"low",    specks:1200, spk:0.55, clods:240,  puffs:64,  haze:0,  motes:0,   lens:0, rock:8,  rate:0.7,  atlas:96,  pbr:false, depth:false, veil:0.24, maxPx:9},
-  ultra: {n:"ultra",  specks:9000, spk:1.20, clods:2000, puffs:380, haze:44, motes:210, lens:6, rock:20, rate:1.00, atlas:128, pbr:true,  depth:true,  veil:0.32, maxPx:13},
-  stick: {n:"stick",  specks:1000, spk:0.55, clods:160,  puffs:40,  haze:0,  motes:0,   lens:0, rock:8,  rate:0.6,  atlas:96,  pbr:false, depth:false, veil:0.22, maxPx:9}
+  high:  {n:"high",   specks:6000, spk:1.00, clods:1400, puffs:300, haze:36, motes:170, lens:6, rock:20, rate:1.00, atlas:128, pbr:true,  depth:true,  veil:0.30, maxPx:12, bank:0.30},
+  medium:{n:"medium", specks:2800, spk:0.75, clods:640,  puffs:150, haze:14, motes:80,  lens:0, rock:20, rate:0.85, atlas:128, pbr:true,  depth:true,  veil:0.28, maxPx:11, bank:0.26},
+  low:   {n:"low",    specks:1200, spk:0.55, clods:240,  puffs:64,  haze:0,  motes:0,   lens:0, rock:8,  rate:0.7,  atlas:96,  pbr:false, depth:false, veil:0.24, maxPx:9,  bank:0.22},
+  ultra: {n:"ultra",  specks:9000, spk:1.20, clods:2000, puffs:380, haze:44, motes:210, lens:6, rock:20, rate:1.00, atlas:128, pbr:true,  depth:true,  veil:0.32, maxPx:13, bank:0.30},
+  stick: {n:"stick",  specks:1000, spk:0.55, clods:160,  puffs:40,  haze:0,  motes:0,   lens:0, rock:8,  rate:0.6,  atlas:96,  pbr:false, depth:false, veil:0.22, maxPx:9,  bank:0.22}
 };
 const ALIAS={firetv:"stick",stick:"stick",low:"low",balanced:"medium",medium:"medium",high:"high",ultra:"ultra"};
 function tierOf(o){
@@ -117,8 +118,8 @@ const LIGHT_FN=[
 "}"].join("\n");
 const SPR_VS=[
 "attribute vec4 aA; attribute vec4 aB; attribute vec4 aC; attribute vec4 aD;",   /* aA = x y z radius; aB = vx vy vz alpha; aC = r g b kind (1..4 puff variants); aD = rotation, the ground under it, -, - */
-"uniform float uH; uniform float uVeil; uniform float uCapR;",
-"varying vec2 vUv; varying vec4 vC; varying float vA; varying vec2 vRot; varying vec3 vVP;",
+"uniform float uH; uniform float uVeil; uniform float uCapR; uniform float uBank;",
+"varying vec2 vUv; varying vec4 vC; varying float vA; varying vec2 vRot; varying vec3 vVP; varying float vGlow;",
 "#include <fog_pars_vertex>",
 "void main(){",
 "  vec4 mvPosition=modelViewMatrix*vec4(aA.xyz,1.0);",
@@ -130,13 +131,15 @@ const SPR_VS=[
 "  alpha*=ry>uCapR?pow(uCapR/ry,1.5):1.0;",                          /* m2: no single puff covers more than about a fifth of the frame's height */
 "  alpha*=mix(1.0,0.4,smoothstep(0.7,3.0,aA.y-aD.y));",              /* m2: denser near the floor, thinner higher up */
 "  alpha*=uVeil;",                                                   /* m2: the whole dust layer's coverage cap (set while the frame is drawn) */
+"  vec3 wd=normalize(aA.xyz-cameraPosition); float ce=0.868*sqrt(max(0.0,1.0-wd.y*wd.y))+0.497*wd.y;",   /* m2: the ring of floodlight banks 30 degrees up all round the bowl: the angle between the view ray and the nearest bank */
+"  vGlow=uBank*0.64/pow(1.36-1.2*clamp(ce,-1.0,1.0),1.5);",          /* forward scattering (Henyey-Greenstein, g 0.6): dust seen against the lights glows, dust seen from above does not */
 "  mvPosition.xy+=off; vVP=mvPosition.xyz; vUv=c*0.5+0.5; vC=aC; vA=alpha;",
 "  gl_Position=projectionMatrix*mvPosition;",
 "  #include <fog_vertex>",
 "}"].join("\n");
 const SPR_FS=[
 "uniform sampler2D uAtlas; uniform float uGain;",
-"varying vec2 vUv; varying vec4 vC; varying float vA; varying vec2 vRot; varying vec3 vVP;",
+"varying vec2 vUv; varying vec4 vC; varying float vA; varying vec2 vRot; varying vec3 vVP; varying float vGlow;",
 "#include <common>",
 "#include <fog_pars_fragment>",
 "#include <lights_pars_begin>",
@@ -145,7 +148,7 @@ LIGHT_FN,
 "  vec3 vd=normalize(vVP);",
 "  float cell=floor(vC.w-0.5); vec2 uv=(vec2(mod(cell,2.0),floor(cell*0.5))+0.02+0.96*vUv)*0.5; vec4 t=texture2D(uAtlas,uv);",
 "  vec2 nt=t.rg*2.0-1.0; vec3 n=normalize(vec3(vRot.x*nt.x-vRot.y*nt.y,vRot.y*nt.x+vRot.x*nt.y,0.62));",
-"  vec3 L=sceneLight(n,vd,0.8)*(1.0-0.26*t.b);",   /* the thick middle is a little darker (self shadow) unless the light is behind it */
+"  vec3 L=sceneLight(n,vd,0.8)*(1.0-0.26*t.b)+vGlow*vec3(1.0,0.72,0.42)*(1.0-0.35*t.b);",   /* the thick middle is a little darker (self shadow) unless the light is behind it */
 "  vec4 col=vec4(vC.rgb*L*uGain,t.a*vA);",
 "  if(col.a<0.003) discard;",
 "  gl_FragColor=col;",
@@ -157,11 +160,11 @@ LIGHT_FN,
 /* ---------------- the speck shaders: ballistic crumbs moved on the GPU ---------------- */
 const SPK_VS=[
 "attribute vec4 aP; attribute vec4 aV; attribute vec4 aS; attribute vec4 aK;",   /* aP = x0 y0 z0 t0 (thrown); aV = vx vy vz life; aS = the ground y, radius, drag, seed; aK = r g b, kind (0 grain, 1 chip) */
-"uniform float uTime; uniform float uH; uniform float uShutter; uniform float uMaxPx;",
-"varying vec2 vUv; varying vec3 vCol; varying float vA; varying float vGlint; varying vec3 vVP;",
+"uniform float uTime; uniform float uH; uniform float uShutter; uniform float uMaxPx; uniform float uBank;",
+"varying vec2 vUv; varying vec3 vCol; varying float vA; varying float vGlint; varying vec3 vVP; varying float vBank;",
 "#include <fog_pars_vertex>",
 "void main(){",
-"  vUv=position.xy; vCol=aK.rgb; vA=0.0; vGlint=0.0; vVP=vec3(0.0,0.0,-1.0);",
+"  vUv=position.xy; vCol=aK.rgb; vA=0.0; vGlint=0.0; vVP=vec3(0.0,0.0,-1.0); vBank=0.0;",
 "  float age=uTime-aP.w, life=aV.w;",
 "  if(age<0.0||age>=life){ gl_Position=vec4(0.0,0.0,2.0,1.0); return; }",
 "  float k=aS.z, e=exp(-k*age); vec3 vt=vec3(0.0,-9.81/k,0.0);",                     /* the exact flight with linear air drag: v(t) = vt + (v0 - vt) e^(-kt) */
@@ -183,13 +186,14 @@ const SPK_VS=[
 "  if(aK.w>0.5){ float ph=aS.w*40.0+age*(9.0+15.0*fract(aS.w*13.7)); hw*=0.3+0.7*abs(cos(ph)); float g=abs(sin(ph)); g*=g; g*=g; vGlint=g*g; }",   /* a flat chip tumbling: it thins and flashes as it turns */
 "  alpha*=smoothstep(0.3,1.1,depth)*(1.0-smoothstep(75.0,120.0,depth));",
 "  mvPosition.xy+=dir*(position.x*hl-0.5*streak)+vec2(-dir.y,dir.x)*(position.y*hw);",   /* centred half a shutter back: the trail is behind it */
+"  vec3 wd=normalize(p-cameraPosition); float ce=clamp(0.868*sqrt(max(0.0,1.0-wd.y*wd.y))+0.497*wd.y,-1.0,1.0); vBank=uBank*0.64/pow(1.36-1.2*ce,1.5);",   /* seen against the ring of floodlight banks a crumb has a warm bright rim (forward scattering, as the dust) */
 "  vVP=mvPosition.xyz; vA=alpha;",
 "  gl_Position=projectionMatrix*mvPosition;",
 "  #include <fog_vertex>",
 "}"].join("\n");
 const SPK_FS=[
 "uniform float uGain;",
-"varying vec2 vUv; varying vec3 vCol; varying float vA; varying float vGlint; varying vec3 vVP;",
+"varying vec2 vUv; varying vec3 vCol; varying float vA; varying float vGlint; varying vec3 vVP; varying float vBank;",
 "#include <common>",
 "#include <fog_pars_fragment>",
 "#include <lights_pars_begin>",
@@ -205,7 +209,7 @@ LIGHT_FN,
 "  #endif",
 "  vec3 vd=normalize(vVP);",
 "  vec3 L=sceneLight(vec3(0.0,0.45,0.89),vd,0.7);",
-"  vec3 col=vCol*L*uGain*(0.8+0.3*(1.0-r))+vGlint*vec3(1.0,0.82,0.58)*1.6;",
+"  vec3 col=vCol*L*uGain*(0.8+0.3*(1.0-r))+vCol*vBank*vec3(1.0,0.72,0.42)*(0.25+0.55*r)+vGlint*vec3(1.0,0.82,0.58)*1.6;",
 "  gl_FragColor=vec4(col,a);",
 "  #include <tonemapping_fragment>",
 "  #include <colorspace_fragment>",
@@ -314,7 +318,7 @@ export function createFx(opts){
   const jP=new THREE.InstancedBufferAttribute(kP,4).setUsage(THREE.DynamicDrawUsage), jV=new THREE.InstancedBufferAttribute(kV,4).setUsage(THREE.DynamicDrawUsage),
     jS=new THREE.InstancedBufferAttribute(kS,4).setUsage(THREE.DynamicDrawUsage), jC=new THREE.InstancedBufferAttribute(kC,4).setUsage(THREE.DynamicDrawUsage);
   kg.setAttribute("aP",jP); kg.setAttribute("aV",jV); kg.setAttribute("aS",jS); kg.setAttribute("aK",jC); kg.instanceCount=NK;
-  const km=new THREE.ShaderMaterial({uniforms:THREE.UniformsUtils.merge([THREE.UniformsLib.lights,THREE.UniformsLib.fog,{uTime:{value:0},uH:{value:720},uShutter:{value:1/70},uMaxPx:{value:T.maxPx},uGain:{value:1}}]),
+  const km=new THREE.ShaderMaterial({uniforms:THREE.UniformsUtils.merge([THREE.UniformsLib.lights,THREE.UniformsLib.fog,{uTime:{value:0},uH:{value:720},uShutter:{value:1/70},uMaxPx:{value:T.maxPx},uGain:{value:1},uBank:{value:T.bank||0}}]),
     vertexShader:SPK_VS,fragmentShader:SPK_FS,lights:true,fog:true,transparent:true,depthWrite:!!T.depth,depthTest:true,defines:T.depth?{SPK_DEPTH:1}:{}});
   const specks=new THREE.Mesh(kg,km); specks.frustumCulled=false; specks.renderOrder=3.5; specks.name="fx-specks";   /* after the dust (renderOrder 3) */
   const _v2=new THREE.Vector2();
@@ -348,7 +352,7 @@ export function createFx(opts){
     iC=new THREE.InstancedBufferAttribute(aC,4).setUsage(THREE.DynamicDrawUsage), iD=new THREE.InstancedBufferAttribute(aD,4).setUsage(THREE.DynamicDrawUsage);
   sg.setAttribute("aA",iA); sg.setAttribute("aB",iB); sg.setAttribute("aC",iC); sg.setAttribute("aD",iD); sg.instanceCount=NS;
   const atlasTex=atlasTexture(T.atlas);
-  const sm=new THREE.ShaderMaterial({uniforms:THREE.UniformsUtils.merge([THREE.UniformsLib.lights,THREE.UniformsLib.fog,{uAtlas:{value:atlasTex},uH:{value:720},uGain:{value:1},uVeil:{value:1},uCapR:{value:0.2}}]),
+  const sm=new THREE.ShaderMaterial({uniforms:THREE.UniformsUtils.merge([THREE.UniformsLib.lights,THREE.UniformsLib.fog,{uAtlas:{value:atlasTex},uH:{value:720},uGain:{value:1},uVeil:{value:1},uCapR:{value:0.2},uBank:{value:T.bank||0}}]),
     vertexShader:SPR_VS,fragmentShader:SPR_FS,lights:true,fog:true,transparent:true,depthWrite:false,depthTest:true});
   const sprites=new THREE.Mesh(sg,sm); sprites.frustumCulled=false; sprites.renderOrder=3; sprites.name="fx-sprites";
   /* THE VEIL RULE, worked out while the frame is drawn (the drawing camera; the simulation never reads it): the dust layer's opacity-weighted share of the frame,
