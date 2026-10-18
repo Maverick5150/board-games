@@ -492,11 +492,25 @@ export function createCams(VIEW){
     const fx=Math.cos(yawS), fz=Math.sin(yawS);
     E.x=S.x-fx*b-fz*sd; E.z=S.z-fz*b+fx*sd;
     { const f=r.fr; if(f&&!crash){ const c=Math.cos(f.th), s=Math.sin(f.th), lt=(r.lat||0)+(E.x-S.x)*-s+(E.z-S.z)*c, lim=Math.max(0.4,f.hw-0.35); if(Math.abs(lt)>lim){ const q=Math.sign(lt)*lim-lt; E.x+=-s*q; E.z+=c*q; } } }   /* over the dirt, never over the blocks */
+    /* riders are solid: whatever mount is chosen, a rival's body near the lens pushes it away (out to 2.4 m from his wheelbase segment: a continuous push, so it glides round the
+       pack; the vector has the length d: no flash frames, QD motion #4) and lifts it over his head (up to 1.8 m); the subject's own body keeps it 1.6 m away */
+    let near=0; const rsA=VIEW.rs, KO=crash?3:2.4, ex0=E.x, ez0=E.z;
+    for(let pass=0;pass<2;pass++) for(let i2=0;i2<rsA.length;i2++){ const o=rsA[i2]; if(o===r||(o.gone&&!o.crash)||!o.pos) continue;
+      const fo=Math.cos(o.th||0), go=Math.sin(o.th||0); let tq=(E.x-o.pos.x)*fo+(E.z-o.pos.z)*go; tq=clamp(tq,-1.05,1.05);
+      let dx=E.x-(o.pos.x+fo*tq), dz=E.z-(o.pos.z+go*tq), d=Math.hypot(dx,dz);
+      if(d<KO){ if(d<0.35){ const sg=((E.x-o.pos.x)*-go+(E.z-o.pos.z)*fo)>=0?1:-1; dx=-go*sg*0.35; dz=fo*sg*0.35; d=0.35; }
+        const k=(KO-d)/d; E.x+=dx*k; E.z+=dz*k; near=Math.max(near,1-d/KO); } }
+    { const fo=Math.cos(th), go=Math.sin(th); let tq=(E.x-S.x)*fo+(E.z-S.z)*go; tq=clamp(tq,-1.05,1.05); const dx=E.x-(S.x+fo*tq), dz=E.z-(S.z+go*tq), d=Math.hypot(dx,dz);
+      if(d<1.6&&d>1e-3){ const k=(1.6-d)/d; E.x+=dx*k; E.z+=dz*k; } }
+    { const f=r.fr; if(f&&!crash){ const c=Math.cos(f.th), s=Math.sin(f.th), lt=(r.lat||0)+(E.x-S.x)*-s+(E.z-S.z)*c, lim=f.hw+0.3; if(Math.abs(lt)>lim){ const q=Math.sign(lt)*lim-lt; E.x+=-s*q; E.z+=c*q; } } }   /* a push may take it a little over the edge, never into the next lane */
+    /* the push itself glides (tau 0.08 s): two rivals pushing from either side, or one crossing the lens, never throw the eye a metre in one frame */
+    if(first||!K.pxS){ K.pxS=new Sd(E.x-ex0); K.pzS=new Sd(E.z-ez0); } E.x=ex0+K.pxS.step(E.x-ex0,0.08,dt); E.z=ez0+K.pzS.step(E.z-ez0,0.08,dt);
+    K.near=K.near===undefined||first?near:K.near+(near-K.near)*Math.min(1,Math.max(0,dt)*6);
     if(VIEW.C.kind==="stadium") inFloor(E);
     const hAir=crash?0:Math.max(0,(r.oy!=null?r.oy:gS)-gS), air=K.air.step(Math.min(4.5,hAir),0.22,dt);
     const gE=groundNear(r,E.x-S.x,E.z-S.z), gBase=crash?gS:0.5*gE+0.5*gS;
     if(first) K.gb.snap(gBase); const gb=K.gb.step(gBase,0.28,dt);
-    let yT2=gb+u+0.8*air;
+    let yT2=gb+u+0.8*air+1.8*K.near;   /* (lifted over a rival's head: a helmet is at 1.95 m) */
     { let need=-1e9; for(let q=1;q<=3;q++){ const t=q*0.25, g=groundNear(r,(E.x-S.x)*(1-t),(E.z-S.z)*(1-t))+0.25; need=Math.max(need,(g-t*S.y)/(1-t)); } if(need>yT2) yT2=need; }   /* he stays in sight over a crest */
     if(first) K.y.snap(yT2); const ys=K.y.step(yT2,0.18,dt);
     const floor=Math.max(gE,groundNear(r,E.x-S.x+fx*0.6,E.z-S.z+fz*0.6),groundNear(r,E.x-S.x-fx*0.6,E.z-S.z-fz*0.6))+0.45;
