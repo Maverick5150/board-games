@@ -1,7 +1,7 @@
 // Offline cache for Motocross War (the season files data/<series>-<year>.js are cached on first use: every .js the page fetches is stored) (bump VERSION to force update)
 const VERSION = "mxwar-v10";
 const PREFIX = VERSION.replace(/v[0-9]+$/, "");   // every game shares one origin (one CacheStorage): only ever delete THIS game's old caches
-const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "../sound.js", "../skins.js", "../saves.js", "../names.js", "./data/index.js", "./race.js", "./round.js", "./season.js", "./announce-lines.js", "./announce.js", "./brain.js", "./art.js", "./track.js", "./booth.js", "./game.js",
+const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "../sound.js", "../skins.js", "../saves.js", "../names.js", "./data/index.js", "./race.js", "./time.js", "./round.js", "./season.js", "./announce-lines.js", "./announce.js", "./brain.js", "./art.js", "./track.js", "./booth.js", "./game.js",
   "../ui/theme.css", "../ui/voice.css", "../ui/ui.js", "../ui/icons.js", "../ui/picker.js", "../ui/voice.js",
   "../ui/fonts/dmserifdisplay-latin.woff2", "../ui/fonts/dmserifdisplay-italic-latin.woff2", "../ui/fonts/manrope-var-latin.woff2",
   "../ui/tex/felt.webp", "../ui/tex/paper.webp", "../ui/tex/orb-gold.webp", "../ui/tex/orb-violet.webp", "../ui/tex/rays-core.webp",
