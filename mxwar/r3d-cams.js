@@ -1,6 +1,8 @@
-/* MOTOCROSS WAR 3D — THE CAMERAS (owner: cams): a TV broadcast of a supercross night. The cover chase (the default: low behind the rider,
-   3.5 m back, 1.5 m up, 70 degrees, the rider big in the right third, the pack ahead and the lit stadium in the frame), trackside broadcast
-   long lenses that pan with the pack, the corner camera low inside a berm, the jump camera low at the landing, the high stadium-wide
+/* MOTOCROSS WAR 3D — THE CAMERAS (owner: cams): a TV broadcast of a supercross night. THE HERO CHASE (milestone 2, the default chase: the cover's
+   framing, low behind and to the left of the rider, 2.6 m back, 1.1 m up, 72 degrees, the rider big in the right third, the pack ahead in the left
+   two thirds and the lit bowl above; mounts chosen by what fills the lens), the wide chase (3.5 m / 1.5 m / 70 degrees, the old default), THE
+   BROADCAST (milestone 2: a TV platform in the lower stands, a long lens panning and zooming with the pack: the camera button and the director's
+   once-a-lap establishing shot), trackside long lenses that pan with the pack, the corner camera low inside a berm, the jump camera low at the landing, the high stadium-wide
    from the grandstand, the onboard (82 degrees, stabilised), the replay (slow motion from recorded frames, render time only), the gate,
    the holeshot, the crash with the marshal's yellow flag, the line. THE DIRECTOR cuts every 4-8 s between them (reserved shots: the gate
    drop, the holeshot, a featured pass, a crash and the yellow flag, the leader at the line, the white and checkered flags), keeps the
@@ -10,7 +12,8 @@
    C, world, rs (the riders' records), st (the per-rider state), R, FX (the riders' and particles' meshes: the replay), gate, marshal, T (the
    race clock), lapNo, lenLaps, mode ("gate" | "race" | "idle"), holdInfo, yellow, lapPlan, meSeats, W, H, flag, finished, tv, leaderIdx().
    CAMS.director(dt), CAMS.camera(dt) (every frame, in that order); CAMS.shot, setShot(s), pickShot(force), force(spec) (tests), shotLog, featLog,
-   target (the aim point: the shadow box follows it), focus (the subject: where a depth of field would focus), camS, snap(), buildGrid() (a new
+   target (the aim point: the shadow box follows it), focus (the subject: where a depth of field would focus), keep (a Vector4: the chase subject's
+   hip and a radius, w = 0 when there is none: what the riders' near-lens fade should spare), camS, snap(), buildGrid() (a new
    course), reset() (a new race), modes() / mode(id) / nextMode() (the presets for the remote and the phone button), replayNow(), state();
    spots and tests: sees, safeCam, dirtTop, terrainAt, inFloor, trackCam, featCam, cornerCam, lineCam, crashCam, yellowCam, gateCam, turn1Cam, spotCam, secPt. */
 import * as THREE_NS from "../ui/vendor/three-0.160.0.module.min.js";
@@ -60,6 +63,7 @@ export function createCams(VIEW){
   const cTarget=new THREE.Vector3(), cFocus=new THREE.Vector3(), E=new THREE.Vector3(), T=new THREE.Vector3(), tv3=new THREE.Vector3(), tv4=new THREE.Vector3(), tv2=new THREE.Vector3();
   const RG={fov:50,roll:0,near:0.5,clr:1.2,follow:false};   /* what the rig of this frame asks for */
   const FS=new Sd(50), ROLL=new Sd(0);   /* the lens and the roll, smoothed across shots' frames */
+  const KEEP=new THREE.Vector4(0,0,0,0);   /* the chase subject's hip and a radius (CAMS.keep; w = 0: none) */
 
   /* the highest dirt in every 2 m cell (the track, its berms and shoulders, the start path): no camera ever sits inside a jump or under a
      landing (polish: a chase camera behind a rider who had just landed could end up under the jump's face, and the screen showed the
@@ -829,7 +833,10 @@ export function createCams(VIEW){
     else if(sh==="wide") rigWide(r,j,dt,snap);
     else if(sh==="heli") rigHeli(r,j,dt,snap);
     else rigSpot(sh,r,j,dt,snap);
-    if(!set) return;
+    if(!set){ KEEP.w=0; return; }
+    /* the chase's own rider (milestone 2): a sphere round his hip that the riders' and bikes' near-lens fade could spare (a REQUEST to r3d-riders.js / r3d-bike.js: their dither eats
+       whatever is within 1.7 m of the lens, the subject's own rear wheel too, which is why the hero chase sits 2.6 m behind him and not the cover's 2 m); w = 0: no subject to spare */
+    if(!RP&&sh==="chase"&&!r.crash) KEEP.set(r.pos.x,r.pos.y,r.pos.z,1.6); else KEEP.w=0;
     snap=snap||camS.snap;   /* a rig may cut inside its own shot (the broadcast changing sides): the lens snaps with it */
     /* the lens: smoothed across frames (a cut snaps it); a phone held upright gets a wider vertical field so the sides crop and the riders stay big */
     const asp=VIEW.W/Math.max(1,VIEW.H), fov=lensFov(RG.fov,asp,RP?"replay":sh);
@@ -856,7 +863,7 @@ export function createCams(VIEW){
   function force(spec){ const s=Object.assign({pri:99,min:1e9,max:1e9,why:"test"},spec); if(s.type==="wide"||s.type==="bcast") lapWide=VIEW.lapNo; setShot(s); return shot; }
 
   return {
-    get shot(){ return shot; }, get shotLog(){ return shotLog; }, get featLog(){ return featLog; }, get target(){ return cTarget; }, get focus(){ return cFocus; }, camS:camS,
+    get shot(){ return shot; }, get shotLog(){ return shotLog; }, get featLog(){ return featLog; }, get target(){ return cTarget; }, get focus(){ return cFocus; }, get keep(){ return KEEP; }, camS:camS,
     /* a new course: the grid of the dirt's heights (so no camera sits inside a jump), the corners; a new race: forget the shots */
     buildGrid:function(){ HG=heightGrid(); buildCorners(); RAILS=null; },
     reset:function(){ camS.gp=null; shotLog=[]; featLog=[]; cornLog=[]; share=0.5; youOut=0; earlyT=-1e9; lapWide=-1; launched=false; onbCool=0; wideSide=0; camS.offE=null; recDispose(); replayed.clear(); replays=0; },
