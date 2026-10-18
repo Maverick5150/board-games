@@ -178,7 +178,7 @@ const SPK_VS=[
 "  float ppm=uH*0.5*projectionMatrix[1][1]/depth, rad=aS.y, px=rad*ppm;",           /* pixels a metre at its depth; its radius in pixels */
 "  vec3 vv=(modelViewMatrix*vec4(v,0.0)).xyz; float spd=length(vv.xy); vec2 dir=spd>1e-3?vv.xy/spd:vec2(1.0,0.0);",
 "  float kw=px<0.7?0.7/max(px,1e-4):1.0;",                                          /* never thinner than about 1.4 px across ... */
-"  alpha*=clamp(px/0.7,0.1,1.0);",                                                  /* ... a sub-pixel crumb fades instead of shimmering */
+"  alpha*=clamp(px/0.7,0.18,1.0);",                                                 /* ... a sub-pixel crumb fades instead of shimmering (m2: but not below 0.18: a far roost of hundreds still reads from the stands) */
 "  float cap=px*kw>uMaxPx?uMaxPx/(px*kw):1.0;",                                     /* near the lens a crumb never becomes a blob */
 "  float streak=min(spd*uShutter,0.42)*cap;",                                       /* how far it moved while the shutter was open (m) */
 "  float hw=rad*kw*cap, hl=hw+0.5*streak;",
