@@ -701,7 +701,7 @@ export function create(host,hooks){
     // [hook:motion]
     /* a PROGRESSIVE spring (stiffer over the last 55% of the travel, 4x at the bottom) and a hydraulic bump stop (more compression damping deep in
        the stroke): a 4 m/s landing uses about 0.13 m of the shock, a 6 m/s landing 0.16 m, only 7 m/s and more bottoms it (it bottomed from 4 m/s) */
-    if(Ls<BIKE.TRAVEL){ const xp=Math.max(0,(BIKE.TRAVEL-Ls-0.45*BIKE.TRAVEL)/(0.55*BIKE.TRAVEL)), dv=A.v-vg; a+=K*(1+3*xp*xp)*(LREST-Ls)-2*Z*Math.sqrt(K)*(dv<0?1+7*xp*xp:1)*dv; }
+    if(Ls<BIKE.TRAVEL){ const Lc=Math.max(Ls,0.03), xp=clamp((BIKE.TRAVEL-Lc-0.45*BIKE.TRAVEL)/(0.55*BIKE.TRAVEL),0,1), dv=A.v-vg; a+=K*(1+3*xp*xp)*(LREST-Lc)-2*Z*Math.sqrt(K)*(dv<0?1+7*xp*xp:1)*dv; }   /* (the force of the bottom of the stroke at most: a wheel that finds itself under a step in the dirt is not shot into the sky) */
     // [/hook:motion]
     A.v+=a*h; A.y+=A.v*h;
     if(A.y-gw<0.03){ A.y=gw+0.03; if(A.v<vg) A.v=Math.min(vg,3.2); }
