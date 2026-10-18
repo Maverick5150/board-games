@@ -557,7 +557,7 @@ export function create(host,hooks){
     const x=fr.x+nx*lat, z=fr.z+nz*lat;
     // [hook:motion]
     let v=r.rem?0:r.init&&dt>0?(r.D-r.Dp)/dt:(isGate?0:MX.Course.vOfD(C,Math.max(0,r.D)));   /* (a remount rides on from a stop: r.rem) */
-    if(!isFinite(v)||v<0) v=0; r.vp=r.v; r.v=r.init?r.v+(v-r.v)*Math.min(1,dt*10):v;
+    if(!isFinite(v)||v<0) v=0; r.vp=r.v; r.v=r.init?r.v+(v-r.v)*Math.min(1,dt*10):v; r.vi=v;   /* (r.vi: this frame's own speed, unsmoothed: the jump arcs plan with it) */
     const acc=dt>0?(r.v-r.vp)/dt:0;
     const gF=ride(r,s,onStart,BIKE.WB/2), gR=ride(r,s,onStart,-BIKE.WB/2), tF=gnd(r,s,onStart,BIKE.WB/2), tR=gnd(r,s,onStart,-BIKE.WB/2);
     const aF=onStart||r.crash?null:jumpArc(r,s+BIKE.WB/2,true), aR=onStart||r.crash?null:jumpArc(r,s-BIKE.WB/2,false);   /* this rider's own flight over a jump, from his speed at the lip */
@@ -665,7 +665,7 @@ export function create(host,hooks){
      the distance grows with the speed (d x (v / vx)^1.4: a faster rider flies higher, further and longer, lands further down the landing), kept
      on the landing (never short onto its face, never off its far end: per kind of jump), never through the dirt on the way. The arc is chosen
      when the front wheel leaves the lip and both wheels fly it. */
-  const JLIM={rhythm:[-0.5,0.6],double:[-1.0,2.6],triple:[-1.0,2.6],table:[-2.5,3.0],stepup:[-0.6,1.2],drop:[-0.8,2.0]};
+  const JLIM={rhythm:[-0.6,0.6],double:[-1.4,2.6],triple:[-1.4,2.6],table:[-3.5,3.0],stepup:[-0.8,1.2],drop:[-1.0,2.0]};   /* how much shorter / longer than the design each landing takes (m): onto the peak's top at the shortest, never its face */
   function arcY(J,x){ return {y:J.ya+x*J.tan-G*x*x/(2*J.v*J.v),dy:J.tan-G*x/(J.v*J.v),A:J.A,u:x/J.d}; }
   function jumpArc(r,s,front){
     const key=front?"jF":"jR"; let J=r[key];
@@ -673,9 +673,12 @@ export function create(host,hooks){
     const a=MX.Course.airAt(C,s); if(!a){ if(front) r.jDone=null; return null; }   /* (past the jump: the next lap flies it again) */
     if(!front){ const F=r.jF; if(F&&F.A===a.A){ r.jR=F; const x=MX.Course.wrap(C,s-F.a); return x<=F.d?arcY(F,x):null; } return r.jDone===a.A?null:a; }   /* the rear wheel flies the front's arc */
     if(r.jDone===a.A) return null;   /* already flown (he landed short of the design's touch point) */
-    const A=a.A, d=A.b-A.a, v=clamp(r.v||A.vx,0.6*A.vx,1.45*A.vx), lim=JLIM[A.kind]||[-0.8,1.6], lat=r.lat;
+    /* his speed IN THE AIR: the schedule flies every arc at its design speed A.vx and the cards' gap rate scales it (the rider's own speed over the
+       schedule's at this point); planning with the speed on the face (braking to the lip) made the flight floaty (implied gravity 7.9) */
+    const vs=MX.Course.vOfD(C,Math.max(0,r.D)), q=clamp((r.vi!=null?r.vi:r.v)/Math.max(1,vs),0.7,1.35);
+    const A=a.A, d=A.b-A.a, v=A.vx*q, lim=JLIM[A.kind]||[-0.8,1.6], lat=r.lat;
     const gAt=u=>MX.Course.ground(C,A.a+u,lat);
-    let dr=clamp(d*Math.pow(v/A.vx,1.4),Math.max(1.2,d+lim[0]),d+lim[1]);
+    let dr=clamp(d*Math.pow(q,1.4),Math.max(1.2,d+lim[0]),d+lim[1]);
     for(let k=0;k<12&&gAt(dr+0.25)>gAt(dr)+0.01;k++) dr+=0.25;   /* never onto a rising face */
     let tn=(gAt(dr)-A.ya)/dr+G*dr/(2*v*v);
     for(let it=0;it<6;it++){ let ok=true; for(let k=1;k<10;k++){ const x=dr*k/10; if(A.ya+x*tn-G*x*x/(2*v*v)<gAt(x)+0.1){ ok=false; break; } } if(ok) break; dr+=0.5; tn=(gAt(dr)-A.ya)/dr+G*dr/(2*v*v); }   /* never through the dirt */
