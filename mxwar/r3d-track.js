@@ -29,7 +29,7 @@ export const SOIL={ "stadium-dirt":["#74461f","#a56c35","#6a3f1c"], loam:["#4e33
    [dry tan (crests, lips, windrows, the dry edges), mid brown (the groomed body of the track), wet dark brown (the racing line, the watered patches), the deep wet of a rut's bottom].
    The cover's dirt keeps milestone 1's warm saturated hue (its foreground crop: mean sRGB 111,65,32, saturation 0.78) but spans a far wider value range (luma p5 10, p95 179 against
    milestone 1's 36 / 166 on the flat): a golden dry tan, a darker mid brown, a wet near-black brown in the ruts. */
-const TRK={ "stadium-dirt":["#a06a3a","#663d1d","#3c2210","#27160a"], loam:["#7d6347","#4e3320","#2e1d10","#180f08"], clay:["#a8683c","#7a4326","#45260f","#26150a"],
+const TRK={ "stadium-dirt":["#a2723f","#6a4322","#3f2715","#28180c"], loam:["#7d6347","#4e3320","#2e1d10","#180f08"], clay:["#a8683c","#7a4326","#45260f","#26150a"],
   hardpack:["#b08354","#84603a","#573a20","#33210f"], sand:["#d6b986","#c2a170","#97784b","#6b5232"] };
 /* the dirt's detail maps for the stadium FLOOR and the starting pad (r3d-world.js multiplies them by the soil colour and repeats them every 7 m): the same scans as the track, laid as a
    mosaic of k x k tiles, each turned or mirrored its own way, so no big blotch repeats across the floor. {map: a warm near-white luma detail (sRGB), normal: a tangent-space normal map}. */
@@ -190,7 +190,7 @@ float mxWet=clamp(vWet+mxWx,0.0,1.0);
 /* the colour, after the vertex colour (the soil family by moisture): the scans' grain and the clumps, the per-pixel extra moisture, the dusty dry crust */
 const GL_COLOR_HI=`{ vec3 mxCol=diffuseColor.rgb*clamp(mxLuma,0.3,1.7);
   float mxL=dot(mxCol,vec3(0.3,0.59,0.11));
-  mxCol=max(mix(vec3(mxL),mxCol,1.1+0.3*mxWx),0.0)*mix(1.0,0.48,mxWx);
+  mxCol=max(mix(vec3(mxL),mxCol,1.0+0.15*mxWx),0.0)*mix(1.0,0.5,mxWx);
   diffuseColor.rgb=mxCol; }
 `;
 const GL_COLOR_LO=`diffuseColor.rgb*=clamp(mxLuma,0.3,1.7)*mix(1.0,0.48,mxWx);
