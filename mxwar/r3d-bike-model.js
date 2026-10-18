@@ -296,8 +296,8 @@ function bodyBuild(d){
     if(d>=1) B.add(lathe([[0.0168,0.008],[0.0168,0.046],[0.0150,0.047]],S(d,14,8,6)),withMat(MAT.steel,{m:mcm,uv:"none"}));
     if(d>=1) B.add(lathe([[0.0150,0.047],[0.0150,0.012],[0.001,0.012]],S(d,12,8,6)),withMat(MAT.outlet,{m:mcm,uv:"none"}));
     B.add(rod(V(-0.250,0.735,0.186),V(-0.300,0.748,0.212),0.0175,0.034,S(d,8,6,4)),withMat(MAT.exh,{ao:0.9}));                          /* the mid-pipe joins header and muffler */
-    if(d>=2){ B.add(rod(V(-0.50,0.80,0.12),V(-0.50,0.80,0.19),0.007,0.007,5),withMat(MAT.aluD)); B.add(rod(V(-0.68,0.835,0.115),V(-0.68,0.835,0.18),0.007,0.007,5),withMat(MAT.aluD));
-      B.add(blob(0.20,0.022,0.036,4,4,10),withMat(MAT.aluB,{m:Tm(-0.50,0.838,0.135,0,0,0.25),ao:1})); } }
+    if(d>=2){ B.add(rod(V(-0.50,0.79,0.12),V(-0.50,0.79,0.19),0.007,0.007,5),withMat(MAT.aluD)); B.add(rod(V(-0.68,0.835,0.115),V(-0.68,0.835,0.18),0.007,0.007,5),withMat(MAT.aluD));
+      B.add(blob(0.20,0.022,0.036,4,4,10),withMat(MAT.aluB,{m:Tm(-0.47,0.780,0.150,0,0,0.10),ao:1}));   /* (milestone 2: the muffler bracket sits under the side-panel number, not across it) */ } }
   B.mark('before-hoses');
   /* radiator hoses, the water pump cover (milestone 2) */
   if(d>=1){ const hs=S(d,7,5,4), hp={per:S(d,3,1,1),caps:true};

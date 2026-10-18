@@ -207,7 +207,7 @@ function bikeMaterial(lo,D,U){
          the skid plate and the tyres as st.mud grows; wet (dark, glossy) and dry (light, rough) patches */
       "float mudK=0.0, bkWet=0.5;",
       "if(vMud.x>0.002){ float mud=vMud.x; float low=1.0-smoothstep(0.28,0.86,vLoc.y), rear=smoothstep(0.15,-0.95,vLoc.x)*0.35, under=smoothstep(0.15,-0.7,bkN.y)*0.55;",
-      "  float w=mix(clamp(low*0.85+rear+under,0.0,1.4),0.80,bkW); if(bkK>3.5) w=max(w,1.15); if(bkK>1.5&&bkK<2.5) w=max(w,0.95);",
+      "  float w=mix(clamp(low*0.85+rear+under,0.0,1.4),0.80,bkW); if(bkK>3.5&&bkK<4.5) w=max(w,1.15); if(bkK>1.5&&bkK<2.5) w=max(w,0.95);",
       "  vec2 sp=bkPP*vec2(bkAN.y>0.8?1.0:0.55,1.0); float d1=clamp(mud*(0.20+0.95*w),0.0,0.9), d2=clamp(mud*(0.28+1.15*w),0.0,0.94);",
       "  vec4 bkM1=texture2D(uMudT,sp*2.5); float nz=bkM1.g;",   /* a 0.40 m tile: the big splats, the coat's noise */
       std?"  vec4 bkM2=texture2D(uMudT,sp*7.7+0.37); nz=nz*0.62+bkM2.b*0.38;":"",   /* a 0.13 m tile: the drops, the finer noise */
