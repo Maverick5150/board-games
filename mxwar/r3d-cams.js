@@ -51,8 +51,8 @@ const HERO={fov:72,mounts:[
   {id:"high",b:3.0,s:-0.75,u:2.7,x:0.30,y:-0.16,pref:0.45},
   {id:"wide",b:3.6,s:-1.2,u:1.6,x:0.32,y:-0.22,pref:0.62}],
   crash:{id:"crash",b:7,s:-2.4,u:2.8,x:0,y:-0.1,pref:0}};
-/* the lens of a frame: a phone held upright gets a wider vertical field (the sides crop, the riders stay big) */
-function lensFov(fov,asp,sh){ return asp<1&&sh!=="gate"&&sh!=="crash"?clamp(2*Math.atan(Math.tan(fov*PI/360)/Math.max(0.78,Math.pow(asp,0.55)))*R2D,10,84):fov; }
+/* the lens of a frame: a phone held upright gets a wider vertical field (the sides crop, the riders stay big); not the gate, the crash or the broadcast, which frame their scene's width for the frame's shape themselves */
+function lensFov(fov,asp,sh){ return asp<1&&sh!=="gate"&&sh!=="crash"&&sh!=="bcast"?clamp(2*Math.atan(Math.tan(fov*PI/360)/Math.max(0.78,Math.pow(asp,0.55)))*R2D,10,84):fov; }
 
 export function createCams(VIEW){
   /* ---------------- the cameras' own state ---------------- */
