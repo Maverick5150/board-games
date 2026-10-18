@@ -58,8 +58,10 @@ function atlasMat(T,cols,rows,opts){
   m.onBeforeCompile=function(sh){
     sh.uniforms.uGrid={value:new THREE.Vector2(1/cols,1/rows)};
     sh.vertexShader="attribute vec2 aCell;\nuniform vec2 uGrid;\n"+sh.vertexShader.replace("#include <uv_vertex>","#include <uv_vertex>\n#ifdef USE_MAP\n vMapUv=vec2((aCell.x+uv.x)*uGrid.x,1.0-(aCell.y+1.0-uv.y)*uGrid.y);\n#endif");
+    /* milestone 2 (director's note: a ghost bike near the lens kept an opaque number plate): the plates fade with the bike and the rider (the same dither, 1.7 m to 0.8 m from the lens) */
+    sh.fragmentShader=sh.fragmentShader.replace("#include <color_fragment>","#include <color_fragment>\n { float mxZ=vViewPosition.z; if(mxZ<1.7){ float mxA=smoothstep(0.8,1.7,mxZ); if(mxA<fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))))) discard; } }");
   };
-  m.customProgramCacheKey=()=>"atlas"+cols+"x"+rows;
+  m.customProgramCacheKey=()=>"atlas-fade"+cols+"x"+rows;
   return m;
 }
 
@@ -149,7 +151,7 @@ export function createRiders(list,opts){
   const boneData=new Float32Array(n*NB*12), boneTex=new THREE.DataTexture(boneData,NB*3,n,THREE.RGBAFormat,THREE.FloatType);
   boneTex.minFilter=boneTex.magFilter=THREE.NearestFilter; boneTex.generateMipmaps=false; boneTex.needsUpdate=true;
   const U={uBones:{value:boneTex},uTime:{value:0}};
-  const hiModel=buildRider(1), loModel=buildRider(0);
+  const hiModel=buildRider(1,lo), loModel=buildRider(0);   /* (milestone 2: the near rider is 5,500 triangles on the physically based tiers; the FIRE TV tier / Reduce effects build the lite one, 4,100, about the old cost) */
   const hiInst=instAttrs(n), loInst=instAttrs(n);
   /* THE LEAD'S MATERIAL KIT on the gear (integrate step): the jersey, pants and gloves are physically based cloth (rough, a touch of the stadium's light from the environment map), the helmet is a glossy clear-coat shell that reflects the floodlights; the kit tier follows the quality tier (r3d-look.js), "low" / Reduce effects keep the old Lambert / Phong parts.
      The skinning patch (skinMat) works on any of them: the same chunks. The riders' own rim light is lighter than in the rider branch (the lead's rim and the bloom do that work now). */

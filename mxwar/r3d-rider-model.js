@@ -80,6 +80,7 @@ function loft(g,rings,seg,caps){
   return base;
 }
 const thin=(a,on)=>on?a.filter((x,i)=>i===0||i===a.length-1||i%2===0):a;
+let LITE=false;   /* (set by buildRider while it builds the lite near rider) */
 
 /* ---------------- the colours (linear) ---------------- */
 const COL={white:lin("#dfe2e8"),boot:lin("#e6e8ee"),dark:lin("#15161b"),mid:lin("#2a2c33"),glove:lin("#1a1b20"),strap:lin("#e9eaee"),sole:lin("#101114"),metal:lin("#8a8e98"),lens:lin("#1a2234")};
@@ -109,7 +110,7 @@ function addTorso(g,seg,lo){
 }
 function addNeck(g,seg,lo){
   /* the neck brace: a collar over the shoulders, higher at the front and back; the neck inside it */
-  const nb=[[0.488,0.012,0.114,0.156],[0.530,0.008,0.102,0.132],[0.572,0.008,0.090,0.106],[0.603,0.010,0.083,0.090]].map(t=>ring([t[1],t[0],0],t[2],t[3],{bones:[BN.CHEST,BN.NECK,sstp(0.46,0.64,t[0])],col:t[0]>0.555?COL.dark:[0.62,0.62,0.62],slot:t[0]>0.555?2:1,   /* (milestone 2: it rises to the helmet's rim: no neck shows) */k:a=>1+0.05*Math.pow(Math.abs(Math.cos(a)),6)}));   /* (polish: a coloured collar over the shoulders with a dark pad at its top, not a grey funnel) */
+  const nb=[[0.488,0.012,0.114,0.156],[0.530,0.008,0.102,0.132],[0.572,0.008,0.090,0.106],[0.603,0.010,0.083,0.090]].map(t=>ring([t[1],t[0],0],t[2],t[3],{bones:[BN.CHEST,BN.NECK,sstp(0.46,0.64,t[0])],col:t[0]>0.555?COL.dark:COL.mid,slot:2,   /* (milestone 2: it rises to the helmet's rim: no neck shows; dark plastic, not a grey bib) */k:a=>1+0.05*Math.pow(Math.abs(Math.cos(a)),6)}));   /* (polish: a coloured collar over the shoulders with a dark pad at its top, not a grey funnel) */
   g.part=PART.GEAR; loft(g,thin(nb,lo),seg,"t");
   const nk=[[0.53,0.008,0.050],[0.62,0.012,0.046]].map(t=>ring([t[1],t[0],0],t[2],t[2],{bones:[BN.NECK,BN.HEAD,sstp(0.54,0.62,t[0])],col:COL.dark,slot:2}));
   g.part=PART.GEAR; loft(g,nk,lo?5:Math.max(6,seg-2),"t");
@@ -137,10 +138,10 @@ function addArm(g,sd,seg,lo){
     loft(g,hand,10,"b");
     const GY=-0.145, R=0.0245, sd2=sd;
     [[-0.029,0.0094,-2.85],[-0.0095,0.0097,-2.95],[0.0095,0.0093,-2.85],[0.027,0.0082,-2.5]].forEach(f=>{
-      const zf=z+sd2*f[0], n=7, rows=[];
+      const zf=z+sd2*f[0], n=LITE?5:7, rows=[];
       for(let k=0;k<n;k++){ const th=0.95+(f[2]-0.95)*k/(n-1), r=f[1]*(1-0.18*k/(n-1)), ct=Math.cos(th), s2=Math.sin(th);
         rows.push(ring([R*ct,GY+R*s2,zf],r,r,{u:[ct,s2,0],v:Z,bones:[HA,HA,0],col:COL.glove,slot:2,mud:0.45})); }
-      loft(g,rows,6,"t"); });
+      loft(g,rows,LITE?5:6,"t"); });
     { const zt=z-sd2*0.036, n=5, rows=[];
       for(let k=0;k<n;k++){ const th=2.55+(4.55-2.55)*k/(n-1), r=0.0105*(1-0.15*k/(n-1)), ct=Math.cos(th), s2=Math.sin(th), rr=R+0.002;
         rows.push(ring([rr*ct,GY+rr*s2,zt],r,r,{u:[ct,s2,0],v:Z,bones:[HA,HA,0],col:COL.glove,slot:2,mud:0.45})); }
@@ -203,7 +204,7 @@ function band(g,A,B,closed,col,slot,sk,want){
     if(want([mx,my,mz],[nx,ny,nz])) g.I.push(a,b,c,b,d,c); else g.I.push(a,c,b,b,c,d); }
 }
 function addHelmet(g,hi){
-  const H=BN.HEAD, sk=[H,H,1,0], nlon=hi?30:9, nlat=hi?15:5, th0=-1.0, th1=Math.PI/2;
+  const H=BN.HEAD, sk=[H,H,1,0], nlon=hi?(LITE?22:30):9, nlat=hi?(LITE?11:15):5, th0=-1.0, th1=Math.PI/2;
   /* the shell */
   const base=g.n; g.part=PART.SHELL;
   for(let j=0;j<=nlat;j++){ const th=th0+(th1-th0)*j/nlat;
@@ -224,14 +225,14 @@ function addHelmet(g,hi){
   { const ph0=g.n; for(let k=0;k<nlon;k++){ const o=(base+k)*3; g.vert([g.P[o],g.P[o+1],g.P[o+2]],COL.dark,sk,[2,0,0]); } const ci=g.vert([HC[0]-0.012,HC[1]-0.120,0],COL.dark,sk,[2,0,0]);
     for(let k=0;k<nlon;k++) g.I.push(ph0+k,ph0+(k+1)%nlon,ci); { const n0=g.I.length-nlon*3, P=g.P, a=g.I[n0]*3, b=g.I[n0+1]*3, cc=g.I[n0+2]*3; const ny=(P[b+2]-P[a+2])*(P[cc]-P[a])-(P[b]-P[a])*(P[cc+2]-P[a+2]); if(ny>0) for(let t=n0;t<g.I.length;t+=3){ const s2=g.I[t+1]; g.I[t+1]=g.I[t+2]; g.I[t+2]=s2; } } }
   /* the chin bar: rings round a horizontal arc that wraps the face, juts forward into a beak; a dark vent at its front */
-  { g.part=hi?PART.CHIN:PART.SHELL; const nr=hi?15:5, seg=hi?10:5, rows=[], spine=f=>{ const cf=Math.cos(f), beak=Math.pow(Math.max(0,cf),6), Rx=0.150+0.042*beak; return [0.028+Rx*cf,0.652+0.024*(1-cf)-0.012*beak,0.114*Math.sin(f),beak]; };
+  { g.part=hi?PART.CHIN:PART.SHELL; const nr=hi?(LITE?11:15):5, seg=hi?(LITE?8:10):5, rows=[], spine=f=>{ const cf=Math.cos(f), beak=Math.pow(Math.max(0,cf),6), Rx=0.150+0.042*beak; return [0.028+Rx*cf,0.652+0.024*(1-cf)-0.012*beak,0.114*Math.sin(f),beak]; };
     for(let j=0;j<nr;j++){ const f=-1.70+3.40*j/(nr-1), P0=spine(f), Pa=spine(f-0.01), Pb=spine(f+0.01);
       let nx=Pb[2]-Pa[2], nz=-(Pb[0]-Pa[0]); const nl=Math.hypot(nx,nz)||1; nx/=nl; nz/=nl; if(nx*(P0[0]-0.028)+nz*P0[2]<0){ nx=-nx; nz=-nz; }
-      const vent=Math.abs(f)<0.34;
-      rows.push(ring([P0[0],P0[1],P0[2]],0.020,0.037+0.010*P0[3],{u:[nx,0,nz],v:Y,n:2.6,bones:[H,H,0],col:a=>(vent&&Math.cos(a)>0.35&&Math.abs(Math.sin(a))<0.62)?COL.dark:K1,slot:a=>(vent&&Math.cos(a)>0.35&&Math.abs(Math.sin(a))<0.62)?2:0,mud:0.45})); }
+      const vent=Math.abs(f)<0.22;   /* (a narrow vent: a wide black one read as a robot's mouth) */
+      rows.push(ring([P0[0],P0[1],P0[2]],0.020,0.037+0.010*P0[3],{u:[nx,0,nz],v:Y,n:2.6,bones:[H,H,0],col:a=>(vent&&Math.cos(a)>0.5&&Math.abs(Math.sin(a))<0.45)?COL.mid:K1,slot:a=>(vent&&Math.cos(a)>0.5&&Math.abs(Math.sin(a))<0.45)?2:0,mud:0.45})); }
     loft(g,rows,seg,"tb"); }
   /* the visor: grows out of the brow (on the shell) and runs back along the temples; a top sheet (team colour), a dark underside, a rim */
-  { g.part=PART.TRIM; const nu=hi?6:2, nv=hi?10:4, W=nv+1, p0=g.n;
+  { g.part=PART.TRIM; const nu=hi?(LITE?4:6):2, nv=hi?(LITE?8:10):4, W=nv+1, p0=g.n;
     for(let side=0;side<2;side++){ const off=side?0.0042:-0.0042;
       for(let i=0;i<=nu;i++){ const u=i/nu; for(let j=0;j<=nv;j++){ const v=-1+2*j/nv, ph=v*1.10, th=0.40, dx=Math.cos(th)*Math.cos(ph), dy=Math.sin(th), dz=Math.cos(th)*Math.sin(ph);
         shellPt(dx,dy,dz,SP); const ax=SP[0]+0.004*dx, ay=SP[1]+0.004*dy, az=SP[2]+0.004*dz;
@@ -246,7 +247,7 @@ function addHelmet(g,hi){
     band(g,rimA,rimB,false,[0.55,0.55,0.55],2,sk,(m,n)=>n[0]*(m[0]-0.05)+n[2]*m[2]>0); }
   if(!hi) return;
   /* the goggles: a thick frame wrapped round the face (a nose cut at the bottom), the lens a little behind its face, the strap round the shell */
-  { const N=28, gy=0.750, loop=(sw,sh,dx)=>{ const pts=[]; for(let k=0;k<N;k++){ const a=k/N*Math.PI*2, ca=Math.cos(a), sa=Math.sin(a), e=2/3.6;
+  { const N=LITE?20:28, gy=0.750, loop=(sw,sh,dx)=>{ const pts=[]; for(let k=0;k<N;k++){ const a=k/N*Math.PI*2, ca=Math.cos(a), sa=Math.sin(a), e=2/3.6;
         const z=sw*Math.sign(ca)*Math.pow(Math.abs(ca),e); let y=gy+sh*Math.sign(sa)*Math.pow(Math.abs(sa),e); if(sa<0) y+=sh*0.38*Math.pow(1-Math.abs(ca),3)*(-sa);
         pts.push([0.151-1.50*z*z+dx,y,z]); } return pts; };
     const C0=[0.151,gy,0], outF=loop(0.101,0.044,0.013), inF=loop(0.084,0.031,0.013), outB=loop(0.107,0.048,-0.014), inB=loop(0.084,0.031,0.006);
@@ -260,7 +261,7 @@ function addHelmet(g,hi){
         if(uy*vz-uz*vy>0) g.I.push(a,b,ci); else g.I.push(a,ci,b); } }
     /* the strap: a band 4 cm wide round the back of the shell at the goggles' height, 3.5 mm proud of it */
     g.part=PART.STRAP;
-    const M2=30, row=yy=>{ const pts=[]; for(let k=0;k<=M2;k++){ const ph=0.62+(Math.PI*2-1.24)*k/M2; let th=Math.asin(Math.max(-0.9,Math.min(0.9,(yy-HC[1])/0.145)));
+    const M2=LITE?20:30, row=yy=>{ const pts=[]; for(let k=0;k<=M2;k++){ const ph=0.62+(Math.PI*2-1.24)*k/M2; let th=Math.asin(Math.max(-0.9,Math.min(0.9,(yy-HC[1])/0.145)));
         for(let it=0;it<4;it++){ shellPt(Math.cos(th)*Math.cos(ph),Math.sin(th),Math.cos(th)*Math.sin(ph),SP); th+=(yy-SP[1])/0.145; }
         const dx=SP[0]-HC[0], dy=SP[1]-HC[1], dz=SP[2]-HC[2], l=Math.hypot(dx,dy,dz)||1; pts.push([SP[0]+dx/l*0.0035,SP[1]+dy/l*0.0035,SP[2]+dz/l*0.0035]); } return pts; };
     band(g,row(gy-0.019),row(gy+0.021),false,K1,1,sk,(m,n)=>n[0]*(m[0]-HC[0])+n[1]*(m[1]-HC[1])+n[2]*m[2]>0); }
@@ -278,11 +279,14 @@ function addBack(g,hi){
 
 /* ---------------- the whole rider ---------------- */
 /* detail 1: the near rider (own helmet mesh, buckles, folds); 0: the far pack (one mesh, thin rings). Returns the geometries and the triangle counts */
-export function buildRider(detail){
-  const hi=detail>0, seg=hi?20:6, lo=!hi, body=new GB();
-  addTorso(body,seg,lo); addNeck(body,seg,lo); addArm(body,-1,hi?12:5,lo); addArm(body,1,hi?12:5,lo); addLeg(body,-1,hi?12:6,lo); addLeg(body,1,hi?12:6,lo);
+/* lite (milestone 2): the near rider of the FIRE TV tier / Reduce effects: the same shapes with fewer segments (about 3,900 triangles, the old near rider's cost) */
+export function buildRider(detail,lite){
+  const hi=detail>0, seg=hi?(lite?16:20):6, lo=!hi, body=new GB(), ls=hi?(lite?10:12):5;
+  LITE=!!lite&&hi;
+  addTorso(body,seg,lo); addNeck(body,seg,lo); addArm(body,-1,ls,lo); addArm(body,1,ls,lo); addLeg(body,-1,hi?ls:6,lo); addLeg(body,1,hi?ls:6,lo);
   let helmet=null;
   if(hi){ const h=new GB(); addHelmet(h,true); helmet=h.geometry(); } else addHelmet(body,false);
+  LITE=false;
   const gb=body.geometry();
   const b=new GB(); addBack(b,hi); const back=b.geometry(); back.setAttribute("uv",new THREE.BufferAttribute(new Float32Array(b.UV),2));
   return {body:gb,helmet:helmet,back:back,tris:{body:gb.index.count/3,helmet:helmet?helmet.index.count/3:0,back:back.index.count/3}};

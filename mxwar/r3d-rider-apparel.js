@@ -101,7 +101,7 @@ vec3 apHelmet(vec3 p,vec3 T,vec3 A,int sty,float fw,vec3 vc,float part){
   if(part>7.5&&part<8.5){ float ang=atan(p.z,p.x-0.02);                             /* the strap: the accent colour, dark blocks, two thin white edges */
     vec3 c=A*0.80; c=mix(c,D,step(0.62,fract(ang*2.2))*0.85);
     c=mix(c,W,(apLine(p.y-0.7335,0.0014,fw)+apLine(p.y-0.7685,0.0014,fw))*0.75); return c; }
-  if(part>10.5) return mix(A*0.70+vec3(0.006),vc,dk);                              /* the goggles' frame */
+  if(part>10.5) return mix(mix(T,A,0.35)*0.42+vec3(0.004),vc,dk);                  /* the goggles' frame: a muted team colour (a bright white frame read as two big eyes) */
   vec3 d=normalize(p-vec3(0.020,0.742,0.0)); float az=abs(d.z); vec3 c=T;
   if(part>9.5&&part<10.5){ c=mix(T,A,1.0-smoothstep(0.618,0.630,p.y));            /* the chin bar: its lower edge in the accent colour, the vent stays dark */
     c=mix(c,W,apLine(p.y-0.6305,0.0015,fw)*0.8); return mix(c,vc,dk); }
@@ -177,9 +177,12 @@ const AP_FS_BUMP=`
 {
   vec3 q=vApP; float part=vApI.x;
   /* milestone 2: the folds MOVE with the wind of speed (vApA.w: 0 standing .. 1 at 16 m/s): a ripple runs back over the loose jersey and the sleeves */
-  float wnd=clamp(vApA.w,0.0,1.0), loose=(part<0.5?(1.0-smoothstep(0.05,0.30,q.y)):(part<1.5?0.7:0.25)), tph=uTime*(2.0+9.0*wnd)*loose*wnd;
-  float f1=sin(dot(q,vec3(9.0,33.0,13.0))+2.4*sin(dot(q,vec3(21.0,7.0,27.0))+vApI.w)+tph);
-  float f2=sin(dot(q,vec3(37.0,15.0,-23.0))+1.7+vApI.w*0.6-tph*1.3);
+  /* (the time phase is the same over the whole rider: a phase that varied over the surface, times the clock, made sub-pixel stripes that sparkled; the looseness mixes a
+     still fold with the moving one instead) */
+  float wnd=clamp(vApA.w,0.0,1.0), loose=(part<0.5?(1.0-smoothstep(0.05,0.30,q.y)):(part<1.5?0.7:0.25)), tph=mod(uTime*(2.0+9.0*wnd)*wnd,6.2831853), mv=loose*wnd;
+  float a1=dot(q,vec3(9.0,33.0,13.0))+2.4*sin(dot(q,vec3(21.0,7.0,27.0))+vApI.w), a2=dot(q,vec3(37.0,15.0,-23.0))+1.7+vApI.w*0.6;
+  float f1=mix(sin(a1),sin(a1+tph),mv);
+  float f2=mix(sin(a2),sin(a2-tph*1.3),mv);
   float cloth=(part<1.5||(part>2.5&&part<3.5))?1.0:0.0;
   float amp=0.0052*cloth*(part<0.5?(1.0+1.2*(1.0-smoothstep(0.0,0.22,q.y))):1.0)*(1.0+0.45*wnd*loose);
   float h=amp*(0.62*f1+0.38*f2);

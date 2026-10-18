@@ -85,7 +85,7 @@ function skeleton(Pp,Rpel,o){
   const hint=o.fwdX;
   for(let sd=-1;sd<=1;sd+=2){
     const L=sd<0, S=L?SL:SRr, so=L?SHO_L:SHO_R, UA=L?BN.UAL:BN.UAR, FA=L?BN.FAL:BN.FAR, HA=L?BN.HAL:BN.HAR, h=L?0:3;
-    mulv(Rc,so[0],so[1],so[2],tv); S[0]=Oc[0]+tv[0]; S[1]=Oc[1]+tv[1]; S[2]=Oc[2]+tv[2];
+    mulv(Rc,so[0]+(o.shF||0),so[1]+(o.shU||0),so[2],tv); S[0]=Oc[0]+tv[0]; S[1]=Oc[1]+tv[1]; S[2]=Oc[2]+tv[2];   /* (milestone 2: the shoulders roll forward and up toward the bars when he rides: o.shF, o.shU) */
     G[0]=o.hand[h]; G[1]=o.hand[h+1]; G[2]=o.hand[h+2];
     /* the pole: out to the side and up in the chest's frame, a little back */
     pole[0]=-o.elbowBack; pole[1]=o.elbowUp*(o.elbowAdapt?clamp((S[1]-G[1]-0.17)/0.17,0.25,1):1); pole[2]=sd*o.elbowOut;   /* out to the side and up, in the bike's frame (milestone 2: less up when the shoulders are low over the bars, so the elbows never rise over the shoulders: the gate's 'scarecrows') */
@@ -168,7 +168,7 @@ export function poseRide(rig,Bm,st,dt,out,base){
   /* targets in the bike frame */
   let tx=lerp(bp.sx+0.10,-0.10+sy.hip,stand)+0.04*turn*sit+0.05*adab, ty=lerp(bp.sy+0.10,1.25+sy.crouch,stand)-0.20*crouch*(0.5+0.5*stand)+(air?0.05:0), tz=0.045*Math.sign(dab)*adab-0.05*clamp(lean,-0.8,0.8)*sit;
   if(air&&pitchB<-0.05) tx-=Math.min(0.07,(-pitchB-0.05)*0.25);   /* nose down on the way down: the hips go back */
-  let tp=lerp(0.72,1.05,stand)+sy.pitch+0.22*crouch+0.10*turn*sit+clamp(-acc*0.012,-0.07,0.11)+pitchB*(air?0.78:0.5);   /* torso pitch forward (in the air he holds his body against the bike's pitch) */
+  let tp=lerp(0.84,1.05,stand)+sy.pitch+0.22*crouch*(st.gate?0.4:1)+0.05*turn*sit+clamp(-acc*0.012,-0.07,0.11)+pitchB*(air?0.78:0.5);   /* torso pitch forward (in the air he holds his body against the bike's pitch) */
   if(air&&Math.abs(pitchB)<0.02) tp-=0.06;
   let tr=-(air?0.62:0.30)*lean-0.12*dab*adab;   /* torso roll relative to the bike: more upright than the bike (in the air he stays upright while the bike is whipped under him), the inside shoulder dropped with the foot out */
   /* idle life: the rider works on the bike: shifts a little, faster with speed */
@@ -199,9 +199,10 @@ export function poseRide(rig,Bm,st,dt,out,base){
   o.foot[0]=bp.px-0.095; o.foot[1]=bp.py+0.115; o.foot[2]=-bp.pz; o.foot[3]=bp.px-0.095; o.foot[4]=bp.py+0.115; o.foot[5]=bp.pz;
   if(adab>0.01){ const R=dab>0, k=adab, i=R?3:0, s=R?1:-1; o.foot[i]=lerp(o.foot[i],0.30,k); o.foot[i+1]=lerp(o.foot[i+1],0.52,k); o.foot[i+2]=lerp(o.foot[i+2],s*0.46,k); }
   o.toe[0]=o.toe[1]=0.12+0.28*(air?1:0)-0.1*stand; if(adab>0.01){ const k=adab; if(dab>0) o.toe[1]=lerp(o.toe[1],-0.35,k); else o.toe[0]=lerp(o.toe[0],-0.35,k); }
-  /* the elbows (milestone 2; they were a straight 'wing' out to the side from behind): UP and a little OUT and BACK, so the arm shows its bend (the elbow
-     about at the grips' width or a little outside, below the shoulder, the forearm down to the grip); each rider carries them his own way */
-  o.toeOut=0.12+0.15*adab; o.kneeOut=0.20+0.06*stand; o.elbowOut=(0.42+0.08*stand+0.10*turn)*sy.flare; o.elbowUp=0.80*sy.up; o.elbowBack=0.20; o.elbowAdapt=true;
+  /* the elbows (milestone 2; they were a straight 'wing' out to the side from behind): OUT and a little BACK with the arm visibly bent, as the cover's
+     riders: from behind the upper arm drops about 30 degrees from the shoulder to the elbow, the forearm comes back in and down to the grip; each rider
+     carries them his own way (rig.sty.flare, rig.sty.up) */
+  o.toeOut=0.12+0.15*adab; o.kneeOut=0.20+0.06*stand; o.elbowOut=(0.62+0.06*turn)*sy.flare; o.elbowUp=(sy.up-1.0)*0.5-0.04+0.05*stand; o.elbowBack=0.30; o.elbowAdapt=false; o.shF=0.022+0.026*stand; o.shU=0.008+0.014*stand;
   /* the reach: the pelvis is pulled / pushed along the line to the pegs so the legs neither overstretch nor fold flat */
   { const hx=P[0], hy=P[1]-0.03, hz=P[2], ax=(o.foot[0]+o.foot[3])*0.5, ay=(o.foot[1]+o.foot[4])*0.5, az=(o.foot[2]+o.foot[5])*0.5;
     let dx=ax-hx, dy=ay-hy, dz=az-hz, d=Math.sqrt(dx*dx+dy*dy+dz*dz)||1;
@@ -247,7 +248,7 @@ export function poseBody(rig,body,lim,dt,out,base){
   const o=SKO; o.pitch=spine; o.roll=0; o.hpitch=-spine*0.6+0.1*spread; o.hyaw=0.3*Math.sin(ph*0.7)*spread; o.fwdX=HINT; o.herr=0;
   o.hand[0]=loc[0]; o.hand[1]=loc[1]; o.hand[2]=loc[2]; o.hand[3]=loc[3]; o.hand[4]=loc[4]; o.hand[5]=loc[5];
   o.foot[0]=loc[6]; o.foot[1]=loc[7]; o.foot[2]=loc[8]; o.foot[3]=loc[9]; o.foot[4]=loc[10]; o.foot[5]=loc[11];
-  o.toe[0]=o.toe[1]=0.25-0.4*spread; o.toeOut=0.15; o.kneeOut=0.35; o.elbowOut=0.8; o.elbowUp=0.2; o.elbowBack=0.4; o.kneeAim=0; o.elbowAdapt=false;
+  o.toe[0]=o.toe[1]=0.25-0.4*spread; o.toeOut=0.15; o.kneeOut=0.35; o.elbowOut=0.8; o.elbowUp=0.2; o.elbowBack=0.4; o.kneeAim=0; o.elbowAdapt=false; o.shF=0; o.shU=0;
   P[0]=P[1]=P[2]=0;
   body_id(Rp);
   skeleton(P,Rp,o);
