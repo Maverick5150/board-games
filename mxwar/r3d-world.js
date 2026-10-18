@@ -156,11 +156,11 @@ function finishBuild(C,look){
    rests, with its normals recomputed every frame so the folds catch the floodlights (it used to be a flat square that glowed its own colour). API unchanged:
    {grp, arm, flag, wave(t, amp), setTex(tex)}; front = +z, the flag arm at the right shoulder. */
 export function flaggerBuild(flagTex,o){
-  o=o||{}; const mar=!!o.marshal, grp=new THREE.Group();
+  o=o||{}; const mar=!!o.marshal, grp=new THREE.Group(), lo=!!o.lo, cs=lo?6:10, ss=lo?8:12, sh=lo?6:9;   /* o.lo (FIRE TV, Reduce effects): coarser limbs, about half the triangles */
   const shirt=lin(mar?"#2a2c34":"#ecebe6"), pants=lin(mar?"#1c1e25":"#23252c"), shoe=lin("#131316"), skin=lin(mar?"#b07a52":"#c58c63"), cap=lin(mar?"#ff6a12":"#1d2a4a"), glove=lin(mar?"#2a2a30":"#e8e6e0");
   const vest=lin("#ff6a12"), refl=[0.92,0.94,0.96], hair=lin("#2a1e16");
-  const cyl=(r0,r1,h,c,x,y,z,rx,rz,sz)=>{ const g=paint(new THREE.CylinderGeometry(r0,r1,h,10,1,false),c); if(sz) g.scale(1,1,sz); return xf(g,x,y,z,rx||0,0,rz||0); };
-  const sph=(r,c,x,y,z,sx,sy,sz)=>{ const g=paint(new THREE.SphereGeometry(r,12,9),c); g.scale(sx||1,sy||1,sz||1); return xf(g,x,y,z); };
+  const cyl=(r0,r1,h,c,x,y,z,rx,rz,sz)=>{ const g=paint(new THREE.CylinderGeometry(r0,r1,h,cs,1,false),c); if(sz) g.scale(1,1,sz); return xf(g,x,y,z,rx||0,0,rz||0); };
+  const sph=(r,c,x,y,z,sx,sy,sz)=>{ const g=paint(new THREE.SphereGeometry(r,ss,sh),c); g.scale(sx||1,sy||1,sz||1); return xf(g,x,y,z); };
   const parts=[];
   for(const s of [-1,1]){
     parts.push(xf(paint(new THREE.BoxGeometry(0.11,0.075,0.27),shoe),s*0.1,0.038,0.04));                                   /* the shoes */
@@ -172,8 +172,8 @@ export function flaggerBuild(flagTex,o){
   parts.push(sph(0.088,shirt,-0.19,1.5,0,1,0.85,0.9), sph(0.088,mar?vest:shirt,0.19,1.5,0,1,0.85,0.9));                       /* the shoulders */
   parts.push(cyl(0.05,0.056,0.12,skin,0,1.61,0));                                                                             /* the neck */
   parts.push(sph(0.104,skin,0,1.735,0.005,0.92,1.08,1.0));                                                                    /* the head */
-  { const h=paint(new THREE.SphereGeometry(0.111,12,6,0,Math.PI*2,0,Math.PI*0.5),cap); h.scale(1,0.9,1.04); parts.push(xf(h,0,1.755,0)); }   /* the cap */
-  { const b=paint(new THREE.CylinderGeometry(0.075,0.078,0.014,12),cap); b.scale(1,1,1.25); parts.push(xf(b,0,1.758,0.105)); }             /* its brim */
+  { const h=paint(new THREE.SphereGeometry(0.111,ss,lo?4:6,0,Math.PI*2,0,Math.PI*0.5),cap); h.scale(1,0.9,1.04); parts.push(xf(h,0,1.755,0)); }   /* the cap */
+  { const b=paint(new THREE.CylinderGeometry(0.075,0.078,0.014,ss),cap); b.scale(1,1,1.25); parts.push(xf(b,0,1.758,0.105)); }             /* its brim */
   parts.push(sph(0.06,hair,0,1.70,-0.07,1.4,0.9,0.6));                                                                        /* the hair at the back */
   /* the free (left) arm: hanging a little out and bent forward, a glove */
   parts.push(cyl(0.05,0.044,0.3,mar?vest:shirt,-0.22,1.34,0.0,0,-0.1));
@@ -189,7 +189,7 @@ export function flaggerBuild(flagTex,o){
   const armM=new THREE.Mesh(merge(ap),new THREE.MeshLambertMaterial({vertexColors:true})); arm.add(armM);
   const fw=mar?1.25:0.9, fh=mar?0.86:0.6, pl=mar?1.5:1.1;
   const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.014,0.016,pl,6),new THREE.MeshLambertMaterial({color:0xd8d8dc})); pole.position.set(0,0.52+pl/2,0.0); arm.add(pole);
-  const NX=14, NY=8, fg=new THREE.PlaneGeometry(fw,fh,NX,NY); fg.translate(fw/2,0,0);
+  const NX=lo?9:14, NY=lo?5:8, fg=new THREE.PlaneGeometry(fw,fh,NX,NY); fg.translate(fw/2,0,0);
   /* a little of the cloth's own colour so it reads in the shade; the folds are lit by the floodlights */
   const flag=new THREE.Mesh(fg,new THREE.MeshLambertMaterial({map:flagTex,side:THREE.DoubleSide,emissive:0xffffff,emissiveMap:flagTex,emissiveIntensity:mar?0.2:0.13}));
   flag.position.set(0.012,0.52+pl-fh/2-0.02,0); arm.add(flag);

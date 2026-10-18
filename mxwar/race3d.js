@@ -134,8 +134,9 @@ export function create(host,hooks){
       // [/hook:cams]
       LOOK.apply(C,look,world,{lo:LO,tv:tv()});   /* the venue's lights, exposure, sun disc, fog, environment map and the look's quality tier (r3d-look.js) */
       // [hook:stadium]
-      flagger=flaggerBuild(flagT("white")); flagger.grp.position.copy(world.fin.flagAt).add(v3.set(0,-0.02,0)); flagger.grp.rotation.y=-world.fin.th+(world.fin.side>0?PI:0); world.root.add(flagger.grp);
-      marshal=flaggerBuild(flagT("yellow"),{marshal:true}); marshal.grp.visible=false; world.root.add(marshal.grp);
+      const flo=!!QUAL.options(LO).lo;   /* the simple world (FIRE TV, Reduce effects): coarser flagger figures */
+      flagger=flaggerBuild(flagT("white"),{lo:flo}); flagger.grp.position.copy(world.fin.flagAt).add(v3.set(0,-0.02,0)); flagger.grp.rotation.y=-world.fin.th+(world.fin.side>0?PI:0); world.root.add(flagger.grp);
+      marshal=flaggerBuild(flagT("yellow"),{marshal:true,lo:flo}); marshal.grp.visible=false; world.root.add(marshal.grp);
       // [/hook:stadium]
     }
     V.layout=pick; V.courseInfo={id:C.id,L:+C.L.toFixed(1),Tlap:+C.Tlap.toFixed(1),D1:+C.D1.toFixed(1),T1:+C.T1.toFixed(1),kind:C.kind,shared:pick.shared,name:pick.layout.name};
