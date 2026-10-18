@@ -29,7 +29,7 @@ export const SOIL={ "stadium-dirt":["#74461f","#a56c35","#6a3f1c"], loam:["#4e33
    [dry tan (crests, lips, windrows, the dry edges), mid brown (the groomed body of the track), wet dark brown (the racing line, the watered patches), the deep wet of a rut's bottom].
    The cover's dirt keeps milestone 1's warm saturated hue (its foreground crop: mean sRGB 111,65,32, saturation 0.78) but spans a far wider value range (luma p5 10, p95 179 against
    milestone 1's 36 / 166 on the flat): a golden dry tan, a darker mid brown, a wet near-black brown in the ruts. */
-const TRK={ "stadium-dirt":["#b07c4a","#6e421f","#3c2210","#1f1108"], loam:["#7d6347","#4e3320","#2e1d10","#180f08"], clay:["#a8683c","#7a4326","#45260f","#26150a"],
+const TRK={ "stadium-dirt":["#b07c4a","#6e421f","#3c2210","#27160a"], loam:["#7d6347","#4e3320","#2e1d10","#180f08"], clay:["#a8683c","#7a4326","#45260f","#26150a"],
   hardpack:["#b08354","#84603a","#573a20","#33210f"], sand:["#d6b986","#c2a170","#97784b","#6b5232"] };
 /* the dirt's detail maps for the stadium FLOOR and the starting pad (r3d-world.js multiplies them by the soil colour and repeats them every 7 m): the same scans as the track, laid as a
    mosaic of k x k tiles, each turned or mirrored its own way, so no big blotch repeats across the floor. {map: a warm near-white luma detail (sRGB), normal: a tangent-space normal map}. */
@@ -304,7 +304,7 @@ function trackBuild(C,look,q,tier,tiles){
       const inner=a<=1, latc=clamp(lat,-R.LATR+0.001,R.LATR-0.001);
       let w=inner?R.at(R.moist,ss,latc)/255:R.at(R.moist,ss,Math.sign(lat)*(R.LATR-0.01))/255*0.6, tone=R.at(R.tone,ss,latc)/255;
       /* the soil family by moisture (milestone 2): dry tan -> mid brown -> wet dark brown -> the deep wet of a rut's bottom */
-      let col=mixc(mixc(mixc(lite,base,sstep(0.06,0.32,w)),dark,sstep(0.4,0.74,w)),deep,sstep(0.76,1.0,w));
+      let col=mixc(mixc(mixc(lite,base,sstep(0.06,0.32,w)),dark,sstep(0.42,0.78,w)),deep,sstep(0.84,1.0,w));
       const bermFace=a>0.55&&a<=1?C.bank[ii]/2:0; col=mixc(col,dark,bermFace*0.18);
       const hs=Fh>0.05?clamp(0.9+0.2*clamp(Fh/1.4,0,1)-0.14*clamp(Fs,0,1),0.7,1.12):1;   /* the tops of whoops, mounds and jumps catch the light, the steep faces are darker */
       const tn=(0.84+0.32*tone)*hs; col=[col[0]*tn,col[1]*tn,col[2]*tn];
