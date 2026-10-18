@@ -29,7 +29,7 @@ export const SOIL={ "stadium-dirt":["#74461f","#a56c35","#6a3f1c"], loam:["#4e33
    [dry tan (crests, lips, windrows, the dry edges), mid brown (the groomed body of the track), wet dark brown (the racing line, the watered patches), the deep wet of a rut's bottom].
    The cover's dirt keeps milestone 1's warm saturated hue (its foreground crop: mean sRGB 111,65,32, saturation 0.78) but spans a far wider value range (luma p5 10, p95 179 against
    milestone 1's 36 / 166 on the flat): a golden dry tan, a darker mid brown, a wet near-black brown in the ruts. */
-const TRK={ "stadium-dirt":["#b07c4a","#6e421f","#3c2210","#27160a"], loam:["#7d6347","#4e3320","#2e1d10","#180f08"], clay:["#a8683c","#7a4326","#45260f","#26150a"],
+const TRK={ "stadium-dirt":["#a06a3a","#6e421f","#3c2210","#27160a"], loam:["#7d6347","#4e3320","#2e1d10","#180f08"], clay:["#a8683c","#7a4326","#45260f","#26150a"],
   hardpack:["#b08354","#84603a","#573a20","#33210f"], sand:["#d6b986","#c2a170","#97784b","#6b5232"] };
 /* the dirt's detail maps for the stadium FLOOR and the starting pad (r3d-world.js multiplies them by the soil colour and repeats them every 7 m): the same scans as the track, laid as a
    mosaic of k x k tiles, each turned or mirrored its own way, so no big blotch repeats across the floor. {map: a warm near-white luma detail (sRGB), normal: a tangent-space normal map}. */
@@ -166,11 +166,11 @@ float mxDist=length(vViewPosition);
 float mxCl=(1.0-smoothstep(5.0,30.0,mxDist))*(0.3+0.7*mxLoose)*(1.0-0.55*mxWr)*uTun2.x;
 float mxCl2=(1.0-smoothstep(12.0,60.0,mxDist))*(0.1+0.9*mxLoose)*uTun2.y;
 float mxLumA=mxA1.r*1.992*mix(1.0,mxA2.r*1.992,0.6), mxLumB=mxB1.r*1.992*mix(1.0,mxB2.r*1.992,0.6);
-float mxLuma=pow(max(mix(mxLumA,mxLumB,mxLoose),0.02),uTun.w)*(1.0+(mxK1.r-0.5)*0.9*mxCl+(mxK2.r-0.5)*0.75*mxCl2);
+float mxLuma=pow(max(mix(mxLumA,mxLumB,mxLoose),0.02),uTun.w)*(1.0+(mxK1.r-0.5)*0.6*mxCl+(mxK2.r-0.5)*0.5*mxCl2);
 vec2 mxGd=mix((mxA1.gb-0.5)*2.0+(mxA2.gb-0.5)*1.3,(mxB1.gb-0.5)*2.0+(mxB2.gb-0.5)*1.3,mxLoose)*(1.0-0.4*mxWr);
 vec2 mxGk=mxRot((mxK1.gb-0.5)*2.0,-0.37)*mxCl+mxRot((mxK2.gb-0.5)*2.0,1.13)*0.6*mxCl2;
-float mxAOd=mix(mxA1.a*mxA2.a,mxB1.a*mxB2.a,mxLoose)*mix(1.0,mxK1.a,mxCl)*mix(1.0,mxK2.a,mxCl2*0.75);
-float mxWx=clamp((1.0-mxT.b)*0.5+mxWr*0.42+mxW.b*mxGv*0.4,0.0,1.0);
+float mxAOd=mix(mxA1.a*mxA2.a,mxB1.a*mxB2.a,mxLoose)*mix(1.0,mxK1.a,mxCl*0.7)*mix(1.0,mxK2.a,mxCl2*0.5);
+float mxWx=clamp((1.0-mxT.b)*0.5+mxWr*0.62+mxW.b*mxGv*0.75,0.0,1.0);
 float mxWet=clamp(vWet+mxWx,0.0,1.0);
 `;
 const GL_MAP_LO=`vec2 mxUv=vec2(vTm.x*uTm.x,(vTm.y+uTm.y)*uTm.z);
@@ -184,18 +184,16 @@ float mxCl=(1.0-smoothstep(4.0,24.0,length(vViewPosition)))*(0.3+0.7*mxLoose)*(1
 float mxLuma=pow(max(mix(mxA1.r*1.992,mxB1.r*1.992,mxLoose)*mix(1.0,mxA2.r*1.992,0.5),0.02),uTun.w)*(1.0+(mxK1.r-0.5)*0.9*mxCl);
 vec2 mxGd=mix((mxA1.gb-0.5)*2.0,(mxB1.gb-0.5)*2.0,mxLoose)*(1.0-0.4*mxWr)+mxRot((mxK1.gb-0.5)*2.0,-0.37)*mxCl;
 float mxAOd=mix(mxA1.a,mxB1.a,mxLoose)*mix(1.0,mxK1.a,mxCl);
-float mxWx=clamp((1.0-mxT.b)*0.5+mxWr*0.42,0.0,1.0);
+float mxWx=clamp((1.0-mxT.b)*0.5+mxWr*0.62,0.0,1.0);
 float mxWet=clamp(vWet+mxWx,0.0,1.0);
 `;
 /* the colour, after the vertex colour (the soil family by moisture): the scans' grain and the clumps, the per-pixel extra moisture, the dusty dry crust */
-const GL_COLOR_HI=`{ vec3 mxCol=diffuseColor.rgb*clamp(mxLuma,0.3,2.2);
+const GL_COLOR_HI=`{ vec3 mxCol=diffuseColor.rgb*clamp(mxLuma,0.3,1.7);
   float mxL=dot(mxCol,vec3(0.3,0.59,0.11));
-  mxCol=mix(vec3(mxL),mxCol,1.0+0.3*mxWx)*mix(1.0,0.5,mxWx);
-  float mxDry=(1.0-smoothstep(0.1,0.34,mxWet))*(0.35+0.65*mxLoose);
-  mxCol=mix(mxCol,vec3(mxL)*vec3(1.3,1.0,0.66)*1.12,mxDry*0.16);
+  mxCol=max(mix(vec3(mxL),mxCol,1.1+0.3*mxWx),0.0)*mix(1.0,0.48,mxWx);
   diffuseColor.rgb=mxCol; }
 `;
-const GL_COLOR_LO=`diffuseColor.rgb*=clamp(mxLuma,0.3,2.2)*mix(1.0,0.5,mxWx);
+const GL_COLOR_LO=`diffuseColor.rgb*=clamp(mxLuma,0.3,1.7)*mix(1.0,0.48,mxWx);
 `;
 const GL_NORMAL_HI=`{
   vec3 q0=dFdx(-vViewPosition), q1=dFdy(-vViewPosition); vec2 st0=dFdx(vTm), st1=dFdy(vTm);
@@ -401,7 +399,7 @@ function trackMesh(C,look,q,mat,tier,tiles){
       const m0=gridMesh(G,seq(1),1,cx,cy,cz,true,mat), m1=gridMesh(G,seq(2),2,cx,cy,cz,true,mat), m2=gridMesh(G,seq(4),4,cx,cy,cz,true,mat);
       [m0,m1,m2].forEach(m=>{ m.position.set(0,0,0); });
       if(clodMat){ const cm=clodsFor(G,C,r0,r1,cx,cy,cz,clodMat,look); if(cm){ m0.add(cm); info.clods+=cm.count; } }
-      lod.addLevel(m0,0); lod.addLevel(m1,40*td); lod.addLevel(m2,100*td);   /* (polish, D6: the tier's terrain detail scales the levels' distances: BALANCED 0.8 = 35 m / 80 m) */
+      lod.addLevel(m0,0); lod.addLevel(m1,36*td); lod.addLevel(m2,100*td);   /* (polish, D6: the tier's terrain detail scales the levels' distances: BALANCED 0.8 = 35 m / 80 m) */
       root.add(lod); info.chunks++; info.tris+=m0.geometry.index.count/3;
     }
   } else {

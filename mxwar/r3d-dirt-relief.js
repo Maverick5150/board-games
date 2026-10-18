@@ -117,7 +117,7 @@ function smoothAt(R,i,s,lat,K,out){
   h+=(K.f2(s*0.075,lat*0.22,2)-0.5)*0.026;
   /* the traffic: where the wheels go. In a corner the riders hold the racing line (+-0.2 m, the wings when they pass); on a straight they spread over +-0.6 m */
   const tc=Math.exp(-Math.pow((lat-lc)/0.5,2))+0.4*Math.exp(-Math.pow((lat-lc-side*0.62)/0.3,2))+0.4*Math.exp(-Math.pow((lat-lc+side*0.62)/0.3,2));
-  const tsI=1-sstep(0.5,1.05,Math.abs(lat-lc*0.5)), traf=clamp(tc*cw+tsI*(1-cw)*0.85,0,1);
+  const tsI=1-sstep(0.7,1.5,Math.abs(lat-lc*0.5)), traf=clamp(tc*cw+tsI*(1-cw)*0.9,0,1);
   /* the racing line is packed and darker; crests and edges are dry */
   wet+=0.26*traf;
   wet-=0.32*sstep(hw*0.55,hw,a); wet-=0.24*sstep(0.35,1.0,R.F[i]/1.3);
@@ -164,7 +164,7 @@ function wearMap(Rl,nt,nv){
   const L=Rl.L, LATR=Rl.LATR, K=Rl.K, dsT=L/nt, dlT=2*LATR/nv, rows=Rl.rows, NG=11;
   const F=new Float32Array(nt*nv), TH=new Float32Array(nt*nv).fill(1), GM=new Float32Array(nt*nv);
   for(let g=0;g<NG;g++){
-    const off=((g+0.5)/NG-0.5)*2, thr=0.04+((g*0.6180339)%1)*0.86, dep=0.022+0.016*((g*0.37)%1), hwG=0.055+0.02*((g*0.53)%1);
+    const off=((g+0.5)/NG-0.5)*2, thr=0.04+((g*0.6180339)%1)*0.86, dep=0.03+0.02*((g*0.37)%1), hwG=0.06+0.025*((g*0.53)%1);
     for(let i=0;i<nt;i++){
       const s=(i+0.5)*dsT, ri=Math.min(rows.n-1,Math.floor(s/rows.ds)), hw=rows.hw[ri], lc=Rl.lineAt(s), cw=clamp(Math.abs(lc)/Math.max(0.5,hw*0.36),0,1);
       /* the line this groove takes: a corner's racing line (+-0.45 m, braided out to the wings) or a straight's lane (+-0.62 m), wandering a little */
