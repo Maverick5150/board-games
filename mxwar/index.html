@@ -604,7 +604,8 @@
   html[data-tv] .mx-tw li{grid-template-columns:1.6rem auto minmax(0,1fr) 2.6rem 4.2rem 4.4rem}
   html[data-tv] .mx-tw.is-two li{grid-template-columns:1.4rem auto minmax(0,1fr) 3.9rem 4rem; gap:.3rem}
   html[data-tv] .mx-tw.is-two .mx-tw__c{display:none}
-  html[data-tv] #flipBtn{flex:1 1 4rem}
+  html[data-tv] .mx-tw.is-tight{--tw-row:1.22rem; row-gap:.1rem}
+  html[data-tv] #flipBtn{flex:1 1 13rem}   /* the main button keeps room for its words (Drop the gate): Auto stays beside it, the board and Skip share the next row */
   html[data-tv] #skipBtn{flex:1 1 10rem}
   html[data-tv] #boardBtn{flex:1 1 auto}
   html[data-tv] .mx-acts{row-gap:.75rem}

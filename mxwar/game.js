@@ -1145,7 +1145,7 @@ function drawTower(){
   tw.classList.toggle("is-two",two); tw.classList.toggle("is-compact",compact);
   if(two) tw.style.setProperty("--tw-rows",String(Math.ceil(n/2))); else tw.style.removeProperty("--tw-rows");
   $("race").style.setProperty("--tw-col",tv?(two?"42rem":"30rem"):"");
-  if(tv&&two&&n>30) tw.style.setProperty("--tw-row","1.3rem"); else tw.style.removeProperty("--tw-row");   /* 40 riders: 20 rows and the YOU card in one screen */
+  tw.style.removeProperty("--tw-row"); tw.classList.toggle("is-tight",tv&&(two?Math.ceil(n/2):n)>15);   /* 16 or more rows in a column (a 20-rider heat, a 40-rider moto): shorter rows, so the tower and the YOU card at its foot fit one 1080p screen */
   var mark=ui.twMark&&ui.twMark.until>Date.now()?ui.twMark:null, T=MX.Time, i, r, e, c, sig=[], pre=rc.phase==="gate"||rc.tm.k===0;
   for(i=0;i<n;i++) sig.push(rows[i].s);
   sig=sig.join(",");
