@@ -55,6 +55,8 @@ function hookVoice(V){
 /* what the opening of a race is made of (announce.js: the round's show open, the race intro, the engines): the start procedure waits for these */
 var OPENING={show_open:1,party_welcome:1,smx_playoff:1,triple_crown:1,championship_math:1,race_intro_heat:1,race_intro_semi:1,race_intro_lcq:1,race_intro_qual:1,race_intro_main:1,race_intro_moto:1,engines:1};
 var T={openMin:1800,openMax:32000,openTail:600,lineupAfter:1500,stageMin:900,noLine:900,boardHold:1800,boardCap:11000,sideHoldLo:2600,sideHoldHi:4200,sideCap:14000};
+/* Game speed Fast: the same show, about a third shorter (the opening is let run to 14 s, the holds are half as long: the gate drops after about 24 s instead of 37-40 s); Medium and Slow keep the full procedure */
+var TFAST={openMin:1500,openMax:14000,openTail:400,lineupAfter:1200,stageMin:700,noLine:600,boardHold:900,boardCap:6000,sideHoldLo:1400,sideHoldHi:2400,sideCap:8000};
 
 function create(o){
   o=o||{};
@@ -201,7 +203,7 @@ function create(o){
   B._ann=function(){ return ann; };
 
   /* ---------------- the start procedure (AMA: the show opens, the 30-second board, the board turns sideways, the gate drops 5-10 s later) ----------------
-     The opening is what the commentator says when the race is set up (the welcome, the intros, the engines): it is let finish, up to 32 s.
+     The opening is what the commentator says when the race is set up (the welcome, the intros, the engines): it is let finish, up to 32 s (14 s at Game speed Fast, where every hold is half as long too).
      A person on the gate decides when to go: their tap (Drop the gate) runs the board and the drop; a tap while the opening still plays skips
      it (straight to "sideways"); a tap during the board or the sideways call drops the gate at once. Watching, or Auto: the whole procedure runs by
      itself. A stage whose line was never made (a race picked up after a reload) skips its wait. B.gate() is null when the announcers are Off, so
@@ -213,7 +215,7 @@ function create(o){
     op=op||{};
     if(!ann||!on()) return null;
     if(gate) gate.cancel();
-    var t0=now();
+    var t0=now(), Tk=speedNow()==="fast"?TFAST:T;   /* the timing table of this show (Game speed Fast: about a third shorter) */
     var st={stage:"open",t0:t0,stageAt:t0,last:t0,people:!!op.people,openDone:false,openAt:0,lineupAt:0,phased:false,since:0,qs:0,holdMs:0,done:false,cancelled:false};
     /* a race the commentator did not see set up (a reload on the gate): set it up now, so the opening, the board and the drop are called */
     if(op.G&&op.G.race&&op.G.race.phase==="gate"&&!fed[raceKey(op.G)]){
@@ -233,8 +235,8 @@ function create(o){
       if(!st.phased){ st.phased=true; st.since=st.last; st.holdMs=holdLo+Math.random()*(holdHi-holdLo); B.phase(phase); }
       var set={}; set[ev]=1; set.lineup_gate=1;
       if(quietNow(set)){ if(!st.qs) st.qs=st.last; } else st.qs=0;
-      var made=lineMade(ev,st.since), hold=made?st.holdMs:T.noLine;
-      if(sa>=cap||(sa>=T.stageMin&&st.qs&&st.last-st.qs>=hold)) next();
+      var made=lineMade(ev,st.since), hold=made?st.holdMs:Tk.noLine;
+      if(sa>=cap||(sa>=Tk.stageMin&&st.qs&&st.last-st.qs>=hold)) next();
     }
     var G2={
       state:function(){ return {stage:st.stage,openDone:st.openDone,done:st.done,cancelled:st.cancelled,people:st.people}; },
@@ -256,14 +258,14 @@ function create(o){
         if(!st.people&&st.last-st.t0>100000){ dropNow(); return; }   /* a safety net: Auto / watching never waits longer than the longest procedure (about 60 s) plus a margin */
         if(st.stage==="open"){
           var el=st.last-st.t0;
-          if(!st.openDone){ if((el>=T.openMin&&quietNow(OPENING))||el>=T.openMax){ st.openDone=true; st.openAt=st.last; } }
+          if(!st.openDone){ if((el>=Tk.openMin&&quietNow(OPENING))||el>=Tk.openMax){ st.openDone=true; st.openAt=st.last; } }
           else {
             var wait=st.last-st.openAt;
-            if(!st.people){ if(wait>=T.openTail) enter("board"); }
-            else if(!st.lineupAt&&wait>=T.lineupAfter){ st.lineupAt=st.last; B.phase("lineup"); }   /* the gate-pick talk fills the wait for the person's tap */
+            if(!st.people){ if(wait>=Tk.openTail) enter("board"); }
+            else if(!st.lineupAt&&wait>=Tk.lineupAfter){ st.lineupAt=st.last; B.phase("lineup"); }   /* the gate-pick talk fills the wait for the person's tap */
           }
-        } else if(st.stage==="board") callStage("board_30","board30",T.boardHold,T.boardHold,T.boardCap,function(){ enter("side"); });
-        else if(st.stage==="side") callStage("board_sideways","sideways",T.sideHoldLo,T.sideHoldHi,T.sideCap,dropNow);
+        } else if(st.stage==="board") callStage("board_30","board30",Tk.boardHold,Tk.boardHold,Tk.boardCap,function(){ enter("side"); });
+        else if(st.stage==="side") callStage("board_sideways","sideways",Tk.sideHoldLo,Tk.sideHoldHi,Tk.sideCap,dropNow);
       }
     };
     gate=G2;

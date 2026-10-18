@@ -158,11 +158,11 @@ function annGate(rc,hs){
   syncControls();
   return true;
 }
-function annGateText(gs,people){
+function annGateText(gs,people,watch){   /* the status line at the gate: it says what the button does (people: a person decides; watch: nobody of this phone races; else Auto) */
   if(gs&&gs.stage==="board") return "The 30-second board is up. Tap again to drop the gate now.";
   if(gs&&gs.stage==="side") return "The board is sideways: the gate drops any moment.";
   if(gs&&gs.stage==="drop") return "The gate drops!";
-  return people?"Riders ready: drop the gate.":"The show is opening (Auto): tap Start now to skip ahead.";
+  return people?"Riders ready: drop the gate.":watch?"The show is opening: tap Start now to skip ahead.":"The show is opening (Auto): tap Start now to skip ahead.";
 }
 function annGateStage(){ var g0=ui.gate&&ui.gate.d?ui.gate.d.state():null; return g0&&!g0.done&&!g0.cancelled?g0:null; }
 
@@ -651,12 +651,13 @@ function showSetup(on,resume){
   var B=BG(); if(luxe()&&B.toast&&B.toast.place) B.toast.place();
 }
 function setView(v,keepBody){
-  ui.view=v; var b=document.body;
+  var was=ui.view; ui.view=v; var b=document.body;
   b.classList.toggle("mx-v-season",v==="season"); b.classList.toggle("mx-v-race",v==="race");
   var setup=setupShown();
   b.classList.toggle("bg-app--scene",setup||v==="season"); b.classList.toggle("bg-app--felt",!setup&&v==="race");
   if(keepBody) return;
-  if(v==="season") renderSeason(); else { layoutArena(); renderRace(); }
+  if(v==="season"){ renderSeason(); if(was==="race"&&annOn()){ try{ window.scrollTo(0,0); }catch(e){} } }   /* back from a race with the announcers on: the season opens at its top, so the caption on top (the post-race talk) never sits over "Watch" / "To the gate" */
+  else { layoutArena(); renderRace(); }
   trackShow();
   barTitle();
 }
@@ -1130,14 +1131,15 @@ function syncControls(){
   var rc=ui.rc, f=$("flipBtn"), auto=$("autoBtn"), skip=$("skipBtn"), stat=$("stat");
   if(!G||ui.view!=="race"||!rc){ return; }
   var hs=raceHumans(), alive=humansAlive(), need=rc.over?[]:RC.need(rc);
-  var gate=rc.phase==="gate", proc=gate&&annOn(), gs=proc?annGateStage():null;   /* proc: the announcers run the start procedure (booth.js) */
+  var gate=rc.phase==="gate", proc=gate&&annOn(), gs=proc?annGateStage():null, peo=hs.length>0&&!cfg.auto;   /* proc: the announcers run the start procedure (booth.js); peo: a person decides when the show goes on */
   f.hidden=(!hs.length&&!proc)||rc.over||(!gate&&!alive.length);
   auto.hidden=!hs.length||rc.over;
   skip.hidden=!!rc.over;   /* mxlaps: Skip to the finish on every race (it asks first) */
   var lbl="Flip", sub="";
   if(gate){ lbl="Drop the gate"; sub=hs.length>1?"then every rider turns a card":"";
-    if(proc&&!hs.length){ lbl="Start now"; sub="skip the introduction"; }
-    else if(proc&&gs&&gs.stage!=="open"){ lbl="Drop now"; sub=""; } }
+    if(proc){   /* the button always says what a tap does now (and the status line below says the same): the board is up = drop at once; the show playing by itself (watching, Auto) = skip ahead */
+      if(gs&&gs.stage!=="open"){ lbl="Drop now"; sub=""; }
+      else if(!peo){ lbl="Start now"; sub="skip the introduction"; } } }
   else if(rc.phase==="war"&&need.length){ lbl="War: 3 down, flip the 4th"; }
   if(need.length&&(G.humans.length>1)){ var R=G.riders[seatId(need[0])]; sub=R.name+" · #"+R.plate; }
   $("flipLabel").textContent=lbl; $("flipSub").textContent=sub; $("flipSub").hidden=!sub;
@@ -1145,8 +1147,8 @@ function syncControls(){
   var t="";
   if(skipQ&&!rc.over) t="Skipping to the finish...";
   else if(rc.over) t="Checkered flag.";
-  else if(!hs.length) t=G.humans.length?"You're not in this race: watch it, or skip to the finish.":"Watching the pros.";
-  else if(gate) t=proc?annGateText(gs,hs.length>0&&!cfg.auto):cfg.auto?"The gate drops by itself (Auto).":"Riders ready: drop the gate.";
+  else if(!hs.length) t=proc?annGateText(gs,false,true):G.humans.length?"You're not in this race: watch it, or skip to the finish.":"Watching the pros.";
+  else if(gate) t=proc?annGateText(gs,peo):cfg.auto?"The gate drops by itself (Auto).":"Riders ready: drop the gate.";
   else if(!alive.length) t=hs.some(function(s){ return rc.r[s].dnf&&rc.r[s].dnf.why==="crash"; })?"Crashed out: the race runs on without you. Skip to the finish?":"Out of cards: the race runs on without you. Skip to the finish?";
   else if(need.length&&intent&&ui.queued) t=(G.humans.length>1?G.riders[seatId(need[0])].name+"'s card is in":"Your card is in")+": it turns as the leader starts lap "+Math.min(rc.battle+1,rc.o.len)+".";
   else if(busy) t=need.length?"Next: "+(G.humans.length>1?G.riders[seatId(need[0])].name+" flips":"your flip"):"";
@@ -1154,7 +1156,7 @@ function syncControls(){
   else if(!need.length) t=intent?"Your flip is queued for the next lap.":"";
   else if(need.length) t=cfg.auto?"Auto: your card turns by itself.":(rc.phase==="war"?"War! Lay 3 down and turn the 4th.":(G.humans.length>1?G.riders[seatId(need[0])].name+": turn your card.":"Turn your card."));
   stat.textContent=t;
-  $("hintOk").textContent=gate&&(hs.length||proc)?(proc&&!hs.length?"Start now":"Drop the gate"):need.length?"Flip":f.hidden&&!skip.hidden?"Skip to the finish":"Flip";
+  $("hintOk").textContent=gate&&(hs.length||proc)?lbl:need.length?"Flip":f.hidden&&!skip.hidden?"Skip to the finish":"Flip";
   if(onTV()&&!busy){ var mc=mainControl(), a=document.activeElement; if(mc&&!mc.hidden&&(a===document.body||!a||(a.disabled)||a.hidden||!$("race").contains(a))&&!sheetUp()) focusTV(mc); }
 }
 function sheetUp(){ var B=BG(); return !!(B&&B.sheet&&B.sheet.top&&B.sheet.top())||!!(B&&B.win&&B.win.isOpen&&B.win.isOpen()); }
