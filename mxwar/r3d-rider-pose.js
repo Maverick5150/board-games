@@ -49,9 +49,16 @@ function spring(S,i,target,w,z,dt,extra){
 }
 
 /* ---------------- the rider's state (one per rider) ---------------- */
+/* milestone 2: every rider has his own STYLE (deterministic from his index: no two riders in a pack ride alike): how wide his elbows go, how high he
+   carries them, how deep he crouches, how far forward he leans, how quickly he gets up on the pegs, where he looks, how far back his hips sit */
+function riderStyle(i){
+  const h=k=>{ const x=Math.sin((i+1)*12.9898+k*78.233)*43758.5453; return x-Math.floor(x); };
+  return {flare:0.78+0.44*h(1), crouch:(h(2)-0.5)*0.10, pitch:(h(3)-0.5)*0.16, lag:0.05+0.17*h(4), head:(h(5)-0.5)*0.10, up:0.85+0.30*h(6), hip:(h(7)-0.5)*0.07, knee:(h(8)-0.5)*0.10};
+}
 export function newRig(i){
   return {init:false, S:new Float64Array(24),   /* springs: [x,v] pairs: 0 pelvis x, 2 y, 4 z, 6 pitch, 8 roll, 10 head pitch, 12 head yaw, 14 shoulder sway, 16 stand */
-    pp:[0,0,0], pv:[0,0,0], a:[0,0,0], ph:i*1.7+0.3, tw:0, fl:new Float64Array(12), flv:new Float64Array(12), fl0:false, w:0, hand:[0,0,0,0,0,0], foot:[0,0,0,0,0,0], err:{hand:0,foot:0}};
+    pp:[0,0,0], pv:[0,0,0], a:[0,0,0], ph:i*1.7+0.3, tw:0, fl:new Float64Array(12), flv:new Float64Array(12), fl0:false, w:0, hand:[0,0,0,0,0,0], foot:[0,0,0,0,0,0], err:{hand:0,foot:0},
+    sty:riderStyle(i), sf:0, mode:"", bl:null};
 }
 /* scratch */
 const Rp=new Float64Array(9), Rs=new Float64Array(9), Rc=new Float64Array(9), Rn=new Float64Array(9), Rh=new Float64Array(9);
@@ -81,7 +88,7 @@ function skeleton(Pp,Rpel,o){
     mulv(Rc,so[0],so[1],so[2],tv); S[0]=Oc[0]+tv[0]; S[1]=Oc[1]+tv[1]; S[2]=Oc[2]+tv[2];
     G[0]=o.hand[h]; G[1]=o.hand[h+1]; G[2]=o.hand[h+2];
     /* the pole: out to the side and up in the chest's frame, a little back */
-    pole[0]=-o.elbowBack; pole[1]=o.elbowUp; pole[2]=sd*o.elbowOut;   /* out to the side and a little up, in the bike's frame */
+    pole[0]=-o.elbowBack; pole[1]=o.elbowUp*(o.elbowAdapt?clamp((S[1]-G[1]-0.17)/0.17,0.25,1):1); pole[2]=sd*o.elbowOut;   /* out to the side and up, in the bike's frame (milestone 2: less up when the shoulders are low over the bars, so the elbows never rise over the shoulders: the gate's 'scarecrows') */
     ik2(S,G,LEN.UA,LEN.FA+LEN.HAND,pole,E);
     let dx=E[0]-S[0], dy=E[1]-S[1], dz=E[2]-S[2];
     frameDir(RA,dx,dy,dz,Rc[0],Rc[3],Rc[6]); put(UA,RA,S);
@@ -140,9 +147,9 @@ export function poseRide(rig,Bm,st,dt,out,base){
   const bp=bikePts(), S=rig.S;
   const px=Bm[12], py=Bm[13], pz=Bm[14];
   /* the bike's own acceleration in its frame (world position differences, filtered): a landing, a bump, the brakes, a turn */
-  let teleport=false;
-  if(rig.init){ const dx=px-rig.pp[0], dy=py-rig.pp[1], dz=pz-rig.pp[2]; if(dx*dx+dy*dy+dz*dz>9) teleport=true; }
-  if(!rig.init||teleport){ rig.pp[0]=px; rig.pp[1]=py; rig.pp[2]=pz; rig.pv[0]=rig.pv[1]=rig.pv[2]=0; rig.a[0]=rig.a[1]=rig.a[2]=0; }
+  let teleport=false, jump=false;
+  if(rig.init){ const dx=px-rig.pp[0], dy=py-rig.pp[1], dz=pz-rig.pp[2], d2=dx*dx+dy*dy+dz*dz; if(d2>9) teleport=true; else if(dt>0&&d2>Math.pow(Math.max(0.45,dt*32),2)) jump=true; }   /* (a jump of the bike faster than 32 m/s, e.g. the remount putting him back on his line, is not an acceleration the body feels) */
+  if(!rig.init||teleport||jump){ rig.pp[0]=px; rig.pp[1]=py; rig.pp[2]=pz; if(!jump){ rig.pv[0]=rig.pv[1]=rig.pv[2]=0; } rig.a[0]=rig.a[1]=rig.a[2]=0; }
   else if(dt>=1/240){
     const vx=(px-rig.pp[0])/dt, vy=(py-rig.pp[1])/dt, vz=(pz-rig.pp[2])/dt, k=Math.min(1,dt*18);
     rig.a[0]+=(clamp((vx-rig.pv[0])/dt,-60,60)-rig.a[0])*k; rig.a[1]+=(clamp((vy-rig.pv[1])/dt,-60,60)-rig.a[1])*k; rig.a[2]+=(clamp((vz-rig.pv[2])/dt,-60,60)-rig.a[2])*k;
@@ -150,19 +157,24 @@ export function poseRide(rig,Bm,st,dt,out,base){
   const ax=rig.a[0], ay=rig.a[1], az=rig.a[2];
   const aLx=ax*Bm[0]+ay*Bm[1]+az*Bm[2], aLy=ax*Bm[4]+ay*Bm[5]+az*Bm[6], aLz=ax*Bm[8]+ay*Bm[9]+az*Bm[10];
   if(dt>0) rig.tw+=dt;
-  /* the stance */
-  const stand=clamp(st.stand||0,0,1), crouch=clamp(st.crouch||0,0,0.8), lean=st.lean||0, dab=st.dab||0, adab=Math.abs(dab), pitchB=st.pitch||0, v=st.v||0, acc=st.acc||0;
+  /* the stance (milestone 2: the real ATTACK position: standing, the hips back over the pegs and low, the chest forward, the head over the bars, the arms
+     bent; seated forward on the seat in a flat turn; each rider with his own style (rig.sty) and his own timing getting up on the pegs) */
+  const sy=rig.sty;
+  let standIn=clamp(st.stand||0,0,1);
+  if(!rig.init||teleport||dt<=0) rig.sf=standIn; else rig.sf+=(standIn-rig.sf)*Math.min(1,dt/sy.lag);   /* (a pack does not stand up on the same instant) */
+  const stand=st.gate?standIn:rig.sf, crouch=clamp(st.crouch||0,0,0.8), lean=st.lean||0, dab=st.dab||0, adab=Math.abs(dab), pitchB=st.pitch||0, v=st.v||0, acc=st.acc||0;
   const air=!!st.air, kk=st.k||0, turn=clamp(Math.abs(kk)*14,0,1);
   const sit=1-stand;
   /* targets in the bike frame */
-  let tx=lerp(bp.sx+0.05,-0.05,stand)+0.06*turn*sit+0.05*adab, ty=lerp(bp.sy+0.10,1.31,stand)-0.20*crouch*(0.5+0.5*stand)+(air?0.03:0), tz=0.045*Math.sign(dab)*adab-0.05*clamp(lean,-0.8,0.8)*sit;
-  let tp=lerp(0.80,1.00,stand)+0.22*crouch+0.10*turn*sit+clamp(-acc*0.012,-0.07,0.11)+0.55*pitchB*(air?0.9:0.5);   /* torso pitch forward */
+  let tx=lerp(bp.sx+0.10,-0.10+sy.hip,stand)+0.04*turn*sit+0.05*adab, ty=lerp(bp.sy+0.10,1.25+sy.crouch,stand)-0.20*crouch*(0.5+0.5*stand)+(air?0.05:0), tz=0.045*Math.sign(dab)*adab-0.05*clamp(lean,-0.8,0.8)*sit;
+  if(air&&pitchB<-0.05) tx-=Math.min(0.07,(-pitchB-0.05)*0.25);   /* nose down on the way down: the hips go back */
+  let tp=lerp(0.72,1.05,stand)+sy.pitch+0.22*crouch+0.10*turn*sit+clamp(-acc*0.012,-0.07,0.11)+pitchB*(air?0.78:0.5);   /* torso pitch forward (in the air he holds his body against the bike's pitch) */
   if(air&&Math.abs(pitchB)<0.02) tp-=0.06;
-  let tr=-0.30*lean-0.12*dab*adab;   /* torso roll relative to the bike: more upright than the bike, the inside shoulder dropped with the foot out */
+  let tr=-(air?0.62:0.30)*lean-0.12*dab*adab;   /* torso roll relative to the bike: more upright than the bike (in the air he stays upright while the bike is whipped under him), the inside shoulder dropped with the foot out */
   /* idle life: the rider works on the bike: shifts a little, faster with speed */
   const sw=Math.sin(rig.tw*(2.3+0.05*v)+rig.ph)*0.7+Math.sin(rig.tw*(5.1+0.1*v)+rig.ph*2.1)*0.3, spd=clamp(v/14,0,1);
   tr+=sw*0.025*(0.4+spd); tp+=Math.sin(rig.tw*3.7+rig.ph*1.3)*0.012*(0.4+spd);
-  const hyT=clamp(kk*9,-0.55,0.55), hpT=-tp+0.02-0.15*pitchB;
+  const hyT=clamp(kk*9+sy.head*(1-turn),-0.55,0.55), hpT=-tp+0.02-0.15*pitchB;
   if(!rig.init||teleport){ S[0]=tx; S[1]=0; S[2]=ty; S[3]=0; S[4]=tz; S[5]=0; S[6]=tp; S[7]=0; S[8]=tr; S[9]=0; S[10]=hpT; S[11]=0; S[12]=hyT; S[13]=0; rig.init=true; }
   rig.fl0=false;
   if(dt>0){
@@ -183,11 +195,13 @@ export function poseRide(rig,Bm,st,dt,out,base){
   const o=SKO; o.pitch=pitch; o.roll=roll; o.hpitch=S[10]; o.hyaw=S[12]; o.fwdX=HINT; o.herr=0;
   /* the hands are on the grips AS THE BARS ARE TURNED (r3d-bike.js steerOf / steerXYZ: the same turn the bike draws), so the arms follow the steering */
   { const dl=steerOf(st); if(dl>1e-4||dl<-1e-4){ steerXYZ(bp.gx,bp.gy,-bp.gz,dl,o.hand,0); steerXYZ(bp.gx,bp.gy,bp.gz,dl,o.hand,3); } else { o.hand[0]=bp.gx; o.hand[1]=bp.gy; o.hand[2]=-bp.gz; o.hand[3]=bp.gx; o.hand[4]=bp.gy; o.hand[5]=bp.gz; } }
-  o.knee[0]=bp.kx; o.knee[1]=bp.ky; o.knee[2]=bp.kz; o.kneeAim=0.75*(1-stand)+0.25*stand;   /* the knees press on the shrouds (BIKE.KNEE): the leg's IK bends toward that point */
+  o.knee[0]=bp.kx; o.knee[1]=bp.ky; o.knee[2]=bp.kz; o.kneeAim=clamp(0.78*(1-stand)+0.55*stand+sy.knee,0,1);   /* the knees press on the shrouds (BIKE.KNEE): the leg's IK bends toward that point (standing too: he grips the bike with his knees) */
   o.foot[0]=bp.px-0.095; o.foot[1]=bp.py+0.115; o.foot[2]=-bp.pz; o.foot[3]=bp.px-0.095; o.foot[4]=bp.py+0.115; o.foot[5]=bp.pz;
   if(adab>0.01){ const R=dab>0, k=adab, i=R?3:0, s=R?1:-1; o.foot[i]=lerp(o.foot[i],0.30,k); o.foot[i+1]=lerp(o.foot[i+1],0.52,k); o.foot[i+2]=lerp(o.foot[i+2],s*0.46,k); }
   o.toe[0]=o.toe[1]=0.12+0.28*(air?1:0)-0.1*stand; if(adab>0.01){ const k=adab; if(dab>0) o.toe[1]=lerp(o.toe[1],-0.35,k); else o.toe[0]=lerp(o.toe[0],-0.35,k); }
-  o.toeOut=0.12+0.15*adab; o.kneeOut=0.28+0.1*stand; o.elbowOut=0.85; o.elbowUp=lerp(0.0,0.22,stand); o.elbowBack=0.12;
+  /* the elbows (milestone 2; they were a straight 'wing' out to the side from behind): UP and a little OUT and BACK, so the arm shows its bend (the elbow
+     about at the grips' width or a little outside, below the shoulder, the forearm down to the grip); each rider carries them his own way */
+  o.toeOut=0.12+0.15*adab; o.kneeOut=0.20+0.06*stand; o.elbowOut=(0.42+0.08*stand+0.10*turn)*sy.flare; o.elbowUp=0.80*sy.up; o.elbowBack=0.20; o.elbowAdapt=true;
   /* the reach: the pelvis is pulled / pushed along the line to the pegs so the legs neither overstretch nor fold flat */
   { const hx=P[0], hy=P[1]-0.03, hz=P[2], ax=(o.foot[0]+o.foot[3])*0.5, ay=(o.foot[1]+o.foot[4])*0.5, az=(o.foot[2]+o.foot[5])*0.5;
     let dx=ax-hx, dy=ay-hy, dz=az-hz, d=Math.sqrt(dx*dx+dy*dy+dz*dz)||1;
@@ -233,13 +247,67 @@ export function poseBody(rig,body,lim,dt,out,base){
   const o=SKO; o.pitch=spine; o.roll=0; o.hpitch=-spine*0.6+0.1*spread; o.hyaw=0.3*Math.sin(ph*0.7)*spread; o.fwdX=HINT; o.herr=0;
   o.hand[0]=loc[0]; o.hand[1]=loc[1]; o.hand[2]=loc[2]; o.hand[3]=loc[3]; o.hand[4]=loc[4]; o.hand[5]=loc[5];
   o.foot[0]=loc[6]; o.foot[1]=loc[7]; o.foot[2]=loc[8]; o.foot[3]=loc[9]; o.foot[4]=loc[10]; o.foot[5]=loc[11];
-  o.toe[0]=o.toe[1]=0.25-0.4*spread; o.toeOut=0.15; o.kneeOut=0.35; o.elbowOut=0.8; o.elbowUp=0.2; o.elbowBack=0.4; o.kneeAim=0;
+  o.toe[0]=o.toe[1]=0.25-0.4*spread; o.toeOut=0.15; o.kneeOut=0.35; o.elbowOut=0.8; o.elbowUp=0.2; o.elbowBack=0.4; o.kneeAim=0; o.elbowAdapt=false;
   P[0]=P[1]=P[2]=0;
   body_id(Rp);
   skeleton(P,Rp,o);
   emit(e,out,base);
 }
 function body_id(R){ R[0]=1; R[1]=0; R[2]=0; R[3]=0; R[4]=1; R[5]=0; R[6]=0; R[7]=0; R[8]=1; }
+
+/* ---------------- milestone 2: a BLEND between two poses (the remount: from walking to the bike into the riding pose; the fall: from riding into the
+   tumble), so nothing pops in one frame. blendStart takes the pose the rider showed LAST frame (his row of skinning matrices, still in `out`), expressed in
+   the frame of reference of the new pose (the bike, or the crash body): it moves with that frame while it fades. blendStep (after the new pose has been
+   written) mixes every bone: rotations by quaternion (nlerp), origins linearly, eased over `dur` seconds. ---------------- */
+function m2q(R,q){ const t=R[0]+R[4]+R[8]; let w,x,y,z;
+  if(t>0){ const s=Math.sqrt(t+1)*2; w=0.25*s; x=(R[7]-R[5])/s; y=(R[2]-R[6])/s; z=(R[3]-R[1])/s; }
+  else if(R[0]>R[4]&&R[0]>R[8]){ const s=Math.sqrt(1+R[0]-R[4]-R[8])*2; w=(R[7]-R[5])/s; x=0.25*s; y=(R[1]+R[3])/s; z=(R[2]+R[6])/s; }
+  else if(R[4]>R[8]){ const s=Math.sqrt(1+R[4]-R[0]-R[8])*2; w=(R[2]-R[6])/s; x=(R[1]+R[3])/s; y=0.25*s; z=(R[5]+R[7])/s; }
+  else { const s=Math.sqrt(1+R[8]-R[0]-R[4])*2; w=(R[3]-R[1])/s; x=(R[2]+R[6])/s; y=(R[5]+R[7])/s; z=0.25*s; }
+  q[0]=w; q[1]=x; q[2]=y; q[3]=z; }
+function q2m(q,R){ const w=q[0], x=q[1], y=q[2], z=q[3];
+  R[0]=1-2*(y*y+z*z); R[1]=2*(x*y-w*z); R[2]=2*(x*z+w*y); R[3]=2*(x*y+w*z); R[4]=1-2*(x*x+z*z); R[5]=2*(y*z-w*x); R[6]=2*(x*z-w*y); R[7]=2*(y*z+w*x); R[8]=1-2*(x*x+y*y); }
+const BQa=new Float64Array(4), BQb=new Float64Array(4), BR=new Float64Array(9), BW2=new Float64Array(9);
+/* Bm: the new pose's frame of reference (a column-major 4 x 4: the bike's matrix, or the crash body's) */
+export function blendStart(rig,out,base,Bm,dur){
+  const bl=rig.bl||(rig.bl={rel:new Float64Array(NB*12),t:0,dur:0.4});
+  const ax=[Bm[0],Bm[1],Bm[2]], ay=[Bm[4],Bm[5],Bm[6]], az=[Bm[8],Bm[9],Bm[10]], tx=Bm[12], ty=Bm[13], tz=Bm[14];
+  let ok=true;
+  for(let b=0;b<NB;b++){ const o=base+b*12, r=REST[b];
+    /* the bone's world frame from its skinning matrix: rotation R, origin = M * rest joint */
+    const R0=out[o],R1=out[o+1],R2=out[o+2],R3=out[o+4],R4=out[o+5],R5=out[o+6],R6=out[o+8],R7=out[o+9],R8=out[o+10];
+    const wx=R0*r[0]+R1*r[1]+R2*r[2]+out[o+3], wy=R3*r[0]+R4*r[1]+R5*r[2]+out[o+7], wz=R6*r[0]+R7*r[1]+R8*r[2]+out[o+11];
+    if(!(isFinite(wx)&&isFinite(wy)&&isFinite(wz))||(R0===0&&R4===0&&R8===0)){ ok=false; break; }
+    /* into the reference frame: rel R = B^T R, rel o = B^T (o - t) */
+    const q=bl.rel, k=b*12, dx=wx-tx, dy=wy-ty, dz=wz-tz;
+    q[k]=ax[0]*R0+ax[1]*R3+ax[2]*R6; q[k+1]=ax[0]*R1+ax[1]*R4+ax[2]*R7; q[k+2]=ax[0]*R2+ax[1]*R5+ax[2]*R8;
+    q[k+3]=ay[0]*R0+ay[1]*R3+ay[2]*R6; q[k+4]=ay[0]*R1+ay[1]*R4+ay[2]*R7; q[k+5]=ay[0]*R2+ay[1]*R5+ay[2]*R8;
+    q[k+6]=az[0]*R0+az[1]*R3+az[2]*R6; q[k+7]=az[0]*R1+az[1]*R4+az[2]*R7; q[k+8]=az[0]*R2+az[1]*R5+az[2]*R8;
+    q[k+9]=ax[0]*dx+ax[1]*dy+ax[2]*dz; q[k+10]=ay[0]*dx+ay[1]*dy+ay[2]*dz; q[k+11]=az[0]*dx+az[1]*dy+az[2]*dz; }
+  if(!ok){ rig.blOn=false; return; }
+  bl.t=0; bl.dur=dur; rig.blOn=true;
+}
+export function blendStep(rig,out,base,Bm,dt){
+  const bl=rig.bl; if(!rig.blOn||!bl) return;
+  bl.t+=Math.max(0,dt||0); if(bl.t>=bl.dur){ rig.blOn=false; return; }
+  const u=sst(0,1,bl.t/bl.dur), wF=1-u;
+  const a00=Bm[0],a10=Bm[1],a20=Bm[2],a01=Bm[4],a11=Bm[5],a21=Bm[6],a02=Bm[8],a12=Bm[9],a22=Bm[10], tx=Bm[12], ty=Bm[13], tz=Bm[14];
+  for(let b=0;b<NB;b++){ const o=base+b*12, r=REST[b], q=bl.rel, k=b*12;
+    /* the old pose, carried by the reference frame: B * rel */
+    for(let c=0;c<3;c++){ const x=q[k+c], y=q[k+3+c], z=q[k+6+c]; BW2[c]=a00*x+a01*y+a02*z; BW2[3+c]=a10*x+a11*y+a12*z; BW2[6+c]=a20*x+a21*y+a22*z; }
+    const ox=a00*q[k+9]+a01*q[k+10]+a02*q[k+11]+tx, oy=a10*q[k+9]+a11*q[k+10]+a12*q[k+11]+ty, oz=a20*q[k+9]+a21*q[k+10]+a22*q[k+11]+tz;
+    /* the new pose (just written): rotation and origin */
+    BR[0]=out[o]; BR[1]=out[o+1]; BR[2]=out[o+2]; BR[3]=out[o+4]; BR[4]=out[o+5]; BR[5]=out[o+6]; BR[6]=out[o+8]; BR[7]=out[o+9]; BR[8]=out[o+10];
+    const nx=BR[0]*r[0]+BR[1]*r[1]+BR[2]*r[2]+out[o+3], ny=BR[3]*r[0]+BR[4]*r[1]+BR[5]*r[2]+out[o+7], nz=BR[6]*r[0]+BR[7]*r[1]+BR[8]*r[2]+out[o+11];
+    m2q(BW2,BQa); m2q(BR,BQb);
+    const dq=BQa[0]*BQb[0]+BQa[1]*BQb[1]+BQa[2]*BQb[2]+BQa[3]*BQb[3], sg=dq<0?-1:1;
+    let qw=BQa[0]*wF+BQb[0]*u*sg, qx=BQa[1]*wF+BQb[1]*u*sg, qy=BQa[2]*wF+BQb[2]*u*sg, qz=BQa[3]*wF+BQb[3]*u*sg; const ql=Math.sqrt(qw*qw+qx*qx+qy*qy+qz*qz)||1;
+    BQa[0]=qw/ql; BQa[1]=qx/ql; BQa[2]=qy/ql; BQa[3]=qz/ql; q2m(BQa,BR);
+    const px=ox*wF+nx*u, py=oy*wF+ny*u, pz=oz*wF+nz*u;
+    out[o]=BR[0]; out[o+1]=BR[1]; out[o+2]=BR[2]; out[o+3]=px-(BR[0]*r[0]+BR[1]*r[1]+BR[2]*r[2]);
+    out[o+4]=BR[3]; out[o+5]=BR[4]; out[o+6]=BR[5]; out[o+7]=py-(BR[3]*r[0]+BR[4]*r[1]+BR[5]*r[2]);
+    out[o+8]=BR[6]; out[o+9]=BR[7]; out[o+10]=BR[8]; out[o+11]=pz-(BR[6]*r[0]+BR[7]*r[1]+BR[8]*r[2]); }
+}
 /* the bone frames as the last pose left them (tests) */
 export function lastFrames(){ return {O:O,RR:RR}; }
 export {skeleton,emit,ik2,frameDir,P as _P,SL as _SL,SRr as _SR,HL as _HL,HR as _HR,SKO as _SKO};
