@@ -5,6 +5,8 @@ Written by the file-split step (branch `mxvis-split`) and finished by the BASE s
 `7dec470` (build B as the judges saw it) -> the split -> the harness (two commits) -> the base commit on top (`git log --oneline mxvis`). Neither step changed a pixel: the six bookmark frames at 1280x720 and 1920x1080
 drawn on the laptop's GPU are identical to the BEFORE set (0 differing pixels, 12 of 12), and the split's 84 software-GL frames over 10 scenarios are identical before the split, after it, and on the joined branch (section 9.8).
 
+THE INTEGRATION STEP (2026-10-17, from 18:18, label `integrate:merge`) put the eight specialists' branches (perf, lead, dirt, stadium, bike, rider, fx, cams) onto `mxvis` in that order, as 49 cherry-picked commits (LINEAR history, no merge commit), and made them work together: section 12 says what merged, the one conflict, the requests applied or skipped, the tests and what is still broken. The module blocks of section 3 below describe the INTEGRATED build.
+
 The race renderer is three.js r160 (`ui/vendor/three-0.160.0.module.min.js`, ES modules, WebGL2). The race view is only these files:
 `race3d.js` and `r3d-*.js` in this folder. `game.js` creates it (`create(host, hooks)`) and talks to it through `V.*` (header of `race3d.js`).
 Nothing in this contract changes how `game.js`, the engine (`race.js`, `round.js`, `season.js`), `course.js` or `layouts.js` work.
@@ -39,10 +41,10 @@ Nothing in this contract changes how `game.js`, the engine (`race.js`, `round.js
 | Role | The CEO's title | Files | Hook zones in `race3d.js` | What it is |
 |---|---|---|---|---|
 | lead | Lead Graphics Engineer (the integrator step after the builders applies every REQUEST in these files) | `race3d.js` (everything outside the zones), `r3d-util.js`, `r3d-look.js`, `r3d-lead-post.js`, `r3d-lead-env.js`, `CONTRACT.md`, `sw.js` | none (it is the rest of the file) | the view: `create()`, the race state machine, rider motion and the cards sync, the crash scripts, the frame loop; shared helpers; renderer settings, light rig, fog, the post-processing slot and the frame's counters |
-| dirt | Environment Artist (the ground) | `r3d-track.js`, `mxwar/assets/dirt/` | `dirt` | the track SURFACE: soil, dirt maps, the track ribbon (berms, jump faces, whoops, sand, the start path), its material, the lane-edge blocks |
-| stadium | Environment Artist (the stadium) | `r3d-world.js`, `mxwar/assets/stadium/` | `stadium` | everything round the track: stands, crowd, suites, walls, light rigs and glow, the big screen, sky, start gate, finish line, flaggers and flags, outdoor terrain, trees, paddock, speedway infield; `buildWorld()` |
-| bike | Vehicle / Rider Specialist (the machine) | `r3d-bike.js`, `mxwar/assets/bike/` | `bike` | the motorcycle: `BIKE` constants, part geometries, materials, instanced meshes, plates, the bike's pose |
-| rider | Vehicle / Rider Specialist (the rider) | `r3d-riders.js`, `mxwar/assets/rider/` | `rider` | the rider: geometry, two-bone IK, poses (seated, standing, dab, crash body), the number atlas, blob shadows, number tags, the instancing glue |
+| dirt | Environment Artist (the ground) | `r3d-track.js`, `r3d-dirt-relief.js`, `r3d-dirt-png.js`, `mxwar/assets/dirt/` | `dirt` | the track SURFACE: soil, dirt maps, the track ribbon (berms, jump faces, whoops, sand, the start path), its material, the lane-edge blocks |
+| stadium | Environment Artist (the stadium) | `r3d-world.js`, `r3d-stadium-bowl.js`, `r3d-stadium-art.js`, `mxwar/assets/stadium/` | `stadium` | everything round the track: stands, crowd, suites, walls, light rigs and glow, the big screen, sky, start gate, finish line, flaggers and flags, outdoor terrain, trees, paddock, speedway infield; `buildWorld()` |
+| bike | Vehicle / Rider Specialist (the machine) | `r3d-bike.js`, `r3d-bike-model.js`, `mxwar/assets/bike/` | `bike` | the motorcycle: `BIKE` constants, part geometries, materials, instanced meshes, plates, the bike's pose |
+| rider | Vehicle / Rider Specialist (the rider) | `r3d-riders.js`, `r3d-rider-model.js`, `r3d-rider-pose.js`, `mxwar/assets/rider/` | `rider` | the rider: geometry, two-bone IK, poses (seated, standing, dab, crash body), the number atlas, blob shadows, number tags, the instancing glue |
 | fx | Effects Specialist | `r3d-fx.js`, `mxwar/assets/fx/` | `fx` | roost, dust, impacts: the particle system and when / how much to emit |
 | cams | Cinematic Camera Specialist | `r3d-cams.js` | `cams` | the TV director, every camera rig, the sight tests, the camera itself |
 | perf | Performance Engineer | `r3d-quality.js`, `r3d-perf-bench.js`, `mxwar/assets/perf/` | `perf` | the quality tiers and their flags, the adaptive-resolution ladder, GPU classification and probe, reduce-effects and TV flags, the options every builder receives, `V.qualityNames()` / `V.setQuality()`, the riders' level-of-detail and texture-budget helpers, the in-game benchmark (`?bench=1`) |
@@ -60,11 +62,18 @@ r3d-quality.js     <- util, perf-bench   (r3d-perf-bench.js imports nothing: the
 r3d-look.js        <- util, lead-env, lead-post (+ three-addons SMAAPass / Pass / SMAAShader)
 r3d-lead-env.js    <- util
 r3d-lead-post.js   <- (three.js only)
-r3d-track.js       <- util
-r3d-world.js       <- util, track
-r3d-bike.js        <- util
-r3d-fx.js          <- util
-r3d-riders.js      <- util, bike  (re-exports BIKE; emit / stepParticles from fx)
+r3d-dirt-png.js    <- (nothing)
+r3d-dirt-relief.js <- (nothing: pure maths)
+r3d-track.js       <- util, dirt-png, dirt-relief, assets/dirt/dirt-tiles(-lo).js
+r3d-stadium-art.js <- util
+r3d-stadium-bowl.js<- util, track, stadium-art
+r3d-world.js       <- util, track, stadium-bowl
+r3d-bike-model.js  <- util
+r3d-bike.js        <- util, bike-model
+r3d-rider-model.js <- util
+r3d-rider-pose.js  <- rider-model, bike  (BIKE.GRIP / PEG / SEAT / KNEE, steerOf, steerXYZ)
+r3d-fx.js          <- util, quality (isTV / motionMode)
+r3d-riders.js      <- util, bike, rider-model, rider-pose  (re-exports BIKE; emit / stepParticles from fx)
 r3d-cams.js        <- util, quality (motionMode only)
 race3d.js          <- all of the above
 ```
@@ -82,7 +91,7 @@ Every name below is exported. Arguments in order; `->` is the return value.
 - `now()` -> ms clock. `clamp(x, a, b)`, `sstep(a, b, x)` smoothstep, `lin(hex)` -> linear `[r, g, b]`, `mixc(a, b, t)`.
 - Seeded noise: `hash2(x, z)`, `vnoise(x, z)`, `fbm(x, z, octaves = 4)`; tiling `hashp`, `pnoise(x, z, period)`, `pfbm(x, z, period, octaves)`; `rngf(seed)` -> a function returning 0..1.
 - Textures: `canvas(w, h)`, `tex(canvas, repeat)` -> sRGB CanvasTexture (anisotropy set), `normalTex(heights, W, strength)` -> tangent normal map from a W x W height array,
-  `setAniso(n)` / `getAniso()` (1..8; `r3d-quality.js` sets it from the GPU).
+  `setAniso(n)` / `getAniso()` (1..16; `r3d-quality.js` sets it from the tier: 1 / 4 / 8 / 16).
 - Geometry: `merge(list)` -> one non-indexed BufferGeometry (position, normal, color, uv); `paint(g, [r, g, b])` vertex colours; `xf(g, x, y, z, rx, ry, rz, sx, sy, sz)` transform;
   `bone(mesh, i, a, b, thick, fw)` places instance `i` of an instanced unit-length +Y limb mesh between points `a` and `b` (the limb never spins about its axis: local +X toward `fw`).
 - Course queries (pure): `clear(C, x, z, margin)` -> true if (x, z) is off every part of the track; `clearDist(C, x, z)` -> distance to the nearest track edge (negative on it).
@@ -94,7 +103,7 @@ Every name below is exported. Arguments in order; `->` is the return value.
 `L.setShadows(on)`, `L.apply(C, look, world)` (a new race: the venue's lights, exposure, sun disc, then the fog from `world.ctx.fogC`),
 `L.fitShadow(cam, target)` (every frame while shadows are on: the shadow box follows the action, snapped to texels), `L.blobOp(x, y, z)` (0.42..1: how much blob
 shadow to keep where the real shadows fall), `L.render(scene, cam)` (the frame), `L.resize(W, H, pr)`.
-**`L.post = null` is the post-processing slot**: set it to `{render(scene, cam), resize(W, H, pr)}` and every frame is drawn through it (bloom, depth of field, SMAA; the add-ons are in `ui/vendor/three-addons/`;
+**Since the lead's rewrite (section 11 has everything): `createLook(renderer, {shadows, lo, tv, weak, host}) -> L`; the light rig is key / rim / kick / bounce / hemisphere / fill (`L.rim`, `L.kick`, `L.bounce`); `L.apply(C, look, world, {lo, tv})` also builds the environment map and picks the tier; `L.frame(cam, target, dt, tw, subjectDist)` (every frame, after the camera: the camera-relative lights, the depth of field's focus, the motion-blur matrices); `L.upgrade(root)` (physically based stand-ins for plain Phong parts), `L.receive(root)` (instanced body parts receive the key's shadow), `L.tier`, `L.setTier(name)`, `L.flags`, `L.setFlags({...})`, `L.tiers`, `L.info()`, `L.dispose()`; the stadium's glow gain `uHdr` follows the bloom flag.** **`L.post = null` is the post-processing slot**: set it to `{render(scene, cam), resize(W, H, pr)}` and every frame is drawn through it (bloom, depth of field, SMAA; the add-ons are in `ui/vendor/three-addons/`;
 `tools/post-slot-check.js` builds an EffectComposer with RenderPass + UnrealBloomPass + OutputPass in the real view as a working template, and proves a resize reaches `post.resize`). With a chain on, tone mapping and the sRGB
 conversion belong to the chain's OutputPass (three.js applies `renderer.toneMapping` only when it draws to the screen). **`L.render` owns the frame's counters**: it sets `renderer.info.autoReset = false` and resets once per frame, so
 `renderer.info.render.calls / triangles` (= `V.stats().calls / tris`, the harness' `DEMO.stats()`) are the WHOLE frame: the shadow map pass + the scene + every pass of a chain. (three.js alone resets the counters inside every `renderer.render()`
@@ -117,78 +126,102 @@ The quality system: one place that says how much any module may spend (tiers), h
   `texBudget(root, tier) -> {count, MB, budgetMB, over, biggest}`, `fitTextures(root, max)` (shrinks static canvas textures; the view calls it on the new world), `summarize(ms[], fps)` (r3d-perf-bench.js: avg / 1% low / 0.1% low / percentiles).
 - `r3d-perf-bench.js`: `createBench(Q, view)`; `?bench=1` (or `__mxv3.bench({seconds})`) measures 20 s of the real race and shows the numbers on the screen (9.4). `?fps=1` is a one-line live counter.
 
-### r3d-track.js (dirt)
+### r3d-track.js, r3d-dirt-relief.js, r3d-dirt-png.js, `assets/dirt/` (dirt)
 
-- `SOIL` -> `{soil: [base, light, dark]}` (sRGB hex) for "stadium-dirt", loam, clay, hardpack, sand.
-- `dirtMaps(soil, lo, floor) -> {map, normal}`: the dirt's detail as a colour map (a warm near-white with grooves, tyre tracks, stones: the soil colour is in the vertex colours) and a normal map;
-  `floor` = the stadium floor's version. `padMaps(soil)` -> the same for the starting pad (cached per soil).
-- `trackMaterial(look, q) -> {mat, dirt}`: the material the ribbon is drawn with (`MeshLambertMaterial` + map + normal map + vertex colours + the hairpin shader patch) and the colour map.
-- `addTrack(C, look, q, root, mat) -> {track, frame}`: builds the ribbon (+ the start path) and the lane-edge blocks into `root`. `frame` is `null` or `function(dt, RST)`; `race3d.js` calls it every frame (zone `dirt`)
-  with the riders' per-frame state (section 5): the hook for tyre tracks that deepen the ruts, dust that follows the lanes.
-- The ribbon has attributes `position`, `normal`, `color` (the soil colours per vertex), `uv` (`lat/5, s/5`), `aPlan` (the hairpin weight). Lateral stations: 17 in a stadium, 13 outdoors.
+The dirt is REAL TERRAIN. One relief field in track space (`r3d-dirt-relief.js`, pure maths: ruts on the racing line 10-15 cm deep with pushed-up lips, braided wings, the berms' high lines, windrows of loose dirt, whoop erosion, braking bumps and roost ripples from the speed profile, three wandering tyre tracks, landing scoops, clods)
+feeds four things so they cannot disagree: the MESH, the GROUND THE WHEELS FOLLOW, a 4096x128 RGBA track-space texture (slopes of the detail the mesh cannot carry, cavity ambient occlusion, a loose-dirt mask) and the moisture that darkens the dirt and makes it shine at a grazing angle.
 
-### r3d-world.js (stadium)
+- `SOIL` -> `{soil: [base, light, dark]}` (sRGB hex) for "stadium-dirt", loam, clay, hardpack, sand. `soilTiles(lo)` -> the two CC0 Poly Haven scan tiles (512 px; 256 px with `lo`), decoded SYNCHRONOUSLY by `r3d-dirt-png.js` `decodePNG(base64)` (83 lines, bit-exact against zlib) so the scans are on the GPU when the world is built: no async load, captures stay deterministic.
+  `assets/dirt/dirt-tiles.js` / `dirt-tiles-lo.js` hold them as base64 PNG (luma detail + height packed in one RGBA image; sources and licences in `assets/LICENSES.md`).
+- `dirtMaps(soil, lo, floor) -> {map, normal}` / `padMaps(soil)`: the stadium floor's and the starting pad's maps (mosaics of the same scans).
+- `trackMaterial(look, q) -> {mat, dirt}`; `addTrack(C, look, q, root, mat) -> {track, frame: null, relief, info, tier}`. `track` is a Group of THREE.LOD chunks (48 m long, three levels: 0.25 m rows / 0.5 / 1, switching at 44 m and 100 m, skirts hide the cracks) or, for the `lo` tier, ONE adaptive mesh (21 columns, 0.5 m rows only on jumps / whoops / sand, 1 m elsewhere).
+  `relief` has `delta(s, lat)`, `lineAt(s)` (the racing line the ruts lie on: `-sign(k(s+9)) * hw * 0.36 (+ the rider's bias)`, the same formula `race3d.js` uses for the corner line: change both together), `buildStartFine()` (the start strip's launch grooves). `world.dirt = {track, frame: null, relief, info, tier}`.
+- **`q.dirtTier` = `"hi"` | `"lo"`** (else `q.lo` decides). `hi` = MeshStandardMaterial with the scan tiles at two scales each, LOD chunks (+8..11 draw calls and up to +81k triangles near the lens over the base); `lo` = Lambert, 256 px tiles, one mesh (+1 call, about +21k triangles over the base). `Q.options` sets it per tier (firetv `lo`, balanced / high / ultra `hi`).
+- **`installGround`: `MXWar.Course.ground` is wrapped ONCE** (a no-op for a course with no registered relief): it returns the dirt AS DRAWN (ground + `relief.delta`), so wheels, shadows, cameras and fallen riders all stand on the dirt the mesh shows (a wheel sits IN a rut). The wrapper is global: anything that calls `Course.ground` after a world is built sees the relief.
+- The lane-edge blocks are chamfered, tapered slabs (28 triangles, small yaw and sink jitter, dust at the foot); their albedo must stay at 0.6 or lower (near-white blocks reach 1.4-1.7 under the key and glow neon: section 12.4).
+- Known: the generated Anaheim layout (`sx-modern`, v832) overlaps itself at its left end: the connector (s 166-188, x -57.5) runs under the outer berm of the 180 hairpin (s 426-448); a rider on the connector rides about 1 m under a berm. It is a `layouts.js` / `course.js` matter (section 12.4).
 
-- `buildWorld(C, look, q) -> {root, ctx, track, fin, info, matTrack, dirt, frame}`; `q = {lo, ...}` (Q.options). `root` is a Group (everything is added to it; `race3d.js` adds the gate, the flaggers, the marshal to it).
-  - `ctx`: `dirt` (colour map), `glowTex`, `glow(list, color)`, `sky(top, mid, hor, withSun)` (-> `ctx.skyMesh`, `ctx.sunMesh`), `fog(color, near, far)` (stores `ctx.fogC`, applied by `L.apply`),
-    `clouds(C, q)`, `screen(lap, len, num)` (the stadium's big screen: redraw it; `race3d.js` calls it at the gate and every lap), `hf(x, z)` (terrain height; outdoor and speedway only).
+### r3d-world.js, r3d-stadium-bowl.js, r3d-stadium-art.js (stadium)
+
+- `buildWorld(C, look, q) -> {root, ctx, track, fin, info, matTrack, dirt, frame}`; `q` = `Q.options`. `root` is a Group (everything is added to it; `race3d.js` adds the gate, the flaggers, the marshal to it).
+  - `ctx`: `dirt` (colour map), `glowTex`, `glow(list, color)` (the outdoor night lights, the speedway: the same sprite shader as the towers), `glowMesh` (the instanced glow sprites; **`glowMesh.material.uniforms.uHdr`** is the gain `r3d-look.js` sets: 2.5 with the bloom chain on, 1 on the plain frame), `sky(top, mid, hor, withSun)` (-> `ctx.skyMesh`, `ctx.sunMesh`), `fog(color, near, far)` (stores `ctx.fogC`, applied by `L.apply`),
+    `clouds(C, q)`, `screen(lap, len, num)` (the big video boards: redraw them), `hf(x, z)` (terrain height; outdoor and speedway only), **`bowlY(x, z) -> {y, d}`** (stadium venues: the height of the seats / structure at a place, 0 on the floor, and `d` = metres out from the floor footprint, negative on it; the cameras keep every eye at least 2.5 m above it).
   - `fin`: `{grp, flagAt (Vector3, where the flagger stands), th, side, lat}`. `info`: `{cx, cz}`.
-  - `frame`: `null` or `function(dt, tw, cam)`; `race3d.js` calls it every frame (zone `stadium`): crowd animation, flashing lights, the screen. `tw` = wall-clock seconds.
+  - `frame`: `null` or `function(dt, tw, cam, T, lap, len, leaderNum)`; `race3d.js` calls it every frame (zone `stadium`): the crowd's wave and flashes, the swinging haze cones, the scrolling ribbons, the video boards (lap, leader's number, race clock: redrawn when they change). `tw` = wall-clock seconds, `T` = the race clock (null before the drop).
+- `r3d-stadium-bowl.js` `stadium(C, look, q, root, ctx) -> {cx, cz, frame, board, bowlY}`: a three-tier lit bowl lofted round the floor (a superellipse footprint, e = 6: lower seats, a cross aisle, a second lower tier, the concourse with an LED ribbon, a band of suite windows, the cantilever, the upper deck, the rim, a roof lip; a dome venue gets a roof that covers the bowl with the lights under it),
+  a crowd drawn by a seat-by-seat shader from a 64-person atlas (cheering groups, a wave, sway, camera flashes: `q.crowdAnim`; `q.live.crowdAnim` switches the animation off at run time and the shader is rebuilt) plus upright cut-out crowd cards on the first lower tier (13-15k instanced people; ultra: both lower tiers), ad boards, 14 tall banners, 10 light towers with 24-bulb floodlight banks (emissive bulbs at 4.2, a glow each, a halo and a starburst per bank: HDR units), haze cones (`q.post.shafts`), three big video boards, the start gate (a truss, a MOTOCROSS WAR START banner) and the finish arch (a checkered FINISH banner).
+  Tier fields read from `Q.options`: `q.crowdDetail` (0.35 firetv: 72 ring segments, 6 towers, no cards, no banners; 0.7 balanced: 96 / 8 / cards / banners; 1 high: 128 / 10 / cards / banners), `q.crowdAnim`, `q.post.shafts`, `q.tier === "ultra"` (cards on both lower tiers); overrides `q.cards` 0/1/2, `q.segs`, `q.towers`, `q.banners`, `q.fancy`, `q.haze`. Cost over the base stadium (the stadium specialist's numbers): high +4 draw calls, +41k triangles (25.7k of them the crowd cards), +5 MB of textures; firetv +3 calls, +7.5k triangles, about +1 MB.
+- `r3d-stadium-art.js`: every texture drawn in code (original art: the crowd atlases, ad boards, ribbon, suites, video board, starburst and glow sheet, one shared props texture; half size on firetv). Nothing third-party.
 - `gateBuild(C, look, n) -> {grp, pads, slots, pad, gw, th, x, z, y, drop, dropT, slotLat(k), set(a)}`: `set(a)` lowers the pads (0 up .. 1 down); `slotLat(k)` = the lateral offset of slot k.
 - `flaggerBuild(flagTex, {marshal}) -> {grp, arm, flag, wave(t, amp), setTex(tex)}`; `flagTex(kind)` ("checkered" | "white" | "yellow" | "green" | anything else = red).
 - `fixMat()` (a Lambert material where vertices marked `aFix` keep their own colour), `glowTex()`.
 - Re-exports for the old import path: `setAniso, merge, paint, xf, clear, clearDist, lin, mixc, fbm, vnoise, canvas, tex, rngf` (they live in `r3d-util.js`).
 
-### r3d-bike.js (bike)
+### r3d-bike.js and r3d-bike-model.js (bike)
 
-Bike local axes: +X forward, +Y up, +Z right. Heading `th`: `rotation.y = -th`; roll + = lean right; pitch + = nose up; Euler order YZX.
+A 450 cc Supercross bike built in code: `r3d-bike-model.js` is pure geometry (an original design: twin-spar frame, engine, shrouds, gold fork, exhaust, shock with a coil spring, spoked wheels with knobby tyres, three levels of detail), `r3d-bike.js` has the constants, the shader, the instanced level-of-detail sets, colours, plates and the pose.
+Bike local axes: +X forward, +Y up, +Z right. Heading `th`: `rotation.y = -th`; roll + = lean right; pitch + = nose up; Euler order YZX. `assets/bike/README.md` has the bike's own notes and `assets/bike/viewer.html` its test page (not part of the game, not in `sw.js`).
 
-- `BIKE`: `WB` 1.48 m wheelbase, `WR` 0.34 m wheel radius, `FA` / `RA` front / rear axle (bike space), `HEAD` steering head, `PIVOT` swingarm pivot, `GRIP`, `PEG` (the rider's IK targets), `TRAVEL` 0.30, `SAG` 0.10.
-  `race3d.js` uses `WB`, `WR`, `TRAVEL`, `SAG` for the suspension physics, `r3d-riders.js` uses `GRIP` and `PEG`: change them together or not at all.
-- Geometry: `wheelGeo, chassisGeo, plasticsGeo, trimGeo, forkGeo, swingGeo, plateGeo` (merged, vertex-coloured; unit limbs along +Y for the fork and swingarm), helpers `V3`, `tube`.
-- `createBike(n, lo, mk) -> M`: `mk(geo, count, material)` is the instancing glue of `r3d-riders.js` (an InstancedMesh added to the riders' group). `M` = `{wheel (2n: front, rear), chassis, plastic, trim, fork, swing}`;
-  every part casts the sun's shadow. It makes the bike's materials first (Lambert wheels, glossy Phong plastics and trim, metal Phong chassis / fork / swing).
-- `colorBike(M, i, R)`: `R = {color, accent}` of rider i -> the plastics in the team colour, the trim in the accent.
-- `drawPlate(x, rr, fit, px, py, cell, R, t)`: draws the number plate's face into the riders' atlas canvas (`x` 2D context, `rr` rounded-rect path helper, `fit` font fitter, `t` the number text).
-- `PLATE_L`: the three plates' local matrices (front, two sides); the plate mesh `M.plate` (3 per bike, `plateGeo()`) is made by `createRiders` because it needs the atlas.
-- `poseBike(M, i, B, st)`: `B` = the bike's world Matrix4. Writes the matrices of both wheels (spin, suspension travel), chassis, plastic, trim, fork (a bone from the front axle to the steering head), swingarm, the three plates.
-  Reads `st.compF`, `st.compR`, `st.spinF`, `st.spinR`. `hideBike(M, i)`.
+- `BIKE`: `WB` 1.48 m wheelbase, `WR` 0.34 m wheel radius, `FA` / `RA` axles, `HEAD`, `PIVOT` (x -0.17: a real swingarm length), `GRIP` (0.40, 1.12, 0.37), `PEG` (-0.07, 0.43, 0.21), `TRAVEL` 0.30, `SAG` 0.10; new: `RAKE` (27 degrees), `UP` (the fork axis), `FWD`, `STEER_PT`, `ARM`,
+  **`SEAT` (-0.20, 0.958, 0: where the hips rest), `KNEE` (0.14, 0.84, 0.15: a shroud contact point)**, `SHOCK_TOP` / `SHOCK_BOT` / `SHOCK_STROKE`, `STEER_MAX` 0.34, `CHAIN_SPROCKET`, **`steerGain` (1: the bars show the whole steering; the rider's hands follow them)**.
+  `race3d.js` uses `WB`, `WR`, `TRAVEL`, `SAG` for the suspension physics; **`r3d-rider-pose.js` reads `GRIP`, `PEG`, `SEAT`, `KNEE` LIVE every frame** (a new bike with other contact points needs no rider change): change them together or not at all.
+- `createBike(n, lo, mk, q?) -> M`: `mk(geo, count, material)` is the instancing glue of `r3d-riders.js`. `M` holds every InstancedMesh as `M["bk<lod>_<part>"]` (parts `body`, `steer`, `fork`, `swing`, `shock`, `wheelF`, `wheelR`; LOD 0 close, 1 mid, 2 far = one static mesh) and the state as `M.bk`; `M.plate` (3 plates a bike) is made by `createRiders`.
+  **`q.bikeLod`** = `[d0, d1]` metres at which a bike leaves one level for the next (`Q.options` per tier: firetv `[8]` = LOD 1 under 8 m and LOD 2 beyond, a Lambert shader; balanced `[7, 30]`; high `[9.5, 36]`; ultra `[12, 45]`; hysteresis 8%). Triangles a bike: LOD 0 21.8k (130 real knobs on the rear tyre), LOD 1 5.6k, LOD 2 0.8k.
+  One patched MeshStandardMaterial for the whole bike: team colour and accent from instance attributes, a livery mask (4 styles by rider index), baked per-vertex metalness / roughness / AO, MUD that builds up on the lower parts from `st.mud`, spokes that fade by screen-door dither when a wheel turns faster than a spoke's spacing a frame. It carries its own procedural environment map (`T.env`, high tiers), which overrides `scene.environment` (the lead's map).
+- `colorBike(M, i, R)` (R = `{color, accent}`), `poseBike(M, i, B, st)` (B = the bike's world Matrix4; reads `st.compF`, `st.compR`, `st.spinF`, `st.spinR`, `st.lodD`, `st.lodCut`, `st.mud` and `st.steer` or else the track curvature `st.k`), `hideBike(M, i)`, `lodCounts(M)`.
+  **Every rider must be posed or hidden once per frame, in index order** (a lower index than the last call starts a new frame: the sets are packed per frame, so the draw counters are honest).
+- Steering: the front end (bars, clamps, upper fork tubes, lower legs, front fender, front wheel, front plate) turns about the real steering axis by `steerOf(st)` = `steerAngle(st) * BIKE.steerGain`. `steerMatrix(delta, out)` and `steerPoint(p, delta, out)` (THREE objects) and **`steerXYZ(x, y, z, delta, o, k)`** (plain numbers, no allocation: the rider's pose turns the grips with it) do the same turn; `steerAngle(st)` (+ right, clamped to `STEER_MAX`, a quarter of it in the air).
+- Kept from the base: `drawPlate(x, rr, fit, px, py, cell, R, t)`, `PLATE_L`, `plateGeo()`, `chassisGeo`, `wheelGeo`, `plasticsGeo`, `trimGeo`, `forkGeo`, `swingGeo`, `V3`, `tube`, `triCount`.
 
-### r3d-riders.js (rider)
+### r3d-riders.js, r3d-rider-model.js, r3d-rider-pose.js (rider)
 
-- `createRiders(list, q) -> R`: `list[k] = {s (seat), color, accent, num, name, red, me}`. `R = {grp, M, A (the number atlas), n, list}`. `R.M` holds every InstancedMesh by name:
-  bike parts (above), `helmet`, `torso` (n each), `uarm`, `farm`, `thigh`, `shin` (2n each: left, right), `plate` (3n), `back` (the jersey-back number, n), `shadow` (2n blob quads: bike, body), `tag` (n number tags).
-  Helmet and body parts cast the sun's shadow. Materials: Phong helmets, Lambert cloth with the `aFix` colour exemption (boots, braces, gloves keep their colour).
-- `poseRider(R, i, B, st)`: poses the bike (`poseBike`), then the rider. Normal riding reads `st.stand` 0..1, `st.dab` -1..1 (inside foot out, + = right), `st.lean`, `st.crouch`, plus the bike's inputs.
-  A crashed rider: `st.body` = a Matrix4 (origin the hip, +Y up the spine, +X the chest's front, +Z right) and `st.limbs = {spread, walk, phase, stand, reach}` (the crash script in `race3d.js` builds them: `poseBody`). `st.hide` hides both.
-- Two-bone IK (`ik`): arms 0.29 + 0.29 m to the grips (elbows up and out), legs 0.43 + 0.45 m to the pegs (knees forward); hip and shoulder from `localJoints(stand, dab, lean, crouch)`.
-- `hideRider(R, i)`, `shadowAt(R, k, x, y, z, th, sx, sz, alpha, gs, gl, op)` (blob shadow `k`: a quad lying on the ground at (x, y, z), heading `th`, size `sx` x `sz` scaled by `alpha`, tilted to the slope along `gs` and across `gl`, opacity `op`),
-  `tagAt(R, i, pos, size)` (a number tag billboard; `size` 0 hides it), `commit(R)` (flags every instance buffer for upload: call once per frame after posing), `setRed(R, list)` (the red plate moved: redraw the atlas).
-- Old import path: `BIKE` (from `r3d-bike.js`), `emit`, `stepParticles` (from `r3d-fx.js`; their first argument is now a particle system, not `R`).
+The rider is ONE SKINNED MESH generated in code (original art, no logos): 17 bones (pelvis, lumbar, chest, neck, head, shoulders / elbows / wrists, hips / knees / ankles), two bones and weights a vertex, a baggy jersey with a chest protector, sleeves, gloves, pants with knee braces, tall boots, a neck brace, a helmet with a peak, chin bar and goggles, a number patch curved over the back (`r3d-rider-model.js buildRider(detail)`).
+The skinning is done on the GPU for ALL riders in one draw call a part: every rider's bone matrices live in a float DATA TEXTURE (`R.boneTex`, `NB * 3` x n RGBA32F, one row a rider, backed by the Float32Array `R.bones`) and the vertex shader (patched into three.js' own Phong / Lambert / depth materials) blends two bones with `texelFetch`: **WebGL2 is required** (`supported()` checks it).
+
+- `createRiders(list, q) -> R`: `list[k] = {s (seat), color, accent, num, name, red, me}`. `R = {grp, M, A (the number atlas), n, list, S (the skinned meshes: hiBody, hiHelmet, hiBack, loBody), bones, boneTex, hiInst, loInst, stats {hi, lo}, ...}`. `R.M` holds the bike's InstancedMeshes (r3d-bike.js), `plate` (3n), `shadow` (blob quads, 2n), `tag` (n number tags).
+  **`q.riderHi`** = how many of the nearest IN-VIEW riders get the full model (3,910 triangles, a glossy helmet, the number patch); the rest get the 823-triangle version of the same skeleton (`Q.options` per tier: firetv 3, balanced 6, high 8, ultra 12). `q.lo` = Lambert materials, no rim light or wrinkle shading. The rider draws 4 calls (+3 in the shadow pass, through `customDepthMaterial`).
+- `poseRider(R, i, B, st)`: poses the bike (`poseBike`), then the rider: `poseRide` for normal riding, `poseBody` for a crash (`st.body` = a Matrix4, origin the hip, +Y up the spine, +X the chest's front, +Z right; `st.limbs = {spread, walk, phase, stand, reach}`; the crash script is in `race3d.js`). `st.hide` hides both. `hideRider(R, i)`, `shadowAt(R, k, ...)`, `tagAt(R, i, pos, size)`, `setRed(R, list)`.
+  **`commit(R, cam, dt)`** (once a frame after posing): chooses who gets the full model (by depth in view, the person's rider favoured; a rider behind the lens or off screen comes last), writes every per-instance attribute, flags every buffer and the bone texture for upload; `dt` feeds the springs.
+- The pose (`r3d-rider-pose.js`, plain arrays: 5 microseconds a rider): damped springs in the bike's frame (pelvis on three axes, torso pitch and roll, head pitch and yaw) chase the stance (seated, standing, crouch under load, extended in the air, forward on the tank in a flat turn) and FEEL the bike's own acceleration (a landing pushes the pelvis down through the legs, braking throws the shoulders forward, free fall unloads the legs);
+  two-bone IK: **hands on the grips AS THE BARS ARE TURNED (`BIKE.GRIP`, z mirrored for the left hand, turned by `steerOf(st)` with `steerXYZ`), feet on the pegs (`BIKE.PEG`), hips over `BIKE.SEAT`, the leg IK's pole turned toward `BIKE.KNEE`** (0.75 weight seated, 0.25 standing); a reach constraint keeps the hands on the bars and the feet on the pegs; the head keeps looking ahead and into the turn; the inside foot comes out in a flat turn.
+  A crash: hands and feet are under-damped springs in WORLD space, so the limbs trail the tumbling body. Output: one 3 x 4 skinning matrix per bone.
+- `st.mud` (0..1) browns the boots, shins, gloves, chest front and helmet front (the `bike` zone of `race3d.js` raises it with the distance ridden, `r3d-fx.js` in another rider's roost). The riders' rim light (Fresnel, 0.34 cloth / 0.22 helmet) and the number atlas are in `r3d-riders.js`.
+- Old import path: `BIKE`, `emit`, `stepParticles` are re-exported. These are NOT SkinnedMesh / Skeleton objects: anything that copies the riders' meshes must copy the bone texture too (the replay does, section 3 cams).
 
 ### r3d-fx.js (fx)
 
-- `createFx({lo, C, look, ...}) -> FX` (a new one for every race): `FX.group` (a Group, added to the scene by `race3d.js`), `FX.part` (the ring buffer: `n, pos, alpha, size, col, vari, vel, life, max, next, geo, mat`; 520 particles, 160 with Reduce effects),
-  `FX.emit(x, y, z, vx, vy, vz, size, life, rgb)` (size over 0.3 = dust that grows, otherwise a dirt clod), `FX.step(dt)` (every frame), `FX.rider(st, dt)` (every rider every frame: the landing dust when `st.landed`, the roost while `st.roost` > 0),
-  `FX.crashStart(f, gy)` (the burst where a rider goes down), `FX.crashStep(c, t, dt, hx, hgy, hz, bx, gy, bz, thB, ts)` (dust at each bounce of the tumble, a trail behind the sliding bike). Everything is skipped with `lo`.
-- Module functions: `emit(P, ...)` and `stepParticles(P, dt)` work on a particle system `P` (= `FX.part`); `puffTex` (a 2 x 2 atlas of lumpy dust puffs) is private.
-- The default particle look: dirt clods are small round points (shader branch `vD < 0.5`), dust is a textured soft puff (`aSize > 0.3`); colours are display sRGB (the shader writes them as they are): `dirtCol()` / `dustCol()` by soil.
+The flying dirt of the cover, driven by the riders' real motion. Every piece is pooled and instanced, one draw call each, counts set by the tier.
+
+- `createFx({lo, C, look, cam, ...Q.options}) -> FX` (a new one for every race; reads `q.tier`, `q.lo`, `q.live.particleScale` EVERY frame (the ladder) and `q.cam` (the weak tiers rank riders by the camera)). Pools: high 900 clods + 2600 spray + 260 puffs + 36 haze + 170 motes + lens flecks; ultra 1300 / 3600 / 340 / 44; balanced 420 / 1000 / 130 / 14; firetv 160 / 300 / 44 / 0 (8-triangle clods, no motes, no lens). A pool filling up slows its emitters. Reduced motion = no effects at all.
+- `FX.group` (added to the scene by `race3d.js`): `fx-clods` (an InstancedMesh of lit low-poly rocks that bounce and settle on the REAL dirt height through `Course.ground`, then shrink away; clods inside 1.1 m of the lens shrink to nothing), `fx-sprites` (an InstancedBufferGeometry mesh: velocity-stretched spray, dust puffs with baked normals, haze puffs trailing the pack; a ShaderMaterial lit by the scene's own lights, fog, tone mapping and colour space, so it is right on the plain frame AND inside the HDR chain; it writes no depth),
+  `fx-motes` (Points, high tiers: dust specks floating round the camera), `fx-lens` (high tiers: mud flecks on the lens when the camera is right behind a roosting rider: a pure function of the riders' spray and the DRAWING camera).
+- `FX.inputs(st, dt)` (race3d.js `[hook:fx]` in `rider()`, above `poseRider`): derives `st.throttle` / `st.slip` (0..1) and `st.roost` (0..8) from the rider's real acceleration x a low-speed factor, the gate launch and lean x speed (wheelspin is a low-speed thing), and raises `st.mud` when riding in another rider's roost (the same line, 1.2-9 m ahead; it clears at about 1% a second).
+  `FX.rider(st, dt)` (the emission: a fan of clods and spray off the rear tyre, to the outside in a berm; front-wheel flicks in a berm; a dust trail in a hollow fan so a chase camera keeps a clear line; sand and braking add dust; a haze behind fast riders; a take-off burst at a lip; a landing burst (a ring of clods, spray, puffs) scaled by `st.impact`),
+  `FX.step(dt)`, `FX.focus(a, b)` (the leader's and the person's positions: the high tiers weight the dirt toward them: race state only, NEVER the camera, so frames stay a pure function of the tick), `FX.crashStart(f, gy, r)` (a burst and a dust cloud where the rider goes down; `r` = the rider's record), `FX.crashStep(...)` (a burst at each bounce, a plough behind the sliding bike),
+  `FX.setBudget(0..1)`, `FX.stats()`, `FX.debug(x, z, r)`, `FX.hash()` (tests), `FX.dispose()`, `FX.part` (a debug view of the clods).
+- `emit(P, ...)` and `stepParticles(P, dt)` stay as module exports only because `r3d-riders.js` re-exports them.
+- Determinism: a private seeded generator (never `Math.random`); the high / ultra tiers never read the camera while simulating; the lens flecks are a uniform array set while the lens is drawn.
+- Cost (high, the specialist's numbers): +3 draw calls, +24k triangles, +0.36 ms of JS at the busiest moment (960x540).
 
 ### r3d-cams.js (cams)
 
-`createCams(VIEW) -> CAMS` (once per view). `VIEW` is the view's LIVE state, read-only here (section 6). Per frame the view calls `CAMS.director(dt)` then `CAMS.camera(dt)`.
+A TV broadcast of a supercross night. `createCams(VIEW) -> CAMS` (once per view; `VIEW` = the view's live state, section 6); per frame the view calls `CAMS.director(dt)` then `CAMS.camera(dt)`. Every camera is a critically damped rig (no jitter, continuous velocity); hard cuts only between shots.
 
-- `CAMS.shot` (the current shot: `{type, subj, pri, min, max, cam (a Vector3 or null), why, t, feat, victim}`; `type` = gate | turn1 | chase | heli | track | whoops | jump | crash | line), `CAMS.setShot(s)`, `CAMS.pickShot(force)`,
-  `CAMS.shotLog`, `CAMS.featLog`, `CAMS.target` (the look-at point), `CAMS.camS` (smoothing state: `fov`, `snap`, `gp`), `CAMS.snap()` (the next camera frame jumps instead of easing), `CAMS.buildGrid()` (a new course),
-  `CAMS.reset()` (a new race).
-- Spots and tests: `sees(a, b, margin)` (a sight line over the dirt and the hills), `safeCam(p, clearance)` (keeps a point above the dirt and the ground), `dirtTop(x, z)`, `terrainAt(x, z, y)`, `inFloor(p)` (keeps a camera inside the stadium bowl),
-  `trackCam`, `featCam`, `lineCam`, `crashCam`, `yellowCam`, `gateCam`, `turn1Cam`, `spotCam`, `secPt`.
-- It moves `VIEW.cam` (a `PerspectiveCamera`, near 0.5, far 4200): position, `lookAt`, `fov` (portrait phones get a wider vertical field). It does not move the sky or the shadow box (`race3d.js` does, right after).
+- Shot types: `gate | turn1 | chase | wide | onboard | track | whoops | jump | corner | crash | line | heli`. THE DEFAULT is the cover chase (`rigChase`: 3.5 m behind, 1.5 m up, 70 degrees vertical, the rider in the right third, the pack ahead and the lit stands in frame, path-following so hairpins swing it round, other riders pushed off the lens and lifted over, landing shake, 0.2 x lean roll). Broadcast = fixed trackside spots with a 20-35 degree long lens;
+  corner = low inside the berm before the apex; **stadium-wide = on the stadium's own seats (`world.ctx.bowlY(x, z)`: the eye 2.8 m above them, in the lower tiers like a TV's main camera) at 50 degrees**, a slow crane along the stands (outdoors a tower); onboard = on the bars (bike-local 0.40 / 1.32), 82 degrees. THE DIRECTOR cuts every 2.6-5.6 s (reserved shots: the gate drop, the holeshot, a featured battle or war, a crash and the marshal's yellow flag, the line, the white / checkered flags, a launch chase on the person), and lifts the person's rider when it has had under 62% of the last 28 s.
+- **Every eye is kept at least 2.5 m above the stands under it**: `ctx.bowlY(x, z)` (where `d > -0.5`) is applied right before the camera is set; on the floor nothing changes. The camera is also kept above the exact dirt height (a crest sight test) and `inFloor` keeps the floor cameras inside the bowl (a smaller superellipse, e = 4, shrunk 3.5 m, inside the bowl's e = 6).
+- Presets for the remote and the phone button: `CAMS.modes()` -> `[{id, name}]` (auto = Director, chase, broadcast, stadium, onboard), `CAMS.mode(id?)`, `CAMS.nextMode()`. The view exposes `V.camModes()`, `V.camMode(id?)`, `V.camNext()`, `V.camReplay()` and `V.camState()` -> `{mode, shot, replay, replays, rec, recMB, share}`. A preset holds its rider and never cuts (the broadcast re-picks its spot).
+- **The REPLAY** (render time only: the race is never touched; automatic for the person's own crash, never over the last lap and the flag; `CAMS.replayNow({subj, ev})` or `V.camReplay()` on demand): a ring of the last 7 s, 30 Hz at most, records every drawn instanced matrix, instance colour and count, the riders' per-instance attributes AND BONE MATRICES (the skinned riders' data texture), the clods' matrices and a plain object's transform (about 25 MB on the high tier);
+  a replay draws COPIES of the riders' and particles' groups (the live ones hidden) from the ring at 0.3-1.0x speed through a low 3/4-rear chase and then a low side long lens; the recorded bone matrices are written into the live bone texture each replay frame (the live step rewrites them). The dust sprites and lens flecks are not recorded (about 190 KB a frame): their copies stay hidden in a replay.
+  **`VIEW.replayOK` is false on the FIRE TV tier (tier flag `replay`): nothing is recorded there** (about 25 MB is too much for a 1-2 GB device).
+- Tools: `sees`, `safeCam`, `dirtTop`, `terrainAt`, `inFloor`, `trackCam`, `featCam`, `cornerCam`, `lineCam`, `crashCam`, `yellowCam`, `gateCam`, `turn1Cam`, `spotCam`, `secPt`, `force(spec)` (tests), `corners()`, `focus` (the subject's point: where a depth of field would focus), `target` (the aim point: the shadow box follows it), `camS`, `shot`, `setShot(s)`, `pickShot(force)`, `shotLog`, `featLog`, `snap()`, `buildGrid()` (a new course), `reset()` (a new race), `state()`.
+- It moves `VIEW.cam` every frame: position, `lookAt`, `fov` (portrait phones get a wider vertical field) AND `near` (0.1 onboard, 0.5 otherwise): a post chain must read them every frame.
 
 ### race3d.js (lead)
 
-`supported()` (WebGL present) and `create(host, hooks {onLap(n), onFinish(), lost()}) -> V`. The API `game.js` uses is in the file's header: `V.setRace(o)`, `V.gate()`, `V.drop()`, `V.lap(result)` -> show,
-`V.hold(o)`, `V.standings(order, cnt, lap)`, `V.setFlag(k)`, `V.setRed(seat)`, `V.markOut(seat)`, `V.show(on)`, `V.resize()`, `V.skip()`, `V.lapTime()`, `V.yellowAt(sector)`, `V.yellowOff()`, `V.stop()`, `V.dispose()`.
+`supported()` (**WebGL2 is required** — the riders' skinning needs `texelFetch` on a float data texture; `?gl=0` in the page's address forces the 2D fallback) and `create(host, hooks {onLap(n), onFinish(), lost()}) -> V`. The API `game.js` uses is in the file's header: `V.setRace(o)`, `V.gate()`, `V.drop()`, `V.lap(result)` -> show,
+`V.hold(o)`, `V.standings(order, cnt, lap)`, `V.setFlag(k)`, `V.setRed(seat)`, `V.markOut(seat)`, `V.show(on)`, `V.resize()`, `V.skip()`, `V.lapTime()`, `V.yellowAt(sector)`, `V.yellowOff()`, `V.stop()`, `V.dispose()`; since the eight specialists:
+**`V.warm()`** -> Promise (compiles every shader of the scene now: `game.js` calls it after every `setRace`, while the gate shows), `V.qualityNames()`, `V.qualityLabel(name)`, `V.quality()`, `V.setQuality(name)`, `V.bench({seconds})` / `V.benchResult()` (section 9.4), **`V.camModes()`, `V.camMode(id?)`, `V.camNext()`, `V.camReplay()`, `V.camState()`** (the camera presets and the replay: the game's phone and remote buttons call them; section 3 cams).
 Tools for tests: `V.state()`, `V.stats()` (draw calls, triangles, frame times, pixel ratio, memory), `V.shot(name, o)`, `V.release()`, `V.advance(sec, noDraw)` (steps in 1/60 s; deterministic), `V.sweep(sec)`, `V.proj(seat)`,
 `V.renderNow()`, `V.camInfo()`, `V.setShadows(on)`, `V.fixPR(p)` / `V.prFixed` (freeze the pixel-ratio ladder), `V.timeScale`, `V._dbg` (`riders()`, `fx()`, `state()` = the per-rider state array, `gate()`, `world()`, `marshal()`, `target()`, `sees()`, `dirt()`, `hf()`, `yellow()`, `shot()`, `pos()`, `clearance()`).
 `V.renderer`, `V.scene`, `V.camera` are public. (`V._dbg.riders().part` is now `V._dbg.fx().part`.)
@@ -218,24 +251,26 @@ Zones (find them with a search for `[hook:`); each role may change only its own 
 | perf | `create()` top | `QUAL = createQuality(...)` (with `resized` and `redraw` callbacks), `renderer = QUAL.renderer`, `lastRace` / `builtTier` |
 | perf | `setRace` | `lastRace = o`; Reduce-effects change (`LOOK.setShadows(QUAL.shadowsWanted(LO))`); the world cache `key` (+ `QUAL.buildKey(LO)`); `buildWorld(C, look, QUAL.options(LO))` and `QUAL.fitTextures(world.root)` |
 | perf | `tick`, `V.resize` | `QUAL.adapt(dt, ms)` (the ladder, the benchmark, the riders' level of detail, the GPU sample); `QUAL.resize(w, h, W, H, LO)` |
-| cams | `create()` | `VIEW` (the live state) and `CAMS = createCams(VIEW)` |
+| cams | `create()` | `VIEW` (the live state, section 6), `CAMS = createCams(VIEW)` and the view's `V.camModes()`, `V.camMode(id?)`, `V.camNext()`, `V.camReplay()`, `V.camState()` |
 | cams | `setRace` | `CAMS.buildGrid()` after the world is built; `CAMS.reset()` |
 | cams | `step` | `CAMS.director(dt)`, `CAMS.camera(dt)` |
 | cams | `beginCrash` | the cut to the crash camera (`CAMS.pickShot(true)`) |
 | stadium | `setRace` | the flagger and the marshal are built; the big screen shows 0 / laps |
 | stadium | `V.lap`, `step` | the big screen's lap number |
-| stadium | `step` | `flagger.wave`, `marshal.wave`, `world.frame(dt, tw, cam)` |
+| stadium | `step` | `flagger.wave`, `marshal.wave`, `world.frame(dt, tw, cam, T, lap, len, leaderNum)` (the video boards show the race clock, the lap and the leader's number) |
 | dirt | `step` | `world.dirt.frame(dt, RST)` |
-| fx | `setRace` | the old `FX` is disposed; `FX = createFx(...)` is added to the scene |
-| fx | `step` | `FX.step(dt)` |
-| fx | `rider()` (two zones) | the effects inputs `st.roost`, `st.throttle`, `st.slip` (above `poseRider`); `FX.rider(st, dt)` (the last line) |
-| fx | `beginCrash`, `crashPose` | `FX.crashStart(...)`, `FX.crashStep(...)` |
-| bike | `rider()` | extra pose inputs for the bike (empty): compute any new `st.*` field `poseBike` needs, from the state above it |
-| rider | `rider()` | extra pose inputs for the rider (empty) |
-| rider | `step` | `commit(R)` |
+| fx | `setRace` | the old `FX` is disposed (`FX.dispose()`); `FX = createFx({C, look, cam, ...QUAL.options(LO)})` is added to the scene |
+| fx | `step` | `FX.focus(leaderPos, personPos)` (race state only), `FX.step(dt)` |
+| fx | `rider()` (two zones) | `FX.inputs(st, dt)` (above `poseRider`: `st.throttle`, `st.slip`, `st.roost`, `st.mud`); `FX.rider(st, dt)` (the last line) |
+| fx | `beginCrash`, `crashPose` | `FX.crashStart(f, gy, r)`, `FX.crashStep(...)` |
+| bike | `rider()` | the bike's inputs: `st.lodD` (distance to the lens scaled by the field of view, x2.6 when off screen), `st.lodCut` (the camera jumped more than 3 m: choose the level of detail afresh), `st.mud` (+0.00058 a metre ridden, x3.5 in sand, + up to 0.03 on a hard landing; the ONLY writer of the distance part) |
+| rider | `rider()` | nothing written (the rider branch's time-based `st.mud` rise was removed in the merge: `st.mud` has one physical source, the `bike` zone, plus the roost in `FX.inputs`); the skinned riders' shader browns the boots, legs, gloves, chest and helmet front with `st.mud` |
+| rider | `step` | `commit(R, cam, dt)` (the level of detail by depth in view; every instance buffer and the bone texture are uploaded) |
 | harness | `create()`, right after the view object `V` | `V.camHook = null` (frozen: the capture harness' camera, section 9) |
 | harness | `step`, right after the cams zone | the `V.camHook` call: when the harness set a camera it replaces the director's position, look-at point (`CAMS.target`) and field of view; nothing happens in the game (frozen) |
 | perf | `create()`, after `V.fixPR` | `V.qualityNames()`, `V.qualityLabel()`, `V.quality()`, `V.setQuality(name)`, `V.bench(o)`, `V.benchResult()`, `QUAL.bindLook(LOOK)`, `QUAL.attach(view)`; the harness, `perf.js`, `shots.js` and `finish.js` use them (section 9.4) |
+
+Lead lines for the look (not zones): `createLook(renderer, {shadows, lo, tv, weak, host})`, `LOOK.apply(C, look, world, {lo, tv})` after the world is built, `LOOK.upgrade(R.grp)` + `LOOK.receive(R.grp)` after `createRiders`, `LOOK.frame(cam, CAMS.target, dt, tw, subjectDist())` after the camera (the rider nearest the middle of the picture within 34 m is the depth of field's subject), `LOOK.render(scene, cam, tw)`, `LOOK.dispose()` in `V.dispose`.
 
 Other lines that touch a module (lead's, ask for a change through REQUESTS): the shot tweaks in `V.drop`, `V.gate`, `V.standings`, `placeMarshalS` (uses `CAMS.shot`, `CAMS.sees`, `CAMS.terrainAt`), the sky / shadow-box lines after the cams zone, `tags()`
 (number tags: placement and size on screen), `crashPose` (the fall's trajectory and pose script), `surfY` / `trackXZ` (where the dirt is, for fallen riders).
@@ -256,14 +291,16 @@ Read it; write only in your zone and only fields your zone computes. SI units, m
 | `pitch` | bike pitch, + = nose up (includes weight transfer under throttle and brakes) |
 | `lean` | bike roll, + = lean right (includes the air whip on the big jumps); the matrix angle |
 | `v`, `acc` | speed along the track (m/s); its derivative (m/s^2) |
-| `throttle` 0..1, `slip` 0..1, `roost` | derived in the `fx` zone: the throttle, the rear wheel digging, how hard it throws dirt (`roost` is the old particle demand; 6 at the gate drop) |
+| `throttle` 0..1, `slip` 0..1, `roost` | derived by `FX.inputs` (the `fx` zone): power at low speed (acceleration x a low-speed factor + the gate launch), the rear wheel digging, how hard it throws dirt (`roost` 0..8) |
 | `lat`, `s`, `D`, `onStart`, `k`, `tag`, `sand`, `gate` | lateral position on the track (+ right, m); distance along the lap (m); race distance (m); on the start path; track curvature (1/m, + right); the section (`"whoops"`, `"rhythm"`, `"jump"`, `"bigjump"`, `"rollers"`, ...); sand 0..1; riders still at the gate |
 | `air`, `landed`, `impact`, `hAir` | an axle is on a jump arc; true on the frame the bike touches down; the downward speed just before it (m/s, 0 unless `landed`); the frame's height above the ground (m) |
 | `gF`, `gR`, `tF`, `tR`, `gy` | the ride line under the front / rear wheel (with the whoops skim), the terrain under them, the lower of the two |
 | `compF`, `compR` | suspension compression, fork / shock (m, + compressed, -0.12..0.28) |
 | `spinF`, `spinR` | accumulated wheel spin (rad) |
 | `stand`, `dab`, `crouch` | standing on the pegs 0..1; the inside foot out -1..1 (+ right); the crouch under load |
-| `mud` | 0..1, kept between frames; nobody raises it yet (the fx / bike / rider specialists may) |
+| `mud` | 0..1, kept between frames: +0.00058 a metre ridden (x3.5 in sand, + up to 0.03 on a hard landing) in the `bike` zone, + riding in another rider's roost in `FX.inputs` (clears about 1% a second). The bike's lower parts and the rider's boots, legs, gloves, chest and helmet front brown with it |
+| `lodD`, `lodCut`, `bv`, `bq`, `cp` | the `bike` zone's own: the distance that picks the bike's level of detail, "the camera jumped", scratch vectors |
+| `steer` | optional: the bars' angle (rad, + right); when absent `steerAngle` works it out from `k` and `air` (the hands follow it) |
 | `crash` | `null`, or `{kind: "remount" \| "out", t: seconds since the fall, hx, hy, hz: the rider's hip}` |
 | `body`, `limbs` | reserved for `poseRider`'s crash pose (null in normal riding) |
 
@@ -271,7 +308,7 @@ Read it; write only in your zone and only fields your zone computes. SI units, m
 
 Getters on an object `race3d.js` owns (always the current value; never assign): `VIEW.cam`, `VIEW.C` (the course), `VIEW.world`, `VIEW.rs` (the riders' records), `VIEW.gate`, `VIEW.marshal`, `VIEW.T` (the race clock, s), `VIEW.lapNo`,
 `VIEW.lenLaps`, `VIEW.mode` ("gate" | "race" | "idle"), `VIEW.holdInfo` (a war: `{war: [seat...]}`), `VIEW.yellow` (`{lap, s0, len, s}`), `VIEW.lapPlan` (`{n, win, over, last, rank0}`), `VIEW.meSeats`, `VIEW.W`, `VIEW.H` (canvas size),
-`VIEW.leaderIdx()`. A rider record `rs[i]` (read-only for the cameras): `gone, crash ({kind, T, D, ...}), crashPlan, onStart, D, s, v, k (index), seat, pos (Vector3: the hip point, +1 m for a bike), th, gy, bikeP, lapN`.
+`VIEW.leaderIdx()`, and the read-only views the cameras' replay and tests need: `VIEW.st` (the per-rider state), `VIEW.R` (the riders' set: its meshes, `bones`, `boneTex`), `VIEW.FX`, `VIEW.flag`, `VIEW.finished`, `VIEW.tv`, `VIEW.replayOK` (false on the FIRE TV tier). A rider record `rs[i]` (read-only for the cameras): `gone, crash ({kind, T, D, ...}), crashPlan, onStart, D, s, v, k (index), seat, pos (Vector3: the hip point, +1 m for a bike), th, gy, bikeP, lapN`.
 A camera that needs more of the view's state asks for a new getter (REQUESTS).
 
 ## 7. Couplings to keep in step (the split did not remove them)
@@ -283,6 +320,10 @@ A camera that needs more of the view's state asks for a new getter (REQUESTS).
 - The riders' atlas (rider) draws three cells per rider (plate, jersey back, tag) from `list[k] = {num, color, accent, red, me}`; `drawPlate` (bike) draws the plate's face.
 - Opaque parts are drawn in material-creation order (three.js sorts by `material.id`); exact depth ties between two parts flip with it. The split keeps the original order (the bike's materials, then the rider's).
 - Everything three.js builds draws its UUID from `Math.random()` (4 calls each): one more Group, material or texture shifts a seeded `Math.random` by that many calls. The capture harness reseeds after the world is built (section 9).
+- The rider's hands and knees follow the bike's own numbers: `BIKE.GRIP` / `PEG` / `SEAT` / `KNEE`, the bars' turn `steerOf(st)` (`steerAngle` x `BIKE.steerGain`) and the same turn for a plain point, `steerXYZ`, must stay the one rotation `steerMatrix` draws (bike) and `poseRide` aims at (rider).
+- The dirt wraps `MXWar.Course.ground` once (`installGround`): the wheels, the camera's dirt tests, the fallen riders and the clods all see the dirt as drawn; the cameras' `heightGrid` is built AFTER the world (`CAMS.buildGrid()` in `setRace`) so it samples the wrapped function.
+- The stadium's `ctx.bowlY(x, z)` (stands) and the cameras' `inFloor` (the e = 4 superellipse inside the bowl's e = 6) are the two halves of "no camera inside the stands"; the harness' own poses (B2) must be chosen against `bowlY` too (section 9.2).
+- The replay (cams) records the riders' groups generically: a new per-instance attribute on a rider mesh is recorded by itself (any InstancedBufferAttribute of a mesh under `R.grp`); a new texture or uniform the riders' shader reads per frame (as the bone texture) must be added to `recBuild` / `replayFrame`.
 - Particles are `FX.group`, a separate Group in the scene (they used to live in the riders' group). They are disposed and rebuilt with every race.
 
 ## 8. Behaviour that must keep working
@@ -318,7 +359,7 @@ frame (the view's blob shadows and shadow box read the previous tick's camera), 
 | id | view | t (s) | camera | what it shows |
 |---|---|---|---|---|
 | B1 | cover chase | 41.5 | rig on seat 15: back 3.5, up 1.5, side 0.9, aim {ahead 10, up 1.2, side -0.4}, fov 70 | the cover's framing: low behind a rider, riders ahead, the stadium lights in frame |
-| B2 | stadium wide | 125 | eye [0, 33, 92] looking at [0, 0, 4], fov 50 | the whole course and all 22 riders (the broadcast / stadium_aerial target) |
+| B2 | stadium wide | 125 | eye [22, 18, 63] looking at [-6, 0, 2], fov 48 (MOVED 2026-10-17 from eye [0, 33, 92] at [0, 0, 4], fov 50: that eye is inside the new south upper deck, `bowlY(0, 92)` = 32.4 m there) | an elevated broadcast view from the lower stands, 6.6 m above the seats (`bowlY(22, 63)` = 11.4): the course and the pack across the floor, the far stands and the light rigs above, like `Reference_Crops/broadcast_overview` |
 | B3 | whoops | 46 | eye [-8, 2, -12] at [8, 1, -5], fov 42 | the first-lap pack skimming the whoops head-on |
 | B4 | jump | 77.5 | eye [6, 1.1, 34] at [10, 3.2, 19], fov 45 | six riders in the air over the triple |
 | B5 | gate | 1.6 | eye [-60, 2.2, 24] at [-45, 0.9, 33], fov 50 | the launch from the start gate |
@@ -326,7 +367,7 @@ frame (the view's blob shadows and shadow box read the previous tick's camera), 
 
 Camera specs (`DEMO.camera(spec)`, a plan's `cam`): a rider rig `{seat: "you" | "lead" | "crash" | N | {rank: k}, back, up, side, aim: 8 | {ahead, up, side}, fov, damp}` (metres along / across the rider's heading, + side = the rider's right; `damp` 0 = rigid) or a world pose
 `{eye: [x, y, z] | at: {s, lat, h}, target: [x, y, z] | look: {s, lat, h} | follow: {seat, up, damp}, fov}` (`at` / `look`: course distance s in metres, lat across, h above the dirt); `null` = the view's own director. The view applies it through `V.camHook` (section 4, zone `harness`).
-Known limits: a camera inside the stadium bowl clips the near stands (a dark band; the extra `B2b` is such a pose, the plan's `B2` is clear); `DEMO.step(0, true)` (a redraw) moves the clock by one microsecond, so use it to grab a frame, not inside a plan;
+Known limits: a camera inside the stadium bowl clips the near stands (a dark band): choose a pose against `world.ctx.bowlY(x, z)` (the eye at least 2.5 m above `y`); the old B2 / B2b / R2 eyes were such poses and were moved (`before/README-B2-moved.txt`, `bookmarks.v1-before-D2.json`); `DEMO.step(0, true)` (a redraw) moves the clock by one microsecond, so use it to grab a frame, not inside a plan;
 the runner's CPU cap makes frame TIMES noisy, never the pictures.
 
 ### 9.3 Your cycle, with the exact commands
@@ -392,15 +433,16 @@ Four tiers, names for people and for tools: `firetv` (FIRE TV), `balanced`, `hig
 | `fx.particles` (ring buffer size) | 160 | 360 | 520 | 900 |
 | `crowd.detail` / `crowd.anim` | 0.35 / false | 0.7 / false | 1 / true | 1 / true |
 | `scenery.trees` / `scenery.terrain` | 0.4 / 0.5 | 0.7 / 0.8 | 1 / 1 | 1 / 1 |
-| `riders.full` / `mid` / `near` m / `far` m | 4 / 6 / 14 / 40 | 8 / 8 / 22 / 60 | 12 / 10 / 30 / 80 | 22 / 0 / 60 / 120 |
+| `riders.full` / `mid` / `near` m / `far` m (the perf helper `createLod`; nobody consumes its levels yet) | 4 / 6 / 14 / 40 | 8 / 8 / 22 / 60 | 12 / 10 / 30 / 80 | 22 / 0 / 60 / 120 |
+| **`riderHi`** (riders drawn as the full 3.9k-triangle model, by depth in view) / **`bikeLod`** (m: LOD 0 -> 1 [-> 2]) / **`dirtTier`** / **`replay`** (the cams' 7 s ring, about 25 MB) | 3 / [8] / lo / false | 6 / [7, 30] / hi / true | 8 / [9.5, 36] / hi / true | 12 / [12, 45] / hi / true |
 | `tex.max` px / `aniso` / `budgetMB` | 512 / 1 / 24 | 1024 / 4 / 48 | 1024 / 8 / 96 | 2048 / 16 / 192 |
 | budget: draw calls / triangles / geometry MB (whole frame) | 46 / 110k / 6 | 60 / 200k / 10 | 90 / 350k / 16 | 140 / 600k / 32 |
 
 **Rules for builders.**
 - Read `q.lo` for "the simple world" exactly as today (FIRE TV and Reduce effects). New detail goes behind a tier flag: crowd density and animation (`q.crowdDetail`, `q.crowdAnim`), trees and terrain (`q.trees`, `q.terrainDetail`), particle ring size (`q.particles`), texture size (`q.texMax`: choose the 512 / 1K / 2K file or canvas size from it), anisotropy (`q.aniso`, applied by `setAniso` at texture creation).
 - Anything that moves at run time reads `q.live` / `QUAL.live` EVERY FRAME, not at build time: `live.particleScale` multiplies the roost / dust emission, `live.crowdAnim` stops the crowd's animation, `live.post` switches bloom / depth of field / the whole chain (a chain that is `on` only when `live.post.on`), `live.shadows` is the real shadow map (the view toggles `LOOK.setShadows` itself, and resizes the shadow map to `live.shadowSize`).
-- Riders: draw the `q.riderLod.full` nearest riders in full, the next `mid` simplified, the rest minimal (`QUAL.lod.level[i]` / `st.lod`; hysteresis built in: a level changes only after 8 frames of asking). A bike or rider mesh is one instanced draw call per part type: keep it that way, draw calls (CPU) matter more than triangles on a Fire TV.
-- Budgets (whole frame: the shadow pass counted): the last row of the table. `V.stats().calls / tris`, `DEMO.stats()` and the bench panel show them; `Q.budgetCheck(calls, tris)` says ok / over. Textures: `Q.memory(scene)`; the riders' number atlas (2048x640, 7 MB with mipmaps) is 43% of today's texture memory and larger than the FIRE TV tier's 512: it should follow `q.texMax`.
+- Riders: the integrated riders choose their own detail by depth in view (`q.riderHi` nearest in-view riders in full, the rest the thin skeleton; `R.stats` {hi, lo}) and the bikes theirs (`q.bikeLod` distances, 8% hysteresis); `QUAL.lod.level[i]` / `st.lod` (the perf helper's own levels) is computed but nobody reads it. A bike or rider mesh is one instanced draw call per part type: keep it that way, draw calls (CPU) matter more than triangles on a Fire TV.
+- Budgets (whole frame: the shadow pass counted): the last row of the table. `V.stats().calls / tris`, `DEMO.stats()` and the bench panel show them; `Q.budgetCheck(calls, tris)` says ok / over. Textures: `Q.memory(scene)`; the riders' number atlas (2048x640, 7 MB with mipmaps) was 43% of the texture memory and larger than the FIRE TV tier's 512: **on the FIRE TV tier it is now kept at half size (1024x320, 1.7 MB: that tier's textures went from 10.4 MB to 5.4 MB)**, the other tiers keep 2048x640.
 - Do not change `renderer.setPixelRatio` / `setSize` yourself: the ladder owns them (it also resizes the post chain through `LOOK.resize` and redraws the frame at once, so a resolution step never shows a blank frame).
 
 **How a tier is chosen.** (1) `?quality=firetv|balanced|high|ultra` (or `?tier=`; on the capture page `?q=`; the `data-quality` attribute of `<html>`; `V.setQuality(name)`). (2) A stored choice for this GPU string (localStorage `mxwar.quality.v1`, written after 20 s of calm and on every manual / auto change).
@@ -582,3 +624,86 @@ Materials made with the kit take the tier that is current when `buildWorld` / `c
 So: `medium` costs +0.6 ms at 720p and +5 ms at 1080p; `high` costs +9 ms at 720p and +25 ms at 1080p (depth of field about 3 / 10 ms of it, the depth texture and haze / motion blur about 3 / 4 ms): `high` is a laptop / tablet tier at 720p-class render sizes; at 1080p the adaptive ladder must lower the pixel ratio (the chain follows it: it rebuilds its targets
 from the drawing buffer, about 50 MB at 1080p). The whole-frame counters: high 52-58 draw calls (the base 43), medium 51-57, stick 30; triangles do not change (198.2k high, 100.9k stick). The official `perf.js` rows (contended run, calibration under 150): high 960x540 22.6 ms (the base 21.1), high 1920x1080 61.3 ms (the base 23.8), stick 960x540 17.9 ms, stick 1920x1080 18.4 ms.
 Nothing here is a Fire TV or a phone measurement: the Stick runs `stick` (no post chain) until a device says otherwise.
+
+## 12. The integrated build (the merge step, 2026-10-17: what is on `mxvis` now)
+
+Written by the integration step (label `integrate:merge`, from 18:18). Sections 3-7 above already describe the integrated modules; this section is what the merge decided, changed, tested and left open.
+
+### 12.1 What merged, in which order, and how
+
+`git log --oneline mxvis`: the base `ac4b1bf` -> perf (8 commits) -> lead (9) -> dirt (4) -> stadium (5) -> bike (6) -> rider (5) -> fx (6) -> cams (6) = 49 specialist commits, each CHERRY-PICKED in that order (`git cherry-pick ac4b1bf..mxvis-<role>`): a LINEAR history, no merge commit, each owner's version winning in its own files; then the integration commits (12.2).
+- ONE conflict in the whole series: `CONTRACT.md`, the dependency lines (lead's `r3d-look.js <- util, lead-env, lead-post` vs perf's `r3d-quality.js <- util, perf-bench`): both kept. `race3d.js` auto-merged on every pick (the hook zones did what they were for); `r3d-util.js`, `sw.js`, `LICENSES.md` merged without a conflict (different hunks).
+- A slip of the integration, caught at once: the first resolution of that conflict was committed WITH its markers (a regex that did not know CRLF); the lead's contract commits were reset and re-picked (`git grep` finds no marker in the tree). Working copies are CRLF (`core.autocrlf`), the index is LF.
+- The lead's dry run (`BG_mxV-lead-int`, branch `mxvis-lead-int`: merge commits, one conflict) agreed with this result and was deleted after the merge was committed and tested; the specialists' branches and worktrees (`BG_mxV-<role>`) are untouched.
+
+### 12.2 What the integration commits changed
+
+| File | What |
+|---|---|
+| `r3d-quality.js` | the tiers carry `riderHi` (3 / 6 / 8 / 12), `bikeLod` (`[8]` / `[7,30]` / `[9.5,36]` / `[12,45]`), `dirtTier` (lo / hi / hi / hi), `replay` (false on FIRE TV); `Q.options(LO)` returns them (9.4 table) |
+| `r3d-riders.js` | `createBike(n, lo, mk, opts)`: the bike's level-of-detail distances come from the tier; **the lead's material kit on the riders' gear**: cloth = `MeshStandardMaterial` (rough 0.9, env 0.5), helmet = `MAT.gloss` (clear coat, reflects the floodlights), the kit tier decides (low / Reduce effects keep Lambert / Phong); the riders' own rim light lowered to 0.16 / 0.08 where the kit is on (the lead's rim and the bloom do that work); **the number atlas is kept at half size on the FIRE TV tier** (`q.texMax` 512: 1024x320, 1.7 MB instead of 7 MB; `setRed` redraws it at the same scale) |
+| `r3d-rider-pose.js`, `r3d-bike.js` | **hands on the steered grips** (`steerOf(st)` + the new `steerXYZ`), `BIKE.steerGain = 1`, **knees pressing on `BIKE.KNEE`** (the leg IK's pole turns toward it), `BIKE.SEAT` kept |
+| `race3d.js` | `supported()` = WebGL2 and not `?gl=0`; `VIEW.replayOK`; **`st.mud` has ONE physical source** (the bike zone: distance, sand, landings) + the roost in `FX.inputs`: the rider branch's time-based rise toward 1 (50 s) was removed, it would have caked every bike and rider after two laps on top of the bike's own build-up |
+| `game.js` | `webgl()` = WebGL2 + `?gl=0` (the 2D track); `V3.warm()` after every `V3.setRace` (compile every shader while the gate shows). Nothing else: the engine, saves and controls are untouched |
+| `sw.js` | `ASSETS` lists every new module and asset: `r3d-perf-bench`, `r3d-dirt-png`, `r3d-dirt-relief`, `assets/dirt/dirt-tiles(-lo)`, `r3d-stadium-bowl`, `r3d-stadium-art`, `r3d-bike-model`, `r3d-rider-model`, `r3d-rider-pose` (the lead's entries were in): checked against the import graph from `race3d.js`; `VERSION` NOT bumped |
+| `r3d-util.js` | `setAniso` caps at 16 (ULTRA asks for 16) |
+| `r3d-stadium-bowl.js`, `r3d-look.js` | **HDR glow sprites**: a `uHdr` gain (2.5 with the bloom chain, 1 on the plain frame): the floodlights bloom and star on HIGH / BALANCED, no clipped blobs on the TV tier. The `pow(vF, ...)` guards are already `max(vF, 0.0)` |
+| `r3d-cams.js` | `wideSpot` stands on the stadium's own seats (`ctx.bowlY`); **every eye is kept at least 2.5 m above the stands**; **the replay records the skinned riders** (bone matrices, per-instance attributes, counts, colours), 30 Hz at most, and hides the sprite clones; nothing is recorded when `VIEW.replayOK` is false |
+| `r3d-lead-post.js` | the depth-of-field gather clamps a bright tap (2.5 instead of 64), a lighter luminance weight and a far blur of at most 30% (was 42%): the thin light strings no longer glitter (director note D5) |
+| `r3d-track.js` | **coloured tuff blocks** in the CEO's palette (yellow, red, blue, white), every albedo at 0.6 or less in linear light (they were near-white and glowed neon under the key); plain colours, no lettering, no brand |
+| `demo-bookmarks.json` | **B2, B2b and R2 moved out of the stands** (12.3) |
+| `CONTRACT.md` | ownership, dependencies, every module block of section 3, the hook-zone rows of section 4, the per-rider state (5), the view's getters (6), the couplings (7), the B2 pose (9.2), the flag table (9.4), this section |
+
+### 12.3 B2 (the stadium wide) was INSIDE the new stands: moved (director note D2)
+
+The harness' B2 eye `(0, 33, 92)` looking at `(0, 0, 4)`, fov 50 stands inside the new south upper deck (`bowlY(0, 92)` = 32.4 m: the eye is 0.6 m above the seats, among the upper deck's rows and fascia): the lower 40% of the frame was a black band of smeared crowd texture. The new pose is **eye `(22, 18, 63)`, target `(-6, 0, 2)`, fov 48** (6.6 m above the seats under it: `bowlY(22, 63)` = 11.4; an oblique elevated view across the floor like `Reference_Crops/broadcast_overview`, chosen from six candidates drawn on the merged build: `integrate/b2cand/`).
+B2b (the south-west oblique) became eye `(-16, 17, 62)`, target `(4, 0, 2)`, fov 46; R2's first cut follows the leader from the new B2 eye. The master plan `BG_audit/sprint/mxvis/bookmarks.json` and `mxwar/demo-bookmarks.json` carry the move (a `moved` field with the old and the new pose; the previous plan is `bookmarks.v1-before-D2.json`); **the BEFORE frames of B2 were re-captured from the base commit `ac4b1bf` with the same new pose** in a temporary worktree (removed), so every before / after pair still has identical cameras (`before/README-B2-moved.txt`; the old-pose frames are in `before/old-pose-B2/`). The before-manifests, the perf rows and the old R2 clip still describe the old pose.
+The cameras (`CAMS`) now keep every eye above `bowlY + 2.5 m` themselves; the harness' own poses must be chosen against `bowlY` (probe: `integrate/tools/probe-bowl.js`: the south stand is 2 m high at the wall (z 46), 9.5 m at z 61, 13 at z 66, 18 at z 76, 25 at z 81, 32 at z 91, 48.5 at the roof).
+
+### 12.4 The reports' REQUESTS: applied, skipped, and why
+
+| Request | Result |
+|---|---|
+| sw.js lists every new module (all) | applied (12.2) |
+| `supported()` requires WebGL2 (rider) | applied; `?gl=0` added to test the fallback |
+| `riderHi` / `bikeLod` / `crowdDetail` / `dirtTier` through `Q.options` per tier (rider, bike, stadium, dirt) | applied (`crowdDetail` was there already) |
+| hands follow the steered grips, `steerGain` 1, `SEAT`, `KNEE` (bike) | applied |
+| `V.warm()` while the gate shows (perf) | applied in `game.js` (after `setRace`: the shaders are compiled then; the line-up sheet itself has no scene yet) |
+| glow sprites HDR; `max(vF, 0.0)` (lead) | applied / already in |
+| lane blocks at albedo 0.6 or less, in the CEO's colours (lead, stadium, director D5) | applied |
+| setAniso cap 16 (perf) | applied |
+| `ctx.bowlY` in the cameras (stadium, lead, cams) | applied (eye clamp + wide spot); `ctx.bowl.prof` / `ctx.solids` not published: the cameras do not need them any more |
+| `CONTRACT.md` for every new API (bike, cams, fx, dirt, stadium, rider, perf, lead) | applied |
+| the replay must copy the riders (cams, rider) | applied: the skinned riders' bone matrices and instance attributes are recorded (they would have shown the LIVE riders on recorded bikes) |
+| `st.mud` has one writer (bike) | applied: the rider zone's time-based rise was removed |
+| materials from the kit on suits, gear, plastics (lead, director D3) | riders' cloth and helmet: applied. The bike's plastics keep their own shader (livery, mud, baked AO) and their own environment map: switching to `scene.environment` (one environment instead of two) is open |
+| Settings row "Graphics" and "Run graphics benchmark" (perf); camera and replay buttons, a REPLAY badge, the cards window out of the chase framing (cams) | SKIPPED: `game.js` UI work of the game-integration step (the view side is ready: `V.setQuality`, `V.camNext`, `V.camReplay`, `V.camState`) |
+| aim the corner line at `relief.lineAt` (dirt) | not needed: the ruts use the same formula (`-sign(k(s+9)) * hw * 0.36`) as `race3d.js` |
+| Anaheim layout overlap (dirt, director D9) | LOGGED, not fixed: moving the connector changes the lap time and with it the whole seeded race (every bookmark time, the engine's lap plans), which would break the identical before / after cameras (D1) |
+| remount pose blend (rider) | open (one-frame pose change when the rider remounts) |
+| a depth-writing core for the dust so the DoF blurs it (fx, lead) | open |
+| bike: livery art, handguards, cables; rider: a baked jersey / pants texture atlas, corrective shapes | open (director D3: the biggest single win left) |
+
+### 12.5 Tests on the merged tree (this laptop, Intel UHD 0x46D2 via ANGLE / D3D11, the runner's 3 lanes shared with other work: absolute times are noisy; the Fire TV Stick was NOT measured)
+
+- lint (`lint-modules.js`, 20 modules): 0 problems. Engine tests (`run-engine-tests.js`): 5 of 5 pass.
+- `finish.js`, the whole 24-lap race, 22 riders: **high ALL CHECKS PASSED** (127 s wall; 4 crashes with remounts, 4 yellow laps, both flags, order = the engine's standings, 22 places once, 0 page / console errors, 0 warnings, no leak: 50 geometries / 33 textures at the first draw, 96 / 37 at the end; heap 77 MB; calls 47-90, triangles 213k-1.16M); **firetv ALL CHECKS PASSED** (53 s; calls 24-45, triangles 82k-163k; 27 -> 45 geometries, 20 -> 24 textures; heap 24-26 MB).
+- `determinism.js`: IDENTICAL (6 frames byte-identical alone and in one session, B2 included).
+- The REAL game page: `game-flow.js` on a phone (390x844, real touch): setup -> season -> line-up -> 3D gate -> drop -> 8 real-time laps (clock 1.00) -> results places 1..20, 0 errors. `tv-flow.js` (`?tv=1`, REAL KEYS: Enter / ArrowRight / ArrowDown, focus on the TV ring) at 1920x1080 with `quality=firetv` (the Stick's configuration: drawn at about 900 px, upscaled) and at 960x540 with the automatic tier: both to the checkered flag and the results sheet, places 1..20, 0 errors (the 960x540 run started BALANCED and the ladder walked to its floor and auto-demoted to FIRE TV under the shared CPU: that mechanism works). `gl0-flow.js` (`?gl=0`): the 2D track runs, no 3D view is created, 0 errors.
+- The ten older scenarios (`cap.js`, GPU kit): stadium lap, outdoor RedBud, speedway hybrid, the CRASH LAP (a rigged double war: seat 7 crashes and remounts; the yellow lap; a rigged triple war: seat 9 crashes out and walks off), Reduce effects, reduced motion, portrait phone, a restored race (standings, hold, flags, skip), three races in one view, a TV: all ran to the end, 0 console logs.
+- Quality tiers (`tiers.js`): all four tiers drawn in one page (B1 / B2 whole-frame counters, memory, the look's tier: firetv -> look `low` (`stick` on a TV), balanced -> `medium`, high -> `high`, ultra -> `high`); a MID-RACE switch (firetv -> ultra -> balanced -> high -> firetv through `V.setQuality`) raises no error and the next `setRace` builds the new world.
+- The replay (`diag1.js`): a forced replay of seat 19's crash: the ring holds 211 frames (25.8 MB on high), 8 replay frames drawn, the riders sit on their bikes (before the fix they would have been drawn at their LIVE places), 0 errors. The AUTOMATIC trigger (the person's own crash) did not happen in the seed-22 race and is untested in a real race.
+- Frame cost (`perf.js`, lap-1 pack at t = 20 s, pixel ratio 1, `integrate/perf/perf.md`): `bench draw+sync best-30 ms (calls / triangles)`: firetv 960x540 15.0 (34 / 98.7k), 1920x1080 33.8; balanced 31.0 (58 / 215.9k), 1080p 56.5 (THROTTLED row); high 34.5 (60 / 245k; THROTTLED row), 1080p 68.8; ultra 36.6 (75 / 334.5k), 1080p 72.0. The base's HIGH was 21.1 / 23.8 ms (43 calls / 198k): the merged HIGH costs about 1.6x at 960x540 and 2.9x at 1080p. Cover chase B1 (`tiers.js`): firetv 41 calls / 108k triangles, balanced 86 / 442k, high 89 / 617k, ultra 88 / 768k (the base: 49 / 199k).
+- D7 numbers (`d7.js`, B1 held, the FIRE TV tier with the look's lite chain = bloom + grade + FXAA + the full rig): +5.4 ms at 960x540 (18.3 -> 23.7) and +6.3 ms at 1920x1080 (20.3 -> 26.7) on this iGPU, not the lead's +0.6 ms at 720p: the lead's figure was an uncontended minimum with the old rig; a quiet run and a real Stick are needed before the TV tier gets the chain. Until then the FIRE TV tier keeps no post chain (the look's `stick` / `low` tier).
+
+### 12.6 What is still broken or short (honest list, biggest first)
+
+1. PERFORMANCE: HIGH and ULTRA are far from 60 fps on this iGPU (balanced 31 ms at 960x540, high 69 ms at 1080p) and the whole-race peak is 1.16M triangles at a wide shot: the director's note D6 is NOT met. Where the weight is: the terrain's LOD 0 chunks (+81k near the lens), 21.8k-triangle bikes within 9.5 m, the shadow pass (every instanced body twice), the crowd cards, the post chain. `Q.lod` / `RST[i].lod` is computed but nobody consumes it (the riders choose by depth themselves). The Fire TV Stick is unmeasured by anyone: every FIRE TV statement is an estimate.
+2. The riders are still mannequins next to the cover's athletes: vertex colours (no atlas, no seams, no dirt streaks), fists, huge white boots, a ball helmet with a ring, arms that read as wings from behind; the person's number is a plain patch. The bike is a step up but its plastics are simple stripes.
+3. The FIRE TV tier's crowd reads dark and empty in the lower stands (72 segments, no cards), and it has no bloom, so the floodlights are small discs; the tuff blocks are smooth plastic.
+4. Dust: B5 (the gate view) is veiled by the launch dust; the cover chase has tens of clods, not a storm; the dust writes no depth (the depth of field treats it as background).
+5. The harness B5 eye is 3 m from the new gate truss: the banner crosses the top of the frame (not moved: it is not inside geometry).
+6. The marshal's yellow flag is a flat yellow square; the starburst flares are large (HDR x2.5: a matter of taste to tune).
+7. The remount pops from the walking pose to the seated pose in one frame; the replay's dust and lens flecks are not recorded; the REPLAY badge and the camera / replay buttons are not in `game.js` yet.
+8. The Anaheim layout overlap (the connector under the 180's berm) is not fixed (12.4).
+9. Load: the 3D modules are 1.78 MB of JavaScript (plus three.js 655 KB), 1.23 MB of it the two base64 dirt-tile files, both imported statically even when only the 256 px tiles are used (FIRE TV / Reduce effects): a dynamic import per tier would save about 1 MB of parsing and memory on the Stick. The first race of a session builds the world in about 2.5 s on high (1.0 s on FIRE TV) under a CPU cap here; a Stick will be slower.

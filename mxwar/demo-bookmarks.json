@@ -43,7 +43,7 @@
       "id": "B2",
       "name": "stadium wide",
       "t": 125,
-      "why": "An elevated broadcast view from the lower stands (south-east corner, 6.7 m above the seats): the whole course and the pack across the floor, the far packed stands and the light rigs in the top half (Reference_Crops/broadcast_overview). FOV 48. (MOVED from the eye (0,33,92), which sits inside the new upper deck: see \"moved\".)",
+      "why": "An elevated broadcast view from the lower stands (south-east corner, 6.6 m above the seats): the whole course and the pack across the floor, the far packed stands and the light rigs in the top half (Reference_Crops/broadcast_overview). FOV 48. (MOVED from the eye (0,33,92), which sits inside the new upper deck: see \"moved\".)",
       "cam": {
         "eye": [
           22,
@@ -85,7 +85,7 @@
           "fov": 48
         },
         "when": "2026-10-17 integrate:merge",
-        "why": "D2: the old eye (0,33,92) is INSIDE the new south upper deck (bowlY = 32.4 there): a black band over the lower 40% of the frame. The new eye stands 6.7 m above the seats under it (bowlY(22,63) = 11.3), oblique over the floor like the CEO broadcast reference crop. The BEFORE frame was re-captured from the base commit ac4b1bf with this same pose."
+        "why": "D2: the old eye (0,33,92) is INSIDE the new south upper deck (bowlY(0, 92) = 32.4 there: the eye is 0.6 m above the seats, among the upper deck's rows and fascia): a black band over the lower 40% of the frame. The new eye stands 6.6 m above the seats under it (bowlY(22,63) = 11.3), oblique over the floor like the CEO broadcast reference crop. The BEFORE frame was re-captured from the base commit ac4b1bf with this same pose."
       }
     },
     {
@@ -393,7 +393,7 @@
       "t0": 120,
       "seconds": 10,
       "fps": 30,
-      "why": "The elevated south-east broadcast camera (FOV 48, 6.7 m above the seats) panning with the race leader for 5 s, then a cut to the view's own director (its trackside / chase / jump cameras): what a viewer of the real game is shown.",
+      "why": "The elevated south-east broadcast camera (FOV 48, 6.6 m above the seats) panning with the race leader for 5 s, then a cut to the view's own director (its trackside / chase / jump cameras): what a viewer of the real game is shown.",
       "cuts": [
         {
           "at": 0,
