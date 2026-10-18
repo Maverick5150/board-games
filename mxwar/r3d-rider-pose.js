@@ -168,7 +168,7 @@ export function poseRide(rig,Bm,st,dt,out,base){
   /* targets in the bike frame */
   let tx=lerp(bp.sx+0.10,-0.10+sy.hip,stand)+0.04*turn*sit+0.05*adab, ty=lerp(bp.sy+0.10,1.25+sy.crouch,stand)-0.20*crouch*(0.5+0.5*stand)+(air?0.05:0), tz=0.045*Math.sign(dab)*adab-0.05*clamp(lean,-0.8,0.8)*sit;
   if(air&&pitchB<-0.05) tx-=Math.min(0.07,(-pitchB-0.05)*0.25);   /* nose down on the way down: the hips go back */
-  let tp=lerp(0.84,1.05,stand)+sy.pitch+0.22*crouch*(st.gate?0.4:1)+0.05*turn*sit+clamp(-acc*0.012,-0.07,0.11)+pitchB*(air?0.78:0.5);   /* torso pitch forward (in the air he holds his body against the bike's pitch) */
+  let tp=lerp(0.90,1.12,stand)+sy.pitch+0.22*crouch*(st.gate?0.4:1)+0.05*turn*sit+clamp(-acc*0.012,-0.07,0.11)+pitchB*(air?0.78:0.5);   /* torso pitch forward (in the air he holds his body against the bike's pitch) */
   if(air&&Math.abs(pitchB)<0.02) tp-=0.06;
   let tr=-(air?0.62:0.30)*lean-0.12*dab*adab;   /* torso roll relative to the bike: more upright than the bike (in the air he stays upright while the bike is whipped under him), the inside shoulder dropped with the foot out */
   /* idle life: the rider works on the bike: shifts a little, faster with speed */
