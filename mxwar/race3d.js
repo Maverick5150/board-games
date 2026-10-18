@@ -183,10 +183,13 @@ export function create(host,hooks){
     const use=Math.max(1.5,hwG-0.6), rows=N<=11?1:Math.max(2,Math.ceil(N/Math.max(2,Math.floor(2*use/1.3)+1))), per=Math.ceil(N/rows);
     const P=Math.min(2.0,2*use/Math.max(1,per-1+(rows>1?0.5:0))), lat=[], back=[];
     for(let k=0;k<N;k++){ const row=k%rows, c=Math.floor(k/rows), pos=(c%2?1:-1)*Math.ceil(c/2);
-      lat.push(clamp(pos*P+(rows>1?(row/(rows-1)-0.5)*P*0.5:0),-use,use)); back.push(row*2.3); }
-    GRID={lat:lat,back:back,hwG:hwG,use:use,rows:rows,P:P};
+      lat.push(clamp(pos*P+(rows>1?(row/(rows-1)-0.5)*P*0.5:0),-use,use)); back.push(row*1.0); }   /* the second row 1.0 m back, half a pitch over (an echelon: footprints touch, never overlap) */
+    const rank=[]; lat.map((l,k)=>[l,k]).sort((x,y)=>(x[0]-y[0])||(x[1]-y[1])).forEach((v,j)=>{ rank[v[1]]=j; });   /* each slot's place across the track, left to right */
+    GRID={lat:lat,back:back,hwG:hwG,use:use,rows:rows,P:P,rank:rank};
   }
   function gridLat(k){ return GRID&&GRID.lat[k]!=null?GRID.lat[k]:0; }
+  /* level riders: the one ahead in the cards' order of this lap (V.lap) goes first; before any cards, the logical distance, then the grid */
+  function rightOf(o,r){ const a=o.cr!=null?o.cr:1e3, b=r.cr!=null?r.cr:1e3; if(a!==b) return a<b; return o.Dl>r.Dl||(o.Dl===r.Dl&&o.k<r.k); }
   function gridBack(k){ return GRID&&GRID.back[k]!=null?GRID.back[k]:0; }
   /* which side of rider o rider r keeps (+1 = his right): the side he is on (natural hysteresis); right behind him, the side he chose for this
      pass while it lasts (1.6 s memory), else toward his own line, else toward the room */
@@ -198,6 +201,33 @@ export function create(host,hooks){
     m[o.k]={s:s,T:T}; return s;
   }
   function slotOf(k){ const n=gate.slots, mid=Math.floor(n/2); return clamp(mid+(k%2?1:-1)*Math.ceil(k/2),0,n-1); }   /* (kept for reference; the grid above replaces it) */
+  const SEP=1.2;
+  function passLine(r,a,ord,target,ia,ib,blk){
+    let lo=ia, hi=ib; const bad=[], mem=r.sd||(r.sd={});
+    for(let b=0;b<ord.length;b++){ const o=ord[b]; if(o===r||o.crash) continue;
+      const dD=o.D-r.D; if(dD<-1.6||dD>10) continue;
+      if(dD<2.2){ /* level: never crossed */
+        let sd=r.lat-o.lat; if(Math.abs(sd)<0.02){ const m=mem[o.k]; sd=m&&T-m.T<1.6?m.s:(r.k<o.k?-1:1); }
+        if(sd>0) lo=Math.max(lo,o.lat+SEP); else hi=Math.min(hi,o.lat-SEP);
+        mem[o.k]={s:sd>0?1:-1,T:T}; continue; }
+      if(b>a) continue;
+      const cl=Math.max(0,(r.v||0)-(o.v||0)), m=mem[o.k], want=r.sb>0.05||r.Dl>o.D-3.2;
+      if((want&&dD<5+cl*1.4)||(m&&T-m.T<1.6&&dD<6)) bad.push(o); }
+    if(lo>hi) return (lo+hi)/2;   /* squeezed between two level riders: the middle (the setback sorts out the rest) */
+    /* the free gaps between the riders to pass, inside [lo, hi] */
+    const iv=bad.map(o=>[o.lat-SEP,o.lat+SEP]).concat(blk?blk.map(v=>[v[0],v[1]]):[]).sort((x,y)=>x[0]-y[0]), gaps=[]; let c0=lo;   /* (a fallen rider or bike: an interval too) */
+    for(const v of iv){ if(v[0]>c0) gaps.push([c0,Math.min(v[0],hi)]); c0=Math.max(c0,v[1]); if(c0>=hi) break; }
+    if(c0<hi) gaps.push([c0,hi]);
+    if(!gaps.length) return clamp(target,lo,hi);
+    let best=null, bc=1e9;
+    for(const g of gaps){ if(g[1]<g[0]) continue; const p=clamp(target,g[0],g[1]);
+      let cost=Math.abs(p-target)+0.8*Math.abs(p-r.lat);
+      for(const o of bad){ const m=mem[o.k]; if(m&&T-m.T<1.6&&(p>o.lat?1:-1)!==m.s) cost+=2.5; }   /* a pass keeps its side */
+      if(cost<bc){ bc=cost; best=p; } }
+    if(best==null) return clamp(target,lo,hi);
+    for(const o of bad) mem[o.k]={s:best>o.lat?1:-1,T:T};
+    return best;
+  }
   // [/hook:motion]
   function flagT(k){ return texFlags[k]||(texFlags[k]=flagTex(k)); }
   /* free a world or a rider set: geometries, materials and every texture they hold (normal and glow maps, shader uniforms too: a new
@@ -231,6 +261,9 @@ export function create(host,hooks){
     const n=req.lap||lapNo;
     const alive=req.order1.filter(s=>!(req.dnf&&req.dnf.indexOf(s)>=0)&&rs[s]&&!rs[s].gone);
     const gg=MX.Course.gaps(alive,req.cnt1,C.Tlap,{base:0.5,extra:1.4});
+    // [hook:motion]
+    rs.forEach(r=>{ r.cr=1e3; }); alive.forEach((s,j)=>{ if(rs[s]) rs[s].cr=j; });   /* the cards' order this lap: who has the right of way when two riders are level */
+    // [/hook:motion]
     const Tend=Math.max(T+8,lapStartT(n+1)-1.5), rate=1/Math.max(5,Tend-T);
     rs.forEach((r,i)=>{ const g1=gg[i]!=null?gg[i]:r.g+2.5; if(r.boot&&r.tg){ r.tg.g1=g1; return; } r.tg={g0:r.g,g1:g1,p:0,rate:rate}; });
     const scr=crashSpot(MX.Course.wrap(C,(req.sector!=null?req.sector:0.5)*C.L));
@@ -376,22 +409,28 @@ export function create(host,hooks){
       if(r.sb==null) r.sb=0;
       ordA.push(r);
     }
-    /* the order on track as drawn (last frame's setbacks): the one behind yields */
-    ordA.sort((a,b)=>((b.Dl-b.sb)-(a.Dl-a.sb))||(a.k-b.k));
+    /* who yields to whom: a rider clearly AHEAD as drawn (more than 1 m) is never driven through; two riders LEVEL as drawn (within 1 m)
+       merge in the cards' order (the one the cards put behind lets the other in: the funnel into turn 1 and every merge sort themselves by the
+       race's real order, nobody is buried by a tie). Processed front to back as drawn last frame; a rider not yet placed this frame counts
+       where he was drawn last frame. The distance is measured along the rider's own line (the inside of a hairpin is shorter). */
+    for(let a=0;a<ordA.length;a++){ const r=ordA[a]; r.Dq=r.D; }
+    ordA.sort((a,b)=>(b.Dq-a.Dq)||(b.Dl-a.Dl)||(a.k-b.k));
     for(let a=0;a<ordA.length;a++){
       const r=ordA[a], live=racing&&dt>0&&(r.init||r.rem)&&!atGate;
       let sb=r.crash?r.sb:0;
       if(!r.crash&&!atGate){
         let need=0;
-        const Lf=2.15+0.05*Math.max(0,r.v||0);   /* nose to tail: the footprint (2 m) and a gap that grows with the speed (0.9 m at 15 m/s) */
-        for(let b=0;b<a;b++){ const o=ordA[b]; if(o.crash) continue; const ah=o.D-r.Dl; if(ah>Lf+0.1) continue;
-          const dl=Math.abs(o.lat-r.lat), Lq=Lf*(1-sstep(0.8,1.05,dl)); if(Lq<=0.001) continue;
+        const Lf=2.15+0.05*Math.max(0,r.v||0), kr=(r.fr&&r.fr.k)||0;   /* nose to tail: the footprint (2 m) and a gap that grows with the speed (0.9 m at 15 m/s) */
+        for(let b=0;b<ordA.length;b++){ if(b===a) continue; const o=ordA[b]; if(o.crash) continue;
+          const oD=b<a?o.D:o.Dq, lead=oD-r.Dq;   /* (o.D: placed this frame; o.Dq: where he was drawn last frame) */
+          if(!(lead>1.25||(lead>=-1.25&&rightOf(o,r)))) continue;   /* he has the right of way over r */
+          const ah=oD-r.Dl, dl=Math.abs(o.lat-r.lat), Lq=Lf*(1-sstep(0.70,0.752,dl))/Math.max(0.45,1-kr*(o.lat+r.lat)*0.5); if(Lq<=0.001||ah>Lq) continue;   /* (the footprint is 0.75 m wide) */
           const nd=Lq-ah; if(nd>need) need=nd; }
         if(live){
           const cz=r.czone||0; sb=r.sb||0;
           if(cz>0) sb+=2.6*cz*dt;   /* a crash ahead: slower through it (up to 2.6 m/s), made up afterwards */
-          if(need>sb){ sb=Math.min(need,sb+7*dt); if(need-sb>0.3) sb=need-0.3; }   /* held back: quickly, never more than 0.3 m into the bike ahead */
-          else if(cz<=0){ const ex=sb-need; sb-=Math.min(ex,Math.min(1.8,0.2+ex*1.5)*dt); }   /* catching up: gently (at most 1.8 m/s faster than the clock) */
+          if(need>sb){ sb=Math.min(need,sb+7*dt); if(need-sb>0.15) sb=need-0.15; }   /* held back: quickly, never more than 0.15 m into the bike ahead */
+          else if(cz<=0){ const ex=sb-need; sb-=Math.min(ex,Math.min(ex>4?2.6:1.8,0.2+ex*1.5)*dt); }   /* catching up: gently (1.8 m/s faster than the clock, 2.6 m/s when far back) */
           sb=Math.max(0,sb);
         } else sb=need;   /* a placement frame (the race restored, a test jump): placed at once */
       }
@@ -415,36 +454,33 @@ export function create(host,hooks){
       const hw=fr.hw;
       r.fr={x:fr.x,z:fr.z,th:fr.th,k:fr.k,hw:hw,y:fr.y||0,tag:fr.tag,sand:fr.sand||0};
       if(r.crash) continue;
-      const ia=-hw+0.55, ib=hw-0.55;
+      let ia=-hw+0.55, ib=hw-0.55;
+      if(!r.onStart){ /* the inside of a tight turn is not a line: nobody rides a radius under 4 m (a hairpin is ridden on its berm, two or three wide, not on its apex) */
+        const k1=fr.k, k2=MX.Course.frame(C,r.s+6,tmpO).k, kk=Math.abs(k2)>Math.abs(k1)?k2:k1;
+        if(kk>1/40) ib=Math.max(ia+0.6,Math.min(ib,1/kk-4)); else if(kk<-1/40) ia=Math.min(ib-0.6,Math.max(ia,-(1/-kk-4))); }
       if(atGate){ r.lat=gridLat(r.k); r.latT=r.lat; r.vl=0; r.al=0; r.alF=0; r.psi=0; continue; }   /* the grid: still, each in his own slot */
       let target, pushes=true;
       const startMode=r.onStart||(loopStart&&r.lapN===1&&r.D<C.hsD);
       if(startMode){
         /* the start: each rider holds his lane, the lanes narrow with the start (they keep their order across it); into turn 1 the racing line takes over */
-        const lane=gridLat(r.k)*clamp((hw-0.6)/Math.max(0.5,GRID?GRID.use:hw),0.05,1), wS=sstep(turn1-44,turn1-18,r.D);
+        const lane=clamp(gridLat(r.k)*clamp((hw-0.6)/Math.max(0.5,GRID?GRID.use:hw),0.62,1),-(hw-0.6),hw-0.6), wS=sstep(turn1-44,turn1-18,r.D);   /* (the lanes narrow a little; where the start gets narrower still the outside riders tuck in behind: the funnel) */
         let line=r.bias*hw*0.45; { const kk=r.onStart?MX.Course.startFrame(C,Math.min(C.Ls,Math.max(0,r.P)+9),tmpO).k:MX.Course.frame(C,r.s+9,tmpO).k; if(Math.abs(kk)>1/30) line=-Math.sign(kk)*hw*0.36+r.bias*0.5; }
         target=lane*(1-wS)+line*wS; pushes=wS>0.55;
       } else { const kk=MX.Course.frame(C,r.s+9,tmpO).k; target=Math.abs(kk)>1/30?-Math.sign(kk)*hw*0.36+r.bias*0.5:r.bias*hw*0.45; }
-      /* passing room: level riders ride side by side (each stays on his side of the other); a rider who is held back or closing on the one ahead
-         picks a side early (by the closing speed) and keeps it; a rider content to follow stays in the line ahead of him (a train in the ruts) */
-      if(pushes){ const SEP=1.2;
-        for(let pass=0;pass<2;pass++) for(let b=0;b<ordB.length;b++){ const o=ordB[b]; if(o===r||o.crash) continue;
-          const dD=o.D-r.D; if(dD<-1.6||dD>10) continue;
-          let act=b<a?dD<2.2:true;   /* level with him (a rider just behind does not push the one in front over: trains are allowed) */
-          if(!act&&b<a){ const cl=Math.max(0,(r.v||0)-(o.v||0)), want=r.sb>0.05||r.Dl>o.D-3.2, rec=r.sd&&r.sd[o.k]; act=(want&&dD<5+cl*1.4)||(rec&&T-rec.T<1.6&&dD<6); }   /* held back, closing, or already passing him (the pass keeps going) */
-          if(!act||Math.abs(o.lat-target)>=SEP) continue;
-          const sd=sideOf(r,o,target,ia,ib); let t2=o.lat+sd*SEP;
-          if((t2<ia-0.05||t2>ib+0.05)&&Math.abs(r.lat-o.lat)<0.5){ const t3=o.lat-sd*SEP; if(t3>=ia-0.05&&t3<=ib+0.05){ r.sd[o.k]={s:-sd,T:T}; t2=t3; } }   /* no room on that side: the other */
-          target=t2; } }
+      /* passing room, solved across the track (not one push after another): a rider LEVEL with him (overlapping along the track) is never crossed:
+         he stays on his side of him, at least SEP away; a rider just ahead that he is closing on, is held back by or is already passing must not be
+         in his lane: the line goes to the free gap nearest the racing line, with hysteresis (moving costs, a pass keeps its side for 1.6 s). A rider
+         content to follow stays in the line ahead of him (a train in the ruts); if no gap is free, the setback above holds him behind. */
       /* nobody rides into a fallen rider or his bike, where they are now (the bike slides on, the rider is thrown further the other way): each
-         blocks 1.9 m either side of it from 22 m before; the line goes round the blocked stretch on the side the rider is on (never across the
-         fallen rider to reach his line), or on the side with room; level with it, it is a hard limit (1.45 m) and everyone slows through it */
+         blocks 1.9 m either side of it from 22 m before (the passing solver treats it like a rider to get round); level with it, it is a hard
+         limit (1.45 m) and everyone slows through it */
       let blk=null, cz=0;
       for(let q1=0;q1<rs.length;q1++){ const o=rs[q1], c=o.crash; if(!c||o===r) continue;
         for(let q2=0;q2<2;q2++){ const pd=q2?(c.rD!=null?c.rD:c.D):(c.bD!=null?c.bD:c.D), pl=q2?(c.rL!=null?c.rL:c.lat):(c.bL!=null?c.bL:c.lat), dd=pd-r.D;
           if(Math.abs(pl)>hw+0.7) continue;   /* off the track: no obstacle */
           if(dd>-3&&dd<22){ (blk=blk||[]).push([pl-1.9,pl+1.9,pl,dd]); cz=Math.max(cz,1-sstep(12,22,dd)); } } }
       r.czone=cz;
+      if(pushes) target=passLine(r,a,ordB,target,ia,ib,blk);
       if(blk){ const bs=blk.slice().sort((x,y)=>x[0]-y[0]), mg=[]; bs.forEach(v=>{ const l=mg[mg.length-1]; if(l&&v[0]<=l[1]) l[1]=Math.max(l[1],v[1]); else mg.push([v[0],v[1]]); });
         const cur=clamp(r.lat,ia,ib), tc=clamp(target,ia,ib), lo2=Math.min(cur,tc), hi2=Math.max(cur,tc);
         const hit=mg.find(v=>(tc>v[0]&&tc<v[1])||(cur>v[0]&&cur<v[1])||(lo2<=v[0]&&hi2>=v[1]));
@@ -457,7 +493,7 @@ export function create(host,hooks){
         const am=cz>0?6:4, vmax=Math.min(cz>0?4.5:3.2,0.15+0.42*Math.max(0,r.v||0)), n=Math.max(1,Math.ceil(dt*120)), h=dt/n, v0=r.vl||0;
         let lat=r.lat, vl=v0;
         for(let q=0;q<n;q++){ let ac=0;
-          if(!r.air){ const e=target-lat, vd=Math.sign(e)*Math.min(vmax,Math.abs(e)/0.35,Math.sqrt(2*am*0.85*Math.abs(e))); ac=clamp((vd-vl)/0.0875,-am,am); }   /* (in the air nothing pushes sideways) */
+          { const e=target-lat, vd=Math.sign(e)*Math.min(vmax,Math.abs(e)/0.35,Math.sqrt(2*am*0.85*Math.abs(e))), aa=r.air?1.2:am; ac=clamp((vd-vl)/0.0875,-aa,aa); }   /* (in the air only a little body english sideways) */
           vl+=ac*h; lat+=vl*h; }
         r.al=(vl-v0)/dt; r.vl=vl; r.lat=lat;
       }
@@ -634,7 +670,7 @@ export function create(host,hooks){
   function jumpArc(r,s,front){
     const key=front?"jF":"jR"; let J=r[key];
     if(J){ const x=MX.Course.wrap(C,s-J.a); if(x<=J.d) return arcY(J,x); r[key]=null; }   /* this wheel is down again */
-    const a=MX.Course.airAt(C,s); if(!a) return null;
+    const a=MX.Course.airAt(C,s); if(!a){ if(front) r.jDone=null; return null; }   /* (past the jump: the next lap flies it again) */
     if(!front){ const F=r.jF; if(F&&F.A===a.A){ r.jR=F; const x=MX.Course.wrap(C,s-F.a); return x<=F.d?arcY(F,x):null; } return r.jDone===a.A?null:a; }   /* the rear wheel flies the front's arc */
     if(r.jDone===a.A) return null;   /* already flown (he landed short of the design's touch point) */
     const A=a.A, d=A.b-A.a, v=clamp(r.v||A.vx,0.6*A.vx,1.45*A.vx), lim=JLIM[A.kind]||[-0.8,1.6], lat=r.lat;
