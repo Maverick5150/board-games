@@ -15,7 +15,7 @@ import {CROWD,crowdAtlas,boardsTex,ribbonTex,suitesTex,drawBoard,glowSheet,BRAND
 
 const sgn=v=>v<0?-1:1;
 /* Reduce effects or reduced motion (the page's own attributes, as game.js sets them): the world stays still */
-function stillWorld(){ try{ const d=document.documentElement; return d.getAttribute("data-effects")==="reduced"||d.getAttribute("data-motion")==="reduce"; }catch(e){ return false; } }
+function stillWorld(){ try{ const d=document.documentElement, B=(typeof window!=="undefined")&&window.BGUI; return d.getAttribute("data-effects")==="reduced"||d.getAttribute("data-motion")==="reduce"||!!(B&&B.reducedMotion&&B.reducedMotion()); }catch(e){ return false; } }   /* (the same test as r3d-quality.js motionMode) */
 /* the footprint: a superellipse resampled to equal steps along its length, with the outward normal at every point */
 function makeRing(cx,cz,rx,rz,e,segs){
   const M=4096, P=new Float64Array((M+1)*2), Lc=new Float64Array(M+1);
@@ -239,7 +239,7 @@ ${FOG_K}
 /* the first rows as real people (milestone 2, HIGH / ULTRA): instanced low-poly bodies (a tapered torso with shoulders, a head with hair, two arms on shoulder pivots:
    36 triangles), facing the floor, shirt and skin from the same palette, lit by the floodlights (a key from above the far banks, the place's baked light); arms
    rest, one waves, some pump both fists, everybody's go up when the wave passes; a few stand. They sink into the slope beyond 60-115 m like the cards. ONE draw call.
-   (36 triangles a person in the paused first try: facets and a diamond head; now 52 with smooth shading.) */
+   (36 triangles a person in the paused first try: facets and a diamond head; now 47 with smooth shading.) */
 function nearPeople(ring,LV,pr,segs,U,lightFn,nRows){
   const slen=Math.hypot(pr[2]-pr[0],pr[3]-pr[1]), rows=Math.max(1,Math.round(slen/CROWD.row)), nA=44, aw=1.2*CROWD.seat, list=[], R=rngf(8821);
   for(let r=0;r<Math.min(nRows,rows);r++){ const t=(r+0.5)/rows, d=pr[0]+(pr[2]-pr[0])*t, y=pr[1]+(pr[3]-pr[1])*t, L=LV(d), aisleW=aw*nA/L.len; let i=0;
@@ -249,11 +249,12 @@ function nearPeople(ring,LV,pr,segs,U,lightFn,nRows){
       if(a<0.04) continue;   /* an empty seat */
       list.push({x:x-nz*jx+nx*jd,y:y,z:z+nx*jx+nz*jd,th:Math.atan2(-nx,-nz)+(c-0.5)*0.5,L:lightFn(0,t,rf,L.len),a:a,b:b,c:c,rf:rf}); } }
   /* the body in person space (+z = the front, toward the floor; y = 0 the seat): colour.r = the part (0 torso, 1 head, 2 left arm, 3 right arm) */
-  /* smooth normals (each part keeps its own: a rounded body under the lights, not facets): a 5-sided torso with shoulders, a 5 x 3 head, 3-sided arms: 52 triangles */
-  const torso=new THREE.CylinderGeometry(0.215,0.16,0.5,5,1,false); torso.rotateY(Math.PI/10); torso.scale(1,1,0.6); torso.translate(0,0.27,0);
+  /* smooth normals (each part keeps its own: a rounded body under the lights, not facets): a 5-sided torso with a top, a 5 x 3 head, 3-sided arms: 47 triangles */
+  const torso=new THREE.CylinderGeometry(0.215,0.16,0.5,5,1,true); torso.rotateY(Math.PI/10); torso.scale(1,1,0.6); torso.translate(0,0.27,0);
+  const top=new THREE.CircleGeometry(0.215,5); top.rotateX(-Math.PI/2); top.scale(1,1,0.6); top.translate(0,0.52,0);   /* the shoulders' top (no bottom cap: they sit on a seat) */
   const head=new THREE.SphereGeometry(0.105,5,3); head.scale(0.92,1.12,1.0); head.translate(0,0.68,0.01);
   const arm=s=>{ const g=new THREE.CylinderGeometry(0.068,0.05,0.52,3,1,true); g.translate(0,-0.26,0); g.translate(s*0.215,0.47,0.0); return g; };
-  const parts=[paint(torso,[0,0,0]),paint(head,[1,0,0]),paint(arm(-1),[2,0,0]),paint(arm(1),[3,0,0])], geo=merge(parts);
+  const parts=[paint(torso,[0,0,0]),paint(top,[0,0,0]),paint(head,[1,0,0]),paint(arm(-1),[2,0,0]),paint(arm(1),[3,0,0])], geo=merge(parts);
   const n=list.length;
   const uni=THREE.UniformsUtils.merge([THREE.UniformsLib.fog,{}]); uni.uTime=U.uTime; uni.uGain=U.uGainC||U.uGain; uni.uFogK=U.uFogK;
   const mat=new THREE.ShaderMaterial({uniforms:uni,fog:true,vertexColors:true,
@@ -290,15 +291,10 @@ void main(){
 #include <colorspace_fragment>
 ${FOG_K}
 }`});
-  /* 8 sectors round the bowl, each culled by the camera's frustum (its bounding sphere + 1.5 m for the arms): a chase frame draws 2-4 of them, the people behind the lens cost nothing
-     (one ring-wide mesh drew all 1,300 people, about 68k triangles, in every frame) */
-  const K=8, grp=new THREE.Group(), M=new THREE.Matrix4(), Q=new THREE.Quaternion(), P=new THREE.Vector3(), S=new THREE.Vector3(1,1,1), Y=new THREE.Vector3(0,1,0), c=new THREE.Color(); grp.name="mx-near-people";
-  for(let k=0;k<K;k++){ const L=list.filter(g=>Math.min(K-1,Math.floor(g.rf*K))===k); if(!L.length) continue;
-    const gk=geo.clone(), inst=new Float32Array(L.length*4), m=new THREE.InstancedMesh(gk,mat,L.length);
-    L.forEach((g,i)=>{ Q.setFromAxisAngle(Y,g.th); P.set(g.x,g.y+0.42,g.z); M.compose(P,Q,S); m.setMatrixAt(i,M); c.setRGB(g.L[0],g.L[1],g.L[2]); m.setColorAt(i,c); inst[i*4]=g.a; inst[i*4+1]=g.b; inst[i*4+2]=g.c; inst[i*4+3]=g.rf; });
-    gk.setAttribute("aP",new THREE.InstancedBufferAttribute(inst,4)); m.instanceMatrix.needsUpdate=true; if(m.instanceColor) m.instanceColor.needsUpdate=true;
-    m.computeBoundingSphere(); m.boundingSphere.radius+=1.5; m.frustumCulled=true; m.name="mx-near-people-"+k; grp.add(m); }
-  geo.dispose(); return grp;
+  /* ONE draw call for the whole ring (measured: 8 frustum-culled sectors cost +6-8 draw calls in the wide and chase frames, where most sectors are in view, and saved few triangles) */
+  const m=new THREE.InstancedMesh(geo,mat,n), M=new THREE.Matrix4(), Q=new THREE.Quaternion(), P=new THREE.Vector3(), S=new THREE.Vector3(1,1,1), Y=new THREE.Vector3(0,1,0), c=new THREE.Color(), inst=new Float32Array(n*4);
+  list.forEach((g,i)=>{ Q.setFromAxisAngle(Y,g.th); P.set(g.x,g.y+0.42,g.z); M.compose(P,Q,S); m.setMatrixAt(i,M); c.setRGB(g.L[0],g.L[1],g.L[2]); m.setColorAt(i,c); inst[i*4]=g.a; inst[i*4+1]=g.b; inst[i*4+2]=g.c; inst[i*4+3]=g.rf; });
+  geo.setAttribute("aP",new THREE.InstancedBufferAttribute(inst,4)); m.instanceMatrix.needsUpdate=true; if(m.instanceColor) m.instanceColor.needsUpdate=true; m.frustumCulled=false; m.name="mx-near-people"; return m;
 }
 
 export function stadium(C,look,q,root,ctx){
