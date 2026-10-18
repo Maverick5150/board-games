@@ -1,16 +1,19 @@
 /* MOTOCROSS WAR 3D — EFFECTS (owner: fx): the flying dirt of the cover and the race atmosphere, all driven by the riders' real motion.
    Milestone 2, "the dirt storm": the cover is a STORM of crumbs (hundreds of motion-blurred specks, fewer chunky clods of darker moist dirt, backlit dust,
    roost arcs that fill the foreground), never a veil over the pack. What it draws (every piece pooled and instanced, counts set by the quality tier):
-   - SPECKS (new): thousands of small crumbs on the GPU. A speck is written ONCE when it is thrown (where, how fast, when, its size, drag and colour) and the
-     vertex shader moves it on a ballistic arc with air drag (an exact solution, no per-frame CPU work or upload), stretches it along its screen velocity
-     like a fast shutter (a streak, never thinner than a pixel, fainter the longer it is), fades it near the lens and caps its size there. A quarter of
-     them are flat CHIPS that tumble and catch the light. Colours from dark wet soil to light dry tan. On the high tiers their cores write depth, so the
-     depth of field keeps a crumb at its own distance sharp (they used to be blurred as part of the background).
+   - SPECKS (new): thousands of crumbs on the GPU (radius about 0.4-2.6 cm, median 1 cm: what reads at the chase distance). A speck is written ONCE when it
+     is thrown (where, how fast, when, its size, drag and colour) and the vertex shader moves it on a ballistic arc with air drag (an exact solution, no
+     per-frame CPU work or upload). THE SHUTTER: its trail is where it was 1/150 s ago RELATIVE TO THE LENS (its flight minus the camera's motion over the
+     last tick), both ends projected, at most 5.5% of the frame height, never thinner than 1.4 px, fainter the longer it is; it fades near the lens and its
+     size is capped there. A quarter of them are flat CHIPS that tumble and catch the light. Colours from dark wet soil to light dry tan. On the high tiers
+     their cores write depth, so the depth of field keeps a crumb at its own distance sharp. The roost: a rooster tail under power inside a wider fan,
+     berm spray to the outside, front-wheel flicks, a steady spray at speed; take-offs, landings and crashes throw them too.
    - CLODS: low-poly rocks (an InstancedMesh, 20 triangles, 8 on the weak tiers): darker moist dirt (a physically based material with a wet sheen on the
-     high tiers, no warm emissive floor: the highlights stay brown), log-normal sizes (about 1-4 cm, 3% big chunks), lit by the scene's lights, tumbling,
-     stretched along their velocity when fast (motion blur), bouncing and settling on the real ground (Course.ground), then shrinking away.
+     high tiers, no warm emissive floor: the highlights stay brown), log-normal sizes (radius about 1-3.4 cm, 4% chunks to 6.5 cm, up to 1.6x off the start
+     pad), lit by the scene's lights, tumbling, stretched along their velocity when fast, bouncing and settling on the real ground (Course.ground), then
+     shrinking away; they shrink inside 1.6 m of the lens.
    - SPRITES (one instanced billboard draw call): DUST puffs (lumpy, baked normals, lit by the scene's lights with forward scattering when a light is
-     behind them, thinner higher up) and HAZE (big faint puffs trailing the pack). THE VEIL RULE: a puff fades from 3 m to 0.7 m from the lens, a puff
+     behind them, a warm glow when seen against the ring of floodlight banks, thinner higher up) and HAZE (big faint puffs trailing the pack). THE VEIL RULE: a puff fades from 3 m to 0.7 m from the lens, a puff
      never covers more than about a fifth of the frame's height, and the whole dust layer's opacity-weighted coverage of the frame is capped (`uVeil`,
      worked out while the frame is drawn from the drawing camera: nothing in the simulation reads the camera).
    - MOTES (high tier): dust specks floating round the camera; LENS flecks (high tier): mud on the lens behind a roosting rider (draw-time only).
