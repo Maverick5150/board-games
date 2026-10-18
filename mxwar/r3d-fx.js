@@ -504,7 +504,7 @@ export function createFx(opts){
     while(n-->0){
       const tail=rnd()<0.5*ef, u=rnd(), chip=rnd()<0.25;
       let up, bk, sd;
-      if(tail){ up=(3.0+3.4*rnd())*lift; bk=(2.5+8.0*ef*(0.6+0.4*rnd())); sd=(rnd()-0.5)*0.9-sgn*bm*(2.0+3.0*rnd()); }   /* the arc: back at about the wheelspin speed, 25-45 degrees up */
+      if(tail){ up=(3.6+4.0*rnd())*lift; bk=(3.0+8.0*ef*(0.6+0.4*rnd())); sd=(rnd()-0.5)*0.9-sgn*bm*(2.0+3.0*rnd()); }   /* the arc: back at about the wheelspin speed, 25-45 degrees up, 1-1.8 m high */
       else { up=(1.2+6.4*rnd())*lift; bk=(0.4+rnd()*(1.5+6.0*ef)); sd=(rnd()+rnd()-1)*(2.0+2.2*bm)-sgn*bm*(1.5+4.0*rnd()); }
       const cr=(0.04+0.12*rnd())*v;
       speck(st.x-cth*(0.78+v*dt*u)+rx*(rnd()-0.5)*0.18,gR+0.04+0.1*rnd(),st.z-sth*(0.78+v*dt*u)+rz*(rnd()-0.5)*0.18,cth*(cr-bk)+rx*sd,up,sth*(cr-bk)+rz*sd,speckR(chip),0.45+0.8*rnd(),speckC(),gR-0.06,chip?1:0,u);
