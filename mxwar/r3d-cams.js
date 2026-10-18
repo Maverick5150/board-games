@@ -328,12 +328,20 @@ export function createCams(VIEW){
     return L;
   }
   /* the shot a preset holds: the person's rider (or the leader), never cutting; the broadcast keeps cutting between trackside spots as the rider passes them */
+  /* is a rival's body near the onboard lens (the bars, 0.6 m ahead of his hip)? under 1.7 m from a rival's wheelbase segment (ahead of or beside the lens) it is, and it stays so until he has
+     been over 2.2 m away for 1.5 s (the riders' near-lens fade turns a body within 1.7 m into a screen-door ghost) */
+  let onbBlk=false, onbClrT=-1e9;
+  function onbBlocked(j){ const r=VIEW.rs[j]; if(!r||!r.pos) return false; if(r.onStart){ onbBlk=true; onbClrT=VIEW.T; return true; }   /* the gate row: shoulder to shoulder */
+    const fo=Math.cos(r.th||0), go=Math.sin(r.th||0), ex=r.pos.x+fo*0.6, ez=r.pos.z+go*0.6; let dmin=1e9;
+    for(let i=0;i<VIEW.rs.length;i++){ const o=VIEW.rs[i]; if(i===j||(o.gone&&!o.crash)||!o.pos) continue; const f2=Math.cos(o.th||0), g2=Math.sin(o.th||0); const t=clamp((ex-o.pos.x)*f2+(ez-o.pos.z)*g2,-1.05,1.05), nx=o.pos.x+f2*t-ex, nz=o.pos.z+g2*t-ez; if(nx*fo+nz*go<-0.2) continue; const d=Math.hypot(nx,nz); if(d<dmin) dmin=d; }   /* (behind the lens: not in the picture) */
+    if(dmin<1.7){ onbBlk=true; onbClrT=VIEW.T; } else if(dmin<2.2) onbClrT=VIEW.T; else if(onbBlk&&VIEW.T-onbClrT>1.5) onbBlk=false;
+    return onbBlk; }
   function lockedShot(){
     const me=meList(), lead=VIEW.leaderIdx(), subj=me.length?me[0]:lead; if(subj<0) return null;
     const r=VIEW.rs[subj];
     switch(mode){
       case "chase": return {type:"chase",subj:subj,pri:2,min:1e9,max:1e9,why:"preset"};
-      case "onboard": return {type:"onboard",subj:subj,pri:2,min:1e9,max:1e9,why:"preset"};
+      case "onboard": return onbBlocked(subj)?{type:"chase",subj:subj,pri:2,min:1e9,max:1e9,why:"preset"}:{type:"onboard",subj:subj,pri:2,min:1e9,max:1e9,why:"preset"};   /* (milestone 2, QD look #8: a rival alongside the bars was a dithered ghost filling half the lens: the hero chase, whose lens keeps clear of bodies, until he is 2.2 m away for 1.5 s) */
       case "stadium": return {type:"wide",subj:subj,pri:2,min:1e9,max:1e9,why:"preset"};
       case "broadcast": return {type:"bcast",subj:subj,pri:2,min:1e9,max:1e9,why:"preset"};   /* (milestone 2: the elevated stadium broadcast from the stands, panning and zooming with the pack round the person's rider; it was the trackside long lens) */
       case "trackside": { if(r.onStart) return {type:"gate",subj:subj,pri:2,min:0.1,max:1e9,why:"preset"};   /* milestone 1's "broadcast" button, kept as its own preset: a crane beside the track ahead of the rider, re-picked as he passes it (still on the start path: the gate camera) */
@@ -373,6 +381,7 @@ export function createCams(VIEW){
     /* the person's rider out of the frame for over 6 s: a filler shot of somebody else ends early, and the next pick (his hero chase has the lift then) brings him back (milestone 2: the CEO
        roots for his own rider; QD motion #6 measured him out of the frame for up to 13.7 s). At most once every 4 s of race */
     if(youOut>6&&shot.pri<6&&shot.t>1.2&&!isMe(shot.subj)&&shot.why!=="yellow"&&VIEW.T-earlyT>4&&meList().some(i=>!VIEW.rs[i].crash&&!VIEW.rs[i].onStart)){ earlyT=VIEW.T; pickShot(); return; }
+    if(shot.type==="onboard"&&shot.why!=="preset"&&shot.t>0.3&&onbBlocked(shot.subj)){ pickShot(); return; }   /* the director's onboard: a rival alongside the bars ends it (no ghost in the lens) */
     if(shot.t>=shot.max){ pickShot(); return; }
     if(shot.t>=shot.min){
       const r=VIEW.rs[shot.subj];
@@ -868,7 +877,7 @@ export function createCams(VIEW){
     get shot(){ return shot; }, get shotLog(){ return shotLog; }, get featLog(){ return featLog; }, get target(){ return cTarget; }, get focus(){ return cFocus; }, get keep(){ return KEEP; }, camS:camS,
     /* a new course: the grid of the dirt's heights (so no camera sits inside a jump), the corners; a new race: forget the shots */
     buildGrid:function(){ HG=heightGrid(); buildCorners(); RAILS=null; },
-    reset:function(){ camS.gp=null; shotLog=[]; featLog=[]; cornLog=[]; share=0.5; youOut=0; earlyT=-1e9; lapWide=-1; launched=false; onbCool=0; wideSide=0; camS.offE=null; recDispose(); replayed.clear(); replays=0; },
+    reset:function(){ camS.gp=null; shotLog=[]; featLog=[]; cornLog=[]; share=0.5; youOut=0; earlyT=-1e9; onbBlk=false; onbClrT=-1e9; lapWide=-1; launched=false; onbCool=0; wideSide=0; camS.offE=null; recDispose(); replayed.clear(); replays=0; },
     snap:function(){ camS.snap=true; },
     modes:function(){ return MODES.map(m=>({id:m.id,name:m.name})); }, mode:setMode, nextMode:nextMode, replayNow:replayNow,
     state:function(){ return {mode:mode,shot:shot?{type:shot.type,why:shot.why||"",subj:shot.subj,mount:shot.k&&shot.k.mount||""}:null,youOut:+youOut.toFixed(1),replay:!!RP,replays:replays,rec:REC?REC.Q.length:0,recMB:REC?+(REC.Q.length*REC.total*4/1048576).toFixed(1):0,share:+share.toFixed(2)}; },
