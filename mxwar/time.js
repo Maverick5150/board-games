@@ -440,10 +440,204 @@ function run(G,info,hum){
 }
 
 /* ================= READOUTS (new in the integration; nothing below writes to G.tm) =================
-   The numbers and the words the screens show: a time, a gap, a row of the tower, the YOU readout. Pure functions of G.tm (and G for names), so the phone
-   page, the Party TV and a Party phone print the same thing. */
+   The numbers and the words the screens show: a time, a gap, a row of the tower, the YOU readout, where a rider is on the clock. Pure functions of G.tm
+   (and G for names), so the phone page, the Party TV and a Party phone print the same thing. */
+
+/* ---- texts ---- */
+/* a lap time: 49.812 -> "49.812", 62.341 -> "1:02.341" ("-" when there is none) */
+function fmtLap(sec){
+  if(sec==null||!isFinite(sec)||sec<0) return "-";
+  var m=Math.round(sec*1000), mi=Math.floor(m/60000), r=m-mi*60000, ss=Math.floor(r/1000), mm=r-ss*1000;
+  return (mi?mi+":"+(ss<10?"0":""):"")+ss+"."+(mm<10?"00":mm<100?"0":"")+mm;
+}
+/* a race time in ms: 798729 -> "13:18.729", 3725400 -> "1:02:05.400" */
+function fmtRace(msv){
+  if(msv==null||!isFinite(msv)||msv<0) return "-";
+  var m=Math.round(msv), h=Math.floor(m/3600000), r=m-h*3600000, mi=Math.floor(r/60000); r-=mi*60000; var ss=Math.floor(r/1000), mm=r-ss*1000;
+  return (h?h+":"+(mi<10?"0":""):"")+mi+":"+(ss<10?"0":"")+ss+"."+(mm<10?"00":mm<100?"0":"")+mm;
+}
+/* a gap in seconds for a narrow cell: "+3.412" up to 99.999, then "+1:43.2" */
+function fmtGap(g){
+  if(g==null||!isFinite(g)) return "";
+  if(g<0) g=0;
+  if(g<99.9995) return "+"+g.toFixed(3);
+  var m=Math.floor(g/60), r=g-m*60; return "+"+m+":"+(r<10?"0":"")+r.toFixed(1);
+}
+/* a row's gap cell: "Leader" | "+3.412" | "+1 Lap" | "DNF" (a running rider whose gap is not known yet: "") */
+function gapText(row){
+  if(!row) return "";
+  if(row.dnf) return "DNF";
+  if(row.gap==="Leader"||(row.gap&&row.gap.charAt(0)==="+"&&/Lap/.test(row.gap))) return row.gap;
+  return row.gs!=null?fmtGap(row.gs):(row.gap||"");
+}
+/* seconds as text for the YOU readout: 0.9 -> "0.9 s", 12.34 -> "12.3 s" */
+function secText(x,d){ x=Math.abs(+x||0); return (x>=10?x.toFixed(1):x.toFixed(d==null?1:d))+" s"; }
+function ordText(n){ var t=n%100; return n+((t>=11&&t<=13)?"th":(["th","st","nd","rd"][n%10]||"th")); }
+
+/* ---- lap times ---- */
+/* the seconds of each lap rider s has ridden (lap 1 includes the start); a lap with a crash hold keeps it in (the rider was down) */
+function lapTimes(G,s){ var T=G.tm.r[s].T, out=[], i; for(i=0;i<T.length;i++) out.push((T[i]-(i?T[i-1]:0))/1000); return out; }
+/* the last completed lap (at clock t in ms; null = all) and the best clean lap of rider s (not lap 1, not a lap with a crash hold, not a yellow lap) */
+function lapStats(G,s,t){
+  var tm=G.tm, R=tm.r[s], T=R.T, last=null, lastK=0, best=null, bestK=0, i;
+  for(i=0;i<T.length;i++){
+    if(t!=null&&T[i]>t) break;
+    var v=(T[i]-(i?T[i-1]:0))/1000; last=v; lastK=i+1;
+    if(i>0&&!R.hold[i+1]&&!tm.yz[i+1]&&(best==null||v<best)){ best=v; bestK=i+1; }
+  }
+  return { last:last, lastK:lastK, best:best, bestK:bestK };
+}
+/* the clock window [t0, t1] (ms) in which rider s lies at his crash site in lap k (a remount's hold); null when he does not; a crash-out: [crash time, Infinity] */
+function holdWindow(G,s,k){
+  var R=G.tm.r[s], d=R.dnf;
+  if(d&&d.why==="crash"&&d.lap===k) return [d.t,Infinity];
+  if(!R.hold[k]) return null;
+  var kn=knots(G,s,k); if(!kn) return null;
+  for(var i=1;i<kn.length;i++) if(kn[i][0]===kn[i-1][0]&&kn[i][1]>kn[i-1][1]) return [kn[i-1][1],kn[i][1]];
+  return null;
+}
+/* the yellow flags of the race: [{lap (the yellow lap), c (the crash sector, phase), z (half width), t0 (clock ms of the first crash), from, to (clock ms the flag flies: from the
+   crash or the first rider's entry into the section, to the last rider's exit; to = null while the yellow lap is not decided yet), by (seats)}].
+   A back-marker can crash after the leader has ridden the yellow lap's section already: the flag then flies from the crash, and every rider is slowed in his own yellow lap. */
+function yellowWindows(G){
+  var tm=G.tm, out=[], keys=Object.keys(tm.yz).map(Number).sort(function(a,b){ return a-b; });
+  keys.forEach(function(j){
+    if(j>tm.L) return;   // a crash on the last lap raises a flag for a lap that is never ridden
+    var y=tm.yz[j], c=y.c, z=y.z, t0=Infinity, a=Infinity, b=-Infinity, i;
+    (y.by||[]).forEach(function(s){ var w=holdWindow(G,s,j-1); if(w&&w[0]<t0) t0=w[0]; });
+    if(t0===Infinity) for(i=0;i<G.n;i++){ var w2=holdWindow(G,i,j-1); if(w2&&w2[0]<t0) t0=w2[0]; }
+    for(i=0;i<G.n;i++) if(tm.r[i].T.length>=j){ var ea=timeAt(G,i,j-1+c-z), eb=timeAt(G,i,j-1+c+z); if(ea!=null&&ea<a) a=ea; if(eb!=null&&eb>b) b=eb; }
+    var from=Math.min(t0,a), to=b===-Infinity?null:Math.max(b,t0===Infinity?b:t0+6000);
+    out.push({ lap:j, c:c, z:z, t0:t0===Infinity?null:t0, from:from===Infinity?null:from, to:to, by:(y.by||[]).slice() });
+  });
+  return out;
+}
+/* the clock time (ms) the first rider ends lap k (the leader's line crossing; the start of lap k + 1); null when no rider has it */
+function leaderLine(G,k){
+  var best=null, i, T; if(k<1) return 0;
+  for(i=0;i<G.n;i++){ T=G.tm.r[i].T; if(T.length>=k&&(best==null||T[k-1]<best)) best=T[k-1]; }
+  return best;
+}
+/* the clock time (ms) the race clock may run up to before the next battle must be fought: the first line crossing of the last lap decided
+   (Infinity once the flag has fallen; 0 before the first lap) */
+function clockLimit(G){ var tm=G.tm; if(tm.done) return Infinity; if(tm.k<1) return 0; var b=leaderLine(G,tm.k); return b==null?0:b; }
+
+/* ---- where is everyone on the clock: progressAt with the knots of each rider's lap kept, for a view that asks every rider every frame ----
+   w.at(s, t) is exactly progressAt(G, s, t) (a test checks it) and sets w.state: "run" | "down" (in a crash hold: w.h0, w.h1 = its clock window in ms) |
+   "out" (crashed out and gone) | "pits" (out of cards and pulled off) | "fin" (past his flag line). */
+function walker(G){
+  var tm=G.tm, kc=[], w={ state:"run", h0:0, h1:0, G:G };
+  function knotsOf(s,k){ var c=kc[s]; if(c&&c.k===k&&c.n===tm.r[s].T.length) return c.kn; var kn=knots(G,s,k); kc[s]={ k:k, n:tm.r[s].T.length, kn:kn }; return kn; }
+  w.at=function(s,t){
+    var R=tm.r[s], T=R.T, d=R.dnf, i, kn, a, b; w.state="run";
+    if(d&&d.why==="crash"&&t>=d.t){ w.state="out"; return d.lap-1+d.at; }
+    if(!T.length||t>=T[T.length-1]){
+      if(d&&d.why==="crash"&&d.lap===T.length+1){
+        kn=knotsOf(s,d.lap); var base=T.length;
+        for(i=1;i<kn.length;i++) if(t<=kn[i][1]){ a=kn[i-1]; b=kn[i]; if(b[0]===a[0]&&b[1]>a[1]){ w.state="down"; w.h0=a[1]; w.h1=b[1]; } return base+a[0]+(b[0]-a[0])*Math.max(0,Math.min(1,(t-a[1])/Math.max(1,b[1]-a[1]))); }
+        return base+d.at; }
+      if(R.fin) w.state="fin"; else if(d&&d.why==="cards") w.state="pits";
+      return T.length; }
+    var lo=0, hi=T.length-1; while(lo<hi){ var m=(lo+hi)>>1; if(T[m]>t) hi=m; else lo=m+1; }
+    var k=lo+1; kn=knotsOf(s,k);
+    for(i=1;i<kn.length;i++){ if(t<=kn[i][1]||i===kn.length-1){ a=kn[i-1]; b=kn[i];
+      if(b[0]===a[0]&&b[1]>a[1]){ w.state="down"; w.h0=a[1]; w.h1=b[1]; }
+      if(b[1]<=a[1]) return k-1+b[0]; return k-1+a[0]+(b[0]-a[0])*Math.max(0,Math.min(1,(t-a[1])/(b[1]-a[1]))); } }
+    return k-1;
+  };
+  /* the live timing tower at clock t: tower(G, t) with each row's status, last and best lap (completed by t); r.fl = the race's fastest lap so far is his */
+  w.rows=function(t){
+    var rows=tower(G,t), fast=null;
+    rows.forEach(function(r){
+      var st=lapStats(G,r.s,t); r.last=st.last; r.best=st.best; r.bestK=st.bestK; r.lastK=st.lastK;
+      if(st.best!=null&&(fast==null||st.best<fast.t)) fast={ s:r.s, t:st.best, k:st.bestK };
+      w.at(r.s,t); r.status=w.state; if(w.state==="out"||w.state==="pits") r.dnf=r.dnf||tm.r[r.s].dnf;
+    });
+    rows.forEach(function(r){ r.fl=!!(fast&&fast.s===r.s); });
+    return rows;
+  };
+  return w;
+}
+
+/* ---- the lap chart: the place of rider s at the end of lap k (by the order the riders ended lap k; a rider who was already out is behind) ---- */
+function lapPlace(G,s,k){
+  var tm=G.tm, T=tm.r[s].T, i, n=0;
+  if(T.length>=k){ for(i=0;i<G.n;i++){ var Ti=tm.r[i].T; if(i!==s&&Ti.length>=k&&(Ti[k-1]<T[k-1]||(Ti[k-1]===T[k-1]&&i<s))) n++; } return n+1; }
+  var have=0; for(i=0;i<G.n;i++) if(tm.r[i].T.length>=k) have++;
+  var d=tm.r[s].dnf, ahead=0; for(i=0;i<G.n;i++){ var di=tm.r[i].dnf; if(i!==s&&tm.r[i].T.length<k&&di&&d&&((di.lap+di.at)>(d.lap+d.at)||((di.lap+di.at)===(d.lap+d.at)&&i<s))) ahead++; }
+  return have+ahead+1;
+}
+
+/* ---- the facts of a battle for the YOU readout: read right after the battle (G.lastLap is that lap's) and kept by the page until the rider ends the lap ---- */
+function facts(G,s){
+  var tm=G.tm, L0=G.lastLap; if(!tm||!L0||L0.c==null) return null;
+  var c=L0.c[s], Rc=RC(), P=tm.P, k=tm.k, crash=null;
+  (L0.cr||[]).forEach(function(x){ if(x.s===s) crash=x.kind; });
+  var v=c==null?null:Rc.val(G,c), wild=v!=null&&v>=100, rank=c==null?null:Rc.rank(c);
+  return { k:k, s:s, c:c==null?null:c, rank:rank, wild:wild, win:L0.win===s, war:L0.war|0, fought:!!(L0.w&&L0.w[s]), crash:crash, wl:k>=tm.L?P.LLW:1 };
+}
+/* the seconds a thing was worth against a neutral rider on a typical lap (TIME-MODEL.md 2.1; negative = faster): the card turned, the pot or the war won / lost */
+function worth(G,f){
+  var tm=G.tm, P=tm.P, p=tm.p, base=p*ratio(P,P.Z0), out={ card:0, res:0 };
+  if(!f) return out;
+  var x=f.c==null?0:(f.wild?1.25:(f.rank-8)/6), zb=0;
+  if(f.win) zb=f.war>0?P.WS*P.WW*f.war:P.W1; else if(f.fought&&!f.crash) zb=-P.WS*P.WL;
+  out.card=p*ratio(P,P.Z0-P.A*f.wl*x)-base; out.res=p*ratio(P,P.Z0-zb*f.wl)-base;
+  return out;
+}
+var RWORD={ 11:"Jack", 12:"Queen", 13:"King", 14:"Ace", 15:"Joker" };
+function rankWord(r){ return RWORD[r]||String(r); }
+
+/* ---- the YOU readout for rider s at the end of lap k (call it when he crosses the line: T[k-1] exists).
+   f = facts(G, s) kept from that lap's battle (null = the reasons come from the lap's events only), nameOf(seat) = "#12 Name" or the like.
+   Returns { k, time (s), typical (s), gain (s, + = faster than a typical lap), from, to (lap-chart places before / after), moved (+ = places gained), gap (s to the
+   leader at the line), int (s to the rider ahead at the line), crash ("remount" | "out" | null), down (s lost in a hold), reasons [{kind, text, sec (+ = time gained)}],
+   head (the sentence about the lap), line (head + the places) } ---- */
+function you(G,s,k,f,nameOf){
+  var tm=G.tm, R=tm.r[s], T=R.T, p=tm.p, nm=nameOf||function(x){ return "#"+(x+1); };
+  var out={ k:k, s:s, time:null, typical:p, gain:null, from:null, to:null, moved:0, gap:null, int:null, crash:null, down:0, reasons:[], head:"", line:"" };
+  var fin=T.length>=k, i;
+  out.time=fin?(T[k-1]-(k>1?T[k-2]:0))/1000:null;
+  if(fin) out.gain=p-out.time;
+  out.to=lapPlace(G,s,k); out.from=k>1?lapPlace(G,s,k-1):null; out.moved=out.from!=null?out.from-out.to:0;
+  if(fin){ var lead=leaderLine(G,k); out.gap=(T[k-1]-lead)/1000; var ahead=null; for(i=0;i<G.n;i++){ var Ti=tm.r[i].T; if(i!==s&&Ti.length>=k&&Ti[k-1]<=T[k-1]&&(ahead==null||Ti[k-1]>ahead)) ahead=Ti[k-1]; } out.int=ahead==null?null:(T[k-1]-ahead)/1000; }
+  var ev=[]; tm.laps.forEach(function(l){ if(l.k===k) ev=l.ev; });
+  var hold=R.hold[k], d=R.dnf; out.down=hold?hold[1]/1000:0;
+  if(d&&d.why==="crash"&&d.lap===k) out.crash="out"; else if(hold) out.crash="remount";
+  var rs=out.reasons, w=worth(G,f);
+  function add(kind,text,sec){ rs.push({ kind:kind, text:text, sec:sec }); }
+  if(out.crash==="out") add("crash","crashed out: the race is over for you",0);
+  else if(out.crash==="remount") add("crash","crashed: down "+secText(out.down,0)+", back on the bike",-out.down);
+  if(f&&f.c!=null){
+    var cw=f.wild?"Wild card":rankWord(f.rank);
+    if(f.win&&f.war>0) add("result",(f.war>1?(f.war===2?"Double":"Triple")+" war won":"War won")+" ("+cw+")",-w.res);
+    else if(f.win) add("result",cw+"! pot won",-w.res);
+    else if(f.fought&&!f.crash) add("result","War lost",-w.res);
+    if(!f.win&&!(f.fought&&!f.crash)&&Math.abs(w.card)>=0.3) add("card",cw+(w.card<0?" is a good card":" is a weak card"),-w.card);
+  }
+  ev.forEach(function(e){
+    if(e.e==="held"&&e.s===s) add("held","stuck behind "+nm(e.by),-e.lost);
+    else if(e.e==="lapping"&&e.s===s) add("lapping","lapping "+e.n+(e.n>1?" riders":" rider")+" (blue flag)",-e.cost);
+    else if(e.e==="pass"&&e.a===s&&!e.crash) add("pass","passed "+nm(e.d),0);
+    else if(e.e==="pass"&&e.d===s&&!e.crash) add("passed","passed by "+nm(e.a),0);
+  });
+  if(tm.yz[k]&&out.crash==null) add("yellow","yellow flag: everybody loses "+secText(tm.P.YLF*p,1),-tm.P.YLF*p);
+  if(R.fire>0&&k>=tm.k&&!out.crash) add("fire","attacking after the crash",0);
+  var parts=[];
+  if(out.crash==="out") out.head="Crashed out on lap "+k;
+  else if(fin){
+    var g=out.gain; out.head="Lap "+k+": "+fmtLap(out.time)+(Math.abs(g)<0.05?", a typical lap":", "+secText(g,1)+(g>0?" faster":" slower")+" than a typical lap");
+    if(out.moved>0) parts.push("up "+out.moved+(out.moved>1?" places":" place")+" to "+ordText(out.to)); else if(out.moved<0) parts.push("down "+(-out.moved)+(out.moved<-1?" places":" place")+" to "+ordText(out.to)); else if(k>1) parts.push("still "+ordText(out.to));
+    else parts.push(ordText(out.to)+" after the first lap");
+  }
+  out.line=out.head+(parts.length?" · "+parts.join(", "):"");
+  return out;
+}
+
 var MX_Time={ BASE:BASE, CLS:CLS, classOf:classOf, era:era, cardsFor:cardsFor, init:init, adopt:adopt, trim:trim, lap:lap, complete:complete, finish:finish, standings:standings, result:result,
-  knots:knots, progress:progress, progressAt:progressAt, timeAt:timeAt, splits:splits, tower:tower, packet:packet, infoOf:infoOf, run:run, ratio:ratio, handQ:handQ };
+  knots:knots, progress:progress, progressAt:progressAt, timeAt:timeAt, splits:splits, tower:tower, packet:packet, infoOf:infoOf, run:run, ratio:ratio, handQ:handQ,
+  fmtLap:fmtLap, fmtRace:fmtRace, fmtGap:fmtGap, gapText:gapText, secText:secText, ordText:ordText, rankWord:rankWord, lapTimes:lapTimes, lapStats:lapStats, holdWindow:holdWindow, yellowWindows:yellowWindows,
+  leaderLine:leaderLine, clockLimit:clockLimit, walker:walker, lapPlace:lapPlace, facts:facts, worth:worth, you:you };
 
 MX.Time=MX_Time;
 if(typeof module!=="undefined"&&module.exports) module.exports=MX.Time;
