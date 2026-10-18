@@ -37,7 +37,7 @@ function atlas(riders,scale){
       x.textAlign="center"; x.textBaseline="middle"; x.lineJoin="round";
       if(nm){ let fs=24; x.font="800 "+fs+"px Manrope, system-ui, sans-serif"; while(x.measureText(nm).width>cell-12&&fs>12){ fs-=2; x.font="800 "+fs+"px Manrope, system-ui, sans-serif"; }
         x.lineWidth=5; x.strokeStyle="rgba(10,10,14,.85)"; x.strokeText(nm,dx+cell/2,dy+15); x.fillStyle="#f4f5f7"; x.fillText(nm,dx+cell/2,dy+15); }
-      fit(t,cell-16,90); const ny=dy+(nm?cell*0.60:cell/2+4);
+      fit(t,cell-10,100); const ny=dy+(nm?cell*0.615:cell/2+4);   /* (the number as big as the cover's: across the whole upper back) */
       x.lineWidth=12; x.strokeStyle="rgba(10,10,14,.92)"; x.strokeText(t,dx+cell/2,ny); x.lineWidth=4; x.strokeStyle="rgba(255,255,255,.55)"; x.strokeText(t,dx+cell/2,ny);
       x.fillStyle=R.red?"#ff5a5a":"#ffffff"; x.fillText(t,dx+cell/2,ny); }
     /* the floating tag: the plate on a dark pill (gold ring for a person, red for the leader) */
