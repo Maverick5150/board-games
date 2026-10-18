@@ -578,9 +578,9 @@
   html[data-tv] .mx-yc__gap{flex:1 1 12rem}
   html[data-tv] .mx-yc__line{font-size:var(--fs-xs); line-height:1.2}
   html[data-tv] .mx-yc__why li{padding:.08rem .5rem}
-  /* on the TV the card has a fixed budget at the foot of the tower: the chips stay on one line (the rest is cut), the recap takes two lines at most */
-  html[data-tv] .mx-yc__why{flex-wrap:nowrap; overflow:hidden}
-  html[data-tv] .mx-yc__why li{flex:none; white-space:nowrap}
+  /* on the TV the card has a fixed budget at the foot of the tower: two rows of chips at most (a chip that does not fit moves to a row that is cut, never half a chip), the recap two lines */
+  html[data-tv] .mx-yc__why{max-height:3.3rem; overflow:hidden}
+  html[data-tv] .mx-yc__why li{white-space:nowrap}
   html[data-tv] .mx-yc__line{display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden}
   /* the log has its own full-width lines (v2: it shared its row with the hint bar and wrapped in a narrow column); the hint bar under it */
   html[data-tv] .mx-logw{grid-area:log; display:flex; flex-direction:column; align-items:stretch; gap:.35rem; min-width:0}

@@ -192,3 +192,17 @@ attrs, color)` (a seat-coloured button), `api.afkHTML(id)` (the "computer is pla
   same step as the remote's Back.
 - Test hooks: `window.__fs.rejoin` (read-only: `gone`, `invites`, `asks`, `open()` = the colours the Menu lists). Tests:
   BG_audit/sprint/partyrejoin/.
+
+## 9. Notes from the Motocross War plugin (games/mxwar.js: real lap times, the cards decide the seconds)
+- The TV loads the phone game's own time model: `../mxwar/time.js` goes right after `../mxwar/race.js` in the registry line (the same ES5 file as the
+  phone page, plain arithmetic, so every device gets the same bits). The War is unchanged; after each battle `Race` turns that lap's public result
+  into every rider's lap time (`G.tm`, plain JSON in the race snapshot, so a saved Party race and a reloaded TV keep it).
+- The TV host is authoritative: it runs the race, the clock (`MXWar.Track.setModel`, the 2D view rides the race clock) and the announcers. A phone
+  never runs a model. `phoneSt` (the compact state each phone gets) carries `race.tw` (the tower rows: place, number, name, gap as text, DNF mark,
+  fastest-lap mark) and `race.you` (this seat's YOU readout: place, seconds to the leader and to the rider ahead, last and best lap, why the lap
+  was fast or slow, the crash rule that applies), so the phones show the same standings, gaps and YOU lines as the TV with no model of their own.
+  The live rows are computed once per clock instant (one computation serves every phone's push); the host pushes on every event and on a 5 s tick while a
+  race runs, never on every frame, because the relays are public MQTT.
+- The TV tower lists every rider (up to 40) without scrolling: one column up to 22 riders, two columns beyond (`is-cols2`), the row height follows the room left.
+- Test hooks: `window.__mxp.phoneSt(color)` returns the snapshot that phone would get; `window.__mxpLap` (ms) sets the lap length of the race clock. Tests:
+  BG_audit/sprint/mxtimebuild/ (s4-party.js is the TV + 3 phones round trip).
