@@ -99,7 +99,7 @@ function smoothAt(R,i,s,lat,K,out){
   if(A>0.001){
     const n1=K.n2(s*0.13,7.7), n2=K.n2(s*0.17,19.3), n3=K.n2(s*0.11,29.9), n4=K.n2(s*0.14,43.1), n5=K.n2(s*0.47,61.7), wan=(K.n2(s*0.19,71.3)-0.5)*0.18;
     const D0=0.235*A*(0.84+0.3*n1)*(0.88+0.24*n5), w0=0.31+0.08*n2;
-    const r0=rutA(lat-lc-wan,w0,w0*1.9,D0,side);
+    const r0=rutA(lat-lc-wan,w0,w0*2.3,D0,side);
     const r1=rut(lat-(lc+side*(0.58+0.14*n3)),0.24,0.13*A*sstep(0.18,0.5,n3));
     const r2=rut(lat-(lc-side*(0.6+0.12*n4)),0.25,0.14*A*sstep(0.18,0.5,n4));
     const r3=rut(lat-(-side*(hw*0.8+0.1*n1)),0.27,0.16*A*sstep(0.18,0.5,n2)*(0.6+0.4*R.bank[i]));
