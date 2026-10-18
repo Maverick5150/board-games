@@ -34,12 +34,26 @@ class Sd{
 const BOWL=[[0,1.6],[2,3.0],[30,18],[31,18.4],[32,22.5],[34,23],[62,42],[64,44]];
 /* the presets of the remote / phone button */
 const MODES=[{id:"auto",name:"Director"},{id:"chase",name:"Chase"},{id:"broadcast",name:"Broadcast"},{id:"stadium",name:"Stadium"},{id:"onboard",name:"Onboard"}];
-/* the cover chase's numbers (11_SKIN_DESIGN_TOKENS.json cinematic_chase: 3.5 m behind, 1.5 m up, 70 degrees vertical) */
+/* the WIDE chase (11_SKIN_DESIGN_TOKENS.json cinematic_chase: 3.5 m behind, 1.5 m up, 70 degrees vertical): milestone 1's default, kept for a chase with shot.wide and as the replay's rig */
 const CHASE={back:3.5,up:1.5,side:-1.1,fov:70};
+/* THE HERO CHASE (milestone 2, the cover's framing; the default chase): 2.6 m behind the rider and 1 m to his left, 1.1 m up, 72 degrees vertical, the rider big in the
+   right third (his hip point at NDC x +0.42, y -0.28: helmet to tyres over about half the frame's height), the riders ahead in the left two thirds, the stands and the floodlights
+   in the upper frame. (2.6 m, not the cover's 2 m: the riders' and bikes' near-lens fade (r3d-riders.js / r3d-bike.js, D12) dissolves whatever is nearer than 1.7 m to the lens,
+   and at 2.1 m it ate the subject's own rear wheel and fender; at 2.6 m his tyre's back edge is 1.5 m from the lens. With the fade off for the chased subject (a REQUEST) b = 2.1.) The rig keeps the subject exactly where the mount wants him (the eye rides his own heading, smoothed: a hairpin swings it round behind him, never ahead),
+   and chooses between MOUNTS by cost (a rival filling the lens now or in 0.35 s, the track's edge, a berm under the lens) with hysteresis, gliding between them (critically damped):
+   b = metres back, s = metres to his right (- = left), u = metres up, x / y = where his hip point sits on screen (NDC), pref = the mount's cost when nothing is in the way */
+const HERO={fov:72,mounts:[
+  {id:"cover",b:2.6,s:-1.0,u:1.1,x:0.42,y:-0.28,pref:0},
+  {id:"mirror",b:2.6,s:1.0,u:1.1,x:-0.42,y:-0.28,pref:0.30},
+  {id:"high",b:3.0,s:-0.75,u:2.7,x:0.30,y:-0.16,pref:0.45},
+  {id:"wide",b:3.6,s:-1.2,u:1.6,x:0.32,y:-0.22,pref:0.62}],
+  crash:{id:"crash",b:7,s:-2.4,u:2.8,x:0,y:-0.1,pref:0}};
+/* the lens of a frame: a phone held upright gets a wider vertical field (the sides crop, the riders stay big) */
+function lensFov(fov,asp,sh){ return asp<1&&sh!=="gate"&&sh!=="crash"?clamp(2*Math.atan(Math.tan(fov*PI/360)/Math.max(0.78,Math.pow(asp,0.55)))*R2D,10,84):fov; }
 
 export function createCams(VIEW){
   /* ---------------- the cameras' own state ---------------- */
-  let shot=null, shotLog=[], featLog=[], HG=null, mode="auto", CORN=[], share=0.5, lapWide=-1, launched=false, onbCool=0, cornLog=[], wideSide=0;
+  let shot=null, shotLog=[], featLog=[], HG=null, mode="auto", CORN=[], share=0.5, lapWide=-1, launched=false, onbCool=0, cornLog=[], wideSide=0, youOut=0;   /* youOut: seconds the person's rider has been out of the frame */
   const camS={pos:new THREE.Vector3(),look:new THREE.Vector3(),fov:50,snap:true,roll:0};
   const tmpO={}, v3=new THREE.Vector3();   /* scratch */
   const cam=VIEW.cam;   /* the THREE.PerspectiveCamera (race3d.js owns it; these functions move it) */
@@ -80,14 +94,22 @@ export function createCams(VIEW){
   function sees(a,b,margin){
     const d=Math.hypot(b.x-a.x,b.z-a.z), n=Math.max(2,Math.ceil(d/1.2)), m=margin!=null?margin:0.25;
     const hf=VIEW.world&&VIEW.world.ctx.hf;
+    if(a.y<8&&legInSight(a,b,0.75)) return false;   /* a finish-arch leg across the sight line (milestone 2) */
     for(let k=1;k<n;k++){ const t=k/n; if(t*d>d-2.2) break; const x=a.x+(b.x-a.x)*t, z=a.z+(b.z-a.z)*t, y=a.y+(b.y-a.y)*t; if(dirtCell(x,z)>y-m) return false; if(hf&&hf(x,z)>y-m-0.3) return false; }   /* the dirt, and outdoors the hills */
     return true;
   }
   /* a camera at p stays at least clr above the dirt and the ground under it */
   function safeCam(p,clr){ const y=Math.max(dirtTop(p.x,p.z),VIEW.world&&VIEW.world.ctx.hf?VIEW.world.ctx.hf(p.x,p.z):-1e9,VIEW.C&&VIEW.C.kind==="stadium"?-0.16:-1e9); if(p.y<y+clr) p.y=y+clr; return p; }
 
-  /* the finish tower (the flagger's stand) is a solid thing the dirt grid does not know: no fixed camera stands inside or against it */
-  function blocked(x,z,pad){ const fa=VIEW.world&&VIEW.world.fin&&VIEW.world.fin.flagAt; if(fa&&Math.hypot(x-fa.x,z-fa.z)<3.6+(pad||0)) return true; return false; }
+  /* the finish tower (the flagger's stand) and the finish arch's two steel legs (0.36 m boxes, 7.6 m tall, either side of the lane: r3d-world.js finishBuild) are solid things the dirt
+     grid does not know: no fixed camera stands inside or against them (milestone 2, QD look #10: a leg filled 12% of a jump camera's frame) */
+  function archLegs(){ const w=VIEW.world, fin=w&&w.fin; if(!fin||!VIEW.C) return null; if(fin.__legs) return fin.__legs; const f=MX.Course.frame(VIEW.C,0,{}), hw=Math.abs(fin.lat)-1.6, sd=fin.side||-1;
+    fin.__legs=[-sd*(hw+2.3),sd*(hw+3.5)].map(l=>({x:f.x-Math.sin(f.th)*l,z:f.z+Math.cos(f.th)*l})); return fin.__legs; }
+  function blocked(x,z,pad){ const fa=VIEW.world&&VIEW.world.fin&&VIEW.world.fin.flagAt; if(fa&&Math.hypot(x-fa.x,z-fa.z)<3.6+(pad||0)) return true;
+    const lg=archLegs(); if(lg) for(const p of lg) if(Math.hypot(x-p.x,z-p.z)<1.6+(pad||0)) return true; return false; }
+  /* does the sight line from a to b pass within r metres of an arch leg (a steel post across the lens)? */
+  function legInSight(a,b,r){ const lg=archLegs(); if(!lg) return false; const dx=b.x-a.x, dz=b.z-a.z, L2=dx*dx+dz*dz||1;
+    for(const p of lg){ const t=clamp(((p.x-a.x)*dx+(p.z-a.z)*dz)/L2,0,1); if(t>0.02&&Math.hypot(a.x+dx*t-p.x,a.z+dz*t-p.z)<r) return true; } return false; }
   /* ---------------- where things are on the course ---------------- */
   const pa={}, pb={};
   /* a point of the rider's path: race distance D (the gate = 0; before it the start's first heading, extended back), lateral lat (+ right) -> {x, z, th, hw, k, s, onStart, g (the dirt's height there)} */
@@ -266,14 +288,14 @@ export function createCams(VIEW){
   function candidates(urgent){
     const L=[], lead=VIEW.leaderIdx(); if(lead<0) return L;
     const rs=VIEW.rs, r=rs[lead], me=meList().filter(i=>!rs[i].crash);
-    const boost=clamp((0.62-share)*4,0,1.4);   /* the person's rider has had less than its share of the screen: its shots get a lift */
+    const boost=clamp((0.70-share)*4,0,1.4), outB=youOut>5?2.6:youOut>3?0.8:0;   /* the person's rider has had less than its share of the screen (70%: the CEO roots for his own rider): its shots get a lift; out of the frame for over 5 s: the hero chase on him comes next (milestone 2) */
     if(VIEW.lapNo===1&&r.D<VIEW.C.hsD&&VIEW.C.hsD-r.D<62&&!(shot&&shot.type==="turn1")) L.push({type:"turn1",subj:lead,pri:9.2,min:4.5,max:8,cam:turn1Cam});   /* the holeshot: never missed */
     rs.forEach((k,i)=>{ if(k.crashPlan&&!k.crash&&!k.gone&&!k.onStart&&k.lapN>=k.crashPlan.lap){ const d=MX.Course.wrap(VIEW.C,k.crashPlan.s-k.s); if(d>0&&d<Math.max(10,k.v*2.6)){ const out=k.crashPlan.kind==="out"; const cs=k.crashPlan.s; L.push({type:"crash",subj:i,pri:10,min:out?7.5:8.4,max:out?9.5:10.5,cam:()=>crashCam(cs)}); } } });
     if(!r.onStart){ const toLine=VIEW.C.L-r.s, tl=toLine/Math.max(4,r.v), over=VIEW.lapPlan&&VIEW.lapPlan.over&&VIEW.lapPlan.n>=VIEW.lapNo;
       if(tl<3.4&&(over||VIEW.lapNo===VIEW.lenLaps-1||VIEW.lapNo%3===0)) L.push({type:"line",subj:lead,pri:over?9:VIEW.lapNo===VIEW.lenLaps-1?7:4,min:3.2,max:over?7:5,cam:lineCam}); }
     /* the yellow lap: once, the first rider (in running order) about to ride through the yellow section, with the marshal in the frame */
     if(VIEW.yellow&&VIEW.yellow.lap===VIEW.lapNo&&!VIEW.yellow.shown){ const ys=VIEW.yellow.s; let yi=-1;
-      rs.map((k,i)=>i).filter(i=>!rs[i].gone&&!rs[i].crash&&!rs[i].onStart).sort((a,b)=>rs[b].D-rs[a].D).some(i=>{ const k=rs[i], d=MX.Course.wrap(VIEW.C,VIEW.yellow.s0-k.s); if(d>2&&d<Math.max(14,k.v*4.5)){ yi=i; return true; } return false; });
+      rs.map((k,i)=>i).filter(i=>!rs[i].gone&&!rs[i].crash&&!rs[i].onStart).sort((a,b)=>rs[b].D-rs[a].D).some(i=>{ const k=rs[i], d=MX.Course.wrap(VIEW.C,VIEW.yellow.s0-k.s); if(d>2&&d<Math.max(8,k.v*1.8)&&d<30){ yi=i; return true; } return false; });   /* (milestone 2, QD motion #6: it cut in 4.5 s out and filmed an empty corner for up to 6 s: now about 1.8 s out, the first rider within 30 m) */
       if(yi>=0) L.push({type:"track",subj:yi,pri:6.5,min:4.5,max:7,cam:()=>yellowCam(ys),why:"yellow"}); }
     /* the launch: right after the gate drops the person's rider, the pack ahead and the gate row behind (the cover's framing) */
     if(!launched&&VIEW.lapNo===1&&VIEW.T<9&&me.length&&!rs[me[0]].crash) L.push({type:"chase",subj:me[0],pri:9.4,min:3,max:4.6,why:"launch"});
@@ -292,13 +314,13 @@ export function createCams(VIEW){
         if(imp>=2){ const bs=b.s+b.v*2.2; L.push(mine||k<=3?{type:"chase",subj:b.k,victim:a.k,pri:4.4+imp*0.3,min:3.6,max:6.5,why:"battle"}:{type:"track",subj:b.k,victim:a.k,pri:4.2+imp*0.3,min:3.5,max:6.5,cam:()=>trackCam(bs,3.2),why:"battle"}); break; } } }
     if(VIEW.holdInfo&&VIEW.holdInfo.war) VIEW.holdInfo.war.forEach((j,ix)=>{ if(rs[j]&&!rs[j].gone&&!rs[j].onStart) L.push({type:"chase",subj:j,pri:3.6-ix*0.1+(isMe(j)?0.8:0),min:3,max:4.5,why:"war"}); });
     /* a wide establishing shot of the whole night: once a lap, and after the first corner of lap one */
-    if(lapWide!==VIEW.lapNo&&!r.onStart&&(VIEW.lapNo>1||r.D>VIEW.C.hsD+20)&&VIEW.C.kind!==undefined&&motion()!=="off") L.push({type:"wide",subj:lead,pri:3.7,min:4.8,max:7.2,why:"wide"});
+    if(lapWide!==VIEW.lapNo&&!r.onStart&&(VIEW.lapNo>1||r.D>VIEW.C.hsD+20)&&VIEW.C.kind!==undefined&&motion()!=="off") L.push({type:"bcast",subj:lead,pri:3.7,min:4.8,max:7.2,why:"wide"});   /* (milestone 2: the high broadcast from the stands, framed wide) */
     L.push({type:"chase",subj:lead,pri:2,min:4,max:7,why:"lead"});
-    if(me.length) L.push({type:"chase",subj:me[0],pri:2.9+boost,min:4.5,max:8,why:"you"});
+    if(me.length) L.push({type:"chase",subj:me[0],pri:Math.min(8.5,3.4+boost+outB),min:4.5,max:8,why:"you"});   /* the hero chase on the person's rider: the default filler (milestone 2: 2.9 before) */
     if(!r.onStart){ const rsd=r.s+Math.max(8,r.v*2.2); L.push({type:"track",subj:lead,pri:2.1,min:3.5,max:6,cam:()=>trackCam(rsd,3.4),why:"roving"}); }
     /* never an empty track: a chase with nobody near it, or a spot shot of a lone rider, is the last choice; nor a chase with riders right behind the subject (the lens would sit among them) */
-    L.forEach(c=>{ if(c.pri>=9||c.type==="wide"||c.type==="crash") return; const n=packAround(c.subj,c.type==="chase"?34:22); if(n===0) c.pri-=2.2; else if(n===1) c.pri-=0.5;
-      if(c.type==="chase"){ const q=rs[c.subj]; let f=0; if(q) rs.forEach((o,i)=>{ if(i===c.subj||o.gone||!o.pos) return; const dd=q.D-o.D; if(dd>0&&dd<5&&Math.abs(o.lat-q.lat)<2.4) f++; }); if(f>=1) c.pri-=1.2+0.7*Math.min(2,f-1); } });
+    L.forEach(c=>{ if(c.pri>=9||c.type==="wide"||c.type==="bcast"||c.type==="crash") return; const n=packAround(c.subj,c.type==="chase"?34:22); if(n===0) c.pri-=2.2; else if(n===1) c.pri-=0.5;
+      if(c.type==="chase"){ const q=rs[c.subj]; let f=0; if(q) rs.forEach((o,i)=>{ if(i===c.subj||o.gone||!o.pos) return; const dd=q.D-o.D; if(dd>0&&dd<5&&Math.abs(o.lat-q.lat)<2.4) f++; }); if(f>=1) c.pri-=(c.wide?1.2:0.45)+(c.wide?0.7:0.3)*Math.min(2,f-1); } });   /* (milestone 2: the hero chase lifts or swaps sides over a rider behind its subject) */
     return L;
   }
   /* the shot a preset holds: the person's rider (or the leader), never cutting; the broadcast keeps cutting between trackside spots as the rider passes them */
@@ -309,8 +331,7 @@ export function createCams(VIEW){
       case "chase": return {type:"chase",subj:subj,pri:2,min:1e9,max:1e9,why:"preset"};
       case "onboard": return {type:"onboard",subj:subj,pri:2,min:1e9,max:1e9,why:"preset"};
       case "stadium": return {type:"wide",subj:subj,pri:2,min:1e9,max:1e9,why:"preset"};
-      case "broadcast": { if(r.onStart) return {type:"gate",subj:subj,pri:2,min:0.1,max:1e9,why:"preset"};   /* still on the start path: the gate camera follows the launch */
-        const rsd=(r.s||0)+Math.max(10,(r.v||10)*2.6); return {type:"track",subj:subj,pri:2,min:4,max:7.5,cam:()=>trackCam(rsd,3.6,[14,18,23,29],5.5,9),why:"preset"}; }
+      case "broadcast": return {type:"bcast",subj:subj,pri:2,min:1e9,max:1e9,why:"preset"};   /* (milestone 2: the elevated stadium broadcast from the stands, panning and zooming with the pack round the person's rider; it was the trackside long lens) */
     }
     return null;
   }
@@ -321,11 +342,11 @@ export function createCams(VIEW){
     L.forEach(c=>{ const k=c.type+(c.why?":"+c.why:""); if(last.indexOf(k)>=0&&c.pri<6) c.pri-=1.2; c.pri+=Math.random()*0.15; });
     L.sort((a,b)=>b.pri-a.pri);
     const c=L[0];
-    if(!force&&shot&&c.type===shot.type&&c.subj===shot.subj&&c.why===shot.why&&!c.cam&&c.type!=="wide"){ shot.t=0; return; }   /* the same moving camera: just keep it */
+    if(!force&&shot&&c.type===shot.type&&c.subj===shot.subj&&c.why===shot.why&&!c.cam&&c.type!=="wide"&&c.type!=="bcast"){ shot.t=0; return; }   /* the same moving camera: just keep it */
     if(c.feat){ featLog.push(c.feat.from); if(featLog.length>6) featLog.shift(); }
     if(c.corner){ cornLog.push(c.corner.sa); if(cornLog.length>6) cornLog.shift(); }
     if(c.why==="launch") launched=true;
-    if(c.type==="wide") lapWide=VIEW.lapNo;
+    if(c.type==="wide"||c.type==="bcast"&&c.why==="wide") lapWide=VIEW.lapNo;
     setShot(c);
   }
   const dirA=new THREE.Vector3(), fwA=new THREE.Vector3();
@@ -349,7 +370,7 @@ export function createCams(VIEW){
       if(shot.feat&&r&&!r.onStart){ const d=MX.Course.wrap(VIEW.C,r.s-shot.feat.to); if(d<VIEW.C.L/2&&d>3){ pickShot(); return; } }
       if(shot.corner&&r&&!r.onStart){ const d=MX.Course.wrap(VIEW.C,r.s-shot.corner.s1); if(d<VIEW.C.L/2&&d>4){ pickShot(); return; } }
       if(shot.cam&&r&&r.pos&&shot.type!=="crash"&&shot.type!=="line"){ dirA.subVectors(shot.cam,r.pos); fwA.set(Math.cos(r.th||0),0,Math.sin(r.th||0)); const far=shot.type==="track"?18:6; if(dirA.dot(fwA)<-far||dirA.length()<4.2){ pickShot(); return; } }
-      if(!shot.cam&&shot.type!=="wide"&&shot.t>=shot.min+1.5) pickShot();
+      if(!shot.cam&&shot.type!=="wide"&&shot.type!=="bcast"&&shot.t>=shot.min+1.5) pickShot();
     }
   }
 
@@ -375,7 +396,7 @@ export function createCams(VIEW){
     let near=0; for(let pass=0;pass<2;pass++) for(let i2=0;i2<rs.length;i2++){ const x=rs[i2]; if(x===r||x.gone||!x.pos) continue;
       const fx=Math.cos(x.th||0), fz=Math.sin(x.th||0); let tq=(E.x-x.pos.x)*fx+(E.z-x.pos.z)*fz; tq=clamp(tq,-1.05,1.05);
       let dx=E.x-(x.pos.x+fx*tq), dz=E.z-(x.pos.z+fz*tq), d=Math.hypot(dx,dz);
-      if(d<2.1){ if(d<0.35){ const sgn=((E.x-x.pos.x)*-fz+(E.z-x.pos.z)*fx)>=0?1:-1; dx=-fz*sgn; dz=fx*sgn; d=0.35; }   /* (nearly on the segment: the side he is on, not a flip) */
+      if(d<2.1){ if(d<0.35){ const sgn=((E.x-x.pos.x)*-fz+(E.z-x.pos.z)*fx)>=0?1:-1; dx=-fz*sgn*0.35; dz=fx*sgn*0.35; d=0.35; }   /* (nearly on the segment: the side he is on, not a flip; milestone 2, QD motion #4: the push vector has the length d, so the push is 2.1 - d, not a 10 m kick) */
         const k=(2.1-d)/Math.max(d,0.35); E.x+=dx*k; E.z+=dz*k; near=Math.max(near,1-d/2.1); } }
     K.near=K.near===undefined?near:K.near+(near-K.near)*Math.min(1,Math.max(0,dt)*6);
     /* height: above the dirt under the lens, smoothed (the whoops don't bounce it), lifted a little with the bike over a jump, and high enough to see him over a crest */
@@ -404,6 +425,97 @@ export function createCams(VIEW){
     T.set(E.x+Math.cos(yaw)*cp*14,E.y+Math.sin(pt)*14,E.z+Math.sin(yaw)*cp*14);
     cFocus.copy(S);
     RG.fov=crash?60:o.fov+clamp(((r.v||0)-10)*0.12,0,1.6); RG.roll=roll; RG.near=0.5; RG.clr=0.4; RG.follow=true;
+  }
+  /* THE HERO CHASE (milestone 2; the numbers are HERO's): the eye rides the subject's own heading (a spring, tau 0.38 s, never more than 43 degrees behind the track's heading: a
+     hairpin swings it round BEHIND him, never ahead), offset by the chosen mount; the aim puts his hip point exactly where the mount wants it on screen (the camera is fixed to him,
+     so nothing lags: the composition is the cover's whatever his speed); the height floats over the whoops (half the dirt under the lens, half the dirt under him, smoothed), rises
+     with him over a jump (80% of his height in the air), never dips into the dirt and always sees him over a crest; a rival filling the lens (now or in 0.35 s), the track's edge, a
+     berm or the wall under the lens make another mount cheaper and the rig glides there (critically damped, about a second; a switch waits 0.9 s unless the lens is badly blocked). */
+  const hm={x:0,y:0,z:0}, hw2={x:0,z:0};
+  /* the dirt as drawn at the subject's position plus (dx, dz) (the subject's own track frame: exact enough within a few metres of him; the start pad is flat) */
+  function groundNear(r,dx,dz){ const f=r.fr; if(!f) return r.gy!=null?r.gy:0; if(r.onStart||r.crash&&r.s==null) return f.y||0;
+    const c=Math.cos(f.th), s=Math.sin(f.th), al=dx*c+dz*s, lt=-dx*s+dz*c; return MX.Course.ground(VIEW.C,(r.s||0)+al,clamp((r.lat||0)+lt,-f.hw-0.5,f.hw+0.5)); }
+  function mountEye(m,S,yaw,gS,o){ const fx=Math.cos(yaw), fz=Math.sin(yaw); o.x=S.x-fx*m.b-fz*m.s; o.z=S.z-fz*m.b+fx*m.s; o.y=gS+m.u; return o; }
+  /* what a mount costs now: its preference + 2.4 x how much a rival fills its lens + the track's edge (the lens over the blocks) + a berm or a jump face under the lens + the
+     stadium's wall. The lens test is the picture itself: each rival within 8 m (a 2.2 x 0.8 x 1.9 m box, now and where he will be in 0.35 s) projected through the lens this
+     mount would have; its share of the frame (the box's screen rectangle, clipped to the frame; a box across the lens plane counts as 70%) over 5% costs, 30% or more is the
+     worst (1). The subject himself is the picture and does not count. */
+  const pc8=[[-1.1,-0.4],[1.1,-0.4],[-1.1,0.4],[1.1,0.4]];
+  function mountCost(m,r,j,S,yaw,gS,tanH,tanV,kA){
+    mountEye(m,S,yaw,gS,hm); const rs=VIEW.rs;
+    const be=Math.atan2(S.z-hm.z,S.x-hm.x), hd=Math.max(0.6,Math.hypot(S.x-hm.x,S.z-hm.z)), psi=be-Math.atan(m.x*tanH), pit=Math.atan2(S.y-hm.y,hd)-Math.atan(m.y*tanV);
+    const cps=Math.cos(pit), sps=Math.sin(pit), cy=Math.cos(psi), sy=Math.sin(psi);
+    const fX=cps*cy, fY=sps, fZ=cps*sy, rX=-sy, rZ=cy, uX=-cy*sps, uY=cps, uZ=-sy*sps;   /* the lens' forward, right and up */
+    let I=0;
+    for(let i=0;i<rs.length;i++){ const o=rs[i]; if(i===j||(o.gone&&!o.crash)||!o.pos) continue;
+      const dx0=o.pos.x-hm.x, dz0=o.pos.z-hm.z; if(dx0*dx0+dz0*dz0>64) continue;
+      const fo=Math.cos(o.th||0), go=Math.sin(o.th||0), gy=o.gy!=null?o.gy:o.pos.y-1, top=gy+(o.crash?1.2:1.95);
+      for(let w=0;w<2;w++){ const ad=w&&!o.crash?Math.min(4,(o.v||0)*0.35):0, cx=o.pos.x+fo*ad, cz=o.pos.z+go*ad;
+        let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9,nf=0;
+        for(let c=0;c<4;c++) for(let h=0;h<2;h++){ const a=pc8[c][0], l=pc8[c][1], px=cx+fo*a-go*l-hm.x, py=(h?top:gy)-hm.y, pz=cz+go*a+fo*l-hm.z;
+          const zc=px*fX+py*fY+pz*fZ; if(zc>0.05) nf++; const zz=Math.max(zc,0.3);   /* (a corner at or behind the lens plane is projected as if 0.3 m in front: it pushes the box to the frame's edge on its own side) */
+          const xn=(px*rX+pz*rZ)/(zz*tanH), yn=(px*uX+py*uY+pz*uZ)/(zz*tanV); if(xn<x0) x0=xn; if(xn>x1) x1=xn; if(yn<y0) y0=yn; if(yn>y1) y1=yn; }
+        let cov=0;
+        if(nf){ x0=Math.max(-1,x0); x1=Math.min(1,x1); y0=Math.max(-1,y0); y1=Math.min(1,y1); if(x1>x0&&y1>y0) cov=(x1-x0)*(y1-y0)/4; }   /* (all of him behind the lens: nothing) */
+        const k=clamp((cov-0.05)/0.25,0,1)*(w?0.7:1); if(k>I) I=k; } }
+    let P=m.pref+2.4*I+(m.s<0?1:-1)*clamp((kA||0)*8,-0.2,0.2);   /* a right turn ahead (kA > 0) prefers the lens on his right, looking into the turn (and a left turn the cover's) */
+    const f=r.fr; if(f&&!r.crash){ const c=Math.cos(f.th), s=Math.sin(f.th), lt=(r.lat||0)+(hm.x-S.x)*-s+(hm.z-S.z)*c, over=Math.abs(lt)-(f.hw-0.35); if(over>0) P+=0.25+over*0.5;
+      if(groundNear(r,hm.x-S.x,hm.z-S.z)>gS+0.75) P+=0.35; }
+    if(VIEW.C.kind==="stadium"&&VIEW.C.layout.floor){ hw2.x=hm.x; hw2.z=hm.z; inFloor(hw2); if(Math.hypot(hw2.x-hm.x,hw2.z-hm.z)>0.3) P+=0.6; }
+    return {cost:P,I:I};
+  }
+  function rigHero(r,j,dt,snap){
+    const K=shot.k, st=j>=0&&VIEW.st?VIEW.st[j]:null, S=r.pos, asp=VIEW.W/Math.max(1,VIEW.H), crash=!!r.crash, th=r.th||0;
+    const fovL=lensFov(crash?60:HERO.fov+clamp(((r.v||0)-10)*0.12,0,2),asp,"chase"), tanV=Math.tan(fovL*PI/360), tanH=tanV*asp, xs=clamp(asp/1.78,0.45,1);
+    const first=!K.init||snap;
+    if(first){ K.hy=new Sd(th); K.mi=-1; K.mT=9; K.hb=new Sd(0); K.hs=new Sd(0); K.hu=new Sd(0); K.hx=new Sd(0); K.hyy=new Sd(0); K.gb=new Sd(0); K.sy=new Sd(S.y); K.py=S.y; K.wasAir=!!r.air; K.vyMin=0; K.shkA=0; K.shkT=9; }
+    /* the heading the eye rides: his, smoothed, at most 43 degrees behind */
+    let yawS=K.hy.stepA(th,0.38,dt); { const lag=wrapA(yawS-th); if(Math.abs(lag)>0.75){ yawS=th+Math.sign(lag)*0.75; K.hy.x=yawS; } }
+    const gS=r.gy!=null?r.gy:S.y-1;
+    /* the turn ahead (the mean curvature 5-25 m on, + = right): the composition leans into it, and it prefers the mount that looks into it */
+    let kA=0; if(!r.onStart&&!crash&&r.s!=null){ for(let q=5;q<=25;q+=5) kA+=MX.Course.frame(VIEW.C,r.s+q,tmpO).k||0; kA/=5; }
+    if(first) K.kA=new Sd(kA); const kS=K.kA.step(kA,0.5,dt);
+    /* the mount: the cheapest, with hysteresis */
+    const M=crash?[HERO.crash]:HERO.mounts; K.mT+=Math.max(0,dt);
+    /* (each mount's cost is smoothed over a quarter second, and a switch needs a clear margin and a dwell: 0.3 and 1.4 s, or 0.35 and 0.5 s when the lens is badly
+       blocked; a pack in which every mount is blocked does not make the rig hunt between them) */
+    if(first||!K.cs||K.cs.length!==M.length){ K.cs=null; }
+    let best=0, bc=1e9; const costs=[]; for(let i=0;i<M.length;i++){ const c=mountCost(M[i],r,j,S,yawS,gS,tanH,tanV,kS); costs.push(c); }
+    if(!K.cs) K.cs=costs.map(c=>c.cost); else { const a=Math.min(1,Math.max(0,dt)/0.25); for(let i=0;i<M.length;i++) K.cs[i]+=(costs[i].cost-K.cs[i])*a; }
+    for(let i=0;i<M.length;i++) if(K.cs[i]<bc){ bc=K.cs[i]; best=i; }
+    if(first||K.mi<0||K.mi>=M.length) K.mi=best;
+    else if(best!==K.mi){ const cc=K.cs[K.mi]; if((bc<cc-0.3&&K.mT>1.4)||(costs[K.mi].I>0.6&&bc<cc-0.35&&K.mT>0.5)){ K.mi=best; K.mT=0; } }
+    const m=M[K.mi]; K.mount=m.id; K.lensI=costs[K.mi].I;
+    if(first){ K.hb.snap(m.b); K.hs.snap(m.s); K.hu.snap(m.u); K.hx.snap(m.x); K.hyy.snap(m.y); }
+    const b=K.hb.step(m.b,0.5,dt), sd=K.hs.step(m.s,0.5,dt), u=K.hu.step(m.u,0.45,dt), xT=clamp(K.hx.step(m.x,0.55,dt)-clamp(kS*2.5,-0.22,0.22),-0.6,0.6)*xs, yT=K.hyy.step(m.y,0.5,dt);
+    /* the eye */
+    const fx=Math.cos(yawS), fz=Math.sin(yawS);
+    E.x=S.x-fx*b-fz*sd; E.z=S.z-fz*b+fx*sd;
+    { const f=r.fr; if(f&&!crash){ const c=Math.cos(f.th), s=Math.sin(f.th), lt=(r.lat||0)+(E.x-S.x)*-s+(E.z-S.z)*c, lim=Math.max(0.4,f.hw-0.35); if(Math.abs(lt)>lim){ const q=Math.sign(lt)*lim-lt; E.x+=-s*q; E.z+=c*q; } } }   /* over the dirt, never over the blocks */
+    if(VIEW.C.kind==="stadium") inFloor(E);
+    const hAir=crash?0:Math.max(0,(r.oy!=null?r.oy:gS)-gS), air=K.air.step(Math.min(4.5,hAir),0.22,dt);
+    const gE=groundNear(r,E.x-S.x,E.z-S.z), gBase=crash?gS:0.5*gE+0.5*gS;
+    if(first) K.gb.snap(gBase); const gb=K.gb.step(gBase,0.28,dt);
+    let yT2=gb+u+0.8*air;
+    { let need=-1e9; for(let q=1;q<=3;q++){ const t=q*0.25, g=groundNear(r,(E.x-S.x)*(1-t),(E.z-S.z)*(1-t))+0.25; need=Math.max(need,(g-t*S.y)/(1-t)); } if(need>yT2) yT2=need; }   /* he stays in sight over a crest */
+    if(first) K.y.snap(yT2); const ys=K.y.step(yT2,0.18,dt);
+    const floor=Math.max(gE,groundNear(r,E.x-S.x+fx*0.6,E.z-S.z+fz*0.6),groundNear(r,E.x-S.x-fx*0.6,E.z-S.z-fz*0.6))+0.45;
+    E.y=Math.max(ys,floor);
+    /* a landing: the camera drops with the bike and comes back (a soft shake) */
+    const vy=dt>0?(S.y-K.py)/dt:0; K.py=S.y; if(r.air){ if(!K.wasAir) K.vyMin=0; K.vyMin=Math.min(K.vyMin,vy); }
+    if(K.wasAir&&!r.air&&!crash){ K.shkA=clamp(-K.vyMin*0.017,0.03,0.14); K.shkT=0; }
+    K.wasAir=!!r.air; K.shkT+=Math.max(0,dt);
+    const shk=K.shkA*Math.exp(-K.shkT/0.2)*Math.sin(K.shkT*TAU*3.1); E.y+=shk;
+    /* the aim: his hip point at the mount's place on screen */
+    /* (no lag on the aim: a landing drops him 8 m/s at 2.3 m from the lens, and any smoothing of the angles let him slide to the frame's edge; only his height is lightly
+       smoothed, so the suspension's bob over the whoops does not shake the frame) */
+    if(first){ K.sy.snap(S.y); K.roll.snap(0); K.init=true; }
+    const syS=K.sy.step(S.y,0.05,dt), be=Math.atan2(S.z-E.z,S.x-E.x), hd=Math.max(0.6,Math.hypot(S.x-E.x,S.z-E.z)), el=Math.atan2(syS-E.y,hd);
+    const psi=be-Math.atan(xT*tanH), pit=clamp(el-Math.atan(yT*tanV),-0.7,0.8)+shk*0.4, cp=Math.cos(pit);
+    T.set(E.x+Math.cos(psi)*cp*14,E.y+Math.sin(pit)*14,E.z+Math.sin(psi)*cp*14);
+    cFocus.copy(S);
+    const lean=st?st.lean:(r.lean||0), roll=K.roll.step(crash?0:clamp(lean*0.22,-0.12,0.12),0.35,dt);   /* the bike's lean banks it a little in a berm */
+    RG.fov=crash?60:HERO.fov+clamp(((r.v||0)-10)*0.12,0,2); RG.roll=roll; RG.near=0.5; RG.clr=0.4; RG.follow=true;
   }
   /* onboard: the rider's eyes just in front of the helmet, over the bars; the bike's roll and pitch softened (a helmet camera is stabilised), looking into the corner */
   const oEul=new THREE.Euler(0,0,0,"YZX"), oQ=new THREE.Quaternion(), oV=new THREE.Vector3();
@@ -435,6 +547,49 @@ export function createCams(VIEW){
     const dist=E.distanceTo(T); let fov=50;
     if(port){ const wid=Math.max(18,Math.hypot(maxx-minx,maxz-minz)*1.2+12); fov=clamp(2*Math.atan(wid/asp/(2*dist))*R2D,24,72); }
     RG.fov=fov; RG.roll=0; RG.near=0.5; RG.clr=2.5; RG.follow=false;
+  }
+  /* THE BROADCAST (milestone 2: the camera button's "Broadcast" and the director's once-a-lap establishing shot; the CEO's elevated stadium view, Reference_Crops/broadcast_overview):
+     a TV camera on a platform in the stands, 6.5 m over the seats where they are about 10 m high (the lower bowl), on a rail along a long side of the stadium. It dollies slowly
+     with the action (tau 3 s), pans with the pack round its rider (a damped follower led by their speed) and zooms so the pack fills about half the frame's width (16-42 degrees
+     vertical); it changes sides (a cut) only when the pack comes too close under it or too far across the floor, at most every 5 s. Outdoors: a tower over the terrain. */
+  let RAILS=null;
+  function bcastRails(){
+    if(RAILS) return RAILS;
+    const C=VIEW.C, F=C.layout&&C.layout.floor, BY=VIEW.world&&VIEW.world.ctx&&VIEW.world.ctx.bowlY; RAILS=[];
+    if(C.kind==="stadium"&&F&&BY){ const cx=(F[0]+F[1])/2;
+      for(const sd of [1,-1]){ const z0=sd>0?F[3]:F[2]; let z=z0+sd*6;
+        for(let d=6;d<=60;d+=1){ z=z0+sd*d; const b=BY(cx,z); if(b&&b.y>=9.5) break; }
+        RAILS.push({z:z,x0:F[0]+26,x1:F[1]-26,side:sd}); } }
+    return RAILS;
+  }
+  const bT=new THREE.Vector3(), bV=new THREE.Vector3();
+  function rigBroadcast(r,j,dt,snap){
+    const K=shot.k, rs=VIEW.rs, asp=VIEW.W/Math.max(1,VIEW.H), est=shot.why==="wide", BY=VIEW.world&&VIEW.world.ctx&&VIEW.world.ctx.bowlY;
+    /* the pack round the rider: everyone within 30 m of race distance (the rider counts three times), its middle and its size */
+    let sx=0,sy=0,sz=0,sw=0; const D0=r.D||0;
+    for(let i=0;i<rs.length;i++){ const o=rs[i]; if((o.gone&&!o.crash)||!o.pos) continue; if(i!==j&&Math.abs((o.D||0)-D0)>30) continue; const w=i===j?3:1; sx+=o.pos.x*w; sy+=(o.gy!=null?o.gy:o.pos.y-1)*w; sz+=o.pos.z*w; sw+=w; }
+    if(!sw){ sx=r.pos.x; sy=r.pos.y-1; sz=r.pos.z; sw=1; } sx/=sw; sy/=sw; sz/=sw;
+    let ext=0; for(let i=0;i<rs.length;i++){ const o=rs[i]; if((o.gone&&!o.crash)||!o.pos) continue; if(i!==j&&Math.abs((o.D||0)-D0)>30) continue; ext=Math.max(ext,Math.hypot(o.pos.x-sx,o.pos.z-sz)); }
+    ext=Math.min(ext,40);
+    const v=r.v||0, th=r.th||0; bT.set(sx+Math.cos(th)*v*0.45,sy+0.6,sz+Math.sin(th)*v*0.45);   /* led by the pack's speed: the pan never trails */
+    /* the eye: a rail in the stands (or the outdoor tower) */
+    const R=bcastRails(); K.bt=(K.bt||0)+Math.max(0,dt);
+    if(R.length){
+      const eyeOn=(ri,x)=>{ const rl=R[ri], xx=clamp(x,rl.x0,rl.x1), b=BY(xx,rl.z); return bV.set(xx,(b?Math.max(b.y,0):10)+6.5,rl.z); };
+      const score=ri=>{ const e=eyeOn(ri,bT.x*0.6), d=Math.hypot(e.x-bT.x,e.z-bT.z), dep=Math.atan2(e.y-bT.y,d)*R2D; return Math.abs(d-55)*0.035+(d<35?(35-d)*0.06:0)+(dep<10?(10-dep)*0.1:0)+(dep>32?(dep-32)*0.1:0)-(ri===K.ri?0.6:0); };   /* across the floor (about 55 m), looking down 10-32 degrees: the far stands behind the pack */
+      if(K.ri===undefined||snap){ K.ri=score(0)<=score(1)?0:1; K.bt=0; K.ex=new Sd(clamp(bT.x*0.6,R[K.ri].x0,R[K.ri].x1)); K.init=false; }
+      else if(K.bt>5&&R.length>1){ const o=1-K.ri; if(score(o)<score(K.ri)-0.25){ K.ri=o; K.bt=0; K.ex=new Sd(clamp(bT.x*0.6,R[o].x0,R[o].x1)); K.init=false; camS.snap=true; } }   /* a cut to the other side */
+      const ex=K.ex.step(clamp(bT.x*0.6,R[K.ri].x0,R[K.ri].x1),3.0,dt); E.copy(eyeOn(K.ri,ex));
+    } else { if(!shot.wide) shot.wide=wideSpot(0); E.copy(shot.wide.pos); }
+    /* the pan and the zoom */
+    if(!K.init){ K.tx.snap(bT.x); K.ty.snap(bT.y); K.tz.snap(bT.z); }
+    T.set(K.tx.step(bT.x,0.9,dt),K.ty.step(bT.y,0.9,dt),K.tz.step(bT.z,0.9,dt));
+    const dist=Math.max(8,E.distanceTo(T)), wantW=clamp(ext*2+16,est?60:24,est?110:80), hf=2*Math.atan(wantW/2/dist);
+    let vf=clamp(2*Math.atan(Math.tan(hf/2)/Math.max(0.56,asp))*R2D,16,est?50:42);
+    if(!K.init){ K.zoom.snap(vf); K.init=true; } vf=K.zoom.step(vf,1.0,dt);
+    T.y+=0.12*Math.tan(vf*PI/360)*dist;   /* the pack a little below the middle: the stands and the lights above it */
+    cFocus.copy(T);
+    RG.fov=vf; RG.roll=0; RG.near=0.5; RG.clr=2.5; RG.follow=false;
   }
   /* a heli / crane shot (kept for tests): behind and above, inside the wall */
   function rigHeli(r,j,dt,snap){
@@ -650,19 +805,20 @@ export function createCams(VIEW){
       if(camS.offE) E.copy(camS.offE); T.copy(cTarget); RG.fov=50; RG.roll=0; RG.near=0.5; RG.clr=6; RG.follow=false;
     } else if(sh==="gate"&&VIEW.gate) rigGate(dt,snap,have,r);
     else if(!have){ set=false; /* nothing to follow */ }
-    else if(sh==="chase") rigChase(r,j,dt,snap,{back:CHASE.back,up:CHASE.up,side:shot.why==="launch"?-1.5:CHASE.side,fov:CHASE.fov});
+    else if(sh==="chase"){ if(shot.wide) rigChase(r,j,dt,snap,{back:CHASE.back,up:CHASE.up,side:shot.why==="launch"?-1.5:CHASE.side,fov:CHASE.fov}); else rigHero(r,j,dt,snap); }   /* the hero chase (milestone 2) unless the shot asks for the wide one */
     else if(sh==="onboard") rigOnboard(r,j,dt,snap);
+    else if(sh==="bcast") rigBroadcast(r,j,dt,snap);
     else if(sh==="wide") rigWide(r,j,dt,snap);
     else if(sh==="heli") rigHeli(r,j,dt,snap);
     else rigSpot(sh,r,j,dt,snap);
     if(!set) return;
+    snap=snap||camS.snap;   /* a rig may cut inside its own shot (the broadcast changing sides): the lens snaps with it */
     /* the lens: smoothed across frames (a cut snaps it); a phone held upright gets a wider vertical field so the sides crop and the riders stay big */
-    let fov=RG.fov; const asp=VIEW.W/Math.max(1,VIEW.H);
-    if(asp<1&&sh!=="gate"&&sh!=="crash") fov=clamp(2*Math.atan(Math.tan(fov*PI/360)/Math.max(0.78,Math.pow(asp,0.55)))*R2D,10,84);
-    if(snap){ FS.snap(fov); ROLL.snap(RG.roll); camS.snap=false; } else { FS.step(fov,0.3,dt); ROLL.step(RG.roll,0.05,dt); }
+    const asp=VIEW.W/Math.max(1,VIEW.H), fov=lensFov(RG.fov,asp,RP?"replay":sh);
+    if(snap){ FS.snap(fov); ROLL.snap(RG.roll); camS.snap=false; } else { FS.step(fov,sh==="chase"&&!RP?0.12:0.3,dt); ROLL.step(RG.roll,0.05,dt); }   /* (the hero chase aims with the lens it asked for: a quick follower keeps its composition) */
     camS.fov=FS.x;
     /* never inside the dirt, a berm or a wall: the fixed spots are kept above the grid's dirt, the followers above the exact ground under them */
-    if(!RG.follow){ safeCam(E,RG.clr); if(VIEW.C.kind==="stadium"&&sh!=="wide"&&sh!=="heli") inFloor(E); }
+    if(!RG.follow){ safeCam(E,RG.clr); if(VIEW.C.kind==="stadium"&&sh!=="wide"&&sh!=="heli"&&!(sh==="bcast"&&!RP)) inFloor(E); }   /* (the broadcast stands in the stands, like the stadium-wide) */
     /* never inside the stands (the stadium's real seats, not the base profile): at least 2.5 m above whatever the bowl has under the eye; on the floor (d < 0) nothing changes */
     { const BY=VIEW.world&&VIEW.world.ctx&&VIEW.world.ctx.bowlY; if(BY){ const b=BY(E.x,E.z); if(b&&b.d>-0.5&&E.y<b.y+2.5) E.y=b.y+2.5; } }
     cTarget.copy(T);
@@ -671,22 +827,24 @@ export function createCams(VIEW){
     if(Math.abs(cam.near-RG.near)>1e-4){ cam.near=RG.near; cam.updateProjectionMatrix(); }
     if(Math.abs(cam.fov-camS.fov)>0.01){ cam.fov=camS.fov; cam.updateProjectionMatrix(); }
     camS.roll=ROLL.x;
+    /* is the person's rider in the frame? (the director brings him back after 5 s out of it: milestone 2) */
+    { const me=VIEW.mode==="race"&&!RP?meList():null; if(me&&me.length){ const q=VIEW.rs[me[0]]; if(q&&q.pos){ cam.updateMatrixWorld(); tv3.copy(q.pos).project(cam); youOut=tv3.z<1&&Math.abs(tv3.x)<1&&Math.abs(tv3.y)<1?0:youOut+Math.max(0,dt); } } }
   }
 
   /* ---------------- the presets and the tools ---------------- */
   function setMode(m){ if(!m) return mode; if(!MODES.some(x=>x.id===m)) return mode; if(m===mode) return mode; mode=m; camS.snap=true; if(shot&&shot.type!=="gate"&&VIEW.mode==="race") pickShot(true); return mode; }
   function nextMode(){ const i=MODES.findIndex(x=>x.id===mode); return setMode(MODES[(i+1)%MODES.length].id); }
   /* tests: hold a shot as it would be chosen (pri 99: nothing cuts it) */
-  function force(spec){ const s=Object.assign({pri:99,min:1e9,max:1e9,why:"test"},spec); if(s.type==="wide") lapWide=VIEW.lapNo; setShot(s); return shot; }
+  function force(spec){ const s=Object.assign({pri:99,min:1e9,max:1e9,why:"test"},spec); if(s.type==="wide"||s.type==="bcast") lapWide=VIEW.lapNo; setShot(s); return shot; }
 
   return {
     get shot(){ return shot; }, get shotLog(){ return shotLog; }, get featLog(){ return featLog; }, get target(){ return cTarget; }, get focus(){ return cFocus; }, camS:camS,
     /* a new course: the grid of the dirt's heights (so no camera sits inside a jump), the corners; a new race: forget the shots */
-    buildGrid:function(){ HG=heightGrid(); buildCorners(); },
-    reset:function(){ camS.gp=null; shotLog=[]; featLog=[]; cornLog=[]; share=0.5; lapWide=-1; launched=false; onbCool=0; wideSide=0; camS.offE=null; recDispose(); replayed.clear(); replays=0; },
+    buildGrid:function(){ HG=heightGrid(); buildCorners(); RAILS=null; },
+    reset:function(){ camS.gp=null; shotLog=[]; featLog=[]; cornLog=[]; share=0.5; youOut=0; lapWide=-1; launched=false; onbCool=0; wideSide=0; camS.offE=null; recDispose(); replayed.clear(); replays=0; },
     snap:function(){ camS.snap=true; },
     modes:function(){ return MODES.map(m=>({id:m.id,name:m.name})); }, mode:setMode, nextMode:nextMode, replayNow:replayNow,
-    state:function(){ return {mode:mode,shot:shot?{type:shot.type,why:shot.why||"",subj:shot.subj}:null,replay:!!RP,replays:replays,rec:REC?REC.Q.length:0,recMB:REC?+(REC.Q.length*REC.total*4/1048576).toFixed(1):0,share:+share.toFixed(2)}; },
+    state:function(){ return {mode:mode,shot:shot?{type:shot.type,why:shot.why||"",subj:shot.subj,mount:shot.k&&shot.k.mount||""}:null,youOut:+youOut.toFixed(1),replay:!!RP,replays:replays,rec:REC?REC.Q.length:0,recMB:REC?+(REC.Q.length*REC.total*4/1048576).toFixed(1):0,share:+share.toFixed(2)}; },
     setShot:setShot, pickShot:pickShot, director:director, camera:camera, force:force,
     sees:sees, safeCam:safeCam, dirtTop:dirtTop, terrainAt:terrainAt, inFloor:inFloor, corners:()=>CORN,
     trackCam:trackCam, featCam:featCam, cornerCam:cornerCam, lineCam:lineCam, crashCam:crashCam, yellowCam:yellowCam, gateCam:gateCam, turn1Cam:turn1Cam, spotCam:spotCam, secPt:secPt
