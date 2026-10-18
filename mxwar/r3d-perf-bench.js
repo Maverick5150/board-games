@@ -111,7 +111,42 @@ export function createBench(Q,view){
     hud.textContent=fps.toFixed(0)+" fps  "+(sum/ring.length*1000).toFixed(1)+" ms (max "+(mx*1000).toFixed(0)+")  "+Q.renderer.domElement.width+"x"+Q.renderer.domElement.height+"  "+S.label+" r"+S.rung+"/"+(S.rungs-1)+"  "+(st.calls||0)+" calls "+Math.round((st.tris||0)/1000)+"k tris";
   }
   const hudOn=param("fps")==="1"||param("fps")==="true";
+  /* ---------------- THE PASSIVE RECORD (milestone 2): how every race really ran on THIS device, with nothing to start and nothing on the screen. The CEO will not run a benchmark page on his TV,
+     so the game keeps its own numbers: from the gate drop to the end of a race, a HISTOGRAM of the frame times (0.5 ms bins up to 250 ms: no list that grows, no sort, nothing that can
+     hitch), the tier, the render size the ladder settled on, its steps, how many slow frames were somebody else's. Saved every 30 s of racing and at the end in localStorage
+     "mxwar.perf.races" (the last 6 races, newest last); B.races() / V.perfRaces() read them. A screen of the game (Settings, About) or a remote debugging session can show them: the first
+     real Fire TV numbers without asking anyone to run anything. Costs one array increment a frame. ---------------- */
+  const RKEY="mxwar.perf.races", NB=501, BIN=0.5; let rec=null;
+  function hstats(h,n,sum,target){
+    if(!n) return null;
+    const at=q=>{ const k=Math.max(1,Math.ceil(n*q)); let c=0; for(let i=0;i<NB;i++){ c+=h[i]; if(c>=k) return i*BIN+BIN/2; } return (NB-1)*BIN; };
+    const worst=f=>{ let need=Math.max(1,Math.ceil(n*f)), tot=0, got=0; for(let i=NB-1;i>=0&&need>0;i--){ const c=Math.min(h[i],need); tot+=c*(i*BIN+BIN/2); got+=c; need-=c; } return got?1000/(tot/got):0; };
+    const Tt=1000/(target||30); let on=0, stut=0; for(let i=0;i<NB;i++){ const v=i*BIN+BIN/2; if(v<=Tt*1.1) on+=h[i]; if(v>Tt*2.2) stut+=h[i]; }
+    return {frames:n,fpsAvg:+(1000/(sum/n)).toFixed(1),fps1Low:+worst(0.01).toFixed(1),ms50:+at(0.5).toFixed(1),ms95:+at(0.95).toFixed(1),ms99:+at(0.99).toFixed(1),pctOnTarget:+(on/n*100).toFixed(1),stutters:stut};
+  }
+  function recSave(){
+    if(!rec||rec.n<30) return;
+    const S=Q.summary(), st=hstats(rec.h,rec.n,rec.sum,S.target), cv=Q.renderer.domElement;
+    const e={when:rec.when,secs:+rec.sec.toFixed(0),tier:S.tier,source:S.source,target:S.target,fpsAvg:st.fpsAvg,fps1Low:st.fps1Low,ms50:st.ms50,ms95:st.ms95,ms99:st.ms99,msMax:+rec.max.toFixed(1),onTarget:st.pctOnTarget,
+      stutters:st.stutters,canvas:cv.width+"x"+cv.height,scaleAvg:+(rec.scale/Math.max(1e-3,rec.sec)).toFixed(2),rung:Q.rung,downs:Q.stats.sheds-rec.sheds0,ups:Q.stats.upMoves-rec.ups0,
+      external:(S.external||0)-rec.ext0,jsMs:+(rec.js/Math.max(1,rec.n)).toFixed(2),gpuLate:+(((Q.stats.gpuLate||0)-rec.late0)/Math.max(1,rec.n)*100).toFixed(1),
+      gpu:String(S.gpu||"").slice(0,60),tv:!!S.tv,mobile:!!S.mobile,cores:Q.dev.cores||0,mem:Q.dev.mem||0,lo:!!S.lo,msaa:!!S.msaa};
+    try{ const a=JSON.parse(lsGet(RKEY)||"[]"); if(a.length&&a[a.length-1].when===rec.when) a[a.length-1]=e; else a.push(e); lsSet(RKEY,JSON.stringify(a.slice(-6))); }catch(x){}
+    rec.saved=rec.sec;
+  }
+  function recFrame(dt,ms){
+    const racing=view.mode()==="race"&&view.T()>1;
+    if(racing&&dt>0&&dt<1){
+      if(!rec){ const S=Q.summary(); rec={when:Date.now(),h:new Uint32Array(NB),n:0,sum:0,max:0,js:0,sec:0,scale:0,saved:0,sheds0:Q.stats.sheds,ups0:Q.stats.upMoves,ext0:S.external||0,late0:Q.stats.gpuLate||0,T0:view.T()}; }
+      if(view.T()<rec.T0-1){ recSave(); rec=null; return; }   /* a new race in the same view: start a new record */
+      const v=dt*1000; rec.h[Math.min(NB-1,Math.floor(v/BIN))]++; rec.n++; rec.sum+=v; if(v>rec.max) rec.max=v; rec.js+=(ms||0);
+      rec.sec+=dt; rec.scale+=Q.live.scale*dt; rec.T0=view.T();
+      if(rec.sec-rec.saved>=30) recSave();
+    } else if(rec&&!racing){ recSave(); rec=null; }
+  }
+  B.races=function(){ try{ return JSON.parse(lsGet(RKEY)||"[]"); }catch(e){ return []; } };
   B.frame=function(dt,ms,work){
+    recFrame(dt,ms);
     if(hudOn) fpsHud(dt);
     if(B.state==="armed"){
       armT+=dt; if(view.mode()==="race"&&view.T()>0.4) B.state="running";

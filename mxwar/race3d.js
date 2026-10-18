@@ -62,6 +62,7 @@ export function create(host,hooks){
      runs hot). Done by shadowing requestAnimationFrame inside this view: the loop (tick, start) calls this one; QUAL.skipFrame(t) says "not this time" and the request is simply renewed. 60 fps targets, tests (fixed ratio) and the harness are untouched. */
   const requestAnimationFrame=cb=>GL.requestAnimationFrame(t=>{ if(QUAL.skipFrame(t)){ requestAnimationFrame(cb); return; } cb(t); });
   let lastRace=null, builtTier="";   /* the last setRace argument and the tier key the current world was built with (V.setQuality rebuilds when they differ) */
+  let warmPending=false, raceGen=0;   /* the shader warm-up (r3d-perf-warm.js): owed by every new race; raceGen stops a warm that belongs to a race already replaced */
   // [/hook:perf]
   const LOOK=createLook(renderer,{shadows:QUAL.shadowsWanted(LO),lo:LO,tv:tv(),weak:QUAL.weakGPU,host:host});   /* colour space, tone mapping, shadow map, the light rig, fog, the environment map, the post chain, the quality flags (r3d-look.js) */
   const scene=LOOK.scene, SUN=LOOK.SUN;   /* SUN = the sun's direction (LOOK.apply updates it for each venue) */
@@ -114,7 +115,7 @@ export function create(host,hooks){
   /* ---------------- the round -> the course and the world (built once per layout) ---------------- */
   V.setRace=function(o){
     // [hook:perf]
-    lastRace=o;
+    lastRace=o; raceGen++; warmPending=true;
     const lo=motion()!=="full"; if(lo!==LO){ LO=lo; worldKey=""; LOOK.setShadows(QUAL.shadowsWanted(LO)); if(typeof driveLook==="function") driveLook(); }   /* Reduce effects changed: the next race is built simpler (or richer), the shadows follow */
     // [/hook:perf]
     const pick=MX.Layouts.pick(o.series,o.year,o.round,o.cal||{});
@@ -281,6 +282,8 @@ export function create(host,hooks){
     const w=Math.max(1,Math.round(host.clientWidth)), h=Math.max(1,Math.round(host.clientHeight));
     // [hook:perf]
     const pr=QUAL.resize(w,h,W,H,LO);   /* the pixel ratio: a cap per device (TV, phone, Reduce effects) */
+    /* the capture page has no game.js to call V.warm() while the gate shows: there the new race is warmed here, at the end of setRace, at its real size (the race and its frames are unchanged) */
+    if(warmPending&&GL.DEMO&&C&&R&&!V.lost&&!/[?&]warm=(async|off)/.test(GL.location.search)){ renderer.setPixelRatio(pr); renderer.setSize(w,h,false); V.warmSync(); }   /* (?warm=async: tools test the game's own V.warm()) */
     // [/hook:perf]
     W=w; H=h; renderer.setPixelRatio(pr); renderer.setSize(W,H,false); cv.style.width=W+"px"; cv.style.height=H+"px";
     LOOK.resize(W,H,pr);
@@ -697,9 +700,24 @@ export function create(host,hooks){
     if(lastRace&&QUAL.buildKey(LO)!==builtTier&&(mode==="gate"||mode==="idle")){ V.setRace(lastRace); rebuilt=true; }   /* the build flags changed and nothing is racing: build the new world now (a race in progress keeps its world until the next setRace) */
     return {tier:QUAL.tierName,label:QUAL.label(QUAL.tierName),was:was,changed:r.changed,rebuilt:rebuilt,pendingRebuild:QUAL.buildKey(LO)!==builtTier};
   };
-  V.warm=()=>{ try{ if(!R) return Promise.resolve(false); const pr=renderer.compileAsync?renderer.compileAsync(scene,cam):Promise.resolve(renderer.compile(scene,cam)); return pr.then(()=>true,()=>false); }catch(e){ return Promise.resolve(false); } };   /* compile every shader of the scene now (call once after setRace, while the line-up shows): a weak GPU otherwise hitches for seconds on the first frames */
+  /* THE WARM-UP (r3d-perf-warm.js, milestone 2): every program the tier's ladder can reach (real shadows on / off, the frame into the post chain or to the screen, the crowd's animation on / off,
+     the post chain's depth of field and bloom on / off, the shadow pass, the hidden objects) is compiled while the gate shows, and the post chain's pass programs are kept alive so a ladder step
+     compiles nothing. V.warm() -> Promise of the report (one slice per task: game.js calls it right after setRace), V.warmSync() -> the report (tools; the capture page warms inside setRace). */
+  function warmCtx(){
+    const P=QUAL.warmPlan(), base=(LOOK.tiers&&LOOK.tiers[LOOK.tier])||null, g=raceGen, u=a=>a.filter((x,i)=>a.indexOf(x)===i);
+    const lookSet=lv=>({post:(lv.post.on&&base)?base.post:"off",dof:!!(base&&lv.post.dof&&base.dof),bloom:(lv.post.bloom&&base)?base.bloom*(lv.post.bloomScale<1?0.6:1):0});   /* = driveLive() */
+    const sets=[], keys=[]; P.lives.forEach(lv=>{ const f=lookSet(lv), k=JSON.stringify(f); if(f.post!=="off"&&keys.indexOf(k)<0){ keys.push(k); sets.push(f); } });
+    const wf=world&&world.frame;
+    return {scene:scene,cam:cam,look:LOOK,setShadows:on=>LOOK.setShadows(on),shadowsOn:()=>LOOK.shadows,shadowStates:u(P.shadows.map(x=>!!x&&!LO)),
+      targetStates:u(P.lives.map(lv=>lookSet(lv).post!=="off")),
+      crowd:(wf&&P.crowd.length>1)?(on=>{ QUAL.live.crowdAnim=on; wf(0,now()/1000,cam,null,null,null,null); }):null, crowdNow:QUAL.live.crowdAnim, crowdStates:P.crowd,
+      postSets:sets, applyFlags:f=>{ if(LOOK.setFlags) LOOK.setFlags(f); }, restoreFlags:()=>driveLive(), alive:()=>g===raceGen&&!V.lost};
+  }
+  V.warm=()=>{ try{ if(!R||!C||V.lost) return Promise.resolve(false); warmPending=false; return QUAL.warm(warmCtx(),true); }catch(e){ return Promise.resolve(false); } };
+  V.warmSync=()=>{ if(!R||!C||V.lost) return null; warmPending=false; return QUAL.warm(warmCtx(),false); };
   V.bench=o=>QUAL.bench.start(o);
   V.benchResult=()=>QUAL.bench.result;
+  V.perfRaces=()=>QUAL.bench.races();   /* how the last races really ran on this device (the passive record in r3d-perf-bench.js: no page to open, nothing on screen) */
   /* The look (r3d-look.js) may have its own tier table (high / medium / low / stick): our tier drives it, and the ladder's cuts (post chain, bloom, depth of field) are forwarded as flags it understands.
      Guarded: a look without setTier / setFlags is left alone (the base look). The post flags of a tier are the MOST it may draw; the ladder only switches them off. */
   const LOOKTIER={firetv:()=>QUAL.dev.tv?"stick":"low",balanced:()=>"medium",high:()=>(QUAL.dev.mobile||QUAL.dev.tv)?"medium":"high",ultra:()=>"ultra"};
