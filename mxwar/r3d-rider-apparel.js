@@ -99,7 +99,7 @@ vec3 apHelmet(vec3 p,vec3 T,vec3 A,int sty,float fw,vec3 vc,float part){
   if(part>8.5&&part<9.5){ float g=clamp((p.y-0.712)/0.075,0.0,1.0);               /* the lens: a dark mirror with an iridium tint (the clear coat does the shine) */
     return mix(vec3(0.050,0.020,0.004),vec3(0.004,0.018,0.050),g)*0.85+vec3(0.006); }
   if(part>7.5&&part<8.5){ float ang=atan(p.z,p.x-0.02);                             /* the strap: the accent colour, dark blocks, two thin white edges */
-    vec3 c=A*0.80; c=mix(c,D,step(0.62,fract(ang*2.2))*0.85);
+    vec3 c=A*0.80; c=mix(c,D,apBand(fract(ang*1.1140846),0.56,0.94,0.025)*0.85);   /* (seven blocks round the shell: a whole number, so there is no seam at the back) */
     c=mix(c,W,(apLine(p.y-0.7335,0.0014,fw)+apLine(p.y-0.7685,0.0014,fw))*0.75); return c; }
   if(part>10.5) return mix(mix(T,A,0.35)*0.42+vec3(0.004),vc,dk);                  /* the goggles' frame: a muted team colour (a bright white frame read as two big eyes) */
   vec3 d=normalize(p-vec3(0.020,0.742,0.0)); float az=abs(d.z); vec3 c=T;
