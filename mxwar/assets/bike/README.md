@@ -22,8 +22,8 @@ a curved front number plate. Knobby tyres: real knob geometry on LOD 0 (130 knob
 - **The number and the name on the side panels**: a per-race atlas (`decalAtlas`, one 128 x 72 cell per rider; 64 x 36 on the Fire TV tier), three masks (background, numerals + surname, border), projected by the shader onto
   both side panels (mirrored on the left so it reads correctly) in the class colours (`PLATE_CLASS`: 450 = white with black numerals; `setPlateClass("250")` = black with white numerals) and in red with white numerals for the
   points leader (`st.red`, no redraw). Mud and the clear coat go over it like over the plastic. The old flat side-plate quads are no longer drawn (`poseBike` gives them a zero matrix).
-- **The front plate** (`drawPlate`, the riders' atlas cell): a team-coloured plastic plate with a dark rim, the rider's surname across its top, the class-coloured number background, the numerals, a gold ring for the person's rider;
-  the plate geometry (`plateGeo`) is curved round the fork.
+- **The front plate** is part of the bike now: a curved plate in the steer group (kind 6), its face painted by the shader from the same cell (stretched tall over the plate like a real front number), so it takes the mud, the clear coat and the near-lens fade like the rest of the bike.
+  The riders' flat plate quads (`M.plate`, made by r3d-riders.js) are still posed for old callers but hidden by `poseBike` (one draw call less). `drawPlate` (the riders' atlas cell, no longer on screen) draws a team-coloured plate with the surname and the class colours.
 - **Clear coat**: on the high kit tier (`getKitTier() === "high"`: HIGH / ULTRA) the bike's material comes from the lead's kit (`MAT.gloss`, MeshPhysicalMaterial); the shader keeps the coat on the plastics only and takes it off where mud lies.
 
 ## Mud (milestone 2)
@@ -37,9 +37,9 @@ one instanced draw per level of detail for both wheels of every bike (`M["bk<lod
 ## Levels of detail (InstancedMesh sets; bikes are packed into the slots 0..count-1 of the set their distance picks, so the draw counters are honest)
 | set | distance (m) | triangles per bike (milestone 1 -> 2) | draw calls |
 |---|---|---|---|
-| LOD 0 | `q.bikeLod[0]`, the nearest `q.bikeHi` only | 21,820 -> 26,748 | 7 meshes + 1 blur disc mesh (112 triangles a wheel pair... 2 instances a bike) |
-| LOD 1 | to `q.bikeLod[1]` | 5,632 -> 6,978 | 7 meshes + 1 blur disc mesh |
-| LOD 2 | beyond | 776 (one static mesh) | 1 mesh |
+| LOD 0 | `q.bikeLod[0]`, the nearest `q.bikeHi` only | 21,820 -> 26,868 | 7 meshes + 1 blur-disc mesh (2 instances a bike, 128 triangles each, one pass, no shadow) |
+| LOD 1 | to `q.bikeLod[1]` | 5,632 -> 7,002 | 7 meshes + 1 blur-disc mesh (80 triangles an instance) |
+| LOD 2 | beyond | 776 -> 778 (one static mesh, with the front plate) | 1 mesh |
 | Reduce effects / Fire TV tier (`lo`) | LOD 1 < 8 m, LOD 2 beyond; Lambert version of the same shader | | |
 
 The distance is `st.lodD` (see below); a bike behind the lens or well outside the picture counts 2.6 times further, a narrow lens counts nearer.
