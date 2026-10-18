@@ -14,7 +14,10 @@
    Flow: next(G) says what is next; startRace(G) builds the race (phase "gate"); apply(G, {t:"drop"} | {t:"flip", s}) for a human; step(G)
    for the next phase (computers / auto); simRace(G) runs a whole race (a race the page doesn't show). A finished race is recorded at once;
    a finished round is scored at once; the page saves G after every race (G is plain JSON: Save + Continue resume it exactly, mid-race too).
-   snapshot(G, seat): seat = the human rider index (-1 = the TV). */
+   snapshot(G, seat): seat = the human rider index (-1 = the TV).
+   mxtime: every race is built with its time-model info (startRace: series, year, kind, laps, typical lap, first lap, best lap), so the cards decide
+   REAL lap times (time.js, race.js standings); the House "Cards per rider" row is Auto by default (cardsFor); a race saved before the model gets
+   one from the lap it is on when the save is upgraded (adoptTime). */
 (function(g){
 "use strict";
 var MX=g.MXWar=g.MXWar||{};
@@ -22,6 +25,8 @@ if(MX.Season) return;
 var Race=MX.Race||(typeof require==="function"?require("./race.js"):null);
 var Round=MX.Round||(typeof require==="function"?require("./round.js"):null);
 var VER=1, MAXH=8;
+/* mxtime: the time model (mxwar/time.js) turns every battle into a lap with real seconds; read lazily (the files may load in either order) */
+function TM(){ return MX.Time||(typeof require==="function"?require("./time.js"):null); }
 
 function rnd(G){ var t=(G.rs=(G.rs+0x6D2B79F5)>>>0); t=Math.imul(t^(t>>>15),t|1); t^=t+Math.imul(t^(t>>>7),t|61); return ((t^(t>>>14))>>>0)/4294967296; }
 function rint(G,n){ return Math.floor(rnd(G)*n); }
@@ -39,10 +44,12 @@ function defaultOpts(){
 }
 function normalize(o){
   var d=defaultOpts(), k; o=o||{};
+  var hasCards=!!(o.war&&typeof o.war==="object"&&o.war.cards!==undefined);   /* mxtime: no cards setting = Auto (a saved season keeps what it saved) */
   for(k in d) if(o[k]!==undefined) d[k]=o[k];
   d.length=Round.MODE_OF[d.length]||"real";
   d.len=(d.len&&typeof d.len==="object")?clone(d.len):{};
   d.war=Race.mergeOpts(d.war||{}); delete d.war.len;
+  if(!hasCards||d.war.cards==null) d.war.cards="auto";   /* Auto: TIME-MODEL.md 2.3, cardsFor(series, laps): 52 for a stadium race of more than 16 laps, else 26 (startRace) */
   d.fill=d.fill==="roster"?"roster":"full";
   d.nonTitle=d.nonTitle!==false;
   d.skill=["easy","normal","hard"].indexOf(d.skill)>=0?d.skill:"normal";
@@ -236,6 +243,7 @@ function upgrade(G){
   /* mxtimewire: the races still to run get that night's real laps and lap times (the race under way keeps its own) */
   if(G.round&&G.round.lv<4) Round.upgrade(G.round,G.o,{series:G.series,year:G.year,cal:G.cal[G.ri],live:G.race&&!G.race.over?G.rkey:null});
   if(G.round&&G.round.lv<5) realLive(G,was);
+  adoptTime(G);   /* mxtime */
   return G;
 }
 /* mxsave (the CEO, 2026-10-17 ~05:15, a phone shot of an old save's "Lap 6 of 100": "This track is unacceptable"; the owner's ruling: "any
@@ -269,12 +277,28 @@ function startRace(G){
   if(!G.round) startRound(G);
   var RG=G.round, r=Round.current(RG), ent=Round.entrants(RG);
   var o=clone(G.o.war); o.len=r.len;
+  if(o.cards==="auto"||o.cards==null){ var T0=TM(); o.cards=T0?T0.cardsFor(G.series,r.len):26; }   /* Auto: 52 cards for a stadium race of more than 16 laps, else 26 */
   var list=ent.map(function(id){ var R=G.riders[id]; return {id:id,name:R.name,human:R.kind==="human",edge:R.edge|0}; });
-  G.race=Race.newRace(o,list,Math.floor(rnd(G)*4294967296));
+  G.race=Race.newRace(o,list,Math.floor(rnd(G)*4294967296),timeInfo(G,RG,r));
   G.race.kind=r.kind; G.race.lapS=r.lap>0?r.lap:(RG.lapS||lapOf(G)); G.race.fl=r.fl>0?r.fl:0; G.rmap=ent.slice(); G.rkey=r.key;
   var cal=G.cal[G.ri], R=Round.realRace(cal,RG.F,r.kind,r.i);
   log(G,(cal.city||cal.venue)+" "+r.label+": "+ent.length+" riders, "+r.len+" laps (a lap "+(Math.round(G.race.lapS*10)/10)+" s"+((r.src==="real"||r.src==="time")&&R&&R.w&&R.t?"; in real life won in "+R.t.replace(/\.\d+$/,"")+" by "+R.w+(r.src==="time"?", the laps worked out from that time":""):r.src==="rule"?"; no research for this race: the era's rule":"")+").","race");
   return [{e:"race",ri:G.ri,key:r.key,label:r.label,kind:r.kind,n:ent.length,len:r.len,riders:ent.slice()}];
+}
+/* mxtime: what the time model needs to know about a race of this season (TIME-MODEL.md section 1): the series and year of the season file, the
+   race's kind, its laps (r.len; the model itself uses the engine's flag G.o.len), its typical lap (the winner's median lap), its real first lap
+   (0 = none) and the night's researched best lap (0 = none) */
+function timeInfo(G,RG,r){
+  var R=null; try{ R=Round.realRace(G.cal[G.ri],RG.F,r.kind,r.i); }catch(e){ R=null; }
+  return {series:G.series,year:G.year,kind:r.kind,L:r.len,p:r.lap>0?r.lap:(RG.lapS||lapOf(G)),fl:r.fl>0?r.fl:0,b:R&&R.b>0?R.b:0};
+}
+/* mxtime: a race under way that has no G.tm (a save made before the time model) takes one from the lap it is on: the field at the line in the order of
+   cards held, 0.6 s apart, every earlier lap exactly the typical lap (MXWar.Time.adopt); returns true when it did. An old season save needs nothing else. */
+function adoptTime(G){
+  var R=G&&G.race, T1=TM(); if(!R||R.tm||R.over||!G.round||!T1) return false;
+  var RG=G.round, r=RG.races.filter(function(x){ return x.key===G.rkey; })[0]; if(!r) return false;
+  var info=timeInfo(G,RG,r); if(R.o.len>=1) info.L=R.o.len;
+  T1.adopt(R,info); return true;
 }
 function fail(msg){ return {ok:false,msg:msg,ev:[]}; }
 function apply(G,m){
@@ -411,7 +435,7 @@ function check(G){
   return err;
 }
 
-MX.Season={upgrade:upgrade,lapOf:lapOf,firstLapOf:firstLapOf,roundRaces:roundRaces,attachTiming:attachTiming,VER:VER,MAXH:MAXH,defaultOpts:defaultOpts,normalize:normalize,newSeason:newSeason,next:next,startRound:startRound,startRace:startRace,apply:apply,step:step,simRace:simRace,
+MX.Season={timeInfo:timeInfo,adoptTime:adoptTime,upgrade:upgrade,lapOf:lapOf,firstLapOf:firstLapOf,roundRaces:roundRaces,attachTiming:attachTiming,VER:VER,MAXH:MAXH,defaultOpts:defaultOpts,normalize:normalize,newSeason:newSeason,next:next,startRound:startRound,startRace:startRace,apply:apply,step:step,simRace:simRace,
   standings:standings,redPlate:redPlate,snapshot:snapshot,check:check,raceSeat:raceSeat,humanSeats:humanSeats,rider:rider,calFormat:calFormat};
 if(typeof module!=="undefined"&&module.exports) module.exports=MX.Season;
 })(typeof window!=="undefined"?window:globalThis);

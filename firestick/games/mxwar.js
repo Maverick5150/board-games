@@ -31,7 +31,7 @@
   var ID = "mxwar", KEY = "party-mxwar-live", SAVEV = 1;
   var LONG = { sx: "AMA Supercross", mx: "AMA Pro Motocross", smx: "SuperMotocross Playoffs" };
   var SHORTS = { sx: "Supercross", mx: "Motocross", smx: "SMX Playoffs" };
-  var DEF_WAR = { version: "three", onlyTied: true, outLoses: false, noDown: false, deucesWild: false, acesWild: false, jokersWild: false, wildAs: "top", form: false, cards: 26 };
+  var DEF_WAR = { version: "three", onlyTied: true, outLoses: false, noDown: false, deucesWild: false, acesWild: false, jokersWild: false, wildAs: "top", form: false, cards: "auto" };
   function BG() { return window.BGUI || null; }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
   function plural(n, w) { return n + " " + w + (n === 1 ? "" : "s"); }
@@ -359,7 +359,7 @@
   function effOpts(c) {
     var w = RC.normalize(RC.mergeOpts(warOpts(c)), 22), o = {};
     for (var k in DEF_WAR) o[k] = w[k];
-    o.version = c.version; o.cards = w.cards;
+    o.version = c.version; o.cards = warOpts(c).cards === "auto" ? "auto" : w.cards;   /* mxtime: Auto = 52 cards in a stadium race of more than 16 laps, else 26 (season.js) */
     o.fill = (c.over && c.over.fill) || (c.keep && c.keep.fill) || "full";
     o.nonTitle = (c.over && c.over.nonTitle != null) ? !!c.over.nonTitle : (c.keep && c.keep.nonTitle != null) ? !!c.keep.nonTitle : true;
     o.others = (c.over && c.over.others) || (c.keep && c.keep.others) || "ask";

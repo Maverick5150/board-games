@@ -24,7 +24,12 @@
    contents: in War nobody sees a face-down card, not even its owner).
    mxcrash (the CEO, 2026-10-16 20:06; BG_audit/games/mxwar/CRASH-CONTRACT.md): a lost DOUBLE war = a crash and a remount, a lost TRIPLE war
    (or deeper) = a crash OUT (DNF, classified behind the finishers; the remaining cards go to the war's winner); every crash raises a yellow
-   flag for the next lap (G.yellow): see crash(). */
+   flag for the next lap (G.yellow): see crash().
+   mxtime (the CEO, 2026-10-17: "the cards decide REAL lap times"): when a race is built with a time-model info (newRace's 4th argument) G.tm
+   (mxwar/time.js, MXWar.Time) turns every battle into a lap: endBattle calls MX.Time.lap(G) right after the battle, standings(G) is then the
+   order of RACE TIMES (the same rows as before plus laps, t, gap, gs, int; the old cards order stays as chest(G)), and finish(G) takes the
+   classification from the model. War itself (the pot, the wars, G.rs, the House rules) is untouched; a race without G.tm (an old save) runs
+   exactly as before. */
 (function(g){
 "use strict";
 var MX=g.MXWar=g.MXWar||{};
@@ -62,7 +67,8 @@ function defaultOpts(){
     acesWild:false,    // House (the CEO): every Ace is wild
     jokersWild:false,  // House: 2 jokers join every deck and they are wild
     wildAs:"top",      // a wild card is: top (beats every card that isn't wild) | ace (counts as an Ace)
-    cards:26,          // cards per rider (13 | 26 | 52): the decks scale with the gate
+    cards:26,          // cards per rider (13 | 26 | 52): the decks scale with the gate. A season passes "auto" (the House row's default) and season.js
+                       // turns it into 52 for a stadium race of more than 16 laps, else 26 (time.js cardsFor); here "auto" is read as 26
     len:30,            // battles ("laps") to the flag
     form:false         // House "Real form" (TASK.md, default OFF): riders with an edge (entrant.edge 1..2, the season gives it to the real
                        // top 10 of that year) swap their lowest card for a better one from a rider with no edge, once per edge point
@@ -83,7 +89,7 @@ var HOUSE=[
   ["jokersWild","Jokers are wild","bool",null,1],
   ["wildAs","Wild cards count as","choice",[["top","Higher than every card"],["ace","An Ace"]],1],
   ["form","Real form: the year's top riders get a small edge","bool",null,1],
-  ["cards","Cards per rider","choice",[[13,"13 (a quick race)"],[26,"26 (half a deck each)"],[52,"52 (a full deck each)"]],0]
+  ["cards","Cards per rider","choice",[["auto","Auto (52 in a long stadium race, else 26)"],[13,"13 (a quick race)"],[26,"26 (half a deck each)"],[52,"52 (a full deck each)"]],0]
 ];
 function mergeOpts(o){ var d=defaultOpts(); for(var k in (o||{})) if(o[k]!==undefined&&d.hasOwnProperty(k)) d[k]=o[k]; return d; }
 function versionOf(id){ for(var i=0;i<VERSIONS.length;i++) if(VERSIONS[i].id===id) return VERSIONS[i]; return null; }
@@ -128,9 +134,12 @@ function log(G,t,k){ G.log.push({t:t,k:k||"",b:G.battle}); if(G.log.length>40) G
 function nm(G,s){ return G.r[s].name; }
 function names(G,arr){ var a=arr.map(function(s){ return nm(G,s); }); if(a.length>4) return a.slice(0,3).join(", ")+" and "+(a.length-3)+" more"; return a.length<=2?a.join(" and "):a.slice(0,-1).join(", ")+" and "+a[a.length-1]; }
 
+/* mxtime: the time model (mxwar/time.js), read lazily so the two files may load in either order */
+function TM(){ return MX.Time||(typeof require==="function"?require("./time.js"):null); }
+
 /* ---------------- a new race ----------------
    entrants: [{id, name, human}] in GATE order (the gate pick: index 0 picks first). seed: 32-bit int (the season draws it). */
-function newRace(opts,entrants,seed){
+function newRace(opts,entrants,seed,tminfo){
   var n=(entrants||[]).length; if(n<MINR||n>MAXR) throw new Error("A race is for 2 to 40 riders.");
   var o=normalize(mergeOpts(opts),n);
   var G={v:VER,id:"mxrace",o:o,n:n,rs:(seed==null?Math.floor(Math.random()*4294967296):seed)>>>0,
@@ -143,6 +152,7 @@ function newRace(opts,entrants,seed){
   for(i=0;i<per*n;i++) G.r[i%n].pk.push(deck[i]);
   for(;i<deck.length;i++) G.kitty.push(deck[i]);
   if(o.form) formEdge(G);
+  if(tminfo){ var TM0=TM(); if(TM0) TM0.init(G,tminfo); }   /* mxtime: the lap times of this race (info: series, year, kind, L, p, fl, b), right after the deal */
   log(G,n+" riders behind the gate: "+deck.length+" cards ("+o.nd+(o.nd>1?" decks":" deck")+"), "+per+" each.","gate");
   if(G.kitty.length) log(G,G.kitty.length+" left-over card"+(G.kitty.length>1?"s go":" goes")+" to the winner of the first war.","gate");
   return G;
@@ -341,6 +351,7 @@ function endBattle(G,w,ev){
   if(outs.length){ ev.push({e:"out",seats:outs,b:G.battle}); log(G,names(G,outs)+(outs.length>1?" are":" is")+" out of cards.","out");
     outs.forEach(function(x){ ev.push({e:"dnf",s:x,lap:G.battle,why:"cards"}); }); }
   G.bpart=[];
+  if(G.tm){ var TM1=TM(); if(TM1) TM1.lap(G); }   /* mxtime: this battle is one lap: every rider's lap time, before the running order is read */
   var L=standings(G), lead=L[0].s; G.st.led[lead]++;
   if(lead!==G.st.leader){ if(G.st.leader>=0){ G.st.changes++; ev.push({e:"lead",s:lead,from:G.st.leader}); } G.st.leader=lead; }
   var alive=0; for(s=0;s<G.n;s++) if(!P[s].out) alive++;
@@ -350,12 +361,16 @@ function endBattle(G,w,ev){
 }
 function finish(G,why,ev){
   G.over=true; G.phase="over"; G.why=why; G.need=[]; G.pick={};
-  var L=standings(G); G.res=L.map(function(r){ return r.id; });
+  var TM2=G.tm?TM():null;
+  if(TM2) TM2.complete(G);   /* mxtime: a War that ended before the flag (every other rider out): the survivors ride the laps that are left */
+  var L=standings(G); G.res=TM2?TM2.result(G).order:L.map(function(r){ return r.id; });
   ev.push({e:"flag",why:why,b:G.battle,order:L.map(function(r){ return r.s; })});
-  log(G,why==="all"?nm(G,L[0].s)+" has every card: the race is over.":"Checkered flag! "+nm(G,L[0].s)+" wins with "+L[0].count+" cards.","flag");
+  log(G,why==="all"?nm(G,L[0].s)+" has every card: the race is over.":"Checkered flag! "+nm(G,L[0].s)+" wins"+(TM2?"":" with "+L[0].count+" cards")+".","flag");
 }
 
 /* ---------------- the running order: every rider their own place 1..N ---------------- */
+/* the WAR CHEST order (the old running order, before the time model): riders still in by cards held; equal cards: the higher card in the last
+   battle, then the gate order. A race with G.tm is ranked by time (standings below); the chest stays for the "cards" readouts and old saves. */
 function cmp(G,a,b){
   var A=G.r[a], B=G.r[b];
   if(A.out!==B.out) return A.out?1:-1;
@@ -370,11 +385,24 @@ function cmp(G,a,b){
   if(A.lc!==B.lc) return B.lc-A.lc;                 // photo finish: the higher card in the last battle
   return a-b;                                       // the gate order
 }
-function standings(G){
+function chest(G){
   var idx=[]; for(var s=0;s<G.n;s++) idx.push(s);
   idx.sort(function(a,b){ return cmp(G,a,b); });
   var top=G.r[idx[0]].pk.length;
   return idx.map(function(s,i){ var p=G.r[s]; return {s:s,id:p.id,name:p.name,human:p.human,count:p.pk.length,out:p.out,outAt:p.outAt,place:i+1,gap:p.out?null:top-p.pk.length,dnf:p.dnf||null,crashes:p.crashes|0}; });
+}
+/* the running order. With G.tm (mxtime) it is the order of RACE TIMES at the line: the old row (s, id, name, human, count = cards held, out, outAt,
+   place, dnf, crashes) plus laps (laps ridden), t (race time at the line, ms), gap ("Leader" | "+3.412" | "+1 Lap" | "DNF"), gs (seconds behind the
+   leader), int (seconds behind the rider ahead on the same lap, null if none), cgap (the old number: cards behind the card leader, null when out),
+   cr (the model's crash record or null) and lastLap / bestLap (seconds). Every rider has their own place 1..N. */
+function standings(G){
+  var TM3=G.tm?TM():null;
+  if(!TM3) return chest(G);
+  var rows=TM3.standings(G), top=0, i, s;
+  for(s=0;s<G.n;s++) if(G.r[s].pk.length>top) top=G.r[s].pk.length;
+  return rows.map(function(r){ var p=G.r[r.s], R=G.tm.r[r.s], T=R.T, lt=T.length>1?(T[T.length-1]-T[T.length-2])/1000:(T.length?T[0]/1000:0);
+    return {s:r.s,id:p.id,name:p.name,human:p.human,count:p.pk.length,out:p.out,outAt:p.outAt,place:r.place,gap:r.gap,dnf:p.dnf||null,crashes:p.crashes|0,
+      laps:r.laps,t:r.t,gs:r.gs==null?null:r.gs,int:r.int==null?null:r.int,cgap:p.out?null:top-p.pk.length,cr:R.dnf||null,lastLap:lt}; });
 }
 
 /* who goes first: nobody (War is simultaneous); the opening show is the starting gate */
@@ -388,7 +416,8 @@ function snapshot(G,seat){
     table:G.tb.map(function(e){ return {s:e.s,w:e.w,up:e.up,c:e.up?e.c:null}; }),
     warN:G.warN,down:G.down,wars:G.wars,kitty:G.kitty.length,aside:G.aside.length,holeshot:G.hs,last:G.last,
     standings:standings(G),over:G.over,why:G.why,log:G.log.slice(-8).map(function(e){ return e.t; }),lastLap:G.lastLap||null,laps:(G.laps||[]).slice(),
-    legal:seat>=0?legal(G,seat):[]};
+    legal:seat>=0?legal(G,seat):[],
+    tm:G.tm&&TM()?{k:G.tm.k,flag:G.tm.flag,start:G.tm.start,packet:TM().packet(G,G.tm.k),yz:G.tm.yz}:null};   /* mxtime: the lap just decided (T, holds, crash-outs, events), the yellow sections */
 }
 
 /* ---------------- invariants (tests, fuzz): [] = fine ---------------- */
@@ -403,13 +432,15 @@ function check(G){
   G.need.forEach(function(x){ if(!G.r[x]||!G.r[x].human) err.push("need "+x+" is not a human rider"); });
   if(G.over){ if(!G.res||G.res.length!==G.n) err.push("no result"); else { var u={}; G.res.forEach(function(id){ if(u[id]) err.push("result twice "+id); u[id]=1; }); } }
   if(G.battle>G.o.len) err.push("past the flag");
+  if(G.tm&&G.tm.k>G.battle&&!(G.over&&G.why!=="flag")) err.push("the time model is ahead of the war ("+G.tm.k+" > "+G.battle+")");   /* (a War that ended early: complete() rides the laps that are left) */
+  if(G.tm&&G.tm.k>G.tm.L) err.push("the time model rode past the flag");
   for(s=0;s<G.n;s++){ var q=G.r[s]; if(q.dnf&&!q.out) err.push("dnf rider "+s+" not out"); if(q.out&&q.dnf&&q.dnf.why!=="crash"&&q.dnf.why!=="cards") err.push("dnf why "+s); }
   return err;
 }
 
 MX.Race={VER:VER,MINR:MINR,MAXR:MAXR,defaultOpts:defaultOpts,VERSIONS:VERSIONS,HOUSE:HOUSE,normalize:normalize,mergeOpts:mergeOpts,buildDeck:buildDeck,
   newRace:newRace,legal:legal,apply:apply,step:step,battle:battle,run:run,defaultMove:defaultMove,need:needList,
-  standings:standings,snapshot:snapshot,check:check,firstPlayer:firstPlayer,winnersOf:winnersOf,isWild:isWild,val:val,
+  standings:standings,chest:chest,snapshot:snapshot,check:check,firstPlayer:firstPlayer,winnersOf:winnersOf,isWild:isWild,val:val,
   rank:rank,suit:suit,isRed:isRed,isJoker:isJoker,base:base,copyOf:copyOf,shortName:shortName,cardName:cardName,rankLabel:rankLabel,total:total};
 if(typeof module!=="undefined"&&module.exports) module.exports=MX.Race;
 })(typeof window!=="undefined"?window:globalThis);
