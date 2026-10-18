@@ -572,11 +572,12 @@ function create(o){
     if(o.chatter==="less") return;
     var L=lapLen(r.lap), x=(A.now-r.lapAt)/L;
     if(x<0.3||x>0.88) return;
-    if(r.lap>=r.len-1||r.lap<2) return;              /* no filler on the opening lap or in the last two laps */
+    if(r.lap>=r.len-1||(r.lap<2&&!(r.lap===1&&Lms()>=40000))) return;   /* no filler on the opening lap of a compressed (2D) race or in the last two laps; the opening lap of a real-time race (laps of 40 s and up; ANNOUNCERS.md D.2: colour at 20-40 s) gets its colour line, not half a minute of silence after the holeshot */
     if(A.now<lastEnd()+4000) return;
     if(r.tokens<1) return;
     /* colour and filler: at most one colour line a lap (ANNOUNCERS.md D.4), a second filler only on a long lap (outdoors, or Slow) */
     var cap=o.speed==="fast"?1:(L>=90000?2:1)+(o.speed==="slow"&&L>=40000?1:0);
+    if(r.lap===1&&o.speed!=="fast") cap=Math.max(cap,2);   /* the opening lap of a real-time race is the busiest minute of the broadcast: up to two colour lines in it */
     if(r.fillLap===r.lap&&r.fillN>=cap) return;
     var opts=[], colorOK=r.colorLap!==r.lap;
     if(colorOK){ var sec=curSection(); if(sec) opts.push(["color_technique",3]); else opts.push(["color_technique",1]); opts.push(["color_bike",0.8]); }

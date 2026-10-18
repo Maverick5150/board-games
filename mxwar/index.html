@@ -234,7 +234,7 @@
     font:var(--fw-ui) var(--fs-micro)/1.2 var(--font-ui); letter-spacing:.06em; text-transform:uppercase; color:var(--text-3); opacity:.75; transition:opacity 180ms ease-out}
   .mx-capband .bgv-cap.is-on ~ .mx-capidle{opacity:0}
   /* over a sheet, or on the season: the caption sits on top, just above the open sheet or under the top bar (never over a sheet's contents) */
-  html:root .bgv-cap.mx-capfix{--bgv-left:.75rem; --bgv-right:.75rem; visibility:visible; display:none; position:fixed; left:var(--gutter,1rem); right:auto; bottom:auto; top:calc(var(--bg-bar-h,3.5rem) + .5rem); z-index:92; flex-direction:row; align-items:baseline; gap:.45rem;
+  html:root .bgv-cap.mx-capfix{--bgv-left:.75rem; --bgv-right:.75rem; background:rgba(6,8,18,.96); visibility:visible; display:none; position:fixed; left:var(--gutter,1rem); right:auto; bottom:auto; top:calc(var(--bg-bar-h,3.5rem) + .5rem); z-index:92; flex-direction:row; align-items:baseline; gap:.45rem;
     max-width:calc(100vw - 2 * var(--gutter,1rem)); box-shadow:inset 0 0 0 1px rgba(232,226,255,.18), 0 .5rem 1.4rem rgba(0,0,0,.6)}
   html:root .bgv-cap.mx-capfix.is-over-sheet{top:auto; bottom:var(--cap-bot,auto)}
   html:root .bgv-cap.mx-capfix .bgv-cap__text{font-size:var(--fs-sm); -webkit-line-clamp:3}
