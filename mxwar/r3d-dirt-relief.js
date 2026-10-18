@@ -105,7 +105,7 @@ function smoothAt(R,i,s,lat,K,out){
     const r3=rut(lat-(-side*(hw*0.8+0.1*n1)),0.27,0.16*A*sstep(0.18,0.5,n2)*(0.6+0.4*R.bank[i]));
     const r4=rut(lat-(side*hw*0.3),0.26,0.08*A*sstep(0.22,0.5,n1));
     const rs=(r0+r1+r2+r3+r4)*(R.rutK||1);   /* (the TV's coarse mesh draws them at 65%: o.rut) */
-    h+=rs; if(rs<0) wet+=A*(-rs)*6.0; else { wet-=rs*3.2; loose+=rs*7.5; }   /* the rut bottoms are the wettest dirt; the lips are dry crumbly pushed dirt */
+    h+=rs; if(rs<0) wet+=A*(-rs)*5.0; else { wet-=rs*3.2; loose+=rs*7.5; }   /* the rut bottoms are the wettest dirt; the lips are dry crumbly pushed dirt */
   }
   /* the windrows of loose dirt at both edges; on the outside of a corner the berm's lip: the dirt the riders threw up the face, lumpy along the lap */
   { const c=hw-0.52, x=(a-c)/0.4; if(x>-1&&x<1){ const t=1-x*x, hb=R.wind[i]*(0.55+0.9*K.n2(s*0.9+(lat>0?31:0),9.3))*t*t; h+=hb; wet-=0.2*t; loose+=0.55*t; } }
