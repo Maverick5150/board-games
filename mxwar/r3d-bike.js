@@ -179,6 +179,11 @@ function bikeMaterial(lo,D,U){
       "float bkCi=floor(vMud.w+0.01), bkRed=step(0.25,vMud.w-bkCi), bkCol=mod(bkCi,uDecG.x), bkRow=floor(bkCi/uDecG.x+0.001);",
       "vec3 bkD=texture2D(uDec,vec2((bkCol+bkDu.x)/uDecG.x,1.0-(bkRow+1.0-bkDu.y)/uDecG.y)).rgb*bkDin;",
       "b0=mix(b0,mix(uPlBg,vec3(0.578,0.005,0.012),bkRed),bkD.r); b0=mix(b0,mix(uPlFg,vec3(0.86),bkRed),bkD.g); b0=mix(b0,mix(vAcc,vec3(0.86),bkRed),bkD.b);",
+      /* the front plate's face: the same cell, in the plate's own frame (across = -z, up leaning back 0.30 rad), over the plate below a band of the team colour */
+      "vec3 bkFr=vLoc-vec3(0.508,1.035,0.0); vec2 bkFu=vec2((-bkFr.z/0.25+0.5-0.06)/0.88,(dot(bkFr.xy,vec2(-0.29552,0.95534))/0.215+0.5-0.07)/0.60);",
+      "float bkFin=step(5.5,bkK)*(1.0-step(6.5,bkK))*step(0.0,bkFu.x)*step(bkFu.x,1.0)*step(0.0,bkFu.y)*step(bkFu.y,1.0); bkFu=clamp(bkFu,0.0,1.0);",
+      "vec3 bkF=texture2D(uDec,vec2((bkCol+bkFu.x)/uDecG.x,1.0-(bkRow+1.0-bkFu.y)/uDecG.y)).rgb*bkFin;",
+      "b0=mix(b0,mix(uPlBg,vec3(0.578,0.005,0.012),bkRed),bkF.r); b0=mix(b0,mix(uPlFg,vec3(0.86),bkRed),bkF.g); b0=mix(b0,mix(vAcc,vec3(0.86),bkRed),bkF.b);",
       /* the radiator vent behind the louvre fins */
       "float bkVx=vLoc.x+(vLoc.y-0.742)*0.447; float bkVent=step(0.5,bkTn)*(1.0-step(1.5,bkTn))*(1.0-step(0.5,bkK))*step(0.6,bkAN.z)*step(0.286,bkVx)*step(bkVx,0.462)*step(abs(vLoc.y-0.742),0.060);",
       "b0=mix(b0,vec3(0.012),bkVent); diffuseColor.rgb=b0;",
@@ -360,7 +365,10 @@ export function poseBike(M,i,B,st){
   /* plates (fixed slots, 3 a bike): the front one turns with the bars, the sides stay on the panels */
   if(Math.abs(delta)>1e-4){ steerMatrix(delta,_m1); _m3.multiplyMatrices(_m1,PLATE_L[0]); _m2.multiplyMatrices(B,_m3); } else _m2.multiplyMatrices(B,PLATE_L[0]);
   M.plate.setMatrixAt(i*3,_m2);
-  for(let k=1;k<3;k++) M.plate.setMatrixAt(i*3+k,_Z);   /* (milestone 2: the side numbers are painted on the side panels by the bike's shader: the old side quads are not drawn) */
+  for(let k=1;k<3;k++) M.plate.setMatrixAt(i*3+k,_Z);
+  /* (milestone 2: the numbers are part of the bike now: the side panels and the curved front plate (steer group) are painted by the bike's shader from the rider's cell, with the mud,
+     the clear coat and the near-lens fade of the bike; the riders' flat plate quads are kept posed for old callers but not drawn: one draw call less) */
+  if(M.plate.visible) M.plate.visible=false;
 }
 export function hideBike(M,i){
   const K=M.bk; newFrame(K,i); K.cur[i]=-1; K.dist[i]=1e9;

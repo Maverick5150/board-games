@@ -34,7 +34,7 @@ export {axisPt,forkPt,UA,NF,A0};
 /* ---------------- the material records ---------------- */
 /* tint: 0 fixed colour, 1 team colour (the livery and the side-panel number decal apply), 2 accent colour, 3 team colour seen from above (the fenders: the top livery).
    kind (milestone 2): 0 plain, 1 spoke (dithers away and leaves the blur disc when the wheel turns fast), 2 tyre (the sidewall's moulded marks, dirt packed between the knobs),
-   3 solid team colour with no graphics (handguards, louvre fins), 4 skid plate / under-side parts (they take the mud first), 5 the seat cover (gripper ribs). Packed into aMat.z = tint + 4 * kind + 32 * (a wheel or shock part). */
+   3 solid team colour with no graphics (handguards, louvre fins), 4 skid plate / under-side parts (they take the mud first), 5 the seat cover (gripper ribs), 6 the front number plate's face (the rider's number from the side-panel atlas). Packed into aMat.z = tint + 4 * kind + 32 * (a wheel or shock part). */
 const K=(hex,mt,rg,tint,ao,kind)=>({c:lin(hex),mt:mt,rg:rg,tint:tint||0,ao:ao==null?1:ao,kind:kind||0});
 export const MAT={
   alu:K("#bcbfc7",0.92,0.34), aluD:K("#80848c",0.88,0.40), aluB:K("#d3d6dc",0.95,0.26),
@@ -47,7 +47,7 @@ export const MAT={
   spring:{c:[1,1,1],mt:0.55,rg:0.35,tint:2,ao:1,kind:0}, shockB:K("#17181c",0.8,0.38), chain:K("#8a8272",0.85,0.42), rad:K("#4a4d55",0.75,0.5), slit:K("#050506",0.0,0.9),
   /* milestone 2 */
   guard:{c:[1,1,1],mt:0.0,rg:0.22,tint:1,ao:1,kind:3}, hose:K("#0f0f11",0.0,0.58), cable:K("#0c0c0e",0.0,0.46), skid:K("#141518",0.05,0.48,0,1,4),
-  plateK:K("#1a1a1e",0.0,0.40), link:K("#7d7a74",0.88,0.40), linkD:K("#3a3936",0.8,0.5), blurFar:K("#5c5f66",0.55,0.55), outlet:K("#08080a",0.2,0.7)
+  plateK:K("#1a1a1e",0.0,0.40), plateF:{c:[1,1,1],mt:0.0,rg:0.22,tint:1,ao:1,kind:6}, link:K("#7d7a74",0.88,0.40), linkD:K("#3a3936",0.8,0.5), blurFar:K("#5c5f66",0.55,0.55), outlet:K("#08080a",0.2,0.7)
 };
 
 /* ---------------- the builder ---------------- */
@@ -374,6 +374,12 @@ function steerBuild(d){
     B.add(sweep([V(0.405,1.104,0.276),V(0.432,1.072,0.255),V(0.462,1.022,0.190),V(0.472,0.982,0.120),V(0.462,0.956,0.078),V(0.448,0.946,0.062)],0.0034,cs,cp),withMat(MAT.cable,{ao:0.9}));
     if(d>=2) B.add(sweep([V(0.399,1.100,0.280),V(0.424,1.064,0.262),V(0.452,1.016,0.196),V(0.462,0.978,0.126),V(0.452,0.952,0.084),V(0.440,0.944,0.066)],0.0032,cs,cp),withMat(MAT.cable,{ao:0.9})); }
   if(d>=2){ B.add(blob(0.028,0.022,0.020,3,4,8),withMat(MAT.anod,{m:Tm(0.405,1.128,0.255),ao:0.9})); B.add(cyl(0.012,0.012,0.04,8),withMat(MAT.black,{m:Tm(0.404,1.155,0.255)})); }   /* brake master cylinder + reservoir */
+  /* the front number plate (milestone 2): a curved plastic plate in the team colour (the shader paints the rider's number background, numerals and name from the
+     side-panel atlas onto its face, kind 6), a dark back; its frame: centre (0.508, 1.035, 0), leaning back 0.30 rad, 0.25 m across, 0.215 m high */
+  { const pf=new THREE.Matrix4().compose(V(0.508,1.035,0),new THREE.Quaternion().setFromEuler(new THREE.Euler(0,PI/2,0.30,"ZYX")),V(0.25,0.215,1));
+    const face=new THREE.PlaneGeometry(1,1,S(d,10,6,4),S(d,3,1,1)), P=face.attributes.position; for(let i=0;i<P.count;i++){ const x=P.getX(i), y=P.getY(i); P.setZ(i,-0.022*4*x*x-0.006*(1-4*y*y)*0); } face.computeVertexNormals();
+    const back=face.clone(); back.scale(1,1,1); back.translate(0,0,-0.0045); const bi=back.index.array; for(let i=0;i<bi.length;i+=3){ const t=bi[i+1]; bi[i+1]=bi[i+2]; bi[i+2]=t; } back.computeVertexNormals();
+    B.add(face,withMat(MAT.plateF,{m:pf,uv:"none",ao:1})); B.add(back,withMat(MAT.plateK,{m:pf,uv:"none",ao:0.9})); }
   /* the number-plate bracket: two posts from the bars to where the plate stands */
   B.addM(rod(V(0.395,1.145,0.082),V(0.488,1.043,0.082),0.008,0.008,5),withMat(MAT.alu));
   if(d>=2) B.add(rod(V(0.488,1.000,-0.10),V(0.488,1.062,0.10),0.006,0.006,4),withMat(MAT.alu));
@@ -490,6 +496,8 @@ function farBuild(){
   B.add(loft([[0.50,0.716,0.126],[0.83,0.733,0.100],[1.04,0.632,0.080],[1.16,0.574,0.066]].map(p=>superSec(p[0],0,p[1],p[2],0.011,2.6,4)),{}),withMat(MAT.plastic,{uv:"top"}));
   B.add(sweep([V(0.298,0.700,0.046),V(0.338,0.505,0.150),V(0.03,0.6,0.172),V(-0.25,0.735,0.186)],0.019,4,{per:1,caps:true}),withMat(MAT.exh));
   { const md=V(-0.968,0.250,-0.012).normalize(); B.add(lathe([[0.001,0],[0.049,0.03],[0.0545,0.24],[0.0545,0.42],[0.034,0.52],[0.001,0.52]],6),withMat(MAT.muff,{m:new THREE.Matrix4().compose(V(-0.30,0.748,0.212),new THREE.Quaternion().setFromUnitVectors(V(0,1,0),md),V(1,1,1)),uv:"none"})); }
+  /* the front plate (milestone 2: the rider's number is painted on it by the shader) */
+  B.add(new THREE.PlaneGeometry(1,1),withMat(MAT.plateF,{m:new THREE.Matrix4().compose(V(0.508,1.035,0),new THREE.Quaternion().setFromEuler(new THREE.Euler(0,PI/2,0.30,"ZYX")),V(0.25,0.215,1)),uv:"none"}));
   /* swingarm and shock: one beam and one rod */
   B.add(rod(V(-0.17,0.44,0),V(-0.74,0.34,0),0.05,0.04,4),withMat(MAT.alu));
   B.add(rod(BIKE.SHOCK_BOT.clone(),BIKE.SHOCK_TOP.clone(),0.035,0.035,4),withMat(MAT.spring));
