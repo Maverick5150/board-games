@@ -400,8 +400,10 @@ function trackMesh(C,look,q,mat,tier,tiles){
       const seq=st=>{ const a=[]; for(let r=r0;r<=r1;r+=st) a.push(r); if(a[a.length-1]!==r1) a.push(r1); return a; };
       const m0=gridMesh(G,seq(1),1,cx,cy,cz,true,mat), m1=gridMesh(G,seq(2),2,cx,cy,cz,true,mat), m2=gridMesh(G,seq(4),4,cx,cy,cz,true,mat);
       [m0,m1,m2].forEach(m=>{ m.position.set(0,0,0); });
-      if(clodMat){ const cm=clodsFor(G,C,r0,r1,cx,cy,cz,clodMat,look); if(cm){ m0.add(cm); info.clods+=cm.count; } }
-      lod.addLevel(m0,0); lod.addLevel(m1,36*td); lod.addLevel(m2,100*td);   /* (polish, D6: the tier's terrain detail scales the levels' distances: BALANCED 0.8 = 35 m / 80 m) */
+      /* the clods only where they can be seen (a chunk within 24 m: the a6 captures paid up to 5 clod meshes, +83k triangles, at the whoops camera); 24-36 m the same fine mesh without them */
+      let near=m0, m0b=null;
+      if(clodMat){ const cm=clodsFor(G,C,r0,r1,cx,cy,cz,clodMat,look); if(cm){ near=new THREE.Group(); near.add(m0); near.add(cm); info.clods+=cm.count; m0b=new THREE.Mesh(m0.geometry,mat); m0b.receiveShadow=true; } }
+      lod.addLevel(near,0); if(m0b) lod.addLevel(m0b,24*td); lod.addLevel(m1,36*td); lod.addLevel(m2,100*td);   /* (polish, D6: the tier's terrain detail scales the levels' distances: BALANCED 0.8 = 35 m / 80 m) */
       root.add(lod); info.chunks++; info.tris+=m0.geometry.index.count/3;
     }
   } else {
