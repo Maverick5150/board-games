@@ -47,7 +47,7 @@ const CHASE={back:3.5,up:1.5,side:-1.1,fov:70};
    b = metres back, s = metres to his right (- = left), u = metres up, x / y = where his hip point sits on screen (NDC), pref = the mount's cost when nothing is in the way */
 const HERO={fov:72,mounts:[
   {id:"cover",b:2.6,s:-1.0,u:1.1,x:0.42,y:-0.28,pref:0},
-  {id:"mirror",b:2.6,s:1.0,u:1.1,x:-0.42,y:-0.28,pref:0.30},
+  {id:"mirror",b:2.6,s:1.0,u:1.1,x:-0.42,y:-0.28,pref:0.55},   /* (the cover puts him in the RIGHT third: the mirror only when the cover's side is really in the way; at 0.30 it took half of the chase time) */
   {id:"high",b:3.0,s:-0.75,u:2.7,x:0.30,y:-0.16,pref:0.45},
   {id:"wide",b:3.6,s:-1.2,u:1.6,x:0.32,y:-0.22,pref:0.62}],
   crash:{id:"crash",b:7,s:-2.4,u:2.8,x:0,y:-0.1,pref:0}};
@@ -292,7 +292,7 @@ export function createCams(VIEW){
   function candidates(urgent){
     const L=[], lead=VIEW.leaderIdx(); if(lead<0) return L;
     const rs=VIEW.rs, r=rs[lead], me=meList().filter(i=>!rs[i].crash);
-    const boost=clamp((0.70-share)*4,0,1.4), outB=youOut>5?2.6:youOut>3?0.8:0;   /* the person's rider has had less than its share of the screen (70%: the CEO roots for his own rider): its shots get a lift; out of the frame for over 5 s: the hero chase on him comes next (milestone 2) */
+    const boost=clamp((0.75-share)*5,0,1.6), outB=youOut>5?2.6:youOut>3?0.8:0;   /* the person's rider has had less than its share of the screen (75%: the CEO roots for his own rider): its shots get a lift; out of the frame for over 5 s: the hero chase on him comes next (milestone 2) */
     if(VIEW.lapNo===1&&r.D<VIEW.C.hsD&&VIEW.C.hsD-r.D<62&&!(shot&&shot.type==="turn1")) L.push({type:"turn1",subj:lead,pri:9.2,min:4.5,max:8,cam:turn1Cam});   /* the holeshot: never missed */
     rs.forEach((k,i)=>{ if(k.crashPlan&&!k.crash&&!k.gone&&!k.onStart&&k.lapN>=k.crashPlan.lap){ const d=MX.Course.wrap(VIEW.C,k.crashPlan.s-k.s); if(d>0&&d<Math.max(10,k.v*2.6)){ const out=k.crashPlan.kind==="out"; const cs=k.crashPlan.s; L.push({type:"crash",subj:i,pri:10,min:out?7.5:8.4,max:out?9.5:10.5,cam:()=>crashCam(cs)}); } } });
     if(!r.onStart){ const toLine=VIEW.C.L-r.s, tl=toLine/Math.max(4,r.v), over=VIEW.lapPlan&&VIEW.lapPlan.over&&VIEW.lapPlan.n>=VIEW.lapNo;
@@ -318,7 +318,7 @@ export function createCams(VIEW){
         if(imp>=2){ const bs=b.s+b.v*2.2; L.push(mine||k<=3?{type:"chase",subj:b.k,victim:a.k,pri:4.4+imp*0.3,min:3.6,max:6.5,why:"battle"}:{type:"track",subj:b.k,victim:a.k,pri:4.2+imp*0.3,min:3.5,max:6.5,cam:()=>trackCam(bs,3.2),why:"battle"}); break; } } }
     if(VIEW.holdInfo&&VIEW.holdInfo.war) VIEW.holdInfo.war.forEach((j,ix)=>{ if(rs[j]&&!rs[j].gone&&!rs[j].onStart) L.push({type:"chase",subj:j,pri:3.6-ix*0.1+(isMe(j)?0.8:0),min:3,max:4.5,why:"war"}); });
     /* a wide establishing shot of the whole night: once a lap, and after the first corner of lap one */
-    if(lapWide!==VIEW.lapNo&&!r.onStart&&(VIEW.lapNo>1||r.D>VIEW.C.hsD+20)&&VIEW.C.kind!==undefined&&motion()!=="off") L.push({type:"bcast",subj:lead,pri:3.7,min:4.8,max:7.2,why:"wide"});   /* (milestone 2: the high broadcast from the stands, framed wide) */
+    if(lapWide!==VIEW.lapNo&&!r.onStart&&(VIEW.lapNo>1||r.D>VIEW.C.hsD+20)&&VIEW.C.kind!==undefined&&motion()!=="off") L.push({type:"bcast",subj:me.length?me[0]:lead,pri:3.7,min:4.8,max:7.2,why:"wide"});   /* (milestone 2: the high broadcast from the stands, framed wide, round the person's pack: it framed the leader's and the person was out of the frame for 6 s) */
     L.push({type:"chase",subj:lead,pri:2,min:4,max:7,why:"lead"});
     if(me.length) L.push({type:"chase",subj:me[0],pri:Math.min(8.5,4.0+boost+outB),min:4.5,max:8,why:"you"});   /* the hero chase on the person's rider: the default filler, above the leader's corners and the establishing shot (milestone 2: 2.9 before) */
     if(!r.onStart){ const rsd=r.s+Math.max(8,r.v*2.2); L.push({type:"track",subj:lead,pri:2.1,min:3.5,max:6,cam:()=>trackCam(rsd,3.4),why:"roving"}); }
@@ -476,7 +476,7 @@ export function createCams(VIEW){
         let cov=0;
         if(nf){ x0=Math.max(-1,x0); x1=Math.min(1,x1); y0=Math.max(-1,y0); y1=Math.min(1,y1); if(x1>x0&&y1>y0) cov=(x1-x0)*(y1-y0)/4; }   /* (all of him behind the lens: nothing) */
         const k=clamp((cov-0.05)/0.25,0,1)*(w?0.7:1); if(k>I) I=k; } }
-    let P=m.pref+2.4*I+(m.s<0?1:-1)*clamp((kA||0)*8,-0.2,0.2);   /* a right turn ahead (kA > 0) prefers the lens on his right, looking into the turn (and a left turn the cover's) */
+    let P=m.pref+2.4*I+(m.s<0?1:-1)*clamp((kA||0)*3,-0.06,0.06);   /* a right turn ahead (kA > 0) leans a little toward the lens on his right (the composition looks into the turn by itself: xT) */
     const f=r.fr; if(f&&!r.crash){ const c=Math.cos(f.th), s=Math.sin(f.th), lt=(r.lat||0)+(hm.x-S.x)*-s+(hm.z-S.z)*c, over=Math.abs(lt)-(f.hw-0.35); if(over>0) P+=0.25+over*0.5;
       if(groundNear(r,hm.x-S.x,hm.z-S.z)>gS+0.75) P+=0.35; }
     if(VIEW.C.kind==="stadium"&&VIEW.C.layout.floor){ hw2.x=hm.x; hw2.z=hm.z; inFloor(hw2); if(Math.hypot(hw2.x-hm.x,hw2.z-hm.z)>0.3) P+=0.6; }
@@ -864,7 +864,7 @@ export function createCams(VIEW){
     if(Math.abs(cam.fov-camS.fov)>0.01){ cam.fov=camS.fov; cam.updateProjectionMatrix(); }
     camS.roll=ROLL.x;
     /* is the person's rider in the frame? (the director brings him back after 5 s out of it: milestone 2) */
-    { const me=VIEW.mode==="race"&&!RP?meList():null; if(me&&me.length){ const q=VIEW.rs[me[0]]; if(q&&q.pos){ cam.updateMatrixWorld(); tv3.copy(q.pos).project(cam); youOut=tv3.z<1&&Math.abs(tv3.x)<1&&Math.abs(tv3.y)<1?0:youOut+Math.max(0,dt); } } }
+    { const me=VIEW.mode==="race"&&!RP?meList():null; if(me&&me.length){ const q=VIEW.rs[me[0]]; if(q&&q.pos){ cam.updateMatrixWorld(); tv3.copy(q.pos).project(cam); youOut=(shot.type==="onboard"&&shot.subj===me[0])||(tv3.z<1&&Math.abs(tv3.x)<1&&Math.abs(tv3.y)<1)?0:youOut+Math.max(0,dt); } } }   /* (his own onboard: his eyes are the picture) */
   }
 
   /* ---------------- the presets and the tools ---------------- */
