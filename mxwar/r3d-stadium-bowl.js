@@ -108,10 +108,11 @@ function crowdMaterial(atlas,U,fancy,animNow,twink){
   float ar=fract(vRing.x*44.0); bool aisle=ar<vRing.y;
   float blk=rnd(uvec2(floor(id.x/28.0),floor(id.y/9.0)),5u), sec=0.84+0.32*blk;
   /* milestone 2: three regimes by the size of a seat on the screen (fw = seats a pixel): the person's sprite (a seat over 3 px); the SEAT'S OWN colour (its shirt, a pixel or two:
-     a fine, stable speckle in rows, heads lit above the shadowed riser); the BLOCK'S mean (several seats a pixel: no crawl). (The first try faded straight to the atlas' mean: a flat grey, an empty stand.) */
+     a fine speckle in rows, heads lit above the shadowed riser); further, the speckle's contrast falls to 30% round the block's mean (several seats a pixel: a calm grain, little crawl).
+     (A fade straight to the atlas' mean, or to the block's mean, read as a flat grey: an empty stand.) */
   float l1=smoothstep(0.35,0.9,fw), l2=smoothstep(uLp.x,uLp.y,fw);
   float rowK=mix(mix(1.3,0.5,smoothstep(0.45,0.9,f.y)),1.0,smoothstep(0.35,0.8,fwy));
-  vec3 blockC=(vec3(0.035)+0.30*PAL_MEAN)*sec;
+  vec3 blockC=(vec3(0.035)+0.30*PAL_MEAN)*sec*vec3(1.08,1.0,0.9);
   float wave=0.0;
 #ifdef FANCY
   float wp=fract(vRing.x*3.0-uTime*0.045); wave=smoothstep(0.0,0.015,wp)*(1.0-smoothstep(0.05,0.09,wp));
@@ -122,7 +123,7 @@ function crowdMaterial(atlas,U,fancy,animNow,twink){
   if(aisle){
     vec2 fa=vec2(clamp(ar/vRing.y,0.03,0.97),clamp(f.y,0.015,0.985));
     vec4 sa=textureGrad(map,(vec2(6.0,0.0)+fa)/8.0,gx*0.16,gy*0.16);
-    col=mix(mix(sa.rgb,vec3(0.05,0.048,0.055),l1),blockC*0.7,l2);
+    col=mix(mix(sa.rgb,vec3(0.05,0.048,0.055),l1),blockC*0.7,l2*0.7);
   } else {
     float arms=0.0;
 #ifdef FANCY
@@ -148,7 +149,7 @@ function crowdMaterial(atlas,U,fancy,animNow,twink){
     float mk=clamp((1.0-s.a)*2.0,0.0,1.0), shd=(0.78+0.3*r3)*sec;
     s.rgb=mix(s.rgb,s.rgb*shirtCol(r4,r3)*2.09,mk)*shd;
     vec3 seatC=(empty?vec3(0.03):vec3(0.035)+0.30*shirtCol(r4,r3))*shd*rowK;
-    col=mix(mix(s.rgb,seatC,l1),blockC,l2);
+    col=mix(s.rgb,seatC,l1); col=blockC+(col-blockC)*(1.0-0.7*l2);   /* far away the seats keep 30% of their contrast: a crowd's grain, not a flat grey (a flat block mean read as empty concrete) */
 #if defined(FANCY)||defined(TWINK)
     if(!under){
       float g=fw>0.6?3.0:1.0; vec2 c2=cu/vec2(g,g*0.66); vec2 i2=floor(c2); vec2 f2=c2-i2; uvec2 u2=uvec2(i2);
@@ -254,7 +255,7 @@ function nearPeople(ring,LV,pr,segs,U,lightFn,nRows){
   const arm=s=>{ const g=new THREE.CylinderGeometry(0.068,0.05,0.52,3,1,true); g.translate(0,-0.26,0); g.translate(s*0.215,0.47,0.0); return g; };
   const parts=[paint(torso,[0,0,0]),paint(head,[1,0,0]),paint(arm(-1),[2,0,0]),paint(arm(1),[3,0,0])], geo=merge(parts);
   const n=list.length;
-  const uni=THREE.UniformsUtils.merge([THREE.UniformsLib.fog,{}]); uni.uTime=U.uTime; uni.uGain=U.uGain; uni.uFogK=U.uFogK;
+  const uni=THREE.UniformsUtils.merge([THREE.UniformsLib.fog,{}]); uni.uTime=U.uTime; uni.uGain=U.uGainC||U.uGain; uni.uFogK=U.uFogK;
   const mat=new THREE.ShaderMaterial({uniforms:uni,fog:true,vertexColors:true,
     vertexShader:`attribute vec4 aP; varying vec3 vCol; varying vec3 vN; varying float vPart; varying float vHy; varying float vPy; varying vec2 vSh; uniform float uTime;
 #include <fog_pars_vertex>
@@ -333,7 +334,7 @@ export function stadium(C,look,q,root,ctx){
   function lightAt(band,t,rf,len){ const p=poolAt(rf,len), w=0.92+0.08*Math.sin(rf*Math.PI*2*7+0.7)+0.05*Math.sin(rf*Math.PI*2*17); let base,pw;
     if(band===0){ base=0.95+0.22*(1-t); pw=0.5; } else if(band===1){ base=0.86; pw=0.62; } else { base=0.66+0.12*t; pw=0.5+0.7*t; }
     const k=lightK*w; return [k*(base*COOL[0]+pw*p*WARM[0]),k*(base*COOL[1]+pw*p*WARM[1]),k*(base*COOL[2]+pw*p*WARM[2])]; }
-  U.uGain={value:lo?0.8:1.0}; U.uGainC={value:lo?1.05:1.0}; U.uFogK={value:0.55}; U.uNear={value:new THREE.Vector2(0,0)}; U.uLp={value:lo?new THREE.Vector2(0.8,2.0):new THREE.Vector2(1.0,2.6)};   /* calibrated against the tone curve: the stands land near luma 45-55 (milestone 1: about 30) */
+  U.uGain={value:lo?0.68:1.0}; U.uGainC={value:lo?1.05:1.18}; U.uFogK={value:0.55}; U.uNear={value:new THREE.Vector2(0,0)}; U.uLp={value:lo?new THREE.Vector2(1.0,3.0):new THREE.Vector2(1.2,3.5)};   /* calibrated against the tone curve: the stands land near luma 45-55 (milestone 1: about 30) */
   /* ---- the crowd: three lofted strips of seats ---- */
   const MC=Mesher();
   const crowdBand=(pr,sub,band,uoff,voff)=>{ const slen=Math.hypot(pr[2]-pr[0],pr[3]-pr[1]), rows=Math.max(1,Math.round(slen/CROWD.row)), nA=44;
@@ -378,9 +379,10 @@ export function stadium(C,look,q,root,ctx){
   const bt=boardsTex(lo), MB=Mesher(), wallL=LV(-0.55).len;
   loft(MB,LV,segs,[-0.55,0.0,-0.55,1.1],1,(t,r,Uu,o)=>{ const p=poolAt(r,wallL), k=1.3*(0.78+0.1*t); o.u=Uu/23.5; o.v=t; o.r=k*(0.86+0.5*p); o.g=k*(0.88+0.4*p); o.b=k*(0.95+0.26*p); });
   /* hero signs (milestone 2): big upright panels of the boards' art (6 x 2.25 m on two legs) on the floor's edge wherever the track leaves room, lit like the wall */
-  let netOn=false; const heroLegs=[], heroN=lo?0:(q.heroSigns!=null?q.heroSigns:22);
+  let netOn=false; const heroLegs=[], signs=[], heroN=lo?0:(q.heroSigns!=null?q.heroSigns:22);
   for(let k=0;k<heroN;k++){ const f=(k+0.5)/heroN, p=ring.pts[Math.floor(f*segs)%segs], dd=-2.4, qx=p.x+p.nx*dd, qz=p.z+p.nz*dd, tx=-p.nz, tz=p.nx, hw=3.0;
     if(!clear(C,qx,qz,3.4)||!clear(C,qx-tx*hw,qz-tz*hw,2.6)||!clear(C,qx+tx*hw,qz+tz*hw,2.6)) continue;
+    signs.push({x:qx,z:qz,hw:hw,tx:tx,tz:tz,h:2.7});   /* (published as world.ctx.signs: a camera spot must not stand right behind one) */
     const pk=(k*3)%8, u0=pk/8, u1=(pk+1)/8, y0=0.45, y1=2.7, pl=poolAt(f,wallL), kr=1.25*(0.86+0.5*pl), kg=1.25*(0.88+0.4*pl), kb=1.25*(0.95+0.26*pl);
     const v0=MB.vert(qx-tx*hw,y0,qz-tz*hw,u0,0,kr,kg,kb), v1=MB.vert(qx+tx*hw,y0,qz+tz*hw,u1,0,kr,kg,kb), v2=MB.vert(qx-tx*hw,y1,qz-tz*hw,u0,1,kr,kg,kb), v3=MB.vert(qx+tx*hw,y1,qz+tz*hw,u1,1,kr,kg,kb); MB.quad(v0,v1,v2,v3);
     for(const sd of [-0.8,0.8]) heroLegs.push(xf(paint(new THREE.BoxGeometry(0.12,y0+0.05,0.12),lin("#14151b")),qx+tx*hw*sd+p.nx*0.08,(y0+0.05)/2,qz+tz*hw*sd+p.nz*0.08));
@@ -444,7 +446,7 @@ export function stadium(C,look,q,root,ctx){
   let shafts=null;
   if(hazeOn&&!dome&&banks.length){
     const g=new THREE.CylinderGeometry(0.42,1,1,16,1,true); g.translate(0,-0.5,0);   /* (the first try: 4 m at the bank, 26 m wide at the end: the cones overlapped into flat wedges of light over the stands) */
-    const mat=new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,fog:false,uniforms:{col:{value:new THREE.Vector3(1.0,0.92,0.78)},uTime:U.uTime,uI:{value:q.shaftI!=null?q.shaftI:0.045}},
+    const mat=new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,fog:false,uniforms:{col:{value:new THREE.Vector3(1.0,0.92,0.78)},uTime:U.uTime,uI:{value:q.shaftI!=null?q.shaftI:0.065}},
       vertexShader:"attribute float aPh; varying float vU; varying float vE; varying float vPh; varying float vD; void main(){ vU=-position.y; vPh=aPh; vec4 mv=modelViewMatrix*instanceMatrix*vec4(position,1.0); vec3 n=normalize(mat3(modelViewMatrix*instanceMatrix)*normal); vE=abs(dot(n,normalize(-mv.xyz))); vD=-mv.z; gl_Position=projectionMatrix*mv; }",
       fragmentShader:"uniform vec3 col; uniform float uTime; uniform float uI; varying float vU; varying float vE; varying float vPh; varying float vD; void main(){ float u=clamp(vU,0.0,1.0); float a=uI*pow(1.0-u,1.5)*smoothstep(0.0,0.04,u)*pow(clamp(vE,0.0,1.0),2.0)*smoothstep(14.0,40.0,vD)*(0.8+0.2*sin(u*19.0-uTime*0.35+vPh*6.0)); gl_FragColor=vec4(col,a);\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}"});
     const n=banks.length, m=new THREE.InstancedMesh(g,mat,n), M=new THREE.Matrix4(), Q=new THREE.Quaternion(), dn=new THREE.Vector3(0,-1,0), d=new THREE.Vector3(), sc=new THREE.Vector3(), ph=new Float32Array(n);
@@ -479,5 +481,5 @@ export function stadium(C,look,q,root,ctx){
       if(T!=null&&lap>0){ const s=Math.floor(T); if(s!==board.sec){ board.sec=s; board.T=T; ch=true; } } else if(board.T!=null&&!(lap>0)){ board.T=null; ch=true; }
       if(ch) redraw(); }
   }
-  return {cx:cx,cz:cz,frame:frame,board:board,bowlY:bowlY};
+  return {cx:cx,cz:cz,frame:frame,board:board,bowlY:bowlY,signs:signs};
 }
