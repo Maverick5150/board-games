@@ -150,7 +150,7 @@ export function starTex(){
   const S=128, c=canvas(S,S), x=c.getContext("2d");
   let g=x.createRadialGradient(64,64,0,64,64,64); g.addColorStop(0,"rgba(255,255,255,1)"); g.addColorStop(0.1,"rgba(255,244,220,0.8)"); g.addColorStop(0.35,"rgba(255,226,170,0.16)"); g.addColorStop(1,"rgba(255,220,160,0)"); x.fillStyle=g; x.fillRect(0,0,S,S);
   const ray=(ang,len,wd,a)=>{ x.save(); x.translate(64,64); x.rotate(ang); const gg=x.createLinearGradient(-len,0,len,0); gg.addColorStop(0,"rgba(255,240,210,0)"); gg.addColorStop(0.5,"rgba(255,250,235,"+a+")"); gg.addColorStop(1,"rgba(255,240,210,0)"); x.fillStyle=gg; x.beginPath(); x.ellipse(0,0,len,wd,0,0,7); x.fill(); x.restore(); };
-  ray(0,64,2.2,0.9); ray(Math.PI/2,64,2.2,0.9); ray(Math.PI/4,44,1.4,0.5); ray(-Math.PI/4,44,1.4,0.5);
+  ray(0,60,1.5,0.7); ray(Math.PI/2,60,1.5,0.7); ray(Math.PI/4,34,1.0,0.35); ray(-Math.PI/4,34,1.0,0.35);   /* (polish: thinner, shorter rays: a glare, not a cartoon star) */
   const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t;
 }
 /* a soft round light */

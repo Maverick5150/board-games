@@ -239,7 +239,7 @@ export function stadium(C,look,q,root,ctx){
   glowStrip([0.35,1.785,0.455,1.95],[2.6,0.35,0.25]); glowStrip([15.55,10.25,15.55,10.4],[1.8,1.4,0.9]); glowStrip([30.0,18.0,30.0,18.12],[2.2,1.7,0.9]); glowStrip([61.0,49.55,61.0,49.7],[2.2,2.0,1.6]); glowStrip([64.05,48.2,64.05,48.5],[2.6,0.4,0.3]);
   const parts=[], bulbs=[], glows=[], dummy=new THREE.Object3D(), tgt=new THREE.Vector3(cx,2,cz), bcols=lo?4:6, brows=lo?3:4, sp=lo?2.6:2.2;
   const steelC=lin("#1a1c24"), plate=lin("#0c0d12");
-  const addBulb=(M,s,rim)=>{ const p=new THREE.Vector3().setFromMatrixPosition(M); bulbs.push({M:M.clone(),rim:!!rim}); glows.push({x:p.x,y:p.y,z:p.z,s:s,r:1.0,g:0.93,b:0.78,k:0,a:rim?0.5:0.55}); };
+  const addBulb=(M,s,rim)=>{ const p=new THREE.Vector3().setFromMatrixPosition(M); bulbs.push({M:M.clone(),rim:!!rim}); glows.push({x:p.x,y:p.y,z:p.z,s:s*0.56,r:1.0,g:0.93,b:0.78,k:0,a:rim?0.5:0.8}); };   /* (polish: each bulb a distinct small disc, as the cover's light banks: the bank's halo and the bloom do the glow) */
   for(let k=0;k<nTow;k++){
     const idx=Math.floor(((k+0.5)/nTow+0.037)*segs)%segs, p=ring.pts[idx], baseD=PR.rim[0]+1.8, hM=dome?3+(k%3)*1.2:13+(k%3)*2.5;
     const bx=p.x+p.nx*baseD, bz=p.z+p.nz*baseD, by=PR.cap[3], top=by+hM;
@@ -251,7 +251,7 @@ export function stadium(C,look,q,root,ctx){
     const cat=xf(paint(new THREE.BoxGeometry(bw+1.5,0.35,2.2),steelC),0,-bh/2-0.6,-0.9); cat.applyMatrix4(Mb); parts.push(cat);
     for(let j=0;j<brows;j++) for(let i=0;i<bcols;i++){ const lm=new THREE.Matrix4().makeTranslation((i-(bcols-1)/2)*sp,(j-(brows-1)/2)*sp,0.37); addBulb(Mb.clone().multiply(lm),lo?3.4:2.9,false); }
     const c0=new THREE.Vector3(0,0,1.0).applyMatrix4(Mb);
-    glows.push({x:c0.x,y:c0.y,z:c0.z,s:bw*2.2,r:1.0,g:0.85,b:0.6,k:0,a:0.26}); glows.push({x:c0.x,y:c0.y,z:c0.z,s:bw*4.4,r:1.0,g:0.9,b:0.7,k:1,a:0.8});
+    glows.push({x:c0.x,y:c0.y,z:c0.z,s:bw*2.4,r:1.0,g:0.85,b:0.6,k:0,a:0.30}); glows.push({x:c0.x,y:c0.y,z:c0.z,s:bw*2.5,r:1.0,g:0.9,b:0.7,k:1,a:0.34});   /* (polish: a soft halo and a small flare, no longer a 29 m four-point star) */
   }
   const nRim=lo?32:64;
   for(let k=0;k<nRim;k++){ const p=ring.pts[Math.floor(k/nRim*segs)%segs]; dummy.position.set(p.x+p.nx*(PR.rim[0]-0.2),PR.rim[3]+0.55,p.z+p.nz*(PR.rim[0]-0.2)); dummy.lookAt(cx,PR.rim[3]-8,cz); dummy.updateMatrix(); addBulb(dummy.matrix.clone(),2.0,true); }

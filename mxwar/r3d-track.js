@@ -246,14 +246,14 @@ function trackMesh(C,look,q,mat,tier,tiles){
   const U=mat.userData.mx; U.uTrack.value=track; U.uTm.value.set(1/R.L,R.LATR,1/(2*R.LATR),1);
   const info={tris:0,chunks:0,gridMs:t1-t0,fineMs:t2-t1,fineTexels:fine.nt*fine.nv,gridVerts:R.ns*G.nc};
   if(hi){
-    const nCh=Math.max(1,Math.round(R.L/48)), nsq=R.ns/4;
+    const td=clamp(q&&q.terrainDetail!=null?q.terrainDetail:1,0.5,1.2), nCh=Math.max(1,Math.round(R.L/48)), nsq=R.ns/4;
     for(let c=0;c<nCh;c++){ const r0=4*Math.round(c*nsq/nCh), r1=c===nCh-1?R.ns:4*Math.round((c+1)*nsq/nCh); if(r1<=r0) continue;
       const mid=Math.round((r0+r1)/2), k=Math.min(mid,R.ns-1)*G.nc+Math.floor(G.nc/2), cx=G.PX[k], cy=G.PY[k], cz=G.PZ[k];
       const lod=new THREE.LOD(); lod.position.set(cx,cy,cz);
       const seq=st=>{ const a=[]; for(let r=r0;r<=r1;r+=st) a.push(r); if(a[a.length-1]!==r1) a.push(r1); return a; };
       const m0=gridMesh(G,seq(1),1,cx,cy,cz,true,mat), m1=gridMesh(G,seq(2),2,cx,cy,cz,true,mat), m2=gridMesh(G,seq(4),4,cx,cy,cz,true,mat);
       [m0,m1,m2].forEach(m=>{ m.position.set(0,0,0); });
-      lod.addLevel(m0,0); lod.addLevel(m1,44); lod.addLevel(m2,100);
+      lod.addLevel(m0,0); lod.addLevel(m1,44*td); lod.addLevel(m2,100*td);   /* (polish, D6: the tier's terrain detail scales the levels' distances: BALANCED 0.8 = 35 m / 80 m) */
       root.add(lod); info.chunks++; info.tris+=m0.geometry.index.count/3;
     }
   } else {
@@ -320,6 +320,13 @@ function edgeBlocks(C,look,q){
   }
   const geo=look.bales?baleGeo():blockGeo(1.3,0.44,0.5,0.06), hi=!q.lo;
   const mat=hi?new THREE.MeshStandardMaterial({color:0xffffff,vertexColors:true,roughness:0.62,metalness:0}):new THREE.MeshLambertMaterial({color:0xffffff,vertexColors:true});
+  /* polish: moulded plastic that has been in a race: dirt splotches, a dusty foot, rubbed edges and scuffs (a procedural pattern on the block's own position, per block by its place on the track: no texture) */
+  if(hi&&!look.bales){ mat.onBeforeCompile=sh=>{
+    sh.vertexShader=sh.vertexShader.replace("#include <common>","#include <common>"+"\n"+"varying vec3 vBk; varying float vBh;").replace("#include <begin_vertex>","#include <begin_vertex>"+"\n"+"vBk=position+vec3(instanceMatrix[3].x*0.37,instanceMatrix[3].z*0.53,instanceMatrix[3].x+instanceMatrix[3].z); vBh=position.y;");
+    sh.fragmentShader=sh.fragmentShader.replace("#include <common>","#include <common>"+"\n"+"varying vec3 vBk; varying float vBh; float bkH(vec3 p){ p=fract(p*0.3183099+0.1); p*=17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); } float bkN(vec3 x){ vec3 i=floor(x), f=fract(x); f=f*f*(3.0-2.0*f); return mix(mix(mix(bkH(i),bkH(i+vec3(1,0,0)),f.x),mix(bkH(i+vec3(0,1,0)),bkH(i+vec3(1,1,0)),f.x),f.y),mix(mix(bkH(i+vec3(0,0,1)),bkH(i+vec3(1,0,1)),f.x),mix(bkH(i+vec3(0,1,1)),bkH(i+vec3(1,1,1)),f.x),f.y),f.z); }")
+      .replace("#include <color_fragment>","#include <color_fragment>"+"\n"+"{ float n=0.6*bkN(vBk*vec3(6.0,10.0,9.0))+0.4*bkN(vBk*vec3(21.0,31.0,27.0)); float low=1.0-smoothstep(0.02,0.28,vBh); float dirt=clamp(smoothstep(0.50,0.82,n)*0.55+low*0.55*n,0.0,0.85); diffuseColor.rgb=mix(diffuseColor.rgb,vec3(0.13,0.075,0.038)*(0.7+0.6*n),dirt); float scuff=smoothstep(0.80,0.93,bkN(vBk*vec3(3.0,40.0,34.0)))*0.5; diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*0.55+vec3(0.05),scuff); }")
+      .replace("#include <roughnessmap_fragment>","#include <roughnessmap_fragment>"+"\n"+"roughnessFactor=clamp(roughnessFactor+0.25*bkN(vBk*13.0),0.0,1.0);");
+  }; mat.customProgramCacheKey=()=>"mx-tuff"; }
   const m=new THREE.InstancedMesh(geo,mat,Math.max(1,list.length)), M=new THREE.Matrix4(), Q=new THREE.Quaternion(), E=new THREE.Euler(0,0,0,"YXZ"), V=new THREE.Vector3(), Sx=new THREE.Vector3(1,1,1), cl=new THREE.Color();
   /* tuff blocks in plain colours (the CEO's broadcast photo: yellow, red, blue, white), every albedo at 0.6 or less in linear light (the near-white blocks reached 1.4-1.7 under the key and glowed neon: lead's request, director note D5); no brand, no lettering */
   const tints=look.bales?["#c9a55a","#b8944e","#d4b066"]:["#c8a010","#b82430","#2a5cb8","#bfc1c8","#c8a010","#b82430","#2a5cb8"];

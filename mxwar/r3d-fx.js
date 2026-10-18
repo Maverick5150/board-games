@@ -20,10 +20,10 @@ const GL=typeof window!=="undefined"?window:globalThis;
 
 /* ---------------- the tiers: how much of everything (perf: pass {tier: "high" | "medium" | "low" | "stick"} or {fx: {...overrides}} in Q.options) ---------------- */
 const TIERS={
-  high:  {n:"high",   clods:900, sparks:2600, puffs:260, haze:36, motes:170, lens:6, rock:20, rate:1.00, atlas:128, bigger:1.0},
-  medium:{n:"medium", clods:420, sparks:1000, puffs:130, haze:14, motes:80,  lens:0, rock:20, rate:0.8,  atlas:128, bigger:1.1},
+  high:  {n:"high",   clods:2200, sparks:5200, puffs:340, haze:44, motes:170, lens:6, rock:20, rate:1.00, atlas:128, bigger:1.3},   /* polish: the cover is a STORM of roost: 2.4x the clods, 2x the spray (the sim cost is a few tenths of a ms, the triangles are 20 a clod) */
+  medium:{n:"medium", clods:900, sparks:2000, puffs:170, haze:18, motes:80,  lens:0, rock:20, rate:0.85, atlas:128, bigger:1.2},
   low:   {n:"low",    clods:240, sparks:480,  puffs:64,  haze:0,  motes:0,   lens:0, rock:8,  rate:0.7,  atlas:96,  bigger:1.25},
-  ultra: {n:"ultra",   clods:1300, sparks:3600, puffs:340, haze:44, motes:210, lens:6, rock:20, rate:1.00, atlas:128, bigger:1.0},
+  ultra: {n:"ultra",   clods:3000, sparks:7000, puffs:420, haze:52, motes:210, lens:6, rock:20, rate:1.00, atlas:128, bigger:1.3},
   stick: {n:"stick",  clods:160, sparks:300,  puffs:44,  haze:0,  motes:0,   lens:0, rock:8,  rate:0.6,  atlas:96,  bigger:1.35}
 };
 const ALIAS={firetv:"stick",stick:"stick",low:"low",balanced:"medium",medium:"medium",high:"high",ultra:"ultra"};
@@ -90,6 +90,7 @@ function rockGeometry(tris){
   }
   g.computeVertexNormals();
   const nr=g.attributes.normal, col=new Float32Array(p.count*3);
+  for(let i=0;i<p.count;i++){ const x=p.getX(i), y=p.getY(i), z=p.getZ(i), l=Math.hypot(x,y,z)||1, nx=nr.getX(i)*0.4+x/l*0.6, ny=nr.getY(i)*0.4+y/l*0.6, nz=nr.getZ(i)*0.4+z/l*0.6, nl=Math.hypot(nx,ny,nz)||1; nr.setXYZ(i,nx/nl,ny/nl,nz/nl); }   /* (polish: round lumps) */
   for(let i=0;i<p.count;i++){ const f=Math.floor(i/3), h=Math.sin(f*91.7+1.3)*43758.5453, tone=(0.9+0.2*(h-Math.floor(h)))*(0.66+0.46*(nr.getY(i)*0.5+0.5)); col[i*3]=tone; col[i*3+1]=tone*0.98; col[i*3+2]=tone*0.94; }
   g.setAttribute("color",new THREE.BufferAttribute(col,3)); return g;
 }
@@ -207,7 +208,7 @@ export function createFx(opts){
   const NC=T.clods, cPos=new Float32Array(NC*3), cVel=new Float32Array(NC*3), cLife=new Float32Array(NC), cRad=new Float32Array(NC), cSc=new Float32Array(NC*3), cAx=new Float32Array(NC*3),
     cAng=new Float32Array(NC), cSpin=new Float32Array(NC), cRest=new Uint8Array(NC), cAlive=new Uint8Array(NC), cS0=new Float32Array(NC), cL0=new Float32Array(NC), cCs=new Float32Array(NC), cSn=new Float32Array(NC),
     cX0=new Float32Array(NC), cZ0=new Float32Array(NC), cG0=new Float32Array(NC), cMax=new Float32Array(NC);
-  const rockG=rockGeometry(T.rock), rockM=new THREE.MeshLambertMaterial({color:0xffffff,vertexColors:true});
+  const rockG=rockGeometry(T.rock), rockM=new THREE.MeshLambertMaterial({color:0xffffff,vertexColors:true,emissive:0x4a2a14});   /* (polish: a warm floor, so the shadowed side of a clod is brown dirt, not a black rock) */
   rockM.onBeforeCompile=function(sh){ sh.vertexShader=sh.vertexShader.replace("#include <begin_vertex>","#include <begin_vertex>\n#ifdef USE_INSTANCING\n  transformed*=smoothstep(0.3,1.1,-(modelViewMatrix*instanceMatrix*vec4(0.0,0.0,0.0,1.0)).z);\n#endif"); };
   const rocks=new THREE.InstancedMesh(rockG,rockM,NC); rocks.frustumCulled=false; rocks.receiveShadow=true; rocks.castShadow=false; rocks.name="fx-clods";
   rocks.instanceMatrix.setUsage(THREE.DynamicDrawUsage); rocks.setColorAt(0,new THREE.Color(1,1,1)); rocks.instanceColor.setUsage(THREE.DynamicDrawUsage);
@@ -262,8 +263,8 @@ export function createFx(opts){
   }
   /* a streak of fine spray (a clump of dirt flying: stretched along its velocity by the shader) */
   function spray(x,y,z,vx,vy,vz,col){
-    const k=nextSp; nextSp=(nextSp+1)%NSP; const m=0.55+0.8*rnd();
-    sprite(k,x,y,z,vx,vy,vz,0.016+0.022*rnd(),0,0.28+0.36*rnd(),0.9,[COL.spray[0]*m,COL.spray[1]*m,COL.spray[2]*m],0,0,1.3,0.75,0);
+    const k=nextSp; nextSp=(nextSp+1)%NSP; const m=lo?(0.55+0.8*rnd()):(0.95+1.1*rnd());
+    sprite(k,x,y,z,vx,vy,vz,(0.016+0.022*rnd())*(lo?1:1.5),0,0.28+0.36*rnd(),0.9,[COL.spray[0]*m,COL.spray[1]*m,COL.spray[2]*m],0,0,1.3,0.75,0);
   }
   /* a puff of dust: radius r0 growing, a life, a peak alpha, a variant of the atlas */
   function puff(x,y,z,vx,vy,vz,r0,grow,life,alpha,col,buoy,drag){
