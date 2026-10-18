@@ -328,12 +328,12 @@ export function createCams(VIEW){
     return L;
   }
   /* the shot a preset holds: the person's rider (or the leader), never cutting; the broadcast keeps cutting between trackside spots as the rider passes them */
-  /* is a rival's body near the onboard lens (the bars, 0.6 m ahead of his hip)? under 1.7 m from a rival's wheelbase segment (ahead of or beside the lens) it is, and it stays so until he has
-     been over 2.2 m away for 1.5 s (the riders' near-lens fade turns a body within 1.7 m into a screen-door ghost) */
+  /* is a rival's body near the onboard lens (the bars, 0.6 m ahead of his hip)? when a part of him (rear wheel, middle, front) is in the middle of the picture (within about 50 degrees of the
+     axis) and under 1.7 m away it is, and it stays so until none has been under 2.2 m for 1.5 s (the riders' near-lens fade turns a body within 1.7 m into a screen-door ghost) */
   let onbBlk=false, onbClrT=-1e9;
   function onbBlocked(j){ const r=VIEW.rs[j]; if(!r||!r.pos) return false; if(r.onStart){ onbBlk=true; onbClrT=VIEW.T; return true; }   /* the gate row: shoulder to shoulder */
     const fo=Math.cos(r.th||0), go=Math.sin(r.th||0), ex=r.pos.x+fo*0.6, ez=r.pos.z+go*0.6; let dmin=1e9;
-    for(let i=0;i<VIEW.rs.length;i++){ const o=VIEW.rs[i]; if(i===j||(o.gone&&!o.crash)||!o.pos) continue; const f2=Math.cos(o.th||0), g2=Math.sin(o.th||0); const t=clamp((ex-o.pos.x)*f2+(ez-o.pos.z)*g2,-1.05,1.05), nx=o.pos.x+f2*t-ex, nz=o.pos.z+g2*t-ez; if(nx*fo+nz*go<-0.2) continue; const d=Math.hypot(nx,nz); if(d<dmin) dmin=d; }   /* (behind the lens: not in the picture) */
+    for(let i=0;i<VIEW.rs.length;i++){ const o=VIEW.rs[i]; if(i===j||(o.gone&&!o.crash)||!o.pos) continue; const f2=Math.cos(o.th||0), g2=Math.sin(o.th||0); for(let q=-1;q<=1;q++){ const px=o.pos.x+f2*q-ex, pz=o.pos.z+g2*q-ez, fw=px*fo+pz*go, lt=Math.abs(-px*go+pz*fo); if(fw<0.15||lt>fw*1.2+0.35) continue; const d=Math.hypot(px,pz); if(d<dmin) dmin=d; } }   /* (his rear wheel, middle and front: only a part of him in the middle of the picture counts; beside or behind the lens he is not in it) */
     if(dmin<1.7){ onbBlk=true; onbClrT=VIEW.T; } else if(dmin<2.2) onbClrT=VIEW.T; else if(onbBlk&&VIEW.T-onbClrT>1.5) onbBlk=false;
     return onbBlk; }
   function lockedShot(){
@@ -583,7 +583,7 @@ export function createCams(VIEW){
   }
   /* THE BROADCAST (milestone 2: the camera button's "Broadcast" and the director's once-a-lap establishing shot; the CEO's elevated stadium view, Reference_Crops/broadcast_overview):
      a TV camera on a platform in the stands, 6.5 m over the seats where they are about 10 m high (the lower bowl), on a rail along a long side of the stadium. It dollies slowly
-     with the action (tau 3 s), pans with the pack round its rider (a damped follower led by their speed) and zooms so the pack fills about half the frame's width (16-42 degrees
+     with the action (tau 3 s), pans with the pack round its rider (a damped follower led by their speed) and zooms so the pack fills about 60% of the frame's width (12-42 degrees
      vertical); it changes sides (a cut) only when the pack comes too close under it or too far across the floor, at most every 5 s. Outdoors: a tower over the terrain. */
   let RAILS=null;
   function bcastRails(){
@@ -617,8 +617,8 @@ export function createCams(VIEW){
     /* the pan and the zoom */
     if(!K.init){ K.tx.snap(bT.x); K.ty.snap(bT.y); K.tz.snap(bT.z); }
     T.set(K.tx.step(bT.x,0.9,dt),K.ty.step(bT.y,0.9,dt),K.tz.step(bT.z,0.9,dt));
-    const dist=Math.max(8,E.distanceTo(T)), wantW=clamp(ext*2+16,est?60:24,est?110:80), hf=2*Math.atan(wantW/2/dist);
-    let vf=clamp(2*Math.atan(Math.tan(hf/2)/Math.max(0.56,asp))*R2D,16,est?50:42);
+    const dist=Math.max(8,E.distanceTo(T)), wantW=clamp(ext*1.6+12,est?60:20,est?110:70), hf=2*Math.atan(wantW/2/dist);   /* (the pack over about 60% of the frame's width, as in the CEO's broadcast reference: at ext*2+16 it filled a third) */
+    let vf=clamp(2*Math.atan(Math.tan(hf/2)/Math.max(0.56,asp))*R2D,12,est?50:42);
     if(!K.init){ K.zoom.snap(vf); K.init=true; } vf=K.zoom.step(vf,1.0,dt);
     T.y+=0.12*Math.tan(vf*PI/360)*dist;   /* the pack a little below the middle: the stands and the lights above it */
     cFocus.copy(T);
