@@ -564,7 +564,20 @@ function annSeg(boxId,attr,items,cur,onPick){
 function annVoiceSelect(id,list,cur,def){
   var el=$(id); if(!el) return;
   var names=list.map(function(v){ return v.name; }), pick=cur&&names.indexOf(cur)>=0?cur:"";
-  el.innerHTML='<option value="">Automatic'+(def?" ("+esc(def)+")":"")+"</option>"+list.map(function(v){ return '<option value="'+esc(v.name)+'"'+(v.name===pick?" selected":"")+">"+esc(v.name+(v.lang?" · "+v.lang:""))+"</option>"; }).join("");
+  el.innerHTML='<option value="">Automatic'+(def?" ("+esc(def)+")":"")+"</option>"+list.map(function(v){ return '<option value="'+esc(v.name)+'"'+(v.name===pick?" selected":"")+">"+esc((v.label||v.name)+(v.lang?" · "+v.lang:"")+" · man")+"</option>"; }).join("");
+}
+/* The announcers are men (the CEO, 2026-10-18), so a device with no man's voice has no spoken announcers: captions, and the Menu says why (BGVoice ready().why) */
+function annNoVoice(why,info){
+  var cap="Wes Calloway and Hutch Bramlett show as captions.", tv=false; try{ tv=!!onTV(); }catch(e){}
+  if(why==="no-male-voice") return "This "+(tv?"TV":"device")+" has no man's voice installed, so "+cap+" The announcers are always men: a woman's voice is never used."+(tv?"":" Installing a man's English voice in the device's speech settings brings them back.")+(info?" Found on this "+(tv?"TV":"device")+": "+info+".":"");
+  if(why==="old-app") return "This copy of the app is too old to choose a man's voice, so "+cap+" Update the app (it offers the update when it opens) to hear them.";
+  if(why==="starting") return "The app's voices are still starting. Until they are, "+cap;
+  return "No English voice is available on this "+(tv?"TV":"device")+", so "+cap+(info?" Speech engine: "+info+".":"");
+}
+function annVoiceNames(v){
+  var a=v.la||v.a, b=v.lb||v.b;
+  if(!a) return v.native?" (the app's men's voices)":"";
+  return " (men's voice"+(b&&b!==a?"s: "+a+" and "+b:": "+a)+")";
 }
 function drawAnn(){
   var sec=$("annSec"); if(!sec) return;
@@ -578,15 +591,15 @@ function drawAnn(){
   annSeg("annVol","data-vo",[["0.45","Soft"],["0.75","Medium"],["1","Loud"]],String(vol),function(x){ BOOTH.set("vol",+x); drawAnn(); });
   var pick=v.engine==="speech"&&v.list.length>1&&s.mode==="voice";
   $("annVoices").hidden=!pick||off;
-  if(pick){ annVoiceSelect("annVa",v.list,s.a,v.a); annVoiceSelect("annVb",v.list,s.b,v.b); }
+  if(pick){ annVoiceSelect("annVa",v.list,s.a,v.la||v.a); annVoiceSelect("annVb",v.list,s.b,v.lb||v.b); }
   $("annVol").parentNode.hidden=s.mode!=="voice";
   $("annHear").hidden=off;
   var note;
   if(off) note="The announcers are off: the race runs in silence.";
   else if(s.mode==="captions") note="Captions only: Wes Calloway and Hutch Bramlett are shown on screen, nothing is spoken.";
   else if(!v.ready) note="Looking for the voices on this device...";
-  else if(v.engine==="captions") note="No English voice is available on this device, so Wes Calloway and Hutch Bramlett show as captions.";
-  else note="Wes Calloway calls the race and Hutch Bramlett adds the colour, out loud and in captions"+(v.engine==="speech"&&v.a?" (voices: "+v.a+(v.b&&v.b!==v.a?" and "+v.b:"")+")":v.native?" (the app's own voices)":"")+".";
+  else if(v.engine==="captions") note=annNoVoice(v.why,v.info);
+  else note="Wes Calloway calls the race and Hutch Bramlett adds the colour, out loud and in captions"+annVoiceNames(v)+".";
   $("annNote").textContent=note;
 }
 if(!drawAnn.bound){
