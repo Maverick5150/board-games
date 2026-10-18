@@ -218,9 +218,9 @@ function bikeMaterial(lo,D,U){
       "  diffuseColor.rgb=mix(diffuseColor.rgb,uMudCol*(0.58+0.85*nz)*mix(1.25,0.75,bkWet),mudK); }",
       ""].join("\n"));
     if(std){
-      fs=fs.replace("#include <roughnessmap_fragment>","float roughnessFactor=mix(mix(mix(mix(vMat.y,"+(phys?"0.42":"0.30")+",bkPl),0.62,bkMk*0.5),0.55,bkRib*0.6),mix(0.96,0.50,bkWet),mudK);")
+      fs=fs.replace("#include <roughnessmap_fragment>","float roughnessFactor=mix(mix(mix(mix(mix(vMat.y,"+(phys?"0.42":"0.30")+",bkPl),0.62,bkMk*0.5),0.55,bkRib*0.6),0.58,max(bkD.r,bkD.g)),mix(0.96,0.50,bkWet),mudK);")
            .replace("#include <metalnessmap_fragment>","float metalnessFactor=vMat.x*(1.0-mudK);");
-      if(phys) fs=fs.replace("#include <lights_physical_fragment>","#include <lights_physical_fragment>\nmaterial.clearcoat*=bkPl*(1.0-mudK);");
+      if(phys) fs=fs.replace("#include <lights_physical_fragment>","#include <lights_physical_fragment>\nmaterial.clearcoat*=bkPl*(1.0-mudK)*(1.0-0.85*max(bkD.r,bkD.g));");
       fs=fs.replace("#include <lights_fragment_maps>",THREE.ShaderChunk.lights_fragment_maps.replace("iblIrradiance += getIBLIrradiance( geometryNormal );",""));
       fs=fs.replace("#include <aomap_fragment>","reflectedLight.indirectDiffuse*=vMat.w;\n#ifdef USE_ENVMAP\nreflectedLight.indirectSpecular*=mix(vMat.w,1.0,0.35);\n#endif\n");
     } else { fs=fs.replace("#include <aomap_fragment>","reflectedLight.indirectDiffuse*=vMat.w;\n");
