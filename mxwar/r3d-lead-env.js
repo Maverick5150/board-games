@@ -56,3 +56,27 @@ export function makeEnvironment(renderer,o){
   let rt; try{ rt=pm.fromScene(sc,0.04,0.1,200); } finally { pm.dispose(); sc.traverse(m=>{ if(m.geometry) m.geometry.dispose(); if(m.material) m.material.dispose(); }); }
   return {rt:rt,dispose(){ rt.dispose(); }};
 }
+
+/* (milestone 2) THE REAL STADIUM AS THE ENVIRONMENT: render the scene's world (o.keep: the objects to keep; every other child of the scene that is not a light is hidden for the
+   capture) into a 256 px half-float cube from o.pos, then prefilter it (PMREM). o.dim = [{light, k}]: lights scaled by k for the capture only (the key at about half: the lit
+   floor must not swamp the banks). The renderer's state (target, auto clear, tone mapping) and every visibility and intensity are restored, also on an error.
+   -> {rt (the PMREM target: rt.texture is the env map), ms (the time it took, real clock), dispose()}. About 6 world renders + the prefilter: once per world, never per frame. */
+export function captureEnvironment(renderer,scene,o){
+  o=o||{}; const keep=new Set(o.keep||[]), hid=[], dims=[], t0=realNow();
+  scene.children.forEach(ch=>{ if(!keep.has(ch)&&!ch.isLight&&ch.visible){ hid.push(ch); ch.visible=false; } });
+  (o.dim||[]).forEach(d=>{ if(d&&d.light){ dims.push([d.light,d.light.intensity]); d.light.intensity*=d.k; } });
+  const size=o.size||256, cubeRT=new THREE.WebGLCubeRenderTarget(size,{type:THREE.HalfFloatType,generateMipmaps:false,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,depthBuffer:true});
+  const cc=new THREE.CubeCamera(o.near||0.3,o.far||2500,cubeRT); cc.position.copy(o.pos||new THREE.Vector3(0,4,0)); cc.updateMatrixWorld(true);
+  const prevRT=renderer.getRenderTarget(), ac=renderer.autoClear, tm=renderer.toneMapping;
+  let out=null;
+  try{
+    renderer.autoClear=true; cc.update(renderer,scene);
+    const pm=new THREE.PMREMGenerator(renderer);
+    try{ out=pm.fromCubemap(cubeRT.texture); } finally { pm.dispose(); }
+  } finally {
+    cubeRT.dispose(); hid.forEach(ch=>{ ch.visible=true; }); dims.forEach(([l,v])=>{ l.intensity=v; });
+    renderer.setRenderTarget(prevRT); renderer.autoClear=ac; renderer.toneMapping=tm;
+  }
+  return {rt:out,ms:+(realNow()-t0).toFixed(1),dispose(){ if(out) out.dispose(); }};
+}
+function realNow(){ try{ const P=globalThis.performance; return P?Object.getPrototypeOf(P).now.call(P):0; }catch(e){ return 0; } }   /* the real clock (the capture page virtualises performance.now): a diagnostic number only */
