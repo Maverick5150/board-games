@@ -140,7 +140,8 @@ const GLSL_LIB=[
 "  else { cs=0.05; vec2 q=p/cs; q.x+=q.y*0.5; vec2 i=floor(q), f=fract(q); uint h=bkU(uvec3(uvec2(ivec2(i)+32768),uint(step(f.x,f.y))+11u)); v=step(0.60,float(h&255u)*(1.0/255.0)); avg=0.4; }",
 "  return mix(v,avg,smoothstep(0.35,0.9,fw/cs)); }",
 ""].join("\n");
-function bikeMaterial(lo,D){
+const NBK=64;   /* bikes a race at most in the per-bike uniform arrays (a field is 22 to 40) */
+function bikeMaterial(lo,D,U){
   const T=tex(lo), std=!lo, phys=std&&getKitTier()==="high";
   const o={vertexColors:true,roughness:1,metalness:0,envMap:T.env,envMapIntensity:1.7};
   /* the plastics' clear coat comes from the lead's material kit on the high tier (MeshPhysicalMaterial, gloss preset); the shader keeps the coat on the plastics only, off the mud */
@@ -148,11 +149,11 @@ function bikeMaterial(lo,D){
   m.userData.keepMaps=true;
   const cl=PLATE_CLASS[plateClass]||PLATE_CLASS["450"], bg=new THREE.Color(cl.bg), fg=new THREE.Color(cl.fg);
   m.onBeforeCompile=sh=>{
-    sh.uniforms.uLiv={value:T.liv}; sh.uniforms.uDec={value:D.t}; sh.uniforms.uDecG={value:new THREE.Vector4(D.cols,D.rows,0,0)};
+    sh.uniforms.uLiv={value:T.liv}; sh.uniforms.uDec={value:D.t}; sh.uniforms.uDecG={value:new THREE.Vector4(D.cols,D.rows,0,0)}; sh.uniforms.uBkC={value:U.c}; sh.uniforms.uBkA={value:U.a};
     sh.uniforms.uMudCol={value:new THREE.Vector3(0.115,0.066,0.032)}; sh.uniforms.uPlBg={value:new THREE.Vector3(bg.r,bg.g,bg.b)}; sh.uniforms.uPlFg={value:new THREE.Vector3(fg.r,fg.g,fg.b)};
     sh.vertexShader=sh.vertexShader
-      .replace("#include <common>","#include <common>\nattribute vec4 aMat;\nattribute vec3 aAccent;\nattribute vec4 aMud;\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec4 vMud;\nvarying vec3 vLoc;\nvarying vec3 vNl;")
-      .replace("#include <color_vertex>","#include <color_vertex>\n{ float wl=step(31.5,aMat.z); float rr=aMat.z-32.0*wl; float kd=floor((rr+0.5)/4.0); float tn=rr-4.0*kd; float sty=aMud.y; vec3 fc=sty>0.5&&sty<1.5?vec3(0.86):(sty>1.5&&sty<2.5?aAccent:instanceColor.rgb); vec3 tint=tn<0.5?vec3(1.0):(tn<1.5?instanceColor.rgb:(tn<2.5?aAccent:fc)); vColor.rgb=color.rgb*tint; }\nvMat=aMat; vAcc=aAccent; vMud=aMud; vLoc=position; vNl=normal;");
+      .replace("#include <common>","#include <common>\nattribute vec4 aMat;\nuniform vec4 uBkC["+NBK+"];\nuniform vec4 uBkA["+NBK+"];\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec4 vMud;\nvarying vec3 vLoc;\nvarying vec3 vNl;")
+      .replace("#include <color_vertex>","#include <color_vertex>\n{ int bi=int(instanceColor.r); vec4 kc=uBkC[bi], ka=uBkA[bi]; float sty=mod(kc.w,8.0), red=step(7.5,kc.w);\n  float wl=step(31.5,aMat.z); float rr=aMat.z-32.0*wl; float kd=floor((rr+0.5)/4.0); float tn=rr-4.0*kd; vec3 fc=sty>0.5&&sty<1.5?vec3(0.86):(sty>1.5&&sty<2.5?ka.rgb:kc.rgb); vec3 tint=tn<0.5?vec3(1.0):(tn<1.5?kc.rgb:(tn<2.5?ka.rgb:fc)); vColor.rgb=color.rgb*tint;\n  vAcc=ka.rgb; vMud=vec4(instanceColor.b,sty,instanceColor.g,float(bi)+0.5*red); }\nvMat=aMat; vLoc=position; vNl=normal;");
     let fs=sh.fragmentShader.replace("#include <common>","#include <common>\nuniform sampler2D uLiv;\nuniform sampler2D uDec;\nuniform vec4 uDecG;\nuniform vec3 uMudCol;\nuniform vec3 uPlBg;\nuniform vec3 uPlFg;\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec4 vMud;\nvarying vec3 vLoc;\nvarying vec3 vNl;\n"+GLSL_LIB);
     const f=n=>n.toFixed(4);
     fs=fs.replace("#include <color_fragment>",[
@@ -218,9 +219,9 @@ function bikeMaterial(lo,D){
 function blurMaterial(){
   const m=new THREE.MeshLambertMaterial({color:0x9a9da6,transparent:true,depthWrite:false,side:THREE.DoubleSide});
   m.onBeforeCompile=sh=>{
-    sh.vertexShader=sh.vertexShader.replace("#include <common>","#include <common>\nattribute float aBlur;\nvarying float vBl;\nvarying vec2 vRd;").replace("#include <begin_vertex>","#include <begin_vertex>\nvBl=aBlur; vRd=position.xy;");
+    sh.vertexShader=sh.vertexShader.replace("#include <common>","#include <common>\nvarying float vBl;\nvarying vec2 vRd;").replace("#include <begin_vertex>","#include <begin_vertex>\nvBl=instanceColor.r; vRd=position.xy;");
     sh.fragmentShader=sh.fragmentShader.replace("#include <common>","#include <common>\nvarying float vBl;\nvarying vec2 vRd;").replace("#include <color_fragment>",
-      "#include <color_fragment>\n{ float r=length(vRd), an=atan(vRd.y,vRd.x); float a=vBl*(0.13+0.40*pow(0.19/max(r,0.19),1.35))*(0.86+0.14*cos(an*9.0));\n"+
+      "#include <color_fragment>\ndiffuseColor.rgb=diffuse;\n{ float r=length(vRd), an=atan(vRd.y,vRd.x); float a=vBl*(0.13+0.40*pow(0.19/max(r,0.19),1.35))*(0.86+0.14*cos(an*9.0));\n"+
       " a*=smoothstep(0.19,0.25,r)*(1.0-smoothstep(0.93,1.0,r))*smoothstep(0.8,1.7,vViewPosition.z); diffuseColor.a*=a; }");
   };
   m.customProgramCacheKey=()=>"mxbike2-blur";
@@ -230,26 +231,25 @@ function blurMaterial(){
 /* ---------------- createBike: the level-of-detail sets, one InstancedMesh per part ---------------- */
 /* Each level of detail is a SET of instanced meshes. Bikes are packed into the slots 0..count-1 of the set their distance picks (the count is what is drawn, so
    a mid-distance bike costs nothing in the close set and the draw counters stay honest): slot, colour, accent and mud are rewritten every frame.
-   aMud = (mud 0..1, the team's graphic style 0..3, the wheels' blur 0..0.9, the rider's cell in the number atlas + 0.5 for the red plate). */
+   Per slot only the instance matrix and the instance COLOUR change (both are what the replay records): instanceColor = (the bike's index + 0.5, the wheels' blur 0..0.9, mud 0..1);
+   the team colour, the accent, the team's graphic style and the red plate are per bike in two uniform arrays (U.c, U.a) the shader reads by that index (a replay shows every bike in its own colours and numbers). */
 const PARTS=["body","steer","fork","swing","shock","wheelF","wheelR"];
 const _Z=new THREE.Matrix4().makeScale(0,0,0);
-function instGeo(src,S){
-  const g=new THREE.BufferGeometry(); g.setIndex(src.index); Object.keys(src.attributes).forEach(k=>g.setAttribute(k,src.attributes[k]));
-  g.setAttribute("aAccent",S.acc); g.setAttribute("aMud",S.mud); return g;
+function instGeo(src){
+  const g=new THREE.BufferGeometry(); g.setIndex(src.index); Object.keys(src.attributes).forEach(k=>g.setAttribute(k,src.attributes[k])); return g;
 }
 /* the blur discs' radius: the spokes' rim ends (front 21 inch, rear 19 inch rims) */
 const BLUR_R=[0.2667-0.016,0.2413-0.016];
 /* mk(geo, count, material): the instancing glue of r3d-riders.js; q = the quality options (optional) */
 export function createBike(n,lo,mk,q){
-  q=q||{}; const D=decalAtlas(n,lo), mat=bikeMaterial(lo,D), bmat=blurMaterial(), M={}, sets=[], d2=lo?null:buildBike(2), d1=buildBike(1);
+  q=q||{}; const D=decalAtlas(n,lo), U={c:new Float32Array(NBK*4).fill(1),a:new Float32Array(NBK*4).fill(1)}, mat=bikeMaterial(lo,D,U), bmat=blurMaterial(), M={}, sets=[], d2=lo?null:buildBike(2), d1=buildBike(1);
   const mkSet=(lod,src,far)=>{
-    const S={lod:lod,cnt:0,meshes:[],parts:{},far:null,blur:null,bl:null,col:new THREE.InstancedBufferAttribute(new Float32Array(n*3).fill(1),3),acc:new THREE.InstancedBufferAttribute(new Float32Array(n*3).fill(1),3),mud:new THREE.InstancedBufferAttribute(new Float32Array(n*4),4)};
-    S.col.setUsage(THREE.DynamicDrawUsage); S.acc.setUsage(THREE.DynamicDrawUsage); S.mud.setUsage(THREE.DynamicDrawUsage);
-    const one=(name,geo)=>{ const m=mk(instGeo(geo,S),n,mat); m.instanceColor=S.col; m.castShadow=true; m.receiveShadow=!far&&!lo; m.count=0; m.visible=false; M["bk"+lod+"_"+name]=m; S.meshes.push(m); return m; };
+    const S={lod:lod,cnt:0,meshes:[],parts:{},far:null,blur:null,col:new THREE.InstancedBufferAttribute(new Float32Array(n*3),3)};
+    S.col.setUsage(THREE.DynamicDrawUsage);
+    const one=(name,geo)=>{ const m=mk(instGeo(geo),n,mat); m.instanceColor=S.col; m.castShadow=true; m.receiveShadow=!far&&!lo; m.count=0; m.visible=false; M["bk"+lod+"_"+name]=m; S.meshes.push(m); return m; };
     if(far) S.far=one("far",src); else { PARTS.forEach(k=>{ S.parts[k]=one(k,src[k]); });
       /* the wheels' blur discs: two instances a bike (front, rear), translucent, drawn after the opaque scene */
-      const bg=buildBlurDisc(lod===0?32:20); S.bl=new THREE.InstancedBufferAttribute(new Float32Array(n*2),1); S.bl.setUsage(THREE.DynamicDrawUsage); bg.setAttribute("aBlur",S.bl);
-      S.blur=mk(bg,n*2,bmat); S.blur.castShadow=false; S.blur.receiveShadow=false; S.blur.count=0; S.blur.visible=false; S.blur.renderOrder=3; M["bk"+lod+"_blur"]=S.blur; }
+      S.blur=mk(buildBlurDisc(lod===0?32:20),n*2,bmat); S.blur.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(n*2*3),3); S.blur.instanceColor.setUsage(THREE.DynamicDrawUsage); S.blur.castShadow=false; S.blur.receiveShadow=false; S.blur.count=0; S.blur.visible=false; S.blur.renderOrder=3; M["bk"+lod+"_blur"]=S.blur; }
     sets.push(S); return S;
   };
   if(!lo) mkSet(0,d2); mkSet(1,d1); mkSet(2,buildFarBike(),true);
@@ -257,7 +257,7 @@ export function createBike(n,lo,mk,q){
     /* the distances at which a bike leaves one level for the next (m): hysteresis of 8% */
     th:lo?[q.bikeLod&&q.bikeLod[0]||8]:(q.bikeLod&&q.bikeLod.length>1?q.bikeLod:[9.5,36]),sp:new Float32Array(n*2),
     /* milestone 2: the side-panel number atlas, each team's graphic style */
-    dec:D,style:new Uint8Array(n)};
+    dec:D,style:new Uint8Array(n),U:U};
   return M;
 }
 /* the team colours of rider i's bike: the plastics in the team colour, the graphics in the accent colour (written into the sets' instance attributes as the bikes are posed);
@@ -267,6 +267,7 @@ export function colorBike(M,i,R){
   const K=M.bk; _col.set(R.color||"#888"); K.pc[i*3]=_col.r; K.pc[i*3+1]=_col.g; K.pc[i*3+2]=_col.b;
   _col.set(R.accent||"#f2f2f6"); K.ac[i*3]=_col.r; K.ac[i*3+1]=_col.g; K.ac[i*3+2]=_col.b;
   K.style[i]=styleOf(R.color); if(K.dec) drawDecal(K.dec,i,R);
+  if(i<NBK){ const c=K.U.c, a=K.U.a; c[i*4]=K.pc[i*3]; c[i*4+1]=K.pc[i*3+1]; c[i*4+2]=K.pc[i*3+2]; c[i*4+3]=K.style[i]+(R.red?8:0); a[i*4]=K.ac[i*3]; a[i*4+1]=K.ac[i*3+1]; a[i*4+2]=K.ac[i*3+2]; a[i*4+3]=0; }
 }
 /* the front number plate's face in the riders' atlas (milestone 2): the team-coloured plastic plate with a dark rim, the rider's name across its top, the number background
    in the class colours (PLATE_CLASS: 450 white with black numerals; the points leader red with white numerals), a gold ring for the person's own rider.
@@ -333,8 +334,8 @@ export function poseBike(M,i,B,st){
   const blur=dsp>6?0:clamp((dsp-0.16)/0.5,0,0.9);
   for(const m of S0.meshes){ m.count=S0.cnt; m.visible=true; }
   /* this bike's colours and mud in its slot */
-  S0.col.setXYZ(slot,K.pc[i*3],K.pc[i*3+1],K.pc[i*3+2]); S0.acc.setXYZ(slot,K.ac[i*3],K.ac[i*3+1],K.ac[i*3+2]); S0.mud.setXYZW(slot,Math.max(st.mud||0,0.16),K.style[i],blur,i+(st.red?0.5:0));   /* (polish: a bike in a main event is never clean: a floor of dirt on the lower parts, as the cover's) */
-  S0.col.needsUpdate=true; S0.acc.needsUpdate=true; S0.mud.needsUpdate=true;
+  S0.col.setXYZ(slot,Math.min(i,NBK-1)+0.5,blur,Math.max(st.mud||0,0.16)); S0.col.needsUpdate=true;   /* (polish: a bike in a main event is never clean: a floor of dirt on the lower parts, as the cover's) */
+  if(i<NBK) K.U.c[i*4+3]=K.style[i]+(st.red?8:0);   /* the red plate follows st.red (V.setRed) */
   let delta=0;
   if(S0.far){ S0.far.setMatrixAt(slot,B); } else {
     const P=S0.parts; delta=steerOf(st);
@@ -344,12 +345,12 @@ export function poseBike(M,i,B,st){
     _a.copy(UA).multiplyScalar(cf); _m2.makeTranslation(_a.x,_a.y,_a.z); _F.multiplyMatrices(_S,_m2); P.fork.setMatrixAt(slot,_F);
     /* the front wheel: at the axle on the sliding fork, spinning about z */
     _q1.setFromAxisAngle(_c.set(0,0,1),-(st.spinF||0)); _a.copy(BIKE.FA).addScaledVector(UA,cf); _m1.compose(_a,_q1,_s1); _m2.multiplyMatrices(_S,_m1); P.wheelF.setMatrixAt(slot,_m2);
-    if(S0.blur){ S0.blur.count=S0.cnt*2; S0.blur.visible=true; S0.bl.setX(slot*2,blur); _m3.makeScale(BLUR_R[0],BLUR_R[0],1); _m1.multiplyMatrices(_m2,_m3); S0.blur.setMatrixAt(slot*2,_m1); }
+    if(S0.blur){ S0.blur.count=S0.cnt*2; S0.blur.visible=true; S0.blur.instanceColor.setXYZ(slot*2,blur,0,0); _m3.makeScale(BLUR_R[0],BLUR_R[0],1); _m1.multiplyMatrices(_m2,_m3); S0.blur.setMatrixAt(slot*2,_m1); }
     /* the swingarm pivots; the rear axle rides its arc */
     const sn=clamp((BIKE.RA.y+cr-BIKE.PIVOT.y)/ARM,-0.97,0.97), ang=-Math.asin(sn), rax=BIKE.PIVOT.x-ARM*Math.sqrt(1-sn*sn), ray=BIKE.PIVOT.y+sn*ARM;
     _q1.setFromAxisAngle(_c.set(0,0,1),ang); _m1.compose(BIKE.PIVOT,_q1,_s1); _m2.multiplyMatrices(B,_m1); P.swing.setMatrixAt(slot,_m2);
     _q1.setFromAxisAngle(_c.set(0,0,1),-(st.spinR||0)); _a.set(rax,ray,0); _m1.compose(_a,_q1,_s1); _m2.multiplyMatrices(B,_m1); P.wheelR.setMatrixAt(slot,_m2);
-    if(S0.blur){ S0.bl.setX(slot*2+1,blur); _m3.makeScale(BLUR_R[1],BLUR_R[1],1); _m1.multiplyMatrices(_m2,_m3); S0.blur.setMatrixAt(slot*2+1,_m1); S0.bl.needsUpdate=true; S0.blur.instanceMatrix.needsUpdate=true; }
+    if(S0.blur){ S0.blur.instanceColor.setXYZ(slot*2+1,blur,0,0); _m3.makeScale(BLUR_R[1],BLUR_R[1],1); _m1.multiplyMatrices(_m2,_m3); S0.blur.setMatrixAt(slot*2+1,_m1); S0.blur.instanceColor.needsUpdate=true; S0.blur.instanceMatrix.needsUpdate=true; }
     /* the shock: from the linkage (it rises as the wheel does) to the frame mount */
     _a.copy(BIKE.SHOCK_TOP).sub(BIKE.SHOCK_BOT).normalize(); _b.copy(BIKE.SHOCK_BOT).addScaledVector(_a,clamp(cr/BIKE.TRAVEL,-0.45,1)*BIKE.SHOCK_STROKE).applyMatrix4(B); _c.copy(BIKE.SHOCK_TOP).applyMatrix4(B);
     _fw.set(1,0,0).transformDirection(B); bone(P.shock,slot,_b,_c,1,_fw);
