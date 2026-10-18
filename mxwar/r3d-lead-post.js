@@ -24,6 +24,8 @@
      ldr        bool   (milestone 2, the FIRE TV tier's anti-aliasing) no HDR chain at all: the scene is drawn into an 8-bit target exactly as it would be drawn to the screen (three.js tone-maps and
                        encodes sRGB in every material: the target is flagged like a WebXR target, which is what tells r160 to do that, with a plain RGBA8 store), then ONE pass of FXAA (five taps,
                        four more only on edges) writes the screen. Same pixels as the plain frame except the edges; +1 draw call; about 2 MB more written and read per 960x540 frame.
+     tvGlow     0..1   (with ldr) THE TV TIER'S GLOW: the frame's near-white pixels (the floodlight bulbs, the glow sprites' cores) are taken at a quarter of the size, blurred one level down
+                       and back up (three passes of 240x135 and 120x68 pixels at 960x540), and screen-blended in the FXAA pass: the light banks glow on the TV as on the cover. +3 draw calls.
    Nothing is random: the grain is hashed from the pixel and the clock (the harness' virtual clock makes a frame a pure function of the tick). */
 import * as THREE_NS from "../ui/vendor/three-0.160.0.module.min.js";
 const THREE=THREE_NS;
@@ -168,20 +170,36 @@ void main(){
 const TVAA_FRAG=`
 precision mediump float;
 uniform sampler2D tSrc; uniform vec2 uTexel; varying vec2 vUv;
+#ifdef GLOW
+uniform sampler2D tGlow; uniform float uGlow;
+#define OUT(c) gl_FragColor=vec4(1.0-(1.0-(c))*(1.0-min(sqrt(texture2D(tGlow,vUv).rgb)*uGlow,vec3(1.0))),1.0)
+#else
+#define OUT(c) gl_FragColor=vec4(c,1.0)
+#endif
 float lu(vec3 c){ return dot(c,vec3(0.299,0.587,0.114)); }
 void main(){
   vec3 M=texture2D(tSrc,vUv).rgb;
   vec3 NW=texture2D(tSrc,vUv+vec2(-1.0,-1.0)*uTexel).rgb, NE=texture2D(tSrc,vUv+vec2(1.0,-1.0)*uTexel).rgb, SW=texture2D(tSrc,vUv+vec2(-1.0,1.0)*uTexel).rgb, SE=texture2D(tSrc,vUv+vec2(1.0,1.0)*uTexel).rgb;
   float lM=lu(M), lNW=lu(NW), lNE=lu(NE), lSW=lu(SW), lSE=lu(SE);
   float lMin=min(lM,min(min(lNW,lNE),min(lSW,lSE))), lMax=max(lM,max(max(lNW,lNE),max(lSW,lSE)));
-  if(lMax-lMin<max(0.0312,lMax*0.125)){ gl_FragColor=vec4(M,1.0); return; }
+  if(lMax-lMin<max(0.0833,lMax*0.166)){ OUT(M); return; }   /* (FXAA 3.11's quality thresholds: geometric edges only; the dirt's texture is left alone) */
   vec2 dir=vec2(-((lNW+lNE)-(lSW+lSE)),((lNW+lSW)-(lNE+lSE)));
   float red=max((lNW+lNE+lSW+lSE)*0.03125,0.0078125), rcp=1.0/(min(abs(dir.x),abs(dir.y))+red);
   dir=clamp(dir*rcp,vec2(-8.0),vec2(8.0))*uTexel;
   vec3 A=0.5*(texture2D(tSrc,vUv+dir*(1.0/3.0-0.5)).rgb+texture2D(tSrc,vUv+dir*(2.0/3.0-0.5)).rgb);
   vec3 B=A*0.5+0.25*(texture2D(tSrc,vUv+dir*-0.5).rgb+texture2D(tSrc,vUv+dir*0.5).rgb);
   float lB=lu(B);
-  gl_FragColor=vec4((lB<lMin||lB>lMax)?A:B,1.0);
+  OUT((lB<lMin||lB>lMax)?A:B);
+}`;
+
+/* ---------- (ldr + tvGlow) the TV's glow: the near-white part of the 8-bit frame at a quarter of the size (four bilinear taps = a 4 x 4 block of the frame) ---------- */
+const TVPRE_FRAG=`
+precision mediump float;
+uniform sampler2D tSrc; uniform vec2 uTexel; varying vec2 vUv;
+vec3 hi(vec3 c){ float l=dot(c,vec3(0.299,0.587,0.114)); return c*c*smoothstep(0.78,0.97,l); }
+void main(){
+  vec3 a=hi(texture2D(tSrc,vUv+uTexel*vec2(-1.0,-1.0)).rgb)+hi(texture2D(tSrc,vUv+uTexel*vec2(1.0,-1.0)).rgb)+hi(texture2D(tSrc,vUv+uTexel*vec2(-1.0,1.0)).rgb)+hi(texture2D(tSrc,vUv+uTexel*vec2(1.0,1.0)).rgb);
+  gl_FragColor=vec4(a*0.25,1.0);
 }`;
 
 /* ---------- the final pass: depth of field, bloom, tone map, grade, vignette, grain, sRGB ---------- */
@@ -297,7 +315,7 @@ void main(){
 }`;
 
 export function createPost(renderer,f0){
-  const F=Object.assign({motionBlur:0,haze:0,hazeI:1,bloom:1,bloomThreshold:1.35,bloomKnee:0.45,dof:false,dofTaps:16,dofMax:0.017,aa:"none",grade:1,vignette:0.3,grain:0.03,exposure:null,sat:1.02,contrast:0.62,half:false,ldr:false,ao:0,aoR:0.45,aoFar:30,aoK:2.4,fmt:"rgba16f"},f0||{});
+  const F=Object.assign({motionBlur:0,haze:0,hazeI:1,bloom:1,bloomThreshold:1.35,bloomKnee:0.45,dof:false,dofTaps:16,dofMax:0.017,aa:"none",grade:1,vignette:0.3,grain:0.03,exposure:null,sat:1.02,contrast:0.62,half:false,ldr:false,tvGlow:0,ao:0,aoR:0.45,aoFar:30,aoK:2.4,fmt:"rgba16f"},f0||{});
   const ext=renderer.extensions;
   const P={flags:F,dead:false};
   /* the fullscreen triangle */
@@ -312,6 +330,9 @@ export function createPost(renderer,f0){
   const mDown=mk(DOWN_FRAG,{tSrc:{value:null},uTexel:{value:new THREE.Vector2()}});
   const mUp=mk(UP_FRAG,{tSrc:{value:null},uTexel:{value:new THREE.Vector2()},uGain:{value:1}},{transparent:true,blending:THREE.CustomBlending,blendSrc:THREE.OneFactor,blendDst:THREE.OneFactor,blendEquation:THREE.AddEquation});
   const mTv=mk(TVAA_FRAG,{tSrc:{value:null},uTexel:{value:new THREE.Vector2()}});
+  const tvU={tSrc:{value:null},uTexel:{value:new THREE.Vector2()},tGlow:{value:null},uGlow:{value:1}};
+  const mTvG=mk(TVAA_FRAG,tvU,{defines:{GLOW:1}}), mTvPre=mk(TVPRE_FRAG,{tSrc:{value:null},uTexel:{value:new THREE.Vector2()}});
+  let tvLv=[], builtGlow=false;
   let mFinal=null, mDof=null, mHalf=null, mGather=null, mAo=null;
   const fu={tScene:{value:null},tBloom:{value:null},tDepth:{value:null},tBlur:{value:null},uTexel:{value:new THREE.Vector2()},uBloom:{value:0.4},uDof:{value:0},uFocus:{value:8},uAper:{value:3.2},uDead:{value:0.022},uMaxPx:{value:16},uNear:{value:0.5},uFar:{value:4200},
     uInvVP:{value:new THREE.Matrix4()},uPrevVP:{value:new THREE.Matrix4()},uCamPos:{value:new THREE.Vector3()},uMB:{value:0},uHaze:{value:0},uHazeI:{value:1},uHazeK:{value:0.22},uVig:{value:0.3},uGrain:{value:0.03},uTime:{value:0},uGrade:{value:1},uAspect:{value:1.78},uSat:{value:1.14},uCon:{value:0.5},toneMappingExposure:{value:1},
@@ -319,14 +340,16 @@ export function createPost(renderer,f0){
     tAo:{value:null},uAoOn:{value:0},uAoMix:{value:1},uAoDbg:{value:0},uHTexel:{value:new THREE.Vector2()},uAoR:{value:0.45},uAoFar:{value:30},uAoK:{value:1.6}};
   function rt(w,h,o){ return new THREE.WebGLRenderTarget(Math.max(1,w),Math.max(1,h),Object.assign({type:THREE.HalfFloatType,format:THREE.RGBAFormat,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,depthBuffer:false,stencilBuffer:false,generateMipmaps:false},o||{})); }
   function free(){ if(rtScene){ rtScene.dispose(); if(depthTex) depthTex.dispose(); } if(rtLdr) rtLdr.dispose(); if(rtDof) rtDof.dispose(); rtDof=null; levels.forEach(l=>l.dispose()); levels=[]; rtScene=rtLdr=depthTex=null; if(smaa){ smaa.dispose(); smaa=null; }
-    if(rtHalf) rtHalf.dispose(); if(rtFx) rtFx.dispose(); rtHalf=rtFx=null; if(rtTv) rtTv.dispose(); rtTv=null; if(rtAo) rtAo.dispose(); rtAo=null; }
+    if(rtHalf) rtHalf.dispose(); if(rtFx) rtFx.dispose(); rtHalf=rtFx=null; if(rtTv) rtTv.dispose(); rtTv=null; if(rtAo) rtAo.dispose(); rtAo=null; tvLv.forEach(l=>l.dispose()); tvLv=[]; }
   /* (re)build the targets for the drawing buffer size and the flags that decide what exists */
   function build(){
     renderer.getDrawingBufferSize(sizeV); const w=Math.max(2,Math.round(sizeV.x)), h=Math.max(2,Math.round(sizeV.y));
     if(F.ldr){
       /* the FIRE TV tier: an 8-bit target that holds exactly what the screen would (tone-mapped, sRGB-encoded by every material), then the FXAA pass to the screen */
-      if(w===W&&h===H&&rtTv&&builtLdr) return;
-      free(); W=w; H=h; builtLdr=true; builtHalf=false; builtDof=builtDepth=builtBloom=false; builtMsaa=0; builtAa="fxaa";
+      const wantGlow=F.tvGlow>0;
+      if(w===W&&h===H&&rtTv&&builtLdr&&wantGlow===builtGlow) return;
+      free(); W=w; H=h; builtLdr=true; builtHalf=false; builtDof=builtDepth=builtBloom=false; builtMsaa=0; builtAa="fxaa"; builtGlow=wantGlow;
+      if(wantGlow){ const o8={type:THREE.UnsignedByteType}; tvLv=[rt(Math.ceil(W/4),Math.ceil(H/4),o8),rt(Math.ceil(W/8),Math.ceil(H/8),o8)]; }
       rtTv=new THREE.WebGLRenderTarget(W,H,{type:THREE.UnsignedByteType,format:THREE.RGBAFormat,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,depthBuffer:true,stencilBuffer:false,generateMipmaps:false});
       rtTv.texture.colorSpace=THREE.SRGBColorSpace; rtTv.texture.internalFormat="RGBA8"; rtTv.isXRRenderTarget=true;   /* r160: an XR-flagged target gets the renderer's tone mapping and its own colour space (sRGB) in every material; the RGBA8 store keeps the bytes as written */
       return;
@@ -361,7 +384,14 @@ export function createPost(renderer,f0){
     if(builtLdr){
       /* the FIRE TV tier: the frame as the screen would get it, then FXAA (one pass) to the screen */
       renderer.autoClear=true; renderer.setRenderTarget(rtTv); renderer.render(scene,cam);
-      renderer.autoClear=false; pass(mTv,null,rtTv.texture,W,H);
+      renderer.autoClear=false;
+      if(builtGlow&&tvLv.length===2){
+        pass(mTvPre,tvLv[0],rtTv.texture,W,H);
+        pass(mDown,tvLv[1],tvLv[0].texture,tvLv[0].width,tvLv[0].height);
+        pass(mUp,tvLv[0],tvLv[1].texture,tvLv[1].width,tvLv[1].height,m=>{ m.uniforms.uGain.value=1.0; });
+        tvU.tGlow.value=tvLv[0].texture; tvU.uGlow.value=F.tvGlow;
+        pass(mTvG,null,rtTv.texture,W,H);
+      } else pass(mTv,null,rtTv.texture,W,H);
       renderer.setRenderTarget(null); renderer.autoClear=ac; return;
     }
     /* 1. the scene into the HDR target (three.js applies no tone mapping to a target: the final pass owns it) */
@@ -407,9 +437,9 @@ export function createPost(renderer,f0){
   P.setAo=function(on){ aoWant=!!on; };
   /* the camera's view-projection one step ago and how much of the foreground blur to keep (0 = none: a cut, a wide shot) */
   P.setMotion=function(prev,amount){ prevVP.copy(prev); mbAmt=amount; };
-  P.info=function(){ if(builtLdr) return {w:W,h:H,passes:1,targets:1,dof:false,depth:false,aa:"fxaa",msaa:0,bloom:false,half:false,ldr:true};
+  P.info=function(){ if(builtLdr) return {w:W,h:H,passes:builtGlow?4:1,targets:1+tvLv.length,dof:false,depth:false,aa:"fxaa",msaa:0,bloom:false,half:false,ldr:true,tvGlow:builtGlow};
     return {w:W,h:H,passes:(levels.length?1+2*(levels.length-1):0)+1+(smaa?3:0)+(rtDof?1:0)+lastFx,targets:(rtScene?1:0)+levels.length+(rtLdr?1:0)+(depthTex?1:0)+(rtDof?1:0)+(rtHalf?2:0)+(rtAo?1:0),dof:builtDof,depth:builtDepth,aa:builtAa,msaa:builtMsaa,bloom:builtBloom,half:builtHalf,ao:builtAo,fmt:builtFmt,ldr:false}; };
-  P.dispose=function(){ P.dead=true; free(); [mPre,mDown,mUp,mTv].forEach(m=>m.dispose()); if(mFinal) mFinal.dispose(); if(mDof) mDof.dispose(); if(mHalf) mHalf.dispose(); if(mGather) mGather.dispose(); if(mAo) mAo.dispose(); fsGeo.dispose(); };
+  P.dispose=function(){ P.dead=true; free(); [mPre,mDown,mUp,mTv,mTvG,mTvPre].forEach(m=>m.dispose()); if(mFinal) mFinal.dispose(); if(mDof) mDof.dispose(); if(mHalf) mHalf.dispose(); if(mGather) mGather.dispose(); if(mAo) mAo.dispose(); fsGeo.dispose(); };
   P.setFlags(null);
   return P;
 }
