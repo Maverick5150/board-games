@@ -22,7 +22,7 @@ import {createPost,postSupported} from "./r3d-lead-post.js";
 export const TIERS={
   high:  {rig:"full",shadowRes:1024,softShadow:false,env:true, pbr:true, fog:"exp",post:"full",bloom:1.0,bloomDiv:4,dof:true, motionBlur:1.0,haze:0.011,hazeI:1.0,aa:"fxaa",msaa:0,grade:1,vignette:0.34,grain:0.035,exposure:1.0,cssVig:false,half:true,ao:1.0,envCap:true,bikeCC:true},   /* (polish: 1024 and a plain filter, as the quality table says: a 2048 soft map was 4x the texels and 9 taps) */
   ultra: {rig:"full",shadowRes:2048,softShadow:true, env:true, pbr:true, fog:"exp",post:"full",bloom:1.0,bloomDiv:2,dof:true, motionBlur:1.0,haze:0.011,hazeI:1.0,aa:"fxaa",msaa:0,grade:1,vignette:0.34,grain:0.035,exposure:1.0,cssVig:false,half:true,ao:1.0,envCap:true,bikeCC:true},
-  medium:{motionBlur:0,haze:0,hazeI:1,rig:"full",shadowRes:1024,softShadow:false,env:true, pbr:true, fog:"exp",post:"lite",bloom:0.75,bloomDiv:4,dof:false,aa:"fxaa",msaa:0,grade:1,vignette:0.30,grain:0.0, exposure:1.0,cssVig:false,half:true,ao:0,envCap:true},
+  medium:{motionBlur:0,haze:0,hazeI:1,rig:"full",shadowRes:1024,softShadow:false,env:true, pbr:true, fog:"exp",post:"lite",bloom:0.75,bloomDiv:4,dof:false,aa:"fxaa",msaa:0,grade:1,vignette:0.30,grain:0.0, exposure:1.0,cssVig:false,half:true,ao:0,envCap:true,fmt:"r11"},   /* (m2: an R11F_G11F_B10F scene target: half the bytes of RGBA16F; measured -2.9 ms of 50.4 at 1080p on the laptop's iGPU) */
   low:   {motionBlur:0,haze:0,hazeI:1,rig:"lite",shadowRes:1024,softShadow:false,env:false,pbr:false,fog:"lin",post:"off", bloom:0,   dof:false,aa:"none",msaa:0,grade:0,vignette:0,   grain:0.0, exposure:1.0,cssVig:false,half:false,ao:0,envCap:false,tvaa:false,tvGlow:0},
   stick: {motionBlur:0,haze:0,hazeI:1,rig:"lite",shadowRes:1024,softShadow:false,env:false,pbr:false,fog:"lin",post:"off", bloom:0,   dof:false,aa:"none",msaa:0,grade:0,vignette:0,   grain:0.0, exposure:1.0,cssVig:false,half:false,ao:0,envCap:false,tvaa:false,tvGlow:0}
 };
@@ -107,7 +107,7 @@ export function createLook(renderer,opts){
       if(!post){ post=createPost(renderer,{}); }
       if(wantTvaa) post.setFlags({ldr:true,tvFxaa:!!F.tvaa,tvGlow:F.tvGlow||0});
       else post.setFlags({ldr:false,bloom:F.bloom,bloomDiv:F.bloomDiv||2,dof:F.post==="full"&&F.dof,motionBlur:F.post==="full"?F.motionBlur:0,haze:F.post==="full"?F.haze:0,hazeI:F.hazeI,aa:F.aa,grade:F.grade,vignette:F.vignette,grain:F.grain,exposure:null,
-        half:!!F.half,ao:F.post==="full"?(F.ao||0):0,fmt:F.fmt||"rgba16f"});
+        half:!!F.half,ao:F.post==="full"?(F.ao||0):0,aoDebug:!!F.aoDebug,fmt:(F.fmt==="r11"&&floatRT())?"r11":"rgba16f"});
       L.post=post; L._mine=post;
     } else if(L.post&&L.post===L._mine){ L.post=null; L._mine=null; }
     /* the stadium's glow sprites are written in HDR units: 2.5x when the chain's bloom is on (the floodlights bloom and star), 1x on the plain frame (no clipped white blobs on the TV tier) */
@@ -124,6 +124,8 @@ export function createLook(renderer,opts){
     try{ envRT=makeEnvironment(renderer,{kind:envWant,key:SUN,seed:11}).rt; envKind=envWant; L._envError=""; }catch(e){ envRT=null; L._envError=String(e&&e.stack||e).slice(0,400); }
   }
   /* is the canvas itself multisampled (the perf engineer's choice for the TV tier on a tiled GPU: then FXAA is not needed) */
+  /* R11F_G11F_B10F is colour-renderable only with EXT_color_buffer_float (a GPU with only the half-float extension keeps RGBA16F) */
+  function floatRT(){ try{ return !!renderer.extensions.has("EXT_color_buffer_float"); }catch(e){ return false; } }
   function canvasAA(){ try{ const a=renderer.getContext().getContextAttributes(); return !!(a&&a.antialias); }catch(e){ return false; } }
   /* (milestone 2) THE ENVIRONMENT IS THE REAL STADIUM: once per world, a 256 px cube is rendered from the middle of the floor (the world only: no riders, no particles), with the key light
      dimmed so the lit floor does not swamp the light banks, and prefiltered (PMREM). Every physically based material then reflects the venue's own floodlight banks, crowd and boards:
@@ -134,9 +136,9 @@ export function createLook(renderer,opts){
     try{
       const info=world.info||{}, cx=info.cx||0, cz=info.cz||0, y=F.envY!=null?F.envY:3.5;   /* the middle of the floor, a rider's helmet height over the jumps */
       /* the lit surfaces in the capture are dimmed (the key to a third, the fills to a half, the glow halos to 0.6) so the environment adds little flat ambient light (the cover is
-         high-contrast) and keeps its hot spots: the floodlight bulbs themselves are unlit discs and stay at their full HDR level */
-      const ek=F.envKey!=null?F.envKey:0.33, ef=F.envFill!=null?F.envFill:0.5, gm=world.ctx&&world.ctx.glowMesh, gu=gm&&gm.material&&gm.material.uniforms&&gm.material.uniforms.uHdr, gh=gu?gu.value:0;
-      if(gu) gu.value=gh*(F.envGlow!=null?F.envGlow:0.6);
+         high-contrast) and keeps its hot spots: the floodlight bulbs themselves are unlit discs and stay at their full HDR level (key x0.5, fills x0.75, halos x0.8) */
+      const ek=F.envKey!=null?F.envKey:0.5, ef=F.envFill!=null?F.envFill:0.75, gm=world.ctx&&world.ctx.glowMesh, gu=gm&&gm.material&&gm.material.uniforms&&gm.material.uniforms.uHdr, gh=gu?gu.value:0;
+      if(gu) gu.value=gh*(F.envGlow!=null?F.envGlow:0.8);   /* (measured on B1: key x0.33 / fills x0.5 put the foreground dirt's median luma at 53, the cover's is 57, the procedural map's 63) */
       /* the key's shadow box over the middle of the floor for the capture (a fixed box: the map never depends on where the last camera looked; the next frame fits it again) */
       if(SHADOWS){ const pc={position:new THREE.Vector3(cx,y+40,cz+60)}; fitShadow(pc,new THREE.Vector3(cx,0,cz)); }
       let r;
