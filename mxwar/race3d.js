@@ -702,7 +702,7 @@ export function create(host,hooks){
   V.benchResult=()=>QUAL.bench.result;
   /* The look (r3d-look.js) may have its own tier table (high / medium / low / stick): our tier drives it, and the ladder's cuts (post chain, bloom, depth of field) are forwarded as flags it understands.
      Guarded: a look without setTier / setFlags is left alone (the base look). The post flags of a tier are the MOST it may draw; the ladder only switches them off. */
-  const LOOKTIER={firetv:()=>QUAL.dev.tv?"stick":"low",balanced:()=>"medium",high:()=>(QUAL.dev.mobile||QUAL.dev.tv)?"medium":"high",ultra:()=>"high"};
+  const LOOKTIER={firetv:()=>QUAL.dev.tv?"stick":"low",balanced:()=>"medium",high:()=>(QUAL.dev.mobile||QUAL.dev.tv)?"medium":"high",ultra:()=>"ultra"};
   function driveLook(){ if(LOOK.setTier&&LOOK.tiers){ try{ const nm=LOOKTIER[LO?"firetv":QUAL.tierName](); LOOK.setTier(nm); driveLive(); }catch(e){} } }
   function driveLive(){
     if(!LOOK.setFlags||!LOOK.tiers) return;

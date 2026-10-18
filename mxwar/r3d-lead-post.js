@@ -55,7 +55,7 @@ uniform vec2 uTexel; uniform float uDof; uniform float uFocus; uniform float uAp
 varying vec2 vUv;
 float ign(vec2 p){ return fract(52.9829189*fract(dot(p,vec2(0.06711056,0.00583715)))); }
 float zAt(vec2 uv){ return -perspectiveDepthToViewZ(texture2D(tDepth,uv).x,uNear,uFar); }
-float coc(float z){ float d=1.0/max(z,0.05)-1.0/uFocus; return d>0.0?clamp((d-uDead)*uAper,0.0,1.0):clamp((-d-uDead)*uAper*0.5,0.0,0.30); }   /* near: full blur; far: at most 30% (the stands stay a stadium, thin light strings do not turn to noise) */
+float coc(float z){ float f=1.0/uFocus, d=1.0/max(z,0.05)-f; return d>0.0?clamp((d-uDead-0.6*f)*uAper,0.0,1.0):clamp((-d-uDead)*uAper*0.5,0.0,0.30); }   /* near: full blur; far: at most 30% (the stands stay a stadium, thin light strings do not turn to noise) */
 void main(){
   vec3 c=texture2D(tScene,vUv).rgb;
   float z0=zAt(vUv), c0=coc(z0)*uDof, rot=ign(gl_FragCoord.xy)*6.2831853;
@@ -87,7 +87,7 @@ float ign(vec2 p){ return fract(52.9829189*fract(dot(p,vec2(0.06711056,0.0058371
 #ifdef DOF
 uniform sampler2D tBlur;
 float zAt(vec2 uv){ return -perspectiveDepthToViewZ(texture2D(tDepth,uv).x,uNear,uFar); }
-float coc(float z){ float d=1.0/max(z,0.05)-1.0/uFocus; return d>0.0?clamp((d-uDead)*uAper,0.0,1.0):clamp((-d-uDead)*uAper*0.5,0.0,0.30); }   /* near: full blur; far: at most 30% (the stands stay a stadium, thin light strings do not turn to noise) */
+float coc(float z){ float f=1.0/uFocus, d=1.0/max(z,0.05)-f; return d>0.0?clamp((d-uDead-0.6*f)*uAper,0.0,1.0):clamp((-d-uDead)*uAper*0.5,0.0,0.30); }   /* near: full blur; far: at most 30% (the stands stay a stadium, thin light strings do not turn to noise) */
 #endif
 float lm(vec3 c){ return dot(c,vec3(0.299,0.587,0.114)); }
 float pl(vec3 c){ float l=lm(c); return l/(1.0+l); }
@@ -124,10 +124,10 @@ void main(){
     float zv=-perspectiveDepthToViewZ(dep,uNear,uFar);
     /* camera motion blur on whatever is nearer than the subject (the dirt streaming past the lens): the pixel's own world position, seen from the previous step's camera */
     if(uMB>0.001){
-      float fg=1.0-smoothstep(0.55*uFocus,1.0*uFocus,zv);
+      float fg=1.0-smoothstep(0.28*uFocus,0.58*uFocus,zv);   /* (polish: only what is really near the lens streams: the chased bike and rider move WITH the camera and must stay sharp) */
       if(fg>0.01){
-        vec4 pp=uPrevVP*vec4(wp.xyz,1.0); vec2 puv=pp.xy/pp.w*0.5+0.5; vec2 vel=(vUv-puv)*uMB*fg; float vl=length(vel); if(vl>0.04) vel*=0.04/vl;
-        if(vl>0.0015){ vec3 acc=c; float n=1.0; for(int i=1;i<=8;i++){ float f=float(i)/8.0-0.5; vec2 uv=vUv-vel*f*2.0; acc+=texture2D(tScene,uv).rgb; n+=1.0; } c=mix(c,acc/n,clamp(vl*60.0,0.0,1.0)); }
+        vec4 pp=uPrevVP*vec4(wp.xyz,1.0); vec2 puv=pp.xy/pp.w*0.5+0.5; vec2 vel=(vUv-puv)*uMB*fg; float vl=length(vel); if(vl>0.03) vel*=0.03/vl;
+        if(vl>0.0015){ vec3 acc=c; float n=1.0; float jt=ign(gl_FragCoord.xy)-0.5; for(int i=1;i<=8;i++){ float f=(float(i)+jt)/8.0-0.5; vec2 uv=vUv-vel*f*2.0; acc+=texture2D(tScene,uv).rgb; n+=1.0; } c=mix(c,acc/n,clamp(vl*60.0,0.0,1.0)); }   /* (jittered taps: noise, not a stair of ghosts) */
       }
     }
     /* height haze: warm dust glow near the ground, cool air above (added light: the floodlights scatter in it); more with distance, thinning with height */
@@ -173,7 +173,7 @@ export function createPost(renderer,f0){
   const mk=(frag,uni,extra)=>new THREE.ShaderMaterial(Object.assign({uniforms:uni,vertexShader:VERT,fragmentShader:frag,depthTest:false,depthWrite:false,toneMapped:false,fog:false},extra||{}));
   const sizeV=new THREE.Vector2();
   const prevVP=new THREE.Matrix4(); let mbAmt=0;
-  let builtDepth=false, W=0,H=0, rtScene=null, rtLdr=null, rtDof=null, levels=[], smaa=null, depthTex=null, builtDof=false, builtMsaa=0, builtAa="none", builtBloom=false, dofAmt=0, dofFocus=8;
+  let builtBloomDiv=2, builtDepth=false, W=0,H=0, rtScene=null, rtLdr=null, rtDof=null, levels=[], smaa=null, depthTex=null, builtDof=false, builtMsaa=0, builtAa="none", builtBloom=false, dofAmt=0, dofFocus=8;
   const mPre=mk(PRE_FRAG,{tSrc:{value:null},uTexel:{value:new THREE.Vector2()},uThresh:{value:0.85},uKnee:{value:0.5}});
   const mDown=mk(DOWN_FRAG,{tSrc:{value:null},uTexel:{value:new THREE.Vector2()}});
   const mUp=mk(UP_FRAG,{tSrc:{value:null},uTexel:{value:new THREE.Vector2()},uGain:{value:1}},{transparent:true,blending:THREE.CustomBlending,blendSrc:THREE.OneFactor,blendDst:THREE.OneFactor,blendEquation:THREE.AddEquation});
@@ -186,11 +186,12 @@ export function createPost(renderer,f0){
   function build(){
     renderer.getDrawingBufferSize(sizeV); const w=Math.max(2,Math.round(sizeV.x)), h=Math.max(2,Math.round(sizeV.y));
     const wantDof=!!F.dof, wantDepth=wantDof||F.motionBlur>0||F.haze>0, wantMsaa=(!wantDepth&&F.aa==="msaa")?4:0, wantAa=(F.aa==="smaa"||F.aa==="fxaa")?F.aa:"none", wantBloom=F.bloom>0;
-    if(w===W&&h===H&&rtScene&&wantDof===builtDof&&wantDepth===builtDepth&&wantMsaa===builtMsaa&&wantAa===builtAa&&wantBloom===builtBloom) return;
-    free(); W=w; H=h; builtDof=wantDof; builtDepth=wantDepth; builtMsaa=wantMsaa; builtAa=wantAa; builtBloom=wantBloom;
+    const wantDiv=Math.max(2,Math.min(8,F.bloomDiv|0||2));   /* (polish, D6: the bloom's first level is 1/bloomDiv of the frame: 4 = a quarter, about 4x less bloom work than the old half-resolution chain) */
+    if(w===W&&h===H&&rtScene&&wantDof===builtDof&&wantDepth===builtDepth&&wantMsaa===builtMsaa&&wantAa===builtAa&&wantBloom===builtBloom&&wantDiv===builtBloomDiv) return;
+    free(); W=w; H=h; builtBloomDiv=wantDiv; builtDof=wantDof; builtDepth=wantDepth; builtMsaa=wantMsaa; builtAa=wantAa; builtBloom=wantBloom;
     const o={depthBuffer:true}; if(wantDepth){ depthTex=new THREE.DepthTexture(W,H,THREE.UnsignedIntType); o.depthTexture=depthTex; } if(wantMsaa) o.samples=wantMsaa;
     rtScene=rt(W,H,o); if(wantDof) rtDof=rt(Math.ceil(W/2),Math.ceil(H/2));
-    if(wantBloom){ let lw=W,lh=H; for(let k=0;k<4;k++){ lw=Math.max(2,Math.ceil(lw/2)); lh=Math.max(2,Math.ceil(lh/2)); levels.push(rt(lw,lh)); } }
+    if(wantBloom){ let lw=W,lh=H; for(let k=0;k<4;k++){ const dv=k===0?wantDiv:2; lw=Math.max(2,Math.ceil(lw/dv)); lh=Math.max(2,Math.ceil(lh/dv)); levels.push(rt(lw,lh)); } }
     if(wantAa==="smaa"){ rtLdr=rt(W,H,{type:THREE.UnsignedByteType}); smaa=new SMAAPass(W,H); smaa.renderToScreen=true; }
     /* the final material is made again when the compile-time options change (the depth of field's taps, the bloom) */
     const defs={}; if(wantDof){ defs.DOF=1; defs.DOF_TAPS=Math.max(6,F.dofTaps|0); } if(wantDepth) defs.DEPTH=1; if(wantBloom) defs.BLOOM=1; if(wantAa==="fxaa") defs.AA=1;

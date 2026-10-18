@@ -20,8 +20,9 @@ import {createPost,postSupported} from "./r3d-lead-post.js";
 
 /* the tier table: every effect is one flag. post: "full" (HDR scene + bloom + DOF + SMAA + grade) | "lite" (HDR scene + bloom + grade, MSAA) | "off" (the renderer's own frame: nothing extra) */
 export const TIERS={
-  high:  {rig:"full",shadowRes:2048,softShadow:true, env:true, pbr:true, fog:"exp",post:"full",bloom:1.0,dof:true, motionBlur:1.0,haze:0.011,hazeI:1.0,aa:"fxaa",msaa:0,grade:1,vignette:0.34,grain:0.035,exposure:1.0,cssVig:false},
-  medium:{motionBlur:0,haze:0,hazeI:1,rig:"full",shadowRes:1024,softShadow:false,env:true, pbr:true, fog:"exp",post:"lite",bloom:0.75,dof:false,aa:"fxaa",msaa:0,grade:1,vignette:0.30,grain:0.0, exposure:1.0,cssVig:false},
+  high:  {rig:"full",shadowRes:1024,softShadow:false,env:true, pbr:true, fog:"exp",post:"full",bloom:1.0,bloomDiv:4,dof:true, motionBlur:1.0,haze:0.011,hazeI:1.0,aa:"fxaa",msaa:0,grade:1,vignette:0.34,grain:0.035,exposure:1.0,cssVig:false},   /* (polish: 1024 and a plain filter, as the quality table says: a 2048 soft map was 4x the texels and 9 taps) */
+  ultra: {rig:"full",shadowRes:2048,softShadow:true, env:true, pbr:true, fog:"exp",post:"full",bloom:1.0,bloomDiv:2,dof:true, motionBlur:1.0,haze:0.011,hazeI:1.0,aa:"fxaa",msaa:0,grade:1,vignette:0.34,grain:0.035,exposure:1.0,cssVig:false},
+  medium:{motionBlur:0,haze:0,hazeI:1,rig:"full",shadowRes:1024,softShadow:false,env:true, pbr:true, fog:"exp",post:"lite",bloom:0.75,bloomDiv:4,dof:false,aa:"fxaa",msaa:0,grade:1,vignette:0.30,grain:0.0, exposure:1.0,cssVig:false},
   low:   {motionBlur:0,haze:0,hazeI:1,rig:"lite",shadowRes:1024,softShadow:false,env:false,pbr:false,fog:"lin",post:"off", bloom:0,   dof:false,aa:"none",msaa:0,grade:0,vignette:0,   grain:0.0, exposure:1.0,cssVig:false},
   stick: {motionBlur:0,haze:0,hazeI:1,rig:"lite",shadowRes:1024,softShadow:false,env:false,pbr:false,fog:"lin",post:"off", bloom:0,   dof:false,aa:"none",msaa:0,grade:0,vignette:0,   grain:0.0, exposure:1.0,cssVig:false}
 };
@@ -98,7 +99,7 @@ export function createLook(renderer,opts){
     const wantPost=F.post!=="off"&&canPost;
     if(wantPost){
       if(!post){ post=createPost(renderer,{}); }
-      post.setFlags({bloom:F.bloom,dof:F.post==="full"&&F.dof,motionBlur:F.post==="full"?F.motionBlur:0,haze:F.post==="full"?F.haze:0,hazeI:F.hazeI,aa:F.aa,grade:F.grade,vignette:F.vignette,grain:F.grain,exposure:null});
+      post.setFlags({bloom:F.bloom,bloomDiv:F.bloomDiv||2,dof:F.post==="full"&&F.dof,motionBlur:F.post==="full"?F.motionBlur:0,haze:F.post==="full"?F.haze:0,hazeI:F.hazeI,aa:F.aa,grade:F.grade,vignette:F.vignette,grain:F.grain,exposure:null});
       L.post=post; L._mine=post;
     } else if(L.post&&L.post===L._mine){ L.post=null; L._mine=null; }
     /* the stadium's glow sprites are written in HDR units: 2.5x when the chain's bloom is on (the floodlights bloom and star), 1x on the plain frame (no clipped white blobs on the TV tier) */
