@@ -501,8 +501,13 @@ export function create(host,hooks){
         r.al=(vl-v0)/dt; r.vl=vl; r.lat=lat;
       }
       /* hard limits: the track's edge; a fallen rider or bike level with him */
-      if(r.lat<ia-0.15){ r.lat=ia-0.15; if(r.vl<0) r.vl=0; } else if(r.lat>ib+0.15){ r.lat=ib+0.15; if(r.vl>0) r.vl=0; }
-      if(blk) for(let q=0;q<blk.length;q++){ const v=blk[q]; if(v[3]>-2.2&&v[3]<2.4){ const dl=r.lat-v[2]; if(Math.abs(dl)<1.45){ const sd=dl>=0?1:-1; r.lat=v[2]+sd*1.45; if(r.vl*sd<0) r.vl=0; } } }
+      { const lim=dt>0&&(r.init||r.rem)?Math.max(0.02,6*dt):99;   /* back inside the track's edge (and the inside of a hairpin): quickly, never in one jump */
+        if(r.lat<ia-0.15){ r.lat+=Math.min(ia-0.15-r.lat,lim); if(r.vl<0) r.vl=0; } else if(r.lat>ib+0.15){ r.lat-=Math.min(r.lat-ib-0.15,lim); if(r.vl>0) r.vl=0; } }
+      if(blk){ /* the fallen riders and bikes level with him: one merged no-go stretch each (never pushed from one onto the other), left on the
+         nearest side, at most 6 m/s sideways (no jump: the soft line above has already steered him round from 22 m out) */
+        const hz=[]; for(let q=0;q<blk.length;q++){ const v=blk[q]; if(v[3]>-2.2&&v[3]<2.4) hz.push([v[2]-1.45,v[2]+1.45]); }
+        if(hz.length){ hz.sort((x,y)=>x[0]-y[0]); const mz=[]; hz.forEach(v=>{ const l=mz[mz.length-1]; if(l&&v[0]<=l[1]) l[1]=Math.max(l[1],v[1]); else mz.push(v.slice()); });
+          for(const z of mz){ if(r.lat>z[0]&&r.lat<z[1]){ const toL=r.lat-z[0], toR=z[1]-r.lat, sd=toL<=toR?-1:1, goal=sd<0?z[0]:z[1]; r.lat+=clamp(goal-r.lat,-Math.max(0.02,6*dt),Math.max(0.02,6*dt)); if(r.vl*sd<0) r.vl=0; break; } } } }
     }
     // [/hook:motion]
     /* the flagger: the white flag as the leader comes to the line to start the last lap, the checkered flag as the winner arrives */
