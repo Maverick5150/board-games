@@ -222,7 +222,7 @@ reflectedLight.indirectDiffuse*=mxAO*mxAO;
 reflectedLight.directDiffuse*=mix(1.0,mxAO,0.9);
 float mxWs=smoothstep(0.4,0.92,mxWet);
 reflectedLight.directSpecular*=mix(0.12,1.25,mxWs)*mix(1.0,mxAO,0.9);
-reflectedLight.indirectSpecular*=mix(0.18,1.0,mxWs)*mxAO;   /* dry powdery dirt barely mirrors the floodlit environment: at a grazing angle the rut walls and lips read as a white ribbon (a2 captures) */
+reflectedLight.indirectSpecular*=mix(0.18,0.7,mxWs)*mxAO*vec3(1.0,0.84,0.62);   /* dry powdery dirt barely mirrors the floodlit environment: at a grazing angle the rut walls and lips read as a white ribbon (a2 captures) */
 float mxFr=pow(1.0-clamp(dot(mxNg,normalize(vViewPosition)),0.0,1.0),3.0);
 reflectedLight.indirectSpecular+=uSheen*(mxFr*mxWs*uTun.z*mxAO);
 `;
