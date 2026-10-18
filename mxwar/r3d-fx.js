@@ -265,7 +265,7 @@ export function createFx(opts){
   const B0=soil==="sand"?{clod:[0.30,0.22,0.12],dust:[0.40,0.31,0.19],loose:1.0}:soil==="hardpack"?{clod:[0.16,0.1,0.058],dust:[0.34,0.25,0.15],loose:0.8}
     :soil==="loam"?{clod:[0.07,0.045,0.027],dust:[0.22,0.155,0.1],loose:0.45}:soil==="clay"?{clod:[0.15,0.07,0.034],dust:[0.31,0.19,0.105],loose:0.6}:{clod:[0.19,0.108,0.056],dust:[0.30,0.19,0.10],loose:0.7};
   const mul=(c,k)=>[c[0]*k,c[1]*k,c[2]*k], mix3=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];
-  const COL={wet:mul(B0.clod,0.3),mid:mul(B0.clod,0.6),dry:mul(mix3(B0.clod,B0.dust,0.45),0.78),dust:B0.dust,loose:B0.loose};
+  const COL={wet:mul(B0.clod,0.34),mid:mul(B0.clod,0.66),dry:mul(mix3(B0.clod,B0.dust,0.6),0.9),dust:B0.dust,loose:B0.loose};
   COL.clod=COL.mid;
   /* a private generator: the effects never touch Math.random (same race = same dirt) */
   let sd=0x5EEDF00D|0; const rnd=()=>{ sd=(sd+0x6D2B79F5)|0; let t=Math.imul(sd^(sd>>>15),1|sd); t=(t+Math.imul(t^(t>>>7),61|t))^t; return ((t^(t>>>14))>>>0)/4294967296; };
@@ -308,8 +308,9 @@ export function createFx(opts){
     const m=0.7+0.6*rnd(), tint=1+0.14*(rnd()-0.5); ccol[o]=col[0]*m*tint; ccol[o+1]=col[1]*m; ccol[o+2]=col[2]*m/tint; colDirty=true;
     if(!cAlive[k]){ cAlive[k]=1; cLive++; }
   }
-  /* m2: clod sizes are log-normal (radius about 0.5-2 cm, 3% big chunks of 2-4.5 cm), clod colours from wet to the soil (moist chunks are darker) */
-  const clodR=()=>rnd()<0.03?logn(0.03,0.25,0.02,0.045):logn(0.0085,0.42,0.0045,0.02);
+  /* m2: clod sizes are log-normal (radius about 1-3.4 cm, 4% big chunks of 3.2-6.5 cm: the first cut's 0.5-2 cm were under a pixel or two at the chase distance
+     of 3-8 m and the storm did not show in the captures), clod colours from wet to the soil (moist chunks are darker) */
+  const clodR=()=>rnd()<0.04?logn(0.045,0.25,0.032,0.065):logn(0.018,0.4,0.009,0.034);
   const clodC=()=>mix3(COL.wet,COL.mid,rnd()*0.8);
 
   /* ================= SPECKS: the storm of crumbs, ballistic on the GPU ================= */
@@ -320,7 +321,7 @@ export function createFx(opts){
   const jP=new THREE.InstancedBufferAttribute(kP,4).setUsage(THREE.DynamicDrawUsage), jV=new THREE.InstancedBufferAttribute(kV,4).setUsage(THREE.DynamicDrawUsage),
     jS=new THREE.InstancedBufferAttribute(kS,4).setUsage(THREE.DynamicDrawUsage), jC=new THREE.InstancedBufferAttribute(kC,4).setUsage(THREE.DynamicDrawUsage);
   kg.setAttribute("aP",jP); kg.setAttribute("aV",jV); kg.setAttribute("aS",jS); kg.setAttribute("aK",jC); kg.instanceCount=NK;
-  const km=new THREE.ShaderMaterial({uniforms:THREE.UniformsUtils.merge([THREE.UniformsLib.lights,THREE.UniformsLib.fog,{uTime:{value:0},uH:{value:720},uShutter:{value:1/70},uMaxPx:{value:T.maxPx},uGain:{value:1},uBank:{value:T.bank||0},uCamV:{value:new THREE.Vector3()},uMaxTrail:{value:40}}]),
+  const km=new THREE.ShaderMaterial({uniforms:THREE.UniformsUtils.merge([THREE.UniformsLib.lights,THREE.UniformsLib.fog,{uTime:{value:0},uH:{value:720},uShutter:{value:1/150},uMaxPx:{value:T.maxPx},uGain:{value:1},uBank:{value:T.bank||0},uCamV:{value:new THREE.Vector3()},uMaxTrail:{value:40}}]),
     vertexShader:SPK_VS,fragmentShader:SPK_FS,lights:true,fog:true,transparent:true,depthWrite:!!T.depth,depthTest:true,defines:T.depth?{SPK_DEPTH:1}:{}});
   const specks=new THREE.Mesh(kg,km); specks.frustumCulled=false; specks.renderOrder=3.5; specks.name="fx-specks";   /* after the dust (renderOrder 3) */
   const _v2=new THREE.Vector2();
@@ -343,9 +344,11 @@ export function createFx(opts){
     kS[o]=gy; kS[o+1]=rad; kS[o+2]=kd; kS[o+3]=rnd();
     const m=0.82+0.36*rnd(); kC[o]=col[0]*m; kC[o+1]=col[1]*m; kC[o+2]=col[2]*m; kC[o+3]=kind;
   }
-  /* the colour of a crumb: 40% wet dark, 40% the soil, 20% light dry tan */
-  const speckC=()=>{ const r=rnd(); return r<0.4?COL.wet:r<0.8?COL.mid:COL.dry; };
-  const speckR=chip=>chip?logn(0.0042,0.4,0.002,0.011):logn(0.0032,0.45,0.0013,0.01);
+  /* the colour of a crumb: 30% wet dark, 40% the soil, 30% light dry tan (airborne crumbs must read against the dark stands too) */
+  const speckC=()=>{ const r=rnd(); return r<0.3?COL.wet:r<0.7?COL.mid:COL.dry; };
+  /* radius (m): about 0.4-2.6 cm, median 1 cm (the cover's crumbs near the lead rider are 2-5 px at 720p, 2-3 m from the lens); the first cut's 1.3-10 mm drew
+     sub-pixel dots that faded to nothing at the chase distance */
+  const speckR=chip=>chip?logn(0.013,0.4,0.006,0.03):logn(0.010,0.45,0.004,0.026);
 
   /* ================= SPRITES: dust puffs and haze, one instanced draw call ================= */
   const NPF=T.puffs, NHZ=T.haze, NS=NPF+NHZ, H0=NPF;
@@ -530,7 +533,7 @@ export function createFx(opts){
     e.dA+=((1.2+3.5*cruise*loose)*lf+16*pwD*loose+9*bm+6*sand*cruise+6*brake)*dt*PS.p*imp; n=e.dA|0; e.dA-=n; if(n>8) n=8;
     while(n-->0){ const side=(rnd()<0.5?-1:1)*(0.5+1.4*rnd()), hi=rnd()<0.2*efD?1.8:1, off=0.9+v*dt*rnd(), ox=rx*side*0.2;
       puff(st.x-cth*off+ox,gR+0.18+0.2*rnd(),st.z-sth*off+rz*side*0.2,cth*v*0.12-cth*(0.3+0.8*rnd())+rx*side*0.9-sgn*bm*rx*1.2,(0.35+0.8*rnd())*hi,sth*v*0.12-sth*(0.3+0.8*rnd())+rz*side*0.9-sgn*bm*rz*1.2,
-      (0.36+0.26*rnd()+0.2*efD)*(1-0.4*e.ls),0.8+0.5*rnd()+0.3*efD,1.5+1.0*rnd()+0.4*efD,(0.18+0.13*rnd()+0.15*efD+0.05*sand)*(0.7+0.3*loose)*lf,COL.dust,0.18,1.4,gR); }
+      (0.36+0.26*rnd()+0.2*efD)*(1-0.4*e.ls),0.8+0.5*rnd()+0.3*efD,1.5+1.0*rnd()+0.4*efD,(0.18+0.13*rnd()+0.15*efD+0.05*sand)*(0.7+0.3*loose)*lf*1.35,COL.dust,0.18,1.4,gR); }   /* (m2: x1.35: the veil rule now guards the lens, the first cut's dust hardly showed past 3 m) */
     /* the haze that hangs over the track behind a fast pack: large, faint, slow, low */
     e.hA+=(v>6?(0.8+0.7*efD)*lf:0)*dt*PS.h*(st.me?1.3:1)*RATE; n=e.hA|0; e.hA-=n; if(n>3) n=3;
     while(n-->0) haze(st.x-cth*(1.4+3*rnd())+rx*(rnd()-0.5)*1.5,gR+0.55+0.7*rnd(),st.z-sth*(1.4+3*rnd())+rz*(rnd()-0.5)*1.5,(rnd()-0.5)*0.5,0.12,(rnd()-0.5)*0.5,1.3+0.8*rnd(),0.45+0.25*rnd(),3.2+2.4*rnd(),0.045+0.03*rnd(),COL.dust,gR);
