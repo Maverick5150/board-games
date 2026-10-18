@@ -188,8 +188,8 @@ function bikeMaterial(lo,D,U){
       "float bkDin=step(0.0,bkDu.x)*step(bkDu.x,1.0)*step(0.0,bkDu.y)*step(bkDu.y,1.0)*step(0.5,bkAN.z)*step(0.5,bkTn)*(1.0-step(1.5,bkTn))*(1.0-step(0.5,bkK));",
       "bkDu=clamp(bkDu,0.0,1.0); if(vLoc.z<0.0) bkDu.x=1.0-bkDu.x;",
       "float bkCi=floor(vMud.w+0.01), bkRed=step(0.25,vMud.w-bkCi), bkCol=mod(bkCi,uDecG.x), bkRow=floor(bkCi/uDecG.x+0.001);",
-      /* (the front plate's face, kind 6: the same cell in the plate's own frame (across = -z, up leaning back 0.30 rad), below a band of the team colour; one fetch for both) */
-      "vec3 bkFr=vLoc-vec3(0.508,1.035,0.0); vec2 bkFu=vec2((-bkFr.z/0.25+0.5-0.06)/0.88,(dot(bkFr.xy,vec2(-0.29552,0.95534))/0.215+0.5-0.07)/0.60);",
+      /* (the front plate's face, kind 6: the same cell in the plate's own frame (across = -z, up leaning back 0.30 rad), stretched tall over the plate as real front numbers are; one fetch for both) */
+      "vec3 bkFr=vLoc-vec3(0.508,1.035,0.0); vec2 bkFu=vec2((-bkFr.z/0.25+0.5-0.05)/0.90,(dot(bkFr.xy,vec2(-0.29552,0.95534))/0.215+0.5+0.08)/0.96);",
       "float bkFin=step(5.5,bkK)*(1.0-step(6.5,bkK))*step(0.0,bkFu.x)*step(bkFu.x,1.0)*step(0.0,bkFu.y)*step(bkFu.y,1.0); bkDu=mix(bkDu,clamp(bkFu,0.0,1.0),step(5.5,bkK));",
       "vec3 bkD=texture2D(uDec,vec2((bkCol+bkDu.x)/uDecG.x,1.0-(bkRow+1.0-bkDu.y)/uDecG.y)).rgb*max(bkDin,bkFin);",
       "b0=mix(b0,mix(uPlBg,vec3(0.578,0.005,0.012),bkRed),bkD.r); b0=mix(b0,mix(uPlFg,vec3(0.86),bkRed),bkD.g); b0=mix(b0,mix(vAcc,vec3(0.86),bkRed),bkD.b);",
