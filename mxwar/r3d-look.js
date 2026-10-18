@@ -23,8 +23,8 @@ export const TIERS={
   high:  {rig:"full",shadowRes:1024,softShadow:false,env:true, pbr:true, fog:"exp",post:"full",bloom:1.0,bloomDiv:4,dof:true, motionBlur:1.0,haze:0.011,hazeI:1.0,aa:"fxaa",msaa:0,grade:1,vignette:0.34,grain:0.035,exposure:1.0,cssVig:false,half:true,ao:1.0,envCap:true,bikeCC:true},   /* (polish: 1024 and a plain filter, as the quality table says: a 2048 soft map was 4x the texels and 9 taps) */
   ultra: {rig:"full",shadowRes:2048,softShadow:true, env:true, pbr:true, fog:"exp",post:"full",bloom:1.0,bloomDiv:2,dof:true, motionBlur:1.0,haze:0.011,hazeI:1.0,aa:"fxaa",msaa:0,grade:1,vignette:0.34,grain:0.035,exposure:1.0,cssVig:false,half:true,ao:1.0,envCap:true,bikeCC:true},
   medium:{motionBlur:0,haze:0,hazeI:1,rig:"full",shadowRes:1024,softShadow:false,env:true, pbr:true, fog:"exp",post:"lite",bloom:0.75,bloomDiv:4,dof:false,aa:"fxaa",msaa:0,grade:1,vignette:0.30,grain:0.0, exposure:1.0,cssVig:false,half:true,ao:0,envCap:true},
-  low:   {motionBlur:0,haze:0,hazeI:1,rig:"lite",shadowRes:1024,softShadow:false,env:false,pbr:false,fog:"lin",post:"off", bloom:0,   dof:false,aa:"none",msaa:0,grade:0,vignette:0,   grain:0.0, exposure:1.0,cssVig:false,half:false,ao:0,envCap:false,tvaa:true},
-  stick: {motionBlur:0,haze:0,hazeI:1,rig:"lite",shadowRes:1024,softShadow:false,env:false,pbr:false,fog:"lin",post:"off", bloom:0,   dof:false,aa:"none",msaa:0,grade:0,vignette:0,   grain:0.0, exposure:1.0,cssVig:false,half:false,ao:0,envCap:false,tvaa:true}
+  low:   {motionBlur:0,haze:0,hazeI:1,rig:"lite",shadowRes:1024,softShadow:false,env:false,pbr:false,fog:"lin",post:"off", bloom:0,   dof:false,aa:"none",msaa:0,grade:0,vignette:0,   grain:0.0, exposure:1.0,cssVig:false,half:false,ao:0,envCap:false,tvaa:true,tvGlow:0.85},
+  stick: {motionBlur:0,haze:0,hazeI:1,rig:"lite",shadowRes:1024,softShadow:false,env:false,pbr:false,fog:"lin",post:"off", bloom:0,   dof:false,aa:"none",msaa:0,grade:0,vignette:0,   grain:0.0, exposure:1.0,cssVig:false,half:false,ao:0,envCap:false,tvaa:true,tvGlow:0.85}
 };
 const SUN_DIR=new THREE.Vector3(), V1=new THREE.Vector3(), V2=new THREE.Vector3(), V3=new THREE.Vector3(), UP=new THREE.Vector3(0,1,0);
 const DEG=Math.PI/180;
@@ -103,7 +103,7 @@ export function createLook(renderer,opts){
     const wantTvaa=!wantPost&&!!F.tvaa&&!LO&&canvasAA()===false&&!!renderer.capabilities.isWebGL2;
     if(wantPost||wantTvaa){
       if(!post){ post=createPost(renderer,{}); }
-      if(wantTvaa) post.setFlags({ldr:true});
+      if(wantTvaa) post.setFlags({ldr:true,tvGlow:F.tvGlow||0});
       else post.setFlags({ldr:false,bloom:F.bloom,bloomDiv:F.bloomDiv||2,dof:F.post==="full"&&F.dof,motionBlur:F.post==="full"?F.motionBlur:0,haze:F.post==="full"?F.haze:0,hazeI:F.hazeI,aa:F.aa,grade:F.grade,vignette:F.vignette,grain:F.grain,exposure:null,
         half:!!F.half,ao:F.post==="full"?(F.ao||0):0,fmt:F.fmt||"rgba16f"});
       L.post=post; L._mine=post;
@@ -135,6 +135,8 @@ export function createLook(renderer,opts){
          high-contrast) and keeps its hot spots: the floodlight bulbs themselves are unlit discs and stay at their full HDR level */
       const ek=F.envKey!=null?F.envKey:0.33, ef=F.envFill!=null?F.envFill:0.5, gm=world.ctx&&world.ctx.glowMesh, gu=gm&&gm.material&&gm.material.uniforms&&gm.material.uniforms.uHdr, gh=gu?gu.value:0;
       if(gu) gu.value=gh*(F.envGlow!=null?F.envGlow:0.6);
+      /* the key's shadow box over the middle of the floor for the capture (a fixed box: the map never depends on where the last camera looked; the next frame fits it again) */
+      if(SHADOWS){ const pc={position:new THREE.Vector3(cx,y+40,cz+60)}; fitShadow(pc,new THREE.Vector3(cx,0,cz)); }
       let r;
       try{ r=captureEnvironment(renderer,scene,{pos:new THREE.Vector3(cx,y,cz),keep:[world.root],size:256,dim:[{light:sun,k:ek},{light:hemi,k:ef},{light:fill,k:ef},{light:bounce,k:ef},{light:amb,k:ef},{light:rim,k:0},{light:kick,k:0}]}); }
       finally { if(gu) gu.value=gh; }
