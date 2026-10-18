@@ -392,7 +392,8 @@ function trackMesh(C,look,q,mat,tier,tiles){
   if(hi){
     const td=clamp(q&&q.terrainDetail!=null?q.terrainDetail:1,0.5,1.2), nCh=Math.max(1,Math.round(R.L/48)), nsq=R.ns/4;
     /* the clods: HIGH and ULTRA (rank 2+; a build without a rank, e.g. a test, gets them too); BALANCED keeps its call budget */
-    const clodMat=(q&&q.rank!=null&&q.rank<2)?null:new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.93,metalness:0}); info.clods=0;
+    /* (the clods barely mirror the floodlit environment: at a grazing angle toward the lights a lip of clods read as a white ribbon in the captures, envMapIntensity 1 -> 0.1) */
+    const clodMat=(q&&q.rank!=null&&q.rank<2)?null:new THREE.MeshStandardMaterial({color:0xffffff,roughness:1,metalness:0,envMapIntensity:0.1}); if(clodMat) clodMat.userData.keepEnv=true; info.clods=0;
     for(let c=0;c<nCh;c++){ const r0=4*Math.round(c*nsq/nCh), r1=c===nCh-1?R.ns:4*Math.round((c+1)*nsq/nCh); if(r1<=r0) continue;
       const mid=Math.round((r0+r1)/2), k=Math.min(mid,R.ns-1)*G.nc+Math.floor(G.nc/2), cx=G.PX[k], cy=G.PY[k], cz=G.PZ[k];
       const lod=new THREE.LOD(); lod.position.set(cx,cy,cz);
