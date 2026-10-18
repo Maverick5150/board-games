@@ -24,6 +24,7 @@
      ldr        bool   (milestone 2, the FIRE TV tier's anti-aliasing) no HDR chain at all: the scene is drawn into an 8-bit target exactly as it would be drawn to the screen (three.js tone-maps and
                        encodes sRGB in every material: the target is flagged like a WebXR target, which is what tells r160 to do that, with a plain RGBA8 store), then ONE pass of FXAA (five taps,
                        four more only on edges) writes the screen. Same pixels as the plain frame except the edges; +1 draw call; about 2 MB more written and read per 960x540 frame.
+     tvFxaa     bool   (with ldr) false = no FXAA, only the glow (a plain copy: nothing softened)
      tvGlow     0..1   (with ldr) THE TV TIER'S GLOW: the frame's near-white pixels (the floodlight bulbs, the glow sprites' cores) are taken at a quarter of the size, blurred one level down
                        and back up (three passes of 240x135 and 120x68 pixels at 960x540), and screen-blended in the FXAA pass: the light banks glow on the TV as on the cover. +3 draw calls.
    Nothing is random: the grain is hashed from the pixel and the clock (the harness' virtual clock makes a frame a pure function of the tick). */
@@ -172,13 +173,16 @@ precision mediump float;
 uniform sampler2D tSrc; uniform vec2 uTexel; varying vec2 vUv;
 #ifdef GLOW
 uniform sampler2D tGlow; uniform float uGlow;
-#define OUT(c) gl_FragColor=vec4(1.0-(1.0-(c))*(1.0-min(sqrt(texture2D(tGlow,vUv).rgb)*uGlow,vec3(1.0))),1.0)
+#define OUT(c) gl_FragColor=vec4(sqrt((c)*(c)+texture2D(tGlow,vUv).rgb*uGlow),1.0)
 #else
 #define OUT(c) gl_FragColor=vec4(c,1.0)
 #endif
 float lu(vec3 c){ return dot(c,vec3(0.299,0.587,0.114)); }
 void main(){
   vec3 M=texture2D(tSrc,vUv).rgb;
+  #ifdef NOAA
+  OUT(M); return;
+  #endif
   vec3 NW=texture2D(tSrc,vUv+vec2(-1.0,-1.0)*uTexel).rgb, NE=texture2D(tSrc,vUv+vec2(1.0,-1.0)*uTexel).rgb, SW=texture2D(tSrc,vUv+vec2(-1.0,1.0)*uTexel).rgb, SE=texture2D(tSrc,vUv+vec2(1.0,1.0)*uTexel).rgb;
   float lM=lu(M), lNW=lu(NW), lNE=lu(NE), lSW=lu(SW), lSE=lu(SE);
   float lMin=min(lM,min(min(lNW,lNE),min(lSW,lSE))), lMax=max(lM,max(max(lNW,lNE),max(lSW,lSE)));
@@ -331,7 +335,7 @@ export function createPost(renderer,f0){
   const mUp=mk(UP_FRAG,{tSrc:{value:null},uTexel:{value:new THREE.Vector2()},uGain:{value:1}},{transparent:true,blending:THREE.CustomBlending,blendSrc:THREE.OneFactor,blendDst:THREE.OneFactor,blendEquation:THREE.AddEquation});
   const mTv=mk(TVAA_FRAG,{tSrc:{value:null},uTexel:{value:new THREE.Vector2()}});
   const tvU={tSrc:{value:null},uTexel:{value:new THREE.Vector2()},tGlow:{value:null},uGlow:{value:1}};
-  const mTvG=mk(TVAA_FRAG,tvU,{defines:{GLOW:1}}), mTvPre=mk(TVPRE_FRAG,{tSrc:{value:null},uTexel:{value:new THREE.Vector2()}});
+  const mTvG=mk(TVAA_FRAG,tvU,{defines:{GLOW:1}}), mTvGc=mk(TVAA_FRAG,tvU,{defines:{GLOW:1,NOAA:1}}), mTvPre=mk(TVPRE_FRAG,{tSrc:{value:null},uTexel:{value:new THREE.Vector2()}});
   let tvLv=[], builtGlow=false;
   let mFinal=null, mDof=null, mHalf=null, mGather=null, mAo=null;
   const fu={tScene:{value:null},tBloom:{value:null},tDepth:{value:null},tBlur:{value:null},uTexel:{value:new THREE.Vector2()},uBloom:{value:0.4},uDof:{value:0},uFocus:{value:8},uAper:{value:3.2},uDead:{value:0.022},uMaxPx:{value:16},uNear:{value:0.5},uFar:{value:4200},
@@ -390,7 +394,7 @@ export function createPost(renderer,f0){
         pass(mDown,tvLv[1],tvLv[0].texture,tvLv[0].width,tvLv[0].height);
         pass(mUp,tvLv[0],tvLv[1].texture,tvLv[1].width,tvLv[1].height,m=>{ m.uniforms.uGain.value=1.0; });
         tvU.tGlow.value=tvLv[0].texture; tvU.uGlow.value=F.tvGlow;
-        pass(mTvG,null,rtTv.texture,W,H);
+        pass(F.tvFxaa===false?mTvGc:mTvG,null,rtTv.texture,W,H);
       } else pass(mTv,null,rtTv.texture,W,H);
       renderer.setRenderTarget(null); renderer.autoClear=ac; return;
     }
@@ -439,7 +443,7 @@ export function createPost(renderer,f0){
   P.setMotion=function(prev,amount){ prevVP.copy(prev); mbAmt=amount; };
   P.info=function(){ if(builtLdr) return {w:W,h:H,passes:builtGlow?4:1,targets:1+tvLv.length,dof:false,depth:false,aa:"fxaa",msaa:0,bloom:false,half:false,ldr:true,tvGlow:builtGlow};
     return {w:W,h:H,passes:(levels.length?1+2*(levels.length-1):0)+1+(smaa?3:0)+(rtDof?1:0)+lastFx,targets:(rtScene?1:0)+levels.length+(rtLdr?1:0)+(depthTex?1:0)+(rtDof?1:0)+(rtHalf?2:0)+(rtAo?1:0),dof:builtDof,depth:builtDepth,aa:builtAa,msaa:builtMsaa,bloom:builtBloom,half:builtHalf,ao:builtAo,fmt:builtFmt,ldr:false}; };
-  P.dispose=function(){ P.dead=true; free(); [mPre,mDown,mUp,mTv,mTvG,mTvPre].forEach(m=>m.dispose()); if(mFinal) mFinal.dispose(); if(mDof) mDof.dispose(); if(mHalf) mHalf.dispose(); if(mGather) mGather.dispose(); if(mAo) mAo.dispose(); fsGeo.dispose(); };
+  P.dispose=function(){ P.dead=true; free(); [mPre,mDown,mUp,mTv,mTvG,mTvGc,mTvPre].forEach(m=>m.dispose()); if(mFinal) mFinal.dispose(); if(mDof) mDof.dispose(); if(mHalf) mHalf.dispose(); if(mGather) mGather.dispose(); if(mAo) mAo.dispose(); fsGeo.dispose(); };
   P.setFlags(null);
   return P;
 }
