@@ -322,6 +322,12 @@ function simRace(G){
   Race.run(G.race);
   return ev.concat(endRace(G));
 }
+/* mxtime: a race's classification in time, kept in G.last and in the raceDone event for the results (also for a race that was skipped): [id, laps, ms, dnf] per rider, the fastest lap */
+function timeSummary(R){
+  var T1=TM(); if(!R||!R.tm||!T1) return null;
+  try{ var tm=R.tm, rows=T1.standings(R);
+    return {L:tm.L,p:tm.p,flag:tm.flag,rows:rows.map(function(r){ return [R.r[r.s].id,r.laps,r.t,r.dnf?1:0]; }),best:tm.best?{id:R.r[tm.best.s].id,k:tm.best.k,t:tm.best.t}:null}; }catch(x){ return null; }
+}
 function endRace(G){
   var R=G.race, RG=G.round, r=Round.current(RG), ev=[];
   var order=R.res.slice(), hs=R.hs>=0?R.r[R.hs].id:null, fin=r.st<0;
@@ -331,10 +337,10 @@ function endRace(G){
   var tr=Round.record(RG,order,hs,R.why,dnf);
   order.forEach(function(id,p){ var s=stOf(G,id); s.races++; if(fin){ s.finals++; } if(cr[id]) s.crashes=(s.crashes|0)+cr[id]; if(dnf[id]&&dnf[id].why==="crash") s.dnfs=(s.dnfs|0)+1; });
   if(hs!=null){ var sh=stOf(G,hs); sh.hsAll++; if(fin) sh.hs++; }
-  G.last={ri:G.ri,key:r.key,label:r.label,kind:r.kind,order:order,hs:hs,why:R.why,battles:R.battle,len:R.o.len,wars:R.wars,toMain:tr.toMain,toNext:tr.toNext,out:tr.out,dnf:dnf,crashes:cr};
+  G.last={ri:G.ri,key:r.key,label:r.label,kind:r.kind,order:order,hs:hs,why:R.why,battles:R.battle,len:R.o.len,wars:R.wars,toMain:tr.toMain,toNext:tr.toNext,out:tr.out,dnf:dnf,crashes:cr,tm:timeSummary(R)};
   var cal=G.cal[G.ri];
   log(G,(cal.city||cal.venue)+" "+r.label+": "+G.riders[order[0]].name+" wins"+(hs!=null?" (holeshot "+G.riders[hs].name+")":"")+".","race");
-  ev.push({e:"raceDone",ri:G.ri,key:r.key,label:r.label,kind:r.kind,order:order,hs:hs,why:R.why,toMain:tr.toMain,toNext:tr.toNext,out:tr.out,walkover:tr.walkover||null,dnf:dnf,crashes:cr});
+  ev.push({e:"raceDone",ri:G.ri,key:r.key,label:r.label,kind:r.kind,order:order,hs:hs,why:R.why,toMain:tr.toMain,toNext:tr.toNext,out:tr.out,walkover:tr.walkover||null,dnf:dnf,crashes:cr,tm:G.last.tm});
   G.race=null; G.rmap=null; G.rkey=null;
   if(RG.done) ev=ev.concat(endRound(G));
   return ev;

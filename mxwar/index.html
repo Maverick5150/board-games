@@ -361,7 +361,7 @@
   .mx-tower__h{display:flex; align-items:baseline; justify-content:space-between; gap:.5rem; padding:0 .25rem .35rem; font:var(--fw-caps) var(--fs-micro)/1.2 var(--font-ui); letter-spacing:.08em; text-transform:uppercase; color:var(--gold-200)}
   .mx-tower__h span:last-child{letter-spacing:0; text-transform:none; color:var(--text-2); font-weight:var(--fw-ui)}
   .mx-tw{display:grid; grid-auto-rows:var(--tw-row,1.65rem); gap:.12rem; margin:0; padding:0; list-style:none}
-  .mx-tw li{display:grid; grid-template-columns:1.6rem auto minmax(0,1fr) 2.3rem 2.1rem 2.3rem; align-items:center; gap:.4rem; padding:0 .35rem; border-radius:var(--r-sm);
+  .mx-tw li{display:grid; grid-template-columns:1.6rem auto minmax(0,1fr) 2.3rem 3.7rem 4.3rem; align-items:center; gap:.4rem; padding:0 .35rem; border-radius:var(--r-sm);
     font:var(--fw-ui-strong) var(--fs-xs)/1 var(--font-ui); color:var(--text-1); background:rgba(255,255,255,.035)}
   .mx-tw li.is-me{background:linear-gradient(90deg,rgba(231,202,144,.26),rgba(231,202,144,.07)); box-shadow:inset 0 0 0 1.5px var(--gold-200)}
   .mx-tw li.is-win{box-shadow:inset 0 0 0 1.5px #f0d48a; background:rgba(240,212,138,.14)}
@@ -376,8 +376,40 @@
   .mx-tw__c:empty{visibility:hidden}
   .mx-tw__c svg{width:.75em; height:.75em}
   .mx-tw__k{text-align:right; font:400 var(--fs-md)/1 var(--font-display); color:var(--gold-100); font-variant-numeric:tabular-nums}
-  .mx-tw__g{text-align:right; font:var(--fw-ui) var(--fs-micro)/1 var(--font-ui); color:var(--text-2); font-variant-numeric:tabular-nums}
-  .mx-tw li.is-out .mx-tw__k{color:var(--text-2)}
+  .mx-tw__l{text-align:right; white-space:nowrap; font:var(--fw-ui) var(--fs-micro)/1 var(--font-ui); color:var(--text-2); font-variant-numeric:tabular-nums}
+  .mx-tw__g{text-align:right; white-space:nowrap; font:var(--fw-ui-strong) var(--fs-micro)/1 var(--font-ui); color:var(--text-1); font-variant-numeric:tabular-nums}
+  .mx-tw li.is-out .mx-tw__k, .mx-tw li.is-out .mx-tw__g, .mx-tw li.is-out .mx-tw__l{color:var(--text-2)}
+  .mx-tw li.is-down{box-shadow:inset 0 0 0 1.5px #e8775a; background:rgba(232,119,90,.16)}
+  .mx-tw li.is-down .mx-tw__g{color:#ffb4a3; font-weight:800; letter-spacing:.04em}
+  .mx-tw li.is-fl .mx-tw__l{color:#d9b3ff; font-weight:800}
+  .mx-tw__n{display:flex; min-width:0}
+  .mx-tw__f, .mx-tw__s{min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .mx-tw__s{display:none}
+  /* every rider at once: 24+ riders in two columns (a TV: left to right, top to bottom in the DOM order, column after column); on a phone the compact row: place, plate, last name, gap */
+  .mx-tw.is-two{grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-flow:column; grid-template-rows:repeat(var(--tw-rows,20),var(--tw-row)); column-gap:.6rem}
+  .mx-tw.is-compact{--tw-row:1.5rem; gap:.1rem}
+  .mx-tw.is-compact li{grid-template-columns:1.1rem auto minmax(0,1fr) 3.5rem; gap:.25rem; padding:0 .25rem}
+  .mx-tw.is-compact .mx-tw__c, .mx-tw.is-compact .mx-tw__l, .mx-tw.is-compact .mx-tw__f{display:none}
+  .mx-tw.is-compact .mx-tw__s{display:block}
+  .mx-tw.is-compact .mx-tw__p{font-size:var(--fs-micro)}
+  /* mxtime: the YOU card: your place and gap now, your last and best lap, and what the lap you just rode was worth */
+  .mx-yc{margin:0 0 .5rem; padding:.55rem .7rem .6rem; border-radius:var(--r-lg); display:grid; gap:.3rem; background:linear-gradient(180deg,rgba(231,202,144,.16),rgba(231,202,144,.05)); box-shadow:inset 0 0 0 1.5px var(--gold-200)}
+  .mx-yc[hidden]{display:none}
+  .mx-yc.is-down{background:linear-gradient(180deg,rgba(232,119,90,.2),rgba(232,119,90,.05)); box-shadow:inset 0 0 0 1.5px #e8775a}
+  .mx-yc.is-out{opacity:.88}
+  .mx-yc__top{display:flex; flex-wrap:wrap; align-items:baseline; gap:.2rem .65rem; min-width:0}
+  .mx-yc__top .mx-yc__laps{margin-left:auto}
+  .mx-yc__tag{font:var(--fw-caps) var(--fs-micro)/1 var(--font-ui); letter-spacing:.1em; text-transform:uppercase; color:var(--gold-100); padding:.22rem .55rem; border-radius:var(--r-pill); background:rgba(231,202,144,.24)}
+  .mx-yc__pos{font:400 var(--fs-xl)/1 var(--font-display); color:var(--gold-100); white-space:nowrap}
+  .mx-yc__gap{flex:1 1 10rem; min-width:0; font:var(--fw-ui-strong) var(--fs-sm)/1.25 var(--font-ui); color:var(--text-1); font-variant-numeric:tabular-nums}
+  .mx-yc__laps{display:flex; flex-wrap:wrap; gap:.1rem .9rem; font:var(--fw-ui) var(--fs-xs)/1.2 var(--font-ui); color:var(--text-2); font-variant-numeric:tabular-nums}
+  .mx-yc__line{margin:0; font:var(--fw-ui-strong) var(--fs-sm)/1.3 var(--font-ui); color:var(--text-1)}
+  .mx-yc__why{display:flex; flex-wrap:wrap; gap:.3rem; margin:0; padding:0; list-style:none}
+  .mx-yc__why:empty{display:none}
+  .mx-yc__why li{display:inline-flex; align-items:baseline; gap:.4rem; padding:.18rem .6rem; border-radius:var(--r-pill); background:var(--ink-3); box-shadow:inset 0 0 0 1px var(--line-1); font:var(--fw-ui-strong) var(--fs-micro)/1.25 var(--font-ui); color:var(--text-1)}
+  .mx-yc__why li b{font-variant-numeric:tabular-nums}
+  .mx-yc__why li.is-up b{color:#8fe3a3}
+  .mx-yc__why li.is-dn b{color:#ff9a8a}
   .mx-tw .mx-pl{font-size:var(--fs-micro); min-width:2.2em}
   .mx-log{margin:.6rem 0 0; padding:0; list-style:none; display:grid; gap:.15rem; text-align:center; font:var(--fw-body) var(--fs-xs)/1.4 var(--font-ui); color:var(--text-2)}
   .mx-log li:last-child{color:var(--text-1)}
@@ -393,6 +425,7 @@
     font:var(--fw-ui-strong) var(--fs-sm)/1.25 var(--font-ui); color:var(--text-1)}
   .mx-res li.is-me{box-shadow:inset 0 0 0 1.5px var(--gold-200); background:linear-gradient(90deg,rgba(231,202,144,.18),var(--ink-3))}
   .mx-res__p{flex:none; min-width:1.6rem; text-align:right; color:var(--gold-100); font-variant-numeric:tabular-nums}
+  .mx-res__t{flex:none; margin-left:auto; padding-left:.5rem; font:var(--fw-ui) var(--fs-xs)/1.2 var(--font-ui); color:var(--text-2); font-variant-numeric:tabular-nums; white-space:nowrap}
   .mx-res__n{flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   .mx-res__x{flex:none; font:var(--fw-ui) var(--fs-micro)/1.2 var(--font-ui); color:var(--text-2); text-align:right}
   .mx-tag{flex:none; padding:.05rem .4rem; border-radius:var(--r-pill); font:var(--fw-caps) var(--fs-micro)/1.3 var(--font-ui); white-space:nowrap}
@@ -539,6 +572,11 @@
   html[data-tv] .mx-arena{grid-area:arena; height:auto}
   html[data-tv] .mx-acts{grid-area:acts; gap:1.5rem}
   html[data-tv] .mx-stat{grid-area:stat; text-align:left; font-size:var(--fs-md)}
+  html[data-tv] .mx-tower .mx-yc{order:3; flex:none; margin:.4rem 0 0; padding:.3rem .65rem .35rem; gap:.1rem}
+  html[data-tv] .mx-yc__pos{font-size:var(--fs-lg)}
+  html[data-tv] .mx-yc__gap{flex:1 1 12rem}
+  html[data-tv] .mx-yc__line{font-size:var(--fs-xs); line-height:1.2}
+  html[data-tv] .mx-yc__why li{padding:.08rem .5rem}
   /* the log has its own full-width lines (v2: it shared its row with the hint bar and wrapped in a narrow column); the hint bar under it */
   html[data-tv] .mx-logw{grid-area:log; display:flex; flex-direction:column; align-items:stretch; gap:.35rem; min-width:0}
   html[data-tv] .mx-log{flex:none; min-width:0; text-align:left; margin:0}
@@ -563,9 +601,13 @@
   html[data-tv] .mx-tower{grid-area:tower; margin:0; min-height:0; overflow:hidden; display:flex; flex-direction:column}
   html[data-tv] .mx-tw{--tw-row:1.6rem; gap:.18rem}
   html[data-tv] .mx-tw.is-two{grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-flow:column; grid-template-rows:repeat(var(--tw-rows,20),var(--tw-row)); column-gap:.75rem}
-  html[data-tv] .mx-tw li{grid-template-columns:1.6rem auto minmax(0,1fr) 2.6rem 2.2rem 2.4rem}
-  html[data-tv] #flipBtn{flex:1 1 0}
-  html[data-tv] #skipBtn{flex:1 1 0}
+  html[data-tv] .mx-tw li{grid-template-columns:1.6rem auto minmax(0,1fr) 2.6rem 4.2rem 4.4rem}
+  html[data-tv] .mx-tw.is-two li{grid-template-columns:1.4rem auto minmax(0,1fr) 3.9rem 4rem; gap:.3rem}
+  html[data-tv] .mx-tw.is-two .mx-tw__c{display:none}
+  html[data-tv] #flipBtn{flex:1 1 4rem}
+  html[data-tv] #skipBtn{flex:1 1 10rem}
+  html[data-tv] #boardBtn{flex:1 1 auto}
+  html[data-tv] .mx-acts{row-gap:.75rem}
   html[data-tv] .mx-banner b{font-size:var(--fs-3xl)}
   html[data-tv] .mx-banner span{font-size:var(--fs-lg)}
   html[data-tv] .mx-table.is-pip .mx-war{inset:2.8rem .5rem .5rem}
@@ -593,7 +635,8 @@
   @media (orientation: portrait) and (max-width: 36em){
     html:not([data-tv]) .mx-race{padding-inline:.5rem}
     html:not([data-tv]) .mx-acts{margin-inline:-.5rem}
-    html:not([data-tv]) .mx-tw li{grid-template-columns:1.4rem auto minmax(0,1fr) 2.2rem 1.9rem 2.1rem; gap:.3rem}
+    html:not([data-tv]) .mx-tw li{grid-template-columns:1.4rem auto minmax(0,1fr) 2.2rem 3.5rem 4.1rem; gap:.3rem}
+    html:not([data-tv]) .mx-tw.is-compact li{grid-template-columns:1.1rem auto minmax(0,1fr) 3.5rem; gap:.25rem}
   }
 
   /* the caption band: landscape phone (the arena has the full height: three small lines) and the TV (three lines of 1rem) */
@@ -859,6 +902,11 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
     </div>
     <p class="mx-stat" id="stat" data-stage-text aria-live="polite"></p>
     <section class="mx-tower" aria-labelledby="towerHead">
+      <section class="mx-yc" id="youBox" aria-label="You" hidden>
+        <div class="mx-yc__top"><span class="mx-yc__tag" id="youTag">You</span><b class="mx-yc__pos" id="youPos"></b><span class="mx-yc__gap" id="youGap"></span><span class="mx-yc__laps"><span id="youLast"></span> · <span id="youBest"></span></span></div>
+        <p class="mx-yc__line" id="youLine" aria-live="polite"></p>
+        <ul class="mx-yc__why" id="youWhy" aria-label="What the lap was worth"></ul>
+      </section>
       <div class="mx-tower__h"><span id="towerHead">Timing</span><span id="towerSub"></span></div>
       <ol class="mx-tw" id="tower"></ol>
     </section>
