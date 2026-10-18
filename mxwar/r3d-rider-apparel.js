@@ -23,7 +23,7 @@ export const AP_VERT_SET=`
 const AP_FS_DECL=`
 #ifdef MX_APPAREL
 varying vec3 vApP; varying vec4 vApI; varying vec3 vApT; varying vec3 vApA;
-float apH(vec3 p){ p=fract(p*0.3183099+0.1); p*=17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
+float apH(vec3 p){ uvec3 q=uvec3(ivec3(p)+ivec3(32768)); uint h=(q.x*1597334677u)^(q.y*3812015801u)^(q.z*2798796415u); h^=h>>15; h*=2246822519u; h^=h>>13; h*=3266489917u; h^=h>>16; return float(h&16777215u)*5.9604645e-8; }   /* (an INTEGER hash: bit-exact whatever the compiler does with float multiply-adds) */
 float apN(vec3 x){ vec3 i=floor(x), f=fract(x); f=f*f*(3.0-2.0*f);
   return mix(mix(mix(apH(i),apH(i+vec3(1,0,0)),f.x),mix(apH(i+vec3(0,1,0)),apH(i+vec3(1,1,0)),f.x),f.y),
               mix(mix(apH(i+vec3(0,0,1)),apH(i+vec3(1,0,1)),f.x),mix(apH(i+vec3(0,1,1)),apH(i+vec3(1,1,1)),f.x),f.y),f.z); }
@@ -162,7 +162,7 @@ const AP_FS_BUMP=`
   float h=amp*(0.62*f1+0.38*f2);
   vec3 sp=-vViewPosition; vec3 dX=dFdx(sp), dY=dFdy(sp); vec3 R1=cross(dY,normal), R2=cross(normal,dX);
   float det=dot(dX,R1)*faceDirection; vec3 grad=sign(det)*(dFdx(h)*R1+dFdy(h)*R2);
-  normal=normalize(abs(det)*normal-grad);
+  vec3 nb=abs(det)*normal-grad; float nl=length(nb); if(nl>1e-12) normal=nb/nl;   /* (never normalize a zero vector: a grazing pixel gave NaN) */
 }
 #endif
 `;
