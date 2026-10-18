@@ -469,7 +469,7 @@
         '<p class="ps-vdesc"><b>A night' + (si.series === "mx" ? " outdoors" : " in the stadium") + ":</b> " + esc(progWords(F)) + ". " + esc(pointsWords(F)) + " " +
         esc(n + (n === 1 ? " rider" : " riders") + " from this table race every round against the real riders of " + si.year + (fieldN ? "; a night needs " + fieldN + " riders" + (si.riders + n < fieldN ? ", so labelled privateers fill the gate" : "") : "") + ".") + "</p>" : "<p class=\"ps-vdesc\">No season for this series.</p>") +
       '<div class="bg-seg mxp-seg mxp-seg--2 mxp-lseg" role="group" aria-label="Race length">' + [["real", "Real length"], ["half", "Half length"]].map(function (s) { var on = s[0] === cfg.length; return '<button type="button" class="aibtn' + (on ? " on" : "") + '" aria-pressed="' + on + '" data-mxl="' + s[0] + '">' + s[1] + "</button>"; }).join("") + "</div>" +
-      '<p class="ps-vdesc"><b>Real time:</b> every lap takes the round\'s real lap time (Supercross about a minute, outdoors about two), whatever the Game speed (it paces the cards, banners and results). ' + (cfg.length === "half" ? "<b>Half length:</b> half of each race's real laps." : "<b>Real length:</b> every race runs the laps its real race ran.") + " Every lap is one War flip on every phone; the most cards at the flag wins. The season saves after every lap.</p>" +
+      '<p class="ps-vdesc"><b>Real time:</b> every lap takes the round\'s real lap time (Supercross about a minute, outdoors about two), whatever the Game speed (it paces the cards, banners and results). ' + (cfg.length === "half" ? "<b>Half length:</b> half of each race's real laps." : "<b>Real length:</b> every race runs the laps its real race ran.") + " Every lap is one War flip on every phone, and the cards decide the lap times: the first rider across the line after the last lap wins. The season saves after every lap.</p>" +
       '<p class="ps-vdesc">' + esc(BR && BR.skillNote ? BR.skillNote : "War has no choices to make: the cards decide every race.") + "</p>" + announcersRow() + "</section>";
     if (vsec) vsec.insertAdjacentHTML("afterend", ssec); else el.insertAdjacentHTML("beforeend", ssec);
     Array.prototype.forEach.call(el.querySelectorAll("[data-mxa]"), function (b) { b.onclick = function () { try { MX.Booth.store({ mode: b.getAttribute("data-mxa") }); } catch (e) { } api.redraw(); }; });
@@ -776,7 +776,7 @@
       for (i = 0; i < n; i++) {
         r = rows[i]; e = TWK.els[r.s]; c = T.towerCells(r); if (pre) { c.gap = ""; c.last = ""; }
         var R = riderOfS(r.s), k = kOfId(R.id), card = ui.lastCards[r.s], out = c.tag === "out" || c.tag === "pits";
-        var cls = (k >= 0 ? " is-me" : "") + (k >= 0 && ui.need.indexOf(r.s) >= 0 && !ui.intents[r.s] && !machine(k) ? " is-need" : "") + (out ? " is-out" : "") + (r.status === "down" ? " is-down" : "") + (r.fl ? " is-fl" : "") + (mk && mk.win === r.s ? " is-win" : "") + (mk && mk.fight && mk.fight.indexOf(r.s) >= 0 ? " is-fight" : "");
+        var cls = (k >= 0 ? " is-me" : "") + (k >= 0 && ui.need.indexOf(r.s) >= 0 && !ui.intents[r.s] && !machine(k) ? " is-need" : "") + (out ? " is-out" : "") + (r.status === "down" ? " is-down" : "") + (r.fl && r.lastK === r.bestK ? " is-fl" : "") + (mk && mk.win === r.s ? " is-win" : "") + (mk && mk.fight && mk.fight.indexOf(r.s) >= 0 ? " is-fight" : "");
         var v = r.place + "|" + c.gap + "|" + c.last + "|" + cls + "|" + (card == null ? "" : card) + "|" + (out ? 1 : 0);
         if (TWK.cells[r.s] === v) continue;
         TWK.cells[r.s] = v; e.p.textContent = r.place; e.g.textContent = c.gap; e.l.textContent = c.last; e.li.className = cls.trim();
@@ -1076,7 +1076,7 @@
           logLine((e.n > 1 ? "War again! " : "War! ") + whoList(e.tied) + " tie" + (tiedR ? " with " + rankPlural(tiedR) : "") + ".");
           ui.war = { n: e.n, seats: e.seats.slice(), tied: e.tied.slice() };
           drawWar(e.seats, true); renderTower({ fight: e.seats }); pushNow();
-          await pipNote(e.n === 1 ? "War!" : e.n === 2 ? "Double war!|loser crashes, remounts" : e.n === 3 ? "Triple war!|loser crashes out" : warWordP(e.n) + "!|loser crashes out", e.n > 1 ? 900 : 850, e.n > 1);
+          await pipNote(e.n === 1 ? "War!" : e.n === 2 ? "Double war!|crash, remount" : e.n === 3 ? "Triple war!|crash out" : warWordP(e.n) + "!|crash out", e.n > 1 ? 900 : 850, e.n > 1);
           return;
         }
         case "kitty": logLine(nm(e.s) + " also takes " + plural(e.n, "left-over card") + "."); return;

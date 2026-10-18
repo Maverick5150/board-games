@@ -381,11 +381,11 @@ function drawLength(){
   if(!E){ $("lengthDesc").textContent="Every race runs in real time: a lap takes as long as a real lap."; return; }
   if(E.real) $("lengthDesc").innerHTML="<b>Real time:</b> every race takes its real lap time ("+esc(E.range)+" in "+esc(String(si.year))+"). "+
     (cfg.length==="half"?"<b>Half length:</b> half of each race's real laps, still at real lap speed. ":"<b>Real length:</b> every round races the laps its real races ran. ")+
-    esc("Researched for "+E.withT+" of "+E.n+" rounds"+(E.withT<E.n?" (the rest: the "+si.year+" rules)":"")+".")+(E.first&&E.races.length?" <b>"+esc((E.first.city||E.first.venue)+": "+E.races.join(" · "))+".</b>":"")+" Every lap is one battle of War; the most cards at the flag wins.<br>"+
+    esc("Researched for "+E.withT+" of "+E.n+" rounds"+(E.withT<E.n?" (the rest: the "+si.year+" rules)":"")+".")+(E.first&&E.races.length?" <b>"+esc((E.first.city||E.first.venue)+": "+E.races.join(" · "))+".</b>":"")+" Every lap is one battle of War, and the cards decide the lap times: the first rider across the line after the last lap wins.<br>"+
     "<b>Time:</b> a round about "+E.all+" min if you watch every race"+(E.mine<E.all-2?" (about "+E.mine+" min when you sim the races you're not in)":"")+"; the "+si.rounds+"-round "+si.year+" season about "+E.season+", over several sittings: it saves after every race.";
   else $("lengthDesc").innerHTML="<b>Real time:</b> a lap takes as long as a real "+(E.mx?"outdoor":"stadium")+" lap, about "+E.lapW+" ("+E.range+" by track). "+
     (cfg.length==="half"?"<b>Half length:</b> half the race time, still at real lap speed. ":"<b>Real length:</b> the "+esc(String(si.year))+" format. ")+
-    "<b>"+E.races.map(esc).join(" · ")+".</b> Every lap is one battle of War; the most cards at the flag wins.<br>"+
+    "<b>"+E.races.map(esc).join(" · ")+".</b> Every lap is one battle of War, and the cards decide the lap times: the first rider across the line after the last lap wins.<br>"+
     "<b>Time:</b> a round about "+E.all+" min if you watch every race"+(E.mine<E.all-2?" (about "+E.mine+" min when you sim the races you're not in)":"")+"; the "+si.rounds+"-round "+si.year+" season about "+E.season+", over several sittings: it saves after every race.";
 }
 /* mxlaps (the CEO, 2026-10-16 ~21:10, "Fix it", with a search answer: "An average lap takes roughly 1 to 2 minutes in an outdoor motocross
@@ -1152,8 +1152,8 @@ function drawTower(){
   if(sig!==TW.ord){ TW.ord=sig; for(i=0;i<n;i++) tw.appendChild(TW.els[rows[i].s].li); }
   for(i=0;i<n;i++){
     r=rows[i]; e=TW.els[r.s]; c=T.towerCells(r); if(pre){ c.gap=""; c.last=""; }
-    var card=ui.lastCards[r.s], chip=(card!=null&&c.tag!=="out"&&c.tag!=="pits")?A.chip(card):"", cls=(r.status==="down"?" is-down":"")+(c.tag==="out"||c.tag==="pits"?" is-out":"")+(r.fl?" is-fl":"")+(mark&&mark.win===r.s?" is-win":"")+(mark&&mark.fight&&mark.fight.indexOf(r.s)>=0?" is-fight":"")+(G.riders[seatId(r.s)].kind==="human"?" is-me":"");
-    var v=r.place+"|"+c.gap+"|"+c.last+"|"+cls+"|"+(card==null?"":card)+"|"+(r.fl?1:0), old=TW.cells[r.s];
+    var card=ui.lastCards[r.s], chip=(card!=null&&c.tag!=="out"&&c.tag!=="pits")?A.chip(card):"", cls=(r.status==="down"?" is-down":"")+(c.tag==="out"||c.tag==="pits"?" is-out":"")+(r.fl&&r.lastK===r.bestK?" is-fl":"")+(mark&&mark.win===r.s?" is-win":"")+(mark&&mark.fight&&mark.fight.indexOf(r.s)>=0?" is-fight":"")+(G.riders[seatId(r.s)].kind==="human"?" is-me":"");
+    var v=r.place+"|"+c.gap+"|"+c.last+"|"+cls+"|"+(card==null?"":card)+"|"+(r.fl&&r.lastK===r.bestK?1:0), old=TW.cells[r.s];
     if(old===v) continue;
     TW.cells[r.s]=v;
     e.p.textContent=r.place; e.g.textContent=c.gap; e.l.textContent=c.last; e.li.className=cls.trim();

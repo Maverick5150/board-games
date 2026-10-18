@@ -8,7 +8,7 @@
    sync). State = G.tm, plain JSON, integer milliseconds. After each battle (= one lap) lap(G) turns that lap's public card results (G.lastLap,
    G.yellow, the pile sizes) into EVERY rider's LAP TIME; the running order is the order of RACE TIMES.
    This file is the reference implementation final/model.js (BG_audit/sprint/mxtime/final) written in the engine's ES5 style (var / function:
-   the Fire TV browser may be old): the arithmetic and the order of operations are the reference's, line for line. The last section ("READOUTS")
+   the Fire TV browser may be old): the arithmetic and the order of operations are the reference's, line for line (one deliberate difference: finish() gives a finite flag when every rider is out, where the reference leaves Infinity, which a save writes as null; BG_audit/sprint/mxtimebuild equiv.js and equiv2.js compare every other number bit for bit). The last section ("READOUTS")
    is new in the integration: texts and numbers for the tower and the YOU readout, read from G.tm, never written to it.
    API: init(G,info) lap(G) complete(G) finish(G) standings(G) result(G) tower(G,t) progressAt(G,s,t) timeAt(G,s,p) knots(G,s,k)
         splits(G,s,k,M) packet(G,k) run(G,info,hum) infoOf(raceInfo,series,year,kind) adopt(G,info) trim(G,keep) cardsFor(series,laps)
@@ -627,7 +627,7 @@ function you(G,s,k,f,nameOf){
     else if(e.e==="pass"&&e.a===s&&!e.crash) add("pass","passed "+nm(e.d),0);
     else if(e.e==="pass"&&e.d===s&&!e.crash) add("passed","passed by "+nm(e.a),0);
   });
-  if(tm.yz[k]&&out.crash==null) add("yellow","yellow flag: everybody loses "+secText(tm.P.YLF*p,1),-tm.P.YLF*p);
+  if(tm.yz[k]&&out.crash==null) add("yellow","yellow flag slowed everybody",-tm.P.YLF*p);
   if(!out.crash&&(R.hold[k-1]||R.hold[k-2]||R.hold[k-3])) add("fire","attacking after the crash",0);   // the 3 laps after a remount (FIRE)
   /* a lap at the model's slowest pace (rmax x the typical lap: the pace curve stops there): the card chips cannot explain a lap that is already at the floor, so say so (first chip) */
   if(fin&&k>1&&!out.crash&&!hold&&!tm.yz[k]&&Math.abs(out.time-p*tm.P.rmax)<=0.003) rs.unshift({ kind:"cap", text:"at the slowest lap (+"+Math.round((tm.P.rmax-1)*100)+"%)", sec:0 });
