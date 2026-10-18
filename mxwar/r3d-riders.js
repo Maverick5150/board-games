@@ -103,7 +103,7 @@ vec3 transformed=vec3(dot(mxR0,mxP),dot(mxR1,mxP),dot(mxR2,mxP));
 #endif
 ${AP_VERT_SET}
 #ifdef MX_ROWS
- { float fl=aFx.y*aInstB.w; if(fl>0.0){ float ph=dot(position,vec3(5.0,8.0,4.0))+aInstA.x*2.7; transformed+=objectNormal*(fl*0.015*(0.6*sin(uTime*12.0+ph)+0.4*sin(uTime*19.0+ph*1.6))); } }
+ { float fl=aFx.y*aInstB.w; if(fl>0.0){ float ph=dot(position,vec3(5.0,8.0,4.0))+aInstA.x*2.7; transformed+=objectNormal*(fl*(0.014+0.015*(0.6*sin(uTime*12.0+ph)+0.4*sin(uTime*19.0+ph*1.6)))); } }   /* (milestone 2: the wind of speed also puffs the loose hem and sleeves out a little) */
 #endif
 `;
 const SKIN_COLOR=`
