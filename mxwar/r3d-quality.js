@@ -54,17 +54,17 @@ export function detectWeakGPU(renderer){
 export const STEPS=[1,0.9,0.8,0.75,0.67,0.6,0.5];   /* the render-scale ladder (x the pixel-ratio cap): 7 steps, about 10% apart */
 export const TIERS={
   firetv:{id:"firetv",rank:0,label:"FIRE TV",aliases:["stick","low"],fps:30,lo:true,msaa:true,
-    note:"Fire TV Stick 4K Max class (the CEO's TV, 2026-10-18: Mali-G52 / G57 MC2 class GPU, 4 x Cortex-A55, 2 GB) and older Sticks: 960x540 up to 1280x720, 4x MSAA (resolved in the tile memory of a Mali: about free), blob shadows, no post chain, the simple world",
+    note:"Fire TV Stick 4K Max class (the CEO's TV, 2026-10-18: Mali-G52 / G57 MC2 class GPU, 4 x Cortex-A55, 2 GB) and older Sticks: 960x540 up to 1280x720, 4x MSAA (resolved in the tile memory of a Mali: about free), blob shadows, no post chain, the simple world with the lit crowd cards (crowd 0.7)",
     res:{maxPR:1.0,maxPRtv:2.0,capW:1280,tvW:1280,start:0.75,min:0.5},
     shadow:{real:false,size:512,soft:false},
     post:{on:false,bloom:false,bloomScale:0.5,aa:"none",dof:false,shafts:false},
     fog:{on:true,far:0.75},
     fx:{particles:160,scale:1},
-    crowd:{detail:0.35,anim:false},
+    crowd:{detail:0.7,anim:false},   /* milestone 2 (QD look #5, "dark flat lower stands"): the crowd CARDS on the TV too (0.35 = none): +1 draw call, +28k triangles, +1.3 MB textures; no measurable frame cost here (table/ab-firetv.json). Reduce effects keeps 0.35 (Q.options) */
     scenery:{trees:0.4,terrain:0.5},
     riders:{full:4,mid:6,near:14,far:40},riderHi:3,bikeLod:[8],bikeHi:0,dirtTier:"lo",replay:false,
     tex:{max:512,aniso:1,budgetMB:24},
-    budget:{calls:46,tris:110000,geoMB:6}},
+    budget:{calls:46,tris:150000,geoMB:6}},   /* triangles 110k -> 150k (milestone 2): the target is now a Mali-G52 MC2 class stick (the CEO's 4K Max), not a G31 MP2; 150k x 30 fps is far below its vertex rate. Calls stay 46: the stick's CPU is the limit */
   balanced:{id:"balanced",rank:1,label:"BALANCED",aliases:["medium","mid"],fps:60,fpsTV:30,lo:false,msaa:false,
     note:"mid phones, old laptops, integrated GPUs: real shadows (1024), half-resolution bloom, FXAA-class edges, 60 fps",
     res:{maxPR:1.25,tvW:1280,start:1,min:0.5},
@@ -413,7 +413,7 @@ export function createQuality(env){
   Q.options=function(LO){
     const e=LO?TIERS.firetv:tier;
     return {lo:!!(LO||e.lo),tier:e.id,rank:e.rank,label:e.label,shadow:e.shadow,post:e.post,fog:e.fog,fx:e.fx,crowd:e.crowd,scenery:e.scenery,riders:e.riders,tex:e.tex,res:e.res,budget:e.budget,
-      particles:e.fx.particles,texMax:e.tex.max,aniso:e.tex.aniso,crowdDetail:e.crowd.detail,crowdAnim:e.crowd.anim,trees:e.scenery.trees,terrainDetail:e.scenery.terrain,riderLod:e.riders,riderHi:e.riderHi,bikeLod:e.bikeLod,bikeHi:e.bikeHi,dirtTier:e.dirtTier,replay:e.replay!==false,
+      particles:e.fx.particles,texMax:e.tex.max,aniso:e.tex.aniso,crowdDetail:LO?Math.min(0.35,e.crowd.detail):e.crowd.detail,crowdAnim:e.crowd.anim,trees:e.scenery.trees,terrainDetail:e.scenery.terrain,riderLod:e.riders,riderHi:e.riderHi,bikeLod:e.bikeLod,bikeHi:e.bikeHi,dirtTier:e.dirtTier,replay:e.replay!==false,
       live:live,key:e.id+(LO?"+lo":"")};
   };
   /* what makes a world new for the cache: the tier's build flags (a tier switch rebuilds the world on the next race) */
