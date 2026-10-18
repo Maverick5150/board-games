@@ -509,11 +509,12 @@ export function createFx(opts){
     while(n-->0){
       const up=(2.4+6.0*Math.pow(rnd(),0.9))*lift, bk=(rnd()-0.25)*(1.4+3.6*ef)+0.06*v, sd=(rnd()+rnd()-1)*(1.6+1.8*bm)-sgn*bm*(1.5+3.5*rnd()), cr=(0.1+0.25*rnd())*v, u=rnd();
       const bx=st.x-cth*(0.8+v*dt*u)+rx*(rnd()-0.5)*0.14, bz=st.z-sth*(0.8+v*dt*u)+rz*(rnd()-0.5)*0.14;
-      clod(bx,gR+0.05+0.1*rnd(),bz,cth*cr-cth*bk+rx*sd,up,sth*cr-sth*bk+rz*sd,clodR(),0.9+0.9*rnd(),clodC(),gR,s0R,st.lat,st.th);
+      clod(bx,gR+0.05+0.1*rnd(),bz,cth*cr-cth*bk+rx*sd,up,sth*cr-sth*bk+rz*sd,clodR()*(1+0.6*e.ls),0.9+0.9*rnd(),clodC(),gR,s0R,st.lat,st.th);   /* (m2: the launch digs bigger chunks off the start pad: the gate roost must read from the gate camera and the stands) */
     }
     /* THE STORM (m2): hundreds of crumbs a second off the rear tyre. Under power a tight ROOSTER TAIL (thrown back at the wheelspin speed, a clear arc that reads
        from the chase and from the stands) inside a wider fan; in a berm the back end slides and sprays to the outside; at speed the knobs keep throwing a steady spray (up to 450 a second) */
-    e.kA+=(450*cruise+2400*pw+2000*bm+600*sand*cruise)*SPK*(0.03+0.97*(1-e.ls)*(1-e.ls))*dt*PS.k*imp; n=e.kA|0; e.kA-=n; if(n>KMAX) n=KMAX;
+    e.kA+=(450*cruise+2400*pw+2000*bm+600*sand*cruise)*SPK*(0.22+0.78*(1-e.ls)*(1-e.ls))*dt*PS.k*imp;   /* (m2: 22% on the start pad, was 3%: the old cut was for milestone 1's big cream spray sprites; dark 1 cm crumbs do not veil the gate) */
+    n=e.kA|0; e.kA-=n; if(n>KMAX) n=KMAX;
     while(n-->0){
       const tail=rnd()<0.5*ef, u=rnd(), chip=rnd()<0.25;
       let up, bk, sd;
