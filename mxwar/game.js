@@ -506,7 +506,7 @@ var HDESC={
   deucesWild:"Every 2 is wild.", acesWild:"Every Ace is wild (the CEO's house rule).", jokersWild:"Two jokers join every deck and they are wild.",
   wildAs:"A wild card beats every card that isn't wild, or counts as an Ace.",
   form:"The year's real top 10 swap their lowest card for a better one after the deal (once; twice for the top 5). Small on purpose: War stays luck.",
-  cards:"Auto (the standard): a stadium race of more than 16 laps deals a full deck each (52), every other race half a deck (26), so nobody runs dry before the flag. Or pick 13, 26 or 52 for every race. The decks scale with the gate (a 40-rider moto deals 20 decks)."
+  cards:"Auto (the standard): a stadium race of more than 16 laps deals a full deck each (52), every other race half a deck (26). Or pick 13, 26 or 52 for every race. The decks scale with the gate (a 40-rider moto deals 20 decks)."
 };
 function ruleRow(key,label,type,choices,house,val,desc,onCh){
   var tag=house===null?"":house?'<span class="bg-tag bg-tag--house">house</span>':'<span class="bg-tag bg-tag--official">official</span>', row;
