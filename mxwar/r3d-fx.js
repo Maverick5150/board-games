@@ -160,7 +160,7 @@ LIGHT_FN,
 /* ---------------- the speck shaders: ballistic crumbs moved on the GPU ---------------- */
 const SPK_VS=[
 "attribute vec4 aP; attribute vec4 aV; attribute vec4 aS; attribute vec4 aK;",   /* aP = x0 y0 z0 t0 (thrown); aV = vx vy vz life; aS = the ground y, radius, drag, seed; aK = r g b, kind (0 grain, 1 chip) */
-"uniform float uTime; uniform float uH; uniform float uShutter; uniform float uMaxPx; uniform float uBank;",
+"uniform float uTime; uniform float uH; uniform float uShutter; uniform float uMaxPx; uniform float uBank; uniform vec3 uCamV; uniform float uMaxTrail;",
 "varying vec2 vUv; varying vec3 vCol; varying float vA; varying float vGlint; varying vec3 vVP; varying float vBank;",
 "#include <fog_pars_vertex>",
 "void main(){",
@@ -176,19 +176,21 @@ const SPK_VS=[
 "  float depth=-mvPosition.z;",
 "  if(depth<0.12||alpha<0.002){ gl_Position=vec4(0.0,0.0,2.0,1.0); return; }",
 "  float ppm=uH*0.5*projectionMatrix[1][1]/depth, rad=aS.y, px=rad*ppm;",           /* pixels a metre at its depth; its radius in pixels */
-"  vec3 vv=(modelViewMatrix*vec4(v,0.0)).xyz; float spd=length(vv.xy); vec2 dir=spd>1e-3?vv.xy/spd:vec2(1.0,0.0);",
 "  float kw=px<0.7?0.7/max(px,1e-4):1.0;",                                          /* never thinner than about 1.4 px across ... */
 "  alpha*=clamp(px/0.7,0.18,1.0);",                                                 /* ... a sub-pixel crumb fades instead of shimmering (m2: but not below 0.18: a far roost of hundreds still reads from the stands) */
 "  float cap=px*kw>uMaxPx?uMaxPx/(px*kw):1.0;",                                     /* near the lens a crumb never becomes a blob */
-"  float streak=min(spd*uShutter,0.42)*cap;",                                       /* how far it moved while the shutter was open (m) */
-"  float hw=rad*kw*cap, hl=hw+0.5*streak;",
-"  alpha*=clamp(1.7*hw/hl,0.3,1.0);",                                               /* a long streak is fainter (the same dirt, spread out) */
+"  float hw=px*kw*cap;",                                                            /* its half width on the screen (px) */
 "  if(aK.w>0.5){ float ph=aS.w*40.0+age*(9.0+15.0*fract(aS.w*13.7)); hw*=0.3+0.7*abs(cos(ph)); float g=abs(sin(ph)); g*=g; g*=g; vGlint=g*g; }",   /* a flat chip tumbling: it thins and flashes as it turns */
+"  vec3 vr=(modelViewMatrix*vec4(v-uCamV,0.0)).xyz; vec3 q=mvPosition.xyz-vr*uShutter; q.z=min(q.z,-0.1);",   /* THE SHUTTER (m2): where it was one shutter ago RELATIVE TO THE LENS (its flight minus the camera's motion) ... */
+"  vec4 c0=projectionMatrix*mvPosition, c1=projectionMatrix*vec4(q,1.0); vec2 sp=vec2(projectionMatrix[1][1]/projectionMatrix[0][0],1.0)*(uH*0.5);",   /* ... both ends projected (clip -> square pixels): dirt the camera rushes past streaks, dirt flying along with it does not */
+"  vec2 d=c0.xy/c0.w*sp-c1.xy/c1.w*sp; float lp=length(d); if(lp>uMaxTrail){ d*=uMaxTrail/lp; lp=uMaxTrail; } vec2 dir=lp>1e-3?d/lp:vec2(1.0,0.0);",
+"  float hl=hw+0.5*lp;",
+"  alpha*=clamp(1.7*hw/hl,0.3,1.0);",                                               /* a long streak is fainter (the same dirt, spread out) */
 "  alpha*=smoothstep(0.3,1.1,depth)*(1.0-smoothstep(75.0,120.0,depth));",
-"  mvPosition.xy+=dir*(position.x*hl-0.5*streak)+vec2(-dir.y,dir.x)*(position.y*hw);",   /* centred half a shutter back: the trail is behind it */
+"  vec2 sc=c0.xy/c0.w*sp+dir*(position.x*hl-0.5*lp)+vec2(-dir.y,dir.x)*(position.y*hw);",   /* the quad in pixels, centred half a trail behind the crumb */
 "  vec3 wd=normalize(p-cameraPosition); float ce=clamp(0.868*sqrt(max(0.0,1.0-wd.y*wd.y))+0.497*wd.y,-1.0,1.0); vBank=uBank*0.64/pow(1.36-1.2*ce,1.5);",   /* seen against the ring of floodlight banks a crumb has a warm bright rim (forward scattering, as the dust) */
 "  vVP=mvPosition.xyz; vA=alpha;",
-"  gl_Position=projectionMatrix*mvPosition;",
+"  gl_Position=vec4(sc/sp*c0.w,c0.z,c0.w);",
 "  #include <fog_vertex>",
 "}"].join("\n");
 const SPK_FS=[
@@ -318,12 +320,16 @@ export function createFx(opts){
   const jP=new THREE.InstancedBufferAttribute(kP,4).setUsage(THREE.DynamicDrawUsage), jV=new THREE.InstancedBufferAttribute(kV,4).setUsage(THREE.DynamicDrawUsage),
     jS=new THREE.InstancedBufferAttribute(kS,4).setUsage(THREE.DynamicDrawUsage), jC=new THREE.InstancedBufferAttribute(kC,4).setUsage(THREE.DynamicDrawUsage);
   kg.setAttribute("aP",jP); kg.setAttribute("aV",jV); kg.setAttribute("aS",jS); kg.setAttribute("aK",jC); kg.instanceCount=NK;
-  const km=new THREE.ShaderMaterial({uniforms:THREE.UniformsUtils.merge([THREE.UniformsLib.lights,THREE.UniformsLib.fog,{uTime:{value:0},uH:{value:720},uShutter:{value:1/70},uMaxPx:{value:T.maxPx},uGain:{value:1},uBank:{value:T.bank||0}}]),
+  const km=new THREE.ShaderMaterial({uniforms:THREE.UniformsUtils.merge([THREE.UniformsLib.lights,THREE.UniformsLib.fog,{uTime:{value:0},uH:{value:720},uShutter:{value:1/70},uMaxPx:{value:T.maxPx},uGain:{value:1},uBank:{value:T.bank||0},uCamV:{value:new THREE.Vector3()},uMaxTrail:{value:40}}]),
     vertexShader:SPK_VS,fragmentShader:SPK_FS,lights:true,fog:true,transparent:true,depthWrite:!!T.depth,depthTest:true,defines:T.depth?{SPK_DEPTH:1}:{}});
   const specks=new THREE.Mesh(kg,km); specks.frustumCulled=false; specks.renderOrder=3.5; specks.name="fx-specks";   /* after the dust (renderOrder 3) */
   const _v2=new THREE.Vector2();
   function targetH(r){ const rt=r.getRenderTarget(); return rt?rt.height:r.getDrawingBufferSize(_v2).y; }
-  specks.onBeforeRender=function(r){ km.uniforms.uH.value=targetH(r); };
+  /* the shutter needs the lens' own motion over the last tick: FX.step notes where the camera was before the cams moved it (the pose of the previous tick: a pure
+     function of the tick, like the camera itself), the draw takes the difference; a cut (over 40 m/s) or another camera draws with none */
+  const LCAM=opts.cam||null, camPrev=new THREE.Vector3(); let camPrevOk=false, camDt=1/60;
+  specks.onBeforeRender=function(r,sc,camera){ const U=km.uniforms, h=targetH(r); U.uH.value=h; U.uMaxTrail.value=0.055*h; const cv=U.uCamV.value;
+    if(camPrevOk&&camera===LCAM&&camDt>1e-7){ cv.subVectors(camera.position,camPrev).multiplyScalar(1/camDt); if(cv.lengthSq()>1600) cv.set(0,0,0); } else cv.set(0,0,0); };
   grp.add(specks);
   let kNext=0, kFirst=-1, kNew=0, liveK=0, simT=0, stepDt=1/60;
   const SPK=T.spk, KMAX=Math.max(24,Math.round(NK/22*0.9));   /* at most this many specks a rider a frame (22 riders at the gate share the pool) */
@@ -565,6 +571,7 @@ export function createFx(opts){
   /* ================= the step: move everything, write the buffers, set next frame's regulator ================= */
   FX.step=function(dt){
     if(!(dt>0)) return;
+    if(LCAM){ camPrev.copy(LCAM.position); camPrevOk=true; camDt=dt; }   /* (drawing only: the shutter's lens motion; nothing simulated reads it) */
     if(!LIVE){   /* with no ladder (perf's Q.live) the budget adapts by itself: slow frames thin the emission, fast frames bring it back */
       if(dt>0.22){ slowT=0; } else if(dt>0.036){ slowT+=dt; fastT=0; } else if(dt<0.022){ fastT+=dt; slowT=Math.max(0,slowT-dt*0.5); }
       if(slowT>2.0&&FX.budget>0.36){ FX.budget=Math.max(0.35,FX.budget*0.8); slowT=0; } else if(fastT>5&&FX.budget<1&&!FX.pinned){ FX.budget=Math.min(1,FX.budget*1.12); fastT=0; } }
