@@ -420,11 +420,11 @@ export function create(host,hooks){
       let sb=r.crash?r.sb:0;
       if(!r.crash&&!atGate){
         let need=0;
-        const Lf=2.15+0.05*Math.max(0,r.v||0), kr=(r.fr&&r.fr.k)||0;   /* nose to tail: the footprint (2 m) and a gap that grows with the speed (0.9 m at 15 m/s) */
+        const Lf=2.15+0.05*Math.max(0,r.v||0), kr=(r.fr&&r.fr.k)||0;   /* nose to tail: the footprint (2 m) and a gap that grows with the speed (0.9 m at 15 m/s); more round a tight turn (the bikes are turned against each other) */
         for(let b=0;b<ordA.length;b++){ if(b===a||(!live&&b>a)) continue; const o=ordA[b]; if(o.crash) continue;   /* (a placement frame: only against the riders already placed) */
           const oD=b<a?o.D:o.Dq, lead=oD-r.Dq;   /* (o.D: placed this frame; o.Dq: where he was drawn last frame) */
           if(!(lead>1.25||(lead>=-1.25&&rightOf(o,r)))) continue;   /* he has the right of way over r */
-          const ah=oD-r.Dl, dl=Math.abs(o.lat-r.lat), Lq=Lf*(1-sstep(0.70,0.752,dl))/Math.max(0.45,1-kr*(o.lat+r.lat)*0.5); if(Lq<=0.001||ah>Lq) continue;   /* (the footprint is 0.75 m wide) */
+          const ah=oD-r.Dl, dl=Math.abs(o.lat-r.lat), Lq=Lf*(1-sstep(0.70,0.752,dl))*(1+2.4*Math.abs(kr))/Math.max(0.45,1-kr*(o.lat+r.lat)*0.5); if(Lq<=0.001||ah>Lq) continue;   /* (the footprint is 0.75 m wide) */
           const nd=Lq-ah; if(nd>need) need=nd; }
         if(live){
           const cz=r.czone||0; sb=r.sb||0;
@@ -465,7 +465,7 @@ export function create(host,hooks){
         /* the start: each rider holds his lane, the lanes narrow with the start (they keep their order across it); into turn 1 the racing line takes over */
         const lane=clamp(gridLat(r.k)*clamp((hw-0.6)/Math.max(0.5,GRID?GRID.use:hw),0.62,1),-(hw-0.6),hw-0.6), wS=sstep(turn1-44,turn1-18,r.D);   /* (the lanes narrow a little; where the start gets narrower still the outside riders tuck in behind: the funnel) */
         let line=r.bias*hw*0.45; { const kk=r.onStart?MX.Course.startFrame(C,Math.min(C.Ls,Math.max(0,r.P)+9),tmpO).k:MX.Course.frame(C,r.s+9,tmpO).k; if(Math.abs(kk)>1/30) line=-Math.sign(kk)*hw*0.36+r.bias*0.5; }
-        target=lane*(1-wS)+line*wS; pushes=wS>0.55;
+        target=lane*(1-wS)+line*wS; pushes=wS>0.02;   /* (from where the lanes start to bend to the racing line, level riders keep their sides) */
       } else { const kk=MX.Course.frame(C,r.s+9,tmpO).k; target=Math.abs(kk)>1/30?-Math.sign(kk)*hw*0.36+r.bias*0.5:r.bias*hw*0.45; }
       /* passing room, solved across the track (not one push after another): a rider LEVEL with him (overlapping along the track) is never crossed:
          he stays on his side of him, at least SEP away; a rider just ahead that he is closing on, is held back by or is already passing must not be
