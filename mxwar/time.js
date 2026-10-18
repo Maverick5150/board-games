@@ -630,7 +630,11 @@ function you(G,s,k,f,nameOf){
   if(tm.yz[k]&&out.crash==null) add("yellow","yellow flag slowed everybody",-tm.P.YLF*p);
   if(!out.crash&&(R.hold[k-1]||R.hold[k-2]||R.hold[k-3])) add("fire","attacking after the crash",0);   // the 3 laps after a remount (FIRE)
   /* a lap at the model's slowest pace (rmax x the typical lap: the pace curve stops there): the card chips cannot explain a lap that is already at the floor, so say so (first chip) */
-  if(fin&&k>1&&!out.crash&&!hold&&!tm.yz[k]&&Math.abs(out.time-p*tm.P.rmax)<=0.003) rs.unshift({ kind:"cap", text:"at the slowest lap (+"+Math.round((tm.P.rmax-1)*100)+"%)", sec:0 });
+  if(fin&&k>1&&!out.crash&&!hold&&!tm.yz[k]&&Math.abs(out.time-p*tm.P.rmax)<=0.003){
+    /* the pace curve is flat down there: this lap's card and result did not change his time, so no seconds are claimed for them (a pot or a war still names what happened) */
+    for(var ci=rs.length-1;ci>=0;ci--){ if(rs[ci].kind==="card") rs.splice(ci,1); else if(rs[ci].kind==="result") rs[ci].sec=0; }
+    rs.unshift({ kind:"cap", text:"at the slowest lap (+"+Math.round((tm.P.rmax-1)*100)+"%)", sec:0 });
+  }
   /* the gap to the leader against the last line: closing (+) or falling back (-), in seconds. A person roots for this one, so it comes right after a crash or the cap chip */
   out.dgap=null;
   if(fin&&k>1&&!out.crash&&out.to>1&&out.gap!=null){ out.dgap=(T[k-2]-leaderLine(G,k-1))/1000-out.gap;
