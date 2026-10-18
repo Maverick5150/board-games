@@ -207,7 +207,9 @@ function bikeMaterial(lo,D,U){
       if(phys) fs=fs.replace("#include <lights_physical_fragment>","#include <lights_physical_fragment>\nmaterial.clearcoat*=bkPl*(1.0-mudK);");
       fs=fs.replace("#include <lights_fragment_maps>",THREE.ShaderChunk.lights_fragment_maps.replace("iblIrradiance += getIBLIrradiance( geometryNormal );",""));
       fs=fs.replace("#include <aomap_fragment>","reflectedLight.indirectDiffuse*=vMat.w;\n#ifdef USE_ENVMAP\nreflectedLight.indirectSpecular*=mix(vMat.w,1.0,0.35);\n#endif\n");
-    } else fs=fs.replace("#include <aomap_fragment>","reflectedLight.indirectDiffuse*=vMat.w;\n");
+    } else { fs=fs.replace("#include <aomap_fragment>","reflectedLight.indirectDiffuse*=vMat.w;\n");
+      /* the Fire TV tier (Lambert, no environment map): a cheap Blinn highlight of the key light on the plastics and the metal, so the bikes still read glossy on the TV */
+      fs=fs.replace("#include <emissivemap_fragment>","#include <emissivemap_fragment>\n#if NUM_DIR_LIGHTS > 0\n{ vec3 bkV=normalize(vViewPosition); vec3 bkH=normalize(directionalLights[0].direction+bkV); float bkS=pow(max(dot(normal,bkH),0.0),mix(36.0,90.0,bkPl))*(1.0-mudK)*max(bkPl,vMat.x*0.8); totalEmissiveRadiance+=directionalLights[0].color*bkS*0.22; }\n#endif\n"); }
     sh.fragmentShader=fs;
   };
   m.customProgramCacheKey=()=>"mxbike2-"+(phys?"phys":std?"std":"lam");
