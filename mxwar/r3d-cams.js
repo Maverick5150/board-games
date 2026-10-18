@@ -364,16 +364,23 @@ export function createCams(VIEW){
     if(K.sideT===undefined) K.sideT=-1;
     { const spotClear=sg=>{ const q=pathAt(r.D-back,clamp(r.lat+sg*sd0,-lim,lim),pb); let m=1e9; for(let i2=0;i2<rs.length;i2++){ const x=rs[i2]; if(x===r||x.gone||!x.pos) continue; const d=Math.hypot(x.pos.x-q.x,x.pos.z-q.z); if(d<m) m=d; } return m; };
       const cl=spotClear(-1), cr=spotClear(1);
-      if(K.sideT<0&&cl<1.5&&cr>cl+0.6) K.sideT=1; else if(K.sideT>0&&cr<1.5&&cl>cr+0.6) K.sideT=-1; }
+      /* (polish, D12: a side swap carries the lens across the subject's lane, through whoever is alongside: only when the other side is really clear (2.6 m) and not twice in a row within 1.6 s) */
+      K.swapT=(K.swapT||0)+Math.max(0,dt);
+      if(K.swapT>1.6){ if(K.sideT<0&&cl<1.5&&cr>2.6&&cr>cl+0.6){ K.sideT=1; K.swapT=0; } else if(K.sideT>0&&cr<1.5&&cl>2.6&&cl>cr+0.6){ K.sideT=-1; K.swapT=0; } } }
     if(!K.init||snap) K.side=new Sd(K.sideT*sd0);
     const sideS=K.side.step(K.sideT*sd0,0.4,dt), latC=clamp(r.lat+sideS,-lim,lim), pc=pathAt(r.D-back,latC,pa);
     E.x=pc.x; E.z=pc.z;
     /* riders are solid: one close to the lens pushes it away (a continuous push, so it glides round the pack) and lifts it over his head */
-    let near=0; for(let i2=0;i2<rs.length;i2++){ const x=rs[i2]; if(x===r||x.gone||!x.pos) continue; const dx=E.x-x.pos.x, dz=E.z-x.pos.z, d=Math.hypot(dx,dz); if(d<1.9){ const k=(1.9-d)*0.8/Math.max(d,0.25); E.x+=dx*k; E.z+=dz*k; near=Math.max(near,1-d/1.9); } }
+    /* (polish, director note D12: a bike is 2.2 m long, so the keep-out is measured from its WHEELBASE SEGMENT, not from its origin: a rider alongside the lens had his rear wheel at 0.3 m from it while his origin was 1.4 m away and the push did nothing) */
+    let near=0; for(let pass=0;pass<2;pass++) for(let i2=0;i2<rs.length;i2++){ const x=rs[i2]; if(x===r||x.gone||!x.pos) continue;
+      const fx=Math.cos(x.th||0), fz=Math.sin(x.th||0); let tq=(E.x-x.pos.x)*fx+(E.z-x.pos.z)*fz; tq=clamp(tq,-1.05,1.05);
+      let dx=E.x-(x.pos.x+fx*tq), dz=E.z-(x.pos.z+fz*tq), d=Math.hypot(dx,dz);
+      if(d<2.1){ if(d<0.35){ const sgn=((E.x-x.pos.x)*-fz+(E.z-x.pos.z)*fx)>=0?1:-1; dx=-fz*sgn; dz=fx*sgn; d=0.35; }   /* (nearly on the segment: the side he is on, not a flip) */
+        const k=(2.1-d)/Math.max(d,0.35); E.x+=dx*k; E.z+=dz*k; near=Math.max(near,1-d/2.1); } }
     K.near=K.near===undefined?near:K.near+(near-K.near)*Math.min(1,Math.max(0,dt)*6);
     /* height: above the dirt under the lens, smoothed (the whoops don't bounce it), lifted a little with the bike over a jump, and high enough to see him over a crest */
     const hAir=Math.max(0,(r.oy!=null&&r.gy!=null?r.oy-r.gy:0)), air=K.air.step(hAir,0.25,dt);
-    let yT=pc.g+up+0.55*Math.min(3,air)+0.85*K.near;
+    let yT=pc.g+up+0.55*Math.min(3,air)+1.5*K.near;   /* (polish: lifted over his head: a rider's helmet is at 1.7 m) */
     { let need=-1e9; for(let q=1;q<=3;q++){ const t=q*0.25, px=lerp(E.x,S.x,t), pz=lerp(E.z,S.z,t), g=floorFine(px,pz)+0.28; need=Math.max(need,(g-t*S.y)/(1-t)); } if(need>yT) yT=need; }
     if(!K.init||snap) K.y.snap(yT); const ys=K.y.step(yT,0.24,dt);
     E.y=Math.max(ys,pc.g+0.42,floorFine(E.x,E.z)+0.4);

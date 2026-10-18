@@ -76,6 +76,7 @@ function bikeMaterial(lo){
     let fs=sh.fragmentShader.replace("#include <common>","#include <common>\nuniform sampler2D uLiv;\nuniform vec3 uMudCol;\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec3 vMud;\nvarying vec3 vLoc;\nvarying vec2 vLiv;\n"+(std?GLSL_NOISE:""));
     fs=fs.replace("#include <color_fragment>",
       "#include <color_fragment>\n"+
+      "{ float bkZ=vViewPosition.z; if(bkZ<1.7){ float bkA=smoothstep(0.8,1.7,bkZ); if(bkA<fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))))) discard; } }\n"+   /* the near-lens fade: no bike ever fills the lens (director note D12) */
       "float bkWl=step(7.5,vMat.z); float bkTn=vMat.z-8.0*bkWl; float bkSp=step(3.5,bkTn); bkTn-=4.0*bkSp;\n"+
       "if(bkSp>0.5&&vMud.z>0.02){ if(fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453)<vMud.z) discard; }\n"+
       "{ float lk=step(0.5,bkTn)*(1.0-step(1.5,bkTn))+step(2.5,bkTn)*0.85; vec3 lv=texture2D(uLiv,vLiv).rgb; float sty=vMud.y; vec3 b0=diffuseColor.rgb; vec3 cA=vAcc, cB=vec3(0.010), cC=vec3(0.80);\n"+
@@ -115,7 +116,7 @@ export function createBike(n,lo,mk,q){
     sets.push(S); return S;
   };
   if(!lo) mkSet(0,d2); mkSet(1,d1); mkSet(2,buildFarBike(),true);
-  M.bk={n:n,lo:!!lo,sets:sets,cur:new Int8Array(n).fill(-1),lastI:1e9,pc:new Float32Array(n*3).fill(1),ac:new Float32Array(n*3).fill(1),
+  M.bk={n:n,lo:!!lo,sets:sets,cur:new Int8Array(n).fill(-1),lastI:1e9,hiMax:q.bikeHi!=null?q.bikeHi:(lo?0:4),dist:new Float32Array(n).fill(1e9),cutD:1e9,pc:new Float32Array(n*3).fill(1),ac:new Float32Array(n*3).fill(1),
     /* the distances at which a bike leaves one set for the next (m): hysteresis of 8% */
     th:lo?[q.bikeLod&&q.bikeLod[0]||8]:(q.bikeLod&&q.bikeLod.length>1?q.bikeLod:[9.5,36]),sp:new Float32Array(n*2)};
   return M;
@@ -169,13 +170,18 @@ function lodOf(K,i,d){
   while(l>0&&d<K.th[l-1]*0.92) l--;
   return l;
 }
+/* the close level of detail (LOD 0, 21.8k triangles a bike, drawn twice with the shadow pass) is for the nearest q.bikeHi bikes only: the cut distance is the N-th nearest of the last frame (polish step, director note D6: the tier flag the bike never read) */
+function capHi(K,l,d){ return (l===0&&!K.lo&&K.sets[0].lod===0&&(d>K.cutD||K.hiMax<=0))?1:l; }
 /* every frame starts with the first bike posed or hidden again (the riders are posed in order, each once a frame): the sets are emptied */
-function newFrame(K,i){ if(i<=K.lastI){ for(const S of K.sets){ S.cnt=0; for(const m of S.meshes){ m.count=0; m.visible=false; } } } K.lastI=i; }
+function newFrame(K,i){ if(i<=K.lastI){ for(const S of K.sets){ S.cnt=0; for(const m of S.meshes){ m.count=0; m.visible=false; } }
+    const n=K.n, hm=K.hiMax; if(hm>0&&hm<n){ const a=Array.prototype.slice.call(K.dist); a.sort((x,y)=>x-y); K.cutD=a[hm-1]+0.001; } else K.cutD=1e9; K.dist.fill(1e9); }
+  K.lastI=i; }
 /* the bike's pose: B = the bike's world matrix; st = the per-frame state (compF, compR, spinF, spinR, lodD, mud, steer, k) */
 export function poseBike(M,i,B,st){
   const K=M.bk; newFrame(K,i);
   if(st.lodCut) K.cur[i]=-1;
-  const li=lodOf(K,i,st.lodD); K.cur[i]=li;
+  K.dist[i]=(st.lodD!=null&&isFinite(st.lodD))?st.lodD:1e9;
+  const li=capHi(K,lodOf(K,i,st.lodD),st.lodD); K.cur[i]=li;
   const S0=K.sets[li], slot=S0.cnt++, cf=st.compF||0, cr=st.compR||0;
   /* how far the wheels turned since the last frame: past a spoke's spacing the spokes alias, so they fade (screen-door dither) as the wheel blurs */
   const dsp=Math.max(Math.abs((st.spinR||0)-K.sp[i*2+1]),Math.abs((st.spinF||0)-K.sp[i*2])); K.sp[i*2]=st.spinF||0; K.sp[i*2+1]=st.spinR||0;
@@ -207,7 +213,7 @@ export function poseBike(M,i,B,st){
   for(let k=1;k<3;k++){ _m2.multiplyMatrices(B,PLATE_L[k]); M.plate.setMatrixAt(i*3+k,_m2); }
 }
 export function hideBike(M,i){
-  const K=M.bk; newFrame(K,i); K.cur[i]=-1;
+  const K=M.bk; newFrame(K,i); K.cur[i]=-1; K.dist[i]=1e9;
   for(let k=0;k<3;k++) M.plate.setMatrixAt(i*3+k,_Z);
 }
 /* how many bikes each level of detail holds this frame (tests, the viewer) */
