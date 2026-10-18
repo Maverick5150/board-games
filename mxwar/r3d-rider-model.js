@@ -22,8 +22,10 @@ export const REST=[[0,0,0],[0,0.10,0],[0,0.26,0],[0.008,0.53,0],[0.012,0.61,0],
 export const LEN={UA:0.29,FA:0.27,HAND:0.075,TH:0.43,SH:0.45};
 
 /* ---------------- a tiny indexed-geometry builder ---------------- */
-function GB(){ this.P=[]; this.C=[]; this.K=[]; this.F=[]; this.I=[]; this.n=0; }
-GB.prototype.vert=function(p,col,sk,fx){ this.P.push(p[0],p[1],p[2]); this.C.push(col[0],col[1],col[2]); this.K.push(sk[0],sk[1],sk[2],sk[3]); this.F.push(fx[0],fx[1],fx[2]); return this.n++; };
+function GB(){ this.P=[]; this.C=[]; this.K=[]; this.F=[]; this.I=[]; this.n=0; this.part=0; }
+/* every vertex also carries its PART of the outfit (PART.*, set with g.part before a loft): the fragment shader paints the jersey, sleeves, gloves, pants, boots and helmet from it (r3d-riders.js apparel) */
+GB.prototype.vert=function(p,col,sk,fx){ this.P.push(p[0],p[1],p[2]); this.C.push(col[0],col[1],col[2]); this.K.push(sk[0],sk[1],sk[2],sk[3]); this.F.push(fx[0],fx[1],fx[2],this.part); return this.n++; };
+export const PART={JERSEY:0,SLEEVE:1,GLOVE:2,PANTS:3,BOOT:4,GEAR:5,SHELL:6,TRIM:7};
 GB.prototype.geometry=function(){
   const n=this.n, P=new Float32Array(this.P), N=new Float32Array(n*3), I=this.I;
   for(let t=0;t<I.length;t+=3){ const a=I[t]*3, b=I[t+1]*3, c=I[t+2]*3;
@@ -35,7 +37,7 @@ GB.prototype.geometry=function(){
   g.setAttribute("position",new THREE.BufferAttribute(P,3)); g.setAttribute("normal",new THREE.BufferAttribute(N,3));
   g.setAttribute("color",new THREE.BufferAttribute(new Float32Array(this.C),3));
   g.setAttribute("aSkin",new THREE.BufferAttribute(new Float32Array(this.K),4));   /* bone 0, bone 1, weight 0, weight 1 */
-  g.setAttribute("aFx",new THREE.BufferAttribute(new Float32Array(this.F),3));     /* colour slot (0 team, 1 accent, 2 fixed), cloth flutter, mud weight */
+  g.setAttribute("aFx",new THREE.BufferAttribute(new Float32Array(this.F),4));     /* colour slot (0 team, 1 accent, 2 fixed), cloth flutter, mud weight, the outfit part (PART.*) */
   g.setIndex(new THREE.BufferAttribute(n>65000?new Uint32Array(I):new Uint16Array(I),1));
   g.computeBoundingSphere(); return g;
 };
@@ -98,17 +100,17 @@ function addTorso(g,seg,lo){
       /* the jersey in the team colour; the side panels under the arms, a band across the chest and the shoulder yoke in the accent colour */
       slot:a=>y>0.45?1:(y<0.40&&Math.abs(Math.sin(a))>0.8)?4:(y>0.29&&y<0.36&&Math.cos(a)>0.15)?3:0,
       col:a=>{ let c=1; if(y<0.09) c=0.86+0.14*sstp(-0.05,0.09,y); if(y>0.20&&y<0.30&&Math.cos(a)<-0.2) c*=0.95; if(Math.abs(Math.sin(a))>0.9&&y>0.15&&y<0.45) c*=0.72; if(Math.cos(a)<-0.985&&y>0.1&&y<0.45) c*=0.86; return [c,c,c]; } }); });
-  loft(g,rows,seg,"t");
+  g.part=PART.JERSEY; loft(g,rows,seg,"t");
   /* the belt and the pants' waist under the jersey hem, the pelvis */
   const pel=[[-0.17,0.0,0.112,0.168],[-0.10,0.0,0.128,0.184],[-0.03,0.0,0.136,0.184],[0.04,0.0,0.132,0.176]].map(t=>ring([t[1],t[0],0],t[2],t[3],{bones:[BN.PELVIS,BN.PELVIS,0],col:[0.46,0.46,0.46],slot:a=>Math.abs(Math.sin(a))>0.9?4:5,fold:lo?0:0.006}));
-  loft(g,thin(pel,lo),seg,"b");
+  g.part=PART.PANTS; loft(g,thin(pel,lo),seg,"b");
 }
 function addNeck(g,seg,lo){
   /* the neck brace: a collar over the shoulders, higher at the front and back; the neck inside it */
   const nb=[[0.462,0.018,0.118,0.158],[0.500,0.012,0.108,0.140],[0.545,0.006,0.082,0.100],[0.585,0.008,0.070,0.078]].map(t=>ring([t[1],t[0],0],t[2],t[3],{bones:[BN.CHEST,BN.NECK,sstp(0.42,0.62,t[0])],col:COL.mid,slot:2,k:a=>1+0.05*Math.pow(Math.abs(Math.cos(a)),6)}));
-  loft(g,thin(nb,lo),seg,"t");
+  g.part=PART.GEAR; loft(g,thin(nb,lo),seg,"t");
   const nk=[[0.53,0.008,0.050],[0.62,0.012,0.046]].map(t=>ring([t[1],t[0],0],t[2],t[2],{bones:[BN.NECK,BN.HEAD,sstp(0.54,0.62,t[0])],col:COL.dark,slot:2}));
-  loft(g,nk,lo?5:Math.max(6,seg-2),"t");
+  g.part=PART.GEAR; loft(g,nk,lo?5:Math.max(6,seg-2),"t");
 }
 function addArm(g,sd,seg,lo){
   const z=0.215*sd, UA=sd<0?BN.UAL:BN.UAR, FA=sd<0?BN.FAL:BN.FAR, HA=sd<0?BN.HAL:BN.HAR;
@@ -116,11 +118,11 @@ function addArm(g,sd,seg,lo){
   const S=[[0.565,0.048,0.048,[BN.CHEST,UA,0.5],0],[0.520,0.066,0.064,[BN.CHEST,UA,0.55],0],[0.470,0.064,0.062,[BN.CHEST,UA,0.7],0.006],[0.400,0.058,0.056,[UA,UA,0],0.006],[0.300,0.052,0.050,[UA,UA,0],0.006],[0.235,0.052,0.050,[UA,FA,0.18],0.007],
     [0.200,0.058,0.056,[UA,FA,0.5],0.008],[0.165,0.054,0.052,[UA,FA,0.82],0.007],[0.090,0.052,0.050,[FA,FA,0],0.006],[0.010,0.050,0.048,[FA,FA,0],0.004],[-0.040,0.046,0.046,[FA,HA,0.2],0],[-0.075,0.043,0.044,[FA,HA,0.5],0]];
   const rows=thin(S,lo).map(t=>{ const y=t[0]; return ring([0,y,z],t[1],t[2],{bones:t[3],fold:lo?0:t[4],flap:y<0.15?0.7:y<0.3?0.25:0,mud:y<0.1?0.35:0,slot:(y>0.29&&y<0.40)?3:y<0.03?1:0,col:K1}); });
-  loft(g,rows,seg,"tb");
+  g.part=PART.SLEEVE; loft(g,rows,seg,"tb");
   /* the glove: a fist on the bar (wide across the bar, along z), the cuff in the accent colour above it */
   const G=[[-0.060,0.047,0.052,[FA,HA,0.5],1],[-0.095,0.047,0.058,[HA,HA,0],2],[-0.140,0.052,0.062,[HA,HA,0],2],[-0.180,0.042,0.054,[HA,HA,0],2],[-0.198,0.026,0.036,[HA,HA,0],2]];
   const gr=thin(G,lo).map(t=>ring([0.006,t[0],z],t[1],t[2],{bones:t[3],col:t[4]===1?[0.9,0.9,0.9]:COL.glove,slot:t[4]===1?1:2,n:2.6,mud:0.45}));
-  loft(g,gr,lo?5:Math.max(6,seg-2),"b");
+  g.part=PART.GLOVE; loft(g,gr,lo?5:Math.max(6,seg-2),"b");
   if(!lo){ /* the elbow guard under the sleeve: a dark bump on the back of the elbow */ }
 }
 function addLeg(g,sd,seg,lo){
@@ -129,28 +131,28 @@ function addLeg(g,sd,seg,lo){
   const P=[[0.030,0.098,0.096,[BN.PELVIS,TH,0.55],0],[-0.060,0.100,0.095,[BN.PELVIS,TH,0.9],0.01],[-0.180,0.094,0.090,[TH,TH,0],0.012],[-0.300,0.084,0.080,[TH,TH,0],0.012],[-0.395,0.078,0.075,[TH,SH,0.2],0.012],
     [-0.460,0.082,0.078,[TH,SH,0.5],0.012],[-0.530,0.074,0.070,[TH,SH,0.85],0.01],[-0.600,0.066,0.063,[SH,SH,0],0.01]];
   const pr=thin(P,lo).map(t=>{ const y=t[0]; return ring([0.003+(y<-0.2?0.006:0),y,z],t[1],t[2],{bones:t[3],fold:lo?0:t[4],col:[0.46,0.46,0.46],slot:5,flap:0.18,mud:sstp(-0.30,-0.62,y)*0.6}); });
-  loft(g,pr,seg,"");
+  g.part=PART.PANTS; loft(g,pr,seg,"");
   /* the knee brace: a shell over the knee, a cup in front (the accent colour), a dark band round, a hinge on each side */
   const kb=[-0.385,-0.425,-0.465,-0.505,-0.545].map((y,i)=>{ const f=1-Math.abs(i-2)/2.6; return ring([0.012,y,z],0.082+0.012*f,0.080+0.010*f,{bones:[TH,SH,sstp(-0.40,-0.52,y)],col:a=>Math.cos(a)>0.45?[0.9,0.9,0.9]:COL.mid,slot:a=>Math.cos(a)>0.45?1:2,
     k:a=>1+0.5*Math.pow(Math.max(0,Math.cos(a)),3)*f*0.55+0.07*Math.pow(Math.abs(Math.sin(a)),8)*f}); });
-  if(!lo) loft(g,kb,Math.max(8,seg),"tb");
+  g.part=PART.GEAR; if(!lo) loft(g,kb,Math.max(8,seg),"tb");
   /* the boot: a collar, the white upper, buckles, the ankle */
   const B=[[-0.575,0.0,0.082,0.076,[SH,SH,0],COL.mid,2],[-0.610,0.008,0.077,0.072,[SH,SH,0],COL.boot,2],[-0.700,0.014,0.074,0.069,[SH,SH,0],COL.boot,2],[-0.790,0.012,0.072,0.067,[SH,FT,0.3],COL.boot,2],[-0.870,0.008,0.070,0.065,[SH,FT,0.75],COL.boot,2],[-0.935,0.004,0.066,0.062,[FT,FT,0],COL.boot,2]];
   const br=thin(B,lo).map(t=>ring([t[1],t[0],z],t[2],t[3],{bones:t[4],col:t[5],slot:t[6],mud:sstp(-0.5,-0.95,t[0])*0.9,fold:lo?0:0.005}));
-  loft(g,br,seg,"b");
+  g.part=PART.BOOT; loft(g,br,seg,"b");
   /* the foot: a loft along +x from the heel (rings stand in the y-z plane, the toe box and the dark sole) */
   const F=[[-0.080,-0.946,0.044,0.048],[-0.045,-0.940,0.052,0.060],[0.030,-0.952,0.044,0.064],[0.110,-0.962,0.036,0.067],[0.170,-0.968,0.030,0.062],[0.208,-0.975,0.019,0.042]];
   const fr=thin(F,lo).map(t=>ring([t[0],t[1],z],t[2],t[3],{u:Y,v:Z,bones:[FT,FT,0],mud:0.9,n:2.4,col:a=>Math.cos(a)<-0.5?COL.sole:(t[0]>0.12&&Math.cos(a)>0.55?COL.mid:COL.boot),slot:2}));
-  loft(g,fr,lo?6:Math.max(8,seg),"tb");
+  g.part=PART.BOOT; loft(g,fr,lo?6:Math.max(8,seg),"tb");
   if(!lo){ /* the buckles: three straps across the shin, small dark / accent boxes on the outer front */
-    [-0.655,-0.735,-0.815].forEach((y,i)=>{ const bk=[0,1].map(q=>ring([0.040+0.004*i+q*0.014,y,z+sd*0.022],0.014,0.030-q*0.008,{bones:[SH,SH,0],col:COL.dark,slot:i===1?1:2,n:3})); loft(g,bk,6,"tb"); }); }
+    [-0.655,-0.735,-0.815].forEach((y,i)=>{ const bk=[0,1].map(q=>ring([0.040+0.004*i+q*0.014,y,z+sd*0.022],0.014,0.030-q*0.008,{bones:[SH,SH,0],col:COL.dark,slot:i===1?1:2,n:3})); g.part=PART.GEAR; loft(g,bk,6,"tb"); }); }
 }
 /* the helmet: a modified sphere (a long shell with a chin bar, an eye port), a peak, the goggles' frame and lens, the strap */
 function addHelmet(g,hi){
   const c=[0.026,0.742,0], rx=0.158, ry=0.144, rz=0.131, nlon=hi?22:8, nlat=hi?13:5, H=BN.HEAD, sk=[H,H,1,0];
   const rows=[]; const th0=-0.95, th1=Math.PI/2;
   for(let j=0;j<=nlat;j++){ const th=th0+(th1-th0)*j/nlat; rows.push(th); }
-  const base=g.n;
+  const base=g.n; g.part=PART.SHELL;
   for(let j=0;j<=nlat;j++){ const th=rows[j];
     for(let k=0;k<nlon;k++){ const ph=k/nlon*Math.PI*2, dx=Math.cos(th)*Math.cos(ph), dy=Math.sin(th), dz=Math.cos(th)*Math.sin(ph);
       let px=c[0]+rx*dx, py=c[1]+ry*dy, pz=c[2]+rz*dz;
@@ -175,6 +177,7 @@ function addHelmet(g,hi){
   { const ph0=g.n; for(let k=0;k<nlon;k++){ const o=(base+k)*3; g.vert([g.P[o],g.P[o+1],g.P[o+2]],COL.dark,sk,[2,0,0]); } const ci=g.vert([c[0]-0.012,c[1]-0.115,0],COL.dark,sk,[2,0,0]);
     for(let k=0;k<nlon;k++) g.I.push(ph0+k,ph0+(k+1)%nlon,ci); { /* orient downward */ const n0=g.I.length-nlon*3, P=g.P, a=g.I[n0]*3, b=g.I[n0+1]*3, cc=g.I[n0+2]*3; const ny=(P[b+2]-P[a+2])*(P[cc]-P[a])-(P[b]-P[a])*(P[cc+2]-P[a+2]); if(ny>0) for(let t=n0;t<g.I.length;t+=3){ const s=g.I[t+1]; g.I[t+1]=g.I[t+2]; g.I[t+2]=s; } } }
   /* the peak: a thick curved plate above the eyes, angled up, in the accent colour (a darker underside, a rim) */
+  g.part=PART.TRIM;
   { const nu=hi?5:2, nv=hi?8:4, p0=g.n, W=nv+1;
     for(let side=0;side<2;side++){ const off=side?0.0085:-0.0085;
       for(let i=0;i<=nu;i++){ const u=i/nu; for(let j=0;j<=nv;j++){ const v=-1+2*j/nv, w=1-Math.abs(v);

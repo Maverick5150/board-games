@@ -15,6 +15,7 @@ import {canvas,MAT,getKitTier} from "./r3d-util.js";
 import {BIKE,createBike,colorBike,poseBike,hideBike,plateGeo,drawPlate} from "./r3d-bike.js";
 import {buildRider,NB} from "./r3d-rider-model.js";
 import {newRig,poseRide,poseBody} from "./r3d-rider-pose.js";
+import {applyApparel,AP_VERT_DECL,AP_VERT_SET} from "./r3d-rider-apparel.js";   /* the outfit painted in the fragment shader (polish step) */
 export {BIKE} from "./r3d-bike.js";   /* (the old import path) */
 export {emit,stepParticles} from "./r3d-fx.js";   /* (the old import path: the particles moved to r3d-fx.js; the first argument is now the particle system FX.part, no longer the rider set) */
 
@@ -59,11 +60,12 @@ function atlasMat(T,cols,rows,opts){
 /* per vertex: aSkin (bone, bone, weight, weight), aFx (colour slot 0 team / 1 accent / 2 fixed, flutter, mud weight); per instance: aInstA (rider row, team rgb),
    aInstB (accent rgb, wind), aInstC (mud, -, atlas column, atlas row). uBones: NB x 3 texels a row (the three rows of each bone's 3 x 4 matrix), one row a rider. */
 const SKIN_DECL=`
-attribute vec4 aSkin; attribute vec3 aFx; attribute vec4 aInstA; attribute vec4 aInstB; attribute vec4 aInstC;
+attribute vec4 aSkin; attribute vec4 aFx; attribute vec4 aInstA; attribute vec4 aInstB; attribute vec4 aInstC;
 uniform highp sampler2D uBones; uniform float uTime;
 #ifdef MX_WRINKLE
 varying vec3 vMxP; varying float vMxK;
 #endif
+${AP_VERT_DECL}
 void mxRows(out vec4 R0,out vec4 R1,out vec4 R2){
   int row=int(aInstA.x+0.5), b0=int(aSkin.x+0.5)*3, b1=int(aSkin.y+0.5)*3;
   vec4 a0=texelFetch(uBones,ivec2(b0,row),0), a1=texelFetch(uBones,ivec2(b0+1,row),0), a2=texelFetch(uBones,ivec2(b0+2,row),0);
@@ -90,6 +92,7 @@ vec3 transformed=vec3(dot(mxR0,mxP),dot(mxR1,mxP),dot(mxR2,mxP));
 #ifdef MX_WRINKLE
  vMxP=position; vMxK=clamp(0.25+aFx.y*1.4,0.0,1.0);
 #endif
+${AP_VERT_SET}
 #ifdef MX_ROWS
  { float fl=aFx.y*aInstB.w; if(fl>0.0){ float ph=dot(position,vec3(5.0,8.0,4.0))+aInstA.x*2.7; transformed+=objectNormal*(fl*0.015*(0.6*sin(uTime*12.0+ph)+0.4*sin(uTime*19.0+ph*1.6))); } }
 #endif
@@ -105,7 +108,9 @@ function skinMat(mat,U,kind,opts){
   opts=opts||{};
   mat.onBeforeCompile=sh=>{
     sh.uniforms.uBones=U.uBones; sh.uniforms.uTime=U.uTime;
-    if(opts.wrinkle){ sh.vertexShader="#define MX_WRINKLE\n"+sh.vertexShader;
+    if(opts.apparel) applyApparel(sh,opts.apparel,opts.kind||"cloth");
+    if(kind==="main") sh.fragmentShader=sh.fragmentShader.replace("#include <color_fragment>","#include <color_fragment>\n/* the near-lens fade (director note D12: no body ever fills the lens): a dithered dissolve between 1.7 m and 0.8 m from the camera */\n { float mxZ=vViewPosition.z; if(mxZ<1.7){ float mxA=smoothstep(0.8,1.7,mxZ); if(mxA<fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))))) discard; } }");
+    if(opts.wrinkle&&!opts.apparel){ sh.vertexShader="#define MX_WRINKLE\n"+sh.vertexShader;
       sh.fragmentShader="#define MX_WRINKLE\nvarying vec3 vMxP; varying float vMxK;\n"+sh.fragmentShader.replace("#include <color_fragment>","#include <color_fragment>\n { float w=sin(vMxP.y*46.0+2.2*sin(vMxP.x*29.0+vMxP.z*35.0))*0.55+sin(vMxP.y*83.0+vMxP.z*41.0+1.7)*0.25; diffuseColor.rgb*=1.0+0.06*w*vMxK; }"); }
     /* a rim of the rider's own colour on the edges facing away from the camera: the riders stand out of the dark stands as in a backlit cover */
     if(opts.rim){ sh.uniforms.uRim={value:opts.rim}; sh.fragmentShader="uniform float uRim;\n"+sh.fragmentShader.replace("#include <emissivemap_fragment>","#include <emissivemap_fragment>\n float mxRim=pow(1.0-clamp(dot(normalize(normal),normalize(vViewPosition)),0.0,1.0),3.0); totalEmissiveRadiance+=diffuseColor.rgb*mxRim*uRim;"); }
@@ -115,7 +120,7 @@ function skinMat(mat,U,kind,opts){
     if(opts.atlas) vs=vs.replace("#include <uv_vertex>","#include <uv_vertex>\n#ifdef USE_MAP\n vMapUv=vec2((aInstC.z+uv.x)*uGrid.x,1.0-(aInstC.w+1.0-uv.y)*uGrid.y);\n#endif");
     sh.vertexShader=vs;
   };
-  mat.customProgramCacheKey=()=>"mx-skin-"+kind+"-"+(opts.tag||"")+(opts.atlas?"-atlas":"")+(opts.rim?"-rim":"")+(opts.wrinkle?"-wr":"");   /* (a key of its own per material: three.js only calls onBeforeCompile for a program it has not built yet, so a second material with the same key would never get its uniforms) */
+  mat.customProgramCacheKey=()=>"mx-skin-"+kind+"-"+(opts.tag||"")+(opts.atlas?"-atlas":"")+(opts.rim?"-rim":"")+(opts.wrinkle&&!opts.apparel?"-wr":"")+(opts.apparel?"-ap"+opts.apparel+(opts.kind||""):"");   /* (a key of its own per material: three.js only calls onBeforeCompile for a program it has not built yet, so a second material with the same key would never get its uniforms) */
   return mat;
 }
 /* an instanced geometry (a plain Mesh drawn instanced: no instance matrix) over a source geometry, sharing the per-instance attributes */
@@ -142,13 +147,18 @@ export function createRiders(list,opts){
   /* THE LEAD'S MATERIAL KIT on the gear (integrate step): the jersey, pants and gloves are physically based cloth (rough, a touch of the stadium's light from the environment map), the helmet is a glossy clear-coat shell that reflects the floodlights; the kit tier follows the quality tier (r3d-look.js), "low" / Reduce effects keep the old Lambert / Phong parts.
      The skinning patch (skinMat) works on any of them: the same chunks. The riders' own rim light is lighter than in the rider branch (the lead's rim and the bloom do that work now). */
   const KT=lo?"low":getKitTier();
-  const cloth=skinMat(KT==="low"?(lo?new THREE.MeshLambertMaterial({vertexColors:true}):new THREE.MeshPhongMaterial({vertexColors:true,shininess:22,specular:0x262626})):new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.9,metalness:0,envMapIntensity:0.5}),U,"main",{tag:"cloth"+KT,rim:lo?0:(KT==="low"?0.34:0.16),wrinkle:!lo});
-  const shell=skinMat(KT==="low"?(lo?new THREE.MeshLambertMaterial({vertexColors:true}):new THREE.MeshPhongMaterial({vertexColors:true,shininess:120,specular:0x9a9a9a})):MAT.gloss(null,{vertexColors:true}),U,"main",{tag:"shell"+KT,rim:lo?0:(KT==="low"?0.22:0.08)});
+  /* THE APPAREL (r3d-rider-apparel.js): the outfit is painted in the fragment shader from the rest-pose position and the outfit part: level 2 (noise, creases, mud splatter) on the near riders of the physically based tiers, level 1 (flat panels, seams, a plain mud tint) on the thin pack and the FIRE TV tier */
+  const apHi=(lo||KT==="low")?1:2;
+  const mkCloth=(ap,tag)=>skinMat(KT==="low"?(lo?new THREE.MeshLambertMaterial({vertexColors:true}):new THREE.MeshPhongMaterial({vertexColors:true,shininess:22,specular:0x262626})):new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.92,metalness:0,envMapIntensity:0.42}),U,"main",{tag:"cloth"+KT+tag,rim:lo?0:(KT==="low"?0.34:0.16),wrinkle:!lo,apparel:ap,kind:"cloth"});
+  const cloth=mkCloth(apHi,"hi"), clothLo=mkCloth(1,"lo");
+  const shell=skinMat(KT==="low"?(lo?new THREE.MeshLambertMaterial({vertexColors:true}):new THREE.MeshPhongMaterial({vertexColors:true,shininess:120,specular:0x9a9a9a})):MAT.gloss(null,{vertexColors:true}),U,"main",{tag:"shell"+KT,rim:lo?0:(KT==="low"?0.22:0.08),apparel:apHi,kind:"shell"});
   const decal=skinMat(new THREE.MeshLambertMaterial({map:A.tex,vertexColors:true,alphaTest:0.4}),U,"main",{tag:"decal",atlas:new THREE.Vector2(1/A.cols,1/A.rows)});
   const depth=skinMat(new THREE.MeshDepthMaterial({depthPacking:THREE.RGBADepthPacking}),U,"depth",{tag:"shadow"});
   cloth.addEventListener("dispose",()=>{ boneTex.dispose(); depth.dispose(); });   /* (the bone texture and the shadow pass material are not reached by a tree walk) */
   const part=(geo,mat,shadow,order)=>{ const m=new THREE.Mesh(geo,mat); m.frustumCulled=false; m.castShadow=!!shadow; if(shadow) m.customDepthMaterial=depth; if(order) m.renderOrder=order; grp.add(m); return m; };
-  const S={hiBody:part(instGeo(hiModel.body,hiInst),cloth,true), hiHelmet:part(instGeo(hiModel.helmet,hiInst),shell,true), hiBack:part(instGeo(hiModel.back,hiInst),decal,false), loBody:part(instGeo(loModel.body,loInst),cloth,true)};
+  const S={hiBody:part(instGeo(hiModel.body,hiInst),cloth,true), hiHelmet:part(instGeo(hiModel.helmet,hiInst),shell,true), hiBack:part(instGeo(hiModel.back,hiInst),decal,false), loBody:part(instGeo(loModel.body,loInst),clothLo,true)};
+  /* the near riders receive the key's shadow (the helmet's on the shoulders, the arm's on the jersey, the bike's on the legs): the physically based tiers only */
+  if(KT!=="low"&&!lo){ S.hiBody.receiveShadow=true; S.hiHelmet.receiveShadow=true; S.loBody.receiveShadow=true; }
   /* plates (3 a bike) use the atlas */
   const pg=plateGeo(), cellA=new Float32Array(n*3*2);
   list.forEach((R,i)=>{ const c=A.cells[R.s]; for(let k=0;k<3;k++){ cellA[(i*3+k)*2]=c.plate%A.cols; cellA[(i*3+k)*2+1]=Math.floor(c.plate/A.cols); } });
