@@ -67,7 +67,7 @@ if(window.Sound&&Sound.addStyle&&!(Sound.hasStyle&&Sound.hasStyle(GAME))){
 }
 
 /* ================= state ================= */
-var DEF_WAR={version:"three",onlyTied:true,outLoses:false,noDown:false,deucesWild:false,acesWild:false,jokersWild:false,wildAs:"top",form:false,cards:26};
+var DEF_WAR={version:"three",onlyTied:true,outLoses:false,noDown:false,deucesWild:false,acesWild:false,jokersWild:false,wildAs:"top",form:false,cards:"auto"};
 var cfg={series:"sx",sid:null,humans:1,length:"real",speed:"medium",skill:"normal",auto:false,others:"ask",fill:"full",nonTitle:true,war:{}};
 var G=null, gen=0, timer=null, busy=false, intent=0, skipQ=false;   /* skipQ: "Skip to the finish" confirmed while a battle plays (never lost) */
 var ui={view:"season",rc:null,finished:-1,winShown:-1,result:false,rulesOpen:false,cont:false,order:[],lap:0,lastCards:{},bikes:{},sayN:0,
@@ -503,7 +503,7 @@ var HDESC={
   deucesWild:"Every 2 is wild.", acesWild:"Every Ace is wild (the CEO's house rule).", jokersWild:"Two jokers join every deck and they are wild.",
   wildAs:"A wild card beats every card that isn't wild, or counts as an Ace.",
   form:"The year's real top 10 swap their lowest card for a better one after the deal (once; twice for the top 5). Small on purpose: War stays luck.",
-  cards:"26 = half a deck each, as in a two-player game. The decks scale with the gate (a 40-rider moto deals 20 decks)."
+  cards:"Auto (the standard): a stadium race of more than 16 laps deals a full deck each (52), every other race half a deck (26), so nobody runs dry before the flag. Or pick 13, 26 or 52 for every race. The decks scale with the gate (a 40-rider moto deals 20 decks)."
 };
 function ruleRow(key,label,type,choices,house,val,desc,onCh){
   var tag=house===null?"":house?'<span class="bg-tag bg-tag--house">house</span>':'<span class="bg-tag bg-tag--official">official</span>', row;

@@ -302,6 +302,7 @@ function finish(G){
   var flag=Infinity, w=-1;
   tm.r.forEach(function(R,s){ if(!R.dnf&&R.T.length>=tm.L&&R.T[tm.L-1]<flag){ flag=R.T[tm.L-1]; w=s; } });
   if(w<0){ tm.r.forEach(function(R,s){ if(!R.dnf&&R.T.length&&R.T[R.T.length-1]<flag){ flag=R.T[R.T.length-1]; w=s; } }); }   // nobody finished the laps: the first home
+  if(flag===Infinity){ flag=1; tm.r.forEach(function(R){ var e=R.dnf?R.dnf.t:(R.T.length?R.T[R.T.length-1]:0); if(e>flag) flag=e; }); }   // (added in the integration) every rider is out (a dead heat on the last cards): the flag falls when the last one stops; the reference left Infinity, which a save writes as null
   tm.flag=flag; tm.done=true; tm.win=w;
   tm.r.forEach(function(R,s){
     if(R.dnf) return;
