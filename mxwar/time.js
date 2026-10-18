@@ -596,7 +596,7 @@ function rankWord(r){ return RWORD[r]||String(r); }
 /* ---- the YOU readout for rider s at the end of lap k (call it when he crosses the line: T[k-1] exists).
    f = facts(G, s) kept from that lap's battle (null = the reasons come from the lap's events only), nameOf(seat) = "#12 Name" or the like.
    Returns { k, time (s), typical (s), gain (s, + = faster than a typical lap), from, to (lap-chart places before / after), moved (+ = places gained), gap (s to the
-   leader at the line), int (s to the rider ahead at the line), crash ("remount" | "out" | null), down (s lost in a hold), reasons [{kind, text, sec (+ = time gained)}],
+   leader at the line), dgap (s the gap to the leader shrank since the last line; + = closing, null for the leader or a crash lap), int (s to the rider ahead at the line), crash ("remount" | "out" | null), down (s lost in a hold), reasons [{kind, text, sec (+ = time gained)}],
    head (the sentence about the lap), line (head + the places) } ---- */
 function you(G,s,k,f,nameOf){
   var tm=G.tm, R=tm.r[s], T=R.T, p=tm.p, nm=nameOf||function(x){ return "#"+(x+1); };
@@ -629,6 +629,13 @@ function you(G,s,k,f,nameOf){
   });
   if(tm.yz[k]&&out.crash==null) add("yellow","yellow flag: everybody loses "+secText(tm.P.YLF*p,1),-tm.P.YLF*p);
   if(!out.crash&&(R.hold[k-1]||R.hold[k-2]||R.hold[k-3])) add("fire","attacking after the crash",0);   // the 3 laps after a remount (FIRE)
+  /* a lap at the model's slowest pace (rmax x the typical lap: the pace curve stops there): the card chips cannot explain a lap that is already at the floor, so say so (first chip) */
+  if(fin&&k>1&&!out.crash&&!hold&&!tm.yz[k]&&Math.abs(out.time-p*tm.P.rmax)<=0.003) rs.unshift({ kind:"cap", text:"at the slowest lap (+"+Math.round((tm.P.rmax-1)*100)+"%)", sec:0 });
+  /* the gap to the leader against the last line: closing (+) or falling back (-), in seconds. A person roots for this one, so it comes right after a crash or the cap chip */
+  out.dgap=null;
+  if(fin&&k>1&&!out.crash&&out.to>1&&out.gap!=null){ out.dgap=(T[k-2]-leaderLine(G,k-1))/1000-out.gap;
+    if(Math.abs(out.dgap)>=0.3){ var at=0; while(at<rs.length&&(rs[at].kind==="crash"||rs[at].kind==="cap")) at++;
+      rs.splice(at,0,{ kind:"gap", text:out.dgap>0?"closed on the leader":"lost ground to the leader", sec:out.dgap }); } }
   var parts=[];
   if(out.crash==="out") out.head="Crashed out on lap "+k;
   else if(fin){
