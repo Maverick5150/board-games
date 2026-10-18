@@ -107,7 +107,7 @@ function addTorso(g,seg,lo){
 }
 function addNeck(g,seg,lo){
   /* the neck brace: a collar over the shoulders, higher at the front and back; the neck inside it */
-  const nb=[[0.462,0.018,0.118,0.158],[0.500,0.012,0.108,0.140],[0.545,0.006,0.082,0.100],[0.585,0.008,0.070,0.078]].map(t=>ring([t[1],t[0],0],t[2],t[3],{bones:[BN.CHEST,BN.NECK,sstp(0.42,0.62,t[0])],col:COL.mid,slot:2,k:a=>1+0.05*Math.pow(Math.abs(Math.cos(a)),6)}));
+  const nb=[[0.462,0.018,0.118,0.158],[0.500,0.012,0.108,0.140],[0.545,0.006,0.082,0.100],[0.585,0.008,0.070,0.078]].map(t=>ring([t[1],t[0],0],t[2],t[3],{bones:[BN.CHEST,BN.NECK,sstp(0.42,0.62,t[0])],col:t[0]>0.52?COL.dark:[0.62,0.62,0.62],slot:t[0]>0.52?2:1,k:a=>1+0.05*Math.pow(Math.abs(Math.cos(a)),6)}));   /* (polish: a coloured collar over the shoulders with a dark pad at its top, not a grey funnel) */
   g.part=PART.GEAR; loft(g,thin(nb,lo),seg,"t");
   const nk=[[0.53,0.008,0.050],[0.62,0.012,0.046]].map(t=>ring([t[1],t[0],0],t[2],t[2],{bones:[BN.NECK,BN.HEAD,sstp(0.54,0.62,t[0])],col:COL.dark,slot:2}));
   g.part=PART.GEAR; loft(g,nk,lo?5:Math.max(6,seg-2),"t");

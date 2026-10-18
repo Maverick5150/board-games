@@ -188,7 +188,7 @@ export function poseBike(M,i,B,st){
   const blur=dsp>6?0:clamp((dsp-0.16)/0.5,0,0.9);
   for(const m of S0.meshes){ m.count=S0.cnt; m.visible=true; }
   /* this bike's colours and mud in its slot */
-  S0.col.setXYZ(slot,K.pc[i*3],K.pc[i*3+1],K.pc[i*3+2]); S0.acc.setXYZ(slot,K.ac[i*3],K.ac[i*3+1],K.ac[i*3+2]); S0.mud.setXYZ(slot,st.mud||0,i%4,blur);
+  S0.col.setXYZ(slot,K.pc[i*3],K.pc[i*3+1],K.pc[i*3+2]); S0.acc.setXYZ(slot,K.ac[i*3],K.ac[i*3+1],K.ac[i*3+2]); S0.mud.setXYZ(slot,Math.max(st.mud||0,0.16),i%4,blur);   /* (polish: a bike in a main event is never clean: a floor of dirt on the lower parts, as the cover's) */
   S0.col.needsUpdate=true; S0.acc.needsUpdate=true; S0.mud.needsUpdate=true;
   let delta=0;
   if(S0.far){ S0.far.setMatrixAt(slot,B); } else {

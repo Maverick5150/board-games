@@ -103,7 +103,7 @@ export function createLook(renderer,opts){
       L.post=post; L._mine=post;
     } else if(L.post&&L.post===L._mine){ L.post=null; L._mine=null; }
     /* the stadium's glow sprites are written in HDR units: 2.5x when the chain's bloom is on (the floodlights bloom and star), 1x on the plain frame (no clipped white blobs on the TV tier) */
-    { const gm=L._world&&L._world.ctx&&L._world.ctx.glowMesh; if(gm&&gm.material&&gm.material.uniforms&&gm.material.uniforms.uHdr) gm.material.uniforms.uHdr.value=(wantPost&&F.bloom>0)?2.5:1; }
+    { const gm=L._world&&L._world.ctx&&L._world.ctx.glowMesh; if(gm&&gm.material&&gm.material.uniforms&&gm.material.uniforms.uHdr) gm.material.uniforms.uHdr.value=(wantPost&&F.bloom>0)?2.5:1.8; }   /* (polish, D7: with no bloom chain the halos carry the glow: 1.8x, additive, clipped by the frame) */
     /* the fog */
     if(scene.fog&&L._fogOn) applyFog();
     cssVigOn(!!F.cssVig&&!L.post&&opts.host);
