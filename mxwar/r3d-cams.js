@@ -48,7 +48,7 @@ const CHASE={back:3.5,up:1.5,side:-1.1,fov:70};
 const HERO={fov:72,mounts:[
   {id:"cover",b:2.6,s:-1.0,u:1.1,x:0.42,y:-0.28,pref:0},
   {id:"mirror",b:2.6,s:1.0,u:1.1,x:-0.42,y:-0.28,pref:0.55},   /* (the cover puts him in the RIGHT third: the mirror only when the cover's side is really in the way; at 0.30 it took half of the chase time) */
-  {id:"high",b:3.0,s:-0.75,u:2.7,x:0.30,y:-0.16,pref:0.45},
+  {id:"high",b:3.4,s:-0.8,u:3.4,x:0.30,y:-0.22,pref:0.45},   /* (over the roost of a pack ahead and over a rival's head: milestone 2 raised it from 2.7 m, the lens sat inside lap one's dust) */
   {id:"wide",b:3.6,s:-1.2,u:1.6,x:0.32,y:-0.22,pref:0.62}],
   crash:{id:"crash",b:7,s:-2.4,u:2.8,x:0,y:-0.1,pref:0}};
 /* the lens of a frame: a phone held upright gets a wider vertical field (the sides crop, the riders stay big); not the gate, the crash or the broadcast, which frame their scene's width for the frame's shape themselves */
@@ -459,7 +459,7 @@ export function createCams(VIEW){
      mount would have; its share of the frame (the box's screen rectangle, clipped to the frame; a box across the lens plane counts as 70%) over 5% costs, 30% or more is the
      worst (1). The subject himself is the picture and does not count. */
   const pc8=[[-1.1,-0.4],[1.1,-0.4],[-1.1,0.4],[1.1,0.4]];
-  function mountCost(m,r,j,S,yaw,gS,tanH,tanV,kA){
+  function mountCost(m,r,j,S,yaw,gS,tanH,tanV,kA,dust){
     mountEye(m,S,yaw,gS,hm); const rs=VIEW.rs;
     const be=Math.atan2(S.z-hm.z,S.x-hm.x), hd=Math.max(0.6,Math.hypot(S.x-hm.x,S.z-hm.z)), psi=be-Math.atan(m.x*tanH), pit=Math.atan2(S.y-hm.y,hd)-Math.atan(m.y*tanV);
     const cps=Math.cos(pit), sps=Math.sin(pit), cy=Math.cos(psi), sy=Math.sin(psi);
@@ -476,7 +476,7 @@ export function createCams(VIEW){
         let cov=0;
         if(nf){ x0=Math.max(-1,x0); x1=Math.min(1,x1); y0=Math.max(-1,y0); y1=Math.min(1,y1); if(x1>x0&&y1>y0) cov=(x1-x0)*(y1-y0)/4; }   /* (all of him behind the lens: nothing) */
         const k=clamp((cov-0.05)/0.25,0,1)*(w?0.7:1); if(k>I) I=k; } }
-    let P=m.pref+2.4*I+(m.s<0?1:-1)*clamp((kA||0)*3,-0.06,0.06);   /* a right turn ahead (kA > 0) leans a little toward the lens on his right (the composition looks into the turn by itself: xT) */
+    let P=m.pref+2.4*I+(m.s<0?1:-1)*clamp((kA||0)*3,-0.06,0.06)+(m.u<2?0.45*Math.min(2.5,dust||0):0);   /* a low lens behind a roosting pack films a wall of dust (milestone 2): the high mount looks down over it */   /* a right turn ahead (kA > 0) leans a little toward the lens on his right (the composition looks into the turn by itself: xT) */
     const f=r.fr; if(f&&!r.crash){ const c=Math.cos(f.th), s=Math.sin(f.th), lt=(r.lat||0)+(hm.x-S.x)*-s+(hm.z-S.z)*c, over=Math.abs(lt)-(f.hw-0.35); if(over>0) P+=0.25+over*0.5;
       if(groundNear(r,hm.x-S.x,hm.z-S.z)>gS+0.75) P+=0.35; }
     if(VIEW.C.kind==="stadium"&&VIEW.C.layout.floor){ hw2.x=hm.x; hw2.z=hm.z; inFloor(hw2); if(Math.hypot(hw2.x-hm.x,hw2.z-hm.z)>0.3) P+=0.6; }
@@ -498,7 +498,12 @@ export function createCams(VIEW){
     /* (each mount's cost is smoothed over a quarter second, and a switch needs a clear margin and a dwell: 0.3 and 1.4 s, or 0.35 and 0.5 s when the lens is badly
        blocked; a pack in which every mount is blocked does not make the rig hunt between them) */
     if(first||!K.cs||K.cs.length!==M.length){ K.cs=null; }
-    let best=0, bc=1e9; const costs=[]; for(let i=0;i<M.length;i++){ const c=mountCost(M[i],r,j,S,yawS,gS,tanH,tanV,kS); costs.push(c); }
+    /* the dust ahead: riders 1.5-13 m ahead of him and within 3.5 m of his line throw roost and a dust trail back at a low lens (each weighs by his roost, his speed and how near he is) */
+    let dust=0; if(!crash&&!r.onStart){ const fo=Math.cos(th), go=Math.sin(th), rsD=VIEW.rs, stD=VIEW.st; for(let i=0;i<rsD.length;i++){ const o=rsD[i]; if(i===j||o.gone||o.crash||!o.pos) continue;
+      const dx=o.pos.x-S.x, dz=o.pos.z-S.z, al=dx*fo+dz*go, ac=Math.abs(-dx*go+dz*fo); if(al<1.5||al>13||ac>3.5) continue; const so=stD&&stD[i];
+      dust+=(0.35+(so&&so.roost?Math.min(1,so.roost/6):0)+0.25*Math.min(1,(o.v||0)/14))*(1-al/13)*(1-ac/4.5); } }
+    K.dust=dust;
+    let best=0, bc=1e9; const costs=[]; for(let i=0;i<M.length;i++){ const c=mountCost(M[i],r,j,S,yawS,gS,tanH,tanV,kS,dust); costs.push(c); }
     if(!K.cs) K.cs=costs.map(c=>c.cost); else { const a=Math.min(1,Math.max(0,dt)/0.25); for(let i=0;i<M.length;i++) K.cs[i]+=(costs[i].cost-K.cs[i])*a; }
     for(let i=0;i<M.length;i++) if(K.cs[i]<bc){ bc=K.cs[i]; best=i; }
     if(first||K.mi<0||K.mi>=M.length) K.mi=best;
