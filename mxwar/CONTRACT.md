@@ -749,3 +749,39 @@ Written by the polish step. Every picture and number here is from the REAL game 
 3. Performance: HIGH is x1.9-2.6 the base, 29 ms at 960x540 on this iGPU (ladder off). The post chain (HDR target, bloom, depth of field, haze) is the biggest single cost at full resolution and scales with the pixels; the default tier here is BALANCED and the ladder holds about 56-60 fps at 1280x720. The Fire TV Stick is unmeasured.
 4. The crowd cards, the stadium's far stands and the FIRE TV tier's lower stands still read dark or flat; the tuff blocks are plain plastic with a scuff pattern; the marshal's flag is a flat yellow square.
 5. Open from 12.6: the remount pose pop, the replay's dust, the REPLAY badge and the camera buttons in `game.js`, the dynamic import of the dirt tiles per tier, the Anaheim layout overlap.
+
+
+## 14. Milestone 1: the proof (integrate:evidence, 2026-10-18: what was shown, what it measured, what is still short)
+
+Written by the evidence step. **No game code changed in this step**; it captured, measured and judged the polished build (`c3f8623`). Everything is from the REAL game on the harness page (GPU kit: ANGLE / Direct3D 11 on the Intel UHD 0x46D2, the runner's lanes shared with other work). **The Fire TV Stick was NOT measured.**
+
+### 14.1 Where the evidence is
+
+- For the CEO: `BG_demos/v1/` (`shot-1..3.png`, `before-after-B1.png`, `before-after-B2.png`, `chase.mp4`, `broadcast.mp4`, `firetv-tier-before-after.jpg`, `PERF.md`, contact sheets).
+- For the studio: `BG_audit/sprint/mxvis/after/` and `before/` (12 frames each: the six bookmarks at 1280x720 and 1920x1080, the old B2 pose as `*-oldpose.png`), `compare/` (`before-after-B1..B6.png`, `before-after-cover-B1.png`, `before-after-sheet.jpg`, `cmp-*` with the cover), `evidence/` (`plans/*.json`, `tools/rec.js` recordings + previews + a no-draw lens check, `sheet.js`, `make-perf-md.js`, `perf/*.json`, `stills1`, `stills2`, `tv/`, `finish-high`, `finish-firetv`, `game-phone`, `game-tv`, `game-gl0`).
+
+### 14.2 What it proved
+
+- **Same cameras.** The six BEFORE frames reproduce from the base `ac4b1bf` with 0 differing pixels (12 of 12, B2 re-captured at its new pose), the six AFTER frames are byte-identical to the polish step's (0 of 12). Whole frame B1 (HIGH): 49 calls / 198,778 triangles before, 89 / 451,783 now; all six: 45-53 calls and about 199k triangles before, 64-89 calls and 265k-502k now.
+- **Frame cost, ladder off** (`tiers-bench.js`, B1 held, the minimum of 3 interleaved rounds): FIRE TV 17.5 ms (960x540) / 13.7 (1080p), BALANCED 23.3 / 46.5, HIGH 25.0 / 70.0, ULTRA 28.7 / 76.4; HIGH is x1.9 / x2.6 the base (polish `ab-bench`). **Ladder on** (`bench-live.js`, 20 s of the real loop): the laptop's automatic tier (BALANCED) 68.6 fps at 960x540, 43.6 fps at 1920x1080 (the ladder at its 0.6 floor; 56.5 fps at 1280x720 in the polish run): **50-60 fps holds up to 720p, not at 1080p**. The FIRE TV rows read 24 fps because this headless browser delivers a requestAnimationFrame every 20.8 ms (48 fps; the 30 fps cap draws every second one): a harness limit, not a measurement of the tier. Every row, the throttled ones marked, is in `BG_demos/v1/PERF.md`.
+- **The FIRE TV tier at the same budget looks clearly better** (36 calls / 101k triangles before, 41 / 108k now): `firetv-tier-before-after.jpg`.
+- **The game still works on the final tree:** `finish.js` (24 laps, 22 riders) ALL CHECKS PASSED on HIGH (47-90 calls, 232k-616k triangles, heap 87-99 MB) and FIRE TV (24-45 calls, 82k-163k triangles, heap 22-32 MB): 4 crashes with remounts, 4 yellow laps, both flags, order = the engine's standings; the REAL game page `game-flow.js` (phone, touch, 8 real-time laps, results places 1-20, clock 1.00), `tv-flow.js` (`?tv=1`, real keys, 1920x1080, `quality=firetv`), `gl0-flow.js` (`?gl=0`) all PASS with 0 errors; `cap.js` S,O,H,C,L,M,P,R,N,T (double-war crash and remount, yellow lap, triple-war crash-out, outdoor and speedway venues, Reduce effects, reduced motion, portrait phone, restored race, three races in one view, TV) all ran to the end; engine tests 5 of 5; `lint-modules.js` clean.
+
+### 14.3 The two recordings (`rec.js`; how they were made and what they are not)
+
+Frame by frame on the harness's fixed 1/30 s clock at 1920x1080 on the HIGH tier (this laptop cannot play it in real time), JPEG frames q 0.95 into x264 (High 4.1, CRF 20, VBV 4.4 Mbit/s, aq-mode 3, BT.709 limited, yuv420p, +faststart, no audio).
+- `chase.mp4` (21.7 s, 12.4 MB): the cams module's own `rigChase` on rider #200 (seat 7), forced with `cams().force({type:"chase", subj})`; three real-time stretches of one race with hard cuts (lap 1 -0.8 to 11.5 s: the gate drop, launch, turn 1; lap 2 87.2 to 91.6 s: three rhythm jumps; lap 2 99.8 to 104.8 s: the whoops, a pass). Measured per frame by the lens probe: the biggest non-subject rider's silhouette never exceeds 21.5% of the frame (0 frames over 25%), the subject stays in frame (NDC x 0.19-0.58, mostly the right third).
+- `broadcast.mp4` (24.0 s, 13.5 MB): one stretch of lap 1 (13 to 37 s), a fixed eye (0, 24, 70), 8.9 m above `bowlY` (15.1 m), panning with the field's centroid (led by the damping time) and zooming 17-42 degrees so the pack keeps its size. The pan / zoom is a hook in `rec.js` (a `V.camHook`), **not** a camera of `r3d-cams.js`.
+- The person's own rider (seat 12) was tried first: last at turn 1, and a rival filled 44% of the frame for 7 frames in his lap-2 rhythm section, so the clip follows seat 7.
+
+### 14.4 Found by looking, NOT fixed (needs code)
+
+1. **The first hairpin with the lens inside the pack** (`chase.mp4` 9.2-11.4 s): a dust veil over the frame and riders under 1.7 m dither-fading into ghosts; puff sprites only fade inside 1.1 m (`SPR_VS`: `smoothstep(0.25,1.1,depth)`).
+2. **A rival alongside the chase lens** still fills 25-44% of the frame at 2.1 m (the keep-out measured from the wheelbase segment is too small for a 102-degree horizontal lens) and the lens can swing ahead of the subject for about 0.3 s at a hairpin (seat 7, lap 2, 86.8-87.0 s: the subject leaves the frame for 9 frames, the first of them behind the lens).
+3. **The high broadcast preset exists only in the capture tool**; the game's `broadcast` preset is the trackside long lens. The far upper stands read as a dark noisy mass; no light rig is in a high-broadcast frame.
+4. The riders (arms like wings from behind, mitten hands, ball helmet, no cloth folds) and the dirt storm (tens to about a hundred clods in a chase frame, one soil family, no particle motion blur) are the two biggest gaps to the cover (13.3 items 1 and 2).
+5. Still open from 12.6 / 13.3: the Graphics setting, the camera and replay buttons and the REPLAY badge in `game.js`, the replay's real-race trigger (never fired), the remount pop, the Anaheim connector overlap (D9).
+
+### 14.5 Next milestone
+
+Measure the Stick first (`mxwar/assets/perf/bench.html?sweep=1` on the device); then riders (atlas, hands, helmet, pose), the dirt storm, the chase lens (keep-out, dust veil, ghosting) closer to the cover's 2 m, the `game.js` screens and Party Mode parity, the broadcast preset in `r3d-cams.js`, crowd variety, and the Anaheim fix with new BEFORE captures.
