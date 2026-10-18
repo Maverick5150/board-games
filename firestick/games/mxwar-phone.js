@@ -3,7 +3,10 @@
    the season's real riders keep theirs, and two phones never share one; empty = the TV picks a free one). The race: this rider's place,
    cards held and the lap, the Auto switch (the TV flips for you every lap), a big Flip each lap (it turns as the leader starts the lap)
    and in a war ("3 down, the 4th decides"), the card this rider turned, the war (the 3 down + the 4th up), the crash and the yellow flag,
-   the front of the running order with this rider's own place. Between races: the result, the podium, the season place and points.
+   the timing (every rider: place, plate, name, the gap in seconds or the laps down, DNF; two compact columns for a big gate), and the YOU readout
+   (mxtime: this rider's place and gap now, the last and best lap, and after every lap what it was worth: seconds against a typical lap, the places,
+   the reasons). The TV computes it all from the time model (mxwar/time.js) and sends it in the snapshot: the phone only draws it.
+   Between races: the result, the podium, the season place and points.
    The cards are mxwar/art.js's own faces. Text >= 12 px, targets >= 44 px. */
 (function () {
   "use strict";
@@ -70,6 +73,31 @@
       Q + ".mxph-run .mxph-p{flex:none;min-width:1.6rem;font:400 var(--fs-lg)/1 var(--font-display);color:var(--gold-100);text-align:center}",
       Q + ".mxph-run .mxph-n{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
       Q + ".mxph-run .mxph-k{flex:none;color:var(--gold-100);font-variant-numeric:tabular-nums}",
+      Q + ".mxph-you{display:grid;gap:.3rem;padding:.6rem .7rem .65rem;border-radius:var(--r-lg);background:linear-gradient(180deg,rgba(231,202,144,.16),rgba(231,202,144,.05));box-shadow:inset 0 0 0 1.5px var(--gold-300);text-align:left}",
+      Q + ".mxph-you.is-down{background:linear-gradient(180deg,rgba(232,119,90,.22),rgba(232,119,90,.06));box-shadow:inset 0 0 0 1.5px #e8775a}",
+      Q + ".mxph-you.is-out{opacity:.88}",
+      Q + ".mxph-you__top{display:flex;flex-wrap:wrap;align-items:baseline;gap:.15rem .6rem}",
+      Q + ".mxph-you__top b{font:400 var(--fs-xl)/1 var(--font-display);color:var(--gold-100);white-space:nowrap}",
+      Q + ".mxph-you__top span{flex:1 1 9rem;min-width:0;font:var(--fw-ui-strong) var(--fs-sm)/1.25 var(--font-ui);color:var(--text-1);font-variant-numeric:tabular-nums}",
+      Q + ".mxph-you__laps{margin:0;font:var(--fw-ui) var(--fs-xs)/1.25 var(--font-ui);color:var(--text-2);font-variant-numeric:tabular-nums}",
+      Q + ".mxph-you__line{margin:0;font:var(--fw-ui-strong) var(--fs-sm)/1.3 var(--font-ui);color:var(--text-1)}",
+      Q + ".mxph-why{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:.3rem}",
+      Q + ".mxph-why li{display:inline-flex;align-items:baseline;gap:.4rem;padding:.18rem .6rem;border-radius:999px;background:var(--ink-3);box-shadow:inset 0 0 0 1px var(--line-1);font:var(--fw-ui-strong) var(--fs-micro)/1.25 var(--font-ui);color:var(--text-1)}",
+      Q + ".mxph-why li b{font-variant-numeric:tabular-nums}",
+      Q + ".mxph-why li.is-up b{color:#8fe3a3}",
+      Q + ".mxph-why li.is-dn b{color:#ff9a8a}",
+      Q + ".mxph-tw{list-style:none;margin:0;padding:.4rem;display:grid;gap:.18rem;border-radius:var(--r-md);background:var(--ink-2);box-shadow:var(--well-edge)}",
+      Q + ".mxph-tw.is-two{grid-auto-flow:column;grid-template-rows:repeat(var(--rows,20),auto);grid-template-columns:repeat(2,minmax(0,1fr));column-gap:.35rem}",
+      Q + ".mxph-tw li{display:grid;grid-template-columns:1.5rem auto minmax(0,1fr) auto;align-items:center;gap:.35rem;min-height:1.75rem;padding:0 .4rem;border-radius:.4rem;background:var(--ink-3);font:var(--fw-ui-strong) var(--fs-micro)/1.2 var(--font-ui);color:var(--text-1);text-align:left}",
+      Q + ".mxph-tw.is-two li{grid-template-columns:1.1rem auto minmax(0,1fr) auto;gap:.25rem;padding:0 .25rem}",
+      Q + ".mxph-tw li.is-me{box-shadow:inset 0 0 0 2px var(--gold-300)}",
+      Q + ".mxph-tw li.is-down{background:#4a1f14;box-shadow:inset 0 0 0 1.5px #e8775a}",
+      Q + ".mxph-tw li.is-out{opacity:.6}",
+      Q + ".mxph-tw .mxph-p{font:400 var(--fs-micro)/1 var(--font-display);color:var(--gold-100);text-align:right;font-variant-numeric:tabular-nums}",
+      Q + ".mxph-tw .mx-pl{font-size:var(--fs-micro);min-width:2em;padding:.05rem .2rem .05rem .5em}",
+      Q + ".mxph-tw .mxph-n{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+      Q + ".mxph-tw .mxph-g{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}",
+      Q + ".mxph-tw li.is-down .mxph-g{color:#ffb4a3;font-weight:800}",
       Q + ".mxph-teams{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem}",
       Q + ".mxph-team{display:flex;align-items:center;justify-content:center;gap:.4rem;min-height:3rem;padding:.4rem .5rem;border:0;border-radius:var(--r-md);background:var(--ink-2);box-shadow:inset 0 0 0 1px var(--line-1);color:var(--text-1);font:var(--fw-ui-strong) var(--fs-sm)/1.2 var(--font-ui);cursor:pointer}",
       Q + ".mxph-team[aria-pressed=true]{box-shadow:inset 0 0 0 2.5px var(--gold-300);background:var(--ink-3)}",
@@ -133,7 +161,7 @@
         else if (asking) { title = "Flip!"; sub = "Lap " + R.lap + " of " + R.len + " · your card turns as the leader starts the lap."; }
         else if (R.out) { title = R.dnf === "crash" ? "Crashed out" : "Out of cards"; sub = "Watch the rest of " + R.label + " on the TV."; }
         else if (R.over) { title = ord(R.place) + " of " + R.n; sub = "Checkered flag. Watch the TV."; }
-        else { title = ord(R.place) + " of " + R.n; sub = R.label + " · lap " + R.lap + " of " + R.len + (isAuto ? " · Auto flips for you" : ""); }
+        else { var py = R.you && R.you.tag === "down" ? "Down: getting going again" : ord(R.you ? R.you.place : R.place) + " of " + R.n; title = py; sub = R.label + " · lap " + R.lap + " of " + R.len + (isAuto ? " · Auto flips for you" : ""); }
       } else if (pn) {
         var mr = pn.res && pn.res.mine ? pn.res.mine[api.color()] : null;
         if (pn.kind === "results") { title = pn.title; sub = mr ? "You finished " + ord(mr.p) + " of " + mr.of + (mr.tag ? " · " + mr.tag : "") + (mr.dnf ? " · DNF: crash" : "") + (mr.pts ? " · +" + mr.pts + " pts" : "") : (pn.res ? pn.res.win + " wins" : ""); }
@@ -147,7 +175,8 @@
       if (st.ph === "signup" && st.su) html += asking && kind === "signup" ? signupHTML(st, api) : readyHTML(st, api);
       else if (R && (st.ph === "race" || st.ph === "gate")) {
         if (R.inRace) {
-          html += '<div class="mxph-stats"><div class="mxph-stat"><b>' + (R.out ? "Out" : R.gate ? "-" : ord(R.place)) + "</b><span>of " + R.n + '</span></div><div class="mxph-stat"><b>' + (R.out ? 0 : R.cnt) + "</b><span>" + (R.cnt === 1 ? "card" : "cards") + '</span></div><div class="mxph-stat"><b>' + (R.gate ? 0 : R.lap) + "</b><span>lap of " + R.len + "</span></div></div>";
+          html += '<div class="mxph-stats"><div class="mxph-stat"><b>' + (R.out ? "Out" : R.gate ? "-" : ord(R.you ? R.you.place : R.place)) + "</b><span>of " + R.n + '</span></div><div class="mxph-stat"><b>' + (R.out ? 0 : R.cnt) + "</b><span>" + (R.cnt === 1 ? "card" : "cards") + '</span></div><div class="mxph-stat"><b>' + (R.gate ? 0 : R.lap) + "</b><span>lap of " + R.len + "</span></div></div>";
+          html += youHTML(R, api);
           if (!R.out && !R.over) html += '<button type="button" class="mxph-auto" role="switch" aria-checked="' + isAuto + '" id="mxAuto"><span>Auto<small>' + (isAuto ? "On: the TV flips for you every lap" : "Off: you press Flip every lap") + '</small></span><span class="bg-toggle" aria-hidden="true"></span></button>';
           if (asking && (kind === "flip" || kind === "war")) html += '<button type="button" class="opt bg-btn bg-btn--block opt--seat mxph-go" data-seat="' + (api.seat() || 1) + '" id="mxGo">' + (kind === "war" ? "Lay war cards" : "Flip") + "<small>" + (kind === "war" ? "3 face down + the 4th up" : "Lap " + R.lap + " of " + R.len) + "</small></button>" + (R.war && (R.war.won || R.war.lost || R.war.won === false) ? warHTML(R.war) : "");
           else if (R.war && (R.warOn || R.war.won || R.war.lost)) html += warHTML(R.war);
@@ -155,7 +184,7 @@
           if (R.cr && !R.out) html += '<p class="mxph-last">' + (R.cr > 1 ? "You crashed " + R.cr + " times and got back on." : "You crashed and got back on.") + "</p>";
         }
         if (R.hs) html += '<p class="mxph-last">Holeshot: ' + esc(R.hs) + "</p>";
-        html += runHTML(R.top, api);
+        html += R.tw && R.tw.length ? timingHTML(R, api) : runHTML(R.top, api);
       } else if (se) {
         html += '<div class="mxph-stats"><div class="mxph-stat"><b>' + (se.place ? ord(se.place) : "-") + "</b><span>season</span></div><div class=\"mxph-stat\"><b>" + se.pts + "</b><span>points</span></div><div class=\"mxph-stat\"><b>" + se.ri + "</b><span>round of " + se.nr + "</span></div></div>";
         if (se.leader) html += '<p class="mxph-last">Red plate (the points leader): ' + esc(se.leader) + "</p>";
@@ -187,6 +216,27 @@
       (w.n > 1 ? (w.n === 2 ? "Double war" : w.n === 3 ? "Triple war" : "War x" + w.n) : "War") + ": " + (w.down || 0) + " down, the 4th up: " + cardName(w.up) + "." +
       (w.won ? " You win the war!" : w.lost === "out" ? " You lose it: crashed out." : w.lost === "remount" ? " You lose it: down, and you remount." : w.won === false ? " You lose the war." : "") + "</span></div>";
     return h;
+  }
+  /* the YOU readout: this rider's place and gap now, the last and best lap, and what the lap just ridden was worth (the TV computed it) */
+  function secT(x) { x = Math.abs(+x || 0); return x.toFixed(1) + " s"; }
+  function youHTML(R, api) {
+    var y = R.you; if (!y) return "";
+    var esc = api.esc;
+    var gap = R.gate ? "the gate drops on the TV" : y.tag === "down" ? "down: getting going again" : y.tag === "out" ? "crashed out of the race" : y.tag === "pits" ? "pulled off: out of cards" : y.place === 1 ? "leading the race" : (y.gap || "") + " to the leader" + (y.int != null ? " · " + secT(y.int) + " to the rider ahead" : "");
+    return '<div class="mxph-you' + (y.tag === "down" ? " is-down" : "") + (y.tag === "out" || y.tag === "pits" ? " is-out" : "") + '" role="status"><div class="mxph-you__top"><b>' + (R.gate ? "On the gate" : ord(y.place) + " of " + y.of) + "</b><span>" + esc(gap) + "</span></div>" +
+      '<p class="mxph-you__laps">Last lap ' + esc(y.last || "-") + " · Best " + esc(y.best || "-") + (y.fl ? " · fastest of the race" : "") + "</p>" +
+      (y.line ? '<p class="mxph-you__line">' + esc(y.line) + "</p>" : "") +
+      (y.why && y.why.length ? '<ul class="mxph-why" aria-label="What the lap was worth">' + y.why.map(function (w) { return '<li class="' + (w[2] > 0 ? "is-up" : w[2] < 0 ? "is-dn" : "") + '"><span>' + esc(w[0]) + "</span>" + (w[1] ? "<b>" + esc(w[1]) + "</b>" : "") + "</li>"; }).join("") + "</ul>" : "") + "</div>";
+  }
+  /* the timing: every rider (two compact columns for a big gate), the gap in seconds or the laps down, DNF; this rider's row is ringed */
+  function timingHTML(R, api) {
+    var tw = R.tw, esc = api.esc, n = tw.length, two = n > 24;
+    var h = '<p class="mxph-lbl">Timing · gap to the leader' + (R.fl ? " · fastest lap " + esc(R.fl) : "") + '</p><ol class="mxph-tw' + (two ? " is-two" : "") + '" style="--rows:' + Math.ceil(n / 2) + '" aria-label="Timing">';
+    tw.forEach(function (r) {
+      var short = String(r[3] || "").split(" ").pop(), tag = r[5];
+      h += '<li class="' + (r[0] === R.meS ? "is-me" : "") + (tag === "down" ? " is-down" : "") + (tag === "out" || tag === "pits" ? " is-out" : "") + '"><span class="mxph-p">' + r[1] + "</span>" + plate(r[2], r[8], r[9]) + '<span class="mxph-n">' + esc(two ? short : r[3]) + '</span><span class="mxph-g">' + esc(r[4]) + "</span></li>";
+    });
+    return h + "</ol>";
   }
   function runHTML(top, api) {
     if (!top || !top.length) return "";
