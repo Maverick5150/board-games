@@ -525,6 +525,7 @@
       setModel: function (rc) { if (T.setModel) T.setModel(rc); },                 /* mxtime: the race clock of the time model rides the field */
       modelOn: function () { return !!(T.model && T.model()); },
       rows: function () { return T.rows ? T.rows() : null; },                      /* the live timing tower at the race clock */
+      clock: function () { return T.clock ? T.clock() : 0; },
       onEvent: function (fn) { T.onEvent = fn; },                                  /* the events of the clock: a line, a fall, the yellow flag, a pass ... */
       setRate: function (x) { if (T.setRate) T.setRate(x); },
       setWait: function (on) { if (T.setWait) T.setWait(on); },
@@ -671,7 +672,7 @@
           var mr = s >= 0 ? rows.filter(function (r) { return r.s === s; })[0] : null;
           if (mr) { var mc = T.towerCells(mr), yy = youK[s] || null; myPlace = mr.place;
             you = { place: mr.place, of: rows.length, gap: pre ? "" : mc.gap, tag: mc.tag, last: mr.last != null ? T.fmtLap(mr.last) : "", best: mr.best != null ? T.fmtLap(mr.best) : "", fl: mr.fl ? 1 : 0, int: pre || mr.int == null ? null : mr.int,
-              line: yy ? yy.line : "", why: yy ? yy.reasons.slice(0, 4).map(function (q) { return [q.text, Math.abs(q.sec) >= 0.05 ? (q.sec > 0 ? "+" : "-") + T.secText(q.sec) : "", q.sec > 0.04 ? 1 : q.sec < -0.04 ? -1 : 0]; }) : [] }; }
+              line: yy ? yy.line : pre ? T.RULES : "", why: yy ? yy.reasons.slice(0, 4).map(function (q) { return [q.text, Math.abs(q.sec) >= 0.05 ? (q.sec > 0 ? "+" : "-") + T.secText(q.sec) : "", q.sec > 0.04 ? 1 : q.sec < -0.04 ? -1 : 0]; }) : [] }; }
         }
         st.race = { label: ui.label, city: cal().city || cal().venue, lap: Math.min(Math.max(ui.lap, 1), rc.o.len), len: rc.o.len, gate: rc.phase === "gate", over: rc.over, n: rc.n, inRace: s >= 0, meS: s, place: myPlace, cnt: s >= 0 ? cnt[s] : 0, tw: tw, you: you, fl: fl,
           last: s >= 0 && ui.lastCards[s] != null ? ui.lastCards[s] : null, out: !!(mine && mine.out), dnf: mine && mine.dnf ? mine.dnf.why : null, cr: mine ? mine.crashes | 0 : 0,
@@ -682,6 +683,7 @@
       return st;
     }
     function safeSt(c, ask) { try { return phoneSt(c, ask); } catch (e) { stats.errors.push("phoneSt: " + (e && e.message || e)); return null; } }
+    stats.phoneSt = function (c) { return safeSt(c, null); };   /* test hook: the snapshot a phone gets (the Party round-trip test compares it with what the phone received) */
     function pushNow() { clearTimeout(pushT); pushT = 0; stats.pushes++; H.pushAll(function (c) { return safeSt(c, null); }); }
     function pushSoon() { if (pushT) return; pushT = setTimeout(function () { pushT = 0; if (H.live()) pushNow(); }, 450); }
     H.onReconnect(function () { stats.reconnects++; pushNow(); });
@@ -750,7 +752,13 @@
     function modelOn() { return !!(rv.ok && rv.modelOn() && ui.rc && ui.rc.tm && MX.Time); }
     function nameOfSeat(s) { var R = riderOfS(s); return "#" + R.plate + " " + R.name; }
     function modelRate(rc) { return Math.max(0.05, (rc.tm.p || 55) / Math.max(0.5, lapMs() / 1000)); }
-    function liveRows() { return modelOn() ? rv.rows() : null; }
+    var rowsMemo = { t: -1, k: -1, rows: null };
+    function liveRows() {   /* one computation per clock instant: a push to every phone reads it once */
+      if (!modelOn()) return null;
+      var t = rv.clock(), k = ui.rc.tm.k;
+      if (rowsMemo.rows && rowsMemo.t === t && rowsMemo.k === k) return rowsMemo.rows;
+      rowsMemo = { t: t, k: k, rows: rv.rows() }; return rowsMemo.rows;
+    }
     function renderTower(mark) {
       var rc = ui.rc, tw = $("mxpTower"); if (!rc || !tw) return;
       if (mark) twMark = { win: mark.win, fight: mark.fight, until: Date.now() + 1800 };

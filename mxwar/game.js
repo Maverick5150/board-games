@@ -1219,7 +1219,7 @@ function drawYou(rows){
   $("youLast").textContent="Last lap "+(row.last!=null?T.fmtLap(row.last):"-"); $("youBest").textContent="Best "+(row.best!=null?T.fmtLap(row.best):"-")+(row.fl?" · fastest of the race":"");
   box.classList.toggle("is-down",c.tag==="down"); box.classList.toggle("is-out",c.tag==="out"||c.tag==="pits");
   var recap=y&&y.s===s?y:null;
-  $("youLine").textContent=recap?recap.line:"Your lap time and what it was worth show here after every lap.";
+  $("youLine").textContent=recap?recap.line:pre?T.RULES:"Your lap time and what it was worth show here after every lap.";
   $("youWhy").innerHTML=recap?recap.reasons.slice(0,4).map(function(r){ var sec=Math.abs(r.sec)>=0.05?(r.sec>0?"+":"-")+T.secText(r.sec):""; return '<li class="'+(r.sec>0.04?"is-up":r.sec<-0.04?"is-dn":"")+'"><span>'+esc(r.text)+'</span>'+(sec?"<b>"+esc(sec)+"</b>":"")+"</li>"; }).join(""):"";
 }
 /* the events of the race clock, in order: a lap ended, a bike goes down, gets up, the yellow flag, a pass, a lapped rider, the fastest lap */
