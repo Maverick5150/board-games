@@ -14,7 +14,7 @@ const THREE=THREE_NS;
 import {canvas,MAT,getKitTier} from "./r3d-util.js";
 import {BIKE,createBike,colorBike,poseBike,hideBike,plateGeo,drawPlate} from "./r3d-bike.js";
 import {buildRider,NB} from "./r3d-rider-model.js";
-import {newRig,poseRide,poseBody} from "./r3d-rider-pose.js";
+import {newRig,poseRide,poseBody,blendStart,blendStep} from "./r3d-rider-pose.js";
 import {applyApparel,AP_VERT_DECL,AP_VERT_SET} from "./r3d-rider-apparel.js";   /* the outfit painted in the fragment shader (polish step) */
 export {BIKE} from "./r3d-bike.js";   /* (the old import path) */
 export {emit,stepParticles} from "./r3d-fx.js";   /* (the old import path: the particles moved to r3d-fx.js; the first argument is now the particle system FX.part, no longer the rider set) */
@@ -32,7 +32,14 @@ function atlas(riders,scale){
     drawPlate(x,rr,fit,px,py,cell,R,t);   /* the plate: r3d-bike.js */
     /* the jersey back: the number in white with a dark edge (transparent around it) */
     const d=k++, dx=(d%cols)*cell, dy=Math.floor(d/cols)*cell;
-    fit(t,cell-14,96); x.textAlign="center"; x.textBaseline="middle"; x.lineJoin="round"; x.lineWidth=11; x.strokeStyle="rgba(10,10,14,.92)"; x.strokeText(t,dx+cell/2,dy+cell/2+4); x.fillStyle=R.red?"#ff5a5a":"#ffffff"; x.fillText(t,dx+cell/2,dy+cell/2+4);
+    /* (milestone 2) the NAME across the shoulders and the number under it, both plain text, the number with a dark stitched-on edge */
+    { const nm=String(R.name||"").trim().split(/\s+/).pop().toUpperCase().slice(0,11);
+      x.textAlign="center"; x.textBaseline="middle"; x.lineJoin="round";
+      if(nm){ let fs=24; x.font="800 "+fs+"px Manrope, system-ui, sans-serif"; while(x.measureText(nm).width>cell-12&&fs>12){ fs-=2; x.font="800 "+fs+"px Manrope, system-ui, sans-serif"; }
+        x.lineWidth=5; x.strokeStyle="rgba(10,10,14,.85)"; x.strokeText(nm,dx+cell/2,dy+15); x.fillStyle="#f4f5f7"; x.fillText(nm,dx+cell/2,dy+15); }
+      fit(t,cell-16,90); const ny=dy+(nm?cell*0.60:cell/2+4);
+      x.lineWidth=12; x.strokeStyle="rgba(10,10,14,.92)"; x.strokeText(t,dx+cell/2,ny); x.lineWidth=4; x.strokeStyle="rgba(255,255,255,.55)"; x.strokeText(t,dx+cell/2,ny);
+      x.fillStyle=R.red?"#ff5a5a":"#ffffff"; x.fillText(t,dx+cell/2,ny); }
     /* the floating tag: the plate on a dark pill (gold ring for a person, red for the leader) */
     const g=k++, gx=(g%cols)*cell, gy=Math.floor(g/cols)*cell;
     x.fillStyle="rgba(10,10,16,.82)"; rr(gx+2,gy+24,cell-4,cell-48,22); x.fill();
@@ -191,7 +198,7 @@ export function createRiders(list,opts){
     vertexShader:"attribute vec2 aCell; uniform vec2 uGrid; varying vec2 vUv; void main(){ vUv=vec2((aCell.x+uv.x)*uGrid.x,1.0-(aCell.y+1.0-uv.y)*uGrid.y); vec4 c=modelViewMatrix*instanceMatrix*vec4(0.,0.,0.,1.); float s=length(instanceMatrix[0].xyz); c.xyz+=normalize(-c.xyz)*min(1.8,0.25*length(c.xyz)); c.xy+=position.xy*s; gl_Position=projectionMatrix*c; }",
     fragmentShader:"uniform sampler2D map; varying vec2 vUv; void main(){ vec4 t=texture2D(map,vUv); if(t.a<0.05) discard; gl_FragColor=t; }"});
   M.tag=new THREE.InstancedMesh(tagG,tagMat,n); M.tag.frustumCulled=false; M.tag.renderOrder=20; grp.add(M.tag);
-  const R={grp,M,A,aScale,n,list,S,hidden:new Uint8Array(n),vis:new Uint8Array(n),pos:new Float32Array(n*3),team,acc,cell,style,me:list.map(r=>!!r.me),wind:new Float32Array(n),mud:new Float32Array(n),
+  const R={grp,M,A,aScale,n,list,S,hidden:new Uint8Array(n),vis:new Uint8Array(n),shown:new Uint8Array(n),pos:new Float32Array(n*3),team,acc,cell,style,me:list.map(r=>!!r.me),wind:new Float32Array(n),mud:new Float32Array(n),
     rig:list.map((r,i)=>newRig(i)),bones:boneData,boneTex,U,hiInst,loInst,nHi:Math.max(0,opts.riderHi!=null?opts.riderHi:(lo?3:8)),dt:1/60,t:0,order:[],lod:new Int8Array(n),stats:{hi:0,lo:0,tris:hiModel.tris}};
   /* scratch */
   R._m=new THREE.Matrix4(); R._q=new THREE.Quaternion(); R._e=new THREE.Euler(0,0,0,"YZX"); R._v=new THREE.Vector3(); R._s=new THREE.Vector3(1,1,1);
@@ -206,11 +213,17 @@ export function poseRider(R,i,B,st){
   if(st.hide){ hideRider(R,i); return; }
   poseBike(R.M,i,B,st);   /* the bike: wheels, suspension, fork, swingarm, plates (r3d-bike.js) */
   const e=B.elements, p=R.pos; p[i*3]=e[12]; p[i*3+1]=e[13]; p[i*3+2]=e[14]; R.vis[i]=1; R.wind[i]=Math.min(1,Math.max(0,(st.v||0)/16)); if(st.mud!=null) R.mud[i]=st.mud;
-  if(st.body) poseBody(R.rig[i],st.body,st.limbs,R.dt,R.bones,i*NB*12);
-  else poseRide(R.rig[i],e,st,R.dt,R.bones,i*NB*12);
+  /* milestone 2: a change of pose kind (riding -> the fall, the walk back -> riding again at the remount) BLENDS from the pose he showed last frame (0.16 s into a fall, 0.55 s onto the bike) */
+  const rig=R.rig[i], mode=st.body?"body":"ride", base=i*NB*12, ref=st.body?st.body.elements:e;
+  if(rig.mode&&rig.mode!==mode&&R.shown&&R.shown[i]) blendStart(rig,R.bones,base,ref,mode==="ride"?0.55:0.16);
+  rig.mode=mode;
+  if(st.body) poseBody(rig,st.body,st.limbs,R.dt,R.bones,base);
+  else poseRide(rig,e,st,R.dt,R.bones,base);
+  blendStep(rig,R.bones,base,ref,R.dt);
+  if(R.shown) R.shown[i]=1;
 }
 export function hideRider(R,i){
-  hideBike(R.M,i); R.vis[i]=0;
+  hideBike(R.M,i); R.vis[i]=0; if(R.shown) R.shown[i]=0;
   const z=_m1.makeScale(0,0,0); R.M.shadow.setMatrixAt(i*2,z); R.M.shadow.setMatrixAt(i*2+1,z); R.M.tag.setMatrixAt(i,z);
 }
 const _sCol=new THREE.Color();
