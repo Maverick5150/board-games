@@ -117,7 +117,7 @@ void main(){
     float c0=coc(z0)*uDof, rot=ign(gl_FragCoord.xy)*6.2831853; vec3 acc=h0.rgb; float ws=1.0;
     for(int i=0;i<DOF_TAPS;i++){
       float fi=float(i)+0.5, r=sqrt(fi/float(DOF_TAPS)), a=fi*2.39996323+rot;
-      vec4 t=texture2D(tHalf,vUv+vec2(cos(a),sin(a))*r*uMaxPx*uTexel); float zt=abs(t.a);
+      vec4 t=textureLod(tHalf,vUv+vec2(cos(a),sin(a))*r*uMaxPx*uTexel,0.0); float zt=abs(t.a);
       float ct=coc(zt)*uDof, cr=zt<z0?ct:c0, w=clamp((cr-r)/0.18+1.0,0.0,1.0);
       vec3 tc=min(t.rgb,vec3(2.5)); w*=1.0+min(dot(tc,vec3(0.2126,0.7152,0.0722)),2.5)*0.05;
       acc+=tc*w; ws+=w;
@@ -132,7 +132,7 @@ void main(){
       vec2 ndc=vUv*2.0-1.0; vec3 wp=(uCamWorld*vec4(ndc.x*uProjInv.x*z0,ndc.y*uProjInv.y*z0,-z0,1.0)).xyz;
       vec4 pp=uPrevVP*vec4(wp,1.0); vec2 puv=pp.xy/pp.w*0.5+0.5; vec2 vel=(vUv-puv)*uMB*fg; float vl=length(vel); if(vl>0.03) vel*=0.03/vl;
       if(vl>0.0015){ vec3 acc=h0.rgb; float n=1.0, jt=ign(gl_FragCoord.xy)-0.5;
-        for(int i=1;i<=8;i++){ float f=(float(i)+jt)/8.0-0.5; vec4 t=texture2D(tHalf,vUv-vel*f*2.0); float m=step(0.0,t.a); acc+=t.rgb*m; n+=m; }   /* a crumb tap is left out: it is never smeared into the dirt's streak */
+        for(int i=1;i<=8;i++){ float f=(float(i)+jt)/8.0-0.5; vec4 t=textureLod(tHalf,vUv-vel*f*2.0,0.0); float m=step(0.0,t.a); acc+=t.rgb*m; n+=m; }   /* a crumb tap is left out: it is never smeared into the dirt's streak */
         km=clamp(vl*60.0,0.0,1.0); res=mix(res,acc/n,km/max(max(kd,km),1e-4)); }
     }
   }
@@ -146,7 +146,7 @@ uniform sampler2D tHalf; uniform vec2 uHTexel; uniform vec2 uProjInv; uniform fl
 varying vec2 vUv;
 float ign(vec2 p){ return fract(52.9829189*fract(dot(p,vec2(0.06711056,0.00583715)))); }
 vec3 vpos(vec2 uv,float z){ vec2 n=uv*2.0-1.0; return vec3(n.x*uProjInv.x*z,n.y*uProjInv.y*z,-z); }
-float zat(vec2 uv){ return abs(texture2D(tHalf,uv).a); }
+float zat(vec2 uv){ return abs(textureLod(tHalf,uv,0.0).a); }   /* (explicit level 0: no derivatives in the loop and after the early return; the target has no mips) */
 void main(){
   float z0=zat(vUv);
   if(z0>uAoFar){ gl_FragColor=vec4(1.0); return; }
@@ -261,9 +261,9 @@ void main(){
     #ifdef DOF
     if(uDof>0.002) kd=smoothstep(0.02,0.5,coc(-perspectiveDepthToViewZ(dep,uNear,uFar))*uDof);
     #endif
-    vec4 fx=texture2D(tFx,vUv); float kk=max(kd,fx.a*step(0.5,s0.a)); if(kk>0.001) c=mix(c,fx.rgb,kk); }   /* (a crumb pixel itself: no motion blur, its own shutter streaked it) */
+    vec4 fx=textureLod(tFx,vUv,0.0); float kk=max(kd,fx.a*step(0.5,s0.a)); if(kk>0.001) c=mix(c,fx.rgb,kk); }   /* (a crumb pixel itself: no motion blur, its own shutter streaked it) */
   #ifdef AO
-  if(uAoOn>0.5){ vec2 h=uTexel*0.75; float ao=0.25*(texture2D(tAo,vUv+vec2(h.x,h.y)).r+texture2D(tAo,vUv+vec2(-h.x,h.y)).r+texture2D(tAo,vUv+vec2(h.x,-h.y)).r+texture2D(tAo,vUv+vec2(-h.x,-h.y)).r);
+  if(uAoOn>0.5){ vec2 h=uTexel*0.75; float ao=0.25*(textureLod(tAo,vUv+vec2(h.x,h.y),0.0).r+textureLod(tAo,vUv+vec2(-h.x,h.y),0.0).r+textureLod(tAo,vUv+vec2(h.x,-h.y),0.0).r+textureLod(tAo,vUv+vec2(-h.x,-h.y),0.0).r);
     if(uAoDbg>0.5){ gl_FragColor=vec4(vec3(ao),1.0); return; }   /* (a test view: the contact shadows alone) */
     c*=mix(1.0,ao,uAoMix*(1.0-smoothstep(1.2,4.0,lm(c)))); }   /* contact shadows (never on a light: a bright pixel keeps its glow) */
   #endif
