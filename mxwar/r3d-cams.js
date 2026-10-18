@@ -36,7 +36,7 @@ class Sd{
    publish its own as world.ctx.bowl = {prof}. The high cameras stand just above it. */
 const BOWL=[[0,1.6],[2,3.0],[30,18],[31,18.4],[32,22.5],[34,23],[62,42],[64,44]];
 /* the presets of the remote / phone button */
-const MODES=[{id:"auto",name:"Director"},{id:"chase",name:"Chase"},{id:"broadcast",name:"Broadcast"},{id:"stadium",name:"Stadium"},{id:"onboard",name:"Onboard"}];
+const MODES=[{id:"auto",name:"Director"},{id:"chase",name:"Chase"},{id:"broadcast",name:"Broadcast"},{id:"trackside",name:"Trackside"},{id:"stadium",name:"Stadium"},{id:"onboard",name:"Onboard"}];
 /* the WIDE chase (11_SKIN_DESIGN_TOKENS.json cinematic_chase: 3.5 m behind, 1.5 m up, 70 degrees vertical): milestone 1's default, kept for a chase with shot.wide and as the replay's rig */
 const CHASE={back:3.5,up:1.5,side:-1.1,fov:70};
 /* THE HERO CHASE (milestone 2, the cover's framing; the default chase): 2.6 m behind the rider and 1 m to his left, 1.1 m up, 72 degrees vertical, the rider big in the
@@ -336,6 +336,8 @@ export function createCams(VIEW){
       case "onboard": return {type:"onboard",subj:subj,pri:2,min:1e9,max:1e9,why:"preset"};
       case "stadium": return {type:"wide",subj:subj,pri:2,min:1e9,max:1e9,why:"preset"};
       case "broadcast": return {type:"bcast",subj:subj,pri:2,min:1e9,max:1e9,why:"preset"};   /* (milestone 2: the elevated stadium broadcast from the stands, panning and zooming with the pack round the person's rider; it was the trackside long lens) */
+      case "trackside": { if(r.onStart) return {type:"gate",subj:subj,pri:2,min:0.1,max:1e9,why:"preset"};   /* milestone 1's "broadcast" button, kept as its own preset: a crane beside the track ahead of the rider, re-picked as he passes it (still on the start path: the gate camera) */
+        const rsd=(r.s||0)+Math.max(10,(r.v||10)*2.6); return {type:"track",subj:subj,pri:2,min:4,max:7.5,cam:()=>trackCam(rsd,3.6,[14,18,23,29],5.5,9),why:"preset"}; }
     }
     return null;
   }
