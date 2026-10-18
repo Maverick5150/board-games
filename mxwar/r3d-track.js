@@ -322,7 +322,8 @@ function gridMesh(G,rowList,sc,cx,cy,cz,skirts,mat){
   const {R,PX,PY,PZ,CR,WT,TF,UVs,UVl,nc,ns}=G, nl=R.nl, r0=rowList[0], r1=rowList[rowList.length-1];
   const cols=[0,1]; for(let j=0;j<nl;j+=sc) cols.push(2+j); if((nl-1)%sc) cols.push(2+nl-1); cols.push(nc-2,nc-1);
   const nr=rowList.length, ncc=cols.length, nv=nr*ncc+(skirts?2*ncc:0);
-  const pos=new Float32Array(nv*3), nor=new Float32Array(nv*3), col=new Float32Array(nv*3), wet=new Float32Array(nv), trf=new Float32Array(nv), uv=new Float32Array(nv*2);
+  /* (milestone 2: normals as normalized bytes, moisture and traffic as bytes: 37 bytes a vertex instead of 52; the near level has half as many vertices again as milestone 1's) */
+  const pos=new Float32Array(nv*3), nor=new Int8Array(nv*3), col=new Float32Array(nv*3), wet=new Uint8Array(nv), trf=new Uint8Array(nv), uv=new Float32Array(nv*2);
   const at=(r,c)=>{ if(r>=ns) return (r===ns?ns:r-ns)*nc+c; if(r<0) return (r+ns)*nc+c; return r*nc+c; };
   let v=0;
   for(let ri=0;ri<nr;ri++){ const r=rowList[ri], rp=ri>0?rowList[ri-1]:r-(rowList[Math.min(1,nr-1)]-r||1), rn=ri<nr-1?rowList[ri+1]:r+(r-(ri>0?rowList[ri-1]:r-1));
@@ -331,8 +332,8 @@ function gridMesh(G,rowList,sc,cx,cy,cz,skirts,mat){
       const ax=PX[kr]-PX[kl], ay=PY[kr]-PY[kl], az=PZ[kr]-PZ[kl], bx=PX[kd]-PX[ku], by=PY[kd]-PY[ku], bz=PZ[kd]-PZ[ku];
       /* lateral x along-the-track: up (the lap runs along +s, lat to the right) */
       let nx=ay*bz-az*by, ny=az*bx-ax*bz, nz=ax*by-ay*bx; const ln=Math.hypot(nx,ny,nz)||1; nx/=ln; ny/=ln; nz/=ln; if(ny<0){ nx=-nx; ny=-ny; nz=-nz; }
-      pos[v*3]=PX[k]-cx; pos[v*3+1]=PY[k]-cy; pos[v*3+2]=PZ[k]-cz; nor[v*3]=nx; nor[v*3+1]=ny; nor[v*3+2]=nz;
-      col[v*3]=CR[k*3]; col[v*3+1]=CR[k*3+1]; col[v*3+2]=CR[k*3+2]; wet[v]=WT[k]; trf[v]=TF[k]; uv[v*2]=UVs[k]; uv[v*2+1]=UVl[k]; v++; } }
+      pos[v*3]=PX[k]-cx; pos[v*3+1]=PY[k]-cy; pos[v*3+2]=PZ[k]-cz; nor[v*3]=Math.round(nx*127); nor[v*3+1]=Math.round(ny*127); nor[v*3+2]=Math.round(nz*127);
+      col[v*3]=CR[k*3]; col[v*3+1]=CR[k*3+1]; col[v*3+2]=CR[k*3+2]; wet[v]=Math.round(clamp(WT[k],0,1)*255); trf[v]=Math.round(clamp(TF[k],0,1)*255); uv[v*2]=UVs[k]; uv[v*2+1]=UVl[k]; v++; } }
   /* the loop's last row is the first row again: its s runs on to L so the texture coordinate is continuous */
   if(r1>=ns){ for(let ri=0;ri<nr;ri++){ const r=rowList[ri]; if(r>=ns){ for(let ci=0;ci<ncc;ci++) uv[(ri*ncc+ci)*2]=R.L+(r-ns)*R.ds; } } }
   const I=[]; for(let ri=0;ri<nr-1;ri++) for(let ci=0;ci<ncc-1;ci++){ const a=ri*ncc+ci, b=a+1, c2=a+ncc, d=c2+1; I.push(a,b,c2,b,d,c2); }
@@ -341,8 +342,8 @@ function gridMesh(G,rowList,sc,cx,cy,cz,skirts,mat){
       col[d*3]=col[s0*3]; col[d*3+1]=col[s0*3+1]; col[d*3+2]=col[s0*3+2]; wet[d]=wet[s0]; trf[d]=trf[s0]; uv[d*2]=uv[s0*2]; uv[d*2+1]=uv[s0*2+1]; }
       for(let ci=0;ci<ncc-1;ci++){ const t0=ri*ncc+ci, t1=t0+1, b0=base0+ci, b1=b0+1; I.push(t0,b0,t1,t1,b0,b1); } });
   }
-  const g=new THREE.BufferGeometry(); g.setAttribute("position",new THREE.BufferAttribute(pos,3)); g.setAttribute("normal",new THREE.BufferAttribute(nor,3)); g.setAttribute("color",new THREE.BufferAttribute(col,3));
-  g.setAttribute("aWet",new THREE.BufferAttribute(wet,1)); g.setAttribute("aTraf",new THREE.BufferAttribute(trf,1)); g.setAttribute("uv",new THREE.BufferAttribute(uv,2)); g.setIndex(nv>65000?new THREE.BufferAttribute(new Uint32Array(I),1):new THREE.BufferAttribute(new Uint16Array(I),1));
+  const g=new THREE.BufferGeometry(); g.setAttribute("position",new THREE.BufferAttribute(pos,3)); g.setAttribute("normal",new THREE.BufferAttribute(nor,3,true)); g.setAttribute("color",new THREE.BufferAttribute(col,3));
+  g.setAttribute("aWet",new THREE.BufferAttribute(wet,1,true)); g.setAttribute("aTraf",new THREE.BufferAttribute(trf,1,true)); g.setAttribute("uv",new THREE.BufferAttribute(uv,2)); g.setIndex(nv>65000?new THREE.BufferAttribute(new Uint32Array(I),1):new THREE.BufferAttribute(new Uint16Array(I),1));
   const m=new THREE.Mesh(g,mat); m.receiveShadow=true; m.position.set(cx,cy,cz); return m;
 }
 
