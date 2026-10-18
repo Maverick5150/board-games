@@ -312,7 +312,7 @@ export function createFx(opts){
   }
 
   /* ================= the per-rider memory and the emission regulator ================= */
-  function recOf(i){ let e=rec[i]; if(!e){ e={f:-9,air:false,x:0,y:0,z:0,spray:0,acc:0,power:0,berm:0,launch:0,cA:0,sA:0,dA:0,hA:0,fA:0,mudS:0}; rec[i]=e; } return e; }
+  function recOf(i){ let e=rec[i]; if(!e){ e={f:-9,air:false,x:0,y:0,z:0,spray:0,acc:0,power:0,berm:0,launch:0,ls:0,cA:0,sA:0,dA:0,hA:0,fA:0,mudS:0}; rec[i]=e; } return e; }
   const PS={c:1,s:1,p:1,h:1};   /* how much of the wanted emission the pools take now (from last frame's fill) */
   const RATE=T.rate, BIG=T.bigger;
   let simT=0, FRAME=1, slowT=0, fastT=0;   /* FRAME counts the steps: a rider's memory is current if FX.rider ran for it this frame or the last */
@@ -327,6 +327,7 @@ export function createFx(opts){
     /* a berm or a rut: the back end slides out and the tyre throws dirt to the outside, harder under power (a rider holding speed through a turn is on the gas) */
     const corner=clamp(Math.abs(st.lean)*1.7,0,1)*clamp(v/4,0,1), berm=corner*(0.7+0.3*clamp(power*1.2,0,1));
     e.power=power; e.berm=berm; e.launch=launch;
+    e.ls=(st.onStart&&st.D<18)?clamp(1-st.D/18,0,1):0;   /* (polish: how much the pad is under him, from the drop on: `launch` needs v > 1.2, so the first half second of the start threw full dust and spray from all 22 riders: the wall of dust in front of the gate) */
     st.throttle=clamp(power+berm*0.5,0,1);
     st.slip=clamp(power*0.7+berm*0.45+(st.sand||0)*0.3+launch*0.25,0,1);
     st.roost=st.slip*8;
@@ -382,14 +383,14 @@ export function createFx(opts){
     e.spray+=(clamp(pw*0.9+bm*0.9+sand*cruise*0.5,0,1)-e.spray)*Math.min(1,dt*4);
     const gR=st.tR+0.03, gF=st.tF+0.03, s0R=st.onStart?-1:st.s-0.8, s0F=st.onStart?-1:st.s+0.8, sgn=st.k>0?1:-1, lift=0.55+0.45*Math.min(1,ef+0.3);
     /* clods: a fan thrown up and back off the rear tyre (in the world's frame the dirt barely moves while the bike drives away from it); in a turn the back end slides and throws them to the outside */
-    e.cA+=(2+5*cruise+380*pw+320*bm+110*sand*cruise)*(1-0.35*e.launch)*dt*PS.c*imp; let n=e.cA|0; e.cA-=n; if(n>40) n=40;
+    e.cA+=(2+5*cruise+380*pw+320*bm+110*sand*cruise)*(1-0.35*e.ls)*dt*PS.c*imp; let n=e.cA|0; e.cA-=n; if(n>40) n=40;
     while(n-->0){
       const up=(2.6+6.4*Math.pow(rnd(),0.9))*lift, bk=(rnd()-0.3)*(1.2+3.2*ef)+0.05*v, sd=(rnd()+rnd()-1)*(1.6+1.8*bm)-sgn*bm*(1.5+3.5*rnd()), cr=(0.1+0.25*rnd())*v;
       const bx=st.x-cth*(0.8+v*dt*rnd())+rx*(rnd()-0.5)*0.14, bz=st.z-sth*(0.8+v*dt*rnd())+rz*(rnd()-0.5)*0.14, big=rnd()<0.025?1.5:1;
       clod(bx,gR+0.05+0.1*rnd(),bz,cth*cr-cth*bk+rx*sd,up,sth*cr-sth*bk+rz*sd,(0.015+0.036*Math.pow(rnd(),2.2))*big*BIG,0.9+0.9*rnd(),COL.clod,gR,s0R,st.lat,st.th);
     }
     /* the fine spray: hundreds of specks in the same fan, faster */
-    e.sA+=(10*cruise+1300*pw+900*bm+320*sand*cruise)*(1-0.88*e.launch)*dt*PS.s*imp;   /* (polish: 22 riders launching at once threw a brown veil over the whole gate: 12% of the spray while the pad is under them) */ n=e.sA|0; e.sA-=n; if(n>60) n=60;
+    e.sA+=(10*cruise+1300*pw+900*bm+320*sand*cruise)*(0.03+0.97*(1-e.ls)*(1-e.ls))*dt*PS.s*imp;   /* (polish: 22 riders launching at once threw a brown veil over the whole gate: 3% of the spray at the gate, back to full at 18 m: the pool was saturated at any smaller cut) */ n=e.sA|0; e.sA-=n; if(n>60) n=60;
     while(n-->0){
       const up=(1.6+7.6*rnd())*lift, bk=(rnd()-0.3)*(1.6+4.2*ef)+0.05*v, sd=(rnd()+rnd()-1)*(2.2+2.2*bm)-sgn*bm*(1.5+4*rnd()), cr=(0.1+0.3*rnd())*v;
       spray(st.x-cth*(0.8+v*dt*rnd())+rx*(rnd()-0.5)*0.2,gR+0.06+0.12*rnd(),st.z-sth*(0.8+v*dt*rnd())+rz*(rnd()-0.5)*0.2,cth*cr-cth*bk+rx*sd,up,sth*cr-sth*bk+rz*sd,COL.spray);
@@ -401,11 +402,11 @@ export function createFx(opts){
       if(rnd()<0.35) clod(fx,gF+0.05,fz,cth*fr+rx*out,up,sth*fr+rz*out,(0.014+0.03*Math.pow(rnd(),2))*BIG,0.9+0.8*rnd(),COL.clod,gF,s0F,st.lat,st.th);
       else spray(fx,gF+0.06,fz,cth*fr+rx*out*1.2,up*1.1,sth*fr+rz*out*1.2,COL.spray); }
     /* the dust off the rear tyre: a rooster tail of puffs in a hollow fan (the line straight behind the bike stays clear for a chase camera), more under power, on the brakes and in sand; the 22 on the gate throw less each */
-    const lf=1-0.93*e.launch, pwD=pw*lf*lf, efD=Math.max(pwD,bm*0.9);   /* (polish: the 22 on the gate throw almost no dust each: together they were a wall of it between the camera and the field) */
+    const lf=1-0.93*e.ls, pwD=pw*lf*lf, efD=Math.max(pwD,bm*0.9);   /* (polish: the 22 on the gate throw almost no dust each: together they were a wall of it between the camera and the field) */
     e.dA+=((1.2+3.5*cruise*loose)*lf+18*pwD*loose+10*bm+6*sand*cruise+6*brake)*dt*PS.p*imp; n=e.dA|0; e.dA-=n; if(n>8) n=8;
     while(n-->0){ const side=(rnd()<0.5?-1:1)*(0.5+1.4*rnd()), hi=rnd()<0.25*efD?2.2:1, off=0.9+v*dt*rnd(), ox=rx*side*0.2;
       puff(st.x-cth*off+ox,gR+0.25+0.25*rnd(),st.z-sth*off+rz*side*0.2,cth*v*0.12-cth*(0.3+0.8*rnd())+rx*side*0.9-sgn*bm*rx*1.2,(0.5+1.0*rnd())*hi,sth*v*0.12-sth*(0.3+0.8*rnd())+rz*side*0.9-sgn*bm*rz*1.2,
-      (0.36+0.26*rnd()+0.2*efD)*(1-0.4*e.launch),0.8+0.5*rnd()+0.3*efD,1.5+1.0*rnd()+0.4*efD,(0.2+0.14*rnd()+0.16*efD+0.05*sand)*(0.7+0.3*loose)*lf,COL.dust,0.3,1.4); }
+      (0.36+0.26*rnd()+0.2*efD)*(1-0.4*e.ls),0.8+0.5*rnd()+0.3*efD,1.5+1.0*rnd()+0.4*efD,(0.2+0.14*rnd()+0.16*efD+0.05*sand)*(0.7+0.3*loose)*lf,COL.dust,0.3,1.4); }
     /* the haze that hangs over the track behind a fast pack: large, faint, slow */
     e.hA+=(v>6?(0.8+0.7*efD)*lf:0)*dt*PS.h*(st.me?1.3:1)*RATE; n=e.hA|0; e.hA-=n; if(n>3) n=3;
     while(n-->0) haze(st.x-cth*(1.4+3*rnd())+rx*(rnd()-0.5)*1.5,gR+0.7+0.9*rnd(),st.z-sth*(1.4+3*rnd())+rz*(rnd()-0.5)*1.5,(rnd()-0.5)*0.5,0.15,(rnd()-0.5)*0.5,1.3+0.8*rnd(),0.45+0.25*rnd(),3.2+2.4*rnd(),0.05+0.035*rnd(),COL.dust);
