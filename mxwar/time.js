@@ -613,7 +613,7 @@ function you(G,s,k,f,nameOf){
   var rs=out.reasons, w=worth(G,f);
   function add(kind,text,sec){ rs.push({ kind:kind, text:text, sec:sec }); }
   if(out.crash==="out") add("crash","crashed out: the race is over for you",0);
-  else if(out.crash==="remount") add("crash","crashed: down "+secText(out.down,0)+", back on the bike",-out.down);
+  else if(out.crash==="remount") add("crash","crashed: down "+secText(out.down,0)+", back on the bike and attacking",-out.down);
   if(f&&f.c!=null){
     var cw=f.wild?"Wild card":rankWord(f.rank), big=f.wild||f.rank>=11;
     if(f.win&&f.war>0) add("result",f.war>1?(f.war===2?"Double war won":"Triple war won"):"War won",-w.res);
@@ -628,7 +628,7 @@ function you(G,s,k,f,nameOf){
     else if(e.e==="pass"&&e.d===s&&!e.crash) add("passed","passed by "+nm(e.a),0);
   });
   if(tm.yz[k]&&out.crash==null) add("yellow","yellow flag: everybody loses "+secText(tm.P.YLF*p,1),-tm.P.YLF*p);
-  if(R.fire>0&&k>=tm.k&&!out.crash) add("fire","attacking after the crash",0);
+  if(!out.crash&&(R.hold[k-1]||R.hold[k-2]||R.hold[k-3])) add("fire","attacking after the crash",0);   // the 3 laps after a remount (FIRE)
   var parts=[];
   if(out.crash==="out") out.head="Crashed out on lap "+k;
   else if(fin){
@@ -660,7 +660,10 @@ function eventLine(G,e,nameOf,me){
   return null;
 }
 
-var MX_Time={ BASE:BASE, CLS:CLS, classOf:classOf, era:era, cardsFor:cardsFor, init:init, adopt:adopt, trim:trim, lap:lap, complete:complete, finish:finish, standings:standings, result:result,
+/* the crash rules in one sentence (the War decides them; the model only adds the seconds): shown on the gate card of the hub and the phones */
+var RULES="Lose a double war: crash and remount. Lose a triple war: crash out. Yellow flag next lap.";
+
+var MX_Time={ RULES:RULES, BASE:BASE, CLS:CLS, classOf:classOf, era:era, cardsFor:cardsFor, init:init, adopt:adopt, trim:trim, lap:lap, complete:complete, finish:finish, standings:standings, result:result,
   knots:knots, progress:progress, progressAt:progressAt, timeAt:timeAt, splits:splits, tower:tower, packet:packet, infoOf:infoOf, run:run, ratio:ratio, handQ:handQ,
   fmtLap:fmtLap, fmtRace:fmtRace, fmtGap:fmtGap, gapText:gapText, secText:secText, ordText:ordText, rankWord:rankWord, lapTimes:lapTimes, lapStats:lapStats, holdWindow:holdWindow, yellowWindows:yellowWindows,
   leaderLine:leaderLine, clockLimit:clockLimit, walker:walker, lapPlace:lapPlace, facts:facts, worth:worth, you:you, towerCells:towerCells, eventLine:eventLine };
