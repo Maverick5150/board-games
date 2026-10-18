@@ -13,7 +13,7 @@
      pad), lit by the scene's lights, tumbling, stretched along their velocity when fast, bouncing and settling on the real ground (Course.ground), then
      shrinking away; they shrink inside 1.6 m of the lens.
    - SPRITES (one instanced billboard draw call): DUST puffs (lumpy, baked normals, lit by the scene's lights with forward scattering when a light is
-     behind them, a warm glow when seen against the ring of floodlight banks, thinner higher up) and HAZE (big faint puffs trailing the pack). THE VEIL RULE: a puff fades from 3 m to 0.7 m from the lens, a puff
+     behind them, a warm glow when seen against the ring of floodlight banks, thinner higher up) and HAZE (big faint puffs trailing the pack). THE VEIL RULE: a puff fades from 2.2 m to 0.7 m from the lens, a puff
      never covers more than about a fifth of the frame's height, and the whole dust layer's opacity-weighted coverage of the frame is capped (`uVeil`,
      worked out while the frame is drawn from the drawing camera: nothing in the simulation reads the camera).
    - MOTES (high tier): dust specks floating round the camera; LENS flecks (high tier): mud on the lens behind a roosting rider (draw-time only).
@@ -130,7 +130,7 @@ const SPR_VS=[
 "  vec2 c=position.xy;",
 "  float cs=cos(aD.x), sn=sin(aD.x); vec2 off=vec2(cs*c.x-sn*c.y,sn*c.x+cs*c.y)*size; vRot=vec2(cs,sn);",
 "  float ry=size*projectionMatrix[1][1]/depth;",                    /* the puff's radius as a share of the half height */
-"  alpha*=smoothstep(0.7,3.0,depth);",                               /* m2: a puff fades from 3 m to 0.7 m from the lens (it never fills the lens) */
+"  alpha*=smoothstep(0.7,2.2,depth);",                               /* m2: a puff fades from 2.2 m to 0.7 m from the lens (it never fills the lens) */
 "  alpha*=ry>uCapR?pow(uCapR/ry,1.5):1.0;",                          /* m2: no single puff covers more than about a fifth of the frame's height */
 "  alpha*=mix(1.0,0.4,smoothstep(0.7,3.0,aA.y-aD.y));",              /* m2: denser near the floor, thinner higher up */
 "  alpha*=uVeil;",                                                   /* m2: the whole dust layer's coverage cap (set while the frame is drawn) */
@@ -164,10 +164,10 @@ LIGHT_FN,
 const SPK_VS=[
 "attribute vec4 aP; attribute vec4 aV; attribute vec4 aS; attribute vec4 aK;",   /* aP = x0 y0 z0 t0 (thrown); aV = vx vy vz life; aS = the ground y, radius, drag, seed; aK = r g b, kind (0 grain, 1 chip) */
 "uniform float uTime; uniform float uH; uniform float uShutter; uniform float uMaxPx; uniform float uBank; uniform vec3 uCamV; uniform float uMaxTrail;",
-"varying vec2 vUv; varying vec3 vCol; varying float vA; varying float vGlint; varying vec3 vVP; varying float vBank;",
+"varying vec2 vUv; varying vec3 vCol; varying float vA; varying float vGlint; varying vec3 vVP; varying float vBank; varying float vLen; varying vec2 vDir;",
 "#include <fog_pars_vertex>",
 "void main(){",
-"  vUv=position.xy; vCol=aK.rgb; vA=0.0; vGlint=0.0; vVP=vec3(0.0,0.0,-1.0); vBank=0.0;",
+"  vUv=position.xy; vCol=aK.rgb; vA=0.0; vGlint=0.0; vVP=vec3(0.0,0.0,-1.0); vBank=0.0; vLen=1.0; vDir=vec2(1.0,0.0);",
 "  float age=uTime-aP.w, life=aV.w;",
 "  if(age<0.0||age>=life){ gl_Position=vec4(0.0,0.0,2.0,1.0); return; }",
 "  float k=aS.z, e=exp(-k*age); vec3 vt=vec3(0.0,-9.81/k,0.0);",                     /* the exact flight with linear air drag: v(t) = vt + (v0 - vt) e^(-kt) */
@@ -187,7 +187,7 @@ const SPK_VS=[
 "  vec3 vr=(modelViewMatrix*vec4(v-uCamV,0.0)).xyz; vec3 q=mvPosition.xyz-vr*uShutter; q.z=min(q.z,-0.1);",   /* THE SHUTTER (m2): where it was one shutter ago RELATIVE TO THE LENS (its flight minus the camera's motion) ... */
 "  vec4 c0=projectionMatrix*mvPosition, c1=projectionMatrix*vec4(q,1.0); vec2 sp=vec2(projectionMatrix[1][1]/projectionMatrix[0][0],1.0)*(uH*0.5);",   /* ... both ends projected (clip -> square pixels): dirt the camera rushes past streaks, dirt flying along with it does not */
 "  vec2 d=c0.xy/c0.w*sp-c1.xy/c1.w*sp; float lp=length(d); if(lp>uMaxTrail){ d*=uMaxTrail/lp; lp=uMaxTrail; } vec2 dir=lp>1e-3?d/lp:vec2(1.0,0.0);",
-"  float hl=hw+0.5*lp;",
+"  float hl=hw+0.5*lp; vLen=hl/max(hw,1e-3); vDir=dir;",
 "  alpha*=clamp(1.7*hw/hl,0.3,1.0);",                                               /* a long streak is fainter (the same dirt, spread out) */
 "  alpha*=smoothstep(0.3,1.1,depth)*(1.0-smoothstep(75.0,120.0,depth));",
 "  vec2 sc=c0.xy/c0.w*sp+dir*(position.x*hl-0.5*lp)+vec2(-dir.y,dir.x)*(position.y*hw);",   /* the quad in pixels, centred half a trail behind the crumb */
@@ -198,23 +198,24 @@ const SPK_VS=[
 "}"].join("\n");
 const SPK_FS=[
 "uniform float uGain;",
-"varying vec2 vUv; varying vec3 vCol; varying float vA; varying float vGlint; varying vec3 vVP; varying float vBank;",
+"varying vec2 vUv; varying vec3 vCol; varying float vA; varying float vGlint; varying vec3 vVP; varying float vBank; varying float vLen; varying vec2 vDir;",
 "#include <common>",
 "#include <fog_pars_fragment>",
 "#include <lights_pars_begin>",
 LIGHT_FN,
 "void main(){",
-"  float r=length(vUv);",
+"  float x=vUv.x*vLen, ex=max(abs(x)-(vLen-1.0),0.0)*sign(x); vec2 q=vec2(ex,vUv.y); float r=length(q);",   /* m2: a capsule, not a stretched disc (a stretched disc read as a leaf or a coin) */
 "  #ifdef SPK_DEPTH",
-"  if(r>0.86||vA<0.012) discard;",                      /* a crumb has a hard edge: its core goes into the depth buffer, so the depth of field keeps it at its own distance */
+"  if(r>0.92||vA<0.012) discard;",                      /* a crumb has a hard edge: its core goes into the depth buffer, so the depth of field keeps it at its own distance */
 "  float a=vA;",
 "  #else",
-"  float a=vA*(1.0-smoothstep(0.6,1.0,r));",
+"  float a=vA*(1.0-smoothstep(0.62,1.0,r));",
 "  if(a<0.004) discard;",
 "  #endif",
 "  vec3 vd=normalize(vVP);",
-"  vec3 L=sceneLight(vec3(0.0,0.45,0.89),vd,0.7);",
-"  vec3 col=vCol*L*uGain*(0.8+0.3*(1.0-r))+vCol*vBank*vec3(1.0,0.72,0.42)*(0.25+0.55*r)+vGlint*vec3(1.0,0.82,0.58)*1.6;",
+"  vec2 sv=q.x*vDir+q.y*vec2(-vDir.y,vDir.x); vec3 n=normalize(vec3(sv,sqrt(max(0.0,1.0-dot(sv,sv)))+0.15));",   /* m2: a lump of dirt: the normal of a ball under the fragment (a lit side and a dark side) */
+"  vec3 L=sceneLight(n,vd,0.7);",
+"  vec3 col=vCol*L*uGain*1.1+vCol*vBank*vec3(1.0,0.72,0.42)*(0.2+0.6*r)+vGlint*vec3(1.0,0.82,0.58)*1.6;",
 "  gl_FragColor=vec4(col,a);",
 "  #include <tonemapping_fragment>",
 "  #include <colorspace_fragment>",
@@ -348,10 +349,10 @@ export function createFx(opts){
     const m=0.82+0.36*rnd(); kC[o]=col[0]*m; kC[o+1]=col[1]*m; kC[o+2]=col[2]*m; kC[o+3]=kind;
   }
   /* the colour of a crumb: 30% wet dark, 40% the soil, 30% light dry tan (airborne crumbs must read against the dark stands too) */
-  const speckC=()=>{ const r=rnd(); return r<0.3?COL.wet:r<0.7?COL.mid:COL.dry; };
+  const speckC=()=>{ const r=rnd(); return r<0.35?COL.wet:r<0.8?COL.mid:COL.dry; };
   /* radius (m): about 0.4-2.6 cm, median 1 cm (the cover's crumbs near the lead rider are 2-5 px at 720p, 2-3 m from the lens); the first cut's 1.3-10 mm drew
      sub-pixel dots that faded to nothing at the chase distance */
-  const speckR=chip=>chip?logn(0.013,0.4,0.006,0.03):logn(0.010,0.45,0.004,0.026);
+  const speckR=chip=>chip?logn(0.012,0.55,0.005,0.034):logn(0.009,0.6,0.003,0.03);
 
   /* ================= SPRITES: dust puffs and haze, one instanced draw call ================= */
   const NPF=T.puffs, NHZ=T.haze, NS=NPF+NHZ, H0=NPF;
@@ -377,7 +378,7 @@ export function createFx(opts){
       const x=aA[o4], y=aA[o4+1], z=aA[o4+2], s=aA[o4+3], d=-(e[2]*x+e[6]*y+e[10]*z+e[14]); if(d<0.7) continue;
       const ry=s*P11/d, cy=(e[1]*x+e[5]*y+e[9]*z+e[13])*P11/d, cx=(e[0]*x+e[4]*y+e[8]*z+e[12])*P11/(d*asp);
       if(cx-ry/asp>1||cx+ry/asp<-1||cy-ry>1||cy+ry<-1) continue;
-      const near=sstep(0.7,3.0,d), cap=ry>capR?Math.pow(capR/ry,1.5):1, hi=1-0.6*sstep(0.7,3.0,y-aD[o4+1]);
+      const near=sstep(0.7,2.2,d), cap=ry>capR?Math.pow(capR/ry,1.5):1, hi=1-0.6*sstep(0.7,3.0,y-aD[o4+1]);
       cov+=Math.min(1,0.785*ry*ry/asp)*a*near*cap*hi*0.5;   /* the share of the frame (pi r^2 / 4 in clip units) x opacity x the atlas' mean coverage */
     }
     veil.cov=cov; veil.gain=cov>VEIL?VEIL/cov:1; sm.uniforms.uVeil.value=veil.gain;
@@ -537,7 +538,7 @@ export function createFx(opts){
     e.dA+=((1.2+3.5*cruise*loose)*lf+16*pwD*loose+9*bm+6*sand*cruise+6*brake)*dt*PS.p*imp; n=e.dA|0; e.dA-=n; if(n>8) n=8;
     while(n-->0){ const side=(rnd()<0.5?-1:1)*(0.5+1.4*rnd()), hi=rnd()<0.2*efD?1.8:1, off=0.9+v*dt*rnd(), ox=rx*side*0.2;
       puff(st.x-cth*off+ox,gR+0.18+0.2*rnd(),st.z-sth*off+rz*side*0.2,cth*v*0.12-cth*(0.3+0.8*rnd())+rx*side*0.9-sgn*bm*rx*1.2,(0.35+0.8*rnd())*hi,sth*v*0.12-sth*(0.3+0.8*rnd())+rz*side*0.9-sgn*bm*rz*1.2,
-      (0.36+0.26*rnd()+0.2*efD)*(1-0.4*e.ls),0.8+0.5*rnd()+0.3*efD,1.5+1.0*rnd()+0.4*efD,(0.18+0.13*rnd()+0.15*efD+0.05*sand)*(0.7+0.3*loose)*lf*2.0,COL.dust,0.18,1.4,gR); }   /* (m2: x2: the veil rule now guards the lens; the first cut's dust covered under 1% of a chase frame) */
+      (0.36+0.26*rnd()+0.2*efD)*(1-0.4*e.ls),0.8+0.5*rnd()+0.3*efD,1.5+1.0*rnd()+0.4*efD,(0.18+0.13*rnd()+0.15*efD+0.05*sand)*(0.7+0.3*loose)*lf*2.6,COL.dust,0.18,1.4,gR); }   /* (m2: x2.6: the veil rule now guards the lens; the first cut's dust covered under 1% of a chase frame) */
     /* the haze that hangs over the track behind a fast pack: large, faint, slow, low */
     e.hA+=(v>6?(0.8+0.7*efD)*lf:0)*dt*PS.h*(st.me?1.3:1)*RATE; n=e.hA|0; e.hA-=n; if(n>3) n=3;
     while(n-->0) haze(st.x-cth*(1.4+3*rnd())+rx*(rnd()-0.5)*1.5,gR+0.55+0.7*rnd(),st.z-sth*(1.4+3*rnd())+rz*(rnd()-0.5)*1.5,(rnd()-0.5)*0.5,0.12,(rnd()-0.5)*0.5,1.3+0.8*rnd(),0.45+0.25*rnd(),3.2+2.4*rnd(),0.045+0.03*rnd(),COL.dust,gR);
