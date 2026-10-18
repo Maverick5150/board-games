@@ -158,7 +158,9 @@ export function createRiders(list,opts){
   const KT=lo?"low":getKitTier();
   /* THE APPAREL (r3d-rider-apparel.js): the outfit is painted in the fragment shader from the rest-pose position and the outfit part: level 2 (noise, creases, mud splatter) on the near riders of the physically based tiers, level 1 (flat panels, seams, a plain mud tint) on the thin pack and the FIRE TV tier */
   const apHi=(lo||KT==="low")?1:2;
-  const mkCloth=(ap,tag)=>skinMat(KT==="low"?(lo?new THREE.MeshLambertMaterial({vertexColors:true}):new THREE.MeshPhongMaterial({vertexColors:true,shininess:22,specular:0x262626})):new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.92,metalness:0,envMapIntensity:0.42}),U,"main",{tag:"cloth"+KT+tag,rim:lo?0:(KT==="low"?0.34:0.16),wrinkle:!lo,apparel:ap,kind:"cloth"});
+  /* (milestone 2) the near riders' cloth on the high kit tier is the kit's FABRIC (a physically based cloth with a soft sheen at grazing angles: the folds catch the floodlights like the cover's jerseys); the pack keeps the plain standard cloth */
+  const fabric=()=>{ const m=MAT.fabric(null,{vertexColors:true,roughness:0.9,envMapIntensity:0.42}); if(m.sheen!=null) m.sheen=0.32; return m; };
+  const mkCloth=(ap,tag)=>skinMat(KT==="low"?(lo?new THREE.MeshLambertMaterial({vertexColors:true}):new THREE.MeshPhongMaterial({vertexColors:true,shininess:22,specular:0x262626})):(KT==="high"&&tag==="hi"?fabric():new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.92,metalness:0,envMapIntensity:0.42})),U,"main",{tag:"cloth"+KT+tag,rim:lo?0:(KT==="low"?0.34:0.16),wrinkle:!lo,apparel:ap,kind:"cloth"});
   const cloth=mkCloth(apHi,"hi"), clothLo=mkCloth(1,"lo");
   const shell=skinMat(KT==="low"?(lo?new THREE.MeshLambertMaterial({vertexColors:true}):new THREE.MeshPhongMaterial({vertexColors:true,shininess:120,specular:0x9a9a9a})):MAT.gloss(null,{vertexColors:true}),U,"main",{tag:"shell"+KT,rim:lo?0:(KT==="low"?0.22:0.08),apparel:apHi,kind:"shell"});
   const decal=skinMat(new THREE.MeshLambertMaterial({map:A.tex,vertexColors:true,alphaTest:0.4}),U,"main",{tag:"decal",atlas:new THREE.Vector2(1/A.cols,1/A.rows)});
