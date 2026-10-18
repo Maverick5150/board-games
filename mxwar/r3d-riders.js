@@ -19,7 +19,7 @@ export {BIKE} from "./r3d-bike.js";   /* (the old import path) */
 export {emit,stepParticles} from "./r3d-fx.js";   /* (the old import path: the particles moved to r3d-fx.js; the first argument is now the particle system FX.part, no longer the rider set) */
 
 /* ---------------- the number atlas: plates (white / red), the jersey-back numbers and the floating tags, drawn in code ---------------- */
-function atlas(riders){
+function atlas(riders,scale){
   const cols=16, cell=128, rows=Math.ceil((riders.length*3+2)/cols), c=canvas(cols*cell,Math.max(1,rows)*cell), x=c.getContext("2d");
   const cells={};
   let k=0;
@@ -39,8 +39,10 @@ function atlas(riders){
     x.fillStyle=R.me?"#ffd76a":R.red?"#ff6b6b":"#ffffff"; fit(t,cell-26,64); x.fillText(t,gx+cell/2,gy+cell/2+3);
     cells[R.s]={plate:p,decal:d,tag:g};
   });
-  const T=new THREE.CanvasTexture(c); T.colorSpace=THREE.SRGBColorSpace; T.anisotropy=4; T.generateMipmaps=true; T.minFilter=THREE.LinearMipmapLinearFilter;
-  return {tex:T,cells:cells,cols:cols,rows:Math.max(1,rows),canvas:c};
+  /* the FIRE TV tier (q.texMax 512): the atlas is drawn at 2048 px and kept at half size (the cells keep their place: the UVs are fractions of the grid): 1.7 MB with mipmaps instead of 7 MB, the biggest texture of that tier */
+  let img=c; if(scale&&scale<1){ img=canvas(Math.round(c.width*scale),Math.round(c.height*scale)); const g=img.getContext("2d"); g.imageSmoothingQuality="high"; g.drawImage(c,0,0,img.width,img.height); }
+  const T=new THREE.CanvasTexture(img); T.colorSpace=THREE.SRGBColorSpace; T.anisotropy=4; T.generateMipmaps=true; T.minFilter=THREE.LinearMipmapLinearFilter;
+  return {tex:T,cells:cells,cols:cols,rows:Math.max(1,rows),canvas:img};
 }
 /* a Lambert material whose map is one atlas cell per instance (attribute aCell = column, row) */
 function atlasMat(T,cols,rows,opts){
@@ -128,7 +130,8 @@ export function createRiders(list,opts){
   opts=opts||{};
   const n=list.length, lo=!!opts.lo, grp=new THREE.Group();
   const mk=(geo,count,mat)=>{ const m=new THREE.InstancedMesh(geo,mat,count); m.frustumCulled=false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); grp.add(m); return m; };
-  const A=atlas(list);
+  const aScale=(opts.texMax||2048)<=512?0.5:1;
+  const A=atlas(list,aScale);
   const M=createBike(n,lo,mk,opts);   /* the bike's instanced parts in three levels of detail (r3d-bike.js: opts.bikeLod = the distances at which a bike leaves one level for the next, from the quality tier) */
   /* ---- the skinned riders ---- */
   const boneData=new Float32Array(n*NB*12), boneTex=new THREE.DataTexture(boneData,NB*3,n,THREE.RGBAFormat,THREE.FloatType);
@@ -178,7 +181,7 @@ export function createRiders(list,opts){
     vertexShader:"attribute vec2 aCell; uniform vec2 uGrid; varying vec2 vUv; void main(){ vUv=vec2((aCell.x+uv.x)*uGrid.x,1.0-(aCell.y+1.0-uv.y)*uGrid.y); vec4 c=modelViewMatrix*instanceMatrix*vec4(0.,0.,0.,1.); float s=length(instanceMatrix[0].xyz); c.xyz+=normalize(-c.xyz)*min(1.8,0.25*length(c.xyz)); c.xy+=position.xy*s; gl_Position=projectionMatrix*c; }",
     fragmentShader:"uniform sampler2D map; varying vec2 vUv; void main(){ vec4 t=texture2D(map,vUv); if(t.a<0.05) discard; gl_FragColor=t; }"});
   M.tag=new THREE.InstancedMesh(tagG,tagMat,n); M.tag.frustumCulled=false; M.tag.renderOrder=20; grp.add(M.tag);
-  const R={grp,M,A,n,list,S,hidden:new Uint8Array(n),vis:new Uint8Array(n),pos:new Float32Array(n*3),team,acc,cell,style,me:list.map(r=>!!r.me),wind:new Float32Array(n),mud:new Float32Array(n),
+  const R={grp,M,A,aScale,n,list,S,hidden:new Uint8Array(n),vis:new Uint8Array(n),pos:new Float32Array(n*3),team,acc,cell,style,me:list.map(r=>!!r.me),wind:new Float32Array(n),mud:new Float32Array(n),
     rig:list.map((r,i)=>newRig(i)),bones:boneData,boneTex,U,hiInst,loInst,nHi:Math.max(0,opts.riderHi!=null?opts.riderHi:(lo?3:8)),dt:1/60,t:0,order:[],lod:new Int8Array(n),stats:{hi:0,lo:0,tris:hiModel.tris}};
   /* scratch */
   R._m=new THREE.Matrix4(); R._q=new THREE.Quaternion(); R._e=new THREE.Euler(0,0,0,"YZX"); R._v=new THREE.Vector3(); R._s=new THREE.Vector3(1,1,1);
@@ -242,4 +245,4 @@ export function commit(R,cam,dt){
   S.hiBody.visible=S.hiHelmet.visible=S.hiBack.visible=nh>0; S.loBody.visible=nl>0; R.stats.hi=nh; R.stats.lo=nl;
   R.boneTex.needsUpdate=true;
 }
-export function setRed(R,list){ /* the red plate moved: redraw the atlas */ const A=atlas(list); R.A.tex.image=A.canvas; R.A.tex.needsUpdate=true; }
+export function setRed(R,list){ /* the red plate moved: redraw the atlas */ const A=atlas(list,R.aScale||1); R.A.tex.image=A.canvas; R.A.tex.needsUpdate=true; }
