@@ -23,7 +23,7 @@ firestick/games/<id>-phone.js   the phone side    PartyGames.definePhone(id, {..
   the lobby, as in Trouble and Sorry!).
 - A plugin that SPEAKS (Motocross War's announcers) lists the shared voice among its TV files: `../mxwar/announce-lines.js`, `../mxwar/announce.js`,
   `../ui/voice.js` (it loads `ui/voice.css` itself when the captions are mounted) and `../mxwar/booth.js`. Only the TV loads them: the phones' files never
-  do, so the phones are silent. The TV speaks through the Fire TV app's text-to-speech bridge (`window.AndroidTV`), else the browser's voices, else captions.
+  do, so the phones are silent. The TV speaks through the Fire TV app's text-to-speech bridge (`window.AndroidTV`), else the browser's voices, else captions. The announcers are men: only a voice known to be a man's is ever used (`ui/voice.js`, and `MenVoices.kt` in the app); a TV with no man's voice shows captions.
 - The tile appears after the seven built-in games. Picking it loads the TV files, then opens the lobby (QR, room code, phones join).
   A phone loads the phone files when it joins the room (its messages wait, in order, until they are in).
 - Add the files to the hub's `sw.js` cache list only if the hub caches Party files (it does not today); `firestick/` has no service worker.

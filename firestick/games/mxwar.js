@@ -439,7 +439,7 @@
     if (!(MX.Booth && MX.Announce && window.BGVoice)) return "";
     var m = MX.Booth.stored().mode;
     return '<div class="bg-seg mxp-seg mxp-aseg" role="group" aria-label="Announcers">' + [["voice", "Announcers on"], ["captions", "Captions only"], ["off", "Off"]].map(function (s) { var on = s[0] === m; return '<button type="button" class="aibtn' + (on ? " on" : "") + '" aria-pressed="' + on + '" data-mxa="' + s[0] + '">' + s[1] + "</button>"; }).join("") + "</div>" +
-      '<p class="ps-vdesc"><b>Announcers:</b> two commentators call every race on the TV, out loud and in captions. The phones stay silent.</p>';
+      '<p class="ps-vdesc"><b>Announcers:</b> two commentators (both men) call every race on the TV, out loud and in captions. A TV with no male voice installed shows captions only. The phones stay silent.</p>';
   }
   function lobby(api, cfg, el) {
     fixSeason(cfg); keep(cfg);

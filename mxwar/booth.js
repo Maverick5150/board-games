@@ -12,7 +12,7 @@
      booth.gate({G, key, people, drop(), stage(name)})   the start procedure (the opening, the 30-second board, sideways, the drop); .go() = a tap
      booth.state() / booth.restore(st) / booth.newSeason(st)         what a save keeps (the variety memory) / a fresh commentator
      booth.settings() / booth.set(key, value)   mode "voice" | "captions" | "off", chatter "less" | "normal" | "more", vol 0.2..1, a / b (voice names)
-     booth.voices() / booth.sample(who)         the pickers' list / a test line in a voice
+     booth.voices() / booth.sample(who)         the pickers' list (men's voices only; la / lb = friendly names, why / info = why there is only captions and what the device has) / a test line in a voice
      booth.attach(hosts)              mounts the caption strips: {band: element, top: element}
    ctx() is asked on every tick (150 ms): hold = the game is paused (the Menu): the commentator is paused too and the voice stops; quiet = a sheet
    that must stay silent is open (the battle board, the race times ...): the voice stops and the lines meant for that time are dropped. Time is
@@ -128,7 +128,7 @@ function create(o){
   B.voices=function(){
     var r=null, v=null; try{ r=V?V.ready():null; v=V?V.voices():null; }catch(e){}
     var list=v&&v.list?v.list:[];
-    return {ready:!!(r&&r.ready),engine:r?r.engine:"captions",native:!!(r&&r.engine==="native"),list:list,a:v&&v.a?v.a.name:"",b:v&&v.b?v.b.name:"",same:!!(v&&v.same),picks:{a:S.a,b:S.b}};
+    return {ready:!!(r&&r.ready),engine:r?r.engine:"captions",native:!!(r&&r.engine==="native"),list:list,a:v&&v.a?v.a.name:"",b:v&&v.b?v.b.name:"",la:v&&v.a?(v.a.label||v.a.name):"",lb:v&&v.b?(v.b.label||v.b.name):"",same:!!(v&&v.same),why:r&&r.why?r.why:"",info:r&&r.info?r.info:"",picks:{a:S.a,b:S.b}};
   };
   /* a test line in a voice (the settings' "Hear the announcers"): returns the text said, or "" when the announcers are Off; queue = after the line playing */
   B.sample=function(who,queue){
