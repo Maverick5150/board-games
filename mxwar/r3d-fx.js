@@ -3,8 +3,8 @@
    roost arcs that fill the foreground), never a veil over the pack. What it draws (every piece pooled and instanced, counts set by the quality tier):
    - SPECKS (new): thousands of crumbs on the GPU (radius about 0.4-2.6 cm, median 1 cm: what reads at the chase distance). A speck is written ONCE when it
      is thrown (where, how fast, when, its size, drag and colour) and the vertex shader moves it on a ballistic arc with air drag (an exact solution, no
-     per-frame CPU work or upload). THE SHUTTER: its trail is where it was 1/150 s ago RELATIVE TO THE LENS (its flight minus the camera's motion over the
-     last tick), both ends projected, at most 5.5% of the frame height, never thinner than 1.4 px, fainter the longer it is; it fades near the lens and its
+     per-frame CPU work or upload). THE SHUTTER: its trail is where it was 1/250 s ago RELATIVE TO THE LENS (its flight minus the camera's motion over the
+     last tick), both ends projected, at most 5.5% of the frame height and 5 crumb widths, never thinner than 1.4 px, fainter the longer it is; it fades near the lens and its
      size is capped there. A quarter of them are flat CHIPS that tumble and catch the light. Colours from dark wet soil to light dry tan. On the high tiers
      their cores write depth, so the depth of field keeps a crumb at its own distance sharp. The roost: a rooster tail under power inside a wider fan,
      berm spray to the outside, front-wheel flicks, a steady spray at speed; take-offs, landings and crashes throw them too.
@@ -174,7 +174,7 @@ const SPK_VS=[
 "  float k=aS.z, e=exp(-k*age); vec3 vt=vec3(0.0,-9.81/k,0.0);",                     /* the exact flight with linear air drag: v(t) = vt + (v0 - vt) e^(-kt) */
 "  vec3 p=aP.xyz+vt*age+(aV.xyz-vt)*((1.0-e)/k), v=vt+(aV.xyz-vt)*e;",
 "  float sink=aS.x-p.y;",                                                            /* under the dirt it is gone (the clods do the settling) */
-"  float alpha=(1.0-smoothstep(0.0,0.07,sink))*smoothstep(0.0,0.025,age)*(1.0-smoothstep(0.7*life,life,age));",
+"  float alpha=(1.0-step(0.0,sink))*smoothstep(0.0,0.025,age)*(1.0-smoothstep(0.7*life,life,age));",
 "  if(sink>0.0){ p.y=aS.x; v=vec3(0.0); }",
 "  vec4 mvPosition=modelViewMatrix*vec4(p,1.0);",
 "  float depth=-mvPosition.z;",
@@ -187,7 +187,7 @@ const SPK_VS=[
 "  if(aK.w>0.5){ float ph=aS.w*40.0+age*(9.0+15.0*fract(aS.w*13.7)); hw*=0.3+0.7*abs(cos(ph)); float g=abs(sin(ph)); g*=g; g*=g; vGlint=g*g; }",   /* a flat chip tumbling: it thins and flashes as it turns */
 "  vec3 vr=(modelViewMatrix*vec4(v-uCamV,0.0)).xyz; vec3 q=mvPosition.xyz-vr*uShutter; q.z=min(q.z,-0.1);",   /* THE SHUTTER (m2): where it was one shutter ago RELATIVE TO THE LENS (its flight minus the camera's motion) ... */
 "  vec4 c0=projectionMatrix*mvPosition, c1=projectionMatrix*vec4(q,1.0); vec2 sp=vec2(projectionMatrix[1][1]/projectionMatrix[0][0],1.0)*(uH*0.5);",   /* ... both ends projected (clip -> square pixels): dirt the camera rushes past streaks, dirt flying along with it does not */
-"  vec2 d=c0.xy/c0.w*sp-c1.xy/c1.w*sp; float lp=length(d); if(lp>uMaxTrail){ d*=uMaxTrail/lp; lp=uMaxTrail; } vec2 dir=lp>1e-3?d/lp:vec2(1.0,0.0);",
+"  vec2 d=c0.xy/c0.w*sp-c1.xy/c1.w*sp; float lp=length(d), lmax=min(uMaxTrail,10.0*hw); if(lp>lmax){ d*=lmax/max(lp,1e-4); lp=lmax; } vec2 dir=lp>1e-3?d/lp:vec2(1.0,0.0);",
 "  float hl=hw+0.5*lp; vLen=hl/max(hw,1e-3); vDir=dir;",
 "  alpha*=clamp(1.7*hw/hl,0.3,1.0);",                                               /* a long streak is fainter (the same dirt, spread out) */
 "  alpha*=smoothstep(0.3,1.1,depth)*(1.0-smoothstep(75.0,120.0,depth));",
@@ -326,7 +326,7 @@ export function createFx(opts){
   const jP=new THREE.InstancedBufferAttribute(kP,4).setUsage(THREE.DynamicDrawUsage), jV=new THREE.InstancedBufferAttribute(kV,4).setUsage(THREE.DynamicDrawUsage),
     jS=new THREE.InstancedBufferAttribute(kS,4).setUsage(THREE.DynamicDrawUsage), jC=new THREE.InstancedBufferAttribute(kC,4).setUsage(THREE.DynamicDrawUsage);
   kg.setAttribute("aP",jP); kg.setAttribute("aV",jV); kg.setAttribute("aS",jS); kg.setAttribute("aK",jC); kg.instanceCount=NK;
-  const km=new THREE.ShaderMaterial({uniforms:THREE.UniformsUtils.merge([THREE.UniformsLib.lights,THREE.UniformsLib.fog,{uTime:{value:0},uH:{value:720},uShutter:{value:1/150},uMaxPx:{value:T.maxPx},uGain:{value:1},uBank:{value:T.bank||0},uCamV:{value:new THREE.Vector3()},uMaxTrail:{value:40}}]),
+  const km=new THREE.ShaderMaterial({uniforms:THREE.UniformsUtils.merge([THREE.UniformsLib.lights,THREE.UniformsLib.fog,{uTime:{value:0},uH:{value:720},uShutter:{value:1/250},uMaxPx:{value:T.maxPx},uGain:{value:1},uBank:{value:T.bank||0},uCamV:{value:new THREE.Vector3()},uMaxTrail:{value:40}}]),
     vertexShader:SPK_VS,fragmentShader:SPK_FS,lights:true,fog:true,transparent:true,depthWrite:!!T.depth,depthTest:true,defines:T.depth?{SPK_DEPTH:1}:{}});
   const specks=new THREE.Mesh(kg,km); specks.frustumCulled=false; specks.renderOrder=3.5; specks.name="fx-specks";   /* after the dust (renderOrder 3) */
   const _v2=new THREE.Vector2();
