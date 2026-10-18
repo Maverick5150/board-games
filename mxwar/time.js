@@ -545,13 +545,18 @@ function walker(G){
       if(b[1]<=a[1]) return k-1+b[0]; return k-1+a[0]+(b[0]-a[0])*Math.max(0,Math.min(1,(t-a[1])/(b[1]-a[1]))); } }
     return k-1;
   };
-  /* the live timing tower at clock t: tower(G, t) with each row's status, last and best lap (completed by t); r.fl = the race's fastest lap so far is his */
+  /* the live timing tower at clock t: tower(G, t) with each row's status, last and best lap (completed by t); r.fl = the race's fastest lap so far is his.
+     Once the flag has fallen the order is the final classification (standings): a rider who has not crossed the line yet is shown at his classified place with
+     status "run" until he does. */
   w.rows=function(t){
-    var rows=tower(G,t), fast=null;
+    var after=tm.done&&t>=tm.flag, rows, fast=null;
+    if(after){ rows=standings(G).map(function(r){ r.lap=r.laps; r.pr=r.laps; return r; }); }
+    else rows=tower(G,t);
     rows.forEach(function(r){
       var st=lapStats(G,r.s,t); r.last=st.last; r.best=st.best; r.bestK=st.bestK; r.lastK=st.lastK;
       if(st.best!=null&&(fast==null||st.best<fast.t)) fast={ s:r.s, t:st.best, k:st.bestK };
       w.at(r.s,t); r.status=w.state; if(w.state==="out"||w.state==="pits") r.dnf=r.dnf||tm.r[r.s].dnf;
+      if(after&&r.dnf) r.gap="DNF";
     });
     rows.forEach(function(r){ r.fl=!!(fast&&fast.s===r.s); });
     return rows;
@@ -595,10 +600,11 @@ function rankWord(r){ return RWORD[r]||String(r); }
    head (the sentence about the lap), line (head + the places) } ---- */
 function you(G,s,k,f,nameOf){
   var tm=G.tm, R=tm.r[s], T=R.T, p=tm.p, nm=nameOf||function(x){ return "#"+(x+1); };
-  var out={ k:k, s:s, time:null, typical:p, gain:null, from:null, to:null, moved:0, gap:null, int:null, crash:null, down:0, reasons:[], head:"", line:"" };
+  var typ=k===1&&tm.fl>0?tm.fl:p;   // lap 1 includes the start: it is compared with the real first lap
+  var out={ k:k, s:s, time:null, typical:typ, gain:null, from:null, to:null, moved:0, gap:null, int:null, crash:null, down:0, reasons:[], head:"", line:"" };
   var fin=T.length>=k, i;
   out.time=fin?(T[k-1]-(k>1?T[k-2]:0))/1000:null;
-  if(fin) out.gain=p-out.time;
+  if(fin) out.gain=typ-out.time;
   out.to=lapPlace(G,s,k); out.from=k>1?lapPlace(G,s,k-1):null; out.moved=out.from!=null?out.from-out.to:0;
   if(fin){ var lead=leaderLine(G,k); out.gap=(T[k-1]-lead)/1000; var ahead=null; for(i=0;i<G.n;i++){ var Ti=tm.r[i].T; if(i!==s&&Ti.length>=k&&Ti[k-1]<=T[k-1]&&(ahead==null||Ti[k-1]>ahead)) ahead=Ti[k-1]; } out.int=ahead==null?null:(T[k-1]-ahead)/1000; }
   var ev=[]; tm.laps.forEach(function(l){ if(l.k===k) ev=l.ev; });
@@ -609,11 +615,11 @@ function you(G,s,k,f,nameOf){
   if(out.crash==="out") add("crash","crashed out: the race is over for you",0);
   else if(out.crash==="remount") add("crash","crashed: down "+secText(out.down,0)+", back on the bike",-out.down);
   if(f&&f.c!=null){
-    var cw=f.wild?"Wild card":rankWord(f.rank);
-    if(f.win&&f.war>0) add("result",(f.war>1?(f.war===2?"Double":"Triple")+" war won":"War won")+" ("+cw+")",-w.res);
-    else if(f.win) add("result",cw+"! pot won",-w.res);
+    var cw=f.wild?"Wild card":rankWord(f.rank), big=f.wild||f.rank>=11;
+    if(f.win&&f.war>0) add("result",f.war>1?(f.war===2?"Double war won":"Triple war won"):"War won",-w.res);
+    else if(f.win) add("result",big?cw+"! pot won":"Pot won",-w.res);
     else if(f.fought&&!f.crash) add("result","War lost",-w.res);
-    if(!f.win&&!(f.fought&&!f.crash)&&Math.abs(w.card)>=0.3) add("card",cw+(w.card<0?" is a good card":" is a weak card"),-w.card);
+    if(Math.abs(w.card)>=0.3&&!(f.win&&f.war===0&&big)) add("card",cw+" turned",-w.card);
   }
   ev.forEach(function(e){
     if(e.e==="held"&&e.s===s) add("held","stuck behind "+nm(e.by),-e.lost);
@@ -634,10 +640,30 @@ function you(G,s,k,f,nameOf){
   return out;
 }
 
+/* ---- a tower row as the words in its cells: { p (place), gap ("Leader" | "+3.412" | "+1 Lap" | "DNF" | "DOWN" | "OUT"), last ("49.812" or ""), tag (run | down | out | pits | fin) } ---- */
+function towerCells(r){
+  var tag=r.status||"run", gap;
+  if(tag==="out"||(r.dnf&&r.dnf.why==="crash")) gap="DNF"; else if(tag==="pits"||(r.dnf&&r.dnf.why==="cards")) gap="OUT"; else if(tag==="down") gap="DOWN"; else gap=gapText(r);
+  return { p:r.place, gap:gap, last:r.last!=null?fmtLap(r.last):"", tag:tag };
+}
+/* ---- what a model event says (null = nothing worth a line). nameOf(seat) = "#12 Name"; me(seat) = a person rides that seat ---- */
+function eventLine(G,e,nameOf,me){
+  var nm=nameOf||function(x){ return "#"+(x+1); }, human=me||function(){ return false; };
+  switch(e.e){
+    case "down": return e.kind==="out"?"Crash! "+nm(e.s)+" is down and out of the race.":"Crash! "+nm(e.s)+" is down: "+secText((e.ms||0)/1000,0)+" to get going again.";
+    case "up": return nm(e.s)+" is back on the bike.";
+    case "pass": if(e.crash) return null; if(e.pos<=3||human(e.a)||human(e.d)) return nm(e.a)+" passes "+nm(e.d)+" for "+ordText(e.pos)+"."; return null;
+    case "lapped": return nm(e.by)+" laps "+nm(e.s)+".";
+    case "fastest": return "Fastest lap: "+nm(e.s)+", "+fmtLap(e.time)+" (lap "+e.k+").";
+    case "yellowOn": return "Yellow flag: no passing there until the end of lap "+e.lap+".";
+  }
+  return null;
+}
+
 var MX_Time={ BASE:BASE, CLS:CLS, classOf:classOf, era:era, cardsFor:cardsFor, init:init, adopt:adopt, trim:trim, lap:lap, complete:complete, finish:finish, standings:standings, result:result,
   knots:knots, progress:progress, progressAt:progressAt, timeAt:timeAt, splits:splits, tower:tower, packet:packet, infoOf:infoOf, run:run, ratio:ratio, handQ:handQ,
   fmtLap:fmtLap, fmtRace:fmtRace, fmtGap:fmtGap, gapText:gapText, secText:secText, ordText:ordText, rankWord:rankWord, lapTimes:lapTimes, lapStats:lapStats, holdWindow:holdWindow, yellowWindows:yellowWindows,
-  leaderLine:leaderLine, clockLimit:clockLimit, walker:walker, lapPlace:lapPlace, facts:facts, worth:worth, you:you };
+  leaderLine:leaderLine, clockLimit:clockLimit, walker:walker, lapPlace:lapPlace, facts:facts, worth:worth, you:you, towerCells:towerCells, eventLine:eventLine };
 
 MX.Time=MX_Time;
 if(typeof module!=="undefined"&&module.exports) module.exports=MX.Time;
