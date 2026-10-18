@@ -21,7 +21,11 @@
      in there (BG_audit/FOLLOWUPS.md "## For integration: mxwar party").
    - An autosave after every lap and every race (localStorage "party-mxwar-live"; Continue in the lobby when the table has the same number
      of riders); a phone that reloads gets its view back (onReconnect); a phone that leaves is ridden by the computer (Auto) and gets it
-     back by Take over or the host's invite. */
+     back by Take over or the host's invite.
+   - mxtime (the CEO, 2026-10-17: "the cards decide REAL lap times"): the TV is the authority. Every battle is one lap with real seconds (mxwar/time.js);
+     the track rides the race clock (track.js model mode), the timing tower lists every rider live with the gap in seconds and the last lap, the log says
+     what a lap was worth to each phone's rider, and every phone gets the same standings (all riders, gaps, laps down) and its YOU readout in its snapshot
+     (phoneSt: race.tw, race.you), computed here from G.tm: a phone never recomputes a lap. */
 (function () {
   "use strict";
   var P = window.PartyGames, MX = window.MXWar, IDX = window.MXWarIndex;
@@ -235,18 +239,25 @@
     Q + ".mxp-head span{display:block;font:var(--fw-ui) var(--fs-micro)/1.25 var(--font-ui);color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
     Q + ".mxp-skip{flex:none;min-height:3rem !important;padding:0 .9rem !important;font-size:var(--fs-micro) !important}",
     Q + ".mxp-tower{list-style:none;margin:0;padding:.4rem;display:grid;grid-auto-flow:column;grid-template-rows:repeat(var(--rows,20),var(--rh,1.6rem));grid-template-columns:repeat(var(--cols,1),minmax(0,1fr));gap:.15rem .5rem;align-content:start;flex:1 1 auto;min-height:0;overflow:hidden;border-radius:var(--r-md);background:var(--ink-2);box-shadow:var(--well-edge)}",
-    Q + ".mxp-tower li{position:relative;display:grid;grid-template-columns:1.5rem auto minmax(0,1fr) 2.3rem 1.6rem 1.8rem;align-items:center;gap:.3rem;height:var(--rh,1.6rem);box-sizing:border-box;padding:0 .35rem 0 .25rem;border-radius:.45rem;background:var(--ink-3);overflow:hidden;font:var(--fw-ui-strong) var(--fs-micro)/1 var(--font-ui);color:var(--text-1)}",
+    Q + ".mxp-tower li{position:relative;display:grid;grid-template-columns:1.5rem auto minmax(0,1fr) 2.3rem 4.2rem 4.4rem;align-items:center;gap:.3rem;height:var(--rh,1.6rem);box-sizing:border-box;padding:0 .35rem 0 .25rem;border-radius:.45rem;background:var(--ink-3);overflow:hidden;font:var(--fw-ui-strong) var(--fs-micro)/1 var(--font-ui);color:var(--text-1)}",
     Q + ".mxp-tower li.is-me{box-shadow:inset .3rem 0 0 var(--seat,#e7ca90)}",
     Q + ".mxp-tower li.is-need{box-shadow:inset .3rem 0 0 var(--seat,#e7ca90),inset 0 0 0 2px var(--seat,#e7ca90)}",
     Q + ".mxp-tower li.is-win{background:#3a2c10}",
     Q + ".mxp-tower li.is-fight{background:#4a1418}",
     Q + ".mxp-tower li.is-out{opacity:.55}",
+    Q + ".mxp-tower li.is-down{background:#4a1f14;box-shadow:inset 0 0 0 2px #e8775a}",
+    Q + ".mxp-tower li.is-down .mxp-tg{color:#ffb4a3;font-weight:800;letter-spacing:.04em}",
+    Q + ".mxp-tower li.is-fl .mxp-tl{color:#d9b3ff;font-weight:800}",
+    Q + ".mxp-tower.is-cols2 li{grid-template-columns:1.5rem auto minmax(0,1fr) 4.1rem 4.3rem;gap:.25rem}",
+    Q + ".mxp-tower.is-cols2 .mx-tw__c{display:none}",
+    Q + ".mxp-rt{flex:none;margin-left:auto;padding-left:.5rem;font:var(--fw-ui) var(--fs-micro)/1.2 var(--font-ui);color:var(--text-2);font-variant-numeric:tabular-nums;white-space:nowrap}",
+    Q + ".mxp-tl{text-align:right;white-space:nowrap;color:var(--text-2);font-variant-numeric:tabular-nums}",
     Q + ".mxp-tower li.is-sep{background:none;height:.2rem}",
     Q + ".mxp-tp{font:400 var(--fs-md)/1 var(--font-display);color:var(--gold-100);text-align:center;font-variant-numeric:tabular-nums}",
     Q + ".mxp-tn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
     Q + ".mxp-tn .bg-ico{width:.9em;height:.9em;margin-left:.25rem;vertical-align:-.1em;color:var(--text-2)}",
     Q + ".mxp-tk{text-align:right;color:var(--gold-100);font-variant-numeric:tabular-nums}",
-    Q + ".mxp-tg{text-align:right;color:var(--text-2);font-variant-numeric:tabular-nums;white-space:nowrap}",
+    Q + ".mxp-tg{text-align:right;color:var(--text-1);font-variant-numeric:tabular-nums;white-space:nowrap}",
     Q + ".mxp-log{list-style:none;margin:0;padding:.5rem .75rem;display:grid;gap:.25rem;border-radius:var(--r-md);background:var(--ink-2);box-shadow:var(--well-edge);font:var(--fw-body) var(--fs-micro)/1.3 var(--font-ui);color:var(--text-2)}",
     Q + ".mxp-log li{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
     Q + ".mxp-log li:last-child{color:var(--text-1)}",
@@ -508,9 +519,15 @@
   function raceView(host) {
     var T = null, nop = function () { };
     try { T = MX.Track ? MX.Track.create(host) : null; } catch (e) { T = null; }
-    if (!T) return { ok: false, kind: "none", setTrack: nop, setHole: nop, size: nop, setRiders: nop, pace: nop, gate: nop, gateRect: function () { return null; }, drop: nop, resume: nop, standings: nop, lap: nop, crash: nop, yellow: nop, yellowOn: function () { return false; }, flag: nop, setRed: nop, ready: function () { return -1; }, untilLine: function () { return 0; }, onLap: nop, live: nop, destroy: nop };
+    if (!T) return { ok: false, kind: "none", setModel: nop, modelOn: function () { return false; }, rows: function () { return null; }, onEvent: nop, setRate: nop, setWait: nop, setTrack: nop, setHole: nop, size: nop, setRiders: nop, pace: nop, gate: nop, gateRect: function () { return null; }, drop: nop, resume: nop, standings: nop, lap: nop, crash: nop, yellow: nop, yellowOn: function () { return false; }, flag: nop, setRed: nop, ready: function () { return -1; }, untilLine: function () { return 0; }, onLap: nop, live: nop, destroy: nop };
     return {
       ok: true, kind: "2d",
+      setModel: function (rc) { if (T.setModel) T.setModel(rc); },                 /* mxtime: the race clock of the time model rides the field */
+      modelOn: function () { return !!(T.model && T.model()); },
+      rows: function () { return T.rows ? T.rows() : null; },                      /* the live timing tower at the race clock */
+      onEvent: function (fn) { T.onEvent = fn; },                                  /* the events of the clock: a line, a fall, the yellow flag, a pass ... */
+      setRate: function (x) { if (T.setRate) T.setRate(x); },
+      setWait: function (on) { if (T.setWait) T.setWait(on); },
       setTrack: function (series, key) { T.setLayout(series === "mx" ? "outdoor" : "stadium", key); },
       setHole: function (w, h) { T.setHole({ w: w, h: h }); T.resize(true); },
       size: function () { T.resize(); },
@@ -571,7 +588,7 @@
       '<div class="mxp-pip" id="mxpPip" aria-label="The cards"><div class="mxp-duel" id="mxpDuel"></div><div class="mxp-war" id="mxpWar"></div><div class="mxp-note" id="mxpNote"></div></div>' +
       "</div>" +
       '<aside class="mxp-side" aria-label="The timing tower"><div class="mxp-head"><div><b id="mxpTitle"></b><span id="mxpSub"></span></div><button type="button" class="bg-btn bg-btn--secondary mxp-skip" id="mxpSkip">Skip to the finish</button></div>' +
-      '<ol class="mxp-tower" id="mxpTower" aria-label="Places, cards held"></ol><ol class="mxp-log" id="mxpLog" aria-label="What happened"></ol></aside>' +
+      '<ol class="mxp-tower" id="mxpTower" aria-label="Timing: places, gaps, last laps"></ol><ol class="mxp-log" id="mxpLog" aria-label="What happened"></ol></aside>' +
       '<div class="mxp-cap" id="mxpCap" aria-label="The announcers"></div><div class="mxp-panel" id="mxpPanel" hidden></div></div>', "Players: watch the TV");
     var $ = H.$;
     H.music(ID);
@@ -646,7 +663,17 @@
         var myPlace = s >= 0 ? order.indexOf(s) + 1 : 0;
         if (s >= 0 && myPlace > 5) top.push({ p: myPlace, pl: R.plate, mk: A.mk(R.bike), nm: R.name, k: mine.out ? -1 : cnt[s], me: true, red: R.id === redId() });
         var w = s >= 0 ? ui.warCards[s] : null;
-        st.race = { label: ui.label, city: cal().city || cal().venue, lap: Math.min(Math.max(ui.lap, 1), rc.o.len), len: rc.o.len, gate: rc.phase === "gate", over: rc.over, n: rc.n, inRace: s >= 0, place: myPlace, cnt: s >= 0 ? cnt[s] : 0,
+        var rows = liveRows(), tw = null, you = null, fl = "";
+        if (rows) {
+          var T = MX.Time, pre = rc.phase === "gate" || rc.tm.k === 0;
+          tw = rows.map(function (r) { var c = T.towerCells(r), Rx = riderOfS(r.s); return [r.s, r.place, Rx.plate, Rx.name, pre ? "" : c.gap, c.tag, pre ? "" : c.last, r.fl ? 1 : 0, A.mk(Rx.bike), Rx.id === redId() ? 1 : 0]; });
+          rows.forEach(function (r) { if (r.fl) fl = "#" + riderOfS(r.s).plate + " " + T.fmtLap(r.best); });
+          var mr = s >= 0 ? rows.filter(function (r) { return r.s === s; })[0] : null;
+          if (mr) { var mc = T.towerCells(mr), yy = youK[s] || null; myPlace = mr.place;
+            you = { place: mr.place, of: rows.length, gap: pre ? "" : mc.gap, tag: mc.tag, last: mr.last != null ? T.fmtLap(mr.last) : "", best: mr.best != null ? T.fmtLap(mr.best) : "", fl: mr.fl ? 1 : 0, int: pre || mr.int == null ? null : mr.int,
+              line: yy ? yy.line : "", why: yy ? yy.reasons.slice(0, 4).map(function (q) { return [q.text, Math.abs(q.sec) >= 0.05 ? (q.sec > 0 ? "+" : "-") + T.secText(q.sec) : "", q.sec > 0.04 ? 1 : q.sec < -0.04 ? -1 : 0]; }) : [] }; }
+        }
+        st.race = { label: ui.label, city: cal().city || cal().venue, lap: Math.min(Math.max(ui.lap, 1), rc.o.len), len: rc.o.len, gate: rc.phase === "gate", over: rc.over, n: rc.n, inRace: s >= 0, meS: s, place: myPlace, cnt: s >= 0 ? cnt[s] : 0, tw: tw, you: you, fl: fl,
           last: s >= 0 && ui.lastCards[s] != null ? ui.lastCards[s] : null, out: !!(mine && mine.out), dnf: mine && mine.dnf ? mine.dnf.why : null, cr: mine ? mine.crashes | 0 : 0,
           war: w ? { n: w.n, down: w.down, up: w.up, won: w.won, lost: w.lost } : null, warOn: !!(ui.war && s >= 0 && ui.war.seats.indexOf(s) >= 0), warN: ui.war ? ui.war.n : 0,
           phase: rc.phase, need: s >= 0 && ui.need.indexOf(s) >= 0 && !ui.intents[s], hs: ui.hs != null ? nm(ui.hs) : "", yellow: !!(rc.yellow && !rc.over), top: top };
@@ -664,7 +691,9 @@
       stats.views++; if (!d || typeof d !== "object") return;
       if (d.auto != null) { auto[c] = !!d.auto; if (auto[c]) { H.interrupt(c); H.toast(H.name(c) + " turned on Auto"); } renderTower(null); H.push(c, safeSt(c, null)); }
     });
-    H.onEnd(function () { clearTimeout(pushT); clearInterval(panelT); window.removeEventListener("resize", onResize); document.removeEventListener("keydown", onKey, true); closeSkipSheet(); rv.destroy(); if (booth) try { booth.destroy(); } catch (e) { } });
+    twTimer = setInterval(function () { if (ui.rc && (ui.ph === "race" || ui.ph === "gate") && !document.hidden && ui.rc.tm) { try { renderTower(null); } catch (e) { } } }, 250);
+    pushTick = setInterval(function () { if (H.live() && ui.rc && ui.ph === "race" && !ui.rc.over && ui.rc.tm && !pushT) pushNow(); }, 5000);
+    H.onEnd(function () { clearInterval(twTimer); clearInterval(pushTick); clearTimeout(pushT); clearInterval(panelT); window.removeEventListener("resize", onResize); document.removeEventListener("keydown", onKey, true); closeSkipSheet(); rv.destroy(); if (booth) try { booth.destroy(); } catch (e) { } });
 
     /* ---------- the Victory: the season's top 16 (places 1..N, never shared: season.js standings break every tie) ---------- */
     H.standings(function () {
@@ -677,7 +706,7 @@
     function layoutTower() {
       var tw = $("mxpTower"), rc = ui.rc; if (!tw) return;
       var rowsN = tw.children.length || 1, rem = remPx(), cols = rowsN > 22 ? 2 : 1;
-      $("mxp").style.setProperty("--tw", cols === 2 ? "37rem" : "19.5rem");
+      $("mxp").style.setProperty("--tw", cols === 2 ? "41rem" : "25rem"); tw.classList.toggle("is-cols2", cols === 2);
       $("mxp").classList.toggle("is-many", rowsN > 15);
       var per = Math.ceil(rowsN / cols), room = tw.clientHeight - rem * .8 - (per - 1) * rem * .15;
       var rh = clamp(Math.floor(room / per), Math.round(rem * 1.2), Math.round(rem * 2.1));
@@ -715,16 +744,82 @@
       else if (r && r.st < 0) { var tb = RG.F.table || []; t += " · points to the top " + tb.filter(function (x) { return x > 0; }).length; }
       return t;
     }
+    /* mxtime: the TIMING TOWER, every rider in the order of the race clock with the gap in seconds, the last lap and the card turned this lap. The rows are
+       made once per race, patched four times a second, and the DOM order is the running order. Without a model (never now) the old cards tower. */
+    var TWK = { key: "", els: {}, ord: "", cells: {} }, youK = {}, factsK = {}, factK = 0, twMark = null, twTimer, pushTick;
+    function modelOn() { return !!(rv.ok && rv.modelOn() && ui.rc && ui.rc.tm && MX.Time); }
+    function nameOfSeat(s) { var R = riderOfS(s); return "#" + R.plate + " " + R.name; }
+    function modelRate(rc) { return Math.max(0.05, (rc.tm.p || 55) / Math.max(0.5, lapMs() / 1000)); }
+    function liveRows() { return modelOn() ? rv.rows() : null; }
     function renderTower(mark) {
       var rc = ui.rc, tw = $("mxpTower"); if (!rc || !tw) return;
+      if (mark) twMark = { win: mark.win, fight: mark.fight, until: Date.now() + 1800 };
+      var rows = liveRows(); if (!rows) { legacyTower(mark); return; }
+      var n = rows.length, key = G.ri + "|" + ui.rkey + "|" + n, T = MX.Time, i, r, e, c;
+      if (TWK.key !== key) {
+        TWK.key = key; TWK.els = {}; TWK.cells = {}; TWK.ord = "";
+        tw.innerHTML = rows.slice().sort(function (a, b) { return a.s - b.s; }).map(function (x) { var R = riderOfS(x.s), k = kOfId(R.id);
+          return '<li data-s="' + x.s + '"' + (k >= 0 ? ' style="--seat:' + hex(k) + '"' : "") + '><span class="mxp-tp"></span>' + plateHTML(R) + '<span class="mxp-tn">' + nameHTML(R) + '</span><span class="mx-tw__c"></span><span class="mxp-tl"></span><span class="mxp-tg"></span></li>'; }).join("");
+        Array.prototype.forEach.call(tw.children, function (li) { TWK.els[+li.getAttribute("data-s")] = { li: li, p: li.querySelector(".mxp-tp"), c: li.querySelector(".mx-tw__c"), l: li.querySelector(".mxp-tl"), g: li.querySelector(".mxp-tg") }; });
+        layoutTower();
+      }
+      var mk = twMark && twMark.until > Date.now() ? twMark : null, sig = rows.map(function (x) { return x.s; }).join(","), pre = rc.phase === "gate" || rc.tm.k === 0;
+      if (sig !== TWK.ord) { TWK.ord = sig; for (i = 0; i < n; i++) tw.appendChild(TWK.els[rows[i].s].li); }
+      for (i = 0; i < n; i++) {
+        r = rows[i]; e = TWK.els[r.s]; c = T.towerCells(r); if (pre) { c.gap = ""; c.last = ""; }
+        var R = riderOfS(r.s), k = kOfId(R.id), card = ui.lastCards[r.s], out = c.tag === "out" || c.tag === "pits";
+        var cls = (k >= 0 ? " is-me" : "") + (k >= 0 && ui.need.indexOf(r.s) >= 0 && !ui.intents[r.s] && !machine(k) ? " is-need" : "") + (out ? " is-out" : "") + (r.status === "down" ? " is-down" : "") + (r.fl ? " is-fl" : "") + (mk && mk.win === r.s ? " is-win" : "") + (mk && mk.fight && mk.fight.indexOf(r.s) >= 0 ? " is-fight" : "");
+        var v = r.place + "|" + c.gap + "|" + c.last + "|" + cls + "|" + (card == null ? "" : card) + "|" + (out ? 1 : 0);
+        if (TWK.cells[r.s] === v) continue;
+        TWK.cells[r.s] = v; e.p.textContent = r.place; e.g.textContent = c.gap; e.l.textContent = c.last; e.li.className = cls.trim();
+        e.li.setAttribute("aria-label", ord(r.place) + ": " + R.name + ", " + (c.gap || "on the gate") + (c.last ? ", last lap " + c.last : ""));
+        e.c.innerHTML = card != null && !out ? A.chip(card) : ""; e.c.className = "mx-tw__c" + (A.chipRed(card) ? " is-red" : "");
+      }
+    }
+    /* the old tower (a race without a model): the order of the cards */
+    function legacyTower(mark) {
+      var rc = ui.rc, tw = $("mxpTower"); if (!rc || !tw) return;
       var order = ui.order.length ? ui.order : rc.r.map(function (p, s) { return s; }), counts = disp ? disp.cnt : rc.r.map(function (p) { return p.pk.length; }), lead = counts[order[0]] || 0;
+      TWK.key = "";
       tw.innerHTML = order.map(function (s, i) {
         var R = riderOfS(s), k = kOfId(R.id), out = rc.r[s].out, c = ui.lastCards[s];
         var cls = (k >= 0 ? " is-me" : "") + (k >= 0 && ui.need.indexOf(s) >= 0 && !ui.intents[s] && !machine(k) ? " is-need" : "") + (out ? " is-out" : "") + (mark && mark.win === s ? " is-win" : "") + (mark && mark.fight && mark.fight.indexOf(s) >= 0 ? " is-fight" : "");
-        return '<li class="' + cls.trim() + '"' + (k >= 0 ? ' style="--seat:' + hex(k) + '"' : "") + ' aria-label="' + ord(i + 1) + ": " + esc(R.name) + ", " + (out ? "out" : plural(counts[s], "card")) + '"><span class="mxp-tp">' + (i + 1) + "</span>" + plateHTML(R) + '<span class="mxp-tn">' + nameHTML(R) + "</span>" +
-          '<span class="mx-tw__c' + (A.chipRed(c) ? " is-red" : "") + '">' + (c != null && !out ? A.chip(c) : "") + '</span><span class="mxp-tk">' + (out ? (rc.r[s].dnf && rc.r[s].dnf.why === "crash" ? "DNF" : "out") : counts[s]) + '</span><span class="mxp-tg">' + (i === 0 || out || lead === counts[s] ? "" : "-" + (lead - counts[s])) + "</span></li>";
+        return '<li class="' + cls.trim() + '"' + (k >= 0 ? ' style="--seat:' + hex(k) + '"' : "") + '><span class="mxp-tp">' + (i + 1) + "</span>" + plateHTML(R) + '<span class="mxp-tn">' + nameHTML(R) + "</span>" +
+          '<span class="mx-tw__c' + (A.chipRed(c) ? " is-red" : "") + '">' + (c != null && !out ? A.chip(c) : "") + '</span><span class="mxp-tl">' + (out ? (rc.r[s].dnf && rc.r[s].dnf.why === "crash" ? "DNF" : "out") : counts[s]) + '</span><span class="mxp-tg">' + (i === 0 || out || lead === counts[s] ? "" : "-" + (lead - counts[s])) + "</span></li>";
       }).join("");
       layoutTower();
+    }
+    /* mxtime: what each phone's rider's cards were worth, read right after the battle (the data is gone by the time he ends the lap) */
+    function captureFacts() {
+      var rc = ui.rc; if (!rc || !rc.tm || !MX.Time || rc.tm.k <= factK) return;
+      factK = rc.tm.k;
+      rc.r.forEach(function (p, s) { if (kOfS(s) < 0) return; var f = MX.Time.facts(rc, s); if (f) (factsK[s] = factsK[s] || {})[f.k] = f; });
+    }
+    /* a person's rider ends a lap: the readout (the phone shows it, the TV logs one line) */
+    function youLap(s, k) {
+      var rc = ui.rc, kk = kOfS(s); if (!rc || !rc.tm || !MX.Time || kk < 0) return;
+      var y; try { y = MX.Time.you(rc, s, k, factsK[s] && factsK[s][k] || null, nameOfSeat); } catch (x) { return; }
+      youK[s] = y; logLine(nm(s) + ": " + y.line); pushSoon();
+    }
+    /* the events of the race clock, in order: a lap ended, a bike goes down, gets up, the yellow flag, a pass, a lapped rider, the fastest lap */
+    function onTrackEvent(e) {
+      var rc = ui.rc; if (!rc || !G || !rc.tm || !MX.Time) return;
+      var T = MX.Time, me = function (s) { return kOfS(s) >= 0; };
+      switch (e.e) {
+        case "line": if (me(e.s)) youLap(e.s, e.k); break;
+        case "down": annShown("crash", { s: e.s }); H.sfx(e.kind === "out" ? "lose" : "bump"); logLine(T.eventLine(rc, e, nameOfSeat, me)); twMark = { fight: [e.s], until: Date.now() + 2500 }; renderTower(null); pushSoon(); break;
+        case "up": logLine(T.eventLine(rc, e, nameOfSeat, me)); renderTower(null); pushSoon(); break;
+        case "yellowOn": {
+          stats.yellows++; chips();
+          var by = (e.by || []).filter(function (x) { return rc.r[x]; }), outN = by.filter(function (x) { return rc.tm.r[x].dnf && rc.tm.r[x].dnf.why === "crash"; }).length, who = by.map(function (x) { var R = riderOfS(x); return "#" + R.plate + " " + R.name; });
+          logLine(T.eventLine(rc, e, nameOfSeat, me)); pushSoon();
+          banner("Yellow flag", (who.length > 2 ? who.length + " riders" : listNames(who)) + (outN ? (who.length > 1 ? " are" : " is") + " out of the race" : (who.length > 1 ? " go down and remount" : " goes down and remounts")) + " · no passing there next lap", dl(1500), "is-yellow", A.yflag());
+          break; }
+        case "yellowOff": chips(); pushSoon(); break;
+        case "pass": if (e.pos <= 10 && !e.crash) annShown("pass", { s: e.a }); { var pl = T.eventLine(rc, e, nameOfSeat, me); if (pl) logLine(pl); } break;
+        case "lapped": annShown("lapped", { s: e.s, by: e.by }); if (me(e.s) || me(e.by)) logLine(T.eventLine(rc, e, nameOfSeat, me)); break;
+        case "fastest": if (e.k >= 3) logLine(T.eventLine(rc, e, nameOfSeat, me)); break;
+      }
     }
     function cardHTML(id, up, cls) { return '<div class="mx-card' + (up && id != null ? " is-up" : "") + (id == null && !up ? " is-empty" : "") + (cls ? " " + cls : "") + '">' + A.cardInner(id) + "</div>"; }
     function flipEl(el, id, ms, zoom) {
@@ -780,6 +875,7 @@
     }
     function trackSync() {
       var rc = ui.rc; if (!rc) return;
+      if (rv.ok && rv.modelOn()) return;   /* the clock places the riders */
       var counts = disp ? disp.cnt : rc.r.map(function (p) { return p.pk.length; }), outs = {};
       rc.r.forEach(function (p, s) { if (p.out && (!disp || disp.cnt[s] === 0)) outs[s] = 1; });
       rv.standings(ui.order.length ? ui.order : rc.r.map(function (p, s) { return s; }), counts, outs);
@@ -800,15 +896,18 @@
       rv.setRiders(rc.r.map(function (p, s) { var R = riderOfS(s), m = A.mk(R.bike); return { s: s, color: m[0], accent: m[0] === "#f2f4f8" ? "#183a8c" : "#f2f2f6", plate: R.plate, red: R.id === red, me: kOfId(R.id) >= 0 }; }));
       rv.pace(lapMs(), firstMs());
       rv.onLap(leaderLap);
+      rv.onEvent(onTrackEvent);
       rv.live(true);
-      if (rc.phase === "gate") { rv.gate(true); $("mxpGate").style.display = ""; $("mxpGate").style.transform = ""; placeGate(); }
+      TWK.key = ""; factK = rc.tm ? rc.tm.k : 0; factsK = {}; youK = {};
+      if (rc.phase === "gate") { rv.gate(true); if (rc.tm) rv.setModel(rc); $("mxpGate").style.display = ""; $("mxpGate").style.transform = ""; placeGate(); }
       else {
         $("mxpGate").style.display = "none";
         var parked = [], yel = null; rc.r.forEach(function (p, s) { if (p.dnf && p.dnf.why === "crash") parked.push({ s: s, sector: p.dnf.sector }); });
         if (rc.yellow && rc.yellow.lap >= rc.battle + 1) yel = { lap: rc.yellow.lap, s: rc.yellow.s && rc.yellow.s.length ? rc.yellow.s[0] : null, sector: rc.yellow.sector };
-        rv.resume(rc.battle, rc.o.len, parked, yel); trackSync();
+        rv.resume(rc.battle, rc.o.len, parked, yel); if (rc.tm) rv.setModel(rc); trackSync();
         rv.flag(rc.over ? "checkered" : rc.battle + 1 === rc.o.len ? "white" : null);
       }
+      if (rc.tm) rv.setRate(modelRate(rc));
       ui.white = rc.phase !== "gate" && rc.battle + 1 >= rc.o.len ? raceKey() : null;
     }
     function raceKey() { return ui.rnum + "|" + ui.rkey; }
@@ -821,7 +920,7 @@
     /* ms until the next lap's cards turn: the riding clock, else (reduced motion) the plain clock from the last lap's turn */
     function lapWait() {
       var rc = ui.rc, T = rv.ready();
-      if (T >= 0) return T > 0 ? T + Math.round(Math.min(lapMs() * .03, 1500)) : 0;
+      if (T >= 0) return rv.modelOn() ? Math.max(0, T - 350) : T > 0 ? T + Math.round(Math.min(lapMs() * .03, 1500)) : 0;   /* mxtime: the cards turn a moment before the leader's line, so the clock never waits for them */
       if (!ui.lapAt) return 0;
       var fm = rc.battle <= 1 ? firstMs() : 0; return Math.max(0, Math.round(ui.lapAt + (fm > 0 ? fm : lapMs()) - Date.now()));
     }
@@ -892,6 +991,7 @@
       var graceAt = 0, grace = Math.max(6000, dl(ph === "war" ? 9000 : 8000));
       for (;;) {
         if (!H.live()) return;
+        rv.setWait(people.some(function (s) { return !intents[s]; }));
         if (skipQ || rc.over) break;
         var rdy = ph === "flip" ? lapWait() : 0, all = need.every(function (s) { return intents[s]; });
         if (rdy <= 0 && all) break;
@@ -910,6 +1010,7 @@
       need.forEach(function (s) { if (rc.over || keyOf(rc) !== key) return; if (intents[s] && RC.need(rc).indexOf(s) >= 0) { var r = S.apply(G, { t: "flip", s: s }); if (r.ok) ev = ev.concat(r.ev); } });
       if (!rc.over && keyOf(rc) === key) ev = ev.concat(S.step(G));
       try { if (BR) BR.observe(G, ev); } catch (e) { }
+      captureFacts(); rv.setWait(false);
       annFeed(ev);   /* the booth hears the SAME events the screen now plays */
       ui.need = []; ui.intents = {};
       save();
@@ -967,7 +1068,7 @@
           logLine((e.n > 1 ? "War again! " : "War! ") + whoList(e.tied) + " tie" + (tiedR ? " with " + rankPlural(tiedR) : "") + ".");
           ui.war = { n: e.n, seats: e.seats.slice(), tied: e.tied.slice() };
           drawWar(e.seats, true); renderTower({ fight: e.seats }); pushNow();
-          await pipNote(e.n === 1 ? "War!" : e.n === 2 ? "Double war!|loser crashes" : e.n === 3 ? "Triple war!|loser is out" : warWordP(e.n) + "!|loser is out", e.n > 1 ? 900 : 850, e.n > 1);
+          await pipNote(e.n === 1 ? "War!" : e.n === 2 ? "Double war!|loser crashes, remounts" : e.n === 3 ? "Triple war!|loser crashes out" : warWordP(e.n) + "!|loser crashes out", e.n > 1 ? 900 : 850, e.n > 1);
           return;
         }
         case "kitty": logLine(nm(e.s) + " also takes " + plural(e.n, "left-over card") + "."); return;
@@ -975,6 +1076,7 @@
           stats.crashes++; var Rc = riderOfS(e.s);
           if (e.kind === "out") disp.cnt[e.s] = 0;
           ui.crashQ.push({ s: e.s, kind: e.kind, depth: e.depth });
+          if (modelOn()) { var wc0 = ui.warCards[e.s]; if (wc0) wc0.lost = e.kind; renderTower({ fight: [e.s] }); pushSoon(); return; }   /* mxtime: the bike goes down on the clock (onTrackEvent) */
           rv.crash(e.s, e.kind); annShown("crash", { s: e.s });
           H.sfx(e.kind === "out" ? "lose" : "bump");
           logLine("Crash! #" + Rc.plate + " " + Rc.name + (e.kind === "out" ? " loses the " + warWordP(e.depth).toLowerCase() + " and is out of the race." : " loses the double war, goes down and remounts."));
@@ -985,6 +1087,7 @@
         case "crashCards": disp.cnt[e.s] += e.n; logLine(nm(e.s) + " takes the " + plural(e.n, "card") + " the crashed rider held."); renderTower(null); trackSync(); return;
         case "yellow": {
           var q = ui.crashQ; ui.crashQ = [];
+          if (modelOn()) { chips(); return; }   /* mxtime: the flag comes out on the clock (onTrackEvent) */
           rv.yellow(e.lap, e.s, e.sector); chips();
           if (!q.length) return;
           stats.yellows++;
@@ -1195,14 +1298,18 @@
       var c = G.cal[e.ri], last = G.last || {};
       var mine = e.order.map(function (id, i) { return kOfId(id) >= 0 ? G.riders[id].name + " " + ord(i + 1) : null; }).filter(Boolean);
       ui.lastRes = { label: e.label, order: e.order.slice(), city: c.city || c.venue };
-      var rowsX = capRows(e.order, 40).map(function (x) { return x.sep ? '<li class="is-sep" aria-hidden="true">...</li>' : resLi(x.id, x.p, resultTags(e, x.id, x.p - 1)); }).join("");
+      var TX = e.tm || last.tm || null, Tt = MX.Time, tmap = {}, topT = null;
+      if (TX && Tt) TX.rows.forEach(function (r) { tmap[r[0]] = { laps: r[1], t: r[2], dnf: !!r[3] }; if (topT == null && !r[3]) topT = r; });
+      function timeCell(id, i) { var x = tmap[id]; if (!x || !topT) return ""; if (x.dnf) return "DNF"; if (i === 0) return Tt.fmtRace(x.t); var dl0 = topT[1] - x.laps; return dl0 > 0 ? "+" + dl0 + (dl0 > 1 ? " Laps" : " Lap") : Tt.fmtGap((x.t - topT[2]) / 1000); }
+      var fastTxt = TX && TX.best ? "Fastest lap: #" + G.riders[TX.best.id].plate + " " + G.riders[TX.best.id].name + " " + Tt.fmtLap(TX.best.t) + " (lap " + TX.best.k + ")" : "";
+      var rowsX = capRows(e.order, 40).map(function (x) { var tc = x.sep ? "" : timeCell(x.id, x.p - 1); return x.sep ? '<li class="is-sep" aria-hidden="true">...</li>' : resLi(x.id, x.p, (tc ? '<span class="mxp-rt">' + esc(tc) + "</span>" : "") + resultTags(e, x.id, x.p - 1)); }).join("");
       var nxt = ui.pendRound ? null : nextRace();
       var btns = ui.pendRound ? [{ id: "podium", label: "The podium", sub: (c.city || c.venue) + ": 1st, 2nd and 3rd" }] : nxt ? nxt.buttons : [];
       btns.push({ id: "stand", label: "Season standings" });
       for (;;) {
         var ch = await panel({ kind: "results", eyebrow: "Round " + (e.ri + 1) + " of " + G.cal.length + " · " + (c.city || c.venue) + (simmed ? " · simmed" : ""), title: e.label + " results",
           sub: esc(G.riders[e.order[0]].name + " wins" + (mine.length ? " · " + mine.join(" · ") : "")),
-          sum: '<div class="mxp-sum"><span class="mxp-chip is-hot">Holeshot: ' + esc(e.hs != null ? G.riders[e.hs].name : "none") + '</span><span class="mxp-chip">' + plural(last.wars || 0, "war") + '</span><span class="mxp-chip">' + plural(last.battles || 0, "lap") + "</span></div>",
+          sum: '<div class="mxp-sum"><span class="mxp-chip is-hot">Holeshot: ' + esc(e.hs != null ? G.riders[e.hs].name : "none") + '</span><span class="mxp-chip">' + plural(last.wars || 0, "war") + '</span><span class="mxp-chip">' + plural(last.battles || 0, "lap") + "</span>" + (TX && topT ? '<span class="mxp-chip">Race time ' + esc(Tt.fmtRace(topT[2])) + "</span>" : "") + (fastTxt ? '<span class="mxp-chip">' + esc(fastTxt) + "</span>" : "") + "</div>",
           body: '<ol class="mxp-res" aria-label="Results">' + rowsX + "</ol>", buttons: btns, countdown: 20000,
           info: { kind: "results", title: e.label + " results", res: resultsFor(e) } });
         if (ch !== "stand") return ch;
