@@ -55,7 +55,7 @@ export const STEPS=[1,0.9,0.8,0.75,0.67,0.6,0.5];   /* the render-scale ladder (
 export const TIERS={
   firetv:{id:"firetv",rank:0,label:"FIRE TV",aliases:["stick","low"],fps:30,lo:true,msaa:true,
     note:"Fire TV Stick 4K Max class (the CEO's TV, 2026-10-18: Mali-G52 / G57 MC2 class GPU, 4 x Cortex-A55, 2 GB) and older Sticks: 960x540 up to 1280x720, 4x MSAA (resolved in the tile memory of a Mali: about free), blob shadows, no post chain, the simple world",
-    res:{maxPR:1.0,capW:1280,tvW:1280,start:0.75,min:0.5},
+    res:{maxPR:1.0,maxPRtv:2.0,capW:1280,tvW:1280,start:0.75,min:0.5},
     shadow:{real:false,size:512,soft:false},
     post:{on:false,bloom:false,bloomScale:0.5,aa:"none",dof:false,shafts:false},
     fog:{on:true,far:0.75},
@@ -350,7 +350,11 @@ export function createQuality(env){
   const stored=readStore();
   if(!want&&stored&&stored.gpu===gpu0.string&&stored.tier&&TIERS[stored.tier]&&stored.src!=="url"){ want=stored.tier; source="stored"; }
   const prior=gpu0.cls<=0?"firetv":gpu0.cls===1?"balanced":gpu0.cls===2?"high":"ultra";
-  let tierId=want||prior;
+  /* a TV stick (a TV with at most 4 cores and 2 GB, or memory unknown) is the FIRE TV tier whatever its GPU string says (a Mali-G52 MC2 reads as a mid phone GPU): decided BEFORE the
+     renderer is made (its MSAA follows the tier) and never probed (milestone 2: the rule used to run after the probe, so a stick paid for the probe and got the BALANCED renderer's attributes) */
+  const tvStick=!!dev.tv&&(dev.cores||4)<=4&&(!dev.mem||dev.mem<=2);
+  if(!want&&tvStick) source="tv-class";
+  let tierId=want||(tvStick?"firetv":prior);
   /* MSAA (fixed when the renderer is made): only where the frame is drawn straight to the screen. Under the post chain (BALANCED and up) the chain's own FXAA does the edges and a multisampled
      canvas would only add a 4x buffer and a resolve to a full-screen pass (milestone 2, measured in BG_audit/sprint/mxvis2/perf/). A GPU without half-float targets runs no chain: MSAA then. */
   const msaaQ=urlParam("msaa");
@@ -361,13 +365,12 @@ export function createQuality(env){
   Q.weakGPU=gpu0.cls<=0;
   /* 3. the probe: only when nobody decided and the GPU is not known to be weak (the probe may move the prior one tier either way) */
   Q.probe=null;
-  if(!want&&gpu0.cls>=1&&env.probe!==false&&!gpu0.software){
+  if(!want&&!tvStick&&gpu0.cls>=1&&env.probe!==false&&!gpu0.software){
     Q.probe=probeGpu(renderer); Q.stats.probeMs=Q.probe.ms;
     if(Q.probe.ok){ const ms=Q.probe.ms, r=ORDER.indexOf(tierId); let nr=r; if(ms>30) nr=Math.max(0,r-2); else if(ms>12) nr=Math.max(0,r-1); else if(ms<3&&gpu0.cls>=2&&!dev.mobile) nr=Math.min(3,r+1); tierId=ORDER[nr]; if(nr!==r) source="probe"; else source="gpu+probe"; }
-  } else if(!want&&gpu0.cls<=0) source="gpu";
-  if(dev.tv&&!want&&tierId!=="firetv"&&(dev.cores&&dev.cores<=4)&&(dev.mem&&dev.mem<=2)) { tierId="firetv"; source="tv-class"; }
+  } else if(!want&&!tvStick&&gpu0.cls<=0) source="gpu";
   let tier=TIERS[tierId];
-  const autoTier=want?prior:tierId, autoSource=want?"gpu":source;   /* what the system alone would choose here ("auto") */
+  const autoTier=want?(tvStick?"firetv":prior):tierId, autoSource=want?(tvStick?"tv-class":"gpu"):source;   /* what the system alone would choose here ("auto") */
   Q.source=source; Q.autoTier=autoTier;
   /* anisotropy follows the tier (r3d-util caps it at 8) */
   const applyAniso=()=>setAniso(Math.min(maxAniso,(LO0?TIERS.firetv:tier).tex.aniso));
@@ -427,7 +430,8 @@ export function createQuality(env){
     else if(isTV()!==lastTV){ lastTV=isTV(); setRung(); }   /* a TV flag that came late: the frame-rate target changes (30 on a TV) */
     const dpr=GL.devicePixelRatio||1, e=eff();
     if(!Q.fixed){
-      let cap=Math.min(dpr,e.res.maxPR); if(e.res.capW) cap=Math.min(cap,e.res.capW/w); if(dev.tv&&e.res.tvW) cap=Math.min(cap,e.res.tvW/w);
+      let cap=Math.min(dpr,(dev.tv&&e.res.maxPRtv)||e.res.maxPR); if(e.res.capW) cap=Math.min(cap,e.res.capW/w); if(dev.tv&&e.res.tvW) cap=Math.min(cap,e.res.tvW/w);
+      /* (maxPRtv, milestone 2: a TV WebView may report 960 x 540 CSS pixels at a device pixel ratio of 2; with the old cap of 1.0 the FIRE TV tier started at 720x405 there instead of 960x540) */
       prCap=Math.max(0.5,cap); pr=Math.max(0.5,prCap*STEPS[rung.si]); live.pr=pr; pendPR=0;   /* (a resolution step that waited for a cut is part of this new size) */
       /* the ladder's steps are relative to the cap; a cap that is itself small leaves the steps alone, it never goes below half of it */
     }
