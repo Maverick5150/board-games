@@ -29,10 +29,10 @@ const GL=typeof window!=="undefined"?window:globalThis;
    specks = the GPU crumb pool (spk = its emission scale); clods = mesh rocks; puffs / haze = dust sprites; veil = the dust layer's coverage cap; depth = the specks' cores write depth (the depth of field);
    bank = how strongly the dust glows when it is seen against the ring of floodlight banks (forward scattering) */
 const TIERS={
-  high:  {n:"high",   specks:6000, spk:1.00, clods:1400, puffs:300, haze:36, motes:170, lens:6, rock:20, rate:1.00, atlas:128, pbr:true,  depth:true,  veil:0.30, maxPx:12, bank:0.30},
-  medium:{n:"medium", specks:2800, spk:0.75, clods:640,  puffs:150, haze:14, motes:80,  lens:0, rock:20, rate:0.85, atlas:128, pbr:true,  depth:true,  veil:0.28, maxPx:11, bank:0.26},
+  high:  {n:"high",   specks:12000, spk:1.00, clods:1400, puffs:300, haze:36, motes:170, lens:6, rock:20, rate:1.00, atlas:128, pbr:true,  depth:true,  veil:0.30, maxPx:12, bank:0.30},
+  medium:{n:"medium", specks:5000, spk:0.75, clods:640,  puffs:150, haze:14, motes:80,  lens:0, rock:20, rate:0.85, atlas:128, pbr:true,  depth:true,  veil:0.28, maxPx:11, bank:0.26},
   low:   {n:"low",    specks:1200, spk:0.55, clods:240,  puffs:64,  haze:0,  motes:0,   lens:0, rock:8,  rate:0.7,  atlas:96,  pbr:false, depth:false, veil:0.24, maxPx:9,  bank:0.22},
-  ultra: {n:"ultra",  specks:9000, spk:1.20, clods:2000, puffs:380, haze:44, motes:210, lens:6, rock:20, rate:1.00, atlas:128, pbr:true,  depth:true,  veil:0.32, maxPx:13, bank:0.30},
+  ultra: {n:"ultra",  specks:16000, spk:1.20, clods:2000, puffs:380, haze:44, motes:210, lens:6, rock:20, rate:1.00, atlas:128, pbr:true,  depth:true,  veil:0.32, maxPx:13, bank:0.30},
   stick: {n:"stick",  specks:1000, spk:0.55, clods:160,  puffs:40,  haze:0,  motes:0,   lens:0, rock:8,  rate:0.6,  atlas:96,  pbr:false, depth:false, veil:0.22, maxPx:9,  bank:0.22}
 };
 const ALIAS={firetv:"stick",stick:"stick",low:"low",balanced:"medium",medium:"medium",high:"high",ultra:"ultra"};
@@ -505,15 +505,15 @@ export function createFx(opts){
     e.spray+=(clamp(pw*0.9+bm*0.9+sand*cruise*0.5,0,1)-e.spray)*Math.min(1,dt*4);
     const gR=st.tR+0.03, gF=st.tF+0.03, s0R=st.onStart?-1:st.s-0.8, s0F=st.onStart?-1:st.s+0.8, sgn=st.k>0?1:-1, lift=0.55+0.45*Math.min(1,ef+0.3);
     /* clods: a fan thrown up and back off the rear tyre (in the world's frame the dirt barely moves while the bike drives away from it); in a turn the back end slides and throws them to the outside */
-    e.cA+=(2+5*cruise+300*pw+260*bm+90*sand*cruise)*(1-0.35*e.ls)*dt*PS.c*imp; let n=e.cA|0; e.cA-=n; if(n>30) n=30;
+    e.cA+=(2+30*cruise+300*pw+300*bm+90*sand*cruise)*(1-0.35*e.ls)*dt*PS.c*imp; let n=e.cA|0; e.cA-=n; if(n>30) n=30;
     while(n-->0){
       const up=(2.4+6.0*Math.pow(rnd(),0.9))*lift, bk=(rnd()-0.25)*(1.4+3.6*ef)+0.06*v, sd=(rnd()+rnd()-1)*(1.6+1.8*bm)-sgn*bm*(1.5+3.5*rnd()), cr=(0.1+0.25*rnd())*v, u=rnd();
       const bx=st.x-cth*(0.8+v*dt*u)+rx*(rnd()-0.5)*0.14, bz=st.z-sth*(0.8+v*dt*u)+rz*(rnd()-0.5)*0.14;
       clod(bx,gR+0.05+0.1*rnd(),bz,cth*cr-cth*bk+rx*sd,up,sth*cr-sth*bk+rz*sd,clodR(),0.9+0.9*rnd(),clodC(),gR,s0R,st.lat,st.th);
     }
     /* THE STORM (m2): hundreds of crumbs a second off the rear tyre. Under power a tight ROOSTER TAIL (thrown back at the wheelspin speed, a clear arc that reads
-       from the chase and from the stands) inside a wider fan; in a berm the back end slides and sprays to the outside; at speed a rider still kicks up a few */
-    e.kA+=(60*cruise+2400*pw+1600*bm+600*sand*cruise)*SPK*(0.03+0.97*(1-e.ls)*(1-e.ls))*dt*PS.k*imp; n=e.kA|0; e.kA-=n; if(n>KMAX) n=KMAX;
+       from the chase and from the stands) inside a wider fan; in a berm the back end slides and sprays to the outside; at speed the knobs keep throwing a steady spray (up to 450 a second) */
+    e.kA+=(450*cruise+2400*pw+2000*bm+600*sand*cruise)*SPK*(0.03+0.97*(1-e.ls)*(1-e.ls))*dt*PS.k*imp; n=e.kA|0; e.kA-=n; if(n>KMAX) n=KMAX;
     while(n-->0){
       const tail=rnd()<0.5*ef, u=rnd(), chip=rnd()<0.25;
       let up, bk, sd;
@@ -533,7 +533,7 @@ export function createFx(opts){
     e.dA+=((1.2+3.5*cruise*loose)*lf+16*pwD*loose+9*bm+6*sand*cruise+6*brake)*dt*PS.p*imp; n=e.dA|0; e.dA-=n; if(n>8) n=8;
     while(n-->0){ const side=(rnd()<0.5?-1:1)*(0.5+1.4*rnd()), hi=rnd()<0.2*efD?1.8:1, off=0.9+v*dt*rnd(), ox=rx*side*0.2;
       puff(st.x-cth*off+ox,gR+0.18+0.2*rnd(),st.z-sth*off+rz*side*0.2,cth*v*0.12-cth*(0.3+0.8*rnd())+rx*side*0.9-sgn*bm*rx*1.2,(0.35+0.8*rnd())*hi,sth*v*0.12-sth*(0.3+0.8*rnd())+rz*side*0.9-sgn*bm*rz*1.2,
-      (0.36+0.26*rnd()+0.2*efD)*(1-0.4*e.ls),0.8+0.5*rnd()+0.3*efD,1.5+1.0*rnd()+0.4*efD,(0.18+0.13*rnd()+0.15*efD+0.05*sand)*(0.7+0.3*loose)*lf*1.35,COL.dust,0.18,1.4,gR); }   /* (m2: x1.35: the veil rule now guards the lens, the first cut's dust hardly showed past 3 m) */
+      (0.36+0.26*rnd()+0.2*efD)*(1-0.4*e.ls),0.8+0.5*rnd()+0.3*efD,1.5+1.0*rnd()+0.4*efD,(0.18+0.13*rnd()+0.15*efD+0.05*sand)*(0.7+0.3*loose)*lf*2.0,COL.dust,0.18,1.4,gR); }   /* (m2: x2: the veil rule now guards the lens; the first cut's dust covered under 1% of a chase frame) */
     /* the haze that hangs over the track behind a fast pack: large, faint, slow, low */
     e.hA+=(v>6?(0.8+0.7*efD)*lf:0)*dt*PS.h*(st.me?1.3:1)*RATE; n=e.hA|0; e.hA-=n; if(n>3) n=3;
     while(n-->0) haze(st.x-cth*(1.4+3*rnd())+rx*(rnd()-0.5)*1.5,gR+0.55+0.7*rnd(),st.z-sth*(1.4+3*rnd())+rz*(rnd()-0.5)*1.5,(rnd()-0.5)*0.5,0.12,(rnd()-0.5)*0.5,1.3+0.8*rnd(),0.45+0.25*rnd(),3.2+2.4*rnd(),0.045+0.03*rnd(),COL.dust,gR);
