@@ -131,7 +131,7 @@ const SPR_VS=[
 "  float cs=cos(aD.x), sn=sin(aD.x); vec2 off=vec2(cs*c.x-sn*c.y,sn*c.x+cs*c.y)*size; vRot=vec2(cs,sn);",
 "  float ry=size*projectionMatrix[1][1]/depth;",                    /* the puff's radius as a share of the half height */
 "  alpha*=smoothstep(0.7,2.2,depth);",                               /* m2: a puff fades from 2.2 m to 0.7 m from the lens (it never fills the lens) */
-"  alpha*=ry>uCapR?pow(uCapR/ry,1.5):1.0;",                          /* m2: no single puff covers more than about a fifth of the frame's height */
+"  alpha*=ry>uCapR?mix(pow(uCapR/ry,1.5),1.0,smoothstep(3.0,6.0,depth)):1.0;",   /* m2: near the lens no single puff covers more than about a quarter of the frame's height; from 6 m a big cloud is a cloud (the layer cap still holds) */
 "  alpha*=mix(1.0,0.4,smoothstep(0.7,3.0,aA.y-aD.y));",              /* m2: denser near the floor, thinner higher up */
 "  alpha*=uVeil;",                                                   /* m2: the whole dust layer's coverage cap (set while the frame is drawn) */
 "  vec3 wd=normalize(aA.xyz-cameraPosition); float ce=0.868*sqrt(max(0.0,1.0-wd.y*wd.y))+0.497*wd.y;",   /* m2: the ring of floodlight banks 30 degrees up all round the bowl: the angle between the view ray and the nearest bank */
@@ -365,7 +365,7 @@ export function createFx(opts){
     iC=new THREE.InstancedBufferAttribute(aC,4).setUsage(THREE.DynamicDrawUsage), iD=new THREE.InstancedBufferAttribute(aD,4).setUsage(THREE.DynamicDrawUsage);
   sg.setAttribute("aA",iA); sg.setAttribute("aB",iB); sg.setAttribute("aC",iC); sg.setAttribute("aD",iD); sg.instanceCount=NS;
   const atlasTex=atlasTexture(T.atlas);
-  const sm=new THREE.ShaderMaterial({uniforms:THREE.UniformsUtils.merge([THREE.UniformsLib.lights,THREE.UniformsLib.fog,{uAtlas:{value:atlasTex},uH:{value:720},uGain:{value:1},uVeil:{value:1},uCapR:{value:0.2},uBank:{value:T.bank||0}}]),
+  const sm=new THREE.ShaderMaterial({uniforms:THREE.UniformsUtils.merge([THREE.UniformsLib.lights,THREE.UniformsLib.fog,{uAtlas:{value:atlasTex},uH:{value:720},uGain:{value:1},uVeil:{value:1},uCapR:{value:0.26},uBank:{value:T.bank||0}}]),
     vertexShader:SPR_VS,fragmentShader:SPR_FS,lights:true,fog:true,transparent:true,depthWrite:false,depthTest:true});
   const sprites=new THREE.Mesh(sg,sm); sprites.frustumCulled=false; sprites.renderOrder=3; sprites.name="fx-sprites";
   /* THE VEIL RULE, worked out while the frame is drawn (the drawing camera; the simulation never reads it): the dust layer's opacity-weighted share of the frame,
@@ -378,7 +378,7 @@ export function createFx(opts){
       const x=aA[o4], y=aA[o4+1], z=aA[o4+2], s=aA[o4+3], d=-(e[2]*x+e[6]*y+e[10]*z+e[14]); if(d<0.7) continue;
       const ry=s*P11/d, cy=(e[1]*x+e[5]*y+e[9]*z+e[13])*P11/d, cx=(e[0]*x+e[4]*y+e[8]*z+e[12])*P11/(d*asp);
       if(cx-ry/asp>1||cx+ry/asp<-1||cy-ry>1||cy+ry<-1) continue;
-      const near=sstep(0.7,2.2,d), cap=ry>capR?Math.pow(capR/ry,1.5):1, hi=1-0.6*sstep(0.7,3.0,y-aD[o4+1]);
+      const near=sstep(0.7,2.2,d), cap=ry>capR?Math.pow(capR/ry,1.5)+(1-Math.pow(capR/ry,1.5))*sstep(3.0,6.0,d):1, hi=1-0.6*sstep(0.7,3.0,y-aD[o4+1]);
       cov+=Math.min(1,0.785*ry*ry/asp)*a*near*cap*hi*0.5;   /* the share of the frame (pi r^2 / 4 in clip units) x opacity x the atlas' mean coverage */
     }
     veil.cov=cov; veil.gain=cov>VEIL?VEIL/cov:1; sm.uniforms.uVeil.value=veil.gain;
