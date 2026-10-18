@@ -152,8 +152,12 @@ export function create(host,hooks){
     // [/hook:fx]
     if(gate){ world.root.remove(gate.grp); disposeTree(gate.grp); }
     gate=gateBuild(C,look,N); world.root.add(gate.grp);
-    rs=list.map((r,k)=>({k:k,seat:r.s,g:0,tg:null,boot:null,lat:gate.slotLat(slotOf(k)),latT:0,bias:(((k*7919)%11)/10-0.5)*0.7,D:-0.95,Dp:-0.95,s:0,onStart:true,v:0,vp:0,
-      F:{y:0,v:0},Rr:{y:0,v:0},stand:0,lean:0,dab:0,spinF:0,spinR:0,gone:false,crash:null,crashPlan:null,air:false,init:false,lapN:1}));
+    // [hook:motion]
+    gridBuild();   /* the start grid: fixed slots in staggered rows inside the start's width (gridLat / gridBack) */
+    rs=list.map((r,k)=>({k:k,seat:r.s,g:0,tg:null,boot:null,lat:gridLat(k),latT:gridLat(k),bias:(((k*7919)%11)/10-0.5)*0.7,D:-0.95-gridBack(k),Dp:-0.95-gridBack(k),s:0,onStart:true,v:0,vp:0,
+      F:{y:0,v:0},Rr:{y:0,v:0},stand:0,lean:0,dab:0,spinF:0,spinR:0,gone:false,crash:null,crashPlan:null,air:false,init:false,lapN:1,
+      Dl:-0.95-gridBack(k),P:-gridBack(k),sb:0,vl:0,al:0,alF:0,psi:0,psiHold:0,sd:{},jF:null,jR:null,jDone:null,czone:0,rem:false}));
+    // [/hook:motion]
     RST=list.map((r0,k)=>newState(k,r0));
     lenLaps=o.len||30; lapNo=1; T=0; holdInfo=null; flag=null; yellow=null; lapPlan=null; finished=false; show=null;
     // [hook:cams]
@@ -167,7 +171,35 @@ export function create(host,hooks){
     V.resize(); renderOnce();
     return V.courseInfo;
   };
-  function slotOf(k){ const n=gate.slots, mid=Math.floor(n/2); return clamp(mid+(k%2?1:-1)*Math.ceil(k/2),0,n-1); }
+  // [hook:motion]
+  /* THE START GRID (the motion specialist, milestone 2). The old grid put 22 riders in ONE row of 0.9 m slots on a gate wider than the start
+     (19.8 m on a 17 m start): the outer slots were clamped onto each other (riders 17, 19, 21 stood in one spot) and slotOf() sent rider 21 to
+     rider 19's slot. Now: fixed slots in staggered rows (one row up to 11 riders; 22 = two rows of 11), the slots spread evenly inside the start's
+     usable width (half width - 0.55 m), the second row 2.3 m behind the first and offset half a pitch (it launches through the gaps), the middle
+     slots first (k = 0 in the middle, then alternating outward). gridLat(k) = the slot's lateral offset (+ right), gridBack(k) = metres behind
+     the front row. */
+  let GRID=null;
+  function gridBuild(){
+    let hwG=8; try{ hwG=(C.S&&C.S.n?MX.Course.startFrame(C,C.gateAt||2,{}):MX.Course.frame(C,C.join+(C.gateAt||0),{})).hw; }catch(e){}
+    const use=Math.max(1.5,hwG-0.6), rows=N<=11?1:Math.max(2,Math.ceil(N/Math.max(2,Math.floor(2*use/1.3)+1))), per=Math.ceil(N/rows);
+    const P=Math.min(2.0,2*use/Math.max(1,per-1+(rows>1?0.5:0))), lat=[], back=[];
+    for(let k=0;k<N;k++){ const row=k%rows, c=Math.floor(k/rows), pos=(c%2?1:-1)*Math.ceil(c/2);
+      lat.push(clamp(pos*P+(rows>1?(row/(rows-1)-0.5)*P*0.5:0),-use,use)); back.push(row*2.3); }
+    GRID={lat:lat,back:back,hwG:hwG,use:use,rows:rows,P:P};
+  }
+  function gridLat(k){ return GRID&&GRID.lat[k]!=null?GRID.lat[k]:0; }
+  function gridBack(k){ return GRID&&GRID.back[k]!=null?GRID.back[k]:0; }
+  /* which side of rider o rider r keeps (+1 = his right): the side he is on (natural hysteresis); right behind him, the side he chose for this
+     pass while it lasts (1.6 s memory), else toward his own line, else toward the room */
+  function sideOf(r,o,target,ia,ib){
+    const dl=r.lat-o.lat, m=r.sd||(r.sd={}), rec=m[o.k];
+    if(Math.abs(dl)>0.3){ const s=dl>0?1:-1; m[o.k]={s:s,T:T}; return s; }
+    if(rec&&T-rec.T<1.6){ rec.T=T; return rec.s; }
+    const s=Math.abs(target-o.lat)>0.25?(target>o.lat?1:-1):((ib-o.lat)>=(o.lat-ia)?1:-1);
+    m[o.k]={s:s,T:T}; return s;
+  }
+  function slotOf(k){ const n=gate.slots, mid=Math.floor(n/2); return clamp(mid+(k%2?1:-1)*Math.ceil(k/2),0,n-1); }   /* (kept for reference; the grid above replaces it) */
+  // [/hook:motion]
   function flagT(k){ return texFlags[k]||(texFlags[k]=flagTex(k)); }
   /* free a world or a rider set: geometries, materials and every texture they hold (normal and glow maps, shader uniforms too: a new
      layout each round must not leave the old one's textures on the GPU) */
@@ -239,7 +271,9 @@ export function create(host,hooks){
     CAMS.pickShot(true); renderOnce();
   };
   V.markOut=function(seat){ const r=rs[seat]; if(r) r.gone=true; };
-  V.gate=function(){ mode="gate"; gate.set(0); gate.drop=0; gate.dropT=-1; T=0; lapNo=1; rs.forEach((r,k)=>{ r.lat=gate.slotLat(slotOf(k)); r.init=false; r.crash=null; r.crashPlan=null; r.g=0; r.tg=null; }); CAMS.setShot({type:"gate",subj:-1,pri:0,min:1e9,max:1e9}); renderOnce(); };
+  // [hook:motion]
+  V.gate=function(){ mode="gate"; gate.set(0); gate.drop=0; gate.dropT=-1; T=0; lapNo=1; rs.forEach((r,k)=>{ r.lat=gridLat(k); r.latT=r.lat; r.vl=0; r.al=0; r.alF=0; r.psi=0; r.sb=0; r.sd={}; r.jF=null; r.jR=null; r.jDone=null; r.rem=false; r.init=false; r.crash=null; r.crashPlan=null; r.g=0; r.tg=null; }); CAMS.setShot({type:"gate",subj:-1,pri:0,min:1e9,max:1e9}); renderOnce(); };
+  // [/hook:motion]
   /* the gate drops: the pads fall, the clock starts (resolves once the riders are away) */
   V.drop=function(){
     return new Promise(res=>{
@@ -317,50 +351,124 @@ export function create(host,hooks){
     }
     if(gate&&racing){ const a=gate.dropT>0?clamp((now()-gate.dropT)/260,0,1):1; if(a!==gate.drop){ gate.drop=a; gate.set(a*a); } }
     const atGate=mode==="gate";
-    /* positions on the course from each rider's clock */
+    // [hook:motion]
+    /* THE MOTION (the motion specialist, milestone 2): how the race MOVES. The engine and the cards decide each rider's race distance (his gap to
+       the leader's schedule: r.Dl, the LOGICAL distance); the view only PLACES the riders round it, so the order at the line, the lap times and
+       the standings are untouched:
+       - PACK SPACING: a setback r.sb >= 0 holds a rider back from his logical distance while another rider is in his way (bikes never ride through
+         each other: the one behind yields, the one in front never moves for him), then lets him catch up gently: r.D = r.Dl - r.sb is what is
+         drawn. Once the riders are spread (every lap ends with the cards' gaps, 4 m and more apart) the setbacks are 0 and r.D = r.Dl.
+       - THE LATERAL LINE is a critically damped follower (tau 0.35 s, at most 4 m/s^2 sideways, never faster sideways than about 0.42 x the
+         speed: no sliding at walking pace) toward a line that keeps riders on their side of each other (hysteresis: you stay on the side you are
+         on; a pass picks its side and keeps it), instead of the old bang-bang chase at a 2.4 m/s clamp (the crab-walk).
+       - THE GRID: fixed slots in staggered rows (gridBuild), no passing pushes at the gate or on the start straight: the riders hold their lanes as
+         the start narrows and queue into turn 1 through the setbacks (the funnel), the racing line takes over into turn 1.
+       - A fallen rider and his bike are HARD obstacles (never inside 1.45 m of them while level with them) and the riders slow through the crash.
+       - THE REMOUNT rides on from where the bike lies, from a stop (r.rem: no teleport, no snap to the racing line). */
+    const ordA=[];
     for(let i=0;i<N;i++){
       const r=rs[i]; if(r.gone&&!r.crash) continue;
-      if(r.crash&&r.crash.kind==="remount"&&T-r.crash.T>=r.crash.down){ /* back on the bike where it lies (not where the crash began: no jump back) */
+      if(r.crash&&r.crash.kind==="remount"&&T-r.crash.T>=r.crash.down){ /* back on the bike where it lies: the logical distance becomes the bike's, he rides on from there from a stop */
         const c=r.crash, ts=c.v0/7.5, hw0=(r.fr&&r.fr.hw)||4; r.g=T-MX.Course.tOfD(C,c.D+c.v0*ts-3.75*ts*ts); r.lat=clamp(c.lat+c.side*Math.min(2.2,0.9*ts),-hw0+0.6,hw0-0.6);
-        r.crash=null; r.boot={t:0}; r.init=false; }
+        r.crash=null; r.boot={t:0}; r.init=false; r.rem=true; r.sb=0; r.vl=0; r.al=0; r.alF=0; r.psi=-c.side*0.18; r.psiHold=0.8; r.pa=0; r.jF=null; r.jR=null; r.jDone=null; r.czone=0; }
       if(r.crash&&r.crash.kind==="out"&&lapNo>r.crash.lap+1){ r.crash=null; r.gone=true; hideRider(R,i); continue; }   /* cleared after the yellow lap */
       if(r.leave&&lapNo>r.leave&&!r.crash){ r.gone=true; r.leave=0; hideRider(R,i); continue; }
       const tau=atGate?0:tauOf(i), d0=MX.Course.dOfT(C,Math.max(0,tau));
-      const D=atGate?-0.95:d0-0.95*(1-sstep(0,18,d0));
-      r.Dp=r.init?r.D:D; r.D=D;
+      const Db=atGate?-0.95:d0-0.95*(1-sstep(0,18,d0));   /* (the old D: the front row waits out the clock's first 0.95 m, the rear wheel spinning) */
+      r.Db=Db; r.Dl=Db-gridBack(r.k)*(1-sstep(0,60,Math.max(0,d0)));   /* the second row starts 2.3 m back; the offset fades over the first 60 m */
+      if(r.sb==null) r.sb=0;
+      ordA.push(r);
+    }
+    /* the order on track as drawn (last frame's setbacks): the one behind yields */
+    ordA.sort((a,b)=>((b.Dl-b.sb)-(a.Dl-a.sb))||(a.k-b.k));
+    for(let a=0;a<ordA.length;a++){
+      const r=ordA[a], live=racing&&dt>0&&(r.init||r.rem)&&!atGate;
+      let sb=r.crash?r.sb:0;
+      if(!r.crash&&!atGate){
+        let need=0;
+        const Lf=2.15+0.05*Math.max(0,r.v||0);   /* nose to tail: the footprint (2 m) and a gap that grows with the speed (0.9 m at 15 m/s) */
+        for(let b=0;b<a;b++){ const o=ordA[b]; if(o.crash) continue; const ah=o.D-r.Dl; if(ah>Lf+0.1) continue;
+          const dl=Math.abs(o.lat-r.lat), Lq=Lf*(1-sstep(0.8,1.05,dl)); if(Lq<=0.001) continue;
+          const nd=Lq-ah; if(nd>need) need=nd; }
+        if(live){
+          const cz=r.czone||0; sb=r.sb||0;
+          if(cz>0) sb+=2.6*cz*dt;   /* a crash ahead: slower through it (up to 2.6 m/s), made up afterwards */
+          if(need>sb){ sb=Math.min(need,sb+7*dt); if(need-sb>0.3) sb=need-0.3; }   /* held back: quickly, never more than 0.3 m into the bike ahead */
+          else if(cz<=0){ const ex=sb-need; sb-=Math.min(ex,Math.min(1.8,0.2+ex*1.5)*dt); }   /* catching up: gently (at most 1.8 m/s faster than the clock) */
+          sb=Math.max(0,sb);
+        } else sb=need;   /* a placement frame (the race restored, a test jump): placed at once */
+      }
+      let D=r.Dl-sb;
+      if(live&&D<r.D){ D=r.D; sb=r.Dl-D; }   /* never backwards */
+      r.sb=sb;
+      r.Dp=(r.init||r.rem)?r.D:D; r.D=D;
+      r.P=D+Math.max(0,-r.Db);   /* where he is drawn on the start: the front row stands at the start path's first metre while the clock's first 0.95 m pass (the wheel spins) */
       const loc=MX.Course.atD(C,Math.max(0,D),tmpO);
       const sPrev=r.s; r.onStart=loc.onStart; r.s=loc.onStart?0:loc.s; r.lapN=loc.lap;
       /* a crash happens where the engine said, on the lap it said */
-      if(racing&&r.crashPlan&&!r.crash&&!r.onStart&&r.lapN>=r.crashPlan.lap&&dt>0){ const a=MX.Course.wrap(C,r.crashPlan.s-sPrev), b=MX.Course.wrap(C,r.crashPlan.s-r.s); if(a<C.L/2&&(b>C.L/2||b<0.05)) beginCrash(i); }
+      if(racing&&r.crashPlan&&!r.crash&&!r.onStart&&r.lapN>=r.crashPlan.lap&&dt>0){ const a2=MX.Course.wrap(C,r.crashPlan.s-sPrev), b2=MX.Course.wrap(C,r.crashPlan.s-r.s); if(a2<C.L/2&&(b2>C.L/2||b2<0.05)) beginCrash(r.k); }
     }
-    /* the frames, the racing lines and passing room (riders level side by side, the one behind moves over; nobody rides into a fallen rider) */
-    const order=rs.filter(r=>!r.gone||r.crash).sort((a,b)=>b.D-a.D);
-    for(let a=0;a<order.length;a++){
-      const r=order[a];
-      const fr=r.onStart?MX.Course.startFrame(C,Math.max(0,r.D),tmpO2):MX.Course.frame(C,r.s,tmpO2), hw=fr.hw;
+    /* the frames and the lateral lines, front to back (as drawn) */
+    const ordB=ordA.slice().sort((a,b)=>(b.D-a.D)||(a.k-b.k)), loopStart=!(C.S&&C.S.n), turn1=loopStart?C.hsD:C.Ls;
+    for(let a=0;a<ordB.length;a++){
+      const r=ordB[a];
+      let fr;
+      if(r.onStart){ fr=MX.Course.startFrame(C,Math.max(0,r.P),tmpO2); if(r.P<0){ fr.x+=Math.cos(fr.th)*r.P; fr.z+=Math.sin(fr.th)*r.P; } }   /* the second row stands behind the start path's first point */
+      else fr=MX.Course.frame(C,r.s,tmpO2);
+      const hw=fr.hw;
       r.fr={x:fr.x,z:fr.z,th:fr.th,k:fr.k,hw:hw,y:fr.y||0,tag:fr.tag,sand:fr.sand||0};
       if(r.crash) continue;
-      let target;
-      if(r.onStart||atGate||(r.lapN===1&&r.D<C.hsD)){ const f=atGate?0:sstep(C.hsD*0.18,C.hsD*0.9,r.D); target=gate.slotLat(slotOf(r.k))*(1-f)+(r.bias*hw*0.4)*f; }
-      else { const kk=MX.Course.frame(C,r.s+9,tmpO).k; target=Math.abs(kk)>1/30?-Math.sign(kk)*hw*0.36+r.bias*0.5:r.bias*hw*0.45; }
-      for(let b=a-1;b>=0&&order[b].D-r.D<5.5;b--){ const o=order[b]; if(o.crash) continue; if(Math.abs(o.lat-target)<1.15){ target=o.lat+(target>=o.lat?1.25:-1.25); } }   /* (a fallen rider: below, where he and the bike lie now) */
-      for(let b=a+1;b<order.length&&r.D-order[b].D<1.4;b++){ const o=order[b]; if(o.crash) continue; if(Math.abs(o.lat-target)<1.0){ target=o.lat+(target>=o.lat?1.1:-1.1); } }
-      /* nobody rides into a fallen rider or his bike, where they are now (the bike slides on, the rider is thrown further the other way):
-         each blocks 1.9 m either side of it; the line goes round the blocked stretch on the side with room (polish: pushed off one and
-         then the other, a rider could end up between them, over the bike), and the rider swerves quicker than he drifts across a lane */
-      let blk=null, ia=-hw+0.55, ib=hw-0.55;
-      rs.forEach(o=>{ const c=o.crash; if(c&&o!==r){ for(let q2=0;q2<2;q2++){ const pd=q2?(c.rD!=null?c.rD:c.D):(c.bD!=null?c.bD:c.D), pl=q2?(c.rL!=null?c.rL:c.lat):(c.bL!=null?c.bL:c.lat), dd=pd-r.D;
-        if(dd>-3&&dd<22){ (blk=blk||[]).push([pl-1.9,pl+1.9]); } } } });
-      if(blk){ blk.sort((x,y)=>x[0]-y[0]); const mg=[]; blk.forEach(v=>{ const l=mg[mg.length-1]; if(l&&v[0]<=l[1]) l[1]=Math.max(l[1],v[1]); else mg.push(v.slice()); });
-        /* a blocked stretch in the way: the wanted line is in it, or the rider is, or he'd cross it to get to his line; he goes round it on
-           the side he is on now (never across the fallen rider to reach his line), or on the side with room */
+      const ia=-hw+0.55, ib=hw-0.55;
+      if(atGate){ r.lat=gridLat(r.k); r.latT=r.lat; r.vl=0; r.al=0; r.alF=0; r.psi=0; continue; }   /* the grid: still, each in his own slot */
+      let target, pushes=true;
+      const startMode=r.onStart||(loopStart&&r.lapN===1&&r.D<C.hsD);
+      if(startMode){
+        /* the start: each rider holds his lane, the lanes narrow with the start (they keep their order across it); into turn 1 the racing line takes over */
+        const lane=gridLat(r.k)*clamp((hw-0.6)/Math.max(0.5,GRID?GRID.use:hw),0.05,1), wS=sstep(turn1-44,turn1-18,r.D);
+        let line=r.bias*hw*0.45; { const kk=r.onStart?MX.Course.startFrame(C,Math.min(C.Ls,Math.max(0,r.P)+9),tmpO).k:MX.Course.frame(C,r.s+9,tmpO).k; if(Math.abs(kk)>1/30) line=-Math.sign(kk)*hw*0.36+r.bias*0.5; }
+        target=lane*(1-wS)+line*wS; pushes=wS>0.55;
+      } else { const kk=MX.Course.frame(C,r.s+9,tmpO).k; target=Math.abs(kk)>1/30?-Math.sign(kk)*hw*0.36+r.bias*0.5:r.bias*hw*0.45; }
+      /* passing room: level riders ride side by side (each stays on his side of the other); a rider who is held back or closing on the one ahead
+         picks a side early (by the closing speed) and keeps it; a rider content to follow stays in the line ahead of him (a train in the ruts) */
+      if(pushes){ const SEP=1.2;
+        for(let pass=0;pass<2;pass++) for(let b=0;b<ordB.length;b++){ const o=ordB[b]; if(o===r||o.crash) continue;
+          const dD=o.D-r.D; if(dD<-1.6||dD>10) continue;
+          let act=b<a?dD<2.2:true;   /* level with him (a rider just behind does not push the one in front over: trains are allowed) */
+          if(!act&&b<a){ const cl=Math.max(0,(r.v||0)-(o.v||0)), want=r.sb>0.05||r.Dl>o.D-3.2, rec=r.sd&&r.sd[o.k]; act=(want&&dD<5+cl*1.4)||(rec&&T-rec.T<1.6&&dD<6); }   /* held back, closing, or already passing him (the pass keeps going) */
+          if(!act||Math.abs(o.lat-target)>=SEP) continue;
+          const sd=sideOf(r,o,target,ia,ib); let t2=o.lat+sd*SEP;
+          if((t2<ia-0.05||t2>ib+0.05)&&Math.abs(r.lat-o.lat)<0.5){ const t3=o.lat-sd*SEP; if(t3>=ia-0.05&&t3<=ib+0.05){ r.sd[o.k]={s:-sd,T:T}; t2=t3; } }   /* no room on that side: the other */
+          target=t2; } }
+      /* nobody rides into a fallen rider or his bike, where they are now (the bike slides on, the rider is thrown further the other way): each
+         blocks 1.9 m either side of it from 22 m before; the line goes round the blocked stretch on the side the rider is on (never across the
+         fallen rider to reach his line), or on the side with room; level with it, it is a hard limit (1.45 m) and everyone slows through it */
+      let blk=null, cz=0;
+      for(let q1=0;q1<rs.length;q1++){ const o=rs[q1], c=o.crash; if(!c||o===r) continue;
+        for(let q2=0;q2<2;q2++){ const pd=q2?(c.rD!=null?c.rD:c.D):(c.bD!=null?c.bD:c.D), pl=q2?(c.rL!=null?c.rL:c.lat):(c.bL!=null?c.bL:c.lat), dd=pd-r.D;
+          if(Math.abs(pl)>hw+0.7) continue;   /* off the track: no obstacle */
+          if(dd>-3&&dd<22){ (blk=blk||[]).push([pl-1.9,pl+1.9,pl,dd]); cz=Math.max(cz,1-sstep(12,22,dd)); } } }
+      r.czone=cz;
+      if(blk){ const bs=blk.slice().sort((x,y)=>x[0]-y[0]), mg=[]; bs.forEach(v=>{ const l=mg[mg.length-1]; if(l&&v[0]<=l[1]) l[1]=Math.max(l[1],v[1]); else mg.push([v[0],v[1]]); });
         const cur=clamp(r.lat,ia,ib), tc=clamp(target,ia,ib), lo2=Math.min(cur,tc), hi2=Math.max(cur,tc);
         const hit=mg.find(v=>(tc>v[0]&&tc<v[1])||(cur>v[0]&&cur<v[1])||(lo2<=v[0]&&hi2>=v[1]));
-        if(hit){ const left=hit[0]-ia, right=ib-hit[1], goL=left>=0.3, goR=right>=0.3, preferL=cur<=(hit[0]+hit[1])/2;   /* room either side within the track */
+        if(hit){ const left=hit[0]-ia, right=ib-hit[1], goL=left>=0.3, goR=right>=0.3, preferL=cur<=(hit[0]+hit[1])/2;
           target=goL&&goR?(preferL?hit[0]:hit[1]):goL?hit[0]:goR?hit[1]:(left>right?ia:ib); } }
-      r.latT=clamp(target,ia,ib);
-      const maxV=r.init&&dt>0?(blk?4.2:2.4)*dt:99; r.lat+=clamp(r.latT-r.lat,-maxV,maxV);
+      target=clamp(target,ia,ib); r.latT=target;
+      /* the follower */
+      if(!r.init&&!r.rem){ r.lat=target; r.vl=0; r.al=0; }   /* a placement frame */
+      else if(dt>0){
+        const am=cz>0?6:4, vmax=Math.min(cz>0?4.5:3.2,0.15+0.42*Math.max(0,r.v||0)), n=Math.max(1,Math.ceil(dt*120)), h=dt/n, v0=r.vl||0;
+        let lat=r.lat, vl=v0;
+        for(let q=0;q<n;q++){ let ac=0;
+          if(!r.air){ const e=target-lat, vd=Math.sign(e)*Math.min(vmax,Math.abs(e)/0.35,Math.sqrt(2*am*0.85*Math.abs(e))); ac=clamp((vd-vl)/0.0875,-am,am); }   /* (in the air nothing pushes sideways) */
+          vl+=ac*h; lat+=vl*h; }
+        r.al=(vl-v0)/dt; r.vl=vl; r.lat=lat;
+      }
+      /* hard limits: the track's edge; a fallen rider or bike level with him */
+      if(r.lat<ia-0.15){ r.lat=ia-0.15; if(r.vl<0) r.vl=0; } else if(r.lat>ib+0.15){ r.lat=ib+0.15; if(r.vl>0) r.vl=0; }
+      if(blk) for(let q=0;q<blk.length;q++){ const v=blk[q]; if(v[3]>-2.2&&v[3]<2.4){ const dl=r.lat-v[2]; if(Math.abs(dl)<1.45){ const sd=dl>=0?1:-1; r.lat=v[2]+sd*1.45; if(r.vl*sd<0) r.vl=0; } } }
     }
+    // [/hook:motion]
     /* the flagger: the white flag as the leader comes to the line to start the last lap, the checkered flag as the winner arrives */
     if(racing&&!finished){ const L0=leaderIdx(); if(L0>=0&&!rs[L0].onStart){ const tl=(C.L-rs[L0].s)/Math.max(4,rs[L0].v||8);
       if(tl<2.6&&lapNo===lenLaps-1&&flag!=="white") V.setFlag("white");
@@ -414,15 +522,20 @@ export function create(host,hooks){
     const fr=r.fr, s=r.s, onStart=r.onStart;
     const th=fr.th, cth=Math.cos(th), sth=Math.sin(th), nx=-sth, nz=cth, lat=r.lat;
     const x=fr.x+nx*lat, z=fr.z+nz*lat;
-    let v=r.init&&dt>0?(r.D-r.Dp)/dt:(isGate?0:MX.Course.vOfD(C,Math.max(0,r.D)));
+    // [hook:motion]
+    let v=r.rem?0:r.init&&dt>0?(r.D-r.Dp)/dt:(isGate?0:MX.Course.vOfD(C,Math.max(0,r.D)));   /* (a remount rides on from a stop: r.rem) */
     if(!isFinite(v)||v<0) v=0; r.vp=r.v; r.v=r.init?r.v+(v-r.v)*Math.min(1,dt*10):v;
     const acc=dt>0?(r.v-r.vp)/dt:0;
     const gF=ride(r,s,onStart,BIKE.WB/2), gR=ride(r,s,onStart,-BIKE.WB/2), tF=gnd(r,s,onStart,BIKE.WB/2), tR=gnd(r,s,onStart,-BIKE.WB/2);
-    const aF=onStart?null:MX.Course.airAt(C,s+BIKE.WB/2), aR=onStart?null:MX.Course.airAt(C,s-BIKE.WB/2);
+    const aF=onStart||r.crash?null:jumpArc(r,s+BIKE.WB/2,true), aR=onStart||r.crash?null:jumpArc(r,s-BIKE.WB/2,false);   /* this rider's own flight over a jump, from his speed at the lip */
+    // [/hook:motion]
     if(r.crash){ crashPose(i,r,tw,dt); return; }
     let landed=false, impact=0;   /* this frame the bike touches down, and how hard: the axles' downward speed just before (m/s) */
     if(!r.init||dt<=0){
       initAxle(r.F,gF,aF,r.v); initAxle(r.Rr,gR,aR,r.v); r.init=true;
+      // [hook:motion]
+      r.rem=false;
+      // [/hook:motion]
       r.stand=standTarget(r,aF||aR); r.lean=leanTarget(r); r.dab=0; r.gF=gF; r.gR=gR;
     } else {
       const sub=Math.max(1,Math.ceil(dt/(1/120))), h=dt/sub, vgF=(gF-r.gF)/dt, vgR=(gR-r.gR)/dt;
@@ -442,8 +555,17 @@ export function create(host,hooks){
        brakes into a turn, pivoting on the wheel that stays down */
     const paT=(isGate||r.air||onStart&&r.D<0.5)?0:clamp(acc*0.013,-0.06,0.1); r.pa=(r.pa||0)+(paT-(r.pa||0))*Math.min(1,dt*7);
     oy+=BIKE.WB/2*Math.abs(Math.sin(r.pa));
-    let roll=r.lean, yaw=-th, pz=pitch+r.pa;
+    // [hook:motion]
+    /* THE BIKE POINTS WHERE IT GOES: its heading is the track's plus the angle of its own path (the lateral speed against the forward speed,
+       low-passed 0.12 s; the bike no longer crab-walks across a lane with its nose locked to the track), and a lane change leans it into the
+       turn it makes (the lateral acceleration, low-passed 0.15 s) */
+    { const vf=Math.max(2,(r.v||0)*(1-fr.k*lat)), psiT=isGate?0:Math.atan2(r.vl||0,vf)*sstep(0.3,2.0,r.v||0);
+      if(dt>0){ r.psi+=(psiT-r.psi)*Math.min(1,dt/(r.psiHold>0?0.35:0.12)); if(r.psiHold>0) r.psiHold-=dt; r.alF+=((r.air?0:(r.al||0))-r.alF)*Math.min(1,dt/0.15); }
+      else if(!isFinite(r.psi)) r.psi=0; }
+    const hd=th+r.psi;   /* the bike's heading */
+    let roll=r.lean+clamp(Math.atan((r.alF||0)/G)*0.9,-0.32,0.32), yaw=-hd, pz=pitch+r.pa;
     if(isGate){ roll=0; pz+=Math.sin(tw*31+i)*0.004; }
+    // [/hook:motion]
     if(r.air&&aF&&aF.A&&aF.A.b-aF.A.a>14&&!LO){ const u=aF.u; const wsg=((i*13)%3)-1; roll+=wsg*0.55*Math.sin(PI*clamp(u*1.15,0,1)); yaw+=wsg*0.18*Math.sin(PI*u); }
     eul.set(roll,yaw,pz,"YZX"); q.setFromEuler(eul);
     BW.compose(v3.set(x,oy,z),q,sc1);
@@ -453,7 +575,9 @@ export function create(host,hooks){
     const gy=Math.min(tF,tR), hAir=Math.max(0,oy-gy);
     /* the per-rider state every module reads (CONTRACT.md) */
     const st=RST[i];
-    st.visible=true; st.me=!!list[i].me; st.red=!!list[i].red; st.x=x; st.y=oy; st.z=z; st.th=th; st.yaw=yaw; st.pitch=pz;
+    // [hook:motion]
+    st.visible=true; st.me=!!list[i].me; st.red=!!list[i].red; st.x=x; st.y=oy; st.z=z; st.th=hd; st.yaw=yaw; st.pitch=pz;   /* st.th = the bike's heading (the track's + its path angle): the roost leaves the real rear wheel */
+    // [/hook:motion]
     st.v=r.v; st.acc=acc; st.lat=r.lat; st.s=s; st.D=r.D; st.onStart=onStart; st.k=fr.k; st.tag=fr.tag||""; st.sand=fr.sand||0; st.gate=isGate;
     st.air=r.air; st.landed=landed; st.impact=impact; st.hAir=hAir; st.gF=gF; st.gR=gR; st.tF=tF; st.tR=tR; st.gy=gy;
     st.compF=compF; st.compR=compR; st.spinF=r.spinF; st.spinR=r.spinR; st.stand=isGate?0:r.stand; st.dab=r.dab; st.lean=roll; st.crouch=crouch;
@@ -484,19 +608,48 @@ export function create(host,hooks){
     const gl=onStart?0:(MX.Course.ground(C,s,lat+0.5)-MX.Course.ground(C,s,lat-0.5));
     let shx=x, shz=z, shy=(tF+tR)/2;
     if(hAir>0.25&&!onStart){ const k=Math.min(6,hAir)/Math.max(0.35,SUN.y), ox=-SUN.x*k, oz=-SUN.z*k, al=ox*cth+oz*sth, lt=ox*nx+oz*nz; shx=x+ox; shz=z+oz; shy=MX.Course.ground(C,s+al,lat+lt); }
-    shadowAt(R,i*2,shx,shy,shz,th,2.1,0.9,clamp(1-hAir/6,0.3,1),clamp((tF-tR)/BIKE.WB,-1.2,1.2),clamp(gl,-1.2,1.2),LOOK.blobOp(shx,shy,shz));
+    // [hook:motion]
+    shadowAt(R,i*2,shx,shy,shz,hd,2.1,0.9,clamp(1-hAir/6,0.3,1),clamp((tF-tR)/BIKE.WB,-1.2,1.2),clamp(gl,-1.2,1.2),LOOK.blobOp(shx,shy,shz));   /* (the blob turns with the bike) */
+    // [/hook:motion]
     shadowAt(R,i*2+1,0,-999,0,0,0,0,0);
-    r.pos=r.pos||new THREE.Vector3(); r.pos.set(x,oy+1.0,z); r.th=th; r.oy=oy; r.gy=gy;
+    // [hook:motion]
+    r.pos=r.pos||new THREE.Vector3(); r.pos.set(x,oy+1.0,z); r.th=hd; r.oy=oy; r.gy=gy;   /* r.th = the bike's heading */
+    // [/hook:motion]
     // [hook:fx]
     FX.rider(st,dt);   /* landing dust, the roost off the rear wheel (r3d-fx.js) */
     // [/hook:fx]
   }
   function gnd(r,s,onStart,off){ if(onStart) return (r.fr.y||0)+0.02; return MX.Course.ground(C,s+off,r.lat); }
+  // [hook:motion]
   function ride(r,s,onStart,off){
     if(onStart) return (r.fr.y||0)+0.02;
-    const g=MX.Course.ground(C,s+off,r.lat), sk=skim(s+off);
+    const g=MX.Course.ground(C,s+off,r.lat), sk=skim(s+off)*sstep(5,9,r.v||0);   /* the skim line over the whoops' tops is a thing of speed: a rider at walking pace (a remount) rolls through the troughs */
     return sk>0?Math.max(g,sk+MX.Course.frame(C,s+off,tmpO).y):g;
   }
+  /* JUMP ARCS THAT FOLLOW THE SPEED (view side). course.js gives every jump ONE spatial arc, flown at its design speed (A.vx); the riders reach the
+     lip at their own speed (the cards' gaps move them up to 16% either side of the schedule), so a fixed arc made slow riders hang (an implied
+     gravity of 7 m/s^2) and slammed fast ones (11.7). Each rider now flies his OWN ballistic arc from the lip at his own speed with real gravity:
+     the distance grows with the speed (d x (v / vx)^1.4: a faster rider flies higher, further and longer, lands further down the landing), kept
+     on the landing (never short onto its face, never off its far end: per kind of jump), never through the dirt on the way. The arc is chosen
+     when the front wheel leaves the lip and both wheels fly it. */
+  const JLIM={rhythm:[-0.5,0.6],double:[-1.0,2.6],triple:[-1.0,2.6],table:[-2.5,3.0],stepup:[-0.6,1.2],drop:[-0.8,2.0]};
+  function arcY(J,x){ return {y:J.ya+x*J.tan-G*x*x/(2*J.v*J.v),dy:J.tan-G*x/(J.v*J.v),A:J.A,u:x/J.d}; }
+  function jumpArc(r,s,front){
+    const key=front?"jF":"jR"; let J=r[key];
+    if(J){ const x=MX.Course.wrap(C,s-J.a); if(x<=J.d) return arcY(J,x); r[key]=null; }   /* this wheel is down again */
+    const a=MX.Course.airAt(C,s); if(!a) return null;
+    if(!front){ const F=r.jF; if(F&&F.A===a.A){ r.jR=F; const x=MX.Course.wrap(C,s-F.a); return x<=F.d?arcY(F,x):null; } return r.jDone===a.A?null:a; }   /* the rear wheel flies the front's arc */
+    if(r.jDone===a.A) return null;   /* already flown (he landed short of the design's touch point) */
+    const A=a.A, d=A.b-A.a, v=clamp(r.v||A.vx,0.6*A.vx,1.45*A.vx), lim=JLIM[A.kind]||[-0.8,1.6], lat=r.lat;
+    const gAt=u=>MX.Course.ground(C,A.a+u,lat);
+    let dr=clamp(d*Math.pow(v/A.vx,1.4),Math.max(1.2,d+lim[0]),d+lim[1]);
+    for(let k=0;k<12&&gAt(dr+0.25)>gAt(dr)+0.01;k++) dr+=0.25;   /* never onto a rising face */
+    let tn=(gAt(dr)-A.ya)/dr+G*dr/(2*v*v);
+    for(let it=0;it<6;it++){ let ok=true; for(let k=1;k<10;k++){ const x=dr*k/10; if(A.ya+x*tn-G*x*x/(2*v*v)<gAt(x)+0.1){ ok=false; break; } } if(ok) break; dr+=0.5; tn=(gAt(dr)-A.ya)/dr+G*dr/(2*v*v); }   /* never through the dirt */
+    J=r.jF={A:A,a:A.a,d:dr,ya:A.ya,tan:tn,v:v}; r.jDone=A;
+    const x=MX.Course.wrap(C,s-J.a); return x<=J.d?arcY(J,x):null;
+  }
+  // [/hook:motion]
   /* the skim line through the whoops / rollers: the tops' height, ramped in over the first whoop and a half and out over the last */
   function skim(s){
     s=MX.Course.wrap(C,s);
@@ -512,7 +665,11 @@ export function create(host,hooks){
     if(air){ const ty=air.y+BIKE.WR+BIKE.TRAVEL*0.88; A.v=air.dy*v; A.y+=(ty-A.y)*Math.min(1,h*30); return; }
     const gw=g+BIKE.WR, Ls=A.y-gw;
     let a=-G;
-    if(Ls<BIKE.TRAVEL) a+=K*(LREST-Ls)-2*Z*Math.sqrt(K)*(A.v-vg);
+    // [hook:motion]
+    /* a PROGRESSIVE spring (stiffer over the last 55% of the travel, 4x at the bottom) and a hydraulic bump stop (more compression damping deep in
+       the stroke): a 4 m/s landing uses about 0.13 m of the shock, a 6 m/s landing 0.16 m, only 7 m/s and more bottoms it (it bottomed from 4 m/s) */
+    if(Ls<BIKE.TRAVEL){ const xp=Math.max(0,(BIKE.TRAVEL-Ls-0.45*BIKE.TRAVEL)/(0.55*BIKE.TRAVEL)), dv=A.v-vg; a+=K*(1+3*xp*xp)*(LREST-Ls)-2*Z*Math.sqrt(K)*(dv<0?1+7*xp*xp:1)*dv; }
+    // [/hook:motion]
     A.v+=a*h; A.y+=A.v*h;
     if(A.y-gw<0.03){ A.y=gw+0.03; if(A.v<vg) A.v=Math.min(vg,3.2); }
   }
@@ -580,6 +737,9 @@ export function create(host,hooks){
     const f=on?MX.Course.startFrame(C,Math.max(0,D),o):MX.Course.frame(C,sl,o);
     o.px=f.x-Math.sin(f.th)*lat; o.pz=f.z+Math.cos(f.th)*lat; o.py=on?(f.y||0)+0.02:surfY(sl,lat,f,o.px,o.pz); return o; }
   const tmpCB={}, tmpCR={};
+  // [hook:motion]
+  const tmpCW={};
+  // [/hook:motion]
   /* polish: the bike and the rider part company (the bike slides off to its side, the rider is thrown further and tumbles the other way:
      the old script left the rider lying under his own bike); both follow the track's curve and stand on the dirt as it is drawn (the
      shoulders too) while the rider walks back to the bike or off the track; a rider out of the race turns to watch it */
@@ -591,8 +751,14 @@ export function create(host,hooks){
     const yawB=side*0.9*(1-Math.exp(-t*2.2))*(1-lift*0.8), hw0=(r.fr&&r.fr.hw)||4;
     const bl=c.kind==="remount"?hw0-0.6:hw0+1.5, latB=clamp(c.lat+side*Math.min(2.2,0.9*tt),-bl,bl);   /* a bike that will be ridden on stays on the dirt */
     trackXZ(c.D+slide,latB,tmpCB); const bx=tmpCB.px, bz=tmpCB.pz, gy=tmpCB.py, thB=tmpCB.th;
-    ce.set(rollB,-thB+yawB,0.05*Math.sin(t*6)*(t<ts?1:0),"YZX"); cq.setFromEuler(ce);
-    BM.compose(cv3.set(bx,gy+0.32*Math.abs(Math.sin(rollB)),bz),cq,sc1);
+    // [hook:motion]
+    /* the remount: as the bike is lifted it settles onto its own two wheels (the height and pitch of the dirt under them, as the riding branch
+       will draw it), so riding on from here starts exactly where the lifted bike stands: no pop in height or pitch */
+    let pzB=0.05*Math.sin(t*6)*(t<ts?1:0), yB=gy+0.32*Math.abs(Math.sin(rollB));
+    if(lift>0){ const wf=trackXZ(c.D+slide+BIKE.WB/2,latB,tmpCW).py, wr=trackXZ(c.D+slide-BIKE.WB/2,latB,tmpCW).py; pzB+=(Math.atan2(wf-wr,BIKE.WB)-pzB)*lift; yB+=((wf+wr)/2-yB)*lift; }
+    ce.set(rollB,-thB+yawB,pzB,"YZX"); cq.setFromEuler(ce);
+    BM.compose(cv3.set(bx,yB,bz),cq,sc1);
+    // [/hook:motion]
     /* the rider: over the bars, further than the bike slides, tumbling away from it; lying; up; then to the bike (remount) or off (out) */
     const tr=Math.min(t,1.4), thrown=c.v0*0.95*tr-2.7*tr*tr, thrownEnd=c.v0*0.95*1.4-2.7*1.96;
     let Dr=c.D+thrown+0.6, latR=clamp(c.lat+rsd*Math.min(2.1,1.5*tr),-hw0-1,hw0+1), face=null;
