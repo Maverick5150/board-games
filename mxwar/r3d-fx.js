@@ -30,13 +30,14 @@ const GL=typeof window!=="undefined"?window:globalThis;
 
 /* ---------------- the tiers: how much of everything (perf: pass {tier: "high" | "medium" | "low" | "stick"} or {fx: {...overrides}} in Q.options) ----------------
    specks = the GPU crumb pool (spk = its emission scale); clods = mesh rocks; puffs / haze = dust sprites; veil = the dust layer's coverage cap; depth = the specks' cores write depth (the depth of field);
-   bank = how strongly the dust glows when it is seen against the ring of floodlight banks (forward scattering) */
+   bank = how strongly the dust glows when it is seen against the ring of floodlight banks (forward scattering); size = crumbs and clods larger on the
+   lower resolutions and smaller pools (FIRE TV draws 960x540: a 1 cm crumb there is under a pixel at 5 m) */
 const TIERS={
-  high:  {n:"high",   specks:12000, spk:1.00, clods:1400, puffs:300, haze:36, motes:170, lens:6, rock:20, rate:1.00, atlas:128, pbr:true,  depth:true,  veil:0.30, maxPx:12, bank:0.30},
-  medium:{n:"medium", specks:5000, spk:0.75, clods:640,  puffs:150, haze:14, motes:80,  lens:0, rock:20, rate:0.85, atlas:128, pbr:true,  depth:true,  veil:0.28, maxPx:11, bank:0.26},
-  low:   {n:"low",    specks:1200, spk:0.55, clods:240,  puffs:64,  haze:0,  motes:0,   lens:0, rock:8,  rate:0.7,  atlas:96,  pbr:false, depth:false, veil:0.24, maxPx:9,  bank:0.22},
-  ultra: {n:"ultra",  specks:16000, spk:1.20, clods:2000, puffs:380, haze:44, motes:210, lens:6, rock:20, rate:1.00, atlas:128, pbr:true,  depth:true,  veil:0.32, maxPx:13, bank:0.30},
-  stick: {n:"stick",  specks:1000, spk:0.55, clods:160,  puffs:40,  haze:0,  motes:0,   lens:0, rock:8,  rate:0.6,  atlas:96,  pbr:false, depth:false, veil:0.22, maxPx:9,  bank:0.22}
+  high:  {n:"high",   specks:12000, spk:1.00, clods:1400, puffs:300, haze:36, motes:170, lens:6, rock:20, rate:1.00, atlas:128, pbr:true,  depth:true,  veil:0.30, maxPx:12, bank:0.30, size:1.0},
+  medium:{n:"medium", specks:5000, spk:0.75, clods:640,  puffs:150, haze:14, motes:80,  lens:0, rock:20, rate:0.85, atlas:128, pbr:true,  depth:true,  veil:0.28, maxPx:11, bank:0.26, size:1.15},
+  low:   {n:"low",    specks:1200, spk:0.55, clods:240,  puffs:64,  haze:0,  motes:0,   lens:0, rock:8,  rate:0.7,  atlas:96,  pbr:false, depth:false, veil:0.24, maxPx:9,  bank:0.22, size:1.5},
+  ultra: {n:"ultra",  specks:16000, spk:1.20, clods:2000, puffs:380, haze:44, motes:210, lens:6, rock:20, rate:1.00, atlas:128, pbr:true,  depth:true,  veil:0.32, maxPx:13, bank:0.30, size:1.0},
+  stick: {n:"stick",  specks:1400, spk:0.55, clods:160,  puffs:40,  haze:0,  motes:0,   lens:0, rock:8,  rate:0.6,  atlas:96,  pbr:false, depth:false, veil:0.22, maxPx:9,  bank:0.22, size:1.7}
 };
 const ALIAS={firetv:"stick",stick:"stick",low:"low",balanced:"medium",medium:"medium",high:"high",ultra:"ultra"};
 function tierOf(o){
@@ -314,7 +315,7 @@ export function createFx(opts){
   }
   /* m2: clod sizes are log-normal (radius about 1-3.4 cm, 4% big chunks of 3.2-6.5 cm: the first cut's 0.5-2 cm were under a pixel or two at the chase distance
      of 3-8 m and the storm did not show in the captures), clod colours from wet to the soil (moist chunks are darker) */
-  const clodR=()=>rnd()<0.04?logn(0.045,0.25,0.032,0.065):logn(0.018,0.4,0.009,0.034);
+  const SZ=T.size||1, clodR=()=>SZ*(rnd()<0.04?logn(0.045,0.25,0.032,0.065):logn(0.018,0.4,0.009,0.034));
   const clodC=()=>mix3(COL.wet,COL.mid,rnd()*0.8);
 
   /* ================= SPECKS: the storm of crumbs, ballistic on the GPU ================= */
@@ -352,7 +353,7 @@ export function createFx(opts){
   const speckC=()=>{ const r=rnd(); return r<0.35?COL.wet:r<0.8?COL.mid:COL.dry; };
   /* radius (m): about 0.4-2.6 cm, median 1 cm (the cover's crumbs near the lead rider are 2-5 px at 720p, 2-3 m from the lens); the first cut's 1.3-10 mm drew
      sub-pixel dots that faded to nothing at the chase distance */
-  const speckR=chip=>chip?logn(0.012,0.55,0.005,0.034):logn(0.009,0.6,0.003,0.03);
+  const speckR=chip=>SZ*(chip?logn(0.012,0.55,0.005,0.034):logn(0.009,0.6,0.003,0.03));
 
   /* ================= SPRITES: dust puffs and haze, one instanced draw call ================= */
   const NPF=T.puffs, NHZ=T.haze, NS=NPF+NHZ, H0=NPF;
