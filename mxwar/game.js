@@ -1988,6 +1988,9 @@ function resultWords(e,order,me){
   if(lead) return {t:mine[0].R.name+" wins "+L+"!"+(rest.length?" · "+rest.join(" · "):""),hot:true};
   return {t:win.name+" wins · "+rest.join(" · "),hot:fin&&mine[0].p<=3};
 }
+/* mxfix1: a name its row would cut (the results at 360 px: "Anthony Amara...", "Anthony Pocor...") takes the board's condensed face first (index.html
+   .is-cond); one that still does not fit keeps its ellipsis. Measured as the sheet opens and again on the next frame. */
+function fitCond(root){ if(!root) return; function go(){ [].forEach.call(root.querySelectorAll(".mx-res__n, .mx-st__n"),function(n){ n.classList.remove("is-cond"); if(n.clientWidth>0&&n.scrollWidth>n.clientWidth+0.5) n.classList.add("is-cond"); }); } go(); if(window.requestAnimationFrame) requestAnimationFrame(go); }
 function openResults(e,simmed){
   var T=track(); if(T) T.show(false);
   if(V3) V3.show(false);   /* the 3D race rests under the results */
@@ -2022,6 +2025,7 @@ function openResults(e,simmed){
     /* closed with Back (or the scrim) after the round's last race: the podium still comes (the CEO's podium after every Main / overall) */
     if(ui.pendRound&&!setupShown()){ setView("season"); setTimeout(function(){ if(ui.pendRound&&!setupShown()&&!sheetUp()) openPodium(); },60); return; }
     ui.pendRound=null; if(!setupShown()){ setView("season"); drive(); } } }});
+  fitCond($("resSheet"));
   if(simmed&&!reduced()) $("resSheet").querySelectorAll(".mx-res li").forEach(function(li,i){ if(i<14&&li.animate) try{ li.animate([{opacity:0,transform:"translateX(1.5rem)"},{opacity:1,transform:"none"}],{duration:sp(260),delay:dl(i*55),easing:"ease-out",fill:"backwards"}); }catch(x){} });
   function go(fn){ return function(){ sheetClose($("resBox"),"go"); fn(); }; }
   var n1=$("resNext"), s1=$("resSim"), se=$("resSeason");
@@ -2047,6 +2051,7 @@ function openPodium(){
     '<div class="mx-sacts"><button class="bg-btn bg-btn--primary bg-btn--lg" id="podGo" type="button">'+(G.over?"The champion":"Season standings")+"</button></div>";
   /* [bcast] the podium's music (Megasong's finish) plays instead of the old fanfare when the package is on */ if(!(BCM&&BCM.plays())&&!reduced()) Sound.sfx("win"); /* [/bcast] */
   sheetOpen($("podBox"),{focus:"#podGo",onClose:function(reason){ if(reason!=="go"){ setView("season"); if(G.over) finishSeason(); else drive(); } }});
+  fitCond($("podSheet"));
   $("podGo").addEventListener("click",function(){ sheetClose($("podBox"),"go"); setView("season"); if(G.over) finishSeason(); else drive(); });
 }
 function finishSeason(){
