@@ -192,6 +192,9 @@ var MEMSLOT={last:"nl",oldLast:"nl",aLast:"nl",bLast:"nl",rivalLast:"nl",pickLas
   hitsN:["winner","winners"],picksN:["pick","picks"],seasonsN:["season","seasons"],hsN:["holeshot","holeshots"],marginS:"g",hyear:"y",hseries:"s",heatLabel:"r"};
 /* the memory events (a line of these is a memory line: its facts carry claims) */
 var MEMEV={season_story:1,analyst_pick:1,pick_result:1,talk_memory:1,round_wrap:1,career_note:1};
+/* the post-race talk: the lines about the season (the table) and a simmed race's own summary (not post-race talk) */
+var WRAPPTS={points_update:1,red_plate_change:1,championship_math:1,talk_points:1,season_champion:1};
+var SIMSUM={sim_open:1,sim_wars:1,sim_result:1,sim_close:1,skip_open:1,skip_result:1,skip_close:1,heat_transfers:1,lcq_result:1,moto_done:1,walkover:1};
 function wc(t){ var m=String(t).match(/[A-Za-z0-9'’-]+/g); return m?m.length:0; }
 function sentenceCase(t){ t=String(t).replace(/\s+/g," ").trim(); t=t.charAt(0).toUpperCase()+t.slice(1); return t.replace(/([.!?]\s+)([a-z])/g,function(m,p,c){ return p+c.toUpperCase(); }); }
 
@@ -638,6 +641,9 @@ function create(o){
     if(ctx.memBy){ var mtg=tplTags(out.tpl), mex=[]; mtg.forEach(function(x){ if(ctx.memBy[x]) mex=mex.concat(ctx.memBy[x]); }); if(mex.length) ctx.facts.mem=(ctx.facts.mem||[]).concat(mex); }
     if(ctx.memMark&&tplTags(out.tpl).indexOf("red")>=0) memMark(ctx.memMark,tplText(out.tpl));
     if(ctx.facts.mem&&ctx.facts.mem.length) memSaid(ctx,it);
+    /* mxann4: the race's flag and its post lines as they are said (not a simmed race's summary): how many, and how many are the season (the points, a
+       memory line). The wrap lines (wrapBudget) keep the round's post-race talk within 45% the season */
+    if(A.race&&(it.post||it.ev==="checkered"||it.ev==="photo_finish")&&!SIMSUM[it.ev]){ var wq=A.race; wq.wrapL=(wq.wrapL|0)+1; if(WRAPPTS[it.ev]||(ctx.facts.mem&&ctx.facts.mem.length)) wq.wrapS=(wq.wrapS|0)+1; }
     /* a crash call heard: the lap on screen as it was called is the lap the talk names later (the review: never the rider's own lap count) */
     if(it.crashRefs&&role==="C") it.crashRefs.forEach(function(x){ if(x.calledLap==null) x.calledLap=lapNo(); });
     A.said[fnv(out.text)]=A.now; if(++A.saidN%40===0) pruneSaid();
@@ -1656,17 +1662,24 @@ function create(o){
       return c;
     };
   }
-  /* a wrap line within the round's wrap budget (A.race.wrapW, set in onRoundDone) */
-  function wrapBudget(fn){ return function(){ var rr=A.race; if(!rr||(rr.wrapN|0)>=(rr.wrapW|0)) return null; var c=fn(); if(c){ var d0=c.memDone; c.memDone=function(){ rr.wrapN=(rr.wrapN|0)+1; if(d0) d0(); }; } return c; }; }
-  function pickResCtx(final){
+  /* a wrap line within the round's wrap budget (A.race.wrapW, set in onRoundDone), and, after a race watched to its flag, while the round's
+     post-race talk stays within 45% the season: the points lines and the memory lines said since the flag (wrapL / wrapS, counted in emit2 as the
+     lines are said), this one too. A single-Main night with the person in it (the flag, the winner, two rundowns, two points lines) has room for
+     one: the most interesting one comes first (onRoundDone). A race skipped to its finish or simmed has its short summary instead of the
+     post-race show: the wrap's own cap only */
+  function wrapBudget(fn){ return function(){ var rr=A.race; if(!rr||(rr.wrapN|0)>=(rr.wrapW|0)) return null; if(rr.ckSaid&&((rr.wrapS|0)+1)/((rr.wrapL|0)+1)>0.45) return null; var c=fn(); if(c){ var d0=c.memDone; c.memDone=function(){ rr.wrapN=(rr.wrapN|0)+1; if(d0) d0(); }; } return c; }; }
+  /* how the pick did (final: the season's scorecard). good: only a pick that won or made the podium (news, said first in the wrap) */
+  function pickResCtx(final,good){
     return function(){
       if(!memOn()) return null; var Gs=A.G, R=memRi(), M=MEM(), m=memL(); if(!final&&!memRoom(R,12)) return null;
+      if(!final&&m.told["pickres|"+R]) return null;   /* said already this round */
       var p=m.picks[R], n=0, hits=0, k;
       for(k in m.picks){ var pk=m.picks[k]; if(!pk||!pk.said||!pk.id||+k>R) continue; var gx=M.grade(Gs,+k,pk.id); if(!gx) continue; n++; if(gx.cls==="hit") hits++; }
       var sc=[{k:"score|"+R,v:hits+"/"+n}], s, due=R-(m.scoreAt==null?-9:m.scoreAt)>=4;
       if(final){ if(n<2) return null; s={kind:"pickres",key:"score|final",ver:String(n),v:"final",tags:["pickres","final"],d:{hitsN:hits,picksN:n},claims:sc,ids:[]}; }
       else {
         if(!p||!p.said||!p.id) return null; var g=M.grade(Gs,R,p.id); if(!g) return null;
+        if(good&&g.cls!=="hit"&&g.cls!=="podium") return null;
         var v=g.cls, d={last:p.id}, cl=g.claims.slice(), you=isHumanId(p.id);
         if(you){ v=g.cls==="hit"?"hitYou":g.place>0&&g.place<=20?"missYou":"missYouOut"; d={you:p.id}; if(v==="missYou") d.place=g.place; }
         else if(v==="hit"){ if(n>=3&&due){ v="hitscore"; d.hitsN=hits; d.picksN=n; cl=cl.concat(sc); } }
@@ -2027,6 +2040,9 @@ function create(o){
     return function(){
       var c=baseCtx(), sl=c.slots, t=c.tags, r=A.race, Gs=A.G; c.facts.ev=ev; c.facts.named=[];
       var red=redNow(), redIn=!!(red&&A.rmap&&A.rmap.indexOf(red)>=0);
+      /* mxann4: the round's lead story is about the table (a new points leader, a run with the red plate, the title fight): the welcome leaves the
+         standings to it (a red welcome first would leave the story nothing new to say) */
+      if(ev==="show_open"&&red&&memOn()){ try{ var R0=memRi(), lds=R0>=1?MEM().lead(Gs,R0,memEnv(),memL(),memL().claims[R0]||{}):null; if(lds&&(lds.kind==="newred"||lds.kind==="redrun"||lds.kind==="title")) red=null; }catch(e){ if(o.debug) throw e; } }
       if(red&&(ev==="show_open"||ev==="championship_math"||redIn)){ t.red=1; c.facts.red=red;
         var sm=standMarks(); if(sm&&sm[0].v===red) c.memMark=sm; }   /* mxann4: a red line states the standings: the storyline after it never repeats them */
       var hum=(A.rmap||[]).filter(function(id){ return rider(id)&&rider(id).kind==="human"; });
@@ -2551,7 +2567,10 @@ function create(o){
     var Gs=A.G, R=r.ri, M=MEM(), m=memL(), t=c.tags, sl=c.slots, mb={};
     if(!(Gs.results||[]).some(function(x){ return x.ri===R&&x.winner===id; })) return;   /* the round is scored, and it is his */
     if(!riderRoom(id,R,false)||!memRoom(R,12)) return;   /* his memory lines this round are used up */
-    if(r.wrapW!=null&&(r.wrapN|0)>=r.wrapW) return;      /* the wrap's memory budget (onRoundDone) covers the winner's season tag too */
+    if(r.wrapW!=null){   /* the wrap's memory budget (onRoundDone) covers the winner's season tag too, and so does its 45%: the post lines still to come counted */
+      if((r.wrapN|0)>=r.wrapW) return;
+      var qa=0, qp=0; A.q.forEach(function(x){ if(x.race!==r.key||!x.post||x.ev==="winner_line"||MEMEV[x.ev]||SIMSUM[x.ev]) return; qa++; if(WRAPPTS[x.ev]) qp++; });
+      if(((r.wrapS|0)+qp+1)/((r.wrapL|0)+qa+1)>0.45) return; }
     var n=1+M.streak(Gs,id,R-1,"win");
     if(n===2){ t.streak2=1; mb.streak2=[{k:"streak|win|"+id+"|"+R,v:2}]; } else if(n>=3){ t.streak3=1; sl.rowN=V(words(n)); mb.streak3=[{k:"streak|win|"+id+"|"+R,v:n}]; }
     var pv=R>=1?M.resAt(Gs,R-1):null; if(pv&&M.crashedOut(Gs,R-1,id)){ t.bounce=1; sl.lastCity=placeV(pv.city); mb.bounce=[{k:"dnf|"+(R-1)+"|"+id,v:1},{k:"city|"+(R-1),v:pv.city}]; }
@@ -2663,15 +2682,16 @@ function create(o){
     /* mxann4: the round in the season story, the person's round in the person's season (Medium / Slow: both; Fast or Chatter Less: one, the person's
        first), how the pick did. The season's last round: the champion first (onSeasonOver), then the person's season and the scorecard */
     if(memOn()&&!Gs.over){
-      /* the wrap's share: the post-round lines (the flag, the winner, the results, the podium, the points) stay within 45% memory and points, so the
-         new lines are counted against what is already chained (usually one or two; a red-plate night may have none) */
-      var two=o.speed!=="fast"&&o.chatter!=="less", hum=(Gs.humans||[]).length>0, rk=A.race?A.race.key:null, nPts=0, nRace=1;
-      A.q.forEach(function(x){ if(!x.post||x.race!==rk) return; if(/^(red_plate_change|points_update|championship_math)$/.test(x.ev)) nPts++; else if(!/^(round_wrap|pick_result)$/.test(x.ev)) nRace++; });
-      var W=0, cap=two?3:2; while(W<cap&&(nPts+W+1)/(nRace+nPts+W+1)<=0.42) W++;
-      if(A.race){ A.race.wrapW=W; A.race.wrapN=0; }
-      if(W>=1) ch("round_wrap",{role:"any",ctx:wrapBudget(wrapCtx(hum?"youfirst":"story")),delay:900});
-      if(W>=2) ch("pick_result",{role:"A",ctx:wrapBudget(pickResCtx(false)),delay:700});
-      if(W>=3) ch("round_wrap",{role:"any",ctx:wrapBudget(wrapCtx(hum?"story":"story")),delay:700});
+      /* the wrap: Medium / Slow 3 lines at most, Fast or Chatter Less 2, and each only while the post-race talk stays within 45% the season
+         (wrapBudget, counted as the lines are said: a single-Main night with the person in it has room for one). In order of interest: a pick
+         that won or made the podium, the person's night in the season (or the round in the season story), a pick that missed (a plain miss
+         at most every other round), the round in the season story */
+      var two=o.speed!=="fast"&&o.chatter!=="less", hum=(Gs.humans||[]).length>0;
+      if(A.race){ A.race.wrapW=two?3:2; A.race.wrapN=0; }
+      ch("pick_result",{role:"A",ctx:wrapBudget(pickResCtx(false,true)),delay:900});
+      ch("round_wrap",{role:"any",ctx:wrapBudget(wrapCtx(hum?"youfirst":"story")),delay:900});
+      ch("pick_result",{role:"A",ctx:wrapBudget(pickResCtx(false)),delay:700});
+      if(two) ch("round_wrap",{role:"any",ctx:wrapBudget(wrapCtx("story")),delay:700});
     }
     A.sit.redHist.push(redA); A.postAfter=after;
   }
