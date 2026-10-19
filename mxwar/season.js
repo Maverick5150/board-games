@@ -27,6 +27,8 @@ var Round=MX.Round||(typeof require==="function"?require("./round.js"):null);
 var VER=1, MAXH=8;
 /* mxtime: the time model (mxwar/time.js) turns every battle into a lap with real seconds; read lazily (the files may load in either order) */
 function TM(){ return MX.Time||(typeof require==="function"?require("./time.js"):null); }
+/* mxann4: the season journal (mxwar/journal.js): what the booth remembers of every race and round; never part of the rules, never fatal */
+function JN(){ if(MX.Journal) return MX.Journal; try{ return typeof require==="function"?require("./journal.js"):null; }catch(e){ return null; } }
 
 function rnd(G){ var t=(G.rs=(G.rs+0x6D2B79F5)>>>0); t=Math.imul(t^(t>>>15),t|1); t^=t+Math.imul(t^(t>>>7),t|61); return ((t^(t>>>14))>>>0)/4294967296; }
 function rint(G,n){ return Math.floor(rnd(G)*n); }
@@ -126,6 +128,7 @@ function newSeason(season,index,opts,humans,seed){
     seeds.forEach(function(id,k){ G.riders[id].seed=k+1; var p=F0.seedPoints[k]|0; if(p){ G.base[id]=p; G.pts[id]=p; } });
   }
   log(G,G.year+" "+G.seriesName+" ("+G.cls+"): "+G.cal.length+" rounds, "+G.roster.length+" riders.","season");
+  var J0=JN(); if(J0) try{ G.jr=J0.create(G); }catch(x){}   /* mxann4 */
   return G;
 }
 function plate(G,used){ for(var k=0;k<500;k++){ var n=2+rint(G,998); if(!used[n]) return n; } for(n=2;n<1000;n++) if(!used[n]) return n; return 999; }
@@ -244,6 +247,7 @@ function upgrade(G){
   if(G.round&&G.round.lv<4) Round.upgrade(G.round,G.o,{series:G.series,year:G.year,cal:G.cal[G.ri],live:G.race&&!G.race.over?G.rkey:null});
   if(G.round&&G.round.lv<5) realLive(G,was);
   adoptTime(G);   /* mxtime */
+  var J3=JN(); if(J3) try{ J3.upgrade(G); }catch(x){}   /* mxann4: a save without a journal gets one from G.results */
   return G;
 }
 /* mxsave (the CEO, 2026-10-17 ~05:15, a phone shot of an old save's "Lap 6 of 100": "This track is unacceptable"; the owner's ruling: "any
@@ -341,6 +345,7 @@ function endRace(G){
   var cal=G.cal[G.ri];
   log(G,(cal.city||cal.venue)+" "+r.label+": "+G.riders[order[0]].name+" wins"+(hs!=null?" (holeshot "+G.riders[hs].name+")":"")+".","race");
   ev.push({e:"raceDone",ri:G.ri,key:r.key,label:r.label,kind:r.kind,order:order,hs:hs,why:R.why,toMain:tr.toMain,toNext:tr.toNext,out:tr.out,walkover:tr.walkover||null,dnf:dnf,crashes:cr,tm:G.last.tm});
+  var J1=JN(); if(J1) try{ J1.race(G,R,r); }catch(x){}   /* mxann4: the race in the journal */
   G.race=null; G.rmap=null; G.rkey=null;
   if(RG.done) ev=ev.concat(endRound(G));
   return ev;
@@ -361,6 +366,7 @@ function endRound(G){
     races:RG.races.map(function(r){ return {key:r.key,label:r.label,kind:r.kind,res:r.res,hs:r.hs,why:r.why,len:r.len}; })});
   log(G,"Round "+(G.ri+1)+" "+(cal.city||cal.venue)+": "+G.riders[sc.winner].name+" wins the night.","round");
   ev.push({e:"roundDone",ri:G.ri,winner:sc.winner,cls:sc.cls,pts:pts});
+  var J2=JN(); if(J2) try{ J2.round(G); }catch(x){}   /* mxann4: the round in the journal */
   G.round=null; G.ri++;
   if(G.ri>=G.cal.length){
     G.over=true; var L=standings(G);
