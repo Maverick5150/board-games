@@ -348,6 +348,7 @@
   .mx-slot__who{display:flex; align-items:center; gap:.3rem; max-width:100%; font:var(--fw-ui-strong) var(--fs-xs)/1.2 var(--font-ui); color:var(--text-1); white-space:nowrap}
   .mx-slot__who .mx-sn{min-width:0; overflow:hidden; text-overflow:ellipsis}
   .mx-slot__lab{padding:.05rem .45rem; border-radius:var(--r-pill); background:rgba(8,6,4,.78); font:var(--fw-caps) var(--fs-micro)/1.2 var(--font-ui); letter-spacing:.06em; text-transform:uppercase; color:var(--gold-200)}
+  .mx-table.is-one .mx-slot__lab{white-space:nowrap}   /* mxfix1: the one card's label ("You · top") on one line (game.js placeSlots sizes the slot from it) */
   .mx-slot__who, .mx-fight__who{padding:.05rem .4rem .05rem .1rem; border-radius:var(--r-pill); background:rgba(8,6,4,.72)}
   .mx-mid{position:absolute; left:50%; transform:translate(-50%,-50%); display:grid; justify-items:center; gap:.2rem; width:max-content; max-width:34%; text-align:center; pointer-events:none}
   .mx-mid b{font:400 var(--fs-2xl)/1 var(--font-display); color:var(--gold-100)}
