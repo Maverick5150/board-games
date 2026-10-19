@@ -294,12 +294,14 @@
      small window (about a tenth of the picture) for a lap's reveal and a war, to the big one on a tap, then rests again. It moves to the left (under the camera
      button) when the person's rider is under it (game.js pipAvoid). The TV and the 2D track keep the window as it was. */
   .mx-tchip{display:none}
-  html:not([data-tv]) body.mx-3d .mx-table.is-rest{top:.5rem; right:.5rem; width:auto; height:2.75rem; max-width:min(15.5rem,calc(100% - 9rem)); border-radius:var(--r-pill)}
+  html:not([data-tv]) body.mx-3d .mx-table.is-rest{top:.5rem; right:.5rem; width:auto; height:2.75rem; max-width:calc(100% - var(--cam-w,7.5rem) - 1.4rem); border-radius:var(--r-pill)}
   html:not([data-tv]) body.mx-3d .mx-table.is-rest > :not(.mx-tchip):not(.mx-pipbtn){display:none}
-  html:not([data-tv]) body.mx-3d .mx-table.is-rest .mx-tchip{display:flex; align-items:center; gap:.3rem; height:100%; min-width:0; padding:0 2.2rem 0 .7rem; white-space:nowrap; overflow:hidden}
+  html:not([data-tv]) body.mx-3d .mx-table.is-rest .mx-tchip{display:flex; align-items:center; gap:.28rem; height:100%; min-width:0; padding:0 2rem 0 .65rem; white-space:nowrap; overflow:hidden}
   html:not([data-tv]) body.mx-3d .mx-table.is-rest .mx-pipbtn__ic{top:50%; right:.4rem; transform:translateY(-50%)}
   html:not([data-tv]) body.mx-3d .mx-table.is-left{right:auto; left:.5rem; transform-origin:0 0}
   html:not([data-tv]) body.mx-3d .mx-table.is-left:not(.is-big){top:3.65rem}
+  html:not([data-tv]) body.mx-3d .mx-table.is-shy{opacity:.16; transition:opacity .18s ease-out}   /* both top corners on the person's rider (a close shot): it fades out of his way */
+  html:not([data-tv]) body.mx-3d .mx-table:not(.is-shy){transition:opacity .25s ease-out}
   .mx-tchip__l{flex:none; font:var(--fw-caps) var(--fs-micro)/1 var(--font-ui); letter-spacing:.06em; text-transform:uppercase; color:var(--gold-200)}
   .mx-tchip .mx-tw__c{flex:none; min-width:1.9rem; padding:.18rem .3rem; font-size:.8125rem}
   .mx-tchip .mx-tw__c.is-top{box-shadow:0 0 0 2px #f0d48a}

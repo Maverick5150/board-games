@@ -1034,7 +1034,7 @@ function slow3D(info){
 function mode3D(){ var on=race3D(); document.body.classList.toggle("mx-3d",on); var b=$("camBtn"); if(b) b.hidden=!on; if(on) camLabel(); if(!on&&ui.std){ ui.std=false; document.body.classList.remove("mx-std"); } syncRest(); }
 /* the camera presets (the view's own list: Director, Chase, Broadcast, ...): the button over the picture, C or Play/Pause on a remote */
 function camName(){ if(!V3||!V3.camModes) return ""; var id=V3.camMode(), l=V3.camModes().filter(function(x){ return x.id===id; })[0]; return l?l.name:""; }
-function camLabel(){ var b=$("camBtn"), n=camName(); if(!b||!n) return; $("camName").textContent=n; b.setAttribute("aria-label","Camera: "+n+". Change the camera"); }
+function camLabel(){ var b=$("camBtn"), n=camName(); if(!b||!n) return; $("camName").textContent=n; b.setAttribute("aria-label","Camera: "+n+". Change the camera"); if(b.offsetWidth) $("arena").style.setProperty("--cam-w",b.offsetWidth+"px"); }   /* (mxfix1: the cards chip takes the rest of the row) */
 function camNext(){ if(!race3D()||!V3.camNext) return; var id=V3.camNext(); lsSet(CAMK,id); camLabel(); toast("Camera: "+camName(),{icon:"info",ms:1400}); }
 /* the moments the 3D picture shows (hooks.shown: the holeshot into turn 1, a crash, a pass into the top 10, a lapped rider, the checkered flag): the
    announcers call them as they show, and the page's own holeshot banner waits for it (seen3D) */
@@ -1108,7 +1108,7 @@ function syncRest(){
   if(on!==was) morphTable(function(){ tb.classList.toggle("is-rest",on); if(on) drawChip(); });
   $("arena").style.setProperty("--tbl-w",restable()&&!on&&!pipBig()&&!tb.classList.contains("is-left")?(tb.offsetWidth+Math.round(remPx()*1.25))+"px":"0px");
 }
-function pipReset(){ clearTimeout(pipT); pipT=0; ui.pipUp=false; var tb=$("table"); tb.classList.remove("is-one","is-left","is-war"); $("topSlot").hidden=false; }   /* a new race: the window rests on the right */
+function pipReset(){ clearTimeout(pipT); pipT=0; ui.pipUp=false; var tb=$("table"); tb.classList.remove("is-one","is-left","is-war","is-shy"); $("topSlot").hidden=false; }   /* a new race: the window rests on the right */
 function pipOpen(){ clearTimeout(pipT); pipT=0; if(ui.pipUp) return; ui.pipUp=true; syncRest(); }
 function pipRestSoon(ms){ clearTimeout(pipT); var my=gen; pipT=setTimeout(function(){ pipT=0; if(my!==gen) return; ui.pipUp=false; syncRest(); },Math.max(0,ms)); }
 /* a one-shot grow / shrink from the window's corner (transform only) around a change of its size */
@@ -1129,18 +1129,27 @@ function drawChip(){
   el.innerHTML=html;
   var b=$("pipBtn"); if(b&&!pipBig()) b.setAttribute("aria-label","Cards: "+el.textContent.replace(/\s+/g," ").trim()+". Show the cards bigger");
 }
-/* the window keeps off the person's rider: when the rider's box on screen (the view's projection) is under it, it takes the other top corner */
+/* the person's rider on the picture: a box round the rider and the bike from the view's projection of his hip and the camera's field of view (about 1 m to each
+   side and above, 1.15 m below); null when he is out of the picture or the camera rides on him */
+function riderBox(s){
+  if(!V3||!V3.proj||s<0) return null; var p=null; try{ p=V3.proj(s); }catch(e){ p=null; } if(!p||!p.in||p.d<3) return null;
+  var cv=$("v3"), r=cv.getBoundingClientRect(); if(!r.width||!r.height) return null;
+  var fov=50; try{ var ci=V3.camInfo?V3.camInfo():null; if(ci&&ci.fov>0) fov=ci.fov; }catch(e){}
+  var m=r.height/(2*p.d*Math.tan(fov*Math.PI/360)), x=r.left+(p.x+1)/2*r.width, y=r.top+(1-p.y)/2*r.height;
+  return {l:x-m,r:x+m,t:y-m,b:y+m*1.15};
+}
+/* the window keeps off the person's rider: when his box is under it, it takes the other top corner (under the camera button); when both corners are on him (a
+   close shot), it fades out of his way until he is clear */
 var avoidT=0;
 function pipAvoid(){
-  var tb=$("table"); if(!restable()||pipBig()||!V3||!V3.proj||document.hidden) return;
-  var s=focusHuman(); if(s<0) return;
-  var p=null; try{ p=V3.proj(s); }catch(e){ p=null; } if(!p||!p.in||p.d<3) return;   /* (an onboard camera rides on the rider: nothing to keep off) */
-  var cv=$("v3"), r=cv.getBoundingClientRect(); if(!r.width) return;
-  var x=r.left+(p.x+1)/2*r.width, y=r.top+(1-p.y)/2*r.height, z=Math.max(30,Math.min(220,1400/Math.max(1,p.d))), box={l:x-z*.45,r:x+z*.45,t:y-z*.75,b:y+z*.35};
-  var q=tb.getBoundingClientRect(), left=tb.classList.contains("is-left"), rem=remPx();
-  function hit(a){ return Math.min(box.r,a.r)-Math.max(box.l,a.l)>6&&Math.min(box.b,a.b)-Math.max(box.t,a.t)>6; }
+  var tb=$("table"); if(!restable()||pipBig()||document.hidden){ tb.classList.remove("is-shy"); return; }
+  var box=riderBox(focusHuman()); if(!box){ tb.classList.remove("is-shy"); return; }
+  var q=tb.getBoundingClientRect(), left=tb.classList.contains("is-left"), rem=remPx(), r=$("v3").getBoundingClientRect();
+  function hit(a){ return Math.min(box.r,a.r)-Math.max(box.l,a.l)>4&&Math.min(box.b,a.b)-Math.max(box.t,a.t)>4; }
   var here={l:q.left,r:q.right,t:q.top,b:q.bottom}, ox=left?r.right-rem*.5-q.width:r.left+rem*.5, oy=left?r.top+rem*.5:r.top+rem*3.65, there={l:ox,r:ox+q.width,t:oy,b:oy+q.height};
-  if(hit(here)&&!hit(there)&&Date.now()-avoidT>1500){ avoidT=Date.now(); morphTable(function(){ tb.classList.toggle("is-left",!left); }); syncRest(); }
+  if(!hit(here)){ tb.classList.remove("is-shy"); return; }
+  if(!hit(there)&&Date.now()-avoidT>1200){ avoidT=Date.now(); tb.classList.remove("is-shy"); morphTable(function(){ tb.classList.toggle("is-left",!left); }); syncRest(); return; }
+  tb.classList.add("is-shy");
 }
 function capBandH(){ var el=$("capBand"); return el&&document.documentElement.hasAttribute("data-ann")?el.offsetHeight:0; }
 function layoutArena(){
