@@ -1,7 +1,10 @@
 /* Board Games — synthesized music + sound effects (Web Audio, no audio files).
    API: Sound.music(name) | Sound.sfx(name) | Sound.fromText(msg) | Sound.openPanel() | Sound.mountButton(opts) | Sound.duck(on)
    mountButton opts: {top, right, size} (classic look); with ui/theme.css on the page the button is Luxe and docks in
-   .bg-topbar__end ({into: el} = another slot, {dock: false} = float; top/right still move a floating one). */
+   .bg-topbar__end ({into: el} = another slot, {dock: false} = float; top/right still move a floating one).
+   Additions for a game that brings its own sound (Motocross War's broadcast; a game that never calls them hears exactly today's chain):
+   Sound.ctx() -> the AudioContext (null before the first unlock) | Sound.addSfx(name, fn(t, out), {pri, hold, solo}) |
+   Sound.mix.profile("broadcast" | null), Sound.mix.bus(name), Sound.mix.duck(on, {lv}), Sound.mix.addSlider(id, {label, key, def}) (below). */
 (function(g){
 "use strict";
 var AC=g.AudioContext||g.webkitAudioContext;
@@ -11,18 +14,21 @@ var st={music:ld(KEY.music,0.4),sfx:ld(KEY.sfx,0.8),mm:ld(KEY.mm,0)===1,sm:ld(KE
 function save(){ try{ var L=g.localStorage; L.setItem(KEY.music,String(st.music)); L.setItem(KEY.sfx,String(st.sfx)); L.setItem(KEY.mm,st.mm?"1":"0"); L.setItem(KEY.sm,st.sm?"1":"0"); }catch(e){} }
 
 var ctx=null,musicGain=null,sfxGain=null,noiseBuf=null,want=null,cur=null,timer=null,step=0,nextT=0,unlocked=false;
+var compNode=null,masterIn=null;   // today's master compressor and what the music and the effects connect to (the compressor, or the speakers)
 
 function ensure(){
   if(!AC) return false;
   if(!ctx){
     try{ ctx=new AC(); }catch(e){ return false; }
     var out=ctx.destination;
-    if(ctx.createDynamicsCompressor){ var comp=ctx.createDynamicsCompressor(); comp.connect(ctx.destination); out=comp; }
+    if(ctx.createDynamicsCompressor){ var comp=ctx.createDynamicsCompressor(); comp.connect(ctx.destination); out=comp; compNode=comp; }
+    masterIn=out;
     musicGain=ctx.createGain(); sfxGain=ctx.createGain();
     musicGain.connect(out); sfxGain.connect(out);
     var len=ctx.sampleRate; noiseBuf=ctx.createBuffer(1,len,ctx.sampleRate);
     var d=noiseBuf.getChannelData(0); for(var i=0;i<len;i++) d[i]=Math.random()*2-1;
     applyVol();
+    if(prof) mixOn();                    // a page that asked for the broadcast mixer before the audio started gets it now
   }
   if(ctx.state==="suspended"&&ctx.resume&&!isHidden()){ try{ ctx.resume(); }catch(e){} }   // never wake the audio while the page/app is in the background
   return true;
@@ -32,15 +38,14 @@ function isHidden(){ try{ return !!(g.document&&g.document.hidden); }catch(e){ r
    a game that never calls it hears no change */
 var duckK=1;
 function musicLevel(){ return st.mm?0:st.music*0.55*duckK; }
-function duck(on){
-  duckK=on?0.4:1;
-  if(!ctx||!musicGain) return;
-  try{ musicGain.gain.setTargetAtTime(musicLevel(),ctx.currentTime,on?0.08:0.4); }catch(e){}
-}
+function duck(on){ mixDuck(on,null); }   // = Sound.mix.duck(on): without the broadcast mixer exactly today's music duck
 function applyVol(){
   if(!ctx) return; var t=ctx.currentTime;
-  musicGain.gain.setTargetAtTime(musicLevel(),t,0.05);
-  sfxGain.gain.setTargetAtTime(st.sm?0:st.sfx*0.9,t,0.05);
+  if(prof&&MX) mixVol(t);
+  else {
+    musicGain.gain.setTargetAtTime(musicLevel(),t,0.05);
+    sfxGain.gain.setTargetAtTime(st.sm?0:st.sfx*0.9,t,0.05);
+  }
   if(st.mm) halt(); else run();          // muted music schedules no notes at all; unmuting starts it again
 }
 function hz(m){ return 440*Math.pow(2,(m-69)/12); }
@@ -109,10 +114,11 @@ var SFX={
    still click), except while the win fanfare is playing. */
 var PRI={tick:0,click:1,card:2,draw:2,discard:2,place:2,deal:3,dice:3,turn:3,build:4,coin:4,pay:4,meld:4,slide:5,bump:5,cannon:5,jail:6,bell:6,conquer:7,lose:8,win:9};
 var HOLD={win:1600,lose:900,conquer:900,jail:700};
-var pend=null, lastAt={};
+var pend=null, lastAt={}, SOLO={};
 function sfx(name){
   if(!AC||st.sm||!SFX[name]) return;
   if(isHidden()) return;                       // background page/app: drop it (resuming here would restart the music unseen)
+  if(SOLO[name]){ if(ensure()){ try{ SFX[name](ctx.currentTime+0.01,sfxGain); }catch(e){} } return; }   // a game's own "solo" effect: never batched away
   if(pend!==null){ if(pend.indexOf(name)<0) pend.push(name); return; }
   pend=[name];
   if(typeof Promise!=="undefined") Promise.resolve().then(playPending); else setTimeout(playPending,0);
@@ -129,6 +135,16 @@ function playPending(){
   if(!ensure()) return;
   lastAt[name]=now;
   try{ inSfx=true; sty=STY[styleName]||null; mul=sfxMul(); SFX[name](ctx.currentTime+0.01,sfxGain); }catch(e){} inSfx=false;
+}
+/* a game's own synthesized effect on the effects bus (it follows the Effects volume and mute like every effect): fn(t, out, ctx, noise) builds
+   its nodes on Sound.ctx() starting at time t and connects them to out. o.pri / o.hold: as PRI / HOLD above; o.solo: plays at once, never
+   batched with the other effects of the same task. An existing effect is never replaced. Sound.sfx(name) plays it. */
+function addSfx(name,fn,o){
+  if(!name||typeof fn!=="function"||SFX[name]) return false;
+  o=o||{};
+  SFX[name]=function(t,d){ fn(t,d,ctx,noiseBuf); };
+  PRI[name]=o.pri!=null?+o.pri:5; if(o.hold) HOLD[name]=+o.hold; if(o.solo) SOLO[name]=1;
+  return true;
 }
 function fromText(m){
   m=String(m||"");
@@ -363,6 +379,103 @@ if(g.document){
   appStart();
 }
 
+/* ---------- the broadcast mixer (Motocross War only; every other game keeps today's chain, sample for sample) ----------
+   Sound.mix.profile("broadcast") (the mxwar page, and the Party TV while Motocross War is up; null puts today's chain back):
+     voice  recorded booth clips, 0 dB
+     show   the show package's stings: the Music volume, -2 dB; ducked 4 dB under a line
+     music  beds, menu, finale and the synthesized playlist: the Music volume; ducked 7 dB with a -4 dB dialogue pocket at 2.5 kHz
+            (together about 8 LU off a bed: a -22 LUFS bed sits near -30 under a line, MUSIC-PLAN 4.1; -8 dB plus the pocket measured -31.8)
+     race   engines and crowd: its own slider (addSlider "race"); ducked 5 dB (3 dB under a HUGE line, {lv: 3}) with the same pocket
+     sfx    the game's effects: the Effects volume
+   all into one peak limiter: the master compressor re-set to threshold -6 dBFS, knee 3, ratio 20, attack 2 ms, release 150 ms, with its
+   automatic make-up gain taken back by a trim after it, so a -16 LUFS line passes at -16 and only the peaks of the sum are caught.
+   The Music and the added sliders are audio-tapered under their default (halving the slider takes 10 dB off; 0 is silent) and linear
+   above it, as today (100 % = +8 dB for the Music volume). On an iPhone the page's audio session becomes "playback" (the ringer switch no
+   longer silences the broadcast). */
+var prof=null, MX=null, XS=[], sess0, lastLv=0;
+var DEF_COMP={threshold:-24,knee:30,ratio:12,attack:0.003,release:0.25}, LIM={threshold:-6,knee:3,ratio:20,attack:0.002,release:0.15};
+function dbl(d){ return Math.pow(10,d/20); }
+/* POST: 1 / the limiter's own make-up gain (Web Audio applies (1/fullRangeGain)^0.6; measured: a -30 dBFS tone passes at -30).
+   PL_TRIM puts the synthesized playlist at about -24 LUFS (today it is about -31: it stays under the beds and the effects), SFX_TRIM the
+   game effects at about -22 LUFS momentary (their median; MUSIC-PLAN 4.1). Measured in w3/out/audio-tests.json (secB). */
+var POST=0.7153, PL_TRIM=0.725, SFX_TRIM=2.01, SHOW_TRIM=dbl(-2);
+var DUCK={music:dbl(-7),show:dbl(-4),race:dbl(-5),raceHuge:dbl(-3)};
+function taper(v,def){ v=+v; if(!(v>0)) return 0; var r=v/def; return r>=1?r:Math.pow(r,10/(20*Math.log(2)/Math.LN10)); }
+function setComp(c,p){ try{ c.threshold.value=p.threshold; c.knee.value=p.knee; c.ratio.value=p.ratio; c.attack.value=p.attack; c.release.value=p.release; }catch(e){} }
+function mixBuild(){
+  var C=ctx, m={in:{},duck:{},vol:{},pocket:{},post:C.createGain()};
+  ["voice","show","music","race"].forEach(function(n){
+    var i=C.createGain(), d=C.createGain(), v=C.createGain(), last=i;
+    if(n==="music"||n==="race"){ var p=C.createBiquadFilter(); p.type="peaking"; p.frequency.value=2500; p.Q.value=0.8; p.gain.value=0; i.connect(p); last=p; m.pocket[n]=p; }
+    last.connect(d); d.connect(v); m.in[n]=i; m.duck[n]=d; m.vol[n]=v;
+  });
+  m.post.gain.value=POST;
+  return m;
+}
+function mixOn(){
+  if(!ctx||!musicGain) return;
+  if(!MX) MX=mixBuild();
+  var tgt=masterIn||ctx.destination;
+  if(compNode){ setComp(compNode,LIM); try{ compNode.disconnect(); }catch(e){} compNode.connect(MX.post); MX.post.connect(ctx.destination); }
+  for(var k in MX.vol) MX.vol[k].connect(tgt);
+  try{ musicGain.disconnect(); }catch(e){} musicGain.connect(MX.in.music);   // the synthesized playlist rides the music bus (its volume, duck and pocket)
+  applyVol(); mixDuck(duckK<1,{lv:lastLv});
+}
+function mixOff(){
+  if(!ctx||!musicGain||!MX) return;
+  for(var k in MX.vol){ try{ MX.vol[k].disconnect(); }catch(e){} }
+  try{ musicGain.disconnect(); }catch(e){} musicGain.connect(masterIn||ctx.destination);
+  if(compNode){ try{ MX.post.disconnect(); }catch(e){} try{ compNode.disconnect(); }catch(e){} compNode.connect(ctx.destination); setComp(compNode,DEF_COMP); }
+  applyVol();
+}
+function mixVol(t){
+  var m=MX, tm=st.mm?0:taper(st.music,0.4), race=xsGet("race");
+  musicGain.gain.setTargetAtTime(PL_TRIM,t,0.05);
+  sfxGain.gain.setTargetAtTime(st.sm?0:st.sfx*0.9*SFX_TRIM,t,0.05);
+  m.vol.music.gain.setTargetAtTime(tm,t,0.05);
+  m.vol.show.gain.setTargetAtTime(tm*SHOW_TRIM,t,0.05);
+  m.vol.voice.gain.setTargetAtTime(1,t,0.05);
+  m.vol.race.gain.setTargetAtTime(race?taper(race.v,race.def):1,t,0.05);
+}
+function mixDuck(on,o){
+  duckK=on?0.4:1; lastLv=(o&&o.lv)|0;
+  if(!ctx||!musicGain) return;
+  if(!prof||!MX){ try{ musicGain.gain.setTargetAtTime(musicLevel(),ctx.currentTime,on?0.08:0.4); }catch(e){} return; }   // today's duck
+  var t=ctx.currentTime, D=MX.duck, P=MX.pocket;
+  try{
+    D.music.gain.setTargetAtTime(on?DUCK.music:1,t,on?0.08:0.4); P.music.gain.setTargetAtTime(on?-4:0,t,on?0.08:0.4);
+    D.show.gain.setTargetAtTime(on?DUCK.show:1,t,on?0.08:0.3);
+    D.race.gain.setTargetAtTime(on?(lastLv>=3?DUCK.raceHuge:DUCK.race):1,t,on?0.12:0.6); P.race.gain.setTargetAtTime(on?-4:0,t,on?0.12:0.6);
+  }catch(e){}
+}
+function session(on){
+  try{ var a=g.navigator&&g.navigator.audioSession; if(!a) return;
+    if(on){ if(sess0===undefined) sess0=a.type; a.type="playback"; } else if(sess0!==undefined){ a.type=sess0||"auto"; sess0=undefined; } }catch(e){}
+}
+function profile(p){
+  p=p==="broadcast"?"broadcast":null;
+  if(p===prof) return prof;
+  prof=p; session(!!prof);
+  if(ctx){ if(prof) mixOn(); else mixOff(); }
+  return prof;
+}
+function bus(name){
+  if(!ctx) return null;
+  if(prof&&MX) return name==="sfx"?sfxGain:(MX.in[name]||null);
+  return name==="music"?musicGain:name==="sfx"?sfxGain:null;
+}
+/* an extra volume row in the shared panel while the broadcast mixer is on: addSlider("race", {label: "Race sound", key: "bg_vol_race", def: 0.7})
+   drives the race bus; the value is kept per device under key */
+function xsGet(id){ for(var i=0;i<XS.length;i++) if(XS[i].id===id) return XS[i]; return null; }
+function addSlider(id,o){
+  if(!id||!/^[a-z][a-z0-9]*$/i.test(id)||xsGet(id)) return false;
+  o=o||{}; var def=o.def!=null?Math.max(0.05,Math.min(1,+o.def)):0.7;
+  var x={id:id,label:String(o.label||id),key:String(o.key||("bg_vol_"+id)),def:def}; x.v=Math.max(0,Math.min(1,ld(x.key,def)));
+  XS.push(x); applyVol(); refreshPanel(); return true;
+}
+function setX(id,v){ var x=xsGet(id); if(!x) return; x.v=Math.max(0,Math.min(1,v)); try{ g.localStorage.setItem(x.key,String(x.v)); }catch(e){} applyVol(); refreshPanel(); }
+function xsShown(){ return prof?XS:[]; }
+
 /* ---------- settings panel + floating button ---------- */
 /* Midnight Luxe: when ui/theme.css is on the page, the button and the panel are built with its bg- classes (ink panel, gold
    hairlines, the ui fonts, 44 px targets / 72 px at 1080p TV, no emoji); the ids, keys, focus trap and behaviour are the same.
@@ -393,6 +506,7 @@ function refreshPanel(){
   var sb=d.getElementById("bgSndBtn"); if(sb&&sb.classList&&sb.classList.contains("bg-sndbtn")) sndIcon(sb);
   var rm=d.getElementById("bgRm"), rs=d.getElementById("bgRs"); if(!rm||!rs) return;
   rm.value=Math.round(st.music*100); rs.value=Math.round(st.sfx*100);
+  xsShown().forEach(function(x){ var r=d.getElementById("bgR_"+x.id), t=d.getElementById("bgV_"+x.id); if(!r) return; r.value=Math.round(x.v*100); if(t) t.textContent=Math.round(x.v*100)+"%"; if(r.classList&&r.classList.contains("bg-range")) r.style.setProperty("--v",r.value+"%"); });
   d.getElementById("bgVm").textContent=Math.round(st.music*100)+"%"; d.getElementById("bgVs").textContent=Math.round(st.sfx*100)+"%";
   var lx=rm.classList&&rm.classList.contains("bg-range"), mm=d.getElementById("bgMm"), ms=d.getElementById("bgMs");
   if(lx){
@@ -414,7 +528,7 @@ function openPanel(){
     var vol=function(label,idr,idv,what){ return '<div class="bg-sound__vol"><div class="bg-sound__label"><span>'+label+'</span><span id="'+idv+'" class="bg-sound__val"></span></div>'+
       '<div class="bg-sound__slide"><button type="button" data-a="'+idr+'-" class="bg-btn bg-btn--icon" aria-label="'+what+' quieter">−</button><input id="'+idr+'" class="bg-range" type="range" min="0" max="100" step="5" aria-label="'+label+'"><button type="button" data-a="'+idr+'+" class="bg-btn bg-btn--icon" aria-label="'+what+' louder">+</button></div></div>'; };
     ov.innerHTML='<div class="bg-sound__card"><div class="bg-sound__head"><span class="bg-eyebrow">Settings</span><h2 class="bg-sound__title" id="bgSndTitle">'+(F?"Sound and effects":"Sound")+'</h2><div id="bgNow" class="bg-sound__now"></div></div>'+
-      vol("Music volume","bgRm","bgVm","Music")+vol("Sound-effects volume","bgRs","bgVs","Sound effects")+
+      vol("Music volume","bgRm","bgVm","Music")+xsShown().map(function(x){ return vol(x.label,"bgR_"+x.id,"bgV_"+x.id,x.label); }).join("")+vol("Sound-effects volume","bgRs","bgVs","Sound effects")+
       '<div class="bg-sound__row"><button type="button" id="bgMm" class="bg-btn bg-btn--secondary"></button><button type="button" id="bgMs" class="bg-btn bg-btn--secondary"></button><button type="button" id="bgNext" class="bg-btn bg-btn--ghost">Next song</button><button type="button" id="bgTest" class="bg-btn bg-btn--ghost">Test</button></div>'+
       (F?'<div class="bg-sound__fx bg-rows"><button type="button" id="bgFx" class="bg-row" role="switch" aria-checked="false"><span class="bg-row__main"><span class="bg-row__title">Reduce effects</span><span class="bg-row__desc">Calmer background motion for slower devices. Saved on this device.</span></span><span class="bg-toggle"></span></button></div>':'')+
       '<button type="button" id="bgDone" class="bg-btn bg-btn--primary bg-btn--block bg-sound__done">Done</button></div>';
@@ -427,7 +541,7 @@ function openPanel(){
   ov.innerHTML='<div style="background:#16203f;border:2px solid #39498a;border-radius:22px;padding:1.4em 1.6em;width:min(92vw,720px);max-height:92vh;overflow:auto">'+
     '<div style="font-size:calc('+fs+' * 1.3);font-weight:900">🔊 Sound settings</div>'+
     '<div id="bgNow" style="margin-top:.5em;color:#ffd86b;font-size:'+fs+';font-weight:700"></div>'+
-    row("🎵 Music volume","bgRm","bgVm")+row("🔊 Sound-effects volume","bgRs","bgVs")+
+    row("🎵 Music volume","bgRm","bgVm")+xsShown().map(function(x){ return row(x.label,"bgR_"+x.id,"bgV_"+x.id); }).join("")+row("🔊 Sound-effects volume","bgRs","bgVs")+
     '<div style="display:flex;flex-wrap:wrap;gap:.6em;margin-top:.4em"><button id="bgMm" style="'+btn+';background:#2a3663;border-color:#3a4a7e"></button><button id="bgMs" style="'+btn+';background:#2a3663;border-color:#3a4a7e"></button><button id="bgNext" style="'+btn+';background:#6a2bd0;border-color:#6a2bd0">⏭ Next song</button><button id="bgTest" style="'+btn+';background:#27a758;border-color:#27a758">▶ Test</button></div>'+
     (F?'<div style="margin-top:.6em"><button id="bgFx" style="'+btn+';width:100%;background:#2a3663;border-color:#3a4a7e"></button></div>':'')+
     '<button id="bgDone" style="'+btn+';width:100%;margin-top:1.2em">Done</button></div>';
@@ -436,7 +550,8 @@ function openPanel(){
   function on(id,fn){ var e=d.getElementById(id); if(e) e.onclick=fn; }
   d.getElementById("bgRm").oninput=function(){ setVol("m",this.value/100); };
   d.getElementById("bgRs").oninput=function(){ setVol("s",this.value/100); };
-  Array.prototype.forEach.call(ov.querySelectorAll("button[data-a]"),function(b){ b.onclick=function(){ var a=b.getAttribute("data-a"); var up=a.slice(-1)==="+"; if(a.indexOf("bgRm")===0) setVol("m",st.music+(up?0.1:-0.1)); else { setVol("s",st.sfx+(up?0.1:-0.1)); sfx("coin"); } }; });
+  xsShown().forEach(function(x){ var r=d.getElementById("bgR_"+x.id); if(r) r.oninput=function(){ setX(x.id,this.value/100); }; });
+  Array.prototype.forEach.call(ov.querySelectorAll("button[data-a]"),function(b){ b.onclick=function(){ var a=b.getAttribute("data-a"); var up=a.slice(-1)==="+"; if(a.indexOf("bgRm")===0) setVol("m",st.music+(up?0.1:-0.1)); else if(a.indexOf("bgR_")===0){ var xx=xsGet(a.slice(4,-1)); if(xx) setX(xx.id,xx.v+(up?0.1:-0.1)); } else { setVol("s",st.sfx+(up?0.1:-0.1)); sfx("coin"); } }; });
   on("bgMm",function(){ st.mm=!st.mm; save(); applyVol(); refreshPanel(); });
   on("bgMs",function(){ st.sm=!st.sm; save(); applyVol(); refreshPanel(); });
   on("bgTest",function(){ unlock(); ensure(); sfx("dice"); setTimeout(function(){ sfx("coin"); },600); });
@@ -513,5 +628,8 @@ function addStyle(name,S,fl){
   STYLES[name]=S; if(fl&&!STY[name]) STY[name]=fl; delete songCache[name];
   return true;
 }
-g.Sound={music:music,skip:skip,nowPlaying:nowPlaying,stop:function(){ want=null; stopMusic(); },duck:duck,sfx:sfx,fromText:fromText,openPanel:openPanel,closePanel:closePanel,panelOpen:panelOpen,mountButton:mountButton,addStyle:addStyle,hasStyle:function(n){ return !!STYLES[n]; },state:st,_songs:getSongs,_themes:THEMES};
+g.Sound={music:music,skip:skip,nowPlaying:nowPlaying,stop:function(){ want=null; stopMusic(); },duck:duck,sfx:sfx,fromText:fromText,openPanel:openPanel,closePanel:closePanel,panelOpen:panelOpen,mountButton:mountButton,addStyle:addStyle,hasStyle:function(n){ return !!STYLES[n]; },state:st,_songs:getSongs,_themes:THEMES,
+  ctx:function(){ return ctx; },addSfx:addSfx,
+  mix:{profile:profile,bus:bus,duck:mixDuck,addSlider:addSlider,get:function(){ return prof; },
+    _state:function(){ return {profile:prof,ctx:!!ctx,built:!!MX,sliders:XS.map(function(x){ return {id:x.id,v:x.v,def:x.def}; }),duck:duckK<1,lv:lastLv,trims:{post:POST,playlist:PL_TRIM,sfx:SFX_TRIM,show:SHOW_TRIM}}; }}};
 })(window);
