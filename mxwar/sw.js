@@ -20,8 +20,29 @@ const ASSETS3D = [/*3d:assets*/ "./assets/dirt/dirt-tiles-lo.js", "./assets/dirt
 // and takes over at once (skipWaiting + clients.claim). Pages and scripts are network-first, so a published update loads on the
 // next launch or navigation by itself; an open game is never reloaded.
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(ASSETS.concat(ASSETS3D).map(u => new Request(u, { cache: "reload" })))).then(() => self.skipWaiting()));
+  e.waitUntil(Promise.all([caches.open(VERSION).then(c => c.addAll(ASSETS.concat(ASSETS3D).map(u => new Request(u, { cache: "reload" })))), audioWarm().catch(() => {})]).then(() => self.skipWaiting()));
 });
+// [bcast] the music's essentials go into the audio cache at install, once (a later version finds them there and downloads nothing): the package's manifest
+// (its URL carries the content hash that mxsound.js names, read from that file, so a re-cut package needs no edit here), the theme, the open, the checkered
+// fanfare, the post-race beds and the podium (about 1.7 MB). The first visit fetches the manifest before this worker controls the page, so without this the
+// next visit offline had no package. The rotation's long tracks are cached when first heard.
+const AUDIO_ESS = ["title", "open", "checkered", "recapB1", "recapB2", "podium"];
+async function audioWarm() {
+  const c = await caches.open(AUDIO);
+  const src = await (await fetch("./mxsound.js", { cache: "no-cache" })).text();
+  const h = (/PKGS=\{base:"([0-9a-f]+)"\}/.exec(src) || [])[1]; if (!h) return;
+  const mu = new URL("./audio/base/pkg.json?h=" + h, self.location).href;
+  let man = await c.match(mu);
+  if (!man) { const r = await fetch(mu); if (r.status !== 200) return; await c.put(mu, r.clone()); man = r; }
+  const m = await man.json();
+  for (const n of AUDIO_ESS) {
+    const cu = m.cues && m.cues[n]; if (!cu || !cu.file) continue;
+    const u = new URL("./audio/base/" + cu.file, self.location).href;
+    if (await c.match(u)) continue;
+    const r = await fetch(u); if (r.status === 200) await c.put(u, r);
+  }
+}
+// [/bcast]
 self.addEventListener("activate", e => {
   e.waitUntil(
     caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith(PREFIX) && k !== VERSION && !k.startsWith("mxwar-audio-")).map(k => caches.delete(k))))   // [bcast] the audio cache is never an old version
@@ -66,7 +87,7 @@ self.addEventListener("fetch", e => {
   if (isDoc) {
     e.respondWith(
       fetch(fresh(e.request)).then(res => keep(VERSION, e.request, res))
-        .catch(() => caches.match(e.request).then(h => h || caches.match("./index.html")))
+        .catch(() => caches.match(e.request).then(h => h || (e.request.mode === "navigate" ? caches.match("./index.html") : Response.error())))   // [bcast] only a page falls back to the game page: a script never cached fails as a script (it was handed index.html and threw "Unexpected token '<'") [/bcast]
     );
   } else {
     e.respondWith(caches.match(e.request).then(hit => hit || fetch(e.request).then(res => keep(VERSION, e.request, res))));
