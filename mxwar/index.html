@@ -452,7 +452,7 @@
   .mx-tw.is-two{grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-flow:column; grid-template-rows:repeat(var(--tw-rows,20),var(--tw-row)); column-gap:.6rem}
   /* mxfix1 (the CEO: "on the live leader board, I can't see the full names"): the phone's two-column board writes the surname (art.js shortNames) in a
      condensed face, its gaps short ("+2.09", "+1:10.3", time.js fmtGapShort) and its columns tight, so the names read in full; still every row at once */
-  .mx-race{--mx-cond:"Barlow Condensed","Roboto Condensed","sans-serif-condensed","Arial Narrow","Avenir Next Condensed","Bahnschrift Condensed",sans-serif}
+  :root{--mx-cond:"Barlow Condensed","Roboto Condensed","sans-serif-condensed","Arial Narrow","Avenir Next Condensed","Bahnschrift Condensed",sans-serif}
   .mx-tw.is-compact{--tw-row:1.5rem; gap:.1rem .3rem}
   .mx-tw.is-compact li{grid-template-columns:1.05rem auto minmax(0,1fr) auto; gap:.2rem; padding:0 .3rem 0 .15rem}
   .mx-tw.is-compact .mx-tw__c, .mx-tw.is-compact .mx-tw__l, .mx-tw.is-compact .mx-tw__f{display:none}
@@ -502,6 +502,8 @@
   /* mxtime: the race results sheet shows a time next to up to three tags: a crowded row wraps its tags to a second line, the name keeps 4.5 rem */
   #resBox .mx-res li{flex-wrap:wrap; justify-content:flex-end; row-gap:.2rem}
   #resBox .mx-res__n{flex:1 1 4.5rem}
+  /* mxfix1: a name its row would cut (the results, the podium's top five) takes the board's condensed face first (game.js fitCond); one that still does not fit keeps its ellipsis */
+  #resSheet .mx-res__n.is-cond, #podSheet .mx-st__n.is-cond{font-family:var(--mx-cond); letter-spacing:.01em}
   .mx-res__x{flex:none; font:var(--fw-ui) var(--fs-micro)/1.2 var(--font-ui); color:var(--text-2); text-align:right}
   .mx-tag{flex:none; padding:.05rem .4rem; border-radius:var(--r-pill); font:var(--fw-caps) var(--fs-micro)/1.3 var(--font-ui); white-space:nowrap}
   .mx-tag--main{color:var(--text-on-gold); background:var(--gold-fill)}

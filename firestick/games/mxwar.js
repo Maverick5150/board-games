@@ -307,6 +307,7 @@
     Q + ".mxp-res li.is-sep{background:none;justify-content:center;color:var(--text-2)}",
     Q + ".mxp-rp{flex:none;min-width:1.6rem;font:400 var(--fs-md)/1 var(--font-display);color:var(--gold-100);text-align:center}",
     Q + ".mxp-rn{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}",
+    Q + ".mxp-rn.is-cond{font-family:\"Barlow Condensed\",\"Roboto Condensed\",\"sans-serif-condensed\",\"Arial Narrow\",\"Avenir Next Condensed\",\"Bahnschrift Condensed\",sans-serif;letter-spacing:.01em}",   /* mxfix1: fitPanel */
     Q + ".mxp-rx{flex:none;color:var(--gold-100);font-variant-numeric:tabular-nums}",
     Q + ".mxp-tag{flex:none;padding:.12rem .45rem;border-radius:var(--r-pill);font:var(--fw-caps) var(--fs-micro)/1.1 var(--font-ui);letter-spacing:.03em;color:#14110a;background:#e7ca90}",
     Q + ".mxp-tag--next{background:#9fd3ff}",
@@ -1430,6 +1431,9 @@
         rh = clamp(Math.floor((room - (per - 1) * rem * .2) / per), Math.round(rem * 1.25), Math.round(rem * 2));
         ol.style.setProperty("--cols", String(cols)); ol.style.setProperty("--rows", String(per)); ol.style.setProperty("--rh", rh + "px");
       });
+      /* mxfix1: on the results and the podium a name its row would cut takes the condensed face first (the phone game's fitCond); one that still does not fit keeps its ellipsis */
+      var kind = $("mxpPanel").getAttribute("data-kind");
+      if (kind === "results" || kind === "podium") Array.prototype.forEach.call(body.querySelectorAll(".mxp-rn"), function (n) { n.classList.remove("is-cond"); if (n.clientWidth > 0 && n.scrollWidth > n.clientWidth + 0.5) n.classList.add("is-cond"); });
     }
     function resLi(id, place, extra) { var R = G.riders[id], k = kOfId(id); return '<li class="' + (k >= 0 ? "is-me" : "") + '"' + (k >= 0 ? ' style="--seat:' + hex(k) + '"' : "") + '><span class="mxp-rp">' + place + "</span>" + plateHTML(R) + '<span class="mxp-rn">' + nameHTML(R) + "</span>" + (extra || "") + "</li>"; }
     /* a long list: the rows that fit, then the table's riders below them (their real place kept) */
