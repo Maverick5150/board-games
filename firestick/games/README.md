@@ -215,3 +215,7 @@ attrs, color)` (a seat-coloured button), `api.afkHTML(id)` (the "computer is pla
   rider low in the right third); a war flashes across the top; C or Play/Pause on the remote cycles the cameras. The phones stay controllers (no 3D).
   The announcers hear the 3D picture's moments (`hooks.shown`: the holeshot into turn 1, crashes, passes, lapped riders, the checkered flag). Hooks:
   `window.__mxp.rv.is3D()`, `rv.kind` ("3d" | "2d"), `window.__mxpv3` (the view). Tests: BG_audit/sprint/mxlive/tools/p5-party.js.
+- A NEW 3D RACE NEVER BLOCKS THE TV LONG (mxlive review fix, 2026-10-19): the adapter builds the race's world over short tasks (`V3.prepareWorld`; the next
+  race's world is built while a panel shows: `rv.prepare`), then its riders; the view compiles and first-uses its shaders while nothing draws. Meanwhile the
+  race HOLDS (`rv.holding()`): the race clock does not run, the gate does not drop and no lap's cards turn; a card over the picture says "The riders roll up to
+  the gate". Tests: BG_audit/sprint/mxlive/fix/.
