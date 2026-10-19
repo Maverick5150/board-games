@@ -21,6 +21,12 @@ function hash(s){ var h=2166136261>>>0; s=String(s||""); for(var i=0;i<s.length;
 function rng(seed){ var t=seed>>>0; return function(){ t=(t+0x6D2B79F5)>>>0; var x=Math.imul(t^(t>>>15),t|1); x^=x+Math.imul(x^(x>>>7),x|61); return ((x^(x>>>14))>>>0)/4294967296; }; }
 function clone(x){ return JSON.parse(JSON.stringify(x)); }
 
+/* THE WHOOPS' SIZE (2026-10-19, the CEO: "the whoop section is massive ... too high and too deep, it doesn't go proportionate with the bike"): a real Supercross whoop is about
+   0.6-0.9 m from trough to crest (builders quote "about three feet"), 3-5 m crest to crest (about 14 ft), 8-14 in a section, skimmed at speed; the bike beside it: 1.48 m wheelbase,
+   0.68 m wheels, a 0.96 m seat. They were 1.05 m (0.95 on the speedway, 1.0 on a researched stadium) and 3.6-3.75 m apart: taller than the seat with the troughs a wheel deep.
+   Now 0.75 m (0.72 on the speedway) about 4.2 m apart; the national's are lower (0.5 m, about 4.6 m apart). course.js gives every whoop its own height and crest. */
+var WH={stadium:{h:0.75,sp:4.2},hybrid:{h:0.72,sp:4.2},outdoor:{h:0.5,sp:4.6},sharedStadium:{h:0.75,sp:4.2},sharedOutdoor:{h:0.55,sp:4.6}};
+
 /* ---------------- 1. the modern stadium (Supercross) ----------------
    The template (variant 0): floor about 132 x 80 m, 4 lanes of 100 m joined by hairpins (r 7) and a connector, the loop starting at the
    finish line (lane B, heading +x); the start: the gate beside lane A, a 102 m straight into a 180 that merges into lane A. Lap about 514 m
@@ -43,7 +49,7 @@ function sxPack(kind,a,R){
     case "rhythm": return [{k:"rhythm",from:a+15,combo:[[2,3,2,1],[3,2,2],[2,2,3],[1,3,3]][Math.floor(R()*4)],sp:5.6,h:1.35,name:"The rhythm lane"},{k:"rough",from:a+70,to:a+86,r:0.6}];
     case "triple": return [{k:"jump",s0:a+18,lip:a+24,mid:1.3,peak:a+44,touch:a+45.6,s1:a+54,h:2.1,hl:2.25,big:true,name:"The triple"},
                            {k:"jump",table:true,s0:a+62,lip:a+67,end:a+76,s1:a+82,h:1.7,name:"The tabletop"}];
-    case "whoops": var nw=14+Math.floor(R()*4); return [{k:"whoops",from:a+16,to:a+16+3.75*nw,n:nw,h:1.05,name:"The whoops"}];
+    case "whoops": var nw=14+Math.floor(R()*4); return [{k:"whoops",from:a+16,to:a+16+3.75*nw,sp:WH.stadium.sp,h:WH.stadium.h,name:"The whoops"}];   /* (the stretch as before: 13-15 whoops 4.0-4.3 m apart, 0.75 m) */
     case "sand": return [{k:"sand",from:a+8,to:a+60,name:"The sand"},{k:"jump",s0:a+64,lip:a+68,peak:a+80,touch:a+81.2,s1:a+86,h:1.6,hl:1.7,name:"The double"}];
     case "onoff": return [{k:"step",s0:a+13,lip:a+17,top0:a+20.5,top1:a+29,s1:a+36,h1:1.1,h2:2.1,drop:true,name:"The on-off"}];
   }
@@ -75,7 +81,7 @@ function hybrid(variant){
   var R=rng(variant||7);
   var feats=[
     {k:"sand",from:104,to:150,name:"The sand"},
-    {k:"whoops",from:186,to:236,n:14,h:0.95,name:"The whoops"},
+    {k:"whoops",from:186,to:236,sp:WH.hybrid.sp,h:WH.hybrid.h,name:"The whoops"},
     {k:"rhythm",from:270.5,combo:[2,2],sp:5.6,h:1.3,name:"The rhythm lane"},
     {k:"jump",s0:323,lip:328,peak:342,touch:343.3,s1:350,h:1.9,hl:2.0,big:true,name:"The big double"},
     {k:"jump",table:true,s0:388,lip:393,end:402,s1:408,h:1.6,name:"The tabletop"},
@@ -111,7 +117,7 @@ function outdoor(variant){
     {k:"rollers",f0:0.62,f1:0.66,n:4,h:0.8},
     {k:"step",f:0.705,face:4,top:9,down:7,h1:1.0,h2:2.0,name:"The step-up"},
     {k:"flat",f0:0.74,f1:0.80,keep:-0.35},   /* the off-camber hairpin: the outside LOWER than the inside */
-    {k:"whoops",f0:0.83,f1:0.86,n:8,h:0.7,name:"The braking bumps"},
+    {k:"whoops",f0:0.83,f1:0.86,sp:WH.outdoor.sp,h:WH.outdoor.h,name:"The braking bumps"},
     {k:"jump",f:0.905,face:6,gap:22,down:9,h:2.2,hl:2.1,big:true,name:"The big double"}
   ];
   return {id:"outdoor"+(variant?"-v"+(variant%997):""),name:"Outdoor national",kind:"outdoor",width:9.5,berm:1.8,vtop:22.5,acc:0.86,grip:0.86,pts:pts,
@@ -138,7 +144,9 @@ function fromShared(S){
     var t0=+f.t0||0, t1=f.t1!=null?+f.t1:t0, a=sOf(t0), b=a+((t1-t0+1)%1)*L, mid=(a+b)/2, std=STD[f.type], span=Math.max(b-a,std?std.len:0);
     var s0=std?mid-span/2:a;
     switch(f.type){
-      case "whoops": feats.push({k:"whoops",from:s0,to:s0+span,n:f.count||Math.round(span/3.7),h:S.kind==="stadium"?1.0:0.8,name:f.name}); break;
+      case "whoops": /* the researched count at a real spacing (the stretch is the count's length, never longer than the feature's own span: a count drawn on a map may be more than fits) */
+        var W0=S.kind==="stadium"?WH.sharedStadium:WH.sharedOutdoor, wn=f.count||Math.max(3,Math.round(span/W0.sp)); if(wn*W0.sp>span) wn=Math.max(3,Math.floor(span/W0.sp+0.25));
+        feats.push({k:"whoops",from:mid-wn*W0.sp/2,to:mid+wn*W0.sp/2,n:wn,h:W0.h,name:f.name}); break;
       case "rhythm": feats.push({k:"rhythm",from:s0,combo:comboFor(Math.max(3,f.count||Math.round((span-5)/5.6))),sp:5.6,h:1.3,name:f.name}); break;
       case "triple": feats.push({k:"jump",s0:s0,lip:s0+6,mid:1.3,peak:s0+26,touch:s0+27.5,s1:s0+span,h:2.1,hl:2.2,big:true,name:f.name}); break;
       case "double": if(S.kind==="stadium") feats.push({k:"jump",s0:s0,lip:s0+5,peak:s0+18,touch:s0+19.3,s1:s0+span,h:1.8,hl:1.9,name:f.name}); else feats.push({k:"jump",s0:s0,lip:s0+6,peak:s0+23,touch:s0+24.4,s1:s0+Math.max(span,32),h:1.9,hl:1.9,name:f.name}); break;

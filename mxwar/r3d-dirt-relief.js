@@ -24,12 +24,19 @@ function noiseKit(seed){
 /* the course arrays sampled at loop distance s (linear, wrapping) */
 function sampler(C){ const N=C.N, ds=C.ds, L=C.L; return (A,s)=>{ s%=L; if(s<0) s+=L; const x=s/ds, i=Math.floor(x), f=x-i, a=A[i%N], b=A[(i+1)%N]; return a+(b-a)*f; }; }
 
+/* the whoop (or roller) at loop distance s: {ix: its index in the row (the nearest crest), h: its height}; course.js gives every whoop its crest (f.crests = [[s, h], ...]) */
+function whoopAt(feats,s){
+  for(let q=0;q<feats.length;q++){ const f=feats[q]; if((f.k!=="whoops"&&f.k!=="rollers")||s<f.from-1||s>f.to+1) continue;
+    if(f.crests&&f.crests.length){ let j=0, d=1e9; for(let c=0;c<f.crests.length;c++){ const e=Math.abs(f.crests[c][0]-s); if(e<d){ d=e; j=c; } } return {ix:j,h:f.crests[j][1]}; }
+    const sp=f.sp||((f.to-f.from)/(f.n||5)); return {ix:Math.max(0,Math.floor((s-f.from)/sp)),h:f.h||0.75}; }
+  return {ix:Math.floor(s/4),h:0.75};
+}
 /* the rows of per-s facts (n rows over the lap) */
 function makeRows(C,n,K){
   const L=C.L, ds=L/n, at=sampler(C), R={n:n,ds:ds};
   const f=()=>new Float32Array(n);
   Object.assign(R,{hw:f(),side:f(),A:f(),k:f(),la:f(),line:f(),bank:f(),F:f(),Fs:f(),rough:f(),sand:f(),acc:f(),whoop:f(),brake:f(),accel:f(),
-    gc0:f(),gc1:f(),gc2:f(),ga0:f(),ga1:f(),ga2:f(),gw:f(),bph:f(),blam:f(),aph:f(),alam:f(),wind:f(),wnd:f(),swirl:f(),hi:f(),gen:f(),land:f(),pile:f()});
+    gc0:f(),gc1:f(),gc2:f(),ga0:f(),ga1:f(),ga2:f(),gw:f(),bph:f(),blam:f(),aph:f(),alam:f(),wind:f(),wnd:f(),swirl:f(),hi:f(),gen:f(),land:f(),pile:f(),wix:f(),wh:f()});
   const feats=C.feats||[], vA=C.v, N=C.N;
   let bp=0, ap=0;
   for(let i=0;i<n;i++){
@@ -46,6 +53,9 @@ function makeRows(C,n,K){
     /* tags */
     const ii=Math.round(s/C.ds)%N, tg=C.tag?C.tag[ii]:""; R.whoop[i]=(tg==="whoops"||tg==="rollers")?1:0; R.gen[i]=0;
     R.hi[i]=(tg==="jump"||tg==="bigjump"||tg==="rhythm")?1:0;
+    /* (2026-10-19) the whoop this row is on: its index along the row (each one its own noise) and its height (the scour and the crests scale with it); the tags work since the
+       course's C.N fix, so this block (written for 1.05 m whoops 3.75 m apart) runs for the first time: everything in it is relative to the whoop's own size now */
+    if(R.whoop[i]){ const w=whoopAt(feats,s); R.wix[i]=w.ix; R.wh[i]=w.h; }
     /* the straight-line grooves (three wandering tyre tracks) */
     const w0=K.n2(s*0.045,3.1), w1=K.n2(s*0.05,11.7), w2=K.n2(s*0.04,23.9);
     R.gc0[i]=-0.62+(w0-0.5)*0.9; R.gc1[i]=(w1-0.5)*0.7; R.gc2[i]=0.62+(w2-0.5)*0.9;
@@ -112,7 +122,8 @@ function smoothAt(R,i,s,lat,K,out){
   if(A>0.001&&Math.sign(lat)===-side){ const c=hw-0.62, x=(a-c)/0.5; if(x>-1&&x<1){ const t=1-x*x, lump=0.55+0.75*K.n2(s*1.35,lat*0.8+17.1)+0.35*(K.n2(s*3.1,lat*2.2+5.3)-0.5);
     const hb=A*0.14*lump*t*t; h+=hb; wet-=0.28*t*A; loose+=0.7*t*A; } }
   /* whoops: the troughs are scoured, every crest a little uneven across the lane */
-  if(R.whoop[i]>0){ const f=R.F[i]; h+=-0.04*sstep(0.28,0,f)*R.whoop[i]; h+=0.028*(K.n2(lat*0.55+Math.floor(s/3.75)*7.1,Math.floor(s/3.75)*3.3)-0.5)*2*sstep(0.45,0.95,f); wet-=0.25*sstep(0.55,1.0,f); loose+=0.25*sstep(0.6,1.0,f); }
+  if(R.whoop[i]>0){ const f=R.F[i], wh=Math.max(0.3,R.wh[i]||0.75), ix=R.wix[i]; h+=-0.035*sstep(0.36*wh,0,f)*R.whoop[i]; h+=0.024*(K.n2(lat*0.55+ix*7.1,ix*3.3)-0.5)*2*sstep(0.55*wh,0.95*wh,f);
+    wet-=0.25*sstep(0.6*wh,wh,f); loose+=0.25*sstep(0.65*wh,wh,f); }   /* the troughs scoured by the tyres (3.5 cm), every crest a little uneven across the lane (+-2.4 cm), the crests dry and loose */
   /* slow swells, wavelength well above the springs' resonance */
   h+=(K.f2(s*0.075,lat*0.22,2)-0.5)*0.026;
   /* the traffic: where the wheels go. In a corner the riders hold the racing line (+-0.2 m, the wings when they pass); on a straight they spread over +-0.6 m */
@@ -209,7 +220,7 @@ function fineMap(Rl,nt,nv){
       const ld=rows.land[i], pl=rows.pile[i];
       if(ld>0.02||pl>0.02){ const en=Math.exp(-Math.pow(lat/1.9,2)), sc=0.5+0.5*Math.cos(s*17+lat*3.7+K.n2(s*1.3,lat*1.1)*5); f-=ld*en*(0.02+0.014*sc*K.n2(s*0.9,lat*0.6+4)); f+=pl*en*0.028*(0.6+0.4*K.n2(s*4,lat*3)); }
       /* whoops: chopped scallops down the faces */
-      if(wh>0){ const fs=rows.Fs[i]; if(fs<-0.04){ f+=0.03*Math.cos(s*12.2+lat*2.1+Math.floor(s/3.75)*1.7)*clamp(-fs*3,0,1)*sstep(0.1,0.7,1-Math.abs(lat)/hw); } }
+      if(wh>0){ const fs=rows.Fs[i]; if(fs<-0.04){ f+=0.03*Math.cos(s*12.2+lat*2.1+rows.wix[i]*1.7)*clamp(-fs*3,0,1)*sstep(0.1,0.7,1-Math.abs(lat)/hw); } }
       /* milestone 2: the corner ruts are CHOPPED: braking chatter across the trench every 0.6-1.0 m, slanted, strongest in its bottom (the mesh carries the trench, this the chatter) */
       if(A>0.01){ const dl0=(lat-line)/0.42; if(dl0*dl0<1){ const t=1-dl0*dl0, ch=Math.cos(s*(TAU/(0.72+0.22*K.n2(s*0.3,5.1)))+lat*2.6+K.n2(s*0.9,lat*0.7+13)*3.2);
         f+=A*0.03*t*t*ch*(0.6+0.5*K.n2(s*0.5,lat*0.4+21)); } }
