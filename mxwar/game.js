@@ -268,7 +268,9 @@ function keepFocus(box,attr,fn){
   if(k===null) return;
   focusIn(box.querySelector("["+attr+'="'+k+'"]:not([disabled])')||box.querySelector("button.on:not([disabled])")||box.querySelector("button:not([disabled]), select, input"));
 }
-function segHTML(items,cur,attr){ return items.map(function(it){ var on=String(it[0])===String(cur); return '<button type="button" '+attr+'="'+esc(it[0])+'" class="'+(on?"on":"")+'" aria-pressed="'+on+'"'+(it[2]?" disabled":"")+'>'+esc(it[1])+'</button>'; }).join(""); }
+/* a segmented choice: [value, label, disabled, sub, tag]; the optional sub is a one-line <small> description (the Graphics radio list), the tag a word after the label ("Recommended") */
+function segHTML(items,cur,attr){ return items.map(function(it){ var on=String(it[0])===String(cur); return '<button type="button" '+attr+'="'+esc(it[0])+'" class="'+(on?"on":"")+'" aria-pressed="'+on+'"'+(it[2]?" disabled":"")+'>'+
+  (it[3]||it[4]?'<span class="mx-seg__n">'+esc(it[1])+(it[4]?' <em class="mx-seg__tag">'+esc(it[4])+"</em>":"")+"</span>"+(it[3]?"<small>"+esc(it[3])+"</small>":""):esc(it[1]))+'</button>'; }).join(""); }
 function drawSeries(){
   var box=$("seriesSeg");
   keepFocus(box,"data-sr",function(){
@@ -1041,11 +1043,15 @@ function camNext(){ if(!race3D()||!V3.camNext) return; var id=V3.camNext(); lsSe
 function shown3D(kind,info){ if(!race3D()) return; annShown(kind,info); if(kind==="holeshot") v3wait.hsSeen=true; var w=v3wait[kind]; if(w){ v3wait[kind]=null; w.forEach(function(f){ try{ f(); }catch(e){} }); } }
 function seen3D(kind,ms){ return new Promise(function(res){ if(kind==="holeshot"&&v3wait.hsSeen){ res(); return; } var done=false, f=function(){ if(!done){ done=true; res(); } }; (v3wait[kind]=v3wait[kind]||[]).push(f); setTimeout(f,ms); }); }
 /* the Menu's Graphics row: Auto (this device's own choice; FIRE TV on a TV) / Fire TV / Balanced / High / Ultra / Classic 2D, kept on this device */
+/* the Graphics radio list (UI-SPEC 3.6, 09): one row per choice with a one-line description, the radio dot at the right; Auto is the recommended one */
+var GFX_SUB={auto:"Picked for this device",firetv:"The lightest 3D, for TV sticks",balanced:"Shadows and the lights' glow",high:"The full look",ultra:"Every detail, strong graphics",'2d':"The flat track drawing"};
 function drawGfx(){
   var box=$("gfxSeg"); if(!box) return;
   var cur=gfx();
+  box.classList.add("mx-radios"); box.setAttribute("role","radiogroup");
   keepFocus(box,"data-gx",function(){
-    box.innerHTML=segHTML(GFX,cur,"data-gx");
+    box.innerHTML=segHTML(GFX.map(function(g){ return [g[0],g[1],false,GFX_SUB[g[0]]||"",g[0]==="auto"?"Recommended":""]; }),cur,"data-gx");
+    box.querySelectorAll("button").forEach(function(b){ b.setAttribute("role","radio"); b.setAttribute("aria-checked",b.getAttribute("aria-pressed")); b.removeAttribute("aria-pressed"); });
     box.querySelectorAll("button").forEach(function(b){ b.addEventListener("click",function(){ setGfx(b.getAttribute("data-gx")); }); });
   });
   $("gfxNote").textContent=gfxNote(cur);

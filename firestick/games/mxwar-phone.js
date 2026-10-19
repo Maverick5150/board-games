@@ -35,8 +35,6 @@
         "--line-1:rgba(240,241,243,.08);--line-2:rgba(240,241,243,.16);--line-gold:rgba(236,185,103,.45);--text-1:var(--mx-hud-white);--text-2:var(--mx-secondary-text);--text-3:#9AA2AD;" +
         "--gold-100:#F6DDB0;--gold-200:var(--mx-stadium-gold);--gold-300:#D9A24F;--panel-fill:var(--mx-panel-black);--panel-edge:inset 0 0 0 1px var(--mx-hairline);--control-fill:var(--mx-slate);" +
         "--font-display:var(--mx-font-display)}",
-      Q + ".mxph-who h1{text-transform:uppercase;letter-spacing:.01em}",
-      Q + ".mxph-tw li{font-family:var(--mx-font-hud);font-weight:700;font-variant-numeric:tabular-nums}",
       ".mxph{width:100%;max-width:26rem;margin:0 auto;display:grid;gap:.7rem;text-align:center}",
       Q + ".mx-mk{display:inline-flex;align-items:center;flex:none;padding:.1rem .45rem;border-radius:var(--r-xs);font:var(--fw-caps) var(--fs-micro)/1.25 var(--font-ui);color:var(--mk-ink,#fff);background:var(--mk,#3a3a44);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18);white-space:nowrap}",
       Q + ".mx-pl{display:inline-grid;place-items:center;flex:none;min-width:2.6em;padding:.1rem .3rem .1rem .55em;border-radius:var(--r-xs);font:800 var(--fs-sm)/1.1 var(--font-ui);font-variant-numeric:tabular-nums;color:#121216;background:#f4f1e8;box-shadow:inset .3em 0 0 var(--mk,#3a3a44),inset 0 0 0 1px rgba(0,0,0,.4)}",
@@ -147,7 +145,38 @@
       Q + ".mxph-rs li{display:flex;align-items:center;gap:.5rem;min-height:2rem;padding:.2rem .5rem;border-radius:.5rem;background:var(--ink-2);font:var(--fw-ui) var(--fs-sm)/1.2 var(--font-ui);color:var(--text-1)}",
       Q + ".mxph-rs li i{flex:none;width:.85rem;height:.85rem;border-radius:50%;background:var(--seat,#888)}",
       Q + ".mxph-rs li span{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
-      Q + ".mxph-rs li em{flex:none;font-style:normal;color:var(--text-2)}"
+      Q + ".mxph-rs li em{flex:none;font-style:normal;color:var(--text-2)}",
+      /* THE MXWAR SKIN (UI-SPEC 3.6, 09_BUTTON_SKIN_STATES): titles in Anton caps, the timing rows in the HUD face (tabular figures), Barlow caps labels; the primary
+         (Flip, Lay war cards, Ready) war red with a cream edge, secondary slate, pressed sinks, the sent / disabled state muted; the team tiles as secondary tiles
+         (selected: a gold edge and a gold check); the Auto switch row with a war-red track. Every id, act and the room joining are unchanged */
+      Q + ".mxph-who h1{text-transform:uppercase;letter-spacing:.01em}",
+      Q + ".mxph-tw li{font-family:var(--mx-font-hud);font-weight:700;font-variant-numeric:tabular-nums}",
+      Q + ".mxph-lbl{font-family:var(--mx-font-hud);font-weight:700;font-size:.8125rem;letter-spacing:.1em;color:var(--mx-stadium-gold)}",
+      Q + ".bg-btn{font-family:var(--mx-font-hud);font-weight:700;letter-spacing:.03em;text-transform:uppercase;border-radius:var(--mx-r-btn)}",
+      Q + ".bg-btn--secondary{color:var(--mx-hud-white);background:var(--mx-slate);box-shadow:inset 0 0 0 1.5px rgba(141,157,178,.86)}",
+      Q + ".bg-btn--secondary:active{background:#11151E}",
+      Q + ".bg-btn--secondary:focus-visible{background:#212837;box-shadow:inset 0 0 0 1.5px var(--mx-hud-white),var(--focus-ring) !important}",
+      Q + ".mxph-go{color:#FFFFFF;background:var(--mx-red-fill);box-shadow:inset 0 0 0 2px var(--mx-edge-warm);border-radius:var(--mx-r-btn);font-family:var(--mx-font-display) !important;font-weight:400;letter-spacing:.03em}",
+      Q + ".mxph-go small{font:600 .8125rem/1.2 var(--mx-font-hud);letter-spacing:.06em;text-transform:uppercase;color:var(--mx-gold-pale);opacity:1}",
+      Q + ".mxph-go:active{background:var(--mx-red-fill-press);transform:translateY(1px) scale(.97)}",
+      Q + ".mxph-go:focus-visible{background:var(--mx-red-fill-focus);box-shadow:inset 0 0 0 2px var(--mx-edge-focus),var(--focus-ring) !important}",
+      Q + ".mxph-go[disabled]{color:var(--mx-disabled-text);background:var(--mx-disabled);box-shadow:inset 0 0 0 2px var(--mx-disabled-edge);opacity:1}",
+      Q + ".mxph-go[disabled] small{color:var(--mx-disabled-text)}",
+      Q + ".mxph-team{position:relative;color:var(--mx-hud-white);background:var(--mx-slate);box-shadow:inset 0 0 0 1.5px rgba(141,157,178,.86);border-radius:var(--mx-r-btn);font:700 1rem/1.2 var(--mx-font-hud);letter-spacing:.03em;text-transform:uppercase}",
+      Q + ".mxph-team:active{transform:scale(.97)}",
+      Q + ".mxph-team[aria-pressed=true]{background:#212837;box-shadow:inset 0 0 0 2px var(--mx-stadium-gold)}",
+      Q + ".mxph-team[aria-pressed=true]::after{content:'';position:absolute;right:.35rem;top:.35rem;width:1rem;height:1rem;border-radius:50%;background:var(--mx-stadium-gold) url(data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20viewBox=%270%200%2024%2024%27%3E%3Cpath%20d=%27M6.5%2012.5l3.8%203.8L17.5%209%27%20fill=%27none%27%20stroke=%27%23090C12%27%20stroke-width=%273.2%27%20stroke-linecap=%27round%27%20stroke-linejoin=%27round%27/%3E%3C/svg%3E) center/80% no-repeat}",
+      Q + ".mxph-auto{background:var(--mx-panel-black);box-shadow:inset 0 0 0 1.5px var(--mx-row-edge);border-radius:var(--mx-r-btn);font:700 1.0625rem/1.2 var(--mx-font-hud);letter-spacing:.03em;text-transform:uppercase}",
+      Q + ".mxph-auto small{font:600 .8125rem/1.3 var(--mx-font-hud);letter-spacing:.02em;text-transform:none;color:var(--mx-secondary-text)}",
+      Q + ".mxph-auto[aria-checked=true]{box-shadow:inset 0 0 0 2px var(--mx-stadium-gold)}",
+      Q + ".bg-toggle{background:var(--mx-row);box-shadow:inset 0 0 0 1px var(--mx-row-edge)}",
+      Q + ".bg-toggle::before{background:var(--mx-red-fill);box-shadow:inset 0 0 0 1px rgba(255,214,165,.55)}",
+      Q + ".bg-toggle::after{background:var(--mx-hud-white)}",
+      Q + ".bg-input{background:var(--mx-panel-black);box-shadow:inset 0 0 0 1.5px var(--mx-row-edge);border-radius:var(--mx-r-btn)}",
+      Q + ".mxph-num input{font:400 1.5rem/1 var(--mx-font-display);letter-spacing:.08em}",
+      Q + ".mxph-num input[aria-invalid=true]{box-shadow:inset 0 0 0 2px var(--mx-down)}",
+      Q + ".mx-pl{font-family:var(--mx-font-hud);font-weight:700;letter-spacing:.02em}",
+      Q + ".mx-cf{box-shadow:inset 0 0 0 2px var(--mx-card-edge),0 .25rem .6rem rgba(0,0,0,.5)}"
     ].join("\n");
     document.head.appendChild(st);
   }

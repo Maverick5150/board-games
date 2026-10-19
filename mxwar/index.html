@@ -941,6 +941,103 @@
   /* the HUD face (Barlow Condensed, tabular figures) for the timing rows: the gaps never jitter */
   html[data-game="mxwar"] .mx-tw li{font-family:var(--mx-font-hud); font-weight:700; font-variant-numeric:tabular-nums}
   html[data-game="mxwar"] .mx-tw__p, html[data-game="mxwar"] .mx-tw__g, html[data-game="mxwar"] .mx-tw__l{font-family:var(--mx-font-hud); font-weight:700}
+
+  /* ================= THE MXWAR SKIN, step 2: the components (UI-SPEC 3.6, 09_BUTTON_SKIN_STATES) =================
+     Labels, buttons and the HUD in Barlow Condensed caps; long sentences stay Manrope. Every state reads without colour too: focus = the shared ivory ring (and on
+     TV the lift), pressed = sinks, disabled = muted fill and edge, selected = a gold underline / bar or a filled radio dot. Fills and edges swap instantly; only the
+     shared transform and the press shade animate. */
+  html[data-game="mxwar"] .bg-eyebrow{font-family:var(--mx-font-hud); font-weight:700; font-size:.8125rem; letter-spacing:.1em}
+  html[data-tv][data-game="mxwar"] .bg-eyebrow{font-size:1rem}
+  html[data-game="mxwar"] .bg-section::after{background:linear-gradient(90deg, rgba(240,241,243,.18), rgba(240,241,243,0))}
+  html[data-game="mxwar"] .bg-tag{font-family:var(--mx-font-hud); font-weight:700; letter-spacing:.07em}
+  html[data-game="mxwar"] .bg-btn{font-family:var(--mx-font-hud); font-weight:700; font-size:1.0625rem; letter-spacing:.03em; text-transform:uppercase; border-radius:var(--mx-r-btn)}
+  html[data-tv][data-game="mxwar"] .bg-btn{font-size:var(--mx-fs-hud-l)}
+  html[data-game="mxwar"] .bg-btn--lg, html[data-game="mxwar"] .bg-btn--cta{font-size:var(--mx-fs-hud-l); border-radius:var(--mx-r-btn)}
+  html[data-game="mxwar"] .bg-btn__label{font-size:var(--mx-fs-hud-l); letter-spacing:.03em}
+  html[data-game="mxwar"] .bg-btn__sub{font:600 .8125rem/1.2 var(--mx-font-hud); letter-spacing:.06em; text-transform:uppercase}
+  html[data-tv][data-game="mxwar"] .bg-btn__sub{font-size:var(--mx-fs-hud-s)}
+  /* primary (and the CTA): war red, a warm cream edge, a white label, a pale gold sub; focused: brighter, the pale cream edge plus the ring; pressed: darker, sinks */
+  html[data-game="mxwar"] .bg-btn--primary{color:#FFFFFF; background:var(--mx-red-fill); box-shadow:inset 0 0 0 2px var(--mx-edge-warm)}
+  html[data-game="mxwar"] .bg-btn--primary .bg-btn__sub{color:var(--mx-gold-pale)}
+  html[data-game="mxwar"] .bg-btn--primary:active, html[data-game="mxwar"] .bg-btn--primary.is-pressed{background:var(--mx-red-fill-press); transform:translateY(1px) scale(.97)}
+  html[data-game="mxwar"] .bg-btn--primary.is-focus, html[data-game="mxwar"] .bg-btn--primary:focus-visible{background:var(--mx-red-fill-focus); box-shadow:inset 0 0 0 2px var(--mx-edge-focus), var(--focus-ring) !important}
+  /* secondary: slate with a blue-grey edge; focused: lighter fill, a white edge plus the ring; pressed: darker; selected (aria-pressed): a gold edge and a gold bar inside the bottom edge */
+  html[data-game="mxwar"] .bg-btn--secondary{color:var(--mx-hud-white); background:var(--mx-slate); box-shadow:inset 0 0 0 1.5px rgba(141,157,178,.86)}
+  html[data-game="mxwar"] .bg-btn--secondary:active, html[data-game="mxwar"] .bg-btn--secondary.is-pressed{background:#11151E}
+  html[data-game="mxwar"] .bg-btn--secondary.is-focus, html[data-game="mxwar"] .bg-btn--secondary:focus-visible{background:#212837; box-shadow:inset 0 0 0 1.5px var(--mx-hud-white), var(--focus-ring) !important}
+  html[data-game="mxwar"] .bg-btn--secondary[aria-pressed="true"]{box-shadow:inset 0 0 0 1.5px var(--mx-stadium-gold), inset 0 -.1875rem 0 var(--mx-stadium-gold)}
+  html[data-game="mxwar"] .bg-btn--secondary[aria-pressed="true"].is-focus, html[data-game="mxwar"] .bg-btn--secondary[aria-pressed="true"]:focus-visible{box-shadow:inset 0 0 0 1.5px var(--mx-stadium-gold), inset 0 -.1875rem 0 var(--mx-stadium-gold), var(--focus-ring) !important}
+  /* ghost: transparent, a grey edge, a grey label; focused: white label and edge plus the ring */
+  html[data-game="mxwar"] .bg-btn--ghost{color:var(--mx-secondary-text); background:transparent; box-shadow:inset 0 0 0 1px var(--mx-row-edge)}
+  html[data-game="mxwar"] .bg-btn--ghost.is-focus, html[data-game="mxwar"] .bg-btn--ghost:focus-visible{color:var(--mx-hud-white); box-shadow:inset 0 0 0 1px var(--mx-hud-white), var(--focus-ring) !important}
+  /* disabled (every kind): a muted fill and edge, a muted label, no lift */
+  html[data-game="mxwar"] .bg-btn[disabled], html[data-game="mxwar"] .bg-btn.is-disabled, html[data-game="mxwar"] .bg-btn[aria-disabled="true"]{color:var(--mx-disabled-text); background:var(--mx-disabled); box-shadow:inset 0 0 0 1.5px var(--mx-disabled-edge); opacity:1}
+  html[data-game="mxwar"] .bg-btn[disabled] .bg-btn__sub, html[data-game="mxwar"] .bg-btn.is-disabled .bg-btn__sub{color:var(--mx-disabled-text)}
+  /* icon buttons (back, sound, menu): round, panel black, a hairline; on = a gold icon */
+  html[data-game="mxwar"] .bg-btn--icon{color:var(--mx-hud-white); background:var(--mx-panel-black); box-shadow:inset 0 0 0 1px var(--mx-hairline); border-radius:50%}
+  html[data-game="mxwar"] .bg-btn--icon.is-on{color:var(--mx-stadium-gold); box-shadow:inset 0 0 0 1px var(--line-gold)}
+  /* segments: a dark well, Barlow caps; the selected cell red with a pale gold bar inside its foot (shape and colour, never colour alone) */
+  html[data-game="mxwar"] .bg-seg{background:var(--ink-2); box-shadow:inset 0 0 0 1px var(--mx-hairline); border-radius:var(--mx-r-btn)}
+  html[data-game="mxwar"] .bg-seg > button{font-family:var(--mx-font-hud); font-weight:700; letter-spacing:.03em; text-transform:uppercase; color:var(--mx-secondary-text); border-radius:calc(var(--mx-r-btn) - .125rem)}
+  html[data-game="mxwar"] .bg-seg--text > button{font-size:1rem}
+  html[data-tv][data-game="mxwar"] .bg-seg--text > button{font-size:var(--mx-fs-hud-l)}
+  html[data-game="mxwar"] .bg-seg > button:active{transform:scale(.97)}
+  html[data-game="mxwar"] .bg-seg > button[aria-pressed="true"], html[data-game="mxwar"] .bg-seg > button.is-on, html[data-game="mxwar"] .bg-seg > button.on{color:#FFFFFF; background:var(--mx-red-deep); box-shadow:inset 0 -.125rem 0 var(--mx-gold-pale)}
+  html[data-game="mxwar"] .bg-seg > button.on.is-focus, html[data-game="mxwar"] .bg-seg > button.on:focus-visible{box-shadow:inset 0 -.125rem 0 var(--mx-gold-pale), var(--focus-ring) !important}
+  html[data-game="mxwar"] .bg-seg > button small{font:600 .8125rem/1.2 var(--mx-font-hud); letter-spacing:.02em; text-transform:none; color:var(--mx-secondary-text)}
+  html[data-game="mxwar"] .bg-seg > button.on small{color:var(--mx-gold-pale)}
+  /* the radio list (the Graphics choice): one row per option with its one-line description and a radio dot; phone one column, TV 2 x 3 */
+  html[data-game="mxwar"] .bg-seg.mx-radios{grid-auto-flow:row; grid-template-columns:minmax(0,1fr); gap:.5rem; padding:0; background:none; box-shadow:none; border-radius:0}
+  html[data-tv][data-game="mxwar"] .bg-seg.mx-radios{grid-template-columns:repeat(2,minmax(0,1fr)); gap:1.5rem}
+  html[data-game="mxwar"] .mx-radios > button{display:grid; grid-template-columns:minmax(0,1fr) auto; grid-template-rows:auto auto; align-items:center; column-gap:.75rem; row-gap:.1rem; min-height:3.5rem;
+    padding:.55rem .95rem .6rem 1rem; text-align:left; white-space:normal; overflow:visible; color:var(--mx-hud-white); background:var(--mx-panel-black); box-shadow:inset 0 0 0 1.5px var(--mx-row-edge); border-radius:var(--mx-r-btn); font-size:var(--mx-fs-hud-l)}
+  html[data-game="mxwar"] .mx-radios > button .mx-seg__n{grid-row:1; grid-column:1; min-width:0}
+  html[data-game="mxwar"] .mx-radios > button small{grid-row:2; grid-column:1; margin:0; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--mx-secondary-text)}
+  html[data-game="mxwar"] .mx-radios > button::after{content:""; grid-row:1 / span 2; grid-column:2; width:1.25rem; height:1.25rem; border-radius:50%; box-shadow:inset 0 0 0 .125rem var(--mx-row-edge)}
+  html[data-game="mxwar"] .mx-radios > button:active{transform:scale(.985)}
+  html[data-game="mxwar"] .mx-radios > button.on{color:#FFFFFF; background:var(--mx-panel-black); box-shadow:inset 0 0 0 2px var(--mx-stadium-gold)}
+  html[data-game="mxwar"] .mx-radios > button.on small{color:var(--mx-secondary-text)}
+  html[data-game="mxwar"] .mx-radios > button.on::after{background:radial-gradient(circle, #FFFFFF 0 27%, var(--mx-war-red) 31%); box-shadow:none}
+  html[data-game="mxwar"] .mx-radios > button.on.is-focus, html[data-game="mxwar"] .mx-radios > button.on:focus-visible{box-shadow:inset 0 0 0 2px var(--mx-stadium-gold), var(--focus-ring) !important}
+  html[data-game="mxwar"] .mx-seg__tag{display:inline-block; margin-left:.4rem; padding:.12rem .4rem .1rem; border-radius:.25rem; vertical-align:.12em; font:700 .6875rem/1 var(--mx-font-hud); font-style:normal; letter-spacing:.09em; text-transform:uppercase; color:var(--mx-stadium-gold); background:rgba(236,185,103,.14); box-shadow:inset 0 0 0 1px rgba(236,185,103,.45)}
+  html[data-tv][data-game="mxwar"] .mx-seg__tag{font-size:.875rem}
+  /* rows and switches: the row is the target; titles in Barlow caps, descriptions stay Manrope; on = a war-red track and an "On" mark beside the title */
+  html[data-game="mxwar"] .bg-row__title{font-family:var(--mx-font-hud); font-weight:700; font-size:var(--mx-fs-hud-l); letter-spacing:.03em; text-transform:uppercase; line-height:1.2}
+  html[data-game="mxwar"] .mx-auto .bg-row__title{font-size:1.0625rem}
+  html[data-tv][data-game="mxwar"] body.mx-3d .mx-auto .bg-row__title{font-size:var(--fs-sm)}
+  html[data-game="mxwar"] .bg-toggle{background:var(--mx-row); box-shadow:inset 0 0 0 1px var(--mx-row-edge)}
+  html[data-game="mxwar"] .bg-toggle::before{background:var(--mx-red-fill); box-shadow:inset 0 0 0 1px rgba(255,214,165,.55)}
+  html[data-game="mxwar"] .bg-toggle::after{background:var(--mx-hud-white); box-shadow:0 1px 3px rgba(0,0,0,.55)}
+  html[data-game="mxwar"] .bg-row[role="switch"][aria-checked="true"] .bg-row__title::after{content:"On"; display:inline-block; margin-left:.15rem; padding:.12rem .4rem .1rem; border-radius:.25rem; font:700 .75rem/1 var(--mx-font-hud); letter-spacing:.08em; color:#FFFFFF; background:var(--mx-red-deep)}
+  html[data-tv][data-game="mxwar"] .bg-row[role="switch"][aria-checked="true"] .bg-row__title::after{font-size:.875rem}
+  /* the stepper: icon buttons and an Anton value */
+  html[data-game="mxwar"] .bg-stepper__btn{color:var(--mx-hud-white); background:var(--mx-panel-black); box-shadow:inset 0 0 0 1px var(--mx-hairline)}
+  html[data-game="mxwar"] .bg-stepper__val{color:var(--mx-hud-white); background:var(--ink-2); box-shadow:inset 0 0 0 1px var(--mx-hairline); border-radius:var(--mx-r-btn)}
+  /* selects and text fields: panel black, a grey edge, white text; the plate number in Anton */
+  html[data-game="mxwar"] .bg-select{background-color:var(--mx-panel-black); border:1.5px solid var(--mx-row-edge); border-radius:var(--mx-r-btn); color:var(--mx-hud-white); font-family:var(--mx-font-hud); font-weight:600; font-size:1.0625rem; letter-spacing:.02em}
+  html[data-tv][data-game="mxwar"] .bg-select{font-size:var(--mx-fs-hud-l)}
+  html[data-game="mxwar"] .bg-input{background:var(--mx-panel-black); box-shadow:inset 0 0 0 1.5px var(--mx-row-edge); border-radius:var(--mx-r-btn)}
+  html[data-game="mxwar"] .mx-rx input[data-rx="num"]{font:400 1.25rem/1 var(--font-display); letter-spacing:.06em}
+  /* the save bar's buttons are secondary buttons */
+  html[data-game="mxwar"] #svbar.svbar{background:var(--mx-panel-black); box-shadow:inset 0 0 0 1px var(--mx-hairline)}
+  html[data-game="mxwar"] #svbar button{color:var(--mx-hud-white); background:var(--mx-slate); box-shadow:inset 0 0 0 1.5px rgba(141,157,178,.86); border-radius:var(--mx-r-btn);
+    font:700 1.0625rem/1.15 var(--mx-font-hud); letter-spacing:.03em; text-transform:uppercase}
+  html[data-tv][data-game="mxwar"] #svbar button{font-size:var(--mx-fs-hud-l)}
+  html[data-game="mxwar"] #svbar button:active{background:#11151E}
+  html[data-game="mxwar"] #svbar button[disabled]{color:var(--mx-disabled-text); background:var(--mx-disabled); box-shadow:inset 0 0 0 1.5px var(--mx-disabled-edge); opacity:1}
+  html[data-game="mxwar"] #svbar button small{font:600 .75rem/1.2 var(--mx-font-hud); letter-spacing:.04em; text-transform:none; color:var(--mx-secondary-text)}
+  html[data-game="mxwar"] #svbar button .bg-ico{color:var(--mx-stadium-gold)}
+  /* chips (labels, not controls): a flat HUD panel, Barlow caps; hot = gold, yellow = the flag, white = the last lap */
+  html[data-game="mxwar"] .mx-chip{background:var(--mx-hud-panel); box-shadow:inset 0 0 0 1px var(--mx-hairline); font:700 .8125rem/1.3 var(--mx-font-hud); letter-spacing:.05em; text-transform:uppercase; color:var(--mx-hud-white)}
+  html[data-tv][data-game="mxwar"] .mx-chip{font-size:var(--mx-fs-hud-s)}
+  html[data-game="mxwar"] .mx-chip.is-hot{color:var(--mx-stadium-gold); box-shadow:inset 0 0 0 1.5px var(--mx-stadium-gold)}
+  html[data-game="mxwar"] .mx-chip.is-yellow{color:var(--mx-night-black); background:var(--mx-yellow); box-shadow:none}
+  html[data-game="mxwar"] .mx-chip.is-white, html[data-game="mxwar"] .mx-chip.is-hot.is-white{color:var(--mx-night-black); background:var(--mx-hud-white); box-shadow:none}
+  /* plates keep the make colour down the edge and the red plate; the number in Barlow 700 with tabular figures; the person's plate ringed gold */
+  html[data-game="mxwar"] .mx-pl{font-family:var(--mx-font-hud); font-weight:700; letter-spacing:.02em}
+  html[data-game="mxwar"] li.is-me .mx-pl:not(.is-red){box-shadow:inset .3em 0 0 var(--mk,#3a3a44), inset 0 0 0 1px rgba(0,0,0,.4), 0 0 0 2px var(--mx-stadium-gold)}
+  /* the playing cards: the ivory face keeps its gradient, with the pack's warm edge inside */
+  html[data-game="mxwar"] .mx-cf{box-shadow:inset 0 0 0 2px var(--mx-card-edge), 0 .3rem .8rem rgba(0,0,0,.5)}
 </style>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>

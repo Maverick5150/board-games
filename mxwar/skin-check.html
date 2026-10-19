@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en" data-game="mxwar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Motocross War: button skin check</title>
+<!-- DEV ONLY (UI-SPEC 4.7): not linked from the game, not in sw.js; it may stay in the repo like ui/styleguide.html. It renders the four slabs of the CEO's
+     09_BUTTON_SKIN_STATES (1600 x 800: primary default, primary focused, secondary, disabled) at the same places and sizes, with the game's OWN button CSS
+     (the <style> of index.html, read at run time, so this page never drifts from the game), plus the states the pack does not draw: pressed, selected
+     (a segment, a secondary toggle, the radio list), and the focus of every kind. ?tv=1 = the TV scale. Nothing here is a picture from the pack. -->
+<script>(function (h) { if (/[?&]tv=1(&|$)/.test(location.search)) h.setAttribute("data-tv", ""); })(document.documentElement);</script>
+<link rel="stylesheet" href="../ui/theme.css">
+<style id="skinCheckBase">
+  html, body { margin: 0; background: #090C12; }
+  body { width: 1600px; height: 800px; position: relative; overflow: hidden; font-family: var(--font-ui); color: var(--mx-hud-white, #F0F1F3); }
+  .sk { position: absolute; width: 732px; height: 268px; display: block; }
+  .sk .bg-btn { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; padding: 84px 52px 36px; border-radius: 30px; text-align: left; transform: none !important; }
+  .sk .bg-btn__label { font-size: 38px !important; letter-spacing: .03em; }
+  .sk .bg-btn__sub { font-size: 21px !important; letter-spacing: .08em; }
+  .sk1 { left: 32px; top: 37px; } .sk2 { left: 832px; top: 37px; } .sk3 { left: 32px; top: 397px; } .sk4 { left: 832px; top: 397px; }
+  /* the extra states, small, in the band under the slabs */
+  .more { position: absolute; left: 32px; right: 32px; top: 690px; display: flex; gap: 24px; align-items: center; }
+  .more .bg-btn { min-height: 64px; padding: 0 26px; font-size: 24px; }
+  .more .bg-seg { width: 330px; }
+  .more .bg-seg > button { min-height: 52px; font-size: 20px; }
+  .more .bg-btn.is-pressed { transform: translateY(1px) scale(.97) !important; }
+  .more .lab { position: absolute; top: -26px; font: 600 15px/1 "MXW Barlow Condensed", sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #AEB5BF; white-space: nowrap; }
+  .more > div { position: relative; }
+</style>
+</head>
+<body>
+  <div class="sk sk1"><button class="bg-btn bg-btn--primary bg-btn--cta" type="button" tabindex="-1"><span class="bg-btn__label">Primary · Default</span><span class="bg-btn__sub">Start the season · 2026 Supercross</span></button></div>
+  <div class="sk sk2"><button class="bg-btn bg-btn--primary bg-btn--cta is-focus" type="button" tabindex="-1"><span class="bg-btn__label">Primary · Focused</span><span class="bg-btn__sub">The ring: D-pad and keyboard</span></button></div>
+  <div class="sk sk3"><button class="bg-btn bg-btn--secondary bg-btn--cta" type="button" tabindex="-1"><span class="bg-btn__label">Secondary</span><span class="bg-btn__sub">Battle board · standings · skip</span></button></div>
+  <div class="sk sk4"><button class="bg-btn bg-btn--primary bg-btn--cta" type="button" tabindex="-1" disabled><span class="bg-btn__label">Disabled</span><span class="bg-btn__sub">While the season file loads</span></button></div>
+  <div class="more">
+    <div><span class="lab">Pressed</span><button class="bg-btn bg-btn--primary is-pressed" type="button" tabindex="-1">Flip</button></div>
+    <div><span class="lab">Secondary focused</span><button class="bg-btn bg-btn--secondary is-focus" type="button" tabindex="-1">Standings</button></div>
+    <div><span class="lab">Selected toggle</span><button class="bg-btn bg-btn--secondary" type="button" tabindex="-1" aria-pressed="true">Standings</button></div>
+    <div><span class="lab">Ghost</span><button class="bg-btn bg-btn--ghost" type="button" tabindex="-1">All riders</button></div>
+    <div><span class="lab">Selected segment</span><div class="bg-seg bg-seg--text"><button type="button" tabindex="-1">Slow</button><button type="button" class="on" aria-pressed="true" tabindex="-1">Medium</button><button type="button" tabindex="-1">Fast</button></div></div>
+  </div>
+<script>
+/* the game's own CSS: the <style> of index.html (fetched from this folder at run time; nothing is copied into this file) */
+fetch("index.html", { cache: "no-store" }).then(function (r) { return r.text(); }).then(function (t) {
+  var a = t.indexOf("<style>"), b = t.indexOf("</style>", a);
+  var st = document.createElement("style"); st.id = "gameCSS"; st.textContent = t.slice(a + 7, b);   /* (its url("assets/...") resolve here too: the same folder) */
+  document.head.insertBefore(st, document.getElementById("skinCheckBase"));
+  document.documentElement.setAttribute("data-ready", "1");
+});
+</script>
+</body>
+</html>

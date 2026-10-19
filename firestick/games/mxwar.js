@@ -387,6 +387,32 @@
     Q + ".mxp-cap .bgv-cap.is-on ~ .mxp-capidle{opacity:0}",
     /* toasts stay over the tower's foot, clear of the race and the corner window */
     'html[data-pgame="mxwar"][data-tv] body.ps-ingame .bg-toast{left:calc(98vw - 10.5rem);max-width:20rem}',
+    /* THE MXWAR SKIN, the components (09_BUTTON_SKIN_STATES, as mxwar/index.html): Barlow caps labels; primary war red with a cream edge, secondary slate, focus = a brighter fill and edge
+       plus the shared ring, pressed sinks, disabled muted; a selected segment is red with a pale gold bar in its foot */
+    Q + ".mxp .bg-btn," + Q + ".mxp-ssec .bg-btn," + Q + "#mxpSkipSheet .bg-btn{font-family:var(--mx-font-hud);font-weight:700;letter-spacing:.03em;text-transform:uppercase;border-radius:var(--mx-r-btn);font-size:var(--mx-fs-hud-l)}",
+    Q + ".mxp .bg-btn--primary," + Q + "#mxpSkipSheet .bg-btn--primary{color:#FFFFFF;background:var(--mx-red-fill);box-shadow:inset 0 0 0 2px var(--mx-edge-warm)}",
+    Q + ".mxp .bg-btn--primary:active," + Q + "#mxpSkipSheet .bg-btn--primary:active{background:var(--mx-red-fill-press);transform:translateY(1px) scale(.97)}",
+    Q + ".mxp .bg-btn--primary.is-focus," + Q + ".mxp .bg-btn--primary:focus-visible," + Q + "#mxpSkipSheet .bg-btn--primary.is-focus," + Q + "#mxpSkipSheet .bg-btn--primary:focus-visible{background:var(--mx-red-fill-focus);box-shadow:inset 0 0 0 2px var(--mx-edge-focus),var(--focus-ring) !important}",
+    Q + ".mxp .bg-btn--secondary," + Q + ".mxp-ssec .bg-btn--secondary," + Q + "#mxpSkipSheet .bg-btn--secondary{color:var(--mx-hud-white);background:var(--mx-slate);box-shadow:inset 0 0 0 1.5px rgba(141,157,178,.86)}",
+    Q + ".mxp .bg-btn--secondary:active," + Q + "#mxpSkipSheet .bg-btn--secondary:active{background:#11151E}",
+    Q + ".mxp .bg-btn--secondary.is-focus," + Q + ".mxp .bg-btn--secondary:focus-visible," + Q + "#mxpSkipSheet .bg-btn--secondary.is-focus," + Q + "#mxpSkipSheet .bg-btn--secondary:focus-visible{background:#212837;box-shadow:inset 0 0 0 1.5px var(--mx-hud-white),var(--focus-ring) !important}",
+    Q + ".mxp .bg-btn[disabled]{color:var(--mx-disabled-text);background:var(--mx-disabled);box-shadow:inset 0 0 0 1.5px var(--mx-disabled-edge);opacity:1}",
+    Q + ".mxp-acts .bg-btn small{font:600 var(--mx-fs-hud-s)/1.2 var(--mx-font-hud);letter-spacing:.06em;text-transform:uppercase;color:var(--mx-gold-pale);opacity:1}",
+    Q + ".mxp-acts .bg-btn--secondary small{color:var(--mx-secondary-text)}",
+    Q + "#mxpSkipSheet .bg-sheet__title{font:400 var(--mx-fs-display-m)/1.05 var(--mx-font-display);letter-spacing:.01em;text-transform:uppercase}",
+    Q + "#mxpSkipSheet{background:linear-gradient(180deg,#121722,#0B0F17 60%);box-shadow:inset 0 1px 0 rgba(236,185,103,.35),var(--elev-3)}",
+    Q + ".mxp-ssec .bg-eyebrow," + Q + ".mxp-panel .bg-eyebrow{font-family:var(--mx-font-hud);font-weight:700;font-size:1rem;letter-spacing:.1em}",
+    Q + ".mxp-ssec .bg-seg{background:var(--ink-2);box-shadow:inset 0 0 0 1px var(--mx-hairline);border-radius:var(--mx-r-btn)}",
+    Q + ".mxp-ssec .bg-seg > button{font-family:var(--mx-font-hud);font-weight:700;font-size:var(--mx-fs-hud-l);letter-spacing:.03em;text-transform:uppercase;color:var(--mx-secondary-text);border-radius:calc(var(--mx-r-btn) - .125rem)}",
+    Q + ".mxp-ssec .bg-seg > button:active{transform:scale(.97)}",
+    Q + ".mxp-ssec .bg-seg > button.on," + Q + ".mxp-ssec .bg-seg > button[aria-pressed=true]{color:#FFFFFF;background:var(--mx-red-deep);box-shadow:inset 0 -.125rem 0 var(--mx-gold-pale)}",
+    Q + ".mxp-ssec .bg-seg > button.on.is-focus," + Q + ".mxp-ssec .bg-seg > button.on:focus-visible{box-shadow:inset 0 -.125rem 0 var(--mx-gold-pale),var(--focus-ring) !important}",
+    Q + ".mxp-ssec .ps-vdesc{background:var(--ink-2);box-shadow:inset 0 0 0 1px var(--mx-hairline);color:var(--mx-secondary-text)}",
+    Q + ".mxp-ssec .ps-vdesc b{color:var(--mx-hud-white)}",
+    /* chips (labels): a flat HUD panel and Barlow caps */
+    Q + ".mxp-chip{background:var(--mx-hud-panel);box-shadow:inset 0 0 0 1px var(--mx-hairline);font:700 var(--mx-fs-hud-s)/1.3 var(--mx-font-hud);letter-spacing:.05em;text-transform:uppercase}",
+    Q + ".mxp .mx-pl{font-family:var(--mx-font-hud);font-weight:700;letter-spacing:.02em}",
+    Q + ".mxp .mx-cf{box-shadow:inset 0 0 0 2px var(--mx-card-edge),0 .3rem .8rem rgba(0,0,0,.5)}",
     /* reduced effects: nothing moves */
     'html[data-effects="reduced"] ' + Q + ".mxp *{animation:none !important;transition:none !important}"
   ].join("\n");
