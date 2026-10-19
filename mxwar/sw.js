@@ -20,6 +20,7 @@ const ASSETS3D = [/*3d:assets*/ "./assets/dirt/dirt-tiles-lo.js", "./assets/dirt
 // a repeated address (Cache.addAll fails on a list that names one twice, and the visual pack's list names these files too)
 const ASSETSF = ["./assets/fonts/barlowcondensed-600-latin.woff2", "./assets/fonts/barlowcondensed-700-latin.woff2"];
 const once = l => { const seen = new Set(); return l.filter(u => { const k = new URL(u, self.location).href; if (seen.has(k)) return false; seen.add(k); return true; }); };
+ASSETS.push("./beat.js");   // mxbeat: the beat model (MXWar.Beat; a line of its own: the ASSETS line is shared by several sprints)
 
 // Updates: a new VERSION re-downloads every asset (cache "reload" skips the browser's HTTP cache, so cache-first icons are fresh too)
 // and takes over at once (skipWaiting + clients.claim). Pages and scripts are network-first, so a published update loads on the
