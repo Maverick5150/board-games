@@ -760,7 +760,7 @@ function trackRiders(){
     try{
       V3.setRace({series:G.series,year:G.year,round:c3.n||(G.ri+1),cal:c3,len:rc.o.len,lapT:(G.round&&G.round.lapT)||0,riders:rc.r.map(function(p,s){ var R=G.riders[seatId(s)], m=A.mk(R.bike); return {s:s,color:m[0],accent:m[0]==="#f2f4f8"?"#183a8c":(m[1]==="#0b0a12"?"#16161c":"#f2f2f6"),num:R.plate,name:R.name,red:R.id===red3,me:R.kind==="human"}; })});
     }catch(e){ try{ console.warn("mxwar: 3D race",e); }catch(x){} v3state="failed"; mode3D(); ui.trkKey=null; renderRace(); return; }
-    if(V3.warm){ try{ V3.warm(); }catch(e){} }   /* compile every shader of the new race now, while the gate shows (a weak GPU would hitch for seconds on the first frames) */
+    if(V3.warm){ try{ var wp=V3.warm(); if(wp&&wp.then) wp.then(function(){ syncControls(); },function(){ syncControls(); }); }catch(e){} }   /* compile every shader of the new race now, while the gate shows (a weak GPU would hitch for seconds on the first frames); the view draws its first frame and drops the gate only once they are ready (race3d.js: the warm hold) */
     ui.show=null; ui.yellowNext=null; ui.yellowOn=null; ui.lapReady=0; ui.finish3=false;
     if(rc.phase!=="gate"){ /* a race restored mid-way: the field placed by the standings at the start of this lap, riding on */
       rc.r.forEach(function(p,s){ if(p.out&&p.pk.length===0&&p.dnf) V3.markOut(s); });
@@ -945,6 +945,7 @@ function syncControls(){
   var t="";
   if(skipQ&&!rc.over) t="Simming to the flag...";
   else if(rc.over) t="Checkered flag.";
+  else if(gate&&rt&&V3.warming&&V3.warming()) t="The riders roll up to the gate...";   /* (the 3D view's warm hold: its shaders compile, the drop waits) */
   else if(!hs.length) t=G.humans.length?"You're not in this race: watch it, or sim to the flag.":"Watching the pros.";
   else if(gate) t=cfg.auto?"The gate drops by itself (Auto).":"Riders ready: drop the gate.";
   else if(!alive.length) t=hs.some(function(x){ return rc.r[x].dnf&&rc.r[x].dnf.why==="crash"; })?"You crashed out (you lost a triple war): the race runs on without you. Watch it, or skip to the finish.":"Out of cards: the race runs on without you. Watch it, or skip to the finish.";

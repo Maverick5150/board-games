@@ -63,6 +63,12 @@ export function create(host,hooks){
   const requestAnimationFrame=cb=>GL.requestAnimationFrame(t=>{ if(QUAL.skipFrame(t)){ requestAnimationFrame(cb); return; } cb(t); });
   let lastRace=null, builtTier="";   /* the last setRace argument and the tier key the current world was built with (V.setQuality rebuilds when they differ) */
   let warmPending=false, raceGen=0;   /* the shader warm-up (r3d-perf-warm.js): owed by every new race; raceGen stops a warm that belongs to a race already replaced */
+  /* THE WARM HOLD (milestone 2 merge, perf REQUEST 2 / director note N7): in the game a new race draws NOTHING and its clock waits until V.warm() has compiled its shaders in parallel,
+     so no frame waits for a program and the page never blocks on a compile (HIGH on this laptop: one 12.7 s task entering the race). The stadium's environment capture waits too
+     (LOOK.apply deferEnv, then LOOK.envCapture()), and V.drop() waits for the warm. A caller that never calls V.warm() is released on the next task (the old behaviour). The capture page
+     (demo.html) warms synchronously inside setRace and never holds, unless ?warm=async (tools that test the game's own path). drawHold = holding; warmHold = that warm's Promise. */
+  let drawHold=false, warmHold=null;
+  const holdWanted=()=>!GL.DEMO||/[?&]warm=async/.test(GL.location.search);
   // [/hook:perf]
   const LOOK=createLook(renderer,{shadows:QUAL.shadowsWanted(LO),lo:LO,tv:tv(),weak:QUAL.weakGPU,host:host});   /* colour space, tone mapping, shadow map, the light rig, fog, the environment map, the post chain, the quality flags (r3d-look.js) */
   const scene=LOOK.scene, SUN=LOOK.SUN;   /* SUN = the sun's direction (LOOK.apply updates it for each venue) */
@@ -115,7 +121,7 @@ export function create(host,hooks){
   /* ---------------- the round -> the course and the world (built once per layout) ---------------- */
   V.setRace=function(o){
     // [hook:perf]
-    lastRace=o; raceGen++; warmPending=true;
+    lastRace=o; raceGen++; warmPending=true; drawHold=holdWanted(); warmHold=null;
     const lo=motion()!=="full"; if(lo!==LO){ LO=lo; worldKey=""; LOOK.setShadows(QUAL.shadowsWanted(LO)); if(typeof driveLook==="function") driveLook(); }   /* Reduce effects changed: the next race is built simpler (or richer), the shadows follow */
     // [/hook:perf]
     const pick=MX.Layouts.pick(o.series,o.year,o.round,o.cal||{});
@@ -133,7 +139,7 @@ export function create(host,hooks){
       // [hook:cams]
       CAMS.buildGrid();   /* the grid of the dirt's heights: no camera ever sits inside a jump */
       // [/hook:cams]
-      LOOK.apply(C,look,world,{lo:LO,tv:tv()});   /* the venue's lights, exposure, sun disc, fog, environment map and the look's quality tier (r3d-look.js) */
+      LOOK.apply(C,look,world,{lo:LO,tv:tv(),deferEnv:drawHold});   /* the venue's lights, exposure, sun disc, fog, environment map and the look's quality tier (r3d-look.js); deferEnv: the stadium's environment capture waits for the warm (the warm hold) */
       // [hook:stadium]
       const flo=!!QUAL.options(LO).lo;   /* the simple world (FIRE TV, Reduce effects): coarser flagger figures */
       flagger=flaggerBuild(flagT("white"),{lo:flo}); flagger.grp.position.copy(world.fin.flagAt).add(v3.set(0,-0.02,0)); flagger.grp.rotation.y=-world.fin.th+(world.fin.side>0?PI:0); world.root.add(flagger.grp);
@@ -170,6 +176,9 @@ export function create(host,hooks){
     gate.set(0); gate.drop=0; gate.dropT=-1; V.setFlag(null); marshal.grp.visible=false;
     mode="gate"; CAMS.setShot({type:"gate",subj:-1,pri:0,min:1e9,max:1e9});
     V.resize(); renderOnce();
+    // [hook:perf]
+    if(drawHold){ const g=raceGen; setTimeout(()=>{ if(drawHold&&!warmHold&&g===raceGen) releaseHold(); },0); }   /* (nobody called V.warm() in the same task: draw as before) */
+    // [/hook:perf]
     return V.courseInfo;
   };
   // [hook:motion]
@@ -314,6 +323,9 @@ export function create(host,hooks){
   // [/hook:motion]
   /* the gate drops: the pads fall, the clock starts (resolves once the riders are away) */
   V.drop=function(){
+    // [hook:perf]
+    if(drawHold&&warmHold){ const p=warmHold; return p.then(()=>V.drop(),()=>V.drop()); }   /* the warm hold: the gate drops once the race's shaders are ready */
+    // [/hook:perf]
     return new Promise(res=>{
       if(!C){ res(); return; }
       mode="race"; lapNo=1; T=0; finished=false; gate.dropT=now(); lappedK=[]; shownHs=false;
@@ -335,6 +347,7 @@ export function create(host,hooks){
     /* real time even on a slow device (frames up to half a second apart still move the race on by their real length; the physics
        sub-steps); timeScale: tests only (never in the game) */
     const dt=Math.min(1.0,(lastT?Math.min(0.5,(t-lastT)/1000):1/60)*(V.timeScale||1)); lastT=t;
+    if(drawHold){ raf=requestAnimationFrame(tick); return; }   /* the warm hold (perf): nothing moves and nothing is drawn until the race's shaders are ready */
     const c0=now();
     const off=motion()==="off";
     step(dt);
@@ -361,7 +374,9 @@ export function create(host,hooks){
     LOOK.resize(W,H,pr);
     cam.aspect=W/H; cam.updateProjectionMatrix(); CAMS.snap(); renderOnce();
   };
-  function renderOnce(){ if(!C||V.lost) return; step(0); render(); }
+  function renderOnce(){ if(!C||V.lost) return; step(0); if(drawHold) return; render(); }   /* (the warm hold: placed, not drawn) */
+  /* the end of the warm hold: the stadium's environment is captured now (its programs are ready), then the first frame */
+  function releaseHold(){ drawHold=false; warmHold=null; if(V.lost||!C) return; try{ if(LOOK.envCapture) LOOK.envCapture(); }catch(e){} renderOnce(); }
   function render(){
     LOOK.render(scene,cam,now()/1000);   /* the frame (through the post-processing slot when one is set) */
     const inf=renderer.info.render; stats.calls=inf.calls; stats.tris=inf.triangles;
@@ -941,7 +956,11 @@ export function create(host,hooks){
       crowd:(wf&&P.crowd.length>1)?(on=>{ QUAL.live.crowdAnim=on; wf(0,now()/1000,cam,null,null,null,null); }):null, crowdNow:QUAL.live.crowdAnim, crowdStates:P.crowd,
       postSets:sets, applyFlags:f=>{ if(LOOK.setFlags) LOOK.setFlags(f); }, restoreFlags:()=>driveLive(), alive:()=>g===raceGen&&!V.lost};
   }
-  V.warm=()=>{ try{ if(!R||!C||V.lost) return Promise.resolve(false); warmPending=false; return QUAL.warm(warmCtx(),true); }catch(e){ return Promise.resolve(false); } };
+  V.warm=()=>{ try{ if(!R||!C||V.lost){ if(drawHold) releaseHold(); return Promise.resolve(false); } warmPending=false;
+      const g=raceGen, p=QUAL.warm(warmCtx(),true);
+      if(drawHold){ warmHold=p; const done=()=>{ if(warmHold===p) warmHold=null; if(g===raceGen&&drawHold) releaseHold(); }; p.then(done,done); setTimeout(done,20000); }   /* (the warm hold ends with the warm; 20 s at most) */
+      return p; }catch(e){ if(drawHold) releaseHold(); return Promise.resolve(false); } };
+  V.warming=()=>!!(drawHold&&warmHold);   /* the game: true while the new race waits for its shaders (show "lining up", the drop waits by itself) */
   V.warmSync=()=>{ if(!R||!C||V.lost) return null; warmPending=false; return QUAL.warm(warmCtx(),false); };
   V.bench=o=>QUAL.bench.start(o);
   V.benchResult=()=>QUAL.bench.result;

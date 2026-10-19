@@ -213,8 +213,12 @@ export function createLook(renderer,opts){
        makes them glow; a module that already outputs more than 1 (or sets userData.hdr) is left alone */
     const gm=world.ctx&&world.ctx.glowMesh; if(gm&&gm.material&&gm.material.uniforms&&gm.material.uniforms.col&&!gm.material.userData.hdr){ const c=gm.material.uniforms.col.value; if(Math.max(c.r,c.g,c.b)<=1.05){ c.multiplyScalar(2.0); gm.material.userData.hdr=true; } }
     L._world=world; L._stadium=C.kind==="stadium"; tierName=forced||autoTier(); L._applying=true; try{ setFlags(TIERS[tierName]); } finally { L._applying=false; } applyFog(world);
-    if(F.env&&F.envCap&&L._stadium){ captureWorldEnv(); scene.environment=capRT?capRT.texture:(envRT?envRT.texture:null); }   /* (a stadium: the bowl is the venue; an outdoor track keeps the procedural sky) */
+    if(F.env&&F.envCap&&L._stadium){ if(!env.deferEnv) captureWorldEnv(); scene.environment=(capRT&&capWorld===world)?capRT.texture:(envRT?envRT.texture:null); }   /* (a stadium: the bowl is the venue; an outdoor track keeps the procedural sky) */
+    /* (milestone 2 merge, the view's warm hold: env.deferEnv = the capture waits until the warm has compiled the world's programs in parallel (race3d.js calls L.envCapture() then);
+       until then the procedural map lights the scene: the same PMREM size, so no program differs) */
   };
+  /* the stadium capture now, if this world still owes it (the view's warm hold calls it once the shaders are ready; any setFlags() would also make it) -> its time in ms */
+  L.envCapture=function(){ if(!L._world||capWorld===L._world||!(F.env&&F.envCap&&L._stadium)) return 0; captureWorldEnv(); setFlags({}); return L._envCapMs||0; };
   function applyFog(world){
     world=world||L._world; if(!world) return;
     if(F.fog==="exp"&&venueNight&&fogDen>0){ scene.fog=new THREE.FogExp2(fogCol,fogDen); }
