@@ -744,7 +744,8 @@
     if (MX.Booth && MX.Announce && window.BGVoice) {
       try {
         booth = MX.Booth.create({ speed: function () { return H.speed ? H.speed() : "medium"; }, ctx: function () { return { hold: false, quiet: skipSheetUp() }; }, onChange: annBand,
-          clock: function () { return modelOn() ? { t: rv.clock(), rate: modelRate(ui.rc) } : null; } });   /* the race clock the picture is at: the commentator reads the race at that moment */
+          clock: function () { return modelOn() ? { t: rv.clock(), rate: modelRate(ui.rc) } : null; },
+          career: function (n) { try { return MX.Journal ? MX.Journal.career(null, n) : []; } catch (e) { return []; } } });   /* mxann4: the people's earlier seasons on this TV */   /* the race clock the picture is at: the commentator reads the race at that moment */
         var capEls = booth.attach({ band: $("mxpCap") });
         if (capEls && capEls.band) { var idle = document.createElement("span"); idle.className = "mxp-capidle"; idle.textContent = "Calloway and Bramlett on the call"; $("mxpCap").appendChild(idle); }
         annBand();
@@ -845,7 +846,8 @@
       if (!G) return [];
       return S.standings(G).slice(0, 16).map(function (r) { var R = G.riders[r.id], k = kOfId(r.id); return { name: "#" + R.plate + " " + R.name, color: k >= 0 ? hex(k) : A.mk(R.bike)[0], v: plural(r.pts, "pt"), s: [1000 - r.place], win: r.place === 1, k: r.place }; });
     });
-    function save() { if (!G) return; if (G.over) { lsSet(KEY, null); return; } stats.saves++; var as = booth ? booth.state() : null; lsSet(KEY, as ? { v: SAVEV, G: G, t: Date.now(), ann: as } : { v: SAVEV, G: G, t: Date.now() }); }
+    function save() { if (!G) return; try { if (MX.Journal) MX.Journal.keep(G); } catch (e) { }   /* mxann4: the career book (the people's seasons on this TV), as the phone page keeps it */
+      if (G.over) { lsSet(KEY, null); return; } stats.saves++; var as = booth ? booth.state() : null; lsSet(KEY, as ? { v: SAVEV, G: G, t: Date.now(), ann: as } : { v: SAVEV, G: G, t: Date.now() }); }
 
     /* ---------- layout: the tower's rows and columns, the corner window, the gate ---------- */
     function layoutTower() {

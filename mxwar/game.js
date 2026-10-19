@@ -706,7 +706,10 @@ function barTitle(){
 
 /* ================= saving ================= */
 function pack(){ if(!G) return null; var pk={G:JSON.parse(JSON.stringify(G)),cfg:JSON.parse(JSON.stringify(cfg)),view:ui.view}; var as=BOOTH?BOOTH.state():null; if(as) pk.ann=as; return pk; }   /* ann: the announcers' variety memory (plain JSON; a save without it loads as before) */
-function save(){ if(!G) return; if(G.over&&ui.finished===gen){ Saves.del(GAME,"auto"); return; } var pk=pack(); if(pk) Saves.auto(GAME,pk); }
+/* mxann4: the people's seasons on this device (the career book the announcers read: years before the season only), kept with every save */
+function keepCareer(){ try{ if(MX.Journal&&G) MX.Journal.keep(G); }catch(e){} }
+function annCareer(n){ try{ return MX.Journal?MX.Journal.career(null,n):[]; }catch(e){ return []; } }
+function save(){ if(!G) return; keepCareer(); if(G.over&&ui.finished===gen){ Saves.del(GAME,"auto"); return; } var pk=pack(); if(pk) Saves.auto(GAME,pk); }
 function loadSaved(d){
   if(!d||!d.G||d.G.id!=="mxwar"||d.G.v!==S.VER) throw new Error("not a Motocross War save");
   S.upgrade(d.G);   /* mxlaps: a save made with the battle lengths races on at the real lengths (short -> Half length) */
@@ -2322,7 +2325,7 @@ readRiders();
 /* the announcers: the booth, its captions (the band under the track; one on top for the sheets and the season) and its mode on the page */
 if(MX.Booth&&MX.Announce&&window.BGVoice){
   try{
-    BOOTH=MX.Booth.create({speed:function(){ return cfg.speed; },ctx:annCtx,sayNames:annNames,onChange:annMode,clock:annClock});
+    BOOTH=MX.Booth.create({speed:function(){ return cfg.speed; },ctx:annCtx,sayNames:annNames,onChange:annMode,clock:annClock,career:annCareer});
     capEls=BOOTH.attach({band:$("capBand"),top:document.body})||null;
     if(capEls&&capEls.top) capEls.top.el.classList.add("mx-capfix");
     if(capEls&&capEls.band){ var idle=document.createElement("span"); idle.className="mx-capidle"; idle.textContent="Calloway and Bramlett on the call"; $("capBand").appendChild(idle); }
