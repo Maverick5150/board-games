@@ -22,7 +22,14 @@
                                the title gap is under one race's points; preA / recapB resolve to the current variant
      Sound.show.ready(name) -> bool (decoded now);  Sound.show.mem() -> {bytes, peak, files}
    Levels (MUSIC-PLAN 4.1, through Sound.mix's broadcast profile): stings -18 LUFS on the show bus, whooshes -20, beds -22 (-30 under a line),
-   podium / bumper / finale -20, menu -18. Decoded audio stays under 28 MB: cues not playing are released, oldest first. */
+   podium / bumper / finale -20, menu -18. Decoded audio stays under 28 MB: cues not playing are released, oldest first.
+   Late and refused audio (review fixes, 2026-10-19):
+     - a cue or a bed still loading when stop() comes (the race) never plays: its promise rejects with {stale: true}, and a file that lands after a
+       stop that nobody asked for since is released at once (the race cues stay);
+     - the streams reuse up to 3 media elements, and every tap or key loads the idle ones inside the gesture: a browser that wants a gesture for
+       each element (iOS Safari, a WebView left at its default) then lets them play later without one;
+     - a stream the browser still refuses (NotAllowedError) or cannot fetch (offline, never cached) plays today's synthesized playlist in its
+       place; the next tap or key plays the refused stream, and the stand-in stops when a stream, a bed or stop() takes over. */
 (function(g){
 "use strict";
 var S=g.Sound, MXW=g.MXWar=g.MXWar||{};
@@ -65,7 +72,7 @@ S.addSfx("mxReplayOut",function(t,out,C,nb){
 /* ---------- S2: Sound.show ---------- */
 var BUDGET=(function(){ try{ var m=g.navigator&&g.navigator.deviceMemory; return m&&m<=1?14e6:28e6; }catch(e){ return 28e6; } })(), RACE_SET=["whooshIn","whooshOut","checkered","war"], SHOW_SET=["open","theme","hit","outro","whooshIn","whooshOut"];
 var WHOOSH_SFX=0.307;  // a package whoosh in a live replay rides the effects bus at the synthesized pair's level (-22 LUFS momentary)
-var P={id:null,man:null,ready:null,files:{},bytes:0,pend:0,peak:0,delay:null,stakes:1,rot:null,lastBar:{},drawn:{},titleDone:false,gen:0};
+var P={id:null,man:null,ready:null,files:{},bytes:0,pend:0,peak:0,delay:null,stakes:1,rot:null,lastBar:{},drawn:{},titleDone:false,gen:0,synth:false,blocked:null};
 var BED=null, GRID=null, LIVE=[], STREAMS=[];   // LIVE: every source scheduled on a decoded cue, with its scheduled end
 function ac(){ return S.ctx(); }
 function busOf(c,o){ var n=(o&&o.bus)||(c&&c.bus)||"music"; return S.mix.bus(n)||S.mix.bus("music"); }
@@ -104,15 +111,15 @@ function load(id,o){
     var pr=P.ready=fetchJSON(BASE+id+"/pkg.json"+(PKGS[id]?"?h="+PKGS[id]:"")).then(function(m){ if(!m||!m.cues) throw new Error("no cues in "+id); if(P.ready===pr) P.man=m; return m; });
     pr.catch(function(){ if(P.ready===pr){ P.ready=null; P.id=null; } });
   }
-  var want=(o.cues||SHOW_SET).slice();
+  var want=(o.cues||SHOW_SET).slice(), gen0=P.gen;   // a stop() during the chain ends it (but for the race cues)
   // one decode after another (a burst of decodes would stall a slow device), and only what fits the budget now: the rest decodes when it is
   // first used, when the cues that have finished can be released
   function next(){
     var nm=want.shift(); if(nm==null) return P.man;
-    if(!has(nm)) return next();
+    if(!has(nm)||(P.gen!==gen0&&RACE_SET.indexOf(nm)<0)) return next();
     var C=ac(), r=resolve(nm,true), est=r&&C?Math.ceil((r.c.len||10)*C.sampleRate)*8:0;
     if(!r||r.c.kind==="stream"||!C||(P.bytes+P.pend+est>BUDGET&&!(P.files[r.c.file]&&P.files[r.c.file].buf))) return next();
-    return decode(r.name,r.c).then(next,next);
+    return decode(r.name,r.c,gen0).then(next,next);
   }
   return P.ready.then(next);
 }
@@ -126,12 +133,12 @@ function room(est){   // est: the bytes about to be decoded; decodes still in fl
   while(P.bytes+P.pend+est>BUDGET&&list.length) drop(list.shift());
 }
 function drop(e){ if(P.files[e.f]!==e) return; if(e.buf) P.bytes-=e.bytes; delete P.files[e.f]; e.buf=null; }
-function decode(name,c){
-  var f=c.file, e=P.files[f], C=ac();
+function decode(name,c,gen){
+  var f=c.file, e=P.files[f], C=ac(); if(gen==null) gen=P.gen;   // gen: the stop() count when it was asked for (cue / bed / load pass theirs)
   if(e&&e.buf){ e.last=Date.now(); return Promise.resolve(e); }
-  if(e&&e.p) return e.p;
+  if(e&&e.p){ e.gen=Math.max(e.gen,gen); return e.p; }
   if(!C) return Promise.reject(new Error("audio not started"));
-  e=P.files[f]={f:f,name:name,c:c,last:Date.now(),buf:null,bytes:0,dl:0};
+  e=P.files[f]={f:f,name:name,c:c,last:Date.now(),buf:null,bytes:0,dl:0,gen:gen};   // e.gen: the latest request's stop() count
   var est=Math.ceil((c.len||10)*C.sampleRate)*8; room(est); P.pend+=est;
   e.p=fetchBuf(BASE+P.id+"/"+f).then(function(ab){ return decodeBuf(C,ab); }).then(function(buf){
     e.p=null; P.pend=Math.max(0,P.pend-est); if(P.files[f]!==e) return e;
@@ -139,15 +146,16 @@ function decode(name,c){
     var on=firstOver(buf), ok=on!=null&&c.on!=null&&Math.abs(on-c.on)<0.2;
     e.dl=ok?on-c.on:(P.delay!=null?P.delay:0);
     if(ok&&c.on<=0.06) P.delay=e.dl;
+    if(e.gen!==P.gen&&RACE_SET.indexOf(e.name)<0) drop(e);   // a stop() came while it loaded and nobody asked for it since: released, as the stop released the rest
     return e;
   },function(err){ P.pend=Math.max(0,P.pend-est); if(P.files[f]===e) delete P.files[f]; throw err; });
   return e.p;
 }
-function need(name,keep){
+function need(name,keep,gen){
   return man().then(function(){
     var r=resolve(name,keep); if(!r) throw new Error("no cue "+name);
     if(r.c.kind==="stream") return r;
-    return decode(r.name,r.c).then(function(e){ r.e=e; return r; });
+    return decode(r.name,r.c,gen).then(function(e){ r.e=e; return r; });
   });
 }
 function grid(){ var C=ac(), t=C?C.currentTime:0; if(BED&&BED.grid) return BED.grid; if(GRID&&GRID.until>t) return GRID; return null; }
@@ -193,7 +201,9 @@ function play(r,o){
   if(c.bpm&&c.bar&&len>3) GRID={t0:when,bar:c.bar,until:start+len};
   return when;
 }
-function cue(name,o){ return need(name).then(function(r){ if(!ac()) throw new Error("audio not started"); if(r.c.kind==="stream") throw new Error(name+" is streamed: bed()"); return play(r,o||{}); }); }
+/* a cue or a bed asked for before the last stop() (the race) is stale when its file lands: it never plays */
+function stale(name){ var e=new Error(name+": Sound.show.stop() came first"); e.stale=true; return e; }
+function cue(name,o){ var gen=P.gen; return need(name,false,gen).then(function(r){ if(P.gen!==gen) throw stale(name); if(!ac()) throw new Error("audio not started"); if(r.c.kind==="stream") throw new Error(name+" is streamed: bed()"); return play(r,o||{}); }); }
 function ready(name){ var m=P.man; if(!m) return false; var c=m.cues[name]||(m.groups&&m.groups[name]&&P.drawn[name]&&m.cues[P.drawn[name]]); var e=c&&P.files[c.file]; return !!(e&&e.buf); }
 function readyNow(name){ var m=P.man, c=m&&m.cues[name], e=c&&P.files[c.file]; return e&&e.buf?{name:name,c:c,e:e}:null; }
 
@@ -205,12 +215,16 @@ function pickBar(name,n){ var k=Math.floor(Math.random()*n); if(n>1&&k===P.lastB
 function bed(name,o){
   o=o||{};
   if(name==null) return Promise.resolve(bedOff(o));
+  var gen=P.gen;
   return man().then(function(m){
+    if(P.gen!==gen) throw stale(name);
     var gr=m.groups&&m.groups[name], first=gr?m.cues[(gr.alts||[])[0]]:null;
     if((gr&&first&&first.kind==="stream")||(m.cues[name]&&m.cues[name].kind==="stream")) return stream(name,o);
-    return need(name).then(function(r){
+    return need(name,false,gen).then(function(r){
       var C=ac(); if(!C) throw new Error("audio not started");
+      if(P.gen!==gen) throw stale(name);
       var c=r.c, e=r.e; if(c.kind!=="bed") throw new Error(r.name+" is not a bed");
+      synthOff();   // a decoded bed takes over from a refused stream's stand-in
       var pre=c.pre||0, t=C.currentTime, G=grid(), when=G?nextOn(G,true,t+pre+0.015):t+0.06;
       var n=c.bars||1, k=o.bar!=null?((o.bar%n)+n)%n:pickBar(r.name,n), off=c.beat0+e.dl+k*c.bar;
       var src=C.createBufferSource(), lvl=dbl(c.gainDb)*(o.gain!=null?o.gain:1);
@@ -228,7 +242,7 @@ function bed(name,o){
   });
 }
 function bedOff(o){
-  var b=BED, C=ac(); BED=null; killStreams(null,o.fade);
+  var b=BED, C=ac(); BED=null; killStreams(null,o.fade); synthOff();
   if(!b||!C) return C?C.currentTime:0;
   if(o.end&&b.c.end){
     var pre=b.c.endPre!=null?b.c.endPre:(b.c.pre||0), when=nextOn(b.grid,true,C.currentTime+pre+0.015), e=b.e;
@@ -255,24 +269,59 @@ function stream(name,o){
   startStream(r,name==="menu",o);
   return Promise.resolve(t);
 }
+/* the streams' media elements: kept and reused (up to 3, each with its one MediaElementSource); a browser that wants a gesture for each element lets
+   one that was loaded inside a tap or a key play later without one (bless(), from the gesture listener below) */
+var POOL=P.pool=[];   // (on Sound.show._p for the tests)
+function mediaEl(){
+  for(var i=0;i<POOL.length;i++) if(!POOL[i].busy) return POOL[i];
+  var x={a:new g.Audio(),node:null,busy:false}; if(POOL.length<3) POOL.push(x); return x;   // (all 3 busy, in a cross-fade: a one-off element)
+}
+function bless(){ while(POOL.length<3) POOL.push({a:new g.Audio(),node:null,busy:false}); POOL.forEach(function(x){ if(!x.busy){ try{ x.a.load(); }catch(e){} } }); }
+/* the stand-in for a stream that cannot play (refused without a gesture, or offline and never cached): today's synthesized playlist */
+function synthOn(){ if(P.synth) return; P.synth=true; try{ S.music("mxwar"); }catch(e){} }
+function synthOff(){ if(!P.synth) return; P.synth=false; try{ S.stop(); }catch(e){} }
+function playSt(st){
+  var p; try{ p=st.a.play(); }catch(e){ return; }
+  if(p&&p.then) p.then(function(){ if(STREAMS.indexOf(st)<0) return; if(P.blocked===st) P.blocked=null; synthOff(); },
+    function(err){ if(err&&err.name==="NotAllowedError"&&STREAMS.indexOf(st)>=0){ P.blocked=st; synthOn(); } });   // (an AbortError: a pause or a new source came first)
+}
 function startStream(r,isMenu,o){
-  var C=ac(), a, node, lvl=dbl(r.c.gainDb)*(o&&o.gain!=null?o.gain:1);
-  try{ a=new g.Audio(); a.preload="auto"; a.src=BASE+P.id+"/"+r.c.file; node=C.createMediaElementSource(a); }catch(e){ return null; }
+  var C=ac(), x, a, node, lvl=dbl(r.c.gainDb)*(o&&o.gain!=null?o.gain:1);
+  try{ x=mediaEl(); a=x.a; a.preload="auto"; a.src=BASE+P.id+"/"+r.c.file; if(!x.node) x.node=C.createMediaElementSource(a); node=x.node; }catch(e){ return null; }
+  x.busy=true;
   var gn=C.createGain(), fd=C.createGain(); node.connect(gn); gn.connect(fd); fd.connect(busOf(r.c,o));
-  var st={a:a,node:node,g:gn,fd:fd,fo:null,end:Infinity,name:r.name,lvl:lvl,menu:isMenu};
+  var st={x:x,a:a,node:node,g:gn,fd:fd,fo:null,end:Infinity,name:r.name,lvl:lvl,menu:isMenu,done:false};
   STREAMS.push(st);
   var t=C.currentTime; gn.gain.setValueAtTime(0,t); gn.gain.linearRampToValueAtTime(lvl,t+0.08);
-  a.addEventListener("ended",function(){ var live=STREAMS.indexOf(st)>=0; endStream(st); if(live&&isMenu&&!STREAMS.length){ var nx=resolve("menu"); if(nx) startStream(nx,true,o); } });
-  a.addEventListener("error",function(){ var live=STREAMS.indexOf(st)>=0; endStream(st); if(live&&isMenu&&!STREAMS.length){ try{ S.music("mxwar"); }catch(e){} } });   // offline and not cached: the playlist of today
-  if(!hidden()){ try{ var p=a.play(); if(p&&p.catch) p.catch(function(){}); }catch(e){} }
+  a.onended=function(){ var live=STREAMS.indexOf(st)>=0; endStream(st); if(live&&isMenu&&!STREAMS.length){ var nx=resolve("menu"); if(nx) startStream(nx,true,o); } };
+  a.onerror=function(){ var live=STREAMS.indexOf(st)>=0; endStream(st); if(live&&!STREAMS.length) synthOn(); };   // offline and not cached: the playlist of today
+  if(!hidden()) playSt(st);
   return st;
 }
-function endStream(st){ var i=STREAMS.indexOf(st); if(i>=0) STREAMS.splice(i,1); try{ st.a.pause(); }catch(e){} try{ st.node.disconnect(); st.g.disconnect(); st.fd.disconnect(); }catch(e){} try{ st.a.removeAttribute("src"); st.a.load(); }catch(e){} }
+/* once per stream (a cross-fade's timer can come after its 'ended'): the element goes back to the pool silent and empty */
+function endStream(st){
+  var i=STREAMS.indexOf(st); if(i>=0) STREAMS.splice(i,1); if(P.blocked===st) P.blocked=null;
+  if(st.done) return; st.done=true;
+  var a=st.a; a.onended=null; a.onerror=null;
+  try{ a.pause(); }catch(e){} try{ st.node.disconnect(); st.g.disconnect(); st.fd.disconnect(); }catch(e){} try{ a.removeAttribute("src"); a.load(); }catch(e){}
+  if(st.x) st.x.busy=false;
+}
 function killStreams(when,ms){
   var C=ac(); if(!C) return; var t=C.currentTime, f=Math.max(0.02,(ms!=null?ms:600)/1000), t1=when!=null?Math.max(t+0.02,when):t+f, t0=Math.max(t,t1-f);
   STREAMS.slice().forEach(function(st){ STREAMS.splice(STREAMS.indexOf(st),1); fadeOut(st,t0,t1); setTimeout(function(){ endStream(st); },Math.max(0,(t1-t)*1000+60)); });
 }
-if(g.document) g.document.addEventListener("visibilitychange",function(){ STREAMS.forEach(function(st){ try{ if(hidden()) st.a.pause(); else { var p=st.a.play(); if(p&&p.catch) p.catch(function(){}); } }catch(e){} }); });
+if(g.document){
+  g.document.addEventListener("visibilitychange",function(){ STREAMS.forEach(function(st){ try{ if(hidden()) st.a.pause(); else playSt(st); }catch(e){} }); });
+  /* a tap or a key while Motocross War is up (the broadcast profile): the idle elements are blessed inside the gesture, and a refused stream plays now
+     (its stand-in stops when it starts). Only the events that carry the user's activation (a touch's start does not). */
+  ["keydown","mousedown","pointerup","touchend","click"].forEach(function(ev){ g.document.addEventListener(ev,function(e){
+    if(ev==="pointerup"&&e.pointerType==="mouse") return;
+    if(!S.mix.get||S.mix.get()!=="broadcast") return;
+    bless();
+    var st=P.blocked, C=ac();
+    if(st&&STREAMS.indexOf(st)>=0&&C&&!hidden()){ P.blocked=null; try{ var t=C.currentTime; st.g.gain.cancelScheduledValues(t); st.g.gain.setValueAtTime(0,t); st.g.gain.linearRampToValueAtTime(st.lvl,t+0.3); }catch(x){} playSt(st); }
+  },true); });
+}
 
 function stop(o){
   o=o||{}; var C=ac(), f=Math.max(0.03,((o.fade!=null?o.fade:250)/1000)*0.8), t=C?C.currentTime:0;
@@ -281,7 +330,7 @@ function stop(o){
     all.forEach(function(x){ fadeOut(x,t,t+f); });
     killStreams(t+f,f*1000);
   }
-  var gen=++P.gen; P.drawn={};
+  var gen=++P.gen; P.drawn={}; P.blocked=null; synthOff();   // (a refused stream's stand-in stops too)
   setTimeout(function(){ if(P.gen===gen) release(!!o.all); },Math.round((f+0.1)*1000));
   return t+f;
 }
@@ -306,9 +355,9 @@ MXW.Sfx={
     S.sfx(dir==="out"?"mxReplayOut":"mxReplayIn"); return "synth";
   },
   cue:function(name){
-    if(name==="menu"){ if(P.man){ bed("menu").catch(function(){ S.music("mxwar"); }); return "pkg"; } S.music("mxwar"); return "synth"; }
+    if(name==="menu"){ if(P.man){ bed("menu").catch(function(e){ if(!(e&&e.stale)) synthOn(); }); return "pkg"; } S.music("mxwar"); return "synth"; }
     var old={checkered:"win",podium:"win",war:"cannon"}[name]; if(!old) return "none";
-    if(readyNow(name)||(P.man&&name==="podium")){ cue(name).catch(function(){ S.sfx(old); }); return "pkg"; }
+    if(readyNow(name)||(P.man&&name==="podium")){ cue(name).catch(function(e){ if(!(e&&e.stale)) S.sfx(old); }); return "pkg"; }
     S.sfx(old); if(P.man) need(name,true).catch(function(){}); return "synth";
   }
 };
