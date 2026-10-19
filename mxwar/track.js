@@ -385,7 +385,7 @@ function create(host,opt){
   };
   /* a lap's cards are turned (battle n decided): the leader may ride on to the end of lap n (reduced motion: drawn where they stand) */
   V.lap=function(n,len){
-    if(V.mdl){ if(len) V.lapsN=len; poll(); if(motion()==="off"){ var lim0=limitMs(); if(!isFinite(lim0)) lim0=V.mdl.tm.flag; V.ct=Math.max(V.ct,lim0); fire(V.ct); } V.dirty=true; if(!V.run) drawFrame(true); return; }
+    if(V.mdl){ if(len) V.lapsN=len; poll(); if(motion()==="off"&&!beatOn()){ var lim0=limitMs(); if(!isFinite(lim0)) lim0=V.mdl.tm.flag; V.ct=Math.max(V.ct,lim0); fire(V.ct); } V.dirty=true; if(!V.run) drawFrame(true); return; }
     advance(now());
     if(n>V.laps){ V.laps=n; V.lapT=now(); }
     if(len) V.lapsN=len;
@@ -405,12 +405,17 @@ function create(host,opt){
   V.setRed=function(s){ V.riders.forEach(function(r){ var on=r.s===s; if(on!==r.red){ r.red=on; r.plate=null; } }); V.dirty=true; };
   /* the race clock runs while the race is on screen or only covered by the board (the Menu pauses it) */
   V.setLive=function(on){ on=!!on; if(on&&!V.live) V.lt=now(); V.live=on; };
-  function timed(){ return (!!V.C||!!V.mdl)&&V.live&&motion()!=="off"; }   /* (a race with a time model has its clock without a drawn course: the 3D race rides it while this canvas rests) */
-  /* ms until the leader starts the lap whose cards are next (0 = now; -1 = no riding clock: reduced motion, no track, paused) */
+  /* mxbeat: a beat race (G.tm.v 4, MXWar.Beat) keeps its race clock under reduced motion too (the CEO's 10-second rule is time, not animation: only the
+     drawing rests, a still frame every 2 s) */
+  function beatOn(){ return !!(V.mdl&&V.mdl.tm&&V.mdl.tm.v===4&&MX.Beat); }
+  function timed(){ return beatOn()?V.live:(!!V.C||!!V.mdl)&&V.live&&motion()!=="off"; }   /* (a race with a time model has its clock without a drawn course: the 3D race rides it while this canvas rests) */
+  /* ms until the leader starts the lap whose cards are next (0 = now; -1 = no riding clock: reduced motion, no track, paused).
+     mxbeat: a beat race: ms of race clock to the NEXT LOCK (the next beat's cards turn 1 s before its window: MXWar.Beat.nextLock), 0 when it is reached */
   V.ready=function(){
     advance(now());
     if(!timed()) return -1;
     if(V.phase==="gate") return 0;
+    if(beatOn()){ poll(); var lk=MX.Beat.nextLock(V.mdl); return !isFinite(lk)||lk<=V.ct?0:Math.ceil((lk-V.ct)/V.rate); }
     if(V.mdl){ poll(); var lim=limitMs(); return V.mdl.tm.done||lim<=V.ct?0:Math.round((lim-V.ct)/V.rate)+30; }   /* ms of the clock to the leader's line: then the next lap's cards turn */
     var line=V.pFin+V.laps;
     if(V.X<line-1.02){ V.X=Math.max(V.X,line-0.3); V.riders.forEach(function(r){ if(!r.cr) r.off=r.offT; }); laneCheck(true); }   /* the race ran on unwatched: catch up */
@@ -484,8 +489,30 @@ function create(host,opt){
   function xOfPr(pr){ return pr<=1?V.pGate+pr*(V.pFin+1-V.pGate):V.pFin+pr; }
   function xOfLap(k,ph){ return k<=1?V.pGate+ph*(V.pFin+1-V.pGate):V.pFin+(k-1)+ph; }
   function limitMs(){ return V.mdl?MX.Time.clockLimit(V.mdl):0; }
-  /* the lap decided since the last look: its events are put on the clock */
-  function poll(){ if(!V.mdl) return; var tm=V.mdl.tm; while(V.seenK<tm.k){ V.seenK++; enqueue(V.seenK); } }
+  /* the lap decided since the last look: its events are put on the clock (mxbeat: the beat decided, its window's events) */
+  function poll(){ if(!V.mdl) return; var tm=V.mdl.tm; while(V.seenK<tm.k){ V.seenK++; if(beatOn()) enqueueBeat(V.seenK); else enqueue(V.seenK); } }
+  /* mxbeat: the events of beat b's window [lo, hi) on the race clock: the leader starts a lap ("lap"), every rider's line ("line"), a bike goes down
+     ("down", a remount's "up"), a crash-out, out of cards ("pits"), the yellow flag on / off, and the beat's own stories (pass, lapped, fastest, the timed
+     race's boards: timeup, twotogo, lastlap, and the checkered flag at the winner's line: flagfall). A window is final once decided. */
+  function enqueueBeat(b){
+    var B=MX.Beat, rc=V.mdl, tm=rc.tm, n=rc.n, lo=B.winAt(tm,b), hi=lo+B.D, s, i, R;
+    if(b===(tm.k0|0)+1&&!(tm.g0>0)) push({t:0,e:"lap",k:1});                                                     /* the gate: lap 1 */
+    for(var j=1;;j++){ var ll=B.leaderLine(rc,j); if(ll==null) break; if(ll>=lo&&ll<hi) push({t:ll,e:"lap",k:j+1}); else if(ll>=hi) break; }   /* the leader starts lap j+1 */
+    for(s=0;s<n;s++){
+      R=tm.r[s];
+      for(i=0;i<R.T.length;i++) if(R.T[i]>=lo&&R.T[i]<hi) push({t:R.T[i],e:"line",s:s,k:i+1});
+      R.hold.forEach(function(h){ if(h[0]>=lo&&h[0]<hi){ var lap=Math.floor(h[2]/B.U)+1; push({t:h[0],e:"down",s:s,k:lap,kind:"remount",at:h[2]/B.U-(lap-1),ms:h[1]-h[0]}); push({t:h[1],e:"up",s:s,k:lap}); } });
+      if(R.dnf&&R.dnf.t>=lo&&R.dnf.t<hi&&!R.gone){ if(R.dnf.why==="crash") push({t:R.dnf.t,e:"down",s:s,k:R.dnf.lap,kind:"out",at:R.dnf.at}); else push({t:R.dnf.t,e:"pits",s:s,k:R.dnf.lap}); }
+    }
+    tm.yz.forEach(function(y){ if(y.t0>=lo&&y.t0<hi){ push({t:y.t0,e:"yellowOn",lap:y.lap,c:y.c,by:(y.by||[]).slice()}); push({t:y.t1,e:"yellowOff",lap:y.lap}); } });
+    B.events(rc,b).forEach(function(e){
+      if(e.e==="pass") push({t:e.t,e:"pass",k:e.lap,a:e.a,d:e.d,pos:e.pos,at:e.at,crash:e.crash||0});
+      else if(e.e==="lapped") push({t:e.t,e:"lapped",s:e.s,by:e.by,k:b});
+      else if(e.e==="fastest") push({t:e.t,e:"fastest",s:e.s,k:e.k,time:e.time});
+      else if(e.e==="timeup"||e.e==="twotogo"||e.e==="lastlap"||e.e==="flagfall") push(Object.assign({},e));
+      else if(e.e==="lead") push({t:e.t,e:"lead",s:e.s,from:e.from});
+    });
+  }
   function push(e){ e.o=V.qn++; V.q.push(e); V.qdirty=true; }
   function lappedAt(lead,s,k){
     var tm=V.mdl.tm, lo=k>1?tm.r[lead].T[k-2]:0, hi=tm.r[lead].T[k-1], W=V.walk;
@@ -535,13 +562,22 @@ function create(host,opt){
     fire(V.ct);
   }
   function advanceModel(t){
-    if(!V.live||V.phase==="gate"||motion()==="off"){ V.lt=t; return; }
+    if(!V.live||V.phase==="gate"||(motion()==="off"&&!beatOn())){ V.lt=t; return; }
     var dt=t-(V.lt||t); V.lt=t; if(dt<=0) return; if(dt>20000) dt=20000;
     while(dt>0){ var d=Math.min(dt,40); stepModel(d); dt-=d; }
   }
   /* a race picked up again (Continue, a new screen): the clock starts where the leader starts the lap now riding */
   function resumeClock(){
     var T=MX.Time, rc=V.mdl, tm=rc.tm, ct0=tm.done?tm.flag:(tm.k>=2?(T.leaderLine(rc,tm.k-1)||0):0);
+    if(beatOn()){   /* mxbeat: the clock restarts at the start of the last window decided (its 10 s ride on; the next lock comes 9 s later) */
+      var B=MX.Beat; ct0=tm.done?(tm.flag!=null?tm.flag:0):B.winAt(tm,Math.max(1,tm.k)); if(tm.k0&&!tm.done&&tm.k===tm.k0) ct0=tm.g0|0;
+      V.ct=ct0; V.seenK=Math.max(tm.k0|0,tm.k-1); V.q=[]; V.qi=0; V.qn=0; V.yel=null; V.pct=null;
+      var lp=0; while(B.leaderLine(rc,lp+1)!=null&&B.leaderLine(rc,lp+1)<=ct0) lp++; V.lapSeen=lp+(ct0>0||tm.k>0?1:0);
+      if(!tm.done&&tm.k>0) poll();
+      V.q=V.q.filter(function(e){ return e.t>=ct0||e.e==="yellowOff"; });
+      tm.yz.forEach(function(y){ if(y.t0<=ct0&&ct0<y.t1) V.yel={c:xOfLap(y.lap-1,y.c),until:1e12,t0:now(),lap:y.lap}; });
+      V.qdirty=true; fire(ct0-1); return;
+    }
     V.ct=ct0; V.seenK=Math.max(0,tm.k-1); V.q=[]; V.qi=0; V.qn=0; V.yel=null; V.lapSeen=Math.max(0,tm.k-1); V.pct=null;
     if(!tm.done&&tm.k>0) poll();
     V.q=V.q.filter(function(e){ return e.t>=ct0||e.e==="yellowOff"; });
@@ -607,6 +643,7 @@ function create(host,opt){
     V.raf=0; if(!V.run) return;
     if(document.hidden){ V.run=false; return; }
     var mo=motion();
+    if(mo==="off"&&beatOn()){ advance(now()); drawFrame(true); V.raf=0; clearTimeout(V.offT); V.offT=setTimeout(function(){ V.offT=0; if(V.run&&!V.raf) V.raf=requestAnimationFrame(tick); },2000); return; }   /* mxbeat: reduced motion: the clock runs, a still frame every 2 s */
     if(mo==="off"){ V.run=false; drawFrame(true); return; }
     var dt=V.last?Math.min(100,t-V.last):16;
     if((mo==="reduced"||V.half)&&V.last&&t-V.last<31){ V.raf=requestAnimationFrame(tick); return; }
@@ -615,8 +652,8 @@ function create(host,opt){
     if(!V.half&&mo==="full"){ V.fs2=(V.fs2||0)+1; V.ft=(V.ft||0)+dt; V.fc=(V.fc||0)+cost; if(V.fs2>=90){ if(V.ft/V.fs2>22||V.fc/V.fs2>8) V.half=true; V.fs2=0; V.ft=0; V.fc=0; } }
     V.raf=requestAnimationFrame(tick);
   }
-  V.start=function(){ if(V.run) return; if(document.hidden) return; if(motion()==="off"){ drawFrame(true); return; } V.run=true; V.last=0; V.raf=requestAnimationFrame(tick); };
-  V.stop=function(){ V.run=false; if(V.raf){ cancelAnimationFrame(V.raf); V.raf=0; } };
+  V.start=function(){ if(V.run) return; if(document.hidden) return; if(motion()==="off"&&!beatOn()){ drawFrame(true); return; } V.run=true; V.last=0; V.raf=requestAnimationFrame(tick); };
+  V.stop=function(){ V.run=false; if(V.raf){ cancelAnimationFrame(V.raf); V.raf=0; } if(V.offT){ clearTimeout(V.offT); V.offT=0; } };
   document.addEventListener("visibilitychange",function(){ if(document.hidden) V.stop(); else if(V.want) V.start(); });
   V.want=false;
   V.show=function(on){ V.want=!!on; if(on) V.start(); else V.stop(); };
