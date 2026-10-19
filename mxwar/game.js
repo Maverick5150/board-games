@@ -675,8 +675,10 @@ function heroSync(){
 }
 /* TV: the start dock (the same #startDock the phone keeps sticky at the foot) sits in the poster's rail: the rail's slot takes the dock's height and the dock the slot's
    place, measured (the labels, the Continue / Resume button and the fonts change its height), so the shortcut rows under it never meet it */
-var railRO=null;
-function railSync(){
+var railRO=null, railRaf=0;
+/* measured once a frame, before it paints (never inside the page's own DOM writes: a forced layout there cost the TV a long task at load) */
+function railSync(){ if(railRaf) return; var go=function(){ railRaf=0; railNow(); }; railRaf=window.requestAnimationFrame?requestAnimationFrame(go):setTimeout(go,16); }
+function railNow(){
   var setup=$("setup"), hero=$("hero"), dock=$("startDock"), slot=hero?hero.querySelector(".mx-hero__slot"):null;
   if(!setup||!hero||!dock||!slot) return;
   if(!onTV()){ hero.style.removeProperty("--dock-h"); setup.style.removeProperty("--dock-top"); return; }
@@ -984,8 +986,12 @@ function renderSeason(){
 function fitRows(id,min,note){
   var l=$(id), p=l&&l.closest(".mx-panel"), nt=note?$(note):null; if(!p||!onTV()) return;
   var li=[].slice.call(l.children), gap=-1; li.forEach(function(x,i){ x.hidden=false; if(gap<0&&i>0&&x.classList.contains("is-gap")) gap=i; });
-  if(nt){ nt.hidden=false; if(p.scrollHeight>p.clientHeight+1) nt.hidden=true; }   /* (the table's note goes before its rows) */
-  for(var end=gap>0?gap-1:li.length-1;end>=min&&p.scrollHeight>p.clientHeight+1;end--) li[end].hidden=true;
+  if(nt) nt.hidden=false;
+  /* every height read in one layout, then the rows hidden (no layout per row) */
+  var over=p.scrollHeight-p.clientHeight; if(over<=1) return;
+  var ntH=nt?nt.offsetHeight+(parseFloat(getComputedStyle(nt).marginTop)||0):0, hs=li.map(function(x){ return x.offsetHeight; });
+  if(nt){ nt.hidden=true; over-=ntH; }   /* (the table's note goes before its rows) */
+  for(var end=gap>0?gap-1:li.length-1;end>=min&&over>1;end--){ li[end].hidden=true; over-=hs[end]; }
 }
 function realTop(k){ return G.roster.map(function(id){ return G.riders[id]; }).filter(function(R){ return R.pos!=null; }).sort(function(a,b){ return a.pos-b.pos; }).slice(0,k).map(function(R){ return R.name; }).join(", "); }
 function setBtn(b,text,ic){ b.innerHTML=(ic?icon(ic):"")+esc(text); }
@@ -1128,10 +1134,10 @@ function introSync(){
       if(live&&pop&&!lis[i].classList.contains("is-live")&&lis[i].animate) try{ lis[i].animate([{transform:"scale(.9)"},{transform:"scale(1)"}],{duration:160,easing:"cubic-bezier(.2,.8,.2,1)"}); }catch(e){}   /* (the new live stage pops) */
       lis[i].classList.toggle("is-live",live); lis[i].classList.toggle("is-done",st>=0&&i<st);
     }
-    if(cityCh&&!show) introFit();
+    if(cityCh&&!show&&window.requestAnimationFrame) requestAnimationFrame(introFit);
   }
   if(show){
-    el.hidden=false; document.body.classList.add("mx-intro-on"); introFit();
+    el.hidden=false; document.body.classList.add("mx-intro-on"); if(window.requestAnimationFrame) requestAnimationFrame(introFit); else introFit();   /* (fitted in the frame's own layout) */
     var m=introMotion(); if(m&&el.animate) try{ el.animate(m===2?[{opacity:0,transform:"translateY(-10px)"},{opacity:1,transform:"none"}]:[{opacity:0},{opacity:1}],{duration:280,easing:"cubic-bezier(.2,.8,.2,1)"}); }catch(e){}
   }
 }
