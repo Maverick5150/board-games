@@ -235,7 +235,7 @@ function create(o){
   var RS={}, ctx=null, own=null, G=null, core=null, loadP=null, dead=false, held=false, inReplay=false, lineOn=false, lineLv=0, lineEnd=0;
   var seed=(o.seed>>>0)||((Date.now()&0xffff)+1), rnd=rngOf(seed);
   var EX=new Excite({main:o.main!==false}), revs={}, cur=[-1,-1,-1,-1], gateSt=null, lastSnapT=-1, lastWall=0, frames=0, lastE=0;
-  var passes=[], recent={}, lastReact=-1e9, reacts=[], pendingFollow=[], nodes={n:0,max:0}, stats={frames:0,ms:0,msMax:0}, downSeen={}, lastJumpOoh=-1e9, remountDue=[];
+  var passes=[], recent={}, lastReact=-1e9, reacts=[], pendingFollow=[], nodes={n:0,max:0}, stats={frames:0,ms:0,msMax:0}, downSeen={}, lastJumpOoh=-1e9, remountDue=[], lastPassCheer=-1e9;
   var voiceState=[0,1,2,3].map(function(){ return {seat:-1,g:0,sw:0}; });
   var VREF=6, PANK=0.85;
 
@@ -418,6 +418,8 @@ function create(o){
     src.start(when,off); src.stop(when+dur+0.05);
     var P={seat:r.seat,end:when+dur,k:pick,at:when+(peak-off)/rate,b:+a.b.toFixed(2)};
     passes.push(P); recent[pick]=T; RS._log.push(["pass",+T.toFixed(3),r.seat,pick,+P.at.toFixed(3),P.b]);
+    /* the spectators at that corner: now and then a small cheer as he goes by */
+    if(P.b<5&&T-lastPassCheer>20&&rnd()<0.35){ lastPassCheer=T; pendingFollow.push({t:P.at-0.1,pool:"cheerS",db:-8}); }
     src.onended=function(){ try{ src.disconnect(); gn.disconnect(); if(pn) pn.disconnect(); }catch(e){} untrack(pn?3:2); };
   }
 
@@ -444,6 +446,7 @@ function create(o){
     src.onended=function(){ try{ src.disconnect(); gn.disconnect(); if(pn) pn.disconnect(); }catch(e){} untrack(pn?3:2); };
     return {src:src,g:gn,end:T+dur};
   }
+  function poolKey(k){ var m=core&&core.m&&core.m.pools; if(m) for(var p in m) if(m[p].indexOf(k)>=0) return p; return ""; }
   /* the crowd's answer to a moment of size lv (0..3) */
   function react(kind,lv,T,info){
     if(!G||!core||lv<=0) return;
@@ -464,7 +467,8 @@ function create(o){
       if(lv>=3&&(kind==="lead"||kind==="checkered"||kind==="photo")) horns(T+0.25,kind==="checkered"?3:1);
       if(kind==="checkered"&&era.venue==="stadium") pyro(T+0.4);
     }
-    lastReact=T; reacts.push([+T.toFixed(3),kind,lv,k||null]); RS._log.push(["react",+T.toFixed(3),kind,lv,k||null]);
+    var big=!!(k&&/^(roar|cheerL|ooh)/.test(poolKey(k)));
+    lastReact=T; reacts.push([+T.toFixed(3),kind,lv,k||null,big]); RS._log.push(["react",+T.toFixed(3),kind,lv,k||null]);
   }
   /* the PA's air horn (synthesized: two detuned saws through a band-pass), n blasts */
   function horns(T,n){
@@ -594,7 +598,11 @@ function create(o){
     if(dead||!G) return;
     var T=ctx.currentTime; lv=lv|0;
     if(on){ lineOn=true; lineLv=lv; lineEnd=0;
-      if(lv>=3&&!reacts.some(function(x){ return x[0]>T-1&&x[2]>=2&&x[3]; })){ react("huge",3,T+0.05,{force:true}); EX.kick(IMP.huge); }
+      if(lv>=3&&!reacts.some(function(x){ return x[0]>T-1&&x[4]; })){   /* no big reaction in the last second: one now, the big "ooooh" after a crash, else the roar */
+        var lastK=null; for(var q=reacts.length-1;q>=0&&reacts[q][0]>T-2.5;q--){ lastK=reacts[q][1]; break; }
+        if(lastK==="crash"||lastK==="out"){ var ko=draw("ooh",T)||draw("roar",T); if(ko){ shot(ko,T+0.05,{db:-1,pan:0}); reacts.push([+T.toFixed(3),"huge",3,ko,true]); RS._log.push(["react",+T.toFixed(3),"huge-ooh",3,ko]); lastReact=T; } }
+        else react("huge",3,T+0.05,{force:true});
+        EX.kick(IMP.huge); }
     } else { lineOn=false; lineEnd=T; }
     if(own){ set(own.duck.gain,on?dbl(lv>=3?-3:-5):1,T,on?0.12:0.6); set(own.pocket.gain,on?-4:0,T,on?0.12:0.6); }
   };
