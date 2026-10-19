@@ -405,7 +405,7 @@ function create(host,opt){
   V.setRed=function(s){ V.riders.forEach(function(r){ var on=r.s===s; if(on!==r.red){ r.red=on; r.plate=null; } }); V.dirty=true; };
   /* the race clock runs while the race is on screen or only covered by the board (the Menu pauses it) */
   V.setLive=function(on){ on=!!on; if(on&&!V.live) V.lt=now(); V.live=on; };
-  function timed(){ return !!V.C&&V.live&&motion()!=="off"; }
+  function timed(){ return (!!V.C||!!V.mdl)&&V.live&&motion()!=="off"; }   /* (a race with a time model has its clock without a drawn course: the 3D race rides it while this canvas rests) */
   /* ms until the leader starts the lap whose cards are next (0 = now; -1 = no riding clock: reduced motion, no track, paused) */
   V.ready=function(){
     advance(now());
@@ -535,7 +535,7 @@ function create(host,opt){
     fire(V.ct);
   }
   function advanceModel(t){
-    if(!V.C||!V.live||V.phase==="gate"||motion()==="off"){ V.lt=t; return; }
+    if(!V.live||V.phase==="gate"||motion()==="off"){ V.lt=t; return; }
     var dt=t-(V.lt||t); V.lt=t; if(dt<=0) return; if(dt>20000) dt=20000;
     while(dt>0){ var d=Math.min(dt,40); stepModel(d); dt-=d; }
   }
@@ -559,6 +559,8 @@ function create(host,opt){
   V.setRate=function(x){ V.rate=x>0?x:1; };
   V.setWait=function(on){ V.wait=!!on; };
   V.clock=function(){ return V.ct; };
+  /* the race clock brought up to now (ms): a view that draws this race somewhere else (the 3D race) asks every frame, so the clock runs while this canvas rests */
+  V.tick=function(){ advance(now()); return V.ct; };
   V.rows=function(){ return V.mdl&&V.walk?V.walk.rows(V.ct):null; };
   V.limit=function(){ return limitMs(); };
   /* a crash's timing, in ms of the clock it is drawn on (the clock of the model, or real time without one) */

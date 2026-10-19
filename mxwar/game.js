@@ -13,7 +13,14 @@
    - Saves after every action (Saves.auto "mxwar"); the season is plain JSON, so Continue resumes it exactly, mid-race too.
    - mxtime (the CEO, 2026-10-17: "the cards decide REAL lap times"): every battle is one lap with real seconds (time.js). The track rides the race clock
      (track.js model mode), the timing tower lists every rider live with the gap in seconds, the last lap and the laps down, and the YOU readout tells the
-     person after each lap what it was worth: seconds against a typical lap, the places, the reason (the card, the war, a fall, a rider in the way). */
+     person after each lap what it was worth: seconds against a typical lap, the places, the reason (the card, the war, a fall, a rider in the way).
+   - THE 3D RACE (mxlive, 2026-10-18; the view is race3d.js + r3d-*.js from the development branch mxvis, mxwar/CONTRACT.md): wherever WebGL2 works, phone
+     and TV alike, the race is drawn in 3D. It rides THE SAME race clock (track.js model mode keeps the clock and fires the events even while its canvas
+     rests; the view asks it every frame: V3.setModel), so the 3D riders are where the time model says, in the tower's order, crashing, remounting and
+     slowing under the yellow flag where it says; the cards, the tower, the YOU readout, the results and the announcers work exactly as with the 2D track.
+     The 2D track is the fallback: no WebGL2, ?gl=0, the Menu's Graphics = Classic 2D, a lost GPU, a device too slow at the lowest quality. The Menu's
+     Graphics row picks the quality (Auto / Fire TV / Balanced / High / Ultra) or Classic 2D, kept on this device; the camera button (and C or Play/Pause on
+     a remote) cycles the view's camera presets. Over the 3D picture the tower and the YOU card sit at the edges, clear of the hero camera's rider. */
 (function(){
 "use strict";
 var MX=window.MXWar, S=MX.Season, RC=MX.Race, RD=MX.Round, BR=MX.Brain, A=MX.Art, IDX=window.MXWarIndex;
@@ -49,7 +56,8 @@ var GLYPHS={
   helmet:'<path d="M4 14a8 8 0 0 1 16-1.5V15h-6.5L12 18H6.5A2.5 2.5 0 0 1 4 15.5z"/><path d="M13.5 12.5H20"/><path d="M8 8.5l3 1"/>',
   wheel:'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.2"/><path d="M12 4v5.8M12 14.2V20M4 12h5.8M14.2 12H20"/>',
   checkflag:'<path d="M5 21V4"/><path d="M5 4h13l-2.5 4L18 12H5"/><path d="M9 4v8M13 4v8M5 8h11"/>',
-  board:'<path d="M4.5 6h2.5M10 6h9.5M4.5 12h2.5M10 12h9.5M4.5 18h2.5M10 18h9.5"/>'
+  board:'<path d="M4.5 6h2.5M10 6h9.5M4.5 12h2.5M10 12h9.5M4.5 18h2.5M10 18h9.5"/>',
+  camera:'<rect x="3" y="7" width="12.5" height="10" rx="2"/><path d="M15.5 10.6l5-3.1v9l-5-3.1"/><circle cx="7.2" cy="10.4" r="1"/>'   /* the 3D race's camera button (original line art) */
 };
 var registered=false;
 function register(){
@@ -546,7 +554,7 @@ function syncRules(){
   $("rulesToggle").setAttribute("aria-expanded",String(open)); $("houseRules").hidden=!open; $("rulesLegend").hidden=!open;
 }
 $("rulesToggle").addEventListener("click",function(){ ui.rulesOpen=!ui.rulesOpen; syncRules(); });
-function drawSetup(){ fixSeason(); drawSeries(); drawSeasonCard(); drawRiders(); drawLength(); drawRules(); drawAnn(); $("skillNote").textContent=BR.skillNote; syncStart(); }
+function drawSetup(){ fixSeason(); drawSeries(); drawSeasonCard(); drawRiders(); drawLength(); drawRules(); drawAnn(); drawGfx(); $("skillNote").textContent=BR.skillNote; syncStart(); }
 function setSpeedSeg(){ cfg.speed=normSpeed(cfg.speed); window.bgGameSpeed=cfg.speed; if(BOOTH) BOOTH.setSpeed(cfg.speed); $("speedSeg").querySelectorAll("button").forEach(function(x){ var on=x.dataset.s===cfg.speed; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
 $("speedSeg").querySelectorAll("button").forEach(function(b){ b.addEventListener("click",function(){ cfg.speed=b.dataset.s; setSpeedSeg(); save(); drawLength(); }); });
 function setSkillSeg(){ cfg.skill=normSkill(cfg.skill); if(G&&G.o) G.o.skill=cfg.skill; $("skillSeg").querySelectorAll("button").forEach(function(x){ var on=x.dataset.k===cfg.skill; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
@@ -724,6 +732,7 @@ function lenWords(n){
 function lenSync(){
   var rc=ui.rc, T=track(); if(!rc||!G||rc!==G.race) return;
   if(T){ T.setPace(lapGuess()); if(T.setFirst) T.setFirst(firstMs()); if(rc.phase!=="gate") T.setLaps(rc.battle,rc.o.len); T.setFlag(rc.over?"checkered":(rc.phase!=="gate"&&rc.battle+1===rc.o.len?"white":null)); }
+  if(race3D()&&!busy){ ui.trk3=null; riders3D(); }   /* 3D: the race set again with its laps, placed where the clock is */
   ui.white=rc.phase!=="gate"&&rc.battle+1>=rc.o.len?gen+"|"+G.rkey:null;
   if(rc.phase!=="gate"&&!rc.over){ $("midBig").textContent="Lap "+Math.min(ui.lap,rc.o.len); $("midSmall").textContent="of "+rc.o.len; }   /* as drawDuel */
   chips();
@@ -738,7 +747,7 @@ function lenNotice(my){
   if(said.indexOf(id)>=0) return;
   setTimeout(function(){ if(my!==gen) return; toast(lenWords(n),{ms:5200}); said.unshift(id); try{ localStorage.setItem(LENK,JSON.stringify(said.slice(0,12))); }catch(e){} },2600);
 }
-function resetUI(){ ui.winShown=-1; ui.result=false; ui.finished=-1; ui.order=[]; ui.lastCards={}; ui.bikes={}; ui.pendRound=null; ui.pendSeason=null; ui.log=[]; ui.rc=null; ui.facts={}; ui.you={}; ui.factK=0; ui.twMark=null; TW.key=""; ui.rmap=null; ui.hs=null; ui.trkKey=null; disp=null; trackShow(); renderLog(); }
+function resetUI(){ ui.winShown=-1; ui.result=false; ui.finished=-1; ui.order=[]; ui.lastCards={}; ui.bikes={}; ui.pendRound=null; ui.pendSeason=null; ui.log=[]; ui.rc=null; ui.facts={}; ui.you={}; ui.factK=0; ui.twMark=null; TW.key=""; ui.rmap=null; ui.hs=null; ui.trkKey=null; ui.trk3=null; v3wait={}; disp=null; trackShow(); renderLog(); }
 function dressSaveBar(){
   var B=BG(), IC={ss:"save",ls:"load",std:"reset",sg:"save",lg:"load",au:"resume"};
   document.querySelectorAll("#svbar button[data-a]").forEach(function(b){
@@ -854,6 +863,7 @@ function teamTable(){
 }
 function renderSeason(){
   if(!G) return;
+  if(v3state==="off"&&want3D()&&!G.over) setTimeout(function(){ if(v3state==="off"&&want3D()) load3D(); },700);   /* the 3D race loads while the season shows, so the first race opens in 3D */
   var si=seasonInfo(G.sid), n=G.cal.length, L=S.standings(G), me=myId(), mine=me?L.filter(function(r){ return r.id===me; })[0]:null;
   $("seEyebrow").textContent=LONG[G.series]+" · "+G.cls+(G.status&&G.status!=="VERIFIED"?" · partly inferred":"");
   $("seTitle").textContent=G.year+" season";
@@ -922,7 +932,7 @@ function enterRace(){
   if(!G||G.over) return;
   if(!G.race){ var ev0=S.startRace(G); annFeed(ev0); }   /* the race event opens the show: the welcome, the intros, the engines */
   if(ui.gate){ try{ ui.gate.d.cancel(); }catch(e){} ui.gate=null; }
-  skipQ=false; ui.rc=G.race; ui.rmap=G.rmap.slice(); ui.label=raceLabel(); ui.hs=null; ui.lap=0; ui.lastWin=null; disp=null; ui.lastCards={}; ui.bikes={}; ui.order=[]; ui.flagged=false; ui.trkKey=null; ui.lapAt=0; ui.facts={}; ui.you={}; ui.factK=G.race.tm?G.race.tm.k:0; ui.twMark=null; TW.key="";
+  skipQ=false; ui.rc=G.race; ui.rmap=G.rmap.slice(); ui.label=raceLabel(); ui.hs=null; ui.lap=0; ui.lastWin=null; disp=null; ui.lastCards={}; ui.bikes={}; ui.order=[]; ui.flagged=false; ui.trkKey=null; ui.lapAt=0; ui.facts={}; ui.you={}; ui.factK=G.race.tm?G.race.tm.k:0; ui.twMark=null; TW.key=""; ui.trk3=null; v3wait={};
   save();
   setView("race");
   logLine((G.cal[G.ri].city||G.cal[G.ri].venue)+" "+ui.label+": "+ui.rc.n+" riders behind the gate.");
@@ -934,7 +944,99 @@ var GEO=null;
 /* v2: the arena's top part is the TRACK (track.js: the round's loop, every rider riding it in team colours, passes as ride-ups); the cards of
    the battle under it */
 var TRK=null;
+/* the 2D track draws the race when the 3D race is not on, and for a race with a time model it keeps THE race clock (model mode: the clock, its limit at the
+   next line, the events of the race in clock order) also while its canvas rests under the 3D picture: the 3D view rides that clock (riders3D) */
 function track(){ if(!TRK&&MX.Track){ try{ TRK=MX.Track.create($("lane")); window.__mxtrk=TRK; TRK.setPace(lapMs()); TRK.onLap=leaderLap; TRK.onYellow=function(){ chips(); }; TRK.onEvent=onTrackEvent; }catch(e){ TRK=null; } } return TRK; }
+
+/* ================= the 3D race (race3d.js, an ES module on the vendored three.js r160; mxwar/CONTRACT.md) =================
+   Loaded once, the first time a season or a race is shown, by a dynamic import made at run time (an old engine can't fail to parse this file); the classic
+   scripts it rides on (course.js, layouts.js, data/tracks.js) come just before it. V3 = the view: game.js drives it, the view only draws (V3.setModel: it
+   places every rider on the race clock of the time model). */
+var V3=null, v3state="off", v3gl=null, v3wait={};
+var GFX=[["auto","Auto"],["firetv","Fire TV"],["balanced","Balanced"],["high","High"],["ultra","Ultra"],["2d","Classic 2D"]], GFXK="bg_mxwar_gfx", CAMK="bg_mxwar_cam", SLOWK="bg_mxwar_gfx_slow";
+function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+function lsSet(k,v){ try{ if(v==null) localStorage.removeItem(k); else localStorage.setItem(k,String(v)); }catch(e){} }
+/* the Graphics choice on this device: "auto" | a quality tier | "2d" */
+function gfx(){ var v=lsGet(GFXK); return v==="2d"||v==="firetv"||v==="balanced"||v==="high"||v==="ultra"?v:"auto"; }
+/* a TV or the Android TV app's WebView: its Auto quality is the FIRE TV tier (the Fire TV Stick class) */
+function tvLike(){ return onTV()||/;\s*wv\)|\bAFT[A-Z0-9]/.test((navigator&&navigator.userAgent)||""); }
+/* the 3D race needs WebGL2 (race3d.js supported()); ?gl=0 in the address forces the 2D track */
+function webgl(){ if(v3gl!=null) return v3gl; try{ if(/[?&]gl=0(&|$)/.test(location.search)) return (v3gl=false); var c=document.createElement("canvas"), g=window.WebGL2RenderingContext&&c.getContext("webgl2"); v3gl=!!g; if(g){ var lc=g.getExtension("WEBGL_lose_context"); if(lc) lc.loseContext(); } }catch(e){ v3gl=false; } return v3gl; }
+function slowMarked(){ return !!lsGet(SLOWK); }
+function want3D(){ var g=gfx(); return g!=="2d"&&!(g==="auto"&&slowMarked())&&webgl(); }
+function use3D(){ return v3state==="on"&&!!V3&&!V3.lost&&want3D(); }
+/* the race on screen is drawn in 3D: the view is on and the race has a time model (its clock places the 3D riders; a race without one stays on the 2D track) */
+function race3D(){ return use3D()&&!!(ui.rc&&ui.rc.tm&&MX.Time&&MX.Time.walker); }
+/* the quality the view starts at (r3d-quality.js reads html[data-quality] when the view is made): the Menu's tier, or Auto (a TV: FIRE TV) */
+function qualityAttr(){ var g=gfx(), h=document.documentElement, q=g!=="auto"&&g!=="2d"?g:(tvLike()?"firetv":null); if(q) h.setAttribute("data-quality",q); else h.removeAttribute("data-quality"); }
+function loadScript(src){ return new Promise(function(res,rej){ var s=document.createElement("script"); s.src=src; s.async=false; s.onload=function(){ res(); }; s.onerror=function(){ s.remove(); rej(new Error("load "+src)); }; document.head.appendChild(s); }); }
+function load3D(){
+  if(v3state!=="off"||!want3D()) return;
+  var imp=null; try{ imp=new Function("u","return import(u)"); }catch(e){ imp=null; }
+  if(!imp){ v3state="failed"; return; }
+  v3state="loading"; qualityAttr();
+  var pre=MX.Course&&MX.Layouts&&window.MXWarTracks?Promise.resolve():Promise.all(["course.js","layouts.js","data/tracks.js"].map(loadScript));
+  pre.then(function(){ return imp(new URL("race3d.js",location.href).href); }).then(function(m){
+    if(!m||!m.supported||!m.supported()){ v3state="failed"; mode3D(); drawGfx(); return; }
+    try{ V3=m.create($("v3"),{onLap:function(){},onFinish:function(){},lost:lost3D,shown:shown3D,slow:slow3D}); window.__mxv3=V3; v3state="on"; var cm=lsGet(CAMK); if(cm&&V3.camMode) V3.camMode(cm); }
+    catch(e){ v3state="failed"; V3=null; try{ console.warn("mxwar: no 3D view",e); }catch(x){} }
+    mode3D(); drawGfx();
+    if(ui.view==="race"&&ui.rc&&!setupShown()){ ui.trk3=null; layoutArena(); trackRiders(); trackShow(); }
+  }).catch(function(e){ v3state="failed"; V3=null; mode3D(); drawGfx(); try{ console.warn("mxwar: the 3D view didn't load",e); }catch(x){} if(ui.view==="race"&&ui.rc&&!setupShown()){ layoutArena(); trackShow(); } });
+}
+/* the GPU went away (a lost WebGL context) or the device is too slow at the lowest quality: the race goes on on the 2D track, from where the clock is */
+function to2D(){ if(V3) try{ V3.show(false); }catch(e){} mode3D(); drawGfx(); if(ui.view==="race"&&ui.rc){ layoutArena(); trackRiders(); trackShow(); if(!busy) renderRace(); } }
+function lost3D(){ v3state="failed"; to2D(); }
+function slow3D(info){
+  if(v3state!=="on") return;
+  try{ console.warn("mxwar: the 3D race is too slow on this device: the 2D view",info&&info.why); }catch(e){}
+  if(gfx()==="auto") lsSet(SLOWK,Date.now());
+  v3state="slow"; to2D();
+  toast("The 3D race was too slow here: the race goes on in the classic 2D view (Menu, Graphics, to try 3D again).",{ms:5200});
+}
+/* the page's mode: body.mx-3d shows the 3D picture in the lane's place (index.html) and the camera button */
+function mode3D(){ var on=race3D(); document.body.classList.toggle("mx-3d",on); var b=$("camBtn"); if(b) b.hidden=!on; if(on) camLabel(); if(!on&&ui.std){ ui.std=false; document.body.classList.remove("mx-std"); } }
+/* the camera presets (the view's own list: Director, Chase, Broadcast, ...): the button over the picture, C or Play/Pause on a remote */
+function camName(){ if(!V3||!V3.camModes) return ""; var id=V3.camMode(), l=V3.camModes().filter(function(x){ return x.id===id; })[0]; return l?l.name:""; }
+function camLabel(){ var b=$("camBtn"), n=camName(); if(!b||!n) return; $("camName").textContent=n; b.setAttribute("aria-label","Camera: "+n+". Change the camera"); }
+function camNext(){ if(!race3D()||!V3.camNext) return; var id=V3.camNext(); lsSet(CAMK,id); camLabel(); toast("Camera: "+camName(),{icon:"info",ms:1400}); }
+/* the moments the 3D picture shows (hooks.shown: the holeshot into turn 1, a crash, a pass into the top 10, a lapped rider, the checkered flag): the
+   announcers call them as they show, and the page's own holeshot banner waits for it (seen3D) */
+function shown3D(kind,info){ if(!race3D()) return; annShown(kind,info); if(kind==="holeshot") v3wait.hsSeen=true; var w=v3wait[kind]; if(w){ v3wait[kind]=null; w.forEach(function(f){ try{ f(); }catch(e){} }); } }
+function seen3D(kind,ms){ return new Promise(function(res){ if(kind==="holeshot"&&v3wait.hsSeen){ res(); return; } var done=false, f=function(){ if(!done){ done=true; res(); } }; (v3wait[kind]=v3wait[kind]||[]).push(f); setTimeout(f,ms); }); }
+/* the Menu's Graphics row: Auto (this device's own choice; FIRE TV on a TV) / Fire TV / Balanced / High / Ultra / Classic 2D, kept on this device */
+function drawGfx(){
+  var box=$("gfxSeg"); if(!box) return;
+  var cur=gfx();
+  keepFocus(box,"data-gx",function(){
+    box.innerHTML=segHTML(GFX,cur,"data-gx");
+    box.querySelectorAll("button").forEach(function(b){ b.addEventListener("click",function(){ setGfx(b.getAttribute("data-gx")); }); });
+  });
+  $("gfxNote").textContent=gfxNote(cur);
+}
+function gfxNote(cur){
+  var dev=onTV()?"TV":"device";
+  if(cur==="2d") return "Classic 2D: the race on the flat track drawing. Pick a quality to watch it in 3D.";
+  if(!webgl()) return "This "+dev+" has no WebGL2, so the race uses the classic 2D view.";
+  if(cur==="auto"&&slowMarked()) return "The 3D race was too slow on this "+dev+", so Auto uses the classic 2D view. Pick a quality (or Auto again) to try 3D.";
+  if(v3state==="failed") return "The 3D view could not start here, so the race uses the classic 2D view.";
+  var q=null; try{ q=V3&&V3.quality?V3.quality():null; }catch(e){ q=null; }
+  var lab=q?(q.label||(V3.qualityLabel&&q.tier?V3.qualityLabel(q.tier):"")):"", ch=cur==="auto"?(lab?"Auto: "+lab+" on this "+dev+".":"Auto: the quality is chosen for this "+dev+(tvLike()?" (Fire TV on a TV)":"")+" when the race starts."):
+    ({firetv:"Fire TV: the lightest 3D, made for TV sticks (30 frames a second).",balanced:"Balanced: real shadows and the glow of the lights, for most phones.",high:"High: the full look, for new phones and good laptops.",ultra:"Ultra: everything at the highest detail, for strong graphics cards."})[cur];
+  return ch+" The resolution adapts by itself to keep the race smooth. The camera button over the race changes the camera.";
+}
+function setGfx(v){
+  if(v!=="auto"&&v!=="2d"&&!/^(firetv|balanced|high|ultra)$/.test(v)) v="auto";
+  lsSet(GFXK,v==="auto"?null:v); lsSet(SLOWK,null);
+  if(v3state==="slow") v3state=V3&&!V3.lost?"on":"off";
+  qualityAttr();
+  if(v!=="2d"){
+    if(v3state==="off") load3D();
+    else if(V3&&V3.setQuality&&!V3.lost){ try{ V3.setQuality(v==="auto"?(tvLike()?"firetv":"auto"):v); }catch(e){} }
+  }
+  ui.trk3=null; mode3D(); drawGfx();
+  if(ui.view==="race"&&ui.rc){ layoutArena(); trackRiders(); trackShow(); }
+}
 /* the track with a riding clock (null: reduced motion, no track, not on the race): its laps set the pace of the cards */
 function timedT(){ var T=track(); return T&&ui.rc&&ui.view==="race"&&T.ready()>=0?T:null; }
 /* the leader starts lap k: the lap counter, and the white flag as the last lap begins */
@@ -973,6 +1075,7 @@ function layoutArena(){
   GEO={W:W,H:H,laneH:H,cw:cw,tw:bw,th:bh};
   relabel();
   var T=track(); if(T){ T.setHole({w:small.w+edge,h:small.h+edge}); T.resize(); placeGate(); }
+  if(race3D()){ try{ V3.resize(); }catch(e){} }   /* the 3D picture fills the lane's place (#v3, index.html); its cameras frame the race themselves */
   return true;
 }
 /* the slot labels: full words in the big window, short ones in the small corner window */
@@ -1013,7 +1116,7 @@ function redId(){ if(!G) return null; var k=gen+"|"+G.results.length+"|"+G.ri; i
 /* the track's riders for this race (team colours, plates, the red plate, the people) */
 function trackRiders(){
   var T=track(), rc=ui.rc; if(!T||!rc) return;
-  var key=gen+"|"+G.ri+"|"+G.rkey; if(ui.trkKey===key) return;
+  var key=gen+"|"+G.ri+"|"+G.rkey; if(ui.trkKey===key){ riders3D(); return; }   /* (the 3D race may come later than the 2D track: the view loaded, the Menu's Graphics) */
   ui.trkKey=key;
   var c=G.cal[Math.min(G.ri,G.cal.length-1)], red=redId();
   T.setLayout(G.series==="mx"?"outdoor":"stadium",(c.venue||"")+"|"+(c.city||"")+"|"+G.year);
@@ -1030,7 +1133,28 @@ function trackRiders(){
   if(mm) T.setRate(modelRate(rc));
   ui.white=rc.phase!=="gate"&&rc.battle+1>=rc.o.len?gen+"|"+G.rkey:null;
   T.setFlag(rc.over?"checkered":(rc.phase!=="gate"&&rc.battle+1===rc.o.len?"white":null));
+  riders3D();
 }
+/* the 3D race for this race: the round's course (layouts.js) at the model's typical lap, the riders in team colours with their plates and names, the red
+   plate, the people, placed on THE race clock (the 2D track's, model mode: V3.setModel); a race picked up again mid-way is placed where its clock is */
+function riders3D(){
+  var rc=ui.rc; if(!rc||!G||!race3D()) return;
+  var key=gen+"|"+G.ri+"|"+G.rkey+"|"+rc.o.len; if(ui.trk3===key) return;
+  ui.trk3=key;
+  var c=G.cal[Math.min(G.ri,G.cal.length-1)], red=redId();
+  try{
+    V3.setRace({series:G.series,year:G.year,round:c.n||(G.ri+1),cal:c,len:rc.o.len,lapT:rc.tm.p||realLap(),
+      riders:rc.r.map(function(p,s){ var R=G.riders[seatId(s)], m=A.mk(R.bike); return {s:s,color:m[0],accent:m[0]==="#f2f4f8"?"#183a8c":(m[1]==="#0b0a12"?"#16161c":"#f2f2f6"),num:R.plate,name:R.name,red:R.id===red,me:R.kind==="human"}; })});
+    V3.setModel(rc,{clock:clock3D});
+  }catch(e){ try{ console.warn("mxwar: 3D race",e); }catch(x){} v3state="failed"; ui.trk3=null; to2D(); return; }
+  if(V3.warm){ try{ var w=V3.warm(); if(w&&w.catch) w.catch(function(){}); }catch(e){} }   /* every shader of the new race compiled now, while the gate shows (a weak GPU would hitch on the first frames) */
+  V3.setFlag(rc.over?"checkered":(rc.phase!=="gate"&&rc.battle+1===rc.o.len?"white":null));
+  camLabel();
+}
+/* the race clock for the 3D view: the 2D track's model clock brought up to now (it runs while the race is on screen; the Menu pauses it) */
+function clock3D(){ var T=TRK; return T&&T.tick?T.tick():0; }
+/* the race's real lap (season.js: the night's researched lap, the era's, or the track's estimate) */
+function realLap(){ if(G){ try{ return S.lapOf(G); }catch(e){} } return 0; }
 /* the race clock runs at real speed (1); a test that shortens the lap (Season.lapOf) runs it faster by the same factor */
 function modelRate(rc){ return Math.max(0.05,(rc.tm.p||55)/Math.max(0.5,lapSec())); }
 function modelOn(){ var T=TRK; return !!(T&&T.model&&T.model()&&ui.rc&&ui.rc.tm&&MX.Time); }
@@ -1051,7 +1175,15 @@ function trackSync(atGate){
   var order=ui.order.length?ui.order:rc.r.map(function(p,s){ return s; });
   T.update(order,counts,outs);
 }
-function trackShow(){ var T=track(); if(!T) return; var on=!!(G&&ui.rc&&ui.view==="race"&&!setupShown()); T.setLive(on); T.show(on&&!boardOpen()); }
+function trackShow(){
+  var T=track(), on=!!(G&&ui.rc&&ui.view==="race"&&!setupShown());
+  /* 3D: the 2D track keeps the clock running (live) without drawing; the 3D view draws while the race is on screen or only covered by the battle board, and
+     rests under the results; while the view is still loading (the first race of a visit) the flat track is not shown, so it does not flash before the 3D race */
+  if(race3D()||v3state==="loading"&&want3D()){ if(T){ T.setLive(on); T.show(false); } if(V3&&race3D()) V3.show(on&&!resultsOpen()); return; }
+  if(V3) V3.show(false);
+  if(!T) return; T.setLive(on); T.show(on&&!boardOpen());
+}
+function resultsOpen(){ var el=$("resBox"), B=BG(); return !!el&&(el.classList.contains("show")||!!(B&&B.sheet&&B.sheet.isOpen&&B.sheet.isOpen(el))); }
 function setCard(el,id,up){
   var top=el.classList.contains("is-top");
   el.className="mx-card"+(up&&id!=null?" is-up":"")+(id==null&&!up?" is-empty":"")+(top?" is-top":"");
@@ -1078,7 +1210,9 @@ function renderRace(){
   if(!ui.lap) ui.lap=rc.battle+1;
   chips();
   var gate=rc.phase==="gate";
-  var gt=$("gate"); if(gt.getAnimations) gt.getAnimations().forEach(function(a){ a.cancel(); }); gt.style.display=gate?"":"none"; gt.style.transform="";
+  if(v3state==="off"&&want3D()) load3D();   /* the 3D race (the first race of a visit loads it, if the season screen did not) */
+  mode3D();
+  var gt=$("gate"); if(gt.getAnimations) gt.getAnimations().forEach(function(a){ a.cancel(); }); gt.style.display=gate&&!race3D()?"":"none"; gt.style.transform="";
   layoutArena(); trackRiders(); trackSync(gate);
   /* the cards on the table now (a war in progress is drawn as a war; else the last battle) */
   if(rc.phase==="war"&&rc.part&&rc.part.length) drawWar(rc.part,rc.tb,false);
@@ -1143,11 +1277,12 @@ function drawTower(){
   var rows=liveRows(); if(!rows){ legacyTower(ui.twMark); return; }
   var tv=onTV(), n=rows.length, key=gen+"|"+G.rkey+"|"+n;
   if(TW.key!==key){ TW.key=key; twBuild(rc); }
-  var two=tv?n>20:n>24, compact=two&&!tv;
-  tw.classList.toggle("is-two",two); tw.classList.toggle("is-compact",compact);
+  var hud=tv&&race3D()&&!ui.std;   /* the 3D race on a TV: a small panel at the picture's left edge (CSS shows the top 8 and you); the Standings button: every rider, two columns */
+  var two=!hud&&(tv?n>20:n>24), compact=two&&!tv;
+  tw.classList.toggle("is-two",two); tw.classList.toggle("is-compact",compact); tw.classList.toggle("is-hud",hud);
   if(two) tw.style.setProperty("--tw-rows",String(Math.ceil(n/2))); else tw.style.removeProperty("--tw-rows");
   $("race").style.setProperty("--tw-col",tv?(two?"42rem":"30rem"):"");
-  tw.style.removeProperty("--tw-row"); tw.classList.toggle("is-tight",tv&&(two?Math.ceil(n/2):n)>15);   /* 16 or more rows in a column (a 20-rider heat, a 40-rider moto): shorter rows, so the tower and the YOU card at its foot fit one 1080p screen */
+  tw.style.removeProperty("--tw-row"); tw.classList.toggle("is-tight",tv&&!hud&&(two?Math.ceil(n/2):n)>15);   /* 16 or more rows in a column (a 20-rider heat, a 40-rider moto): shorter rows, so the tower and the YOU card at its foot fit one 1080p screen */
   var mark=ui.twMark&&ui.twMark.until>Date.now()?ui.twMark:null, T=MX.Time, i, r, e, c, sig=[], pre=rc.phase==="gate"||rc.tm.k===0;
   for(i=0;i<n;i++) sig.push(rows[i].s);
   sig=sig.join(",");
@@ -1162,7 +1297,7 @@ function drawTower(){
     e.c.innerHTML=chip; e.c.className="mx-tw__c"+(A.chipRed(card)?" is-red":"");
   }
   var fl=null; rows.forEach(function(x){ if(x.fl) fl=x; });
-  $("towerSub").textContent=pre?n+" riders · on the gate":n+" riders · live gaps"+(fl?" · fastest lap #"+G.riders[seatId(fl.s)].plate+" "+T.fmtLap(fl.best):"");
+  $("towerSub").textContent=pre?n+" riders · on the gate":hud?(n>8?"top 8 of "+n+" · live gaps":n+" riders · live gaps"):n+" riders · live gaps"+(fl?" · fastest lap #"+G.riders[seatId(fl.s)].plate+" "+T.fmtLap(fl.best):"");
   drawYou(rows);
 }
 /* the old tower (a race without a model): the order of the cards */
@@ -1231,7 +1366,7 @@ function onTrackEvent(e){
   switch(e.e){
     case "line": if(me(e.s)) youLap(e.s,e.k); break;
     case "down": {
-      annShown("crash",{s:e.s}); Sound.sfx(e.kind==="out"?"lose":"bump");
+      if(!race3D()) annShown("crash",{s:e.s}); Sound.sfx(e.kind==="out"?"lose":"bump");   /* (3D: the view calls it as the bike goes down: shown3D) */
       logLine(T.eventLine(rc,e,nameOfSeat,me)); ui.twMark={fight:[e.s],until:Date.now()+2500}; drawTower(); break; }
     case "up": logLine(T.eventLine(rc,e,nameOfSeat,me)); drawTower(); break;
     case "yellowOn": {
@@ -1240,8 +1375,8 @@ function onTrackEvent(e){
       var who=by.map(function(x){ var R=G.riders[seatId(x)]; return "#"+R.plate+" "+R.name; }), plur=who.length>1||(by.length===1&&/^you$/i.test(G.riders[seatId(by[0])].name));
       var sub=(who.length>2?who.length+" riders":listNames(who))+(outN?(plur?" are":" is")+" out of the race":(plur?" go down and remount":" goes down and remounts"))+" · no passing there next lap";
       logLine(T.eventLine(rc,e,nameOfSeat,me)); banner("Yellow flag",sub,dl(1500),"is-yellow"); break; }
-    case "pass": if(e.pos<=10&&!e.crash) annShown("pass",{s:e.a,d:e.d,pos:e.pos}); { var pl=T.eventLine(rc,e,nameOfSeat,me); if(pl) logLine(pl); } break;
-    case "lapped": annShown("lapped",{s:e.s,by:e.by}); if(me(e.s)||me(e.by)) logLine(T.eventLine(rc,e,nameOfSeat,me)); break;
+    case "pass": if(e.pos<=10&&!e.crash&&!race3D()) annShown("pass",{s:e.a,d:e.d,pos:e.pos}); { var pl=T.eventLine(rc,e,nameOfSeat,me); if(pl) logLine(pl); } break;
+    case "lapped": if(!race3D()) annShown("lapped",{s:e.s,by:e.by}); if(me(e.s)||me(e.by)) logLine(T.eventLine(rc,e,nameOfSeat,me)); break;
     case "fastest": if(e.k>=3) logLine(T.eventLine(rc,e,nameOfSeat,me)); break;
   }
 }
@@ -1305,11 +1440,21 @@ function confirmSkip(){
     '<p class="bg-sheet__sub">'+(rc.phase==="gate"?"The whole race":plural(left,"lap")+" to go")+" (about "+Math.max(1,Math.round(left*lapSec()/60))+" min). The cards decide the rest at once, as War always does"+(mine?", your cards too":"")+", and you see the result.</p></div>"+
     '<div class="mx-sacts"><button class="bg-btn bg-btn--secondary bg-btn--lg" id="skipYes" type="button">Skip to the finish</button><button class="bg-btn bg-btn--primary bg-btn--lg" id="skipNo" type="button" data-autofocus>Keep watching</button></div>';
   sheetOpen($("skipBox"),{focus:"#skipNo"});
-  $("skipYes").addEventListener("click",function(){ sheetClose($("skipBox")); if(!G||!ui.rc||ui.rc.over) return; if(busy){ skipQ=true; syncControls(); return; } simNow(); });
+  $("skipYes").addEventListener("click",function(){ sheetClose($("skipBox")); if(!G||!ui.rc||ui.rc.over) return; if(race3D()) try{ V3.skip(); }catch(e){} if(busy){ skipQ=true; syncControls(); return; } simNow(); });
   $("skipNo").addEventListener("click",function(){ sheetClose($("skipBox")); setTimeout(function(){ focusTV(mainControl()); },60); });
 }
 $("pipIc").innerHTML=A.pipIcon(true);
 $("pipBtn").addEventListener("click",function(ev){ ev.stopPropagation(); setPip(!pipBig(),true); });
+/* the 3D race on a TV: the Standings button lays every rider of the gate over the picture (two columns, the live rows), and takes them away again */
+function setStd(on){ ui.std=!!on&&race3D(); document.body.classList.toggle("mx-std",ui.std); var b=$("stdBtn"); if(b){ b.setAttribute("aria-pressed",String(ui.std)); $("stdLab").textContent=ui.std?"Small tower":"Standings"; } TW.cells={}; drawTower(); }
+$("stdBtn").addEventListener("click",function(){ setStd(!ui.std); });
+/* the 3D race's camera: the button over the picture (tap, or OK on the remote's ring), C on a keyboard, Play/Pause on a TV remote */
+$("camBtn").addEventListener("click",function(ev){ ev.stopPropagation(); camNext(); });
+document.addEventListener("keydown",function(e){
+  if(!race3D()||!G||ui.view!=="race"||setupShown()||sheetUp()) return;
+  var t=e.target, typing=t&&(t.tagName==="INPUT"||t.tagName==="TEXTAREA"||t.tagName==="SELECT"||t.isContentEditable);
+  if(!typing&&(e.key==="c"||e.key==="C"||e.key==="MediaPlayPause"||e.keyCode===179)){ e.preventDefault(); camNext(); }
+});
 $("arena").addEventListener("click",function(ev){ if(ev.target&&ev.target.closest&&ev.target.closest("#table")) return; if(ui.rc&&!ui.rc.over&&raceHumans().length&&!busy&&(ui.rc.phase==="gate"||RC.need(ui.rc).length)){ intent=1; drive(); } else if(ui.rc&&ui.rc.phase==="gate"&&!ui.rc.over&&!busy&&annGateStage()){ intent=1; drive(); } });
 
 /* ================= the turn: queue the person's flip, pace the field ================= */
@@ -1339,10 +1484,12 @@ function drive(){
   /* mxcrash: riding, a lap's cards turn as the leader STARTS that lap (T.ready), and the field rides the result round it; a person's flip
      pressed early waits for the line ("your card is in"); a war plays on in the same lap. Reduced motion: v2's pace. */
   var need=RC.need(rc), T=rc.phase==="flip"?timedT():null, mm=!!(T&&T.model&&T.model()), rdy=lapWait(T), clk=!T&&rdy>0, lead=T?Math.round(Math.min(lapMs()*0.03,1500)):0;
-  /* mxtime: the next lap's cards turn a moment BEFORE the leader's line, so the race clock never has to wait for them; a person we are waiting for holds it (it eases to a stop) */
-  if(mm){ lead=0; if(rdy>0) rdy=Math.max(0,rdy-350); }
-  if(T&&T.setWait) T.setWait(mm&&need.length>0&&!intent&&!cfg.auto);
-  function lapWaitE(){ var r=lapWait(T); return mm&&r>0?Math.max(0,r-350):r; }
+  /* mxtime: the next lap's cards turn a moment BEFORE the leader's line, so the race clock never has to wait for them; a person we are waiting for holds it (it eases to a stop).
+     The 3D race: a few seconds before the line (a war's cards take that long to play), and the clock always eases into a wait (the bikes never stop dead) */
+  var LEAD=mm&&race3D()?Math.max(1500,dl(6000)):350;
+  if(mm){ lead=0; if(rdy>0) rdy=Math.max(0,rdy-LEAD); }
+  if(T&&T.setWait) T.setWait(mm&&(race3D()||need.length>0&&!intent&&!cfg.auto));
+  function lapWaitE(){ var r=lapWait(T); return mm&&r>0?Math.max(0,r-LEAD):r; }
   if(need.length){
     if(intent){
       if((T||clk)&&need.length===1&&rdy>0){ ui.queued=true; syncControls(); later(my,drive,rdy+lead); return; }
@@ -1391,6 +1538,7 @@ async function animEvent(my,e){
   if(!rc) return;   /* the race was simmed under the show: nothing left to draw */
   switch(e.e){
     case "gate": {
+      if(race3D()){ Sound.sfx("jail"); logLine("The gate drops!"); $("gate").style.display="none"; ui.lap=1; chips(); var T7=track(); if(T7){ T7.gate(false); T7.lap(0,rc.o.len); } try{ await V3.drop(); }catch(x){} return; }   /* 3D: the pads fall (the 2D track keeps the clock) */
       Sound.sfx("jail"); logLine("The gate drops!");
       var gt=$("gate"), du=$("dust");
       if(!reduced()&&gt.animate){
@@ -1405,6 +1553,7 @@ async function animEvent(my,e){
     }
     case "acted": { if(!e.auto&&isHumanId(seatId(e.s))){ Sound.sfx("click"); } return; }
     case "reveal": {
+      if(e.w===0&&race3D()) V3.hold(null);   /* 3D: a new lap's cards (the director's war shot is over) */
       if(e.w===0){
         ui.lapAt=Date.now();   /* mxlaps: this lap's cards turn as it starts (the plain clock under reduced motion counts from here) */
         ui.lapPre=disp.cnt.slice(); ui.lastWin=null; $("warRow").innerHTML=""; pipNote(null); $("youSlot").hidden=false; $("topSlot").hidden=false; $("midNote").hidden=false;
@@ -1440,12 +1589,14 @@ async function animEvent(my,e){
       return;
     }
     case "war": {
+      if(race3D()) V3.hold({war:e.seats});   /* 3D: the director looks at the war's riders while the cards turn */
       Sound.sfx("cannon"); flash();
       var tiedR=rc.cur&&e.tied.length?A.info(ui.lastCards[e.tied[0]]).r:0;
       logLine((e.n>1?"War again! ":"War! ")+whoList(e.tied)+" tie"+(tiedR?" with "+rankPlural(tiedR):"")+".");
       drawWar(e.seats,null,true);
       renderTower({fight:e.seats});
       /* the CEO (20:06): the wars stay in the corner window: its name there (a double war loses = a crash, a triple war = out) */
+      if(race3D()) banner(e.n===1?"War!":e.n===2?"Double war!":e.n===3?"Triple war!":warWordP(e.n)+"!",warWorth(e.n),dl(1300),"is-war");
       await pipNote(e.n===1?"War!":e.n===2?"Double war!|the loser crashes and remounts":e.n===3?"Triple war!|the loser crashes out":warWordP(e.n)+"!|the loser crashes out",dl(e.n>1?900:850),e.n>1);
       return;
     }
@@ -1498,9 +1649,11 @@ async function animEvent(my,e){
       return;
     }
     case "holeshot": {
-      ui.hs=e.s; chips(); Sound.sfx("bell"); annShown("holeshot",{s:e.s});
-      var hl=null; try{ hl=BR.react(G,e); }catch(x){} logLine(hl||"Holeshot: "+nm(e.s)+"!");
+      var hl=null; try{ hl=BR.react(G,e); }catch(x){}
       var R=G.riders[seatId(e.s)];
+      if(race3D()){ var hs3=e.s, rc3=rc; seen3D("holeshot",12000).then(function(){ if(my!==gen||ui.rc!==rc3||skipQ) return; ui.hs=hs3; chips(); Sound.sfx("bell"); logLine(hl||"Holeshot: "+nm(hs3)+"!"); banner("Holeshot!","#"+R.plate+" "+R.name+(R.bike?" · "+R.bike:""),dl(1100),"is-calm"); }); return; }   /* (the announcers' call comes from the view: shown3D) */
+      ui.hs=e.s; chips(); Sound.sfx("bell"); annShown("holeshot",{s:e.s});
+      logLine(hl||"Holeshot: "+nm(e.s)+"!");
       await banner("Holeshot!","#"+R.plate+" "+R.name+(R.bike?" · "+R.bike:""),dl(1100),"is-calm");
       return;
     }
@@ -1520,7 +1673,7 @@ async function animEvent(my,e){
       else if(ui.lapAt&&!skipQ){ $("stat").textContent="Last lap: the riders ride to the flag."; for(var gj=0;gj<2400;gj++){ await hold(my); if(my!==gen) return; if(skipQ) break; var mc=ui.lapAt+lapMs()-Date.now(); if(mc<=0) break; await sleep(Math.min(mc,250)); } }
       ui.lap=Math.min(e.b,rc.o.len); chips();
       var T4=track(); if(T4){ T4.lap(e.b,rc.o.len); T4.setFlag("checkered"); }
-      annShown("checkered",{s:e.order[0]});
+      if(race3D()){ try{ V3.setFlag("checkered"); }catch(x){} } else annShown("checkered",{s:e.order[0]});   /* (3D: the view calls it as the winner crosses the line) */
       var w=e.order[0], hw=isHumanId(seatId(w));
       ui.order=e.order.slice(); renderTower({win:w});
       Sound.sfx(hw?"win":"conquer");
@@ -1534,6 +1687,13 @@ async function animEvent(my,e){
   }
 }
 function nm0(id){ return G.riders[id]?G.riders[id].name:""; }
+/* what a war of this depth is worth (the 3D race's war flash): the winner's seconds against a typical lap (the time model, a neutral rider), the loser's fate */
+function warWorth(n){
+  var rc=ui.rc, T=MX.Time, w=null;
+  if(n===1&&rc&&rc.tm&&T&&T.worth){ try{ w=T.worth(rc,{c:null,win:true,war:1,fought:true,crash:null,wl:1}); }catch(e){ w=null; } }
+  if(n===1) return w&&w.res<0?"Card event · the winner gains "+T.secText(-w.res,1)+" · the losers lose time":"Card event · the winner gains time";
+  return n===2?"The loser crashes and remounts":"The loser crashes out";
+}
 function bestOf(cards){
   var rc=ui.rc, best=-1, out=[];
   cards.forEach(function(x){ var v=RC.val(rc,x.c); if(v>best){ best=v; out=[x.s]; } else if(v===best) out.push(x.s); });
@@ -1637,6 +1797,7 @@ function racePoints(e,p){
 }
 function openResults(e,simmed){
   var T=track(); if(T) T.show(false);
+  if(V3) V3.show(false);   /* the 3D race rests under the results */
   if(boardOpen()) sheetClose($("boardBox"),"go");
   var c=G.cal[e.ri], me=G.humans, order=e.order, rcStats=G.last||{};
   var myP=-1; order.forEach(function(id,i){ if(me.indexOf(id)>=0&&myP<0) myP=i; });
@@ -1832,6 +1993,7 @@ document.addEventListener("bgui:sheet",hintSync); document.addEventListener("bgu
 /* ================= keys, the remote's Back ================= */
 function backStep(){
   if(!setupShown()&&G&&ui.view==="race"&&pipBig()){ setPip(false,true); return "cards"; }
+  if(!setupShown()&&G&&ui.view==="race"&&ui.std){ setStd(false); focusTV($("stdBtn")); return "standings"; }
   if(!setupShown()&&G){ $("menuBtn").click(); return "menu"; }
   if(G&&$("resumeBtn").style.display!=="none"&&!ui.cont){ $("resumeBtn").click(); return "resume"; }
   return false;
@@ -1879,6 +2041,6 @@ if(MX.Booth&&MX.Announce&&window.BGVoice){
 Sound.mountButton(); Sound.music(GAME);
 deviceCopy(); drawSetup(); saveBar.refresh(); showSetup(true); contOffer();
 if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(function(){}); }
-window.__mxwar={get G(){ return G; },get booth(){ return BOOTH; },rows:function(){ return liveRows(); },drawTower:drawTower,toSeason:function(){ ui.rc=null; setView("season"); drive(); },cfg:cfg,ui:ui,drive:drive,act:act,simNow:simNow,enterRace:enterRace,startSeason:startSeason,loadSeason:loadSeason,
+window.__mxwar={get G(){ return G; },get booth(){ return BOOTH; },get v3(){ return V3; },get v3state(){ return v3state; },use3D:function(){ return use3D(); },race3D:function(){ return race3D(); },gfx:gfx,setGfx:setGfx,camNext:camNext,rows:function(){ return liveRows(); },drawTower:drawTower,toSeason:function(){ ui.rc=null; setView("season"); drive(); },cfg:cfg,ui:ui,drive:drive,act:act,simNow:simNow,enterRace:enterRace,startSeason:startSeason,loadSeason:loadSeason,
   state:function(){ return {busy:busy,gen:gen,view:ui.view,intent:intent,phase:ui.rc?ui.rc.phase:null,battle:ui.rc?ui.rc.battle:null,over:G?G.over:null,finished:ui.finished,winShown:ui.winShown}; }};
 })();
