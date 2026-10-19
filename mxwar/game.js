@@ -1364,6 +1364,10 @@ function racePoints(e,p){
   var F=S.calFormat(G,c); if(F.pointsOn!=="race") return 0;
   return ((F.table||[])[p]||0)*(c.mult||1);
 }
+/* how the 3D race really ran on this device (race3d.js V.perfRaces(): the passive per-race record of r3d-perf-bench.js, the last 6 races): one quiet chip on the results of a race shown in 3D,
+   so a Fire TV reports its real frame rate just by being played (perf REQUEST 3, milestone 2 merge) */
+function perfChip(simmed){ try{ if(simmed||!use3D()||!V3.perfRaces) return ""; var a=V3.perfRaces(), r=a&&a[a.length-1]; if(!r||!(r.fpsAvg>0)||Date.now()-r.when>45*60000) return "";
+  var lbl=(V3.qualityLabel&&V3.qualityLabel(r.tier))||String(r.tier||"").toUpperCase(); return '<span class="mx-chip" title="How the 3D race ran on this device">3D: '+Math.round(r.fpsAvg)+" fps, 1% low "+Math.round(r.fps1Low)+", "+esc(String(r.canvas||""))+", "+esc(lbl)+"</span>"; }catch(x){ return ""; } }
 function openResults(e,simmed){
   var T=track(); if(T) T.show(false); if(V3) V3.show(false); clearGrace();
   if(boardOpen()) sheetClose($("boardBox"),"go");
@@ -1372,7 +1376,7 @@ function openResults(e,simmed){
   var head='<div class="bg-sheet__grip" aria-hidden="true"></div><div class="mx-shd"><span class="bg-eyebrow">Round '+(e.ri+1)+" · "+esc(c.city||c.venue)+(simmed?" · simmed":"")+'</span>'+
     '<h2 class="bg-sheet__title" id="resTitle">'+esc(e.label)+" results</h2>"+
     '<p class="bg-sheet__sub">'+esc(G.riders[order[0]].name)+" wins"+(myP>=0?(me.length>1?" · "+G.riders[order[myP]].name+" "+ord(myP+1):" · you finished "+ord(myP+1)):"")+"</p></div>";
-  var sum='<div class="mx-sum"><span class="mx-chip is-hot">Holeshot: '+esc(e.hs!=null?G.riders[e.hs].name:"none")+'</span><span class="mx-chip">'+plural(rcStats.wars||0,"war")+'</span><span class="mx-chip">'+plural(rcStats.battles||0,"lap")+"</span></div>";
+  var sum='<div class="mx-sum"><span class="mx-chip is-hot">Holeshot: '+esc(e.hs!=null?G.riders[e.hs].name:"none")+'</span><span class="mx-chip">'+plural(rcStats.wars||0,"war")+'</span><span class="mx-chip">'+plural(rcStats.battles||0,"lap")+"</span>"+perfChip(simmed)+"</div>";
   var list='<ol class="mx-res">'+order.map(function(id,i){ var R=G.riders[id]; return '<li class="'+(me.indexOf(id)>=0?"is-me":"")+'"><span class="mx-res__p">'+(i+1)+"</span>"+plateHTML(R)+'<span class="mx-res__n">'+nameHTML(R)+"</span>"+resultTags(e,id,i)+"</li>"; }).join("")+"</ol>";
   var acts='<div class="mx-sacts" id="resActs"></div>';
   $("resSheet").innerHTML=head+sum+list+acts;
