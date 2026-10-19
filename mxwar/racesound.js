@@ -235,7 +235,7 @@ function create(o){
   var RS={}, ctx=null, own=null, G=null, core=null, loadP=null, dead=false, held=false, inReplay=false, lineOn=false, lineLv=0, lineEnd=0;
   var seed=(o.seed>>>0)||((Date.now()&0xffff)+1), rnd=rngOf(seed);
   var EX=new Excite({main:o.main!==false}), revs={}, cur=[-1,-1,-1,-1], gateSt=null, lastSnapT=-1, lastWall=0, frames=0, lastE=0;
-  var passes=[], recent={}, lastReact=-1e9, reacts=[], pendingFollow=[], nodes={n:0,max:0}, stats={frames:0,ms:0,msMax:0};
+  var passes=[], recent={}, lastReact=-1e9, reacts=[], pendingFollow=[], nodes={n:0,max:0}, stats={frames:0,ms:0,msMax:0}, downSeen={}, lastJumpOoh=-1e9, remountDue=[];
   var voiceState=[0,1,2,3].map(function(){ return {seat:-1,g:0,sw:0}; });
   var VREF=6, PANK=0.85;
 
@@ -455,7 +455,9 @@ function create(o){
       if(k){ shot(k,T,{db:cap+(lv>=3?0:-3),pan:pan}); }
       pendingFollow.push({t:T+(kind==="out"?2.6:1.8),pool:kind==="out"?"murmur":"groan",db:cap-4});
     } else if(kind==="remount"){ pool="applause"; k=draw(pool,T); if(k) shot(k,T,{db:cap-4,pan:pan,max:5,fadeIn:0.25}); }
-    else if(kind==="war"){ k=draw("gasp",T)||draw("cheerS",T); if(k) shot(k,T,{db:cap-5,pan:pan}); }
+    else if(kind==="war"){ k=(lv>=2?draw("ooh",T):null)||draw("gasp",T); if(k) shot(k,T,{db:cap-5,pan:pan}); }
+    else if(kind==="yellow"){ k=draw("murmur",T); if(k) shot(k,T,{db:cap-6,pan:pan,max:5,fadeIn:0.4}); }
+    else if(kind==="landing"){ k=draw("ooh",T)||draw("cheerS",T); if(k) shot(k,T,{db:cap-8,pan:pan,max:3,fadeIn:0.05}); }
     else {
       pool=lv>=3?"roar":lv>=2?"cheerL":"cheerS"; k=draw(pool,T)||(lv>=2?draw(pool==="roar"?"cheerL":"roar",T)||draw("ooh",T):null)||draw("cheerS",T);
       if(k) shot(k,T,{db:cap+(lv>=3?0:lv>=2?-2:-6),pan:pan,max:lv>=3?9:6,fadeIn:0.08});
@@ -499,9 +501,9 @@ function create(o){
     if(dead) return; if(!G){ if(loadP) loadP.then(function(){ RS.gate(stage); }); return; }
     var T=ctx.currentTime; gateSt={stage:stage,t:T};
     var P=G.P;
-    if(stage==="open"){ if(P){ set(P("gGain"),dbl(-6),T,0.8); set(P("gRev"),0.25,T,1.2); set(P("gWig"),1,T,0.2); } EX.kick(0.05); if(o.main&&era.venue==="stadium") pyro(T+0.2); }
-    else if(stage==="board"){ if(P){ set(P("gRev"),0.75,T,0.6); set(P("gWig"),1,T,0.2); set(P("gGain"),dbl(-3),T,0.5); } horns(T+0.1,1); EX.kick(0.12); }
-    else if(stage==="side"){ if(P){ set(P("gRev"),1.0,T,0.4); set(P("gWig"),0.15,T,0.4); set(P("gGain"),dbl(-2),T,0.4); } RS._hush=T; }
+    if(stage==="open"){ if(P){ set(P("gGain"),dbl(-6),T,0.8); set(P("gRev"),0.25,T,1.2); set(P("gWig"),1,T,0.2); } EX.kick(0.05); if(o.main!==false&&era.venue==="stadium") pyro(T+0.2); var kw=draw("whistle",T); if(kw) shot(kw,T+1.2,{db:-4,pan:-0.3}); }
+    else if(stage==="board"){ if(P){ set(P("gRev"),0.75,T,0.6); set(P("gWig"),1,T,0.2); set(P("gGain"),dbl(-3),T,0.5); } horns(T+0.1,1); EX.kick(0.12); var kb=draw("cheerS",T); if(kb) shot(kb,T+0.9,{db:-6,pan:0.3}); }
+    else if(stage==="side"){ if(P){ set(P("gRev"),1.0,T,0.4); set(P("gWig"),0.15,T,0.4); set(P("gGain"),dbl(-2),T,0.4); } RS._hush=T; var ks=draw("whistle",T); if(ks) shot(ks,T+0.4,{db:-8,pan:0.3}); }
     else if(stage==="drop"){
       gateSlam(T); if(P){ set(P("gRev"),1.2,T,0.08); set(P("gWig"),0,T,0.05); set(P("gGain"),dbl(-1),T,0.05); set(P("gRev"),0.9,T+1.6,0.8); set(P("gWig"),0.7,T+1.6,0.5); set(P("gLp"),3500,T+1.2,1.2); }
       G.farFrom=T+2.2;   /* (from here RS.frame sets the far pack's level) */
@@ -530,6 +532,9 @@ function create(o){
       if(snap.mode!=="gate"&&!r.crash) dens+=1/(1+(r.d/28)*(r.d/28));
       if(r.d<dmin) dmin=r.d;
       if(snap.mode==="run"&&!r.crash) tryPass(r,T);
+      /* a remount seen in the picture: the crowd applauds him back on the bike; a big landing near the lens: now and then an "ooh" */
+      var was=downSeen[r.seat]; if(r.crash===1) downSeen[r.seat]=T; else if(was!=null&&!r.crash){ delete downSeen[r.seat]; if(T-was<15){ react("remount",1,T+0.2,{force:true}); for(var q2=remountDue.length-1;q2>=0;q2--) if(remountDue[q2].s===r.seat) remountDue.splice(q2,1); } }
+      if(r.land>=0.8&&r.d<30&&T-lastJumpOoh>45&&rnd()<0.2){ lastJumpOoh=T; react("landing",1,T+0.1,{}); }
     }
     /* the four voices */
     var a=assign(snap,cur), cutCam=snap.cut===1;
@@ -549,6 +554,8 @@ function create(o){
     }
     /* the crowd breathes with the race */
     stepCrowd(dt,T);
+    for(i=remountDue.length-1;i>=0;i--){ var rd=remountDue[i]; if(T<rd.t) continue; if(rd.s!=null&&downSeen[rd.s]!=null&&T-rd.t<8) continue;   /* the picture shows him still down: the picture's own remount will be applauded */
+      remountDue.splice(i,1); react("remount",1,T,{force:true}); }
     /* the moments' follow-ups (the groan after a gasp ...) */
     for(i=pendingFollow.length-1;i>=0;i--){ var fw=pendingFollow[i]; if(T>=fw.t){ pendingFollow.splice(i,1); var k2=draw(fw.pool,T); if(k2) shot(k2,T,{db:fw.db,pan:(rnd()-0.5)*0.5,max:5,fadeIn:0.2}); } }
     passes=passes.filter(function(p){ return p.end>T-1; });
@@ -577,7 +584,7 @@ function create(o){
     var T=ctx.currentTime+(info.delay||0);
     RS._log.push(["moment",+ctx.currentTime.toFixed(3),kind,lv,info.s==null?null:info.s]);
     if(kind==="battle"){ /* a battle swells the murmur: the bed rises with E; a cheer only if it is for the lead late on */ if(lv>=3) react("battle",2,T,info); return; }
-    if(kind==="crash") react(info.kind==="out"?"out":"crash",Math.max(lv,info.place>0&&info.place<=10?2:1),T,{force:true});
+    if(kind==="crash"){ react(info.kind==="out"?"out":"crash",Math.max(lv,info.place>0&&info.place<=10?2:1),T,{force:true}); if(info.kind!=="out") remountDue.push({t:T+6,s:info.s}); }
     else if(kind==="remount") react("remount",1,T,{force:true});
     else if(kind==="checkered"){ react("checkered",lv,T,{force:true}); }
     else react(kind,lv,T,info);
