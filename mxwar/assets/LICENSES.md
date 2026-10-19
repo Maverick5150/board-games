@@ -69,3 +69,13 @@ Add your lines between your heading and its end marker only (this keeps the role
   licence `mxwar/assets/fonts/OFL-BarlowCondensed.txt`. The page names it "MXW Barlow Condensed" (`@font-face`) for the phone's timing board, the cards chip and a results name that would be cut
   (mxfix1); Party Mode loads the same files. The same files and family name as the visual pack's ("ui skin").
 <!-- end race screen fonts -->
+
+## ui skin
+- The page skin (BG_audit/sprint/mxui/UI-SPEC.md) uses two font families, both SIL Open Font License 1.1, vendored as Latin WOFF2 files (Google Fonts' latin subset, fetched 2026-10-19,
+  SHA-256 checked) in `mxwar/assets/fonts/`, each with its full licence text. No Reserved Font Name in either. The page names them "MXW Anton" and "MXW Barlow Condensed" (`@font-face`).
+  - Anton Regular (display): `anton-400-latin.woff2` (18 612 B, sha256 d0fa07ff...bbaec3b), from https://fonts.gstatic.com/s/anton/v27/1Ptgg87LROyAm3Kz-C8.woff2;
+    "Copyright 2020 The Anton Project Authors (https://github.com/googlefonts/AntonFont.git)"; licence `mxwar/assets/fonts/OFL-Anton.txt` (the repo's OFL.txt).
+  - Barlow Condensed SemiBold and Bold (HUD): `barlowcondensed-600-latin.woff2` (22 308 B, sha256 215a93c6...cbb2b66) and `barlowcondensed-700-latin.woff2` (22 444 B, sha256 3787a5a4...dc11ec090fdc3ee2b8),
+    from https://fonts.gstatic.com/s/barlowcondensed/v13/; "Copyright 2017 The Barlow Project Authors (https://github.com/jpt/barlow)"; licence `mxwar/assets/fonts/OFL-BarlowCondensed.txt` (the repo's OFL.txt).
+    These are the very files of "race screen fonts" above (one copy in the repo, one family name).
+<!-- end ui skin -->

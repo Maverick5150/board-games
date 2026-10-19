@@ -1,5 +1,5 @@
 // Offline cache for Motocross War (the season files data/<series>-<year>.js are cached on first use: every .js the page fetches is stored) (bump VERSION to force update)
-const VERSION = "mxwar-v21";
+const VERSION = "mxwar-v22";
 const PREFIX = VERSION.replace(/v[0-9]+$/, "");   // every game shares one origin (one CacheStorage): only ever delete THIS game's old caches
 // [bcast] the music (mxshow S0): mxwar/audio/<pkg>/ (pkg.json + the content-hashed .m4a files) lives in its own cache, filled on first use and KEPT across
 // versions (a new VERSION never re-downloads audio: a changed file has a new name), cache-first; Range requests (the streamed menu tracks) are answered
@@ -10,7 +10,9 @@ const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "../sound.js", "
   "../ui/theme.css", "../ui/voice.css", "../ui/ui.js", "../ui/icons.js", "../ui/picker.js", "../ui/voice.js",
   "../ui/fonts/dmserifdisplay-latin.woff2", "../ui/fonts/dmserifdisplay-italic-latin.woff2", "../ui/fonts/manrope-var-latin.woff2",
   "../ui/tex/felt.webp", "../ui/tex/paper.webp", "../ui/tex/orb-gold.webp", "../ui/tex/orb-violet.webp", "../ui/tex/rays-core.webp",
-  "../ui/art/icon-mxwar-192.png", "../ui/art/icon-mxwar-512.png", "../ui/art/icon-mxwar-maskable-512.png", "../ui/art/hero-mxwar.svg"];
+  "../ui/art/icon-mxwar-192.png", "../ui/art/icon-mxwar-512.png", "../ui/art/icon-mxwar-maskable-512.png", "../ui/art/hero-mxwar.svg",
+  /* the page skin (UI-SPEC): its two OFL font families */
+  "./assets/fonts/anton-400-latin.woff2", "./assets/fonts/barlowcondensed-600-latin.woff2", "./assets/fonts/barlowcondensed-700-latin.woff2"];
 // the 3D race view (race3d.js and its modules from the development branch mxvis, mxwar/CONTRACT.md): every module, the course scripts, the dirt tiles, three.js r160
 // and the add-ons the view imports. BG_audit/sprint/mxlive/sync-view.sh copies the view and rewrites the next two lines (the synced commit; the list).
 // mxwar 3D view: synced from mxvis fd207c6 (BG_audit/sprint/mxlive/sync-view.sh writes this line and the ASSETS3D list)

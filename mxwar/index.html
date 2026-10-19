@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<meta name="theme-color" content="#080a15">
+<meta name="theme-color" content="#090c12">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
@@ -19,7 +19,8 @@
 <link rel="stylesheet" href="../ui/theme.css">
 <link rel="stylesheet" href="../ui/voice.css">
 <link rel="preload" href="../ui/fonts/manrope-var-latin.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="../ui/fonts/dmserifdisplay-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/anton-400-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/barlowcondensed-700-latin.woff2" as="font" type="font/woff2" crossorigin>
 <script src="../ui/icons.js" defer></script>
 <script src="../ui/ui.js" defer></script>
 <script src="../ui/picker.js" defer></script>
@@ -31,6 +32,48 @@
      deep #2c2830 is dE >= 17.1 from every shipped deep. Accent text #bdbdc6 on the ink page 10.4:1, ink on the accent 7.6:1. */
   [data-game="mxwar"] { --accent: #a0a0a8; --accent-bright: #d2d2da; --accent-deep: #2c2830; --accent-ink: #101014; --accent-text: #bdbdc6; --accent-paper: #46464f;
     --accent-glow: rgba(176, 176, 190, .26); --felt: #3b2a1b; --felt-deep: #120c07; --felt-lite: #5e4329; --board: #3b2a1b; --board-lite: #5e4329; }
+
+  /* ================= THE MXWAR SKIN (BG_audit/sprint/mxui/UI-SPEC.md, the CEO's visual pack: night black, war red, stadium gold, hud white) =================
+     Fonts: two OFL 1.1 families vendored in assets/fonts/ (assets/LICENSES.md, "ui skin"): Anton for display, Barlow Condensed 600 / 700 for the HUD (tabular
+     figures). The same tokens are copied into firestick/games/mxwar.js (Party TV) and mxwar-phone.js (Party phone). The shared system (ui/) is not changed: this
+     page remaps the shared tokens it uses (3.2), so every bg- component keeps its structure, focus ring, sheets, toasts and effects. */
+  @font-face{font-family:"MXW Anton"; src:url("assets/fonts/anton-400-latin.woff2") format("woff2"); font-weight:400; font-style:normal; font-display:swap;
+    unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
+  /* Barlow Condensed 600 / 700 ("MXW Barlow Condensed"): its @font-face is with the race screen's rules below (mxfix1), the same files and family name */
+  /* 3.1 the tokens: 11_SKIN_DESIGN_TOKENS.json palette verbatim, then the derived fills and edges (reds chosen so white text keeps >= 4.5:1) */
+  [data-game="mxwar"] {
+    --mx-night-black: #090C12; --mx-panel-black: #0D111B; --mx-war-red: #F72D2E; --mx-dust-brown: #7B4A2B; --mx-dirt-highlight: #B6824C;
+    --mx-stadium-gold: #ECB967; --mx-hud-white: #F0F1F3; --mx-secondary-text: #AEB5BF;
+    --mx-font-display: "MXW Anton", Impact, "Arial Narrow", "Roboto Condensed", sans-serif;
+    --mx-font-hud: "MXW Barlow Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
+    --mx-safe-area-percent: 6; --mx-safe-x: 1rem; --mx-safe-y: .5rem;
+    --mx-red-fill: #C92730; --mx-red-fill-focus: #D22B31; --mx-red-fill-press: #A51E25; --mx-red-deep: #B5222A; --mx-red-head: #B21F29; --mx-red-text: #FF5A4F;
+    --mx-edge-warm: #FFD6A5; --mx-edge-focus: #FFF3CB; --mx-slate: #191F2B; --mx-slate-edge: #8D9DB2; --mx-row: #22272F; --mx-row-edge: #626A7B; --mx-gold-pale: #FCEFD2;
+    --mx-disabled: #26282F; --mx-disabled-edge: #3F444D; --mx-disabled-text: #8E949C;
+    --mx-hud-panel: rgba(6, 9, 16, .84); --mx-hud-panel-strong: rgba(6, 10, 16, .93); --mx-zebra: rgba(100, 106, 121, .11); --mx-hairline: rgba(240, 241, 243, .14);
+    --mx-card-face: #EAE7DD; --mx-card-edge: #E7CA9C; --mx-up: #8FE3A3; --mx-down: #FF9A8A; --mx-yellow: #FFD21F; --mx-fastest: #D9B3FF;
+    --mx-r-btn: .5rem; --mx-r-panel: .75rem; --mx-r-card: 1rem;
+    /* 3.4 the type scale (phone; the TV values below) */
+    --mx-fs-hero: 3rem; --mx-fs-display-xl: 2.5rem; --mx-fs-display-l: 2.25rem; --mx-fs-display-m: 1.75rem; --mx-fs-display-s: 1.25rem;
+    --mx-fs-hud-l: 1.125rem; --mx-fs-hud-m: .8125rem; --mx-fs-hud-s: .75rem;
+  }
+  html[data-tv][data-game="mxwar"] { --mx-safe-x: 4.8rem; --mx-safe-y: 2.7rem;
+    --mx-fs-hero: 5rem; --mx-fs-display-xl: 4rem; --mx-fs-display-l: 3rem; --mx-fs-display-m: 2.25rem; --mx-fs-display-s: 1.5rem;
+    --mx-fs-hud-l: 1.25rem; --mx-fs-hud-m: 1rem; --mx-fs-hud-s: .875rem; }
+  /* 3.2 the shared tokens this page uses, remapped to the pack (the page's own style loads after ui/theme.css); --accent stays the hub's neutral steel */
+  html[data-game="mxwar"] {
+    --ink-0: #05070B; --ink-1: var(--mx-night-black); --ink-2: #0A0E16; --ink-3: var(--mx-panel-black); --ink-4: var(--mx-slate); --ink-5: var(--mx-row);
+    --line-1: rgba(240,241,243,.08); --line-2: rgba(240,241,243,.16); --line-gold: rgba(236,185,103,.45);
+    --text-1: var(--mx-hud-white); --text-2: var(--mx-secondary-text); --text-3: #9AA2AD;
+    --gold-100: #F6DDB0; --gold-200: var(--mx-stadium-gold); --gold-300: #D9A24F;
+    --panel-fill: var(--mx-panel-black); --panel-edge: inset 0 0 0 1px var(--mx-hairline);
+    --control-fill: var(--mx-slate);
+    --font-display: var(--mx-font-display);
+    --scrim: rgba(5, 7, 11, .82);
+    --accent-glow: rgba(247, 45, 46, .22);
+    --accent-deep: #170C0D;
+    --focus-gap: #090C12;
+  }
   *, *::before, *::after{box-sizing:border-box}
   [hidden]{display:none !important}
   html{scroll-padding-bottom:6.5rem}
@@ -859,6 +902,45 @@
     html:not([data-tv]) .mx-hero{padding-top:5.5rem}
     html:not([data-tv]) .mx-hero .bg-hero__layer{bottom:0; aspect-ratio:auto; background-size:cover; background-position:50% 40%}
   }
+
+  /* ================= THE MXWAR SKIN, step 1 (UI-SPEC 3.2 / 3.4 / 3.7): the night surfaces, the war-red stripe, Anton titles in caps ================= */
+  /* the stage changes colour, not behaviour: the accent orb and beam turn war red (--accent-glow), the violet orb and beam rest unseen (gold floodlight plus red) */
+  html[data-game="mxwar"] .bg-ambient .is-violet, html[data-game="mxwar"] .bg-orbs--stage > i:nth-child(3){opacity:0 !important}
+  html[data-game="mxwar"] .bg-app::before{background:radial-gradient(120% 60% at 50% -10%, rgba(236,185,103,.07), rgba(236,185,103,0) 60%), var(--ink-1)}
+  /* the pages: night, panel-black cards and sheets, hairline edges; a war-red stripe across the top of the bar (3 px; .42rem on TV, the pack's 10 px at 1080) */
+  html[data-game="mxwar"] .bg-topbar{background:var(--mx-night-black); box-shadow:0 1px 0 var(--mx-hairline)}
+  html[data-game="mxwar"] .bg-topbar::before{content:""; position:absolute; left:0; right:0; top:0; height:3px; background:var(--mx-war-red); pointer-events:none}
+  html[data-tv][data-game="mxwar"] .bg-topbar::before{height:.42rem}
+  html[data-game="mxwar"] .bg-sheet{background:linear-gradient(180deg,#121722,#0B0F17 60%); box-shadow:inset 0 1px 0 rgba(236,185,103,.35), var(--elev-3)}
+  html[data-game="mxwar"] .bg-toast{background:var(--mx-panel-black); box-shadow:inset 0 0 0 1px var(--line-gold), 0 16px 36px -12px rgba(0,0,0,.9)}
+  /* display type: Anton, ALL CAPS for titles; its caps are taller than DM Serif's (cap height .859 em against about .70), so every shared title the page shows gets an explicit size */
+  html[data-game="mxwar"] .bg-topbar__name{font:400 var(--mx-fs-display-s)/1.1 var(--font-display); letter-spacing:.015em; text-transform:uppercase}
+  html[data-game="mxwar"] .bg-sheet__title{font:400 var(--mx-fs-display-m)/1.05 var(--font-display); letter-spacing:.01em; text-transform:uppercase}
+  html[data-game="mxwar"] .bg-win__title{font:400 3rem/1 var(--font-display); letter-spacing:.01em; text-transform:uppercase}
+  html[data-game="mxwar"][data-tv] .bg-win__title, html[data-game="mxwar"][data-tv] #winTitle{font-size:3.75rem}
+  html[data-game="mxwar"] .bg-hero__title{font:400 var(--mx-fs-display-l)/.95 var(--font-display); letter-spacing:.005em; text-transform:uppercase}
+  html[data-game="mxwar"] .bg-h1{font-size:var(--mx-fs-display-m); text-transform:uppercase} html[data-game="mxwar"] .bg-h2{font-size:var(--mx-fs-display-s); text-transform:uppercase} html[data-game="mxwar"] .bg-h3{font-size:var(--mx-fs-hud-l); text-transform:uppercase}
+  html[data-game="mxwar"] .bg-stat b, html[data-game="mxwar"] .bg-stepper__val, html[data-game="mxwar"] .bg-sound__val{font-size:var(--mx-fs-display-s)}
+  html[data-game="mxwar"] .bg-sound__title{font-size:var(--mx-fs-display-m); text-transform:uppercase; letter-spacing:.01em}
+  html[data-game="mxwar"] .bg-sheet__label, html[data-game="mxwar"] .bg-pk__name{font-size:var(--mx-fs-display-s); letter-spacing:.01em}
+  html[data-game="mxwar"] .mx-scard__y{font-size:var(--mx-fs-display-m)}
+  html[data-game="mxwar"] .mx-pv__y{font-size:2.2em}
+  html[data-game="mxwar"] .mx-next__t{font-size:var(--mx-fs-display-s); text-transform:uppercase; letter-spacing:.01em}
+  html[data-game="mxwar"] .mx-shead h1{font-size:var(--mx-fs-display-m); text-transform:uppercase; letter-spacing:.01em}
+  html[data-game="mxwar"] .mx-rtitle{font-size:var(--mx-fs-display-s); text-transform:uppercase; letter-spacing:.01em}
+  html[data-game="mxwar"] .mx-mid b{font-size:var(--mx-fs-display-s); text-transform:uppercase}
+  html[data-game="mxwar"] .mx-banner b{font-size:1.375rem; text-transform:uppercase; letter-spacing:.01em}
+  html[data-game="mxwar"][data-tv] .mx-banner b{font-size:2.25rem}
+  html[data-game="mxwar"] .mx-yc__pos{font-size:1.125rem; text-transform:uppercase; letter-spacing:.01em}
+  html[data-game="mxwar"][data-tv] .mx-yc__pos{font-size:var(--fs-lg)}
+  html[data-game="mxwar"] .mx-tw__k, html[data-game="mxwar"] .mx-bd__k{font-size:var(--fs-sm)}
+  html[data-game="mxwar"] .mx-st__v{font-size:var(--fs-md)}
+  html[data-game="mxwar"] .mx-pod__step{font-size:1.75rem}
+  html[data-game="mxwar"] .mx-lu__h{font-size:var(--fs-md); text-transform:uppercase; letter-spacing:.02em}
+  html[data-game="mxwar"] .mx-lu__h span{text-transform:none; letter-spacing:0}
+  /* the HUD face (Barlow Condensed, tabular figures) for the timing rows: the gaps never jitter */
+  html[data-game="mxwar"] .mx-tw li{font-family:var(--mx-font-hud); font-weight:700; font-variant-numeric:tabular-nums}
+  html[data-game="mxwar"] .mx-tw__p, html[data-game="mxwar"] .mx-tw__g, html[data-game="mxwar"] .mx-tw__l{font-family:var(--mx-font-hud); font-weight:700}
 </style>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>

@@ -119,7 +119,30 @@
 
   /* ---------- the CSS (scoped by html[data-pgame="mxwar"]) ---------- */
   var Q = 'html[data-pgame="mxwar"] ';
+  /* THE MXWAR SKIN (BG_audit/sprint/mxui/UI-SPEC.md; the same tokens and fonts as mxwar/index.html): the two OFL font families from ../mxwar/assets/fonts/, the pack's
+     tokens on the page while this game is up (html[data-pgame]), and the shared tokens remapped ONLY inside this plugin's own containers (the race screen and its
+     panels, the lobby section, the skip sheet): the host bar, seat cards, QR and hint bar keep the shared look, and nothing leaks into another game */
+  var FR = "unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD";
+  var MXV = "--mx-night-black:#090C12;--mx-panel-black:#0D111B;--mx-war-red:#F72D2E;--mx-dust-brown:#7B4A2B;--mx-dirt-highlight:#B6824C;--mx-stadium-gold:#ECB967;--mx-hud-white:#F0F1F3;--mx-secondary-text:#AEB5BF;" +
+    "--mx-font-display:\"MXW Anton\",Impact,\"Arial Narrow\",\"Roboto Condensed\",sans-serif;--mx-font-hud:\"MXW Barlow Condensed\",\"Roboto Condensed\",\"Arial Narrow\",system-ui,sans-serif;" +
+    "--mx-safe-area-percent:6;--mx-safe-x:4.8rem;--mx-safe-y:2.7rem;" +
+    "--mx-red-fill:#C92730;--mx-red-fill-focus:#D22B31;--mx-red-fill-press:#A51E25;--mx-red-deep:#B5222A;--mx-red-head:#B21F29;--mx-red-text:#FF5A4F;--mx-edge-warm:#FFD6A5;--mx-edge-focus:#FFF3CB;" +
+    "--mx-slate:#191F2B;--mx-slate-edge:#8D9DB2;--mx-row:#22272F;--mx-row-edge:#626A7B;--mx-gold-pale:#FCEFD2;--mx-disabled:#26282F;--mx-disabled-edge:#3F444D;--mx-disabled-text:#8E949C;" +
+    "--mx-hud-panel:rgba(6,9,16,.84);--mx-hud-panel-strong:rgba(6,10,16,.93);--mx-zebra:rgba(100,106,121,.11);--mx-hairline:rgba(240,241,243,.14);--mx-card-face:#EAE7DD;--mx-card-edge:#E7CA9C;" +
+    "--mx-up:#8FE3A3;--mx-down:#FF9A8A;--mx-yellow:#FFD21F;--mx-fastest:#D9B3FF;--mx-r-btn:.5rem;--mx-r-panel:.75rem;--mx-r-card:1rem;" +
+    "--mx-fs-hero:5rem;--mx-fs-display-xl:4rem;--mx-fs-display-l:3rem;--mx-fs-display-m:2.25rem;--mx-fs-display-s:1.5rem;--mx-fs-hud-l:1.25rem;--mx-fs-hud-m:1rem;--mx-fs-hud-s:.875rem";
+  var REMAP = "--ink-0:#05070B;--ink-1:var(--mx-night-black);--ink-2:#0A0E16;--ink-3:var(--mx-panel-black);--ink-4:var(--mx-slate);--ink-5:var(--mx-row);" +
+    "--line-1:rgba(240,241,243,.08);--line-2:rgba(240,241,243,.16);--line-gold:rgba(236,185,103,.45);--text-1:var(--mx-hud-white);--text-2:var(--mx-secondary-text);--text-3:#9AA2AD;" +
+    "--gold-100:#F6DDB0;--gold-200:var(--mx-stadium-gold);--gold-300:#D9A24F;--panel-fill:var(--mx-panel-black);--panel-edge:inset 0 0 0 1px var(--mx-hairline);--control-fill:var(--mx-slate);" +
+    "--font-display:var(--mx-font-display)";
   var CSS = [
+    '@font-face{font-family:"MXW Anton";src:url("../mxwar/assets/fonts/anton-400-latin.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap;' + FR + "}",
+    /* Barlow Condensed 600 / 700 ("MXW Barlow Condensed"): its @font-face is with the timing rules below (mxfix1), the same files and family name */
+    'html[data-pgame="mxwar"]{' + MXV + "}",
+    Q + ".mxp," + Q + ".mxp-ssec," + Q + "#mxpSkipSheet{" + REMAP + "}",
+    /* display titles in Anton caps; the timing rows in the HUD face (tabular figures: the gaps never jitter) */
+    Q + ".mxp-ph h2," + Q + ".mxp-banner b{text-transform:uppercase;letter-spacing:.01em}",
+    Q + ".mxp-tower li{font-family:var(--mx-font-hud);font-weight:700;font-variant-numeric:tabular-nums}",
     /* plates, makes and cards (as mxwar/index.html) */
     Q + ".mx-mk{display:inline-flex;align-items:center;flex:none;padding:.05rem .4rem;border-radius:var(--r-xs);font:var(--fw-caps) var(--fs-micro)/1.25 var(--font-ui);letter-spacing:.02em;color:var(--mk-ink,#fff);background:var(--mk,#3a3a44);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18);white-space:nowrap}",
     Q + ".mx-pl{display:inline-grid;place-items:center;flex:none;min-width:2.6em;padding:.1rem .3rem .1rem .55em;border-radius:var(--r-xs);font:800 var(--fs-micro)/1.1 var(--font-ui);font-variant-numeric:tabular-nums;color:#121216;background:#f4f1e8;box-shadow:inset .3em 0 0 var(--mk,#3a3a44),inset 0 0 0 1px rgba(0,0,0,.4)}",
@@ -290,7 +313,7 @@
     Q + ".mxp-log:empty{display:none}",
     Q + ".mxp.is-many .mxp-log{display:none}",
     /* the panels over the screen: sign-up, results, podium, standings */
-    Q + ".mxp-panel{position:absolute;inset:0;z-index:20;display:flex;flex-direction:column;gap:.6rem;padding:1.1rem 1.5rem 1.2rem;border-radius:1.1rem;background:linear-gradient(180deg,rgba(22,18,32,.98),rgba(10,9,16,.99));box-shadow:inset 0 0 0 1.5px var(--gold-200),0 1rem 2.5rem rgba(0,0,0,.6)}",
+    Q + ".mxp-panel{position:absolute;inset:0;z-index:20;display:flex;flex-direction:column;gap:.6rem;padding:1.1rem 1.5rem 1.2rem;border-radius:1.1rem;background:linear-gradient(180deg,rgba(13,17,27,.98),rgba(9,12,18,.99));box-shadow:inset 0 0 0 1.5px var(--gold-200),0 1rem 2.5rem rgba(0,0,0,.6)}",
     Q + ".mxp-panel[hidden]{display:none}",
     Q + ".mxp.is-panel > .mxp-main," + Q + ".mxp.is-panel > .mxp-side{visibility:hidden}",   /* a panel stands alone: nothing behind it shows through or takes the focus */
     Q + ".mxp-ph{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;flex-wrap:wrap}",
