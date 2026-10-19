@@ -1295,7 +1295,7 @@
         li.classList.toggle("is-live", live); li.classList.toggle("is-done", st >= 0 && i < st);
       });
       if (show) {
-        el.hidden = false; $("mxpMain").classList.add("has-intro"); pIntroFit();
+        el.hidden = false; $("mxpMain").classList.add("has-intro"); if (window.requestAnimationFrame) requestAnimationFrame(pIntroFit); else pIntroFit();   /* (fitted in the frame's own layout) */
         var m = pMotion(); if (m && el.animate) try { el.animate(m === 2 ? [{ opacity: 0, transform: "translateY(-10px)" }, { opacity: 1, transform: "none" }] : [{ opacity: 0 }, { opacity: 1 }], { duration: 280, easing: "cubic-bezier(.2,.8,.2,1)" }); } catch (e) { }
       }
       pushSoon();
@@ -1790,9 +1790,10 @@
       Array.prototype.forEach.call(body.querySelectorAll("ol[data-lu]"), function (ol) {
         var col = luCols[+ol.getAttribute("data-lu")]; if (!col) return;
         ol.innerHTML = ""; ol.style.removeProperty("--rows");
-        var room = ol.clientHeight, cols = +(ol.getAttribute("data-cols") || 1), per = Math.max(3, Math.floor((room + gap) / (rem * 1.25 + gap)));
+        var room = ol.clientHeight, cols = +(ol.getAttribute("data-cols") || 1), minH = rem * (cols >= 4 ? .95 : 1.25), per = Math.max(3, Math.floor((room + gap) / (minH + gap)));   /* (four columns: a 40-rider gate, its rows a little lower so every rider shows) */
         var rowsX = capRows(col.ids, per * cols), shown = Math.ceil(rowsX.length / cols);
-        var rh = clamp(Math.floor((room - (shown - 1) * gap) / Math.max(1, shown)), Math.round(rem * 1.25), Math.round(rem * 1.9));
+        var rh = clamp(Math.floor((room - (shown - 1) * gap) / Math.max(1, shown)), Math.round(minH), Math.round(rem * 1.9));
+        ol.classList.toggle("is-tight", rh < rem * 1.25);
         ol.style.setProperty("--cols", String(cols)); ol.style.setProperty("--rows", String(shown)); ol.style.setProperty("--rh", rh + "px");
         ol.innerHTML = rowsX.map(function (x) { if (x.sep) return '<li class="is-sep" aria-hidden="true">...</li>'; var R = G.riders[x.id]; return resLi(x.id, x.p, '<span class="mx-mk" style="' + A.mkStyle(R.bike) + '">' + esc(R.bike || "Privateer") + "</span>"); }).join("");
       });
