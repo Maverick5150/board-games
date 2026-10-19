@@ -107,7 +107,7 @@ function Engine(o){
   if(o.bank&&o.bank.data&&o.bank.bins){ try{ var B=new Bank(o.bank); if(B.M>=2){ this.bank=B; for(var k=0;k<MAIN;k++) initPos(this.v[k],B); for(var q=0;q<this.g.length;q++) initPos(this.g[q],B); } }catch(e){ this.bank=null; } }
   if(this.bank&&o.bankOff&&o.bankOff.data&&o.bankOff.bins){ try{ var BO=new Bank(o.bankOff); if(BO.M>=2){ this.bankOff=BO; for(var k2=0;k2<MAIN;k2++){ var vv=this.v[k2]; vv.off={r:vv.r,pos:null,pk:{a:0,b:-1,wa:1,wb:0}}; initPos(vv.off,BO); } } }catch(e){ this.bankOff=null; } }
   /* the mix of the two: the recording on the throttle, the synthesis off it (o.mix: tests force 0 = synth only, 1 = recording only) */
-  this.mix=o.mix==null?null:+o.mix;
+  this.mix=o.mix==null?null:+o.mix; this.mixOff=o.mixOff==null?null:+o.mixOff;   /* (tests: mixOff = the off-throttle recording alone) */
   this.synthK=o.synthK==null?(this.stroke===2?1.0:0.37):+o.synthK;   /* the synth's level against the bank's (-20 dBFS RMS loops), measured: the four-stroke synth is 8.5 dB louder, the two-stroke level */
 }
 /* the recorded engine for one voice: n samples of the bins around firing frequency f (no Doppler) at playback factor D (Doppler x pitch), x amp, into Y */
@@ -137,8 +137,11 @@ Engine.prototype.voice=function(V,L,R,n,rpm,thr,gain,pan,dop,lp,pitch){
   /* the weights: the recording while the throttle is open (its loudness rising with the revs and the load), the synthesis as it closes */
   var ws=0, wy=1;
   var on=1, wo=0;
-  if(this.bank){ on=sstep(0.06,0.42,thr); ws=this.mix==null?(0.12+0.88*on):this.mix; wy=this.mix==null?(1-on):(1-this.mix); }   /* (on the throttle the recording alone: by measurement the closest to the real engines) */
-  if(this.bankOff&&this.mix==null){ wo=(1-on)*0.9; ws=on; wy=(1-on)*0.35; }   /* off the throttle: the recorded decel (the burble, the pops), the synthesis a light layer */
+  /* the recording leads everywhere: on the throttle alone (by measurement the closest to the real engines), off it the recorded decel when there is one, else
+     the on-throttle recording quieter (closer to real decel than the synthesis: W11 cmp), with the synthesis only a light layer for the pops */
+  if(this.bank){ on=sstep(0.06,0.42,thr); ws=this.mix==null?(0.45+0.55*on):this.mix; wy=this.mix==null?0.4*(1-on):(1-this.mix); }
+  if(this.bankOff&&this.mix==null){ wo=(1-on)*0.9; ws=on; wy=(1-on)*0.25; }
+  if(this.bankOff&&this.mixOff!=null){ ws=0; wy=0; wo=this.mixOff; }
   var fRpm=two?rpm/60:rpm/120, ampB=ws*(0.3+0.7*Math.pow(thr,0.8))*(0.55+0.45*Math.min(1,rpm/rv.red));
   if(ws>1e-3) this.sampled(V,YB,n,fRpm,dop*pitch,ampB*2.4); else for(var z=0;z<n;z++) YB[z]=0;
   if(wo>1e-3){ this.sampled(V.off,YS,n,fRpm,dop*pitch,wo*0.4*(0.55+0.45*Math.min(1,rpm/rv.red))*2.4,this.bankOff); for(var z2=0;z2<n;z2++) YB[z2]+=YS[z2]; }
@@ -155,8 +158,10 @@ Engine.prototype.voice=function(V,L,R,n,rpm,thr,gain,pan,dop,lp,pitch){
   var pb=two?sstep(rv.pipeLo,rv.pipeHi,rpm)*(1-sstep(rv.red*0.97,rv.red*1.04,rpm)):0;
   var f1=(T.body[0]+T.body[1]*rpm)*D, f2=two?(T.pipe[0]+1300*T.k*pb+T.pipe[1]*rpm)*D:(T.pipe[0]+T.pipe[1]*rpm)*D, f3=T.ring[0]*D;
   var lim=sr/6, F1=2*Math.sin(Math.PI*Math.min(f1,lim)/sr), F2=2*Math.sin(Math.PI*Math.min(f2,lim)/sr), F3=2*Math.sin(Math.PI*Math.min(f3,lim)/sr), FH=2*Math.sin(Math.PI*Math.min(5200*D,lim)/sr);
-  var Q1=1/T.body[2], Q2=1/(two?T.pipe[2]+6*pb:T.pipe[2]), Q3=1/(two?T.ring[2]+10*(1-thr):T.ring[2]), QH=1/1.2;
-  var g1=T.body[3], g2=two?T.pipe[3]*(1+0.9*pb):T.pipe[3], g3=two?T.ring[3]+0.5*(1-thr):T.ring[3];
+  /* (the two-stroke's ring-ding off the throttle: measured against decel recordings the plan's ring (+0.5, Q to 14) put the brightness at 2,100 Hz
+     against 480-570 Hz real; now a third of that lift) */
+  var Q1=1/T.body[2], Q2=1/(two?T.pipe[2]+6*pb:T.pipe[2]), Q3=1/(two?T.ring[2]+4*(1-thr):T.ring[2]), QH=1/1.2;
+  var g1=T.body[3], g2=two?T.pipe[3]*(1+0.9*pb):T.pipe[3], g3=two?T.ring[3]*(1+0.6*(1-thr)):T.ring[3];
   var drv=T.drive+T.driveT*thr, rasp=T.rasp*thr, nz=T.noise;
   var atLim=rpm>=rv.red*0.985&&thr>0.5, r=V.r;
   var ph=V.ph, env=V.env, dk=V.dk, a1=V.a1, b1=V.b1, a2=V.a2, b2=V.b2, a3=V.a3, b3=V.b3, ha=V.ha, hb=V.hb, l1=V.lp1, l2=V.lp2;
