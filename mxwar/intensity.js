@@ -7,6 +7,7 @@
    moment. HUGE stays rare: an earned HUGE comes 25 s after the last one at least, three in a Main at most (one kept for the last lap), one in a
    heat (the last lap) or in a race whose laps are shown short; forced peaks (the gate, the checkered flag of a Main, a photo finish, a crash
    of the leader or a top-3 rider, a triple war ...) can never be turned down. For 9 s after a HUGE line no line is quieter than lively.
+   Only a line actually said at HUGE spends the budget, and the person taking the lead for the first time in a race keeps its HUGE (review fixes).
      MXWar.Intensity.decide({ev, tpl, role, follow, A, it, ctx, lapMs})  -> {lv, E, forced, why[], flags}  or null (an unknown line: the old tier)
      MXWar.Intensity.flagsOf(A, it, ctx)     the situation as flags (p1 p3 p5 p10 pback you youIn tight close endgame lastlap early final ...)
      MXWar.Intensity.evalEvent(evd, flags, trace)   a moment's level for a set of flags (the build uses it too)
@@ -83,18 +84,25 @@ function decide(o){
   var B0=B;
   if(B0.compressed&&o.lapMs>0&&o.lapMs<B0.compressed.lapMsBelow) B=over(B0,B0.compressed);   /* laps shown short (6 to 14 s): a tighter budget */
   else if(B0.nonFinal&&A.race&&!A.race.isFinal&&!(o.ctx&&(o.ctx.human||(o.ctx.tags&&o.ctx.tags.you)))) B=over(B0,B0.nonFinal);   /* a heat, a semi, a last chance race, a qualifier: a smaller budget unless the home rider is in the moment */
-  if(o.follow&&st.callE[o.ev]!=null){ E=st.callE[o.ev]; why.push("follows the call: same moment, same level"); }
+  var youTake=false, fol=!!(o.follow&&st.callE[o.ev]!=null);
+  if(fol){ E=st.callE[o.ev]; why.push("follows the call: same moment, same level"); }
   else{
     fl=flagsOf(A,o.it,o.ctx);
     var res=evalEvent(evd,fl,why); E=res.E; forced=res.forced;
-    if(E>=3&&!forced){
+    /* the person taking the lead for the first time in a race keeps its HUGE, whatever came before (the review: an early podium pass or two
+       computer lead changes used the budget, and his own lead change came out BIG): it counts like a forced peak (the 25 s gap) */
+    youTake=E>=3&&!forced&&o.ev==="lead_change"&&!!(o.ctx&&o.ctx.tags&&o.ctx.tags.you)&&!st.youLed;
+    if(youTake) why.push("the home rider takes the lead for the first time in this race: HUGE, whatever the budget");
+    if(E>=3&&!forced&&!youTake){
       if(!fl.lastlap&&now-st.last3At<B.minGapMs){ E=2; why.push("budget: a HUGE was said "+Math.round((now-st.last3At)/1000)+" s ago, so this one is BIG"); }
       else if(st.earned>=B.maxEarned-(fl.lastlap?0:(B.reserveLastLap|0))){ E=2; why.push("budget: "+st.earned+" earned HUGE calls already in this race"+(fl.lastlap?"":" (the last "+(B.reserveLastLap|0)+" is kept for the last lap)")+", so this one is BIG"); }
     }
-    if(E>=3){ st.last3At=now; st.n3++; if(!forced) st.earned++; }
     st.callE[o.ev]=E;
   }
   var lv=clamp(E+ln.d,0,ln.max);
+  /* only a line actually SAID at HUGE spends the budget (the review: a moment rated HUGE but said by a BIG-at-most line charged the gap and the
+     count, and the next real HUGE was turned down) */
+  if(!fol&&E>=3&&lv>=3){ st.last3At=now; st.n3++; if(!forced&&!youTake) st.earned++; if(youTake) st.youLed=true; }
   if(now-st.hugeLineAt<C.floorMs&&lv<C.floor&&ln.kind!=="t"){ var fl2=Math.min(ln.max,C.floor); if(fl2>lv){ lv=fl2; why.push("continuity: right after a HUGE line, not below lively"); } }   /* never above the line's own range: a calm-only line has no lively take */
   if(lv>=3) st.hugeLineAt=now;
   st.lastLv=lv; st.lastAt=now;
