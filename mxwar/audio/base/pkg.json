@@ -1,0 +1,947 @@
+{
+ "v": 1,
+ "pkg": "base",
+ "made": "2026-10-19T14:46:58.020Z",
+ "lufs": -16,
+ "lead": 0.05,
+ "sr": 48000,
+ "picks": "music/CEO-PICKS.md (the CEO, 2026-10-19 08:25-08:30, by ear from the reel)",
+ "rotation": [
+  "c1",
+  "c3",
+  "c4",
+  "c5",
+  "c6",
+  "c7"
+ ],
+ "cues": {
+  "bumper-c1": {
+   "kind": "sting",
+   "bus": "music",
+   "gainDb": -4,
+   "src": "c1",
+   "use": "Up next: the next race",
+   "bpm": 128,
+   "beats": 4,
+   "bar": 1.875,
+   "beat0": 0.064,
+   "fromBar": 105,
+   "on": 0.050937,
+   "file": "bumper-c1.2d186281.m4a",
+   "len": 5.626,
+   "bytes": 93364
+  },
+  "bumper-c3": {
+   "kind": "sting",
+   "bus": "music",
+   "gainDb": -4,
+   "src": "c3",
+   "use": "Up next: the next race",
+   "bpm": 180,
+   "beats": 4,
+   "bar": 1.333333,
+   "beat0": 0.063,
+   "fromBar": 18,
+   "on": 0.073646,
+   "file": "bumper-c3.bc74c402.m4a",
+   "len": 5.363,
+   "bytes": 91088
+  },
+  "bumper-c4": {
+   "kind": "sting",
+   "bus": "music",
+   "gainDb": -4,
+   "src": "c4",
+   "use": "Up next: the next race",
+   "bpm": 160,
+   "beats": 4,
+   "bar": 1.5,
+   "beat0": 0.065,
+   "fromBar": 92,
+   "on": 0.050333,
+   "file": "bumper-c4.6d6e209c.m4a",
+   "len": 6.065,
+   "bytes": 100961
+  },
+  "bumper-c5": {
+   "kind": "sting",
+   "bus": "music",
+   "gainDb": -4,
+   "src": "c5",
+   "use": "Up next: the next race",
+   "bpm": 170,
+   "beats": 4,
+   "bar": 1.411765,
+   "beat0": 0.072,
+   "fromBar": 94,
+   "on": 0.050354,
+   "file": "bumper-c5.dfacddec.m4a",
+   "len": 6.3927,
+   "bytes": 106925
+  },
+  "bumper-c6": {
+   "kind": "sting",
+   "bus": "music",
+   "gainDb": -4,
+   "src": "c6",
+   "use": "Up next: the next race",
+   "bpm": 172,
+   "beats": 4,
+   "bar": 1.395349,
+   "beat0": 0.095,
+   "fromBar": 149,
+   "on": 0.050688,
+   "file": "bumper-c6.a044ea4c.m4a",
+   "len": 5.1636,
+   "bytes": 86874
+  },
+  "bumper-c7": {
+   "kind": "sting",
+   "bus": "music",
+   "gainDb": -4,
+   "src": "c7",
+   "use": "Up next: the next race",
+   "bpm": 209,
+   "beats": 4,
+   "bar": 1.148325,
+   "beat0": 0.081,
+   "fromBar": 175,
+   "on": 0.050688,
+   "file": "bumper-c7.9974fab9.m4a",
+   "len": 5.4089,
+   "bytes": 90417
+  },
+  "checkered": {
+   "kind": "sting",
+   "bus": "show",
+   "gainDb": 0,
+   "src": "c9",
+   "use": "the Main's winner takes the flag",
+   "bpm": 172,
+   "beats": 4,
+   "bar": 1.395349,
+   "beat0": 0.05,
+   "on": 0.05,
+   "file": "checkered.9f57b7f5.m4a",
+   "len": 5.4407,
+   "bytes": 90073
+  },
+  "hit": {
+   "kind": "sting",
+   "bus": "show",
+   "gainDb": 0,
+   "src": "c9",
+   "use": "a stat lands, a stamp",
+   "bpm": 172,
+   "beats": 4,
+   "bar": 1.395349,
+   "beat0": 0.05,
+   "on": 0.05,
+   "file": "hit.fd5ff5fb.m4a",
+   "len": 1.95,
+   "bytes": 33191
+  },
+  "long-c1": {
+   "kind": "stream",
+   "bus": "music",
+   "gainDb": -2,
+   "src": "c1",
+   "use": "menu (after the theme) and finale",
+   "bpm": 128,
+   "beats": 4,
+   "bar": 1.875,
+   "beat0": 0.08,
+   "fromBar": 72,
+   "on": 0.050833,
+   "file": "long-c1.d939f5f4.m4a",
+   "len": 67.517,
+   "bytes": 1120156
+  },
+  "long-c3": {
+   "kind": "stream",
+   "bus": "music",
+   "gainDb": -2,
+   "src": "c3",
+   "use": "menu (after the theme) and finale",
+   "bpm": 180,
+   "beats": 4,
+   "bar": 1.333333,
+   "beat0": 0.063,
+   "fromBar": 18,
+   "on": 0.073646,
+   "file": "long-c3.a5a1af06.m4a",
+   "len": 65.6197,
+   "bytes": 1088698
+  },
+  "long-c4": {
+   "kind": "stream",
+   "bus": "music",
+   "gainDb": -2,
+   "src": "c4",
+   "use": "menu (after the theme) and finale",
+   "bpm": 160,
+   "beats": 4,
+   "bar": 1.5,
+   "beat0": 0.065,
+   "fromBar": 92,
+   "on": 0.050333,
+   "file": "long-c4.bc32aff4.m4a",
+   "len": 63.065,
+   "bytes": 1028391
+  },
+  "long-c5": {
+   "kind": "stream",
+   "bus": "music",
+   "gainDb": -2,
+   "src": "c5",
+   "use": "menu (after the theme) and finale",
+   "bpm": 170,
+   "beats": 4,
+   "bar": 1.411765,
+   "beat0": 0.064,
+   "fromBar": 56,
+   "on": 0.050875,
+   "file": "long-c5.9b3e5206.m4a",
+   "len": 60.0318,
+   "bytes": 985155
+  },
+  "long-c6": {
+   "kind": "stream",
+   "bus": "music",
+   "gainDb": -2,
+   "src": "c6",
+   "use": "menu (after the theme) and finale",
+   "bpm": 172,
+   "beats": 4,
+   "bar": 1.395349,
+   "beat0": 0.067,
+   "fromBar": 112,
+   "on": 0.050625,
+   "file": "long-c6.c919b698.m4a",
+   "len": 56.7635,
+   "bytes": 940470
+  },
+  "long-c7": {
+   "kind": "stream",
+   "bus": "music",
+   "gainDb": -2,
+   "src": "c7",
+   "use": "menu (after the theme) and finale",
+   "bpm": 209,
+   "beats": 4,
+   "bar": 1.148325,
+   "beat0": 0.086,
+   "fromBar": 128,
+   "on": 0.050458,
+   "file": "long-c7.195a5d4a.m4a",
+   "len": 59.3851,
+   "bytes": 971165
+  },
+  "next-c1": {
+   "kind": "bed",
+   "bus": "music",
+   "gainDb": -5.89,
+   "src": "c1",
+   "use": "Up next / next week (lighter)",
+   "fromBar": 84,
+   "searched": 82,
+   "runnerUp": [
+    {
+     "a": 76,
+     "n": 8,
+     "ratio": 0.427,
+     "dB": -18.4
+    },
+    {
+     "a": 80,
+     "n": 8,
+     "ratio": 0.491,
+     "dB": -18.9
+    },
+    {
+     "a": 72,
+     "n": 8,
+     "ratio": 0.419,
+     "dB": -18
+    }
+   ],
+   "bpm": 128,
+   "beats": 4,
+   "bar": 1.875,
+   "bars": 8,
+   "pre": 0.039,
+   "loop": [
+    0.1,
+    15.1
+   ],
+   "beat0": 0.139,
+   "end": [
+    15.2,
+    18.926
+   ],
+   "endPre": 0.039,
+   "on": 0.05,
+   "file": "next-c1.a62de2c3.m4a",
+   "len": 18.926,
+   "bytes": 314596,
+   "bodyLufs": -16.11
+  },
+  "next-c3": {
+   "kind": "bed",
+   "bus": "music",
+   "gainDb": -6.08,
+   "src": "c3",
+   "use": "Up next / next week (lighter)",
+   "fromBar": 24,
+   "searched": 18,
+   "runnerUp": [
+    {
+     "a": 12,
+     "n": 16,
+     "ratio": 0.447,
+     "dB": -14
+    },
+    {
+     "a": 8,
+     "n": 16,
+     "ratio": 0.557,
+     "dB": -14.5
+    },
+    {
+     "a": 9,
+     "n": 16,
+     "ratio": 0.411,
+     "dB": -14.3
+    }
+   ],
+   "bpm": 180,
+   "beats": 4,
+   "bar": 1.333333,
+   "bars": 16,
+   "pre": 0.024,
+   "loop": [
+    0.1,
+    21.433333
+   ],
+   "beat0": 0.124,
+   "end": [
+    21.533333,
+    24.2
+   ],
+   "endPre": 0.024,
+   "on": 0.05,
+   "file": "next-c3.d33a23e6.m4a",
+   "len": 24.2,
+   "bytes": 401722,
+   "bodyLufs": -15.92
+  },
+  "next-c4": {
+   "kind": "bed",
+   "bus": "music",
+   "gainDb": -6.08,
+   "src": "c4",
+   "use": "Up next / next week (lighter)",
+   "fromBar": 40,
+   "searched": 17,
+   "runnerUp": [
+    {
+     "a": 36,
+     "n": 16,
+     "ratio": 0.413,
+     "dB": -14
+    },
+    {
+     "a": 48,
+     "n": 16,
+     "ratio": 0.412,
+     "dB": -13.8
+    },
+    {
+     "a": 44,
+     "n": 16,
+     "ratio": 0.475,
+     "dB": -13.9
+    }
+   ],
+   "bpm": 160,
+   "beats": 4,
+   "bar": 1.5,
+   "bars": 16,
+   "pre": 0.032,
+   "loop": [
+    0.1,
+    24.1
+   ],
+   "beat0": 0.132,
+   "end": [
+    24.2,
+    27.2
+   ],
+   "endPre": 0.032,
+   "on": 0.05,
+   "file": "next-c4.0efca8ba.m4a",
+   "len": 27.2,
+   "bytes": 444586,
+   "bodyLufs": -15.92
+  },
+  "next-c5": {
+   "kind": "bed",
+   "bus": "music",
+   "gainDb": -5.89,
+   "src": "c5",
+   "use": "Up next / next week (lighter)",
+   "fromBar": 25,
+   "searched": 42,
+   "runnerUp": [
+    {
+     "a": 76,
+     "n": 16,
+     "ratio": 0.413,
+     "dB": -10.5
+    },
+    {
+     "a": 64,
+     "n": 16,
+     "ratio": 0.42,
+     "dB": -10.5
+    },
+    {
+     "a": 40,
+     "n": 16,
+     "ratio": 0.42,
+     "dB": -10.4
+    }
+   ],
+   "bpm": 170,
+   "beats": 4,
+   "bar": 1.411765,
+   "bars": 16,
+   "pre": 0.019,
+   "loop": [
+    0.1,
+    22.688229
+   ],
+   "beat0": 0.119,
+   "end": [
+    22.788229,
+    27.7132
+   ],
+   "endPre": 0.016,
+   "on": 0.05,
+   "file": "next-c5.3b42a57b.m4a",
+   "len": 27.7132,
+   "bytes": 465140,
+   "bodyLufs": -16.11
+  },
+  "next-c6": {
+   "kind": "bed",
+   "bus": "music",
+   "gainDb": -6.18,
+   "src": "c6",
+   "use": "Up next / next week (lighter)",
+   "fromBar": 64,
+   "searched": 106,
+   "runnerUp": [
+    {
+     "a": 20,
+     "n": 16,
+     "ratio": 0.391,
+     "dB": -11.9
+    },
+    {
+     "a": 96,
+     "n": 16,
+     "ratio": 0.398,
+     "dB": -11.9
+    },
+    {
+     "a": 112,
+     "n": 16,
+     "ratio": 0.399,
+     "dB": -11.9
+    }
+   ],
+   "bpm": 172,
+   "beats": 4,
+   "bar": 1.395349,
+   "bars": 16,
+   "pre": 0.016,
+   "loop": [
+    0.1,
+    22.425583
+   ],
+   "beat0": 0.116,
+   "end": [
+    22.525583,
+    26.2139
+   ],
+   "endPre": 0.015,
+   "on": 0.05,
+   "file": "next-c6.a996b167.m4a",
+   "len": 26.2139,
+   "bytes": 432871,
+   "bodyLufs": -15.82
+  },
+  "next-c7": {
+   "kind": "bed",
+   "bus": "music",
+   "gainDb": -6,
+   "src": "c7",
+   "use": "Up next / next week (lighter)",
+   "fromBar": 72,
+   "searched": 22,
+   "runnerUp": [
+    {
+     "a": 68,
+     "n": 16,
+     "ratio": 0.452,
+     "dB": -11.9
+    },
+    {
+     "a": 70,
+     "n": 16,
+     "ratio": 0.428,
+     "dB": -12.2
+    },
+    {
+     "a": 76,
+     "n": 16,
+     "ratio": 0.543,
+     "dB": -11.7
+    }
+   ],
+   "bpm": 209,
+   "beats": 4,
+   "bar": 1.148325,
+   "bars": 16,
+   "pre": 0.036,
+   "loop": [
+    0.1,
+    18.473208
+   ],
+   "beat0": 0.136,
+   "end": [
+    18.573208,
+    21.6364
+   ],
+   "endPre": 0.032,
+   "on": 0.05,
+   "file": "next-c7.f5f1b478.m4a",
+   "len": 21.6364,
+   "bytes": 358104,
+   "bodyLufs": -16
+  },
+  "open": {
+   "kind": "sting",
+   "bus": "show",
+   "gainDb": 0,
+   "src": "c2",
+   "use": "the cold open's first frame",
+   "bpm": 124,
+   "beats": 4,
+   "bar": 1.935484,
+   "beat0": 1.0729,
+   "on": 0.116542,
+   "file": "open.9dd73277.m4a",
+   "len": 4.158,
+   "bytes": 69380
+  },
+  "outro": {
+   "kind": "sting",
+   "bus": "show",
+   "gainDb": 0,
+   "src": "c8",
+   "use": "the sign-off, the cut to the gate",
+   "bpm": 175,
+   "beats": 4,
+   "bar": 1.371429,
+   "beat0": 0.062,
+   "on": 0.050417,
+   "file": "outro.33da1067.m4a",
+   "len": 3.3668,
+   "bytes": 57352
+  },
+  "podium": {
+   "kind": "sting",
+   "bus": "music",
+   "gainDb": -4,
+   "src": "c8",
+   "use": "the podium: the song's last 16 bars and its final hit",
+   "bpm": 175,
+   "beats": 4,
+   "bar": 1.371429,
+   "beat0": 0.078,
+   "on": 0.050833,
+   "file": "podium.d4cdbb12.m4a",
+   "len": 23.9542,
+   "bytes": 402065
+  },
+  "preA1": {
+   "kind": "bed",
+   "bus": "music",
+   "gainDb": -5.91,
+   "src": "c9",
+   "use": "the pre-race talk (the riff, no lead)",
+   "bpm": 172,
+   "beats": 4,
+   "bar": 1.395349,
+   "bars": 16,
+   "pre": 0.013,
+   "loop": [
+    0.1,
+    22.425583
+   ],
+   "beat0": 0.113,
+   "end": [
+    22.525583,
+    27.9283
+   ],
+   "endPre": 0.012,
+   "on": 0.05,
+   "file": "preA1.2ff8a679.m4a",
+   "len": 27.9283,
+   "bytes": 456623,
+   "bodyLufs": -16.09
+  },
+  "preA2": {
+   "kind": "bed",
+   "bus": "music",
+   "gainDb": -6.19,
+   "src": "c9",
+   "use": "the pre-race talk, high stakes (riff + chorus, more crashes)",
+   "bpm": 172,
+   "beats": 4,
+   "bar": 1.395349,
+   "bars": 16,
+   "pre": 0.021,
+   "loop": [
+    0.1,
+    22.425583
+   ],
+   "beat0": 0.121,
+   "end": [
+    22.525583,
+    27.9513
+   ],
+   "endPre": 0.035,
+   "on": 0.05,
+   "file": "preA2.18aafb0e.m4a",
+   "len": 27.9513,
+   "bytes": 453022,
+   "bodyLufs": -15.81
+  },
+  "recapB1": {
+   "kind": "bed",
+   "bus": "music",
+   "gainDb": -5.94,
+   "src": "c8",
+   "use": "the recap and the replays (the riff section: its lead stays out of the voices' band)",
+   "fromBar": 84,
+   "searched": 4,
+   "runnerUp": [
+    {
+     "a": 81,
+     "n": 12,
+     "ratio": 0.387,
+     "dB": -11.6
+    },
+    {
+     "a": 83,
+     "n": 12,
+     "ratio": 0.413,
+     "dB": -11.6
+    },
+    {
+     "a": 82,
+     "n": 12,
+     "ratio": 0.42,
+     "dB": -11.6
+    }
+   ],
+   "bpm": 175,
+   "beats": 4,
+   "bar": 1.371429,
+   "bars": 12,
+   "pre": 0.031,
+   "loop": [
+    0.1,
+    16.557146
+   ],
+   "beat0": 0.131,
+   "end": [
+    16.657146,
+    19.9739
+   ],
+   "endPre": 0.012,
+   "on": 0.05,
+   "file": "recapB1.1dfb6533.m4a",
+   "len": 19.9739,
+   "bytes": 335140,
+   "bodyLufs": -16.06
+  },
+  "recapB2": {
+   "kind": "bed",
+   "bus": "music",
+   "gainDb": -5.97,
+   "src": "c8",
+   "use": "the recap, high stakes (the melody section the CEO heard)",
+   "fromBar": 24,
+   "searched": 66,
+   "runnerUp": [
+    {
+     "a": 116,
+     "n": 16,
+     "ratio": 0.419,
+     "dB": -11
+    },
+    {
+     "a": 28,
+     "n": 16,
+     "ratio": 0.423,
+     "dB": -11
+    },
+    {
+     "a": 20,
+     "n": 16,
+     "ratio": 0.426,
+     "dB": -10.9
+    }
+   ],
+   "bpm": 175,
+   "beats": 4,
+   "bar": 1.371429,
+   "bars": 16,
+   "pre": 0.012,
+   "loop": [
+    0.1,
+    22.042854
+   ],
+   "beat0": 0.112,
+   "end": [
+    22.142854,
+    25.4596
+   ],
+   "endPre": 0.012,
+   "on": 0.05,
+   "file": "recapB2.d12175f3.m4a",
+   "len": 25.4596,
+   "bytes": 425975,
+   "bodyLufs": -16.03
+  },
+  "theme": {
+   "kind": "sting",
+   "bus": "show",
+   "gainDb": 0,
+   "src": "c9",
+   "use": "the signature under the title card (pre and post)",
+   "bpm": 172,
+   "beats": 4,
+   "bar": 1.395349,
+   "beat0": 0.05,
+   "on": 0.05,
+   "file": "theme.82dff8a7.m4a",
+   "len": 11.0221,
+   "bytes": 176344
+  },
+  "title": {
+   "kind": "stream",
+   "bus": "music",
+   "gainDb": -2,
+   "src": "c9",
+   "use": "the title / first menu: the whole theme as the CEO heard it",
+   "bpm": 172,
+   "beats": 4,
+   "bar": 1.395349,
+   "beat0": 0.05,
+   "on": 0.05,
+   "file": "title.f5494759.m4a",
+   "len": 23.5802,
+   "bytes": 386982
+  },
+  "war": {
+   "kind": "sting",
+   "bus": "show",
+   "gainDb": 0,
+   "src": "c9",
+   "use": "the WAR flash",
+   "bpm": 172,
+   "beats": 4,
+   "bar": 1.395349,
+   "beat0": 0.05,
+   "on": 0.05,
+   "file": "war.3817f7bc.m4a",
+   "len": 1.65,
+   "bytes": 28392
+  },
+  "whooshIn": {
+   "kind": "sting",
+   "bus": "show",
+   "gainDb": -2,
+   "src": "synth",
+   "use": "into a replay",
+   "bpm": null,
+   "beats": null,
+   "bar": null,
+   "beat0": null,
+   "on": 0.061958,
+   "file": "whooshIn.f6d675c6.m4a",
+   "len": 0.67,
+   "bytes": 12638
+  },
+  "whooshOut": {
+   "kind": "sting",
+   "bus": "show",
+   "gainDb": -2,
+   "src": "synth",
+   "use": "back to live",
+   "bpm": null,
+   "beats": null,
+   "bar": null,
+   "beat0": null,
+   "on": 0.050479,
+   "file": "whooshOut.509bb9e1.m4a",
+   "len": 0.53,
+   "bytes": 10988
+  }
+ },
+ "groups": {
+  "menu": {
+   "alts": [
+    "long-c1",
+    "long-c3",
+    "long-c4",
+    "long-c5",
+    "long-c6",
+    "long-c7"
+   ],
+   "first": "title"
+  },
+  "finale": {
+   "alts": [
+    "long-c1",
+    "long-c3",
+    "long-c4",
+    "long-c5",
+    "long-c6",
+    "long-c7"
+   ]
+  },
+  "next": {
+   "alts": [
+    "next-c1",
+    "next-c3",
+    "next-c4",
+    "next-c5",
+    "next-c6",
+    "next-c7"
+   ]
+  },
+  "bumper": {
+   "alts": [
+    "bumper-c1",
+    "bumper-c3",
+    "bumper-c4",
+    "bumper-c5",
+    "bumper-c6",
+    "bumper-c7"
+   ]
+  }
+ },
+ "credits": [
+  {
+   "cue": "long-c1, next-c1, bumper-c1",
+   "changes": "cut, looped and levelled for Motocross War",
+   "title": "Hotrock",
+   "by": "Kevin MacLeod (incompetech.com)",
+   "licence": "CC BY 4.0",
+   "url": "http://creativecommons.org/licenses/by/4.0/",
+   "source": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Hotrock.mp3",
+   "isrc": "USUAN1100201"
+  },
+  {
+   "cue": "open",
+   "changes": "cut and levelled for Motocross War",
+   "title": "Welcome to the Show",
+   "by": "Kevin MacLeod (incompetech.com)",
+   "licence": "CC BY 4.0",
+   "url": "http://creativecommons.org/licenses/by/4.0/",
+   "source": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Welcome%20to%20the%20Show.mp3",
+   "isrc": "USUAN1100013"
+  },
+  {
+   "cue": "long-c3, next-c3, bumper-c3",
+   "changes": "cut, looped and levelled for Motocross War",
+   "title": "Last Stand Lets Go",
+   "by": "Peachtea (Noah Cedeno)",
+   "licence": "CC0 1.0",
+   "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "source": "https://opengameart.org/content/last-stand-lets-go"
+  },
+  {
+   "cue": "long-c4, next-c4, bumper-c4",
+   "changes": "cut, looped and levelled for Motocross War",
+   "title": "The Wreck",
+   "by": "Zander Noriega",
+   "licence": "CC BY 3.0",
+   "url": "https://creativecommons.org/licenses/by/3.0/",
+   "source": "https://opengameart.org/content/the-wreck"
+  },
+  {
+   "cue": "long-c5, next-c5, bumper-c5",
+   "changes": "cut, looped and levelled for Motocross War",
+   "title": "Exhilarate",
+   "by": "Kevin MacLeod (incompetech.com)",
+   "licence": "CC BY 4.0",
+   "url": "http://creativecommons.org/licenses/by/4.0/",
+   "source": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Exhilarate.mp3",
+   "isrc": "USUAN1300028"
+  },
+  {
+   "cue": "long-c6, next-c6, bumper-c6",
+   "changes": "cut, looped and levelled for Motocross War",
+   "title": "Ready Aim Fire",
+   "by": "Kevin MacLeod (incompetech.com)",
+   "licence": "CC BY 4.0",
+   "url": "http://creativecommons.org/licenses/by/4.0/",
+   "source": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Ready%20Aim%20Fire.mp3",
+   "isrc": "USUAN1500002"
+  },
+  {
+   "cue": "long-c7, next-c7, bumper-c7",
+   "changes": "cut, looped and levelled for Motocross War",
+   "title": "Summon the Rawk",
+   "by": "Kevin MacLeod (incompetech.com)",
+   "licence": "CC BY 4.0",
+   "url": "http://creativecommons.org/licenses/by/4.0/",
+   "source": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Summon%20the%20Rawk.mp3",
+   "isrc": "USUAN1200050"
+  },
+  {
+   "cue": "recapB1, recapB2, podium, outro",
+   "changes": "cut, looped and levelled for Motocross War",
+   "title": "Megasong",
+   "by": "Emma_MA",
+   "licence": "CC0 1.0",
+   "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "source": "https://opengameart.org/content/megasong"
+  },
+  {
+   "cue": "checkered, hit, preA1, preA2, theme, title, war",
+   "changes": "made for Motocross War",
+   "title": "MX War Theme",
+   "by": "Motocross War (original, made by the game's own code)",
+   "licence": "original",
+   "url": null,
+   "source": null
+  },
+  {
+   "cue": "whooshIn, whooshOut",
+   "changes": "made for Motocross War",
+   "title": "Replay whooshes",
+   "by": "Motocross War (original, synthesized by the game's own code)",
+   "licence": "original",
+   "url": null,
+   "source": null
+  }
+ ]
+}
