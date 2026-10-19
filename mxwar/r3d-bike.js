@@ -107,6 +107,8 @@ function mudTexture(S){
   t.generateMipmaps=true; t.minFilter=THREE.LinearMipmapLinearFilter; t.magFilter=THREE.LinearFilter; t.needsUpdate=true; return t;
 }
 function tex(lo){ const k=lo?"lo":"hi"; if(!TEX[k]) TEX[k]={env:lo?null:envTexture(256),liv:liveryTexture(lo?512:1024),mud:mudTexture(lo?256:512),mudS:lo?256:512}; return TEX[k]; }
+/* [live] the bike's once-a-page textures made ahead (race3d.js V.prepareWorld calls it in a task of its own, so the first race's riders take less time to build) */
+export function warmBike(lo){ tex(!!lo); }
 
 /* THE NUMBER ON THE SIDE PANELS (milestone 2): a per-race atlas, one cell per rider, three masks: r = the number background, g = the numerals and the rider's name, b = a thin
    border. The shader projects the cell onto both side panels (mirrored on the left so it reads the right way), paints the class colours (PLATE_CLASS: 450 = white

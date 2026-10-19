@@ -1140,8 +1140,8 @@ export function create(host,hooks){
     const HC=GL.HTMLCanvasElement&&GL.HTMLCanvasElement.prototype;
     if(HC&&HC.getContext&&!HC.getContext.__mxLive){ const gc0=HC.getContext; const gc=function(t,o){ if((GL.__mxWRF|0)>0&&!GL.__mxWRFdone&&t==="2d") o=Object.assign({willReadFrequently:true},o||{}); return gc0.call(this,t,o); }; gc.__mxLive=true; HC.getContext=gc; }
     const building=fn=>{ GL.__mxWRF=(GL.__mxWRF|0)+1; try{ return fn(); } finally { GL.__mxWRF=Math.max(0,(GL.__mxWRF|0)-1); } };
-    let prepTok=0, gap=false, BWS=null, SWS=null, inflight=null, sizeOK=0;
-    try{ import("./r3d-world.js").then(m=>{ BWS=m&&m.buildWorldSteps||null; },()=>{}); import("./r3d-track.js").then(m=>{ SWS=m&&m.soilWarmSteps||null; },()=>{}); }catch(e){}
+    let prepTok=0, gap=false, BWS=null, SWS=null, PM=null, WB=null, inflight=null, sizeOK=0;
+    try{ import("./r3d-world.js").then(m=>{ BWS=m&&m.buildWorldSteps||null; },()=>{}); import("./r3d-track.js").then(m=>{ SWS=m&&m.soilWarmSteps||null; PM=m&&m.padMaps||null; },()=>{}); import("./r3d-bike.js").then(m=>{ WB=m&&m.warmBike||null; },()=>{}); }catch(e){}
     const setRace0=V.setRace, resize0=V.resize;
     V.setRace=function(){ prepTok++; inflight=null; gap=false; const r=building(()=>setRace0.apply(V,arguments)); GL.__mxWRFdone=true; return r; };   /* (a setRace cancels a world still being prepared) */
     /* V.resize: between the world's last step and setRace the old riders are gone (setRace resizes); and the SAME size re-allocates nothing: the game lays its page out
@@ -1169,7 +1169,7 @@ export function create(host,hooks){
           me={key:key,p:null}; inflight=me;
           raceGen++; drawHold=holdWanted(); warmHold=null;   /* nothing draws while the world is replaced (a warm in flight for the old race stops) */
           const q=QUAL.options(LO), alive=()=>tok===prepTok&&!V.lost;
-          let C2=null, it=null, w2=null, n=0, sit=SWS?SWS(q):null;   /* (first the soil tiles the world needs: once a page, in steps) */
+          let C2=null, it=null, w2=null, n=0, sit=SWS?SWS(q):null, wb=false, wp=false;   /* (first the soil tiles the world needs: once a page, in steps) */
           const fail=e=>{ try{ console.warn("mxwar 3D: prepareWorld",e); }catch(x){} res(false); };   /* (setRace then builds it the old way) */
           const commit=()=>{
             if(R){ disposeTree(R.grp); scene.remove(R.grp); R=null; }   /* the old race's riders, particles and gate go with the old world (setRace makes new ones) */
@@ -1189,6 +1189,8 @@ export function create(host,hooks){
             try{
               building(()=>{
                 if(sit){ const r=sit.next(); if(r.done) sit=null; return; }
+                if(!wb){ wb=true; if(WB) WB(q.lo); return; }   /* the bike's once-a-page textures (r3d-bike.js warmBike: setRace's riders then skip them) */
+                if(!wp){ wp=true; if(PM) PM(pick.look.soil||"stadium-dirt"); return; }   /* the gate pad's maps for this soil (r3d-track.js padMaps, once a soil: as gateBuild) */
                 if(!C2){ C2=MX.Course.build(pick.layout); if(o.lapT>0&&Math.abs(C2.Tlap/o.lapT-1)>0.04){ const want=clamp(o.lapT,C2.Tlap*0.87,C2.Tlap*1.15); C2=MX.Course.build(Object.assign({},pick.layout,{vavg:C2.L/want})); } return; }
                 if(!w2){ if(!it&&BWS) it=BWS(C2,pick.look,q); if(it){ const r=it.next(); if(r.done) w2=r.value; } else w2=buildWorld(C2,pick.look,q); return; }
                 commit(); done=true;
