@@ -304,9 +304,9 @@ function create(o){
   };
 
   /* ---------- the graph ---------- */
-  function bankFor(){
+  function bankFor(off){
     if(!core||!core.m) return null;
-    var key=era.stroke===2?"eng2s":"eng4s", b=core.buf[key], f=core.m.files&&core.m.files[key];
+    var key=(era.stroke===2?"eng2s":"eng4s")+(off?"Off":""), b=core.buf[key], f=core.m.files&&core.m.files[key];
     if(!b||!f||!f.bins) return null;
     var d=b.getChannelData(0), off=core.on[key]||0, out=new Float32Array(Math.max(0,d.length-off)); out.set(d.subarray(off));
     return {data:out,bins:f.bins,sr:b.sampleRate};
@@ -334,7 +334,7 @@ function create(o){
     if(core&&core.worklet){
       try{
         G.wk=track(new g.AudioWorkletNode(C,"mx-engine",{numberOfInputs:0,numberOfOutputs:1,outputChannelCount:[2],
-          processorOptions:{stroke:era.stroke,cc:era.cc,seed:seed,gate:tier==="firetv"?6:8,main:low?3:4,bank:bank}}));
+          processorOptions:{stroke:era.stroke,cc:era.cc,seed:seed,gate:tier==="firetv"?6:8,main:low?3:4,bank:bank,bankOff:bank?bankFor(true):null}}));
         G.wk.connect(G.eng);
         G.P=function(n){ return G.wk.parameters.get(n); };
       }catch(e){ G.wk=null; }

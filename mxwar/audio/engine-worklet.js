@@ -15,7 +15,10 @@
      frequency, resampled to it x Doppler x pitch, crossfaded by log frequency, each bin keeping its own read position (no restart, no click). The
      recording carries the real timbre and the cycle-to-cycle life; the synthesized voice takes over as the throttle closes (the chops, the pops, the
      ring-ding) and is the whole sound when no bank is loaded.
-   processorOptions: {stroke: 2 | 4, cc: 125 | 250 | 450 | 500, seed, gate: 8 (the chorus size; 0..8), main: 4 (1..4), bank: {data, bins, sr} | null}.
+     A second bank, bankOff (the same recordings' decel stretches: the revs falling, the burble and the pops), takes over as the throttle closes,
+     with the synthesis only a light layer under it.
+   processorOptions: {stroke: 2 | 4, cc: 125 | 250 | 450 | 500, seed, gate: 8 (the chorus size; 0..8), main: 4 (1..4), bank: {data, bins, sr} | null,
+     bankOff: {data, bins, sr} | null}.
    Node (tests and the offline measurements): module.exports = {Engine, PARAMS, toneOf, eraRev}; Engine(o).render(L, R, n, P) renders n
    samples into L / R with P = {name: value} (the same names as the AudioParams). Silent voices cost nothing (skipped). */
 (function(){
@@ -100,15 +103,16 @@ function Engine(o){
   this.g=[]; for(var j=0;j<this.nGate;j++) this.g.push(new GVoice(seed*17+j*613+5,j,this.nGate));
   this.t=0;   /* the chorus's own clock (s) */
   this.nr=rng(seed^0x5bd1e995);
-  this.bank=null;
+  this.bank=null; this.bankOff=null;
   if(o.bank&&o.bank.data&&o.bank.bins){ try{ var B=new Bank(o.bank); if(B.M>=2){ this.bank=B; for(var k=0;k<MAIN;k++) initPos(this.v[k],B); for(var q=0;q<this.g.length;q++) initPos(this.g[q],B); } }catch(e){ this.bank=null; } }
+  if(this.bank&&o.bankOff&&o.bankOff.data&&o.bankOff.bins){ try{ var BO=new Bank(o.bankOff); if(BO.M>=2){ this.bankOff=BO; for(var k2=0;k2<MAIN;k2++){ var vv=this.v[k2]; vv.off={r:vv.r,pos:null,pk:{a:0,b:-1,wa:1,wb:0}}; initPos(vv.off,BO); } } }catch(e){ this.bankOff=null; } }
   /* the mix of the two: the recording on the throttle, the synthesis off it (o.mix: tests force 0 = synth only, 1 = recording only) */
   this.mix=o.mix==null?null:+o.mix;
   this.synthK=o.synthK==null?(this.stroke===2?1.0:0.37):+o.synthK;   /* the synth's level against the bank's (-20 dBFS RMS loops), measured: the four-stroke synth is 8.5 dB louder, the two-stroke level */
 }
 /* the recorded engine for one voice: n samples of the bins around firing frequency f (no Doppler) at playback factor D (Doppler x pitch), x amp, into Y */
-Engine.prototype.sampled=function(V,Y,n,f,D,amp){
-  var B=this.bank, pk=B.pick(f,V.pk), d=B.d, ba=B.bins[pk.a], ra=f*D/ba.f0, pa=V.pos[pk.a], la=ba.len, aa=ba.at, wa=pk.wa*amp;
+Engine.prototype.sampled=function(V,Y,n,f,D,amp,BK){
+  var B=BK||this.bank, pk=B.pick(f,V.pk), d=B.d, ba=B.bins[pk.a], ra=f*D/ba.f0, pa=V.pos[pk.a], la=ba.len, aa=ba.at, wa=pk.wa*amp;
   if(pk.b>=0&&pk.wb>1e-3){
     var bb=B.bins[pk.b], rb=f*D/bb.f0, pb=V.pos[pk.b], lb=bb.len, ab=bb.at, wb=pk.wb*amp;
     for(var i=0;i<n;i++){
@@ -132,9 +136,12 @@ Engine.prototype.voice=function(V,L,R,n,rpm,thr,gain,pan,dop,lp,pitch){
   if(YS.length<n){ YS=new Float32Array(n); YB=new Float32Array(n); }
   /* the weights: the recording while the throttle is open (its loudness rising with the revs and the load), the synthesis as it closes */
   var ws=0, wy=1;
-  if(this.bank){ var on=sstep(0.06,0.42,thr); ws=this.mix==null?(0.12+0.88*on):this.mix; wy=this.mix==null?(1-on):(1-this.mix); }   /* (on the throttle the recording alone: by measurement the closest to the real engines) */
+  var on=1, wo=0;
+  if(this.bank){ on=sstep(0.06,0.42,thr); ws=this.mix==null?(0.12+0.88*on):this.mix; wy=this.mix==null?(1-on):(1-this.mix); }   /* (on the throttle the recording alone: by measurement the closest to the real engines) */
+  if(this.bankOff&&this.mix==null){ wo=(1-on)*0.9; ws=on; wy=(1-on)*0.35; }   /* off the throttle: the recorded decel (the burble, the pops), the synthesis a light layer */
   var fRpm=two?rpm/60:rpm/120, ampB=ws*(0.3+0.7*Math.pow(thr,0.8))*(0.55+0.45*Math.min(1,rpm/rv.red));
   if(ws>1e-3) this.sampled(V,YB,n,fRpm,dop*pitch,ampB*2.4); else for(var z=0;z<n;z++) YB[z]=0;
+  if(wo>1e-3){ this.sampled(V.off,YS,n,fRpm,dop*pitch,wo*0.4*(0.55+0.45*Math.min(1,rpm/rv.red))*2.4,this.bankOff); for(var z2=0;z2<n;z2++) YB[z2]+=YS[z2]; }
   wy*=this.bank?this.synthK:1;
   var al=1-Math.exp(-2*Math.PI*Math.min(lp,sr*0.45)/sr), gl=gain*Math.cos((pan+1)*Math.PI/4), gr=gain*Math.sin((pan+1)*Math.PI/4);
   if(wy<1e-3){   /* the recording only: the distance and the pan */
