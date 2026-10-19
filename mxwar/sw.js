@@ -5,7 +5,7 @@ const PREFIX = VERSION.replace(/v[0-9]+$/, "");   // every game shares one origi
 // versions (a new VERSION never re-downloads audio: a changed file has a new name), cache-first; Range requests (the streamed menu tracks) are answered
 // from the cached whole file, so the music plays offline once heard online. [/bcast]
 const AUDIO = "mxwar-audio-1";
-const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "../sound.js", "../skins.js", "../saves.js", "../names.js", "./data/index.js", "./data/history.js", "./race.js", "./time.js", "./round.js", "./season.js", "./journal.js", "./announce-lines.js", "./intensity-data.js", "./intensity.js", "./announce.js", "./brain.js", "./art.js", "./track.js", "./booth.js", "./game.js",
+const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "../sound.js", "../skins.js", "../saves.js", "../names.js", "./data/index.js", "./data/history.js", "./race.js", "./time.js", "./round.js", "./season.js", "./journal.js", "./memory.js", "./announce-lines.js", "./intensity-data.js", "./intensity.js", "./announce.js", "./brain.js", "./art.js", "./track.js", "./booth.js", "./game.js",
   /* [bcast] */ "./mxsound.js", "./mxmusic.js", /* [/bcast] */
   "../ui/theme.css", "../ui/voice.css", "../ui/ui.js", "../ui/icons.js", "../ui/picker.js", "../ui/voice.js",
   "../ui/fonts/dmserifdisplay-latin.woff2", "../ui/fonts/dmserifdisplay-italic-latin.woff2", "../ui/fonts/manrope-var-latin.woff2",
