@@ -27,12 +27,17 @@ function req(p){ try{ return typeof require==="function"?require(p):null; }catch
 function SN(){ return MX.Season||req("./season.js"); }
 
 /* ---------------- the season so far ---------------- */
-function resAt(G,r){ var L=G.results||[]; for(var i=0;i<L.length;i++) if(L[i].ri===r) return L[i]; return null; }
+/* lookups by round and by rider, indexed once per results list (a scored round never changes; the indexes live beside the season, never in it) */
+var WM=typeof WeakMap==="function", RIDX=WM?new WeakMap():null, PMAP=WM?new WeakMap():null;
+function resAt(G,r){ var L=G.results||[], i;
+  if(RIDX){ var e=RIDX.get(L); if(!e||e.n!==L.length){ e={n:L.length,m:{}}; for(i=0;i<L.length;i++) if(!Object.prototype.hasOwnProperty.call(e.m,L[i].ri)) e.m[L[i].ri]=L[i]; RIDX.set(L,e); } return Object.prototype.hasOwnProperty.call(e.m,r)?e.m[r]:null; }
+  for(i=0;i<L.length;i++) if(L[i].ri===r) return L[i]; return null; }
+function pmap(x){ var m=PMAP.get(x); if(m) return m; m={p:Object.create(null),m:Object.create(null)}; (x.cls||[]).forEach(function(id,i){ if(!(id in m.p)) m.p[id]=i+1; }); (x.main||[]).forEach(function(id){ m.m[id]=1; }); PMAP.set(x,m); return m; }
 function before(G,ri){ var out=[]; (G.results||[]).forEach(function(x){ if(x.ri<ri) out.push(x); }); return out; }
 function upto(G,ri){ var out=[]; (G.results||[]).forEach(function(x){ if(x.ri<=ri) out.push(x); }); return out; }
 function jrAt(G,r){ var j=G.jr; if(!j||!j.r) return null; for(var i=0;i<j.r.length;i++) if(j.r[i].ri===r) return j.r[i]; return null; }
-function place(x,id){ return x?x.cls.indexOf(id)+1:0; }
-function inMain(x,id){ return !!x&&(x.main||[]).indexOf(id)>=0; }
+function place(x,id){ if(!x) return 0; if(PMAP) return pmap(x).p[id]||0; return x.cls.indexOf(id)+1; }
+function inMain(x,id){ if(!x) return false; if(PMAP) return !!pmap(x).m[id]; return (x.main||[]).indexOf(id)>=0; }
 function fplace(x,id){ return inMain(x,id)?place(x,id):0; }                  /* a finals place; 0 = no final (the arc counts finals results only) */
 function fmtOf(G,x){ return (G.formats&&(G.formats[x.fmt]||G.formats[G.fmt]))||{}; }
 function tableOf(G,x){ var F=fmtOf(G,x); return F.table&&F.table.length?F.table:DEF_T; }
@@ -125,11 +130,14 @@ function rivalFor(G,r,hid){
 /* ---------------- the pick model learns (form against the points table, 0.3 .. 0.7) ---------------- */
 function formPick(G,x,env){ var fin=(x.main&&x.main.length?x.main:x.cls.slice(0,20)), pf=null, bf=-1; fin.forEach(function(id){ var f=form(G,id,x.ri,env).r; if(f>bf+1e-12||(Math.abs(f-bf)<=1e-12&&id<pf)){ bf=f; pf=id; } }); return pf; }
 function pointsPick(G,x){ var fin=(x.main&&x.main.length?x.main:x.cls.slice(0,20)), pp=null, bp=-1; fin.forEach(function(id){ var p=ptsAfter(G,x.ri-1,id); if(p>bp||(p===bp&&id<pp)){ bp=p; pp=id; } }); return pp; }
+/* a scored round's two picks never change: kept beside the round (the learning re-reads every earlier round each round) */
+var XPICK=WM?new WeakMap():null;
+function picksOf(G,x,env){ var e=XPICK?XPICK.get(x):null; if(e) return e; e={pf:formPick(G,x,env),pp:pointsPick(G,x)}; if(XPICK) XPICK.set(x,e); return e; }
 function weights(G,ri,env){
   return cached(G,ri,"wf",function(){
     var wf=0.5;
     before(G,ri).forEach(function(x){ if(x.ri<1||!x.title) return;
-      var pf=formPick(G,x,env), pp=pointsPick(G,x);
+      var pk=picksOf(G,x,env), pf=pk.pf, pp=pk.pp;
       if(pf===x.winner&&pp!==x.winner) wf=Math.min(0.7,wf+0.1); else if(pp===x.winner&&pf!==x.winner) wf=Math.max(0.3,wf-0.1);
       wf=Math.round(wf*10)/10; });
     return wf;
@@ -138,7 +146,7 @@ function weights(G,ri,env){
 /* how often the form-alone pick won in the last k title rounds (the pattern story's claim) */
 function formHits(G,ri,env,k){
   var L=before(G,ri).filter(function(x){ return x.ri>=1&&x.title; }).slice(-k), n=0;
-  L.forEach(function(x){ if(formPick(G,x,env)===x.winner) n++; });
+  L.forEach(function(x){ if(picksOf(G,x,env).pf===x.winner) n++; });
   return {n:n,of:L.length};
 }
 
