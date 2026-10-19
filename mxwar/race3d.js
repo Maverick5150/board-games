@@ -241,7 +241,7 @@ export function create(host,hooks){
 
   /* ---------------- the clock, the laps, the gaps ---------------- */
   function lapStartT(n){ return MX.Course.tOfD(C,MX.Course.lapStartD(C,n)); }
-  function tauOf(i){ const r=rs[i]; if(r.crash) return r.crash.tau; return T-r.g; }
+  function tauOf(i){ const r=rs[i]; if(r.crash) return r.crash.tau; return LIVE?liveTau(r):T-r.g; }   /* (LIVE: the time model's clock places him: [hook:live] below) */
   function inYellow(r){ if(!yellow||yellow.lap!==lapNo||r.onStart) return false; return MX.Course.wrap(C,r.s-yellow.s0)<yellow.len; }
   function updateGaps(dt){
     for(let i=0;i<N;i++){ const r=rs[i]; if(r.gone||r.crash) continue;
@@ -254,6 +254,116 @@ export function create(host,hooks){
       r.g+=clamp(want-r.g,-GRATE*dt,GRATE*dt);
     }
   }
+  // [hook:live]
+  /* THE LIVE SEAM (the game's integration, mxlive 2026-10-18; not part of the view's development branch: BG_audit/sprint/mxlive/sync-view.sh carries every
+     [hook:live] zone over a re-sync). A race of the TIME MODEL (mxwar/time.js, MXWar.Time; TIME-MODEL.md section 8, the view contract) is placed by ITS race
+     clock instead of this view's own lap clock and the cards' gaps: V.setModel(G, {clock}) with G = the race (G.tm) and clock() = the race clock in ms (the
+     game's own: track.js model mode, which fires the game's events too; the Party host's the same). Every frame every rider is where MXWar.Time says he is at
+     that clock (walker.at: laps + phase, a crash hold, the yellow section), put on the track through this course's own speed profile (equal phase = the same
+     point for everybody: lap 1's phase is the share of the standing-start lap's time C.T1, every other lap's the share of C.Tlap). So the order on the track IS
+     the timing tower's; a rider crosses the line when the model says; goes down where and when it says (the crash is planned as soon as the lap's knots are
+     known: the bike goes down a slide's length before the model's crash point and comes to rest ON it; a lost double war: down for the model's hold, the crash
+     script slowed to fill it, back on the bike and away with a soft start centred on the model's restart, never more than A_RAMP / 4 of course time from it);
+     stays down (a lost triple war); pulls off out of cards; and the yellow flag flies over the section for the model's window. The motion layer still spaces the pack (setbacks, lateral lines), so a drawn swap can lag the tower by a bike length. The laps,
+     the flags and the finish follow the clock, hooks.onLap is not called (the game's clock turns the cards); hooks.shown reports the holeshot, the crashes,
+     the passes into the top 10 (the tower's order), the lapped riders and the checkered flag as the picture shows them. V.setModel(null): the view's own lap
+     clock again (V.lap). */
+  let LIVE=null;
+  const A_RAMP=1.2, SBMAX=6;
+  /* the course time of a progress (laps + phase): the model's phase on this course's speed profile. Lap 1 in two parts, so the model's funnel into turn 1 (its phase t1) is
+     THIS course's turn 1 (the end of the start, C.hsD): the gate -> turn 1 and turn 1 -> the line each the share of their own course time */
+  function tauPr(pr){
+    if(pr<=0) return 0; if(pr>=1) return C.T1+(pr-1)*C.Tlap;
+    const t1=LIVE&&LIVE.G.tm&&LIVE.G.tm.t1>0&&LIVE.G.tm.t1<0.5?LIVE.G.tm.t1:0.12, th=clamp(MX.Course.tOfD(C,C.hsD),0.05*C.T1,0.6*C.T1);
+    return pr<=t1?pr/t1*th:th+(pr-t1)/(1-t1)*(C.T1-th);
+  }
+  /* the remount's soft start: on the bike where it lies (course time tb) until tR - a, then from rest up to the model's pace (rho: course s per race s) by tR + a, where
+     he is exactly where the model has him; tR = the model's restart, later by the time the model needs to reach the bike when it slid past his crash point */
+  function liveTau(r){
+    const m=r.rmt;
+    if(m){ const x=T-m.tR; if(x>=m.a) r.rmt=null; else return m.tb+m.rho*(x<=-m.a?0:(x+m.a)*(x+m.a)/(4*m.a)); }
+    return tauPr(r.mpr||0);
+  }
+  function liveAt(pr){ return MX.Course.atD(C,MX.Course.dOfT(C,tauPr(pr)),{}); }   /* where a progress is: {lap, s (loop position), onStart} */
+  /* a crash the model has (a hold = a lost double war, a crash-out = a lost triple war). PLANNED (livePlanOf: the usual case, the lap's knots are known well before
+     he gets there): the motion zone starts it a slide's length before the model's crash point and liveStep then sets the slide so the bike stops ON that point.
+     UNPLANNED (liveCrash: a race picked up again in a hold, a crash on the start path, a rider held back past his planned spot): it starts at the model's moment
+     (t0, ms) at the model's place and the bike slides on a little. A remount is down until t1. A crash picked up long after it happened has no burst of dirt
+     and no camera cut. */
+  const slideOf=v=>v*v/15;   /* the crash script's bike slide for its speed v0 (crashPose: v0 t - 3.75 t^2 to t = v0 / 7.5) */
+  function livePlanOf(r,Rm,k){
+    r.lastK=k;
+    const h=Rm.hold[k], d=Rm.dnf&&Rm.dnf.why==="crash"&&Rm.dnf.lap===k?Rm.dnf:null; if(!h&&!d) return;
+    const ph=d?d.at:h[0], Dc=MX.Course.dOfT(C,tauPr(k-1+ph)), v=clamp(MX.Course.vOfD(C,Dc)*(LIVE.rate||1),6,10), Ds=Dc-slideOf(v), at=MX.Course.atD(C,Math.max(0,Ds),{});
+    if(at.onStart||Ds<r.D+2) return;
+    let w=null; try{ w=MX.Time.holdWindow(LIVE.G,r.seat,k); }catch(e){ w=null; }
+    r.crashPlan={kind:d?"out":"remount",s:at.s,lap:at.lap,side:((r.seat*31+k-1)%2)?1:-1};
+    r.livePlan={k:k,ph:ph,Dc:Dc,kind:d?"out":"remount",h0:w?w[0]:null,h1:w&&isFinite(w[1])?w[1]:null};
+  }
+  function liveCrash(i,kind,t0,t1){
+    const r=rs[i], ct=LIVE.ct; r.lastH0=t0; r.rmt=null; r.livePlan=null;
+    if(!r.crash){
+      r.crashPlan={kind:kind,s:r.s,lap:r.lapN,side:((r.seat*31+Math.floor(r.mpr||0))%2)?1:-1};
+      if(ct-t0<2500) beginCrash(i);
+      else { const c=r.crashPlan; r.crashPlan=null; r.tg=null; r.crash={T:T,lap:lapNo,kind:kind,tau:0,D:0,side:c.side,v0:Math.max(6,r.v||MX.Course.vOfD(C,Math.max(0,r.D))),lat:r.lat,down:1e9,th:r.fr?r.fr.th:0,fx:0}; }
+    }
+    const c=r.crash; if(!c) return;
+    c.T=t0/1000; c.tau=tauPr(r.mpr||0); c.D=Math.max(0,MX.Course.dOfT(C,c.tau)); c.lap=Math.floor(r.mpr||0)+1;
+    c.v0=Math.min(c.v0,10);   /* the bike slides at most about 6.7 m: the remount (from where it lies) stays within a few tenths of the model's restart */
+    if(kind==="remount"){ c.h1=t1/1000; c.down=Math.max(1.5,c.h1-A_RAMP-c.T); c.ex=Math.max(0,c.down-4.6); } else { c.down=1e9; c.ex=0; }   /* on the bike again A_RAMP before the model's restart (he lies longer to fill the hold) */
+  }
+  /* the crash script's clock: a long hold stretches the half second he lies face down (1.4..1.9 s of the script); the rest runs as written */
+  function crashT(c){ let t=T-c.T; const ex=c.ex||0; if(ex>0&&t>1.4) t=t<1.9+ex?1.4+(t-1.4)*0.5/(0.5+ex):t-ex; return t; }
+  function liveYellow(ct){
+    const tm=LIVE.G.tm;
+    if(LIVE.yk!==tm.k){ LIVE.yk=tm.k; try{ LIVE.yw=MX.Time.yellowWindows(LIVE.G); }catch(e){ LIVE.yw=[]; } }
+    let on=null; for(const y of LIVE.yw){ if(y.from!=null&&ct>=y.from&&(y.to==null||ct<y.to)){ on=y; break; } }
+    if(on){ if(!yellow||yellow.lap!==on.lap||yellow.c!==on.c){ const s=liveAt(on.lap-1+on.c).s, s0=liveAt(on.lap-1+on.c-on.z).s, s1=liveAt(on.lap-1+on.c+on.z).s;
+        yellow={lap:on.lap,s:s,s0:s0,len:Math.max(4,MX.Course.wrap(C,s1-s0)),c:on.c}; marshalAt(s); } }
+    else if(yellow){ yellow=null; if(marshal&&!rs.some(r=>r.crash)) marshal.grp.visible=false; }
+  }
+  /* one frame on the model's clock: T, every rider's progress and state, the crashes ahead (the director's "crash about to happen"), the crashes, the remounts,
+     the pits, the laps, the yellow flag, the finish, the passes */
+  function liveStep(dt){
+    const tm=LIVE.G.tm, W=LIVE.walk; if(!tm||!W) return;
+    const ct=Math.max(0,+LIVE.clock()||0), jump=LIVE.ct>=0&&Math.abs(ct-LIVE.ct)>1500;   /* a jump of the clock (a race picked up again, reduced motion, a long pause): placed at once */
+    if(dt>0&&LIVE.ct>=0&&!jump) LIVE.rate+=(clamp((ct-LIVE.ct)/(dt*1000),0,12)-LIVE.rate)*Math.min(1,dt/0.4);   /* the clock's rate (race s per wall s, smoothed): 1 in the game, 0 while it waits */
+    LIVE.ct=ct; T=ct/1000;
+    let lp=-1;
+    for(let i=0;i<N;i++){
+      const r=rs[i], Rm=tm.r[r.seat]; if(!Rm) continue;
+      let pr=W.at(r.seat,ct); const st=W.state;
+      if(st==="fin"&&Rm.fin) pr+=(ct-Rm.fin.t)/(tm.p*1000/0.55);   /* past his flag he rolls on, cooling down (as the 2D track does) */
+      r.mpr=pr; r.mst=st;
+      if(jump) r.init=false;
+      if(r.gone) continue;
+      const LP=r.livePlan;
+      if(LP&&r.crash&&!r.crash.live){   /* a planned crash the motion zone has just started: the bike stops ON the model's crash point, down until its restart */
+        const c=r.crash; c.live=true; c.v0=clamp(Math.sqrt(15*Math.max(0.5,LP.Dc-c.D)),3,10); c.lap=LP.k; c.tau=tauPr(LP.k-1+LP.ph);
+        if(LP.kind==="remount"&&LP.h1!=null){ c.h1=LP.h1/1000; c.down=Math.max(1.5,c.h1-A_RAMP-c.T); c.ex=Math.max(0,c.down-4.6); r.lastH0=LP.h0; } else { c.down=1e9; c.ex=0; r.outSeen=true; }
+        r.livePlan=null; }
+      if(st==="down"&&W.h0!==r.lastH0&&!(r.crash&&r.crash.kind==="out")) liveCrash(i,"remount",W.h0,W.h1);
+      else if(st==="out"&&!r.outSeen){ r.outSeen=true; liveCrash(i,"out",Rm.dnf&&Rm.dnf.t!=null?Rm.dnf.t:ct,1e12); }
+      else if(st==="pits"&&!r.crash){ r.gone=true; continue; }   /* out of cards: he pulls off at the line */
+      else if(st==="run"&&!r.crash&&!r.crashPlan&&r.lastK!==Math.floor(pr)+1) livePlanOf(r,Rm,Math.floor(pr)+1);   /* a crash ahead on this lap: planned (the director looks ahead with it) */
+      const c=r.crash;
+      if(c&&c.kind==="remount"&&T-c.T>=c.down&&!r.rmt){   /* (the motion zone puts him back on the bike this frame, where it lies): the soft start, timed on the model's restart */
+        const tb=MX.Course.tOfD(C,c.D+slideOf(c.v0)), h1=c.h1!=null?c.h1:T+A_RAMP; let rho=C.Tlap/Math.max(1,tm.p);
+        try{ const q0=W.at(r.seat,h1*1000+500), q1=W.at(r.seat,h1*1000+1500); if(q1>q0) rho=clamp(tauPr(q1)-tauPr(q0),0.2,4); }catch(e){}
+        r.rmt={tb:tb,a:A_RAMP,rho:rho,tR:h1+Math.max(0,tb-(c.tau||tb))/rho}; }
+      if(!r.crash&&(st==="run"||st==="fin")&&pr>lp) lp=pr;
+    }
+    /* the cards' order for level riders (the motion zone's rightOf) = the model's order now */
+    const ord=rs.filter(r=>!r.gone&&!r.crash&&r.mpr!=null).sort((a,b)=>(b.mpr-a.mpr)||(a.k-b.k));
+    rs.forEach(r=>{ r.cr=1e3; }); ord.forEach((r,j)=>{ r.cr=j; });
+    /* the passes the tower shows (a rider moves up into the top 10 past a rider who is riding): the announcers' calls land with them */
+    if(!jump&&LIVE.ord&&dt>0){ const was=LIVE.ord; for(let j=0;j<Math.min(10,ord.length);j++){ const a=ord[j], ja=was.indexOf(a.seat), d=ord[j+1]; if(ja>j&&d&&was.indexOf(d.seat)>=0&&was.indexOf(d.seat)<ja) shown("pass",{s:a.seat}); } }
+    LIVE.ord=ord.map(r=>r.seat);
+    if(lp>=0){ const nl=clamp(Math.floor(lp)+1,1,lenLaps); if(nl>lapNo||jump){ lapNo=nl; if(world.ctx.screen) world.ctx.screen(lapNo,lenLaps,null); } }   /* the leader's lap (the big screen) */
+    liveYellow(ct);
+    if(!finished&&tm.done&&tm.flag!=null&&ct>=tm.flag){ finished=true; if(show) show.fire("done"); if(hooks.onFinish) setTimeout(()=>hooks.onFinish(),0); if(tm.win>=0) shown("checkered",{s:tm.win}); }
+  }
+  // [/hook:live]
   /* a lap's result: every rider rides from where they are to the new standings over the rest of the lap */
   V.lap=function(req){
     const S=makeShow();
@@ -327,6 +437,29 @@ export function create(host,hooks){
   V.setSpeed=function(){ /* real time only (the CEO, 21:10): Game speed never changes the race */ };
   V.lapDone=function(){};
   V.skip=function(){ endShow(); rs.forEach(r=>{ r.crashPlan=null; }); finished=true; };
+  // [hook:live]
+  /* V.setModel(G, {clock}) -> true when the race has a time model: the view rides its clock from now on (see the live seam above); a race under way (picked up
+     again, a new screen) is placed at once, the gate down. V.setModel(null): the view's own clock. V.model() -> on. V.liveState(): the tests' look at it. */
+  V.setModel=function(G0,o){
+    LIVE=G0&&G0.tm&&MX.Time&&MX.Time.walker?{G:G0,walk:MX.Time.walker(G0),clock:(o&&typeof o.clock==="function")?o.clock:()=>0,ct:-1,rate:1,yk:-1,yw:[],ord:null}:null;
+    if(!C||!R) return !!LIVE;
+    rs.forEach(r=>{ r.mpr=null; r.mst=null; r.lastH0=null; r.lastK=null; r.outSeen=false; r.rmt=null; });
+    if(LIVE&&G0.phase!=="gate"){
+      mode="race"; finished=false; holdInfo=null; lapPlan=null; show=null; lappedK=[]; yellow=null; gate.set(1); gate.drop=1; gate.dropT=1;
+      if(marshal) marshal.grp.visible=false;
+      rs.forEach(r=>{ r.init=false; r.tg=null; r.boot=null; r.crashPlan=null; r.crash=null; r.gone=false; });
+      liveStep(0); shownHs=T>0; CAMS.pickShot(true); renderOnce();
+    }
+    return !!LIVE;
+  };
+  V.model=()=>!!LIVE;
+  V.liveState=function(){
+    if(!LIVE) return null;
+    return {ct:LIVE.ct,lap:lapNo,len:lenLaps,mode:mode,finished:finished,yellow:yellow?{lap:yellow.lap,s:+yellow.s.toFixed(1),len:+yellow.len.toFixed(1)}:null,marshal:!!(marshal&&marshal.grp.visible),
+      riders:rs.map(r=>({s:r.seat,pr:r.mpr!=null?+r.mpr.toFixed(4):null,st:r.mst,D:+r.D.toFixed(2),Dm:r.mpr!=null&&C?+MX.Course.dOfT(C,tauPr(r.mpr)).toFixed(2):null,sb:+(r.sb||0).toFixed(2),crash:r.crash?r.crash.kind:null,ct:r.crash?+(T-r.crash.T).toFixed(2):null,down:r.crash?+(+r.crash.down).toFixed(2):null,plan:r.crashPlan?r.crashPlan.kind:null,rmt:!!r.rmt,gone:!!r.gone})),
+      order:rs.filter(r=>!r.gone&&!r.crash).sort((a,b)=>(b.D-a.D)||(a.k-b.k)).map(r=>r.seat)};
+  };
+  // [/hook:live]
 
   /* ---------------- the loop ---------------- */
   function tick(t){
@@ -373,7 +506,11 @@ export function create(host,hooks){
   function step(dt){
     if(!C||!R) return;
     const tw=now()/1000, racing=mode==="race";
-    if(racing&&dt>0){
+    // [hook:live]
+    if(LIVE&&racing) liveStep(dt);   /* a time-model race: the model's clock (the lap loop below is the view's own clock) */
+    const dtM=LIVE&&racing?dt*LIVE.rate:dt;   /* the motion zone's time step: the race clock's (its rate: 1 in the game; a test's faster clock moves the pack as a sped-up race) */
+    // [/hook:live]
+    if(racing&&dt>0&&!LIVE){
       T+=dt; updateGaps(dt);
       /* the leader starts a lap: the cards of that lap turn (the game); the end of the last lap is the checkered flag */
       while(!finished&&T>=lapStartT(lapNo+1)){
@@ -436,11 +573,11 @@ export function create(host,hooks){
           const nd=Lq-ah; if(nd>need) need=nd; }
         if(live){
           const cz=r.czone||0; sb=r.sb||0;
-          if(cz>0) sb+=2.6*cz*dt;   /* a crash ahead: slower through it (up to 2.6 m/s), made up afterwards */
-          if(need>sb){ sb=Math.min(need,sb+7*dt); if(need-sb>0.15) sb=need-0.15; }   /* held back: quickly, never more than 0.15 m into the bike ahead */
-          else if(cz<=0){ const ex=sb-need; sb-=Math.min(ex,Math.min(ex>4?2.6:1.8,0.2+ex*1.5)*dt); }   /* catching up: gently (1.8 m/s faster than the clock, 2.6 m/s when far back) */
-          sb=Math.max(0,sb);
-        } else sb=need;   /* a placement frame (the race restored, a test jump): placed at once */
+          if(cz>0) sb+=2.6*cz*dtM;   /* a crash ahead: slower through it (up to 2.6 m/s), made up afterwards */
+          if(need>sb){ sb=Math.min(need,sb+7*dtM); if(need-sb>0.15) sb=need-0.15; }   /* held back: quickly, never more than 0.15 m into the bike ahead */
+          else if(cz<=0){ const ex=sb-need; sb-=Math.min(ex,Math.min(ex>4?2.6:1.8,0.2+ex*1.5)*dtM); }   /* catching up: gently (1.8 m/s faster than the clock, 2.6 m/s when far back) */
+          sb=Math.max(0,LIVE?Math.min(SBMAX,sb):sb);   /* ([hook:live] the time model's clock: never more than SBMAX m behind the tower's place: a rider who finds no room squeezes through) */
+        } else sb=LIVE?Math.min(SBMAX,need):need;   /* a placement frame (the race restored, a test jump): placed at once ([hook:live] the setback cap holds here too) */
       }
       let D=r.Dl-sb;
       if(live&&D<r.D){ D=r.D; sb=r.Dl-D; }   /* never backwards */
@@ -473,7 +610,7 @@ export function create(host,hooks){
         /* the start: each rider holds his lane, the lanes narrow with the start (they keep their order across it); into turn 1 the racing line takes over */
         const lane=clamp(gridLat(r.k)*clamp((hw-0.6)/Math.max(0.5,GRID?GRID.use:hw),0.62,1),-(hw-0.6),hw-0.6), wS=sstep(turn1-44,turn1-18,r.D);   /* (the lanes narrow a little; where the start gets narrower still the outside riders tuck in behind: the funnel) */
         let line=r.bias*hw*0.45; { const kk=r.onStart?MX.Course.startFrame(C,Math.min(C.Ls,Math.max(0,r.P)+9),tmpO).k:MX.Course.frame(C,r.s+9,tmpO).k; if(Math.abs(kk)>1/30) line=-Math.sign(kk)*hw*0.36+r.bias*0.5; }
-        target=lane*(1-wS)+line*wS; pushes=wS>0.02;   /* (from where the lanes start to bend to the racing line, level riders keep their sides) */
+        target=lane*(1-wS)+line*wS; pushes=wS>0.02||!!LIVE;   /* (from where the lanes start to bend to the racing line, level riders keep their sides; [hook:live] on the time model's clock the riders launch at their own pace: a quicker one finds room round a slower one on the start too) */
       } else { const kk=MX.Course.frame(C,r.s+9,tmpO).k; target=Math.abs(kk)>1/30?-Math.sign(kk)*hw*0.36+r.bias*0.5:r.bias*hw*0.45; }
       /* passing room, solved across the track (not one push after another): a rider LEVEL with him (overlapping along the track) is never crossed:
          he stays on his side of him, at least SEP away; a rider just ahead that he is closing on, is held back by or is already passing must not be
@@ -497,22 +634,22 @@ export function create(host,hooks){
       target=clamp(target,ia,ib); r.latT=target;
       /* the follower */
       if(!r.init&&!r.rem){ r.lat=target; r.vl=0; r.al=0; }   /* a placement frame */
-      else if(dt>0){
-        const am=cz>0?6:4, vmax=Math.min(cz>0?4.5:3.2,0.15+0.42*Math.max(0,r.v||0)), n=Math.max(1,Math.ceil(dt*120)), h=dt/n, v0=r.vl||0;
+      else if(dtM>0){
+        const am=cz>0?6:4, vmax=Math.min(cz>0?4.5:3.2,0.15+0.42*Math.max(0,r.v||0)), n=Math.max(1,Math.ceil(dtM*120)), h=dtM/n, v0=r.vl||0;
         let lat=r.lat, vl=v0;
         for(let q=0;q<n;q++){ let ac=0;
           { const e=target-lat, vd=Math.sign(e)*Math.min(vmax,Math.abs(e)/0.35,Math.sqrt(2*am*0.85*Math.abs(e))), aa=r.air?1.2:am; ac=clamp((vd-vl)/0.0875,-aa,aa); }   /* (in the air only a little body english sideways) */
           vl+=ac*h; lat+=vl*h; }
-        r.al=(vl-v0)/dt; r.vl=vl; r.lat=lat;
+        r.al=(vl-v0)/dtM; r.vl=vl; r.lat=lat;
       }
       /* hard limits: the track's edge; a fallen rider or bike level with him */
-      { const lim=dt>0&&(r.init||r.rem)?Math.max(0.02,6*dt):99;   /* back inside the track's edge (and the inside of a hairpin): quickly, never in one jump */
+      { const lim=dt>0&&(r.init||r.rem)?Math.max(0.02,6*dtM):99;   /* back inside the track's edge (and the inside of a hairpin): quickly, never in one jump */
         if(r.lat<ia-0.15){ r.lat+=Math.min(ia-0.15-r.lat,lim); if(r.vl<0) r.vl=0; } else if(r.lat>ib+0.15){ r.lat-=Math.min(r.lat-ib-0.15,lim); if(r.vl>0) r.vl=0; } }
       if(blk){ /* the fallen riders and bikes level with him: one merged no-go stretch each (never pushed from one onto the other), left on the
          nearest side, at most 6 m/s sideways (no jump: the soft line above has already steered him round from 22 m out) */
         const hz=[]; for(let q=0;q<blk.length;q++){ const v=blk[q]; if(v[3]>-2.2&&v[3]<2.4) hz.push([v[2]-1.45,v[2]+1.45]); }
         if(hz.length){ hz.sort((x,y)=>x[0]-y[0]); const mz=[]; hz.forEach(v=>{ const l=mz[mz.length-1]; if(l&&v[0]<=l[1]) l[1]=Math.max(l[1],v[1]); else mz.push(v.slice()); });
-          for(const z of mz){ if(r.lat>z[0]&&r.lat<z[1]){ const toL=r.lat-z[0], toR=z[1]-r.lat, sd=toL<=toR?-1:1, goal=sd<0?z[0]:z[1]; r.lat+=clamp(goal-r.lat,-Math.max(0.02,6*dt),Math.max(0.02,6*dt)); if(r.vl*sd<0) r.vl=0; break; } } } }
+          for(const z of mz){ if(r.lat>z[0]&&r.lat<z[1]){ const toL=r.lat-z[0], toR=z[1]-r.lat, sd=toL<=toR?-1:1, goal=sd<0?z[0]:z[1]; r.lat+=clamp(goal-r.lat,-Math.max(0.02,6*dtM),Math.max(0.02,6*dtM)); if(r.vl*sd<0) r.vl=0; break; } } } }
     }
     // [/hook:motion]
     /* the flagger: the white flag as the leader comes to the line to start the last lap, the checkered flag as the winner arrives */
@@ -806,7 +943,7 @@ export function create(host,hooks){
      the old script left the rider lying under his own bike); both follow the track's curve and stand on the dirt as it is drawn (the
      shoulders too) while the rider walks back to the bike or off the track; a rider out of the race turns to watch it */
   function crashPose(i,r,tw,dt){
-    const c=r.crash, t=T-c.T, side=c.side, rsd=-side;
+    const c=r.crash, t=crashT(c), side=c.side, rsd=-side;   /* (crashT: T - c.T, a long hold of the time model stretched: [hook:live]) */
     /* the bike: tips over toward its side, slides to a stop along the track, spins a little; lifted again for a remount */
     const ts=c.v0/7.5, tt=Math.min(t,ts), slide=c.v0*tt-3.75*tt*tt, slideEnd=c.v0*ts-3.75*ts*ts;
     const lift=c.kind==="remount"?sstep(3.2,3.9,t):0, rollB=side*(1.25*sstep(0,0.38,t))*(1-lift);
