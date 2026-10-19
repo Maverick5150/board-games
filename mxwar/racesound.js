@@ -235,7 +235,7 @@ function create(o){
   var RS={}, ctx=null, own=null, G=null, core=null, loadP=null, dead=false, held=false, inReplay=false, lineOn=false, lineLv=0, lineEnd=0;
   var seed=(o.seed>>>0)||((Date.now()&0xffff)+1), rnd=rngOf(seed);
   var EX=new Excite({main:o.main!==false}), revs={}, cur=[-1,-1,-1,-1], gateSt=null, lastSnapT=-1, lastWall=0, frames=0, lastE=0;
-  var passes=[], recent={}, lastReact=-1e9, reacts=[], pendingFollow=[], nodes={n:0,max:0}, stats={frames:0,ms:0,msMax:0}, downSeen={}, lastJumpOoh=-1e9, remountDue=[], lastPassCheer=-1e9;
+  var passes=[], recent={}, lastReact=-1e9, reacts=[], pendingFollow=[], nodes={n:0,max:0}, stats={frames:0,ms:0,msMax:0}, downSeen={}, lastJumpOoh=-1e9, remountDue=[], lastPassCheer=-1e9, lastFightCheer=-1e9, fight={pair:null,secs:0,done:false};
   var voiceState=[0,1,2,3].map(function(){ return {seat:-1,g:0,sw:0}; });
   var VREF=6, PANK=0.85;
 
@@ -542,6 +542,11 @@ function create(o){
       var was=downSeen[r.seat]; if(r.crash===1) downSeen[r.seat]=T; else if(was!=null&&!r.crash){ delete downSeen[r.seat]; if(T-was<15){ react("remount",1,T+0.2,{force:true}); for(var q2=remountDue.length-1;q2>=0;q2--) if(remountDue[q2].s===r.seat) remountDue.splice(q2,1); } }
       if(r.land>=0.8&&r.d<30&&T-lastJumpOoh>45&&rnd()<0.2){ lastJumpOoh=T; react("landing",1,T+0.1,{}); }
     }
+    /* a fight the picture shows: two bikes level (within 2 m of each other, the same side) under 25 m from the lens for more than a second */
+    if(snap.mode==="run"){ var pair=null;
+      for(i=0;i<n&&!pair;i++){ var p1=R[i]; if(!p1||p1.seat<0||p1.d>25||p1.crash||p1.v<10) continue; for(var j2=i+1;j2<n;j2++){ var p2=R[j2]; if(!p2||p2.seat<0||p2.d>25||p2.crash||p2.v<10) continue; if(Math.abs(p1.d-p2.d)<2&&Math.abs(p1.az-p2.az)<0.25){ pair=Math.min(p1.seat,p2.seat)+":"+Math.max(p1.seat,p2.seat); break; } } }
+      if(pair&&pair===fight.pair){ fight.secs+=dt; if(fight.secs>1.2&&!fight.done&&T-lastFightCheer>25){ fight.done=true; lastFightCheer=T; EX.kick(0.2); react("fight",2,T,{}); } }
+      else fight={pair:pair,secs:0,done:false}; }
     /* the four voices */
     var a=assign(snap,cur), cutCam=snap.cut===1;
     for(i=0;i<4;i++) voiceOut(i,a[i],a[i]>=0?by[a[i]]:null,T,cutCam);
@@ -589,7 +594,8 @@ function create(o){
     if(!G) return;
     var T=ctx.currentTime+(info.delay||0);
     RS._log.push(["moment",+ctx.currentTime.toFixed(3),kind,lv,info.s==null?null:info.s]);
-    if(kind==="battle"){ /* a battle swells the murmur: the bed rises with E; a cheer only if it is for the lead late on */ if(lv>=3) react("battle",2,T,info); return; }
+    if(kind==="battle"){ /* door to door: the murmur swells (E) and the crowd cheers them on: a big cheer from size 2, a small one at size 1 */
+      if(lv>=2) react("battle",lv,T,info); else if(T-lastFightCheer>20){ lastFightCheer=T; react("battle",1,T,info); } return; }
     if(kind==="crash"){ react(info.kind==="out"?"out":"crash",Math.max(lv,info.place>0&&info.place<=10?2:1),T,{force:true}); if(info.kind!=="out") remountDue.push({t:T+6,s:info.s}); }
     else if(kind==="remount") react("remount",1,T,{force:true});
     else if(kind==="checkered"){ react("checkered",lv,T,{force:true}); }
