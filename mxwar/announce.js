@@ -640,6 +640,7 @@ function create(o){
        line only when its template carries the tag; a line that states the standings (a red show_open or finals intro) marks them said */
     if(ctx.memBy){ var mtg=tplTags(out.tpl), mex=[]; mtg.forEach(function(x){ if(ctx.memBy[x]) mex=mex.concat(ctx.memBy[x]); }); if(mex.length) ctx.facts.mem=(ctx.facts.mem||[]).concat(mex); }
     if(ctx.memMark&&tplTags(out.tpl).indexOf("red")>=0) memMark(ctx.memMark,tplText(out.tpl));
+    if(ctx.memMarkBy) tplTags(out.tpl).forEach(function(x){ if(ctx.memMarkBy[x]) memMark(ctx.memMarkBy[x],""); });   /* an older line that states a season fact (v3's first-win call): marked said, not a memory line */
     if(ctx.facts.mem&&ctx.facts.mem.length) memSaid(ctx,it);
     /* mxann4: the race's flag and its post lines as they are said (not a simmed race's summary): how many, and how many are the season (the points, a
        memory line). The wrap lines (wrapBudget) keep the round's post-race talk within 45% the season */
@@ -2571,6 +2572,7 @@ function create(o){
     if(!memOn()||!r.isFinal||!r.rc||!r.rc.cal||!r.rc.cal.title||!r.F||!r.F.finals||r.F.finals.races!==1) return;
     var Gs=A.G, R=r.ri, M=MEM(), m=memL(), t=c.tags, sl=c.slots, mb={};
     if(!(Gs.results||[]).some(function(x){ return x.ri===R&&x.winner===id; })) return;   /* the round is scored, and it is his */
+    if(t.firstwin) c.memMarkBy={firstwin:[{k:"wins|"+id+"|"+R,v:0}]};   /* v3's own first-win call (a big moment, said BIG): the ledger knows it was said, it is not a memory line */
     if(!riderRoom(id,R,false)||!memRoom(R,12)) return;   /* his memory lines this round are used up */
     if(r.wrapW!=null){   /* the wrap's memory budget (onRoundDone) covers the winner's season tag too, and so does its 45%: the post lines still to come counted */
       if((r.wrapN|0)>=r.wrapW) return;
@@ -2583,11 +2585,10 @@ function create(o){
     (Gs.results||[]).forEach(function(x){ if(x.ri<R&&x.winner===id&&String(x.city||"").replace(/\s*,.*$/,"").trim().toLowerCase()===ck) here=x; });
     if(here){ t.venue2=1; mb.venue2=[{k:"win|"+here.ri,v:id},{k:"city|"+here.ri,v:here.city}]; }
     var pk=m.picks[R]; if(pk&&pk.said&&pk.id===id){ t.pickhit=1; mb.pickhit=[{k:"pick|"+R,v:id}]; }
-    if(t.firstwin) mb.firstwin=[{k:"wins|"+id+"|"+R,v:0}];
     var said=m.claims[R]||{};
-    Object.keys(mb).forEach(function(k){ if(M.anySaid({claims:mb[k]},said)){ delete mb[k]; if(k!=="firstwin") delete t[k]; } });
+    Object.keys(mb).forEach(function(k){ if(M.anySaid({claims:mb[k]},said)){ delete mb[k]; delete t[k]; } });
     c.memBy=mb;
-    var mt=Object.keys(mb).filter(function(k){ return k!=="firstwin"; }); if(mt.length&&chance(0.6)) c.only=mt[0];
+    var mt=Object.keys(mb); if(mt.length&&chance(0.6)) c.only=mt[0];
     if(Object.keys(mb).length) c.memDone=function(){ r.wrapN=(r.wrapN|0)+1; };
   }
   function seasonWinsBefore(id,key){
