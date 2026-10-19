@@ -2589,7 +2589,8 @@ function create(o){
     if(!watched){
       /* Sim to results / Skip to the finish: a short summary from the result (the engine's run() gives no lap events) */
       var live=r.gated&&r.lap>0;
-      if(!live) A.q.forEach(function(x){ if(x.race===r.key&&x.opening&&x.build){ x.build=false; x.post=true; } });   /* mxann4: the round's opening outlives a first race simmed after its call (the sim summary follows it) */
+      if(!live){ if((A.rmap||[]).some(isHumanId)) dropQ(function(x){ return x.race===r.key&&x.opening&&x.build&&((x.ev==="season_story"&&x.role==="C")||x.ev==="career_note"); });   /* the person skipped a race of theirs: the round is being simmed, the lead story only */
+        A.q.forEach(function(x){ if(x.race===r.key&&x.opening&&x.build){ x.build=false; x.post=true; } }); }   /* mxann4: the round's opening outlives a first race simmed after its call (the sim summary follows it) */
       A.q=A.q.filter(function(x){ return x.race!==r.key||x.post; });
       var tl=A.q.filter(function(x){ return x.post||x.build; }).sort(function(a,b){ return b.id-a.id; })[0], prev=tl||null;
       function ch(ev,opt){ opt=opt||{}; opt.post=true; opt.after=prev?prev.id:null; opt.delay=opt.delay!=null?opt.delay:450; var it=q(ev,opt); if(it) prev=it; return it; }
