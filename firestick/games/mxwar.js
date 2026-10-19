@@ -271,7 +271,10 @@
     Q + ".mxp-tower li.is-down{background:#4a1f14;box-shadow:inset 0 0 0 2px #e8775a}",
     Q + ".mxp-tower li.is-down .mxp-tg{color:#ffb4a3;font-weight:800;letter-spacing:.04em}",
     Q + ".mxp-tower li.is-fl .mxp-tl{color:#d9b3ff;font-weight:800}",
-    Q + ".mxp-tower.is-cols2 li{grid-template-columns:1.5rem auto minmax(0,1fr) 4.1rem 4.3rem;gap:.25rem}",
+    Q + ".mxp-tower.is-cols2 li{grid-template-columns:1.5rem auto minmax(0,1fr) 3.8rem 4.6rem;gap:.25rem}",   /* (mxfix1: the gap column holds "+1:54.002"; the last lap "2:30.304" needs less than it had) */
+    Q + ".mxp-ts{display:none}",
+    Q + ".mxp-tower li.is-short .mxp-tf{display:none}",   /* mxfix1: the short name (art.js shortNames) on a row where the whole name would be cut */
+    Q + ".mxp-tower li.is-short .mxp-ts{display:inline}",
     Q + ".mxp-tower.is-cols2 .mx-tw__c{display:none}",
     Q + ".mxp-rt{flex:none;margin-left:auto;padding-left:.5rem;font:var(--fw-ui) var(--fs-micro)/1.2 var(--font-ui);color:var(--text-2);font-variant-numeric:tabular-nums;white-space:nowrap}",
     Q + ".mxp-tl{text-align:right;white-space:nowrap;color:var(--text-2);font-variant-numeric:tabular-nums}",
@@ -849,7 +852,16 @@
       var per = Math.ceil(rowsN / cols), room = tw.clientHeight - rem * .8 - (per - 1) * rem * .15;
       var rh = clamp(Math.floor(room / per), Math.round(rem * 1.2), Math.round(rem * 2.1));
       tw.style.setProperty("--cols", String(cols)); tw.style.setProperty("--rows", String(per)); tw.style.setProperty("--rh", rh + "px");
+      fitTower(tw);
       if (rc) rv.size();
+    }
+    /* mxfix1: the whole name where it fits, the short name (the one rule) where the whole one would be cut (the CEO's 40-rider gate: 9 whole names cut in two columns) */
+    function fitTower(tw) {
+      TWK.short = {}; TWK.cells = {};
+      var lis = [].slice.call(tw.children);
+      lis.forEach(function (li) { li.classList.remove("is-short"); });
+      lis.forEach(function (li) { var f = li.querySelector(".mxp-tf"); if (f && f.getClientRects().length && f.getBoundingClientRect().width > f.parentNode.clientWidth + 0.5) TWK.short[li.getAttribute("data-s")] = 1; });
+      lis.forEach(function (li) { if (TWK.short[li.getAttribute("data-s")]) li.classList.add("is-short"); });
     }
     function layoutPip() {
       var rem = remPx(), pip = $("mxpPip"), w = Math.round(rem * 15), h = Math.round(rem * 9.4);
@@ -903,9 +915,9 @@
       var rows = liveRows(); if (!rows) { legacyTower(mark); return; }
       var n = rows.length, key = G.ri + "|" + ui.rkey + "|" + n, T = MX.Time, i, r, e, c;
       if (TWK.key !== key) {
-        TWK.key = key; TWK.els = {}; TWK.cells = {}; TWK.ord = "";
+        TWK.key = key; TWK.els = {}; TWK.cells = {}; TWK.ord = ""; TWK.short = {}; var sn = shortsOf(rc);
         tw.innerHTML = rows.slice().sort(function (a, b) { return a.s - b.s; }).map(function (x) { var R = riderOfS(x.s), k = kOfId(R.id);
-          return '<li data-s="' + x.s + '"' + (k >= 0 ? ' style="--seat:' + hex(k) + '"' : "") + '><span class="mxp-tp"></span>' + plateHTML(R) + '<span class="mxp-tn">' + nameHTML(R) + '</span><span class="mx-tw__c"></span><span class="mxp-tl"></span><span class="mxp-tg"></span></li>'; }).join("");
+          return '<li data-s="' + x.s + '"' + (k >= 0 ? ' style="--seat:' + hex(k) + '"' : "") + '><span class="mxp-tp"></span>' + plateHTML(R) + '<span class="mxp-tn"><span class="mxp-tf">' + nameHTML(R) + '</span><span class="mxp-ts">' + esc(sn[x.s] || R.name) + (isCpuRider(R) ? cpuIco() : "") + '</span></span><span class="mx-tw__c"></span><span class="mxp-tl"></span><span class="mxp-tg"></span></li>'; }).join("");
         Array.prototype.forEach.call(tw.children, function (li) { TWK.els[+li.getAttribute("data-s")] = { li: li, p: li.querySelector(".mxp-tp"), c: li.querySelector(".mx-tw__c"), l: li.querySelector(".mxp-tl"), g: li.querySelector(".mxp-tg") }; });
         layoutTower();
       }
@@ -914,7 +926,7 @@
       for (i = 0; i < n; i++) {
         r = rows[i]; e = TWK.els[r.s]; c = T.towerCells(r); if (pre) { c.gap = ""; c.last = ""; }
         var R = riderOfS(r.s), k = kOfId(R.id), card = ui.lastCards[r.s], out = c.tag === "out" || c.tag === "pits";
-        var cls = (k >= 0 ? " is-me" : "") + (k >= 0 && ui.need.indexOf(r.s) >= 0 && !ui.intents[r.s] && !machine(k) ? " is-need" : "") + (out ? " is-out" : "") + (r.status === "down" ? " is-down" : "") + (r.fl && r.lastK === r.bestK ? " is-fl" : "") + (mk && mk.win === r.s ? " is-win" : "") + (mk && mk.fight && mk.fight.indexOf(r.s) >= 0 ? " is-fight" : "");
+        var cls = (k >= 0 ? " is-me" : "") + (k >= 0 && ui.need.indexOf(r.s) >= 0 && !ui.intents[r.s] && !machine(k) ? " is-need" : "") + (out ? " is-out" : "") + (r.status === "down" ? " is-down" : "") + (r.fl && r.lastK === r.bestK ? " is-fl" : "") + (mk && mk.win === r.s ? " is-win" : "") + (mk && mk.fight && mk.fight.indexOf(r.s) >= 0 ? " is-fight" : "") + (TWK.short && TWK.short[r.s] ? " is-short" : "");
         var v = r.place + "|" + c.gap + "|" + c.last + "|" + cls + "|" + (card == null ? "" : card) + "|" + (out ? 1 : 0);
         if (TWK.cells[r.s] === v) continue;
         TWK.cells[r.s] = v; e.p.textContent = r.place; e.g.textContent = c.gap; e.l.textContent = c.last; e.li.className = cls.trim();
