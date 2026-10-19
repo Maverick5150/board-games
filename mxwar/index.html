@@ -484,6 +484,7 @@
   /* ---------- sheets: race results, the round podium, a new season ---------- */
   .mx-shd{display:grid; gap:.25rem; margin-bottom:.75rem}
   .mx-shd .bg-sheet__sub{margin:0}
+  .mx-shd .bg-sheet__sub.mx-winline{color:var(--gold-100); font-weight:var(--fw-ui-strong)}   /* mxfix1: the person's win or podium, said like one */
   .mx-res{display:grid; gap:.2rem; margin:0 0 .75rem; padding:0; list-style:none}
   .mx-res li{display:flex; align-items:center; gap:.45rem; min-width:0; padding:.3rem .5rem; border-radius:var(--r-md); background:var(--ink-3); box-shadow:inset 0 0 0 1px var(--line-1);
     font:var(--fw-ui-strong) var(--fs-sm)/1.25 var(--font-ui); color:var(--text-1)}
@@ -550,7 +551,8 @@
   .mx-pod__c{display:grid; justify-items:center; gap:.3rem; min-width:0; text-align:center}
   .mx-pod__bike{width:3.6rem; height:2.3rem}
   .mx-pod__bike svg{display:block; width:100%; height:100%}
-  .mx-pod__nm{max-width:100%; font:var(--fw-ui-strong) var(--fs-sm)/1.2 var(--font-ui); color:var(--text-1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  /* mxfix1: a podium name takes a second line rather than an ellipsis (the CEO's podium read "Pedro Gonzal…" with room to spare) */
+  .mx-pod__nm{max-width:100%; font:var(--fw-ui-strong) var(--fs-sm)/1.15 var(--font-ui); color:var(--text-1); display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; overflow-wrap:break-word; text-wrap:balance}
   .mx-pod__x{font:var(--fw-ui) var(--fs-micro)/1.2 var(--font-ui); color:var(--text-2)}
   .mx-pod__step{display:grid; place-items:center; width:100%; border-radius:var(--r-md) var(--r-md) 0 0; font:400 var(--fs-3xl)/1 var(--font-display); color:#1a1408;
     background:linear-gradient(180deg,#f0d9a6,#a77d41); box-shadow:inset 0 3px 0 var(--mk,#c99f5e)}
