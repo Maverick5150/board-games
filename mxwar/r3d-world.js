@@ -10,7 +10,7 @@
 import * as THREE_NS from "../ui/vendor/three-0.160.0.module.min.js";
 const THREE=THREE_NS;
 import {lin,mixc,clamp,sstep,fbm,pfbm,canvas,tex,rngf,merge,paint,xf,clear,getAniso} from "./r3d-util.js";
-import {SOIL,dirtMaps,padMaps,trackMaterial,addTrack} from "./r3d-track.js";
+import {SOIL,dirtMaps,padMaps,trackMaterial,addTrack,addTrackSteps} from "./r3d-track.js";   /* ([live] addTrackSteps: buildWorldSteps) */
 import {stadium as stadiumBowl,glowSprites} from "./r3d-stadium-bowl.js";
 import {glowSheet,BRAND,PROPS,propsUV,propsTex} from "./r3d-stadium-art.js";
 const MXG=(typeof window!=="undefined"?window:globalThis).MXWar;
@@ -416,7 +416,10 @@ function speedway(C,look,q,root,ctx){
 }
 
 /* ---------------- the whole world ---------------- */
-export function buildWorld(C,look,q){
+/* [live] buildWorld in STEPS (a generator: each yield is a point where the live game may hand the page back to the browser: race3d.js V.prepareWorld builds a race's
+   world over several tasks, none of them long; mxlive 2026-10-19). buildWorld() runs every step at once, exactly as before. */
+export function buildWorld(C,look,q){ const it=buildWorldSteps(C,look,q); let r=it.next(); while(!r.done) r=it.next(); return r.value; }
+export function* buildWorldSteps(C,look,q){
   const root=new THREE.Group(), ctx={};
   const tm=trackMaterial(look,q), matTrack=tm.mat; ctx.dirt=tm.dirt;
   ctx.glowTex=glowTex();
@@ -447,11 +450,13 @@ export function buildWorld(C,look,q){
     list.forEach((c,i)=>{ M.makeScale(c[3],c[4],1); M.setPosition(c[0],c[1],c[2]); m.setMatrixAt(i,M); });
     m.instanceMatrix.needsUpdate=true; m.frustumCulled=false; m.renderOrder=-5; root.add(m);
   };
+  yield "world:around";   /* [live] */
   let info;
   if(C.kind==="stadium"){ info=stadiumBowl(C,look,q,root,ctx); ctx.bowlY=info.bowlY; ctx.signs=info.signs; }   /* ctx.signs: the hero sign panels on the floor's edge, [{x, z, hw, tx, tz, h}] (centre, half width, the panel's direction, height);   ctx.bowlY(x, z) -> {y, d}: the height of the stands at a place (for cameras) */
   else if(look.around==="beach-speedway"||C.kind==="hybrid") info=speedway(C,look,q,root,ctx);
   else info=outdoorWorld(C,look,q,root,ctx);
-  const dirt=addTrack(C,look,q,root,matTrack), track=dirt.track;   /* the track surface (r3d-track.js) joins the scene where it always did */
+  yield "world:track";   /* [live] */
+  const dirt=yield* addTrackSteps(C,look,q,root,matTrack), track=dirt.track;   /* ([live] the steps of addTrack) */   /* the track surface (r3d-track.js) joins the scene where it always did */
   const fin=finishBuild(C,look); root.add(fin.grp);
   return {root,ctx,track,fin,info,matTrack,dirt,frame:(info&&info.frame)||null};   /* frame(dt, tw, cam): optional per-frame work for the surroundings (race3d.js calls it if set) */
 }

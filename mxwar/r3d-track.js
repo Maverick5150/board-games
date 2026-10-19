@@ -109,12 +109,23 @@ function makeTile(src,W,chL,chH,gain,aoK){
 }
 function dataTex(data,w,h,rep,aniso){ const t=new THREE.DataTexture(data,w,h,THREE.RGBAFormat); t.colorSpace=THREE.NoColorSpace; t.wrapS=t.wrapT=rep?THREE.RepeatWrapping:THREE.ClampToEdgeWrapping;
   t.magFilter=THREE.LinearFilter; t.minFilter=THREE.LinearMipmapLinearFilter; t.generateMipmaps=true; t.anisotropy=aniso; t.needsUpdate=true; return t; }
-export function soilTiles(lo){
+/* [live] soilTiles in STEPS (the PNG decode, each scan tile, the clump tile: one a task; race3d.js V.prepareWorld warms them before the world, mxlive 2026-10-19):
+   soilTiles() runs every step at once, exactly as before (the same tiles: every part is seeded) */
+export function soilTiles(lo){ const it=soilTilesSteps(lo); let r=it.next(); while(!r.done) r=it.next(); return r.value; }
+export function* soilTilesSteps(lo){
   const key=lo?"lo":"hi"; if(TILES[key]) return TILES[key];
   const png=decodePNG(lo?DIRT_TILES_LO_PNG:DIRT_TILES_PNG), W=png.w, src=png.data;
-  const A=makeTile(src,W,0,1,lo?5:9,4.2), B=makeTile(src,W,2,3,lo?6:11,4.0), an=Math.max(1,Math.min(getAniso(),lo?2:8));
-  return TILES[key]={A:dataTex(A,W,W,true,an),B:dataTex(B,W,W,true,an),W:W,K:dataTex(clumpTile(lo?128:256),lo?128:256,lo?128:256,true,an)};
+  yield "soil:decode";   /* [live] */
+  const A=makeTile(src,W,0,1,lo?5:9,4.2);
+  yield "soil:a";   /* [live] */
+  const B=makeTile(src,W,2,3,lo?6:11,4.0), an=Math.max(1,Math.min(getAniso(),lo?2:8));
+  yield "soil:b";   /* [live] */
+  const K=clumpTile(lo?128:256);
+  if(TILES[key]) return TILES[key];   /* ([live] made meanwhile by a soilTiles() call) */
+  return TILES[key]={A:dataTex(A,W,W,true,an),B:dataTex(B,W,W,true,an),W:W,K:dataTex(K,lo?128:256,lo?128:256,true,an)};
 }
+/* [live] the soil tiles a world of quality q needs (the track's, and the start pad's: always the light ones), in steps */
+export function* soilWarmSteps(q){ yield* soilTilesSteps(tierOf(q)==="lo"); yield* soilTilesSteps(true); }
 /* THE CLUMP TILE (milestone 2: the cover's chunky loose dirt). A tileable cellular pattern drawn in code: clods (about 9 cm) with crumbs between them (about 3.5 cm),
    each a lit dome cut off from its neighbours by a dark crack. RGBA8: R = luma (clod tops lighter, cracks darker), G,B = slopes (0.5 = flat), A = cavity (ambient occlusion).
    The shader lays it in world space (0.85 m a tile, turned against the scans) on the loose dirt near the lens. Seeded: the same tile on every device. */
@@ -382,13 +393,18 @@ function clodsFor(G,C,r0,r1,cx,cy,cz,mat,look){
   m.instanceMatrix.needsUpdate=true; if(m.instanceColor) m.instanceColor.needsUpdate=true; m.receiveShadow=true; m.castShadow=false; m.computeBoundingSphere(); m.userData.mxClods=list.length;
   return m;
 }
-function trackMesh(C,look,q,mat,tier,tiles){
+/* [live] trackMesh in STEPS (a generator: each yield is a point where the live game may hand the page back to the browser: race3d.js V.prepareWorld builds a race's
+   world over several tasks; mxlive 2026-10-19). trackMesh() runs every step at once, exactly as before. */
+function trackMesh(C,look,q,mat,tier,tiles){ const it=trackMeshSteps(C,look,q,mat,tier,tiles); let r=it.next(); while(!r.done) r=it.next(); return r.value; }
+function* trackMeshSteps(C,look,q,mat,tier,tiles){
   const t0=RT(), G=trackBuild(C,look,q,tier,tiles), {R}=G, hi=tier==="hi", root=new THREE.Group(), t1=RT();
+  yield "track:fine";   /* [live] */
   const fine=R.fine(hi?(C.L>800?8192:4096):2048,hi?128:64), track=trackTexture(fine,true), t2=RT();
   const U=mat.userData.mx; U.uTrack.value=track; U.uTm.value.set(1/R.L,R.LATR,1/(2*R.LATR),1);
   /* milestone 2: the wear map (the race's own grooves, revealed lap by lap) at the fine map's length and twice its width (a tyre groove is 11-15 cm wide); HIGH and up only */
   let wearT=null; if(hi){ const wm=R.wear(fine.nt,C.L>800?128:256); wearT=trackTexture(wm,true); U.uWearT.value=wearT; }
   const info={tris:0,chunks:0,gridMs:t1-t0,fineMs:t2-t1,wearMs:RT()-t2,fineTexels:fine.nt*fine.nv,gridVerts:R.ns*G.nc};
+  yield "track:mesh";   /* [live] */
   if(hi){
     const td=clamp(q&&q.terrainDetail!=null?q.terrainDetail:1,0.5,1.2), nCh=Math.max(1,Math.round(R.L/48)), nsq=R.ns/4;
     /* the clods: HIGH and ULTRA (rank 2+; a build without a rank, e.g. a test, gets them too); BALANCED keeps its call budget */
@@ -509,9 +525,12 @@ export function trackMaterial(look,q){
 }
 /* the track and the lane-edge blocks, added to the world's root -> {track, frame, relief}; frame(dt, riders) is optional (set it for per-frame work:
    tyre tracks, ruts that deepen...), called by race3d.js with the riders' per-frame state (CONTRACT.md) */
-export function addTrack(C,look,q,root,mat){
+/* [live] addTrack in STEPS (see trackMeshSteps): addTrack() runs every step at once, exactly as before */
+export function addTrack(C,look,q,root,mat){ const it=addTrackSteps(C,look,q,root,mat); let r=it.next(); while(!r.done) r=it.next(); return r.value; }
+export function* addTrackSteps(C,look,q,root,mat){
   const tb=RT(), tier=mat.userData.tier||tierOf(q), tiles=mat.userData.tiles||soilTiles(tier==="lo");
-  const T=trackMesh(C,look,q,mat,tier,tiles); root.add(T.root);
+  const T=yield* trackMeshSteps(C,look,q,mat,tier,tiles); root.add(T.root);
+  yield "track:start";   /* [live] */
   const sm=dirtMaterial(tier,tiles,sheenOf(look)), st=startMesh(C,look,q,sm);
   if(st){ const sf=buildStartFine(C,tier==="hi"?1024:512,tier==="hi"?128:64), stex=trackTexture(sf,false); sm.userData.mx.uTrack.value=stex; sm.userData.mx.uTm.value.set(1/sf.L,sf.LAT,1/(2*sf.LAT),1);
     st.geometry.addEventListener("dispose",()=>stex.dispose()); root.add(st); }
