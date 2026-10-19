@@ -293,6 +293,7 @@
     Q + ".mxp-ph{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;flex-wrap:wrap}",
     Q + ".mxp-ph h2{margin:.1rem 0 0;font:400 var(--fs-2xl)/1.1 var(--font-display);color:var(--text-1)}",
     Q + ".mxp-ph p{margin:.2rem 0 0;font:var(--fw-ui) var(--fs-sm)/1.35 var(--font-ui);color:var(--text-2)}",
+    Q + ".mxp-ph p .mxp-winline{color:var(--gold-100);font-weight:var(--fw-ui-strong)}",   /* mxfix1: a table player's win or podium, said like one */
     Q + ".mxp-sum{display:flex;flex-wrap:wrap;gap:.4rem}",
     Q + ".mxp-pbody{position:relative;flex:1 1 auto;min-height:0;overflow:hidden}",
     Q + ".mxp-acts{display:flex;flex-wrap:wrap;gap:1.5rem;padding:.5rem .25rem .25rem}",
@@ -314,7 +315,7 @@
     Q + ".mxp-pod__c{display:grid;justify-items:center;gap:.35rem;min-width:0;text-align:center}",
     Q + ".mxp-pod__bike{width:6rem;height:4rem}",
     Q + ".mxp-pod__bike svg{display:block;width:100%;height:100%}",
-    Q + ".mxp-pod__nm{max-width:100%;font:var(--fw-ui-strong) var(--fs-md)/1.2 var(--font-ui);color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+    Q + ".mxp-pod__nm{max-width:100%;font:var(--fw-ui-strong) var(--fs-md)/1.15 var(--font-ui);color:var(--text-1);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:break-word;text-wrap:balance}",   /* mxfix1: a second line, never an ellipsis on a podium name */
     Q + ".mxp-pod__x{font:var(--fw-ui) var(--fs-micro)/1.2 var(--font-ui);color:var(--text-2)}",
     Q + ".mxp-pod__step{display:grid;place-items:center;width:100%;border-radius:var(--r-md) var(--r-md) 0 0;font:400 var(--fs-3xl)/1 var(--font-display);color:#1a1408;box-shadow:inset 0 3px 0 var(--mk,#c99f5e)}",
     Q + ".mxp-pod__c[data-p='1'] .mxp-pod__step{height:7rem;background:linear-gradient(180deg,#fbeec8,#c99f5e)}",
@@ -801,7 +802,8 @@
         var rows = liveRows(), tw = null, you = null, fl = "";
         if (rows) {
           var T = MX.Time, pre = rc.phase === "gate" || rc.tm.k === 0;
-          tw = rows.map(function (r) { var c = T.towerCells(r), Rx = riderOfS(r.s); return [r.s, r.place, Rx.plate, Rx.name, pre ? "" : c.gap, c.tag, pre ? "" : c.last, r.fl ? 1 : 0, A.mk(Rx.bike), Rx.id === redId() ? 1 : 0]; });
+          var sn = shortsOf(rc);   /* mxfix1: [10] the compact board's gap ("+2.09", "+1:10.3"), [11] the short name (art.js shortNames, the same rule as everywhere) */
+          tw = rows.map(function (r) { var c = T.towerCells(r), Rx = riderOfS(r.s); return [r.s, r.place, Rx.plate, Rx.name, pre ? "" : c.gap, c.tag, pre ? "" : c.last, r.fl ? 1 : 0, A.mk(Rx.bike), Rx.id === redId() ? 1 : 0, pre ? "" : c.short, sn[r.s] || ""]; });
           rows.forEach(function (r) { if (r.fl) fl = "#" + riderOfS(r.s).plate + " " + T.fmtLap(r.best); });
           var mr = s >= 0 ? rows.filter(function (r) { return r.s === s; })[0] : null;
           if (mr) { var mc = T.towerCells(mr), yy = youK[s] || null; myPlace = mr.place;
@@ -885,6 +887,8 @@
     var TWK = { key: "", els: {}, ord: "", cells: {} }, youK = {}, factsK = {}, factK = 0, twMark = null, twTimer, pushTick;
     function modelOn() { return !!(rv.ok && rv.modelOn() && ui.rc && ui.rc.tm && MX.Time); }
     function nameOfSeat(s) { var R = riderOfS(s); return "#" + R.plate + " " + R.name; }
+    var snMemo = { rc: null, a: null };
+    function shortsOf(rc) { if (!snMemo || snMemo.rc !== rc || !snMemo.a) { var a = []; for (var s = 0; s < rc.n; s++) a.push(String(riderOfS(s).name || "")); snMemo = { rc: rc, a: A.shortNames ? A.shortNames(a) : a }; } return snMemo.a; }   /* mxfix1: this race's short names, once */
     function modelRate(rc) { return Math.max(0.05, (rc.tm.p || 55) / Math.max(0.5, lapMs() / 1000)); }
     var rowsMemo = { t: -1, k: -1, rows: null };
     function liveRows() {   /* one computation per clock instant: a push to every phone reads it once */
@@ -1461,9 +1465,15 @@
       if (!G.race) { var ev0 = S.startRace(G); annFeed(ev0); save(); }   /* the race event opens the show */
       var d2 = await raceShow(); return { done: d2, simmed: false };
     }
+    /* mxfix1: the results line says a table player's win like a win ("Ann wins Moto 2!") and a podium like a podium, as the phone game does */
+    function resultLine(e) {
+      var fin = e.kind === "main" || e.kind === "moto", wid = e.order[0], won = kOfId(wid) >= 0;
+      var mine = e.order.map(function (id, i) { return kOfId(id) >= 0 && i > 0 ? G.riders[id].name + " " + ord(i + 1) + (fin && i < 3 ? " (podium)" : "") : null; }).filter(Boolean);
+      var t = G.riders[wid].name + (won ? " wins " + e.label + "!" : " wins") + (mine.length ? " · " + mine.join(" · ") : "");
+      return won || (fin && e.order.slice(1, 3).some(function (id) { return kOfId(id) >= 0; })) ? '<b class="mxp-winline">' + esc(t) + "</b>" : esc(t);
+    }
     async function resultsPanel(e, simmed) {
       var c = G.cal[e.ri], last = G.last || {};
-      var mine = e.order.map(function (id, i) { return kOfId(id) >= 0 ? G.riders[id].name + " " + ord(i + 1) : null; }).filter(Boolean);
       ui.lastRes = { label: e.label, order: e.order.slice(), city: c.city || c.venue };
       var TX = e.tm || last.tm || null, Tt = MX.Time, tmap = {}, topT = null;
       if (TX && Tt) TX.rows.forEach(function (r) { tmap[r[0]] = { laps: r[1], t: r[2], dnf: !!r[3] }; if (topT == null && !r[3]) topT = r; });
@@ -1475,7 +1485,7 @@
       btns.push({ id: "stand", label: "Season standings" });
       for (;;) {
         var ch = await panel({ kind: "results", eyebrow: "Round " + (e.ri + 1) + " of " + G.cal.length + " · " + (c.city || c.venue) + (simmed ? " · simmed" : ""), title: e.label + " results",
-          sub: esc(G.riders[e.order[0]].name + " wins" + (mine.length ? " · " + mine.join(" · ") : "")),
+          sub: resultLine(e),
           sum: '<div class="mxp-sum"><span class="mxp-chip is-hot">Holeshot: ' + esc(e.hs != null ? G.riders[e.hs].name : "none") + '</span><span class="mxp-chip">' + plural(last.wars || 0, "war") + '</span><span class="mxp-chip">' + plural(last.battles || 0, "lap") + "</span>" + (TX && topT ? '<span class="mxp-chip">Race time ' + esc(Tt.fmtRace(topT[2])) + "</span>" : "") + (fastTxt ? '<span class="mxp-chip">' + esc(fastTxt) + "</span>" : "") + "</div>",
           body: '<ol class="mxp-res" aria-label="Results">' + rowsX + "</ol>", buttons: btns, countdown: 20000,
           info: { kind: "results", title: e.label + " results", res: resultsFor(e) } });
@@ -1483,7 +1493,7 @@
         await standingsPanel(false);
       }
     }
-    function resultsFor(e) { var out = {}; e.order.forEach(function (id, i) { var k = kOfId(id); if (k >= 0) { var tg = e.toMain && e.toMain.indexOf(id) >= 0 ? (e.kind === "main" || e.kind === "moto" ? "" : "to the " + (roundFinals(e) === "moto" ? "motos" : "Main")) : e.toNext && e.toNext.indexOf(id) >= 0 ? "to the " + nextStage(e) : e.out && e.out.indexOf(id) >= 0 ? "out of the night" : ""; out[SEATS[k].color] = { p: i + 1, of: e.order.length, tag: tg, dnf: !!(e.dnf && e.dnf[id] && e.dnf[id].why === "crash"), pts: racePoints(e, i) }; } }); return { label: e.label, win: G.riders[e.order[0]].name, mine: out }; }
+    function resultsFor(e) { var out = {}; e.order.forEach(function (id, i) { var k = kOfId(id); if (k >= 0) { var tg = e.toMain && e.toMain.indexOf(id) >= 0 ? (e.kind === "main" || e.kind === "moto" ? "" : "to the " + (roundFinals(e) === "moto" ? "motos" : "Main")) : e.toNext && e.toNext.indexOf(id) >= 0 ? "to the " + nextStage(e) : e.out && e.out.indexOf(id) >= 0 ? "out of the night" : ""; out[SEATS[k].color] = { p: i + 1, of: e.order.length, tag: tg, dnf: !!(e.dnf && e.dnf[id] && e.dnf[id].why === "crash"), pts: racePoints(e, i) }; } }); return { label: e.label, win: G.riders[e.order[0]].name, mine: out, fin: e.kind === "main" || e.kind === "moto" }; }
     function bikeBox(R) { var m = A.mk(R.bike); return '<span class="mxp-pod__bike">' + A.bike(m[0], m[0] === "#f2f4f8" ? "#183a8c" : "#f2f2f6") + "</span>"; }
     function podiumHTML(ids, sub) {
       return [1, 0, 2].map(function (k) { var id = ids[k]; if (!id) return '<div class="mxp-pod__c"></div>'; var R = G.riders[id];

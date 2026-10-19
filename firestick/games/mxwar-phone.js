@@ -89,7 +89,11 @@
       Q + ".mxph-tw{list-style:none;margin:0;padding:.4rem;display:grid;gap:.18rem;border-radius:var(--r-md);background:var(--ink-2);box-shadow:var(--well-edge)}",
       Q + ".mxph-tw.is-two{grid-auto-flow:column;grid-template-rows:repeat(var(--rows,20),auto);grid-template-columns:repeat(2,minmax(0,1fr));column-gap:.35rem}",
       Q + ".mxph-tw li{display:grid;grid-template-columns:1.5rem auto minmax(0,1fr) auto;align-items:center;gap:.35rem;min-height:1.75rem;padding:0 .4rem;border-radius:.4rem;background:var(--ink-3);font:var(--fw-ui-strong) var(--fs-micro)/1.2 var(--font-ui);color:var(--text-1);text-align:left}",
-      Q + ".mxph-tw.is-two li{grid-template-columns:1.1rem auto minmax(0,1fr) auto;gap:.25rem;padding:0 .25rem}",
+      Q + ".mxph-tw.is-two li{grid-template-columns:1.05rem auto minmax(0,1fr) auto;gap:.2rem;padding:0 .3rem 0 .15rem}",
+      Q + ".mxph-tw.is-two .mxph-n," + Q + ".mxph-tw.is-two .mxph-g," + Q + ".mxph-tw.is-two .mxph-p{font-family:\"Barlow Condensed\",\"Roboto Condensed\",\"sans-serif-condensed\",\"Arial Narrow\",\"Avenir Next Condensed\",\"Bahnschrift Condensed\",sans-serif;font-size:.8125rem}",
+      Q + ".mxph-tw.is-two .mxph-n{font-weight:600;letter-spacing:.01em}",
+      Q + ".mxph-tw.is-two .mxph-p{font-weight:700}",
+      Q + ".mxph-tw.is-two .mx-pl{min-width:1.85em;padding:.06rem .16rem .06rem .45em}",
       Q + ".mxph-tw li.is-me{box-shadow:inset 0 0 0 2px var(--gold-300)}",
       Q + ".mxph-tw li.is-down{background:#4a1f14;box-shadow:inset 0 0 0 1.5px #e8775a}",
       Q + ".mxph-tw li.is-out{opacity:.6}",
@@ -164,7 +168,10 @@
         else { var py = R.you && R.you.tag === "down" ? "Down: getting going again" : ord(R.you ? R.you.place : R.place) + " of " + R.n; title = py; sub = R.label + " · lap " + R.lap + " of " + R.len + (isAuto ? " · Auto flips for you" : ""); }
       } else if (pn) {
         var mr = pn.res && pn.res.mine ? pn.res.mine[api.color()] : null;
-        if (pn.kind === "results") { title = pn.title; sub = mr ? "You finished " + ord(mr.p) + " of " + mr.of + (mr.tag ? " · " + mr.tag : "") + (mr.dnf ? " · DNF: crash" : "") + (mr.pts ? " · +" + mr.pts + " pts" : "") : (pn.res ? pn.res.win + " wins" : ""); }
+        if (pn.kind === "results") {   /* mxfix1: a win said like a win ("You win Moto 2!"), a podium like a podium */
+          var lb = pn.res && pn.res.label ? pn.res.label : "", pod = mr && mr.p > 1 && mr.p <= 3 && pn.res && pn.res.fin;
+          title = mr && mr.p === 1 ? "You win" + (lb ? " " + lb : "") + "!" : pod ? "You finished " + ord(mr.p) + "!" : pn.title;
+          sub = mr ? (mr.p === 1 ? (pn.title || "") + " · 1st of " + mr.of : pod ? "On the podium in " + (lb || "the race") + " · " + pn.res.win + " wins" : "You finished " + ord(mr.p) + " of " + mr.of) + (mr.tag ? " · " + mr.tag : "") + (mr.dnf ? " · DNF: crash" : "") + (mr.pts ? " · +" + mr.pts + " pts" : "") : (pn.res ? pn.res.win + " wins" : ""); }
         else if (pn.kind === "lineup") { var ml = pn.mine ? pn.mine[api.color()] : null; title = pn.title; sub = ml ? (/^seeded/.test(ml) ? "You're " + ml + "." : "You ride " + ml + ".") + " Watch the TV." : "Watch the TV."; }
         else if (pn.kind === "podium" || pn.kind === "final") { title = pn.title; sub = (pn.pod || []).map(function (x, i) { return (i + 1) + ". " + x; }).join(" · "); }
         else { title = pn.title || "Season standings"; sub = pn.next ? "Next: " + pn.next : "Watch the TV."; }
@@ -229,12 +236,15 @@
       (y.why && y.why.length ? '<ul class="mxph-why" aria-label="What the lap was worth">' + y.why.map(function (w) { return '<li class="' + (w[2] > 0 ? "is-up" : w[2] < 0 ? "is-dn" : "") + '"><span>' + esc(w[0]) + "</span>" + (w[1] ? "<b>" + esc(w[1]) + "</b>" : "") + "</li>"; }).join("") + "</ul>" : "") + "</div>";
   }
   /* the timing: every rider (two compact columns for a big gate), the gap in seconds or the laps down, DNF; this rider's row is ringed */
+  /* mxfix1: two columns (a big gate) write the surname in a condensed face (the TV sends it: r[11], art.js shortNames, the same rule as everywhere) and the
+     gaps short (r[10]: "+2.09", "+1:10.3"), so the names read in full on a phone */
   function timingHTML(R, api) {
     var tw = R.tw, esc = api.esc, n = tw.length, two = n > 24;
+    var mine = two && !tw.every(function (r) { return r[11]; }) && MXA && MXA.shortNames ? MXA.shortNames(tw.map(function (r) { return String(r[3] || ""); })) : null;
     var h = '<p class="mxph-lbl">Timing · gap to the leader' + (R.fl ? " · fastest lap " + esc(R.fl) : "") + '</p><ol class="mxph-tw' + (two ? " is-two" : "") + '" style="--rows:' + Math.ceil(n / 2) + '" aria-label="Timing">';
-    tw.forEach(function (r) {
-      var short = String(r[3] || "").split(" ").pop(), tag = r[5];
-      h += '<li class="' + (r[0] === R.meS ? "is-me" : "") + (tag === "down" ? " is-down" : "") + (tag === "out" || tag === "pits" ? " is-out" : "") + '"><span class="mxph-p">' + r[1] + "</span>" + plate(r[2], r[8], r[9]) + '<span class="mxph-n">' + esc(two ? short : r[3]) + '</span><span class="mxph-g">' + esc(r[4]) + "</span></li>";
+    tw.forEach(function (r, i) {
+      var short = r[11] || (mine ? mine[i] : String(r[3] || "").split(" ").pop()), tag = r[5], gap = two && typeof r[10] === "string" ? r[10] : r[4];
+      h += '<li class="' + (r[0] === R.meS ? "is-me" : "") + (tag === "down" ? " is-down" : "") + (tag === "out" || tag === "pits" ? " is-out" : "") + '"><span class="mxph-p">' + r[1] + "</span>" + plate(r[2], r[8], r[9]) + '<span class="mxph-n">' + esc(two ? short : r[3]) + '</span><span class="mxph-g">' + esc(gap) + "</span></li>";
     });
     return h + "</ol>";
   }
