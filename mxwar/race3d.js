@@ -1256,36 +1256,41 @@ export function create(host,hooks){
     };
     /* 6. A NEW SIZE NEVER STALLS THE RACE. A resolution step of the ladder (r3d-quality.js applyPR: renderer.setPixelRatio, at a camera cut) gives the canvas a new drawing
        buffer, and that call waits until the GPU process has done every frame already queued: 0.6-2.5 s mid-race here (the BALANCED phone race, the TV), the review's
-       mid-race stalls; with nothing queued it takes about 10 ms. So the new ratio is applied only when nothing is queued: at the ladder's request the next frames are
-       not drawn (the picture holds still; the page, the clock, the tower and the announcers go on) while a fence is polled once a frame (never waited for); once the
-       GPU has done the frames before it, the canvas takes its new size and that frame is drawn at it. A GPU still busy after TRY_MS (one shared with other work):
-       the picture goes on at the size it has, and the new one waits for the ladder's next request or the next race (the view's own resize, a new layout or a new
-       race, applies the ladder's current ratio at once, as before, as does V.fixPR). V.sizeLog: the last tries (fence wait, apply ms, ok). */
+       mid-race stalls; with nothing queued it takes about 10 ms. So the new ratio is applied when nothing is queued: at the ladder's request the next frames are not
+       drawn (the picture holds still; the page, the clock, the tower and the announcers go on) while a fence is polled once a frame (never waited for); once the GPU
+       has done the frames before it, the canvas takes its new size and that frame is drawn at it. A GPU still busy after a try (3 frames, 0.4 s at least; longer at
+       each try, 2 s at most: one shared with other work): the picture goes on at the size it has and tries again 2 s later; the third try takes the size even then
+       (a slow device needs it: the ladder at its floor with the old size would call the device too slow for 3D). The view's own resize (a new layout, a new race:
+       it applies the ladder's current ratio) and V.fixPR (tests) set the size at once, as before. V.sizeLog: the last tries (fence wait, apply ms, ok). */
     {
-      const gl=renderer.getContext(), sPR=renderer.setPixelRatio, sSZ=renderer.setSize, TRY_MS=400;
-      let want=0, tried=false, fence=null, fT=0;
+      const gl=renderer.getContext(), sPR=renderer.setPixelRatio, sSZ=renderer.setSize;
+      let want=0, tries=0, fence=null, fT=0, tryMs=0, nextT=0;
       const unfence=()=>{ if(fence){ try{ gl.deleteSync(fence); }catch(e){} fence=null; } };
-      const drop=()=>{ want=0; tried=false; unfence(); };
+      const drop=()=>{ want=0; tries=0; nextT=0; unfence(); };
+      const frameMs=()=>{ const a=stats.ft.slice(-12).sort((x,y)=>x-y); return a.length?a[a.length>>1]:16.7; };
       const log=o=>{ V.sizeLog.push(o); if(V.sizeLog.length>24) V.sizeLog.shift(); };
       V.sizeLog=[];
       renderer.setPixelRatio=function(p){
         if(sizeOK||V.lost||!gl.fenceSync){ drop(); return sPR.call(renderer,p); }
         if(Math.abs(p-renderer.getPixelRatio())<1e-4){ drop(); return; }   /* (a step back to the size it has: nothing to do) */
-        want=p; tried=false; unfence();   /* (the ladder's own state says p already: QUAL.summary().pr) */
+        want=p; nextT=0; unfence();   /* (the ladder's own state says p already: QUAL.summary().pr; the tries so far still count) */
       };
       renderer.setSize=function(w,h,u){ if(want&&!sizeOK) return; return sSZ.call(renderer,w,h,u); };   /* (the ladder's setSize after its ratio: the same size, nothing to do) */
       const fix0=QUAL.fix; QUAL.fix=function(){ sizeOK++; try{ return fix0.apply(QUAL,arguments); } finally { sizeOK--; } };
       const skip0=QUAL.skipFrame;
       QUAL.skipFrame=function(t){
-        if(want&&!tried&&!V.lost){
-          if(!fence){ try{ fence=gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE,0); gl.flush(); }catch(e){ fence=null; } fT=now(); if(fence) return true; }
+        if(want&&!V.lost&&now()>=nextT){
+          if(!fence){ try{ fence=gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE,0); gl.flush(); }catch(e){ fence=null; } fT=now(); tryMs=Math.min(2000,Math.max(400,3*frameMs())*(1<<Math.min(tries,2))); if(fence) return true; }
           else {
             let s=true; try{ s=gl.getSyncParameter(fence,gl.SYNC_STATUS)===gl.SIGNALED; }catch(e){ s=true; }
-            if(!s){ if(now()-fT<TRY_MS) return true; unfence(); tried=true; log({t:Math.round(fT),wait:Math.round(now()-fT),ok:false,pr:+want.toFixed(3)}); return skip0.call(QUAL,t); }
+            if(!s){
+              if(now()-fT<tryMs) return true;
+              if(tries<2){ unfence(); tries++; nextT=now()+2000; log({t:Math.round(fT),wait:Math.round(now()-fT),ok:false,tries:tries,pr:+want.toFixed(3)}); return skip0.call(QUAL,t); }
+            }
           }
-          const p=want, t0=now(); drop(); sizeOK++;
+          const p=want, n=tries, t0=now(); drop(); sizeOK++;
           try{ sPR.call(renderer,p); sSZ.call(renderer,W,H,false); }catch(e){} finally { sizeOK--; }
-          log({t:Math.round(t0),wait:Math.round(t0-fT),ms:+(now()-t0).toFixed(1),ok:true,pr:+p.toFixed(3)});
+          log({t:Math.round(t0),wait:Math.round(t0-fT),ms:+(now()-t0).toFixed(1),ok:true,tries:n+1,pr:+p.toFixed(3)});
         }
         return skip0.call(QUAL,t);
       };
