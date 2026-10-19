@@ -1105,7 +1105,7 @@ function restable(){ return !onTV()&&race3D(); }
 function syncRest(){
   var tb=$("table"), on=restable()&&!pipBig()&&!ui.pipUp, was=tb.classList.contains("is-rest");
   if(!restable()) tb.classList.remove("is-left");
-  if(on!==was) morphTable(function(){ tb.classList.toggle("is-rest",on); if(on) drawChip(); });
+  if(on!==was){ morphTable(function(){ tb.classList.toggle("is-rest",on); if(on) drawChip(); }); pipAvoid(); }
   $("arena").style.setProperty("--tbl-w",restable()&&!on&&!pipBig()&&!tb.classList.contains("is-left")?(tb.offsetWidth+Math.round(remPx()*1.25))+"px":"0px");
 }
 function pipReset(){ clearTimeout(pipT); pipT=0; ui.pipUp=false; var tb=$("table"); tb.classList.remove("is-one","is-left","is-war","is-shy"); $("topSlot").hidden=false; }   /* a new race: the window rests on the right */
@@ -1139,16 +1139,18 @@ function riderBox(s){
   return {l:x-m,r:x+m,t:y-m,b:y+m*1.15};
 }
 /* the window keeps off the person's rider: when his box is under it, it takes the other top corner (under the camera button); when both corners are on him (a
-   close shot), it fades out of his way until he is clear */
-var avoidT=0;
+   close shot), it fades out of his way until he is clear. Checked 8 times a second, and at once when the window changes size (a reveal opens it), against the
+   window's place as laid out (where a grow / shrink is going, not its animated frame), with a small margin round the rider so it moves before he gets there */
+var avoidT=0, avoidIn=false;
 function pipAvoid(){
-  var tb=$("table"); if(!restable()||pipBig()||document.hidden){ tb.classList.remove("is-shy"); return; }
-  var box=riderBox(focusHuman()); if(!box){ tb.classList.remove("is-shy"); return; }
-  var q=tb.getBoundingClientRect(), left=tb.classList.contains("is-left"), rem=remPx(), r=$("v3").getBoundingClientRect();
-  function hit(a){ return Math.min(box.r,a.r)-Math.max(box.l,a.l)>4&&Math.min(box.b,a.b)-Math.max(box.t,a.t)>4; }
-  var here={l:q.left,r:q.right,t:q.top,b:q.bottom}, ox=left?r.right-rem*.5-q.width:r.left+rem*.5, oy=left?r.top+rem*.5:r.top+rem*3.65, there={l:ox,r:ox+q.width,t:oy,b:oy+q.height};
+  var tb=$("table"); if(avoidIn) return; if(!restable()||pipBig()||document.hidden){ tb.classList.remove("is-shy"); return; }
+  var box=riderBox(focusHuman()), op=tb.offsetParent; if(!box||!op){ tb.classList.remove("is-shy"); return; }
+  var pr=op.getBoundingClientRect(), W=tb.offsetWidth, H=tb.offsetHeight, x0=pr.left+op.clientLeft+tb.offsetLeft, y0=pr.top+op.clientTop+tb.offsetTop;
+  var left=tb.classList.contains("is-left"), rem=remPx(), r=$("v3").getBoundingClientRect(), mg=rem*.4;
+  function hit(a){ return Math.min(box.r+mg,a.r)-Math.max(box.l-mg,a.l)>0&&Math.min(box.b+mg,a.b)-Math.max(box.t-mg,a.t)>0; }
+  var here={l:x0,r:x0+W,t:y0,b:y0+H}, ox=left?r.right-rem*.5-W:r.left+rem*.5, oy=left?r.top+rem*.5:r.top+rem*3.65, there={l:ox,r:ox+W,t:oy,b:oy+H};
   if(!hit(here)){ tb.classList.remove("is-shy"); return; }
-  if(!hit(there)&&Date.now()-avoidT>1200){ avoidT=Date.now(); tb.classList.remove("is-shy"); morphTable(function(){ tb.classList.toggle("is-left",!left); }); syncRest(); return; }
+  if(!hit(there)&&Date.now()-avoidT>1200){ avoidT=Date.now(); tb.classList.remove("is-shy"); morphTable(function(){ tb.classList.toggle("is-left",!left); }); avoidIn=true; try{ syncRest(); }finally{ avoidIn=false; } return; }
   tb.classList.add("is-shy");
 }
 function capBandH(){ var el=$("capBand"); return el&&document.documentElement.hasAttribute("data-ann")?el.offsetHeight:0; }
@@ -1359,7 +1361,7 @@ function renderRace(){
 function leftLab(h){ if(h>=0) lab($("youLab"),G.humans.length>1?"Card of":"Your card",G.humans.length>1?"Card":"You"); else lab($("youLab"),"Race leader","Leader"); }
 /* mxfix1: the left slot's rider (the person, or the race leader when nobody of this device rides) holds the top card: ONE card, marked as the top card,
    never the same card twice (the CEO's podium screenshot showed A♥ 68 beside A♥ 68) */
-function warWin(on){ var tb=$("table"); if(on===tb.classList.contains("is-war")) return; morphTable(function(){ tb.classList.toggle("is-war",!!on); }); }   /* mxfix1: the war's wider window (phone, 3D; CSS), off again with the next lap's cards */
+function warWin(on){ var tb=$("table"); if(on===tb.classList.contains("is-war")) return; morphTable(function(){ tb.classList.toggle("is-war",!!on); }); pipAvoid(); }   /* mxfix1: the war's wider window (phone, 3D; CSS), off again with the next lap's cards */
 function setOne(on){ var tb=$("table"); tb.classList.toggle("is-one",!!on); $("topSlot").hidden=!!on; if(pipBig()) $("youSlot").style.left=on?"50%":"24%"; else placeSlots(); }
 function oneCard(h){
   setOne(true); $("youCard").classList.add("is-win");
@@ -1480,7 +1482,8 @@ function legacyTower(mark){
   $("towerSub").textContent=tv||n<=10?n+" riders · cards held":"top 10"+(miss.length?" + you":"")+" of "+n+" · cards held";
   $("youBox").hidden=true;
 }
-setInterval(function(){ if(G&&ui.rc&&ui.view==="race"&&!setupShown()&&!document.hidden&&ui.rc.tm) try{ drawTower(); pipAvoid(); }catch(e){} },250);
+setInterval(function(){ if(G&&ui.rc&&ui.view==="race"&&!setupShown()&&!document.hidden&&ui.rc.tm) try{ drawTower(); }catch(e){} },250);
+setInterval(function(){ if(G&&ui.rc&&ui.view==="race"&&!setupShown()&&!document.hidden&&restable()) try{ pipAvoid(); }catch(e){} },125);   /* mxfix1: the cards window keeps off the person's rider */
 
 /* mxtime: what each person's cards were worth, kept right after the battle (the battle's data is gone by the time the rider ends the lap) */
 function captureFacts(){
