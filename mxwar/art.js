@@ -143,6 +143,32 @@ function chip(id){ if(id==null) return ""; var c=info(id); return '<span class="
 function chipRed(id){ return id!=null&&info(id).red; }
 function short(id){ var c=info(id); return rankLabel(c.r)+({S:"♠",H:"♥",D:"♦",C:"♣",J:""}[c.s]); }
 
-MX.Art={MK:MK,MODERN:MODERN,mk:mk,mkStyle:mkStyle,bike:bike,track:track,gate:gate,flag:flag,wflag:wflag,yflag:yflag,pipIcon:pipIcon,suit:suit,info:info,rankLabel:rankLabel,face:face,cardInner:cardInner,chip:chip,chipRed:chipRed,short:short};
+/* ---------------- short names (mxfix1): the name a narrow list shows, ONE rule everywhere (the timing tower and board, the cards window, the
+   Party phone's timing, the Party TV): the surname. A nickname in quotes or a note in brackets is left out (Jason "JT" Thomas -> Thomas); a suffix rides
+   with the surname, never alone (Mike Katin Jr -> Katin Jr.); a particle stays with it (Roger De Coster -> De Coster, Dirco Van der Westhuizen ->
+   Van der Westhuizen); one word, or a name ending in a number (Player 2), stays whole. shortNames(list) does a whole field: two riders with the same
+   short name get their initial (J. Evans, T. Evans), the whole name when the initials match too. ---------------- */
+var NMSUF=/^(.*?),?\s+(jr\.?|sr\.?|ii|iii|iv|v)$/i, NMPART={van:1,von:1,der:1,den:1,de:1,del:1,della:1,di:1,da:1,dos:1,du:1,la:1,le:1,st:1,"st.":1,ten:1,ter:1};
+function nmClean(n){ return String(n==null?"":n).replace(/\s*\([^)]*\)\s*/g," ").replace(/\s*["“”][^"“”]*["“”]\s*/g," ").replace(/\s+/g," ").trim(); }
+function nmSuffix(s){ var u=String(s).replace(/\./g,"").toUpperCase(); return u==="JR"?"Jr.":u==="SR"?"Sr.":u; }
+function nameParts(n){
+  var c=nmClean(n), m=c.match(NMSUF), core=(m?m[1]:c).replace(/,$/,"").trim(), suf=m?nmSuffix(m[2]):"", w=core?core.split(" "):[], i=w.length-1;
+  if(w.length<2||/^\d+$/.test(w[i])) return {first:"",last:core,suf:suf};
+  while(i>1&&NMPART[w[i-1].toLowerCase()]) i--;
+  return {first:w.slice(0,i).join(" "),last:w.slice(i).join(" "),suf:suf};
+}
+function shortName(n){ var p=nameParts(n), s=p.last+(p.suf?" "+p.suf:""); return s||String(n==null?"":n).trim(); }
+function shortNames(list){
+  list=list||[]; var out=list.map(shortName), by={};
+  out.forEach(function(s,i){ var k=s.toLowerCase(); (by[k]=by[k]||[]).push(i); });
+  Object.keys(by).forEach(function(k){ var ix=by[k]; if(ix.length<2) return;
+    var ini=ix.map(function(i){ var f=nameParts(list[i]).first; return f?f.charAt(0).toUpperCase()+". "+out[i]:out[i]; });
+    ix.forEach(function(i,j){ var dup=ini.filter(function(x){ return x.toLowerCase()===ini[j].toLowerCase(); }).length>1; out[i]=dup?String(list[i]).trim():ini[j]; });
+  });
+  return out;
+}
+
+MX.Art={MK:MK,MODERN:MODERN,mk:mk,mkStyle:mkStyle,bike:bike,track:track,gate:gate,flag:flag,wflag:wflag,yflag:yflag,pipIcon:pipIcon,suit:suit,info:info,rankLabel:rankLabel,face:face,cardInner:cardInner,chip:chip,chipRed:chipRed,short:short,
+  shortName:shortName,shortNames:shortNames};
 if(typeof module!=="undefined"&&module.exports) module.exports=MX.Art;
 })(typeof window!=="undefined"?window:globalThis);
