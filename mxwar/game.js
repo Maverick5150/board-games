@@ -1947,15 +1947,30 @@ function racePoints(e,p){
    so a Fire TV reports its real frame rate just by being played (the view's perf REQUEST 3) */
 function perfChip(simmed){ try{ if(simmed||!use3D()||!V3.perfRaces) return ""; var a=V3.perfRaces(), r=a&&a[a.length-1]; if(!r||!(r.fpsAvg>0)||Date.now()-r.when>45*60000) return "";
   var lbl=(V3.qualityLabel&&V3.qualityLabel(r.tier))||String(r.tier||"").toUpperCase(); return '<span class="mx-chip" title="How the 3D race ran on this device">3D: '+Math.round(r.fpsAvg)+" fps, 1% low "+Math.round(r.fps1Low)+", "+esc(String(r.canvas||""))+", "+esc(lbl)+"</span>"; }catch(x){ return ""; } }
+/* mxfix1 (the CEO's results screenshot: "Ricky Glassie wins · you finished 1st"): the results line says a win like a win ("You win Moto 2, Ricky Glassie!"),
+   a podium like a podium ("You finished 2nd in Moto 2: on the podium!"); other places as before. hot: the line is the person's moment (gold) */
+function resultWords(e,order,me){
+  var win=G.riders[order[0]], fin=e.kind==="main"||e.kind==="moto", L=e.label, mine=[];
+  order.forEach(function(id,i){ if(me.indexOf(id)>=0) mine.push({R:G.riders[id],p:i+1}); });
+  if(!mine.length) return {t:win.name+" wins",hot:false};
+  if(me.length===1){
+    var m=mine[0], named=!/^you$/i.test(m.R.name);
+    if(m.p===1) return {t:"You win "+L+(named?", "+m.R.name:"")+"!",hot:true};
+    if(m.p<=3&&fin) return {t:"You finished "+ord(m.p)+" in "+L+": on the podium! "+win.name+" wins.",hot:true};
+    return {t:win.name+" wins · you finished "+ord(m.p),hot:false};
+  }
+  var lead=mine[0].p===1, rest=mine.slice(lead?1:0).map(function(x){ return x.R.name+" "+ord(x.p)+(x.p<=3&&fin?" (podium)":""); });
+  if(lead) return {t:mine[0].R.name+" wins "+L+"!"+(rest.length?" · "+rest.join(" · "):""),hot:true};
+  return {t:win.name+" wins · "+rest.join(" · "),hot:fin&&mine[0].p<=3};
+}
 function openResults(e,simmed){
   var T=track(); if(T) T.show(false);
   if(V3) V3.show(false);   /* the 3D race rests under the results */
   if(boardOpen()) sheetClose($("boardBox"),"go");
-  var c=G.cal[e.ri], me=G.humans, order=e.order, rcStats=G.last||{};
-  var myP=-1; order.forEach(function(id,i){ if(me.indexOf(id)>=0&&myP<0) myP=i; });
+  var c=G.cal[e.ri], me=G.humans, order=e.order, rcStats=G.last||{}, rw=resultWords(e,order,me);
   var head='<div class="bg-sheet__grip" aria-hidden="true"></div><div class="mx-shd"><span class="bg-eyebrow">Round '+(e.ri+1)+" · "+esc(c.city||c.venue)+(simmed?" · simmed":"")+'</span>'+
     '<h2 class="bg-sheet__title" id="resTitle">'+esc(e.label)+" results</h2>"+
-    '<p class="bg-sheet__sub">'+esc(G.riders[order[0]].name)+" wins"+(myP>=0?(me.length>1?" · "+G.riders[order[myP]].name+" "+ord(myP+1):" · you finished "+ord(myP+1)):"")+"</p></div>";
+    '<p class="bg-sheet__sub'+(rw.hot?" mx-winline":"")+'">'+esc(rw.t)+"</p></div>";
   var TX=e.tm||(rcStats&&rcStats.tm)||null, Tt=MX.Time, tmap={}, topT=null;
   if(TX&&Tt){ TX.rows.forEach(function(r){ tmap[r[0]]={laps:r[1],t:r[2],dnf:!!r[3]}; if(topT==null&&!r[3]) topT=r; }); }
   function timeCell(id,i){
