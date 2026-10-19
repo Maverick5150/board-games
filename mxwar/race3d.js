@@ -163,7 +163,7 @@ export function create(host,hooks){
     gridBuild();   /* the start grid: fixed slots in staggered rows inside the start's width (gridLat / gridBack) */
     rs=list.map((r,k)=>({k:k,seat:r.s,g:0,tg:null,boot:null,lat:gridLat(k),latT:gridLat(k),bias:(((k*7919)%11)/10-0.5)*0.7,D:-0.95-gridBack(k),Dp:-0.95-gridBack(k),s:0,onStart:true,v:0,vp:0,
       F:{y:0,v:0},Rr:{y:0,v:0},stand:0,lean:0,dab:0,spinF:0,spinR:0,gone:false,crash:null,crashPlan:null,air:false,init:false,lapN:1,
-      Dl:-0.95-gridBack(k),P:-gridBack(k),sb:0,vl:0,al:0,alF:0,psi:0,psiHold:0,sd:{},jF:null,jR:null,jDone:null,czone:0,rem:false}));
+      Dl:-0.95-gridBack(k),P:-gridBack(k),sb:0,sbv:0,vl:0,al:0,alF:0,psi:0,psiHold:0,sd:{},jF:null,jR:null,jDone:null,czone:0,rem:false}));
     // [/hook:motion]
     RST=list.map((r0,k)=>newState(k,r0));
     lenLaps=o.len||30; lapNo=1; T=0; holdInfo=null; flag=null; yellow=null; lapPlan=null; finished=false; show=null; lappedK=[]; shownHs=false;
@@ -319,7 +319,7 @@ export function create(host,hooks){
   };
   V.markOut=function(seat){ const r=rs[seat]; if(r) r.gone=true; };
   // [hook:motion]
-  V.gate=function(){ mode="gate"; gate.set(0); gate.drop=0; gate.dropT=-1; T=0; lapNo=1; rs.forEach((r,k)=>{ r.lat=gridLat(k); r.latT=r.lat; r.vl=0; r.al=0; r.alF=0; r.psi=0; r.sb=0; r.sd={}; r.jF=null; r.jR=null; r.jDone=null; r.rem=false; r.init=false; r.crash=null; r.crashPlan=null; r.g=0; r.tg=null; }); CAMS.setShot({type:"gate",subj:-1,pri:0,min:1e9,max:1e9}); renderOnce(); };
+  V.gate=function(){ mode="gate"; gate.set(0); gate.drop=0; gate.dropT=-1; T=0; lapNo=1; rs.forEach((r,k)=>{ r.lat=gridLat(k); r.latT=r.lat; r.vl=0; r.al=0; r.alF=0; r.psi=0; r.sb=0; r.sbv=0; r.sd={}; r.jF=null; r.jR=null; r.jDone=null; r.rem=false; r.init=false; r.crash=null; r.crashPlan=null; r.g=0; r.tg=null; }); CAMS.setShot({type:"gate",subj:-1,pri:0,min:1e9,max:1e9}); renderOnce(); };
   // [/hook:motion]
   /* the gate drops: the pads fall, the clock starts (resolves once the riders are away) */
   V.drop=function(){
@@ -423,12 +423,12 @@ export function create(host,hooks){
       const r=rs[i]; if(r.gone&&!r.crash) continue;
       if(r.crash&&r.crash.kind==="remount"&&T-r.crash.T>=r.crash.down){ /* back on the bike where it lies: the logical distance becomes the bike's, he rides on from there from a stop */
         const c=r.crash, ts=c.v0/7.5, hw0=(r.fr&&r.fr.hw)||4; r.g=T-MX.Course.tOfD(C,c.D+c.v0*ts-3.75*ts*ts); r.lat=clamp(c.lat+c.side*Math.min(2.2,0.9*ts),-hw0+0.6,hw0-0.6);
-        r.crash=null; r.boot={t:0}; r.init=false; r.rem=true; r.sb=0; r.vl=0; r.al=0; r.alF=0; r.psi=-c.side*0.18; r.psiHold=0.8; r.pa=0; r.jF=null; r.jR=null; r.jDone=null; r.czone=0; }
+        r.crash=null; r.boot={t:0}; r.init=false; r.rem=true; r.sb=0; r.sbv=0; r.vl=0; r.al=0; r.alF=0; r.psi=-c.side*0.18; r.psiHold=0.8; r.pa=0; r.jF=null; r.jR=null; r.jDone=null; r.czone=0; }
       if(r.crash&&r.crash.kind==="out"&&lapNo>r.crash.lap+1){ r.crash=null; r.gone=true; hideRider(R,i); continue; }   /* cleared after the yellow lap */
       if(r.leave&&lapNo>r.leave&&!r.crash){ r.gone=true; r.leave=0; hideRider(R,i); continue; }
       const tau=atGate?0:tauOf(i), d0=MX.Course.dOfT(C,Math.max(0,tau));
       const Db=atGate?-0.95:d0-0.95*(1-sstep(0,18,d0));   /* (the old D: the front row waits out the clock's first 0.95 m, the rear wheel spinning) */
-      r.Db=Db; r.Dl=Db-gridBack(r.k)*(1-sstep(0,60,Math.max(0,d0)));   /* the second row starts 2.3 m back; the offset fades over the first 60 m */
+      r.Dlp=r.Dl; r.Db=Db; r.Dl=Db-gridBack(r.k)*(1-sstep(0,60,Math.max(0,d0)));   /* the second row starts 2.3 m back; the offset fades over the first 60 m (r.Dlp: last frame's, for the logical speed) */
       if(r.sb==null) r.sb=0;
       ordA.push(r);
     }
@@ -442,20 +442,38 @@ export function create(host,hooks){
       const r=ordA[a], live=racing&&dt>0&&(r.init||r.rem)&&!atGate;
       let sb=r.crash?r.sb:0;
       if(!r.crash&&!atGate){
-        let need=0;
-        const Lf=2.15+0.05*Math.max(0,r.v||0), kr=(r.fr&&r.fr.k)||0;   /* nose to tail: the footprint (2 m) and a gap that grows with the speed (0.9 m at 15 m/s); more round a tight turn (the bikes are turned against each other) */
+        let need=0, vS=1e9, vB=1e9, inside=0;
+        const Lf=2.15+0.05*Math.max(0,r.v||0), kr=(r.fr&&r.fr.k)||0, sb0=r.sb||0, vr=Math.max(0,r.vi!=null?r.vi:(r.v||0));   /* nose to tail: the footprint (2 m) and a gap that grows with the speed (0.9 m at 15 m/s); more round a tight turn (the bikes are turned against each other) */
+        let Tf=0; if(live&&!r.air&&!r.onStart){ for(let q=0;q<C.arcs.length;q++){ const A=C.arcs[q]; if(MX.Course.wrap(C,A.a-(r.s||0))<14) Tf=Math.max(Tf,(A.b-A.a)/Math.max(4,vr)); } }   /* a take-off within 14 m: the flight's time (a flight keeps its speed, so the plan covers it before the lip) */
         for(let b=0;b<ordA.length;b++){ if(b===a||(!live&&b>a)) continue; const o=ordA[b]; if(o.crash) continue;   /* (a placement frame: only against the riders already placed) */
           const oD=b<a?o.D:o.Dq, lead=oD-r.Dq;   /* (o.D: placed this frame; o.Dq: where he was drawn last frame) */
           if(!(lead>1.25||(lead>=-1.25&&rightOf(o,r)))) continue;   /* he has the right of way over r */
-          const ah=oD-r.Dl, dl=Math.abs(o.lat-r.lat), Lq=Lf*(1-sstep(0.70,0.752,dl))*(1+2.4*Math.abs(kr))/Math.max(0.45,1-kr*(o.lat+r.lat)*0.5); if(Lq<=0.001||ah>Lq) continue;   /* (the footprint is 0.75 m wide) */
-          const nd=Lq-ah; if(nd>need) need=nd; }
+          const ah=oD-r.Dl, dl=Math.abs(o.lat-r.lat), cq=(1+2.4*Math.abs(kr))/Math.max(0.45,1-kr*(o.lat+r.lat)*0.5), Lq=Lf*(1-sstep(0.70,0.752,dl))*cq;   /* (the footprint is 0.75 m wide) */
+          const dlp=Math.min(dl,Math.abs(o.lat-r.lat+((o.vl||0)-(r.vl||0))*0.35),o.latT!=null&&r.latT!=null?Math.abs(o.latT-r.latT):9), Lp=Lf*(1-sstep(0.70,0.752,dlp))*cq; if(Lp<=0.001||ah>Lp+16) continue;   /* the plan: where the two lines will be in 0.35 s or are heading (a rider moving into his lane, two lines squeezed into one, is planned for before they meet), 16 m up his lane */
+          if(Lq>0.001&&ah<=Lq){ const nd=Lq-ah; if(nd>need) need=nd; }
+          if(live){ const vo=b<a?Math.max(0,(o.D-o.Dp)/dt):Math.max(0,o.vi!=null?o.vi:(o.v||0)), gap=ah-Lp+sb0, gp=gap-0.15-0.03*vr-Math.max(0,vr-vo)*Tf;   /* his speed as drawn; the free road to his tail as drawn; less a margin and what a flight ahead would close */
+            const vs=gp>0?vo+Math.sqrt(8*gp):vo+gp/0.35; if(vs<vS){ vS=vs; vB=vo; } if(Lq>0.001&&sb0<Lq-ah) inside=Math.max(inside,Lq-ah-sb0); } }   /* the fastest he can be and still slow (4 m/s^2) to his speed at his tail; closer, slower than him (the gap opens) */
         if(live){
-          const cz=r.czone||0; sb=r.sb||0;
-          if(cz>0) sb+=2.6*cz*dt;   /* a crash ahead: slower through it (up to 2.6 m/s), made up afterwards */
-          if(need>sb){ sb=Math.min(need,sb+7*dt); if(need-sb>0.15) sb=need-0.15; }   /* held back: quickly, never more than 0.15 m into the bike ahead */
-          else if(cz<=0){ const ex=sb-need; sb-=Math.min(ex,Math.min(ex>4?2.6:1.8,0.2+ex*1.5)*dt); }   /* catching up: gently (1.8 m/s faster than the clock, 2.6 m/s when far back) */
-          sb=Math.max(0,sb);
-        } else sb=need;   /* a placement frame (the race restored, a test jump): placed at once */
+          /* (hotfix, QD milestone 2 defect 2: the yield was an invisible wall, 177 one-tick stops in 332 s, 13 of them in the air) SPEED PLANNING, like a rider: the setback's rate
+             sbv (how much slower than his schedule he is drawn) changes at most 7 m/s^2 when he brakes (up to 20 for a moment once he is inside the bike ahead) and 5 m/s^2 when he lets
+             go; he plans for the bike ahead in his lane (above: its speed, a small margin, a flight ahead, a rider moving into his lane), is never drawn slower than 40% of his own speed
+             (a slower rider's in his way, never under 25%: never a stop), and in the air flies his arc at its own speed (no hang, no floating). The last resort is a little overlap for a
+             moment, never a freeze. */
+          const cz=r.czone||0, vl=r.rem||r.Dlp==null?0:clamp((r.Dl-r.Dlp)/dt,0,40);   /* his schedule's speed this frame */
+          let vt=vl, sbv=r.sbv||0;
+          if(cz<=0&&sb0>need){ const ex=sb0-need; vt=vl+Math.min(ex>4?2.6:1.8,0.2+ex*1.5); }   /* catching up: gently (1.8 m/s faster than the clock, 2.6 m/s when far back) */
+          if(cz>0) vt=Math.min(vt,vl-2.6*cz);   /* a crash ahead: slower through it (up to 2.6 m/s), made up afterwards */
+          const vmin=Math.max(0.25*vl,Math.min(0.4*vl,Math.max(0,vB-0.3-3*Math.min(1,inside/0.5)))); vt=Math.max(vmin,Math.min(vt,vS));   /* (behind a slower rider: down to his speed, under it while he is in his bike; never under a quarter of his own: never a stop) */
+          if(!r.air){ r.vAir=null; sbv+=clamp(vl-vt-sbv,-5*dt,(7+8*Math.min(1,inside/0.4)+5*clamp((inside-0.35)/0.25,0,1))*dt); }   /* (already inside the bike ahead: a rider checking up hard, 15 m/s^2, 20 for a moment when deep in it: still never a wall) */
+          else { /* in the air the bike flies its own arc at the arc's speed (the arc was planned from his take-off speed, so a flight has true gravity; his schedule read metres ahead of
+                    where he is drawn never speeds up or slows a flight), unless he is already in another bike: then a little slower (6 m/s^2, never under 85% of it: never a hang) */
+            const Ja=r.jF||r.jR, va=Ja&&Ja.v>0?Ja.v:vr; if(r.vAir==null) r.vAir=va;
+            if(inside>0.05) r.vAir=Math.max(Math.min(r.vAir,0.85*va),r.vAir-6*dt);
+            sbv=vl-r.vAir; }
+          sbv=Math.min(sbv,vl-vmin);
+          sb=sb0+sbv*dt; if(sb<0){ sb=0; sbv=Math.max(0,sbv); if(r.air) r.vAir=vl-sbv; }   /* (back on his schedule: he rides it, in the air too) */
+          r.sbv=sbv;
+        } else { sb=need; r.sbv=0; r.vAir=null; }   /* a placement frame (the race restored, a test jump): placed at once */
       }
       let D=r.Dl-sb;
       if(live&&D<r.D){ D=r.D; sb=r.Dl-D; }   /* never backwards */
@@ -510,6 +528,7 @@ export function create(host,hooks){
         if(hit){ const left=hit[0]-ia, right=ib-hit[1], goL=left>=0.3, goR=right>=0.3, preferL=cur<=(hit[0]+hit[1])/2;
           target=goL&&goR?(preferL?hit[0]:hit[1]):goL?hit[0]:goR?hit[1]:(left>right?ia:ib); } }
       target=clamp(target,ia,ib); r.latT=target;
+      const lat0=r.lat;   /* (where he was drawn last frame: the sideways limit below) */
       /* the follower */
       if(!r.init&&!r.rem){ r.lat=target; r.vl=0; r.al=0; }   /* a placement frame */
       else if(dt>0){
@@ -528,6 +547,12 @@ export function create(host,hooks){
         const hz=[]; for(let q=0;q<blk.length;q++){ const v=blk[q]; if(v[3]>-2.2&&v[3]<2.4) hz.push([v[2]-1.45,v[2]+1.45]); }
         if(hz.length){ hz.sort((x,y)=>x[0]-y[0]); const mz=[]; hz.forEach(v=>{ const l=mz[mz.length-1]; if(l&&v[0]<=l[1]) l[1]=Math.max(l[1],v[1]); else mz.push(v.slice()); });
           for(const z of mz){ if(r.lat>z[0]&&r.lat<z[1]){ const toL=r.lat-z[0], toR=z[1]-r.lat, sd=toL<=toR?-1:1, goal=sd<0?z[0]:z[1]; r.lat+=clamp(goal-r.lat,-Math.max(0.02,6*dt),Math.max(0.02,6*dt)); if(r.vl*sd<0) r.vl=0; break; } } } }
+      /* (hotfix) RIDERS ARE SOLID SIDEWAYS TOO: two riders level along the track (within 2 m) never slide into each other's footprint (0.76 m across): the one placed later stops at the
+         other's edge, on his own side (most overlaps began as such a merge, which the old setback then stopped dead); his line waits while the speed plan drops him in behind */
+      if(dt>0&&(r.init||r.rem)){ for(let b2=0;b2<a;b2++){ const o=ordB[b2]; if(o.crash||o.gone||Math.abs(o.D-r.D)>=2.0) continue;
+          const dp=lat0-(o.latP!=null?o.latP:o.lat); if(Math.abs(dp)<0.76||Math.abs(r.lat-o.lat)>=0.76) continue;   /* (inside each other already last frame: left to the speed plan) */
+          const sg=dp>0?1:-1, nl=o.lat+sg*0.76; if(nl<ia-0.15||nl>ib+0.15) continue; r.lat=nl; if(r.vl*sg<0) r.vl=0; } }
+      r.latP=lat0;
     }
     // [/hook:motion]
     /* the flagger: the white flag as the leader comes to the line to start the last lap, the checkered flag as the winner arrives */
