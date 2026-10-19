@@ -162,7 +162,7 @@ function lastwinStory(G,R){
   var w=x.winner, jx=jrAt(G,r), hw=howOf(G,r,jx), fw=r>=2&&winsBefore(G,w,r)===0&&!isHuman(G,w), gap=null, multi=finalsOf(x).length>1;
   var calR=G.cal[R]; if(calR&&calR.date&&x.date){ gap=daysBetween(x.date,calR.date); }
   var base=[C("win|"+r,w),C("city|"+r,x.city),C("lastround|"+R,r)], d={last:w,lastCity:x.city}, v=null, sc=0.6, extra=[], needs="results";
-  if(hw&&!multi&&(hw[0].v==="llpass"||hw[0].v==="fromback"||hw[0].v==="crashwin"||!fw)){ v=hw[0].v; extra=hw[0].claims; if(hw[0].d) for(var k in hw[0].d) d[k]=hw[0].d[k]; sc=0.75; needs="details"; }
+  if(hw&&!multi){ v=hw[0].v;   /* how the race was won is the analysis (a first win of the season is said live by the winner line) */ extra=hw[0].claims; if(hw[0].d) for(var k in hw[0].d) d[k]=hw[0].d[k]; sc=0.75; needs="details"; }
   else if(fw){ v="firstwin"; extra=[C("wins|"+w+"|"+r,0)]; sc=0.7; }
   else if(multi&&finalsOf(x).every(function(f){ return f.res&&f.res[0]===w; })){ v="sweep"; extra=finalsOf(x).map(function(f){ return C("rwin|"+r+"|"+f.key,w); }); sc=0.75; }
   else if(gap!=null&&gap>=5&&gap<=9){ v="lastweek"; extra=[C("daygap|"+R,gap)]; }
