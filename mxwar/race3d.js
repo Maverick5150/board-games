@@ -673,7 +673,7 @@ export function create(host,hooks){
     eul.set(roll,yaw,pz,"YZX"); q.setFromEuler(eul);
     BW.compose(v3.set(x,oy,z),q,sc1);
     const compF=clamp(LsEq-(yF-Math.max(tF+BIKE.WR,yF-BIKE.TRAVEL)),-0.12,BIKE.TRAVEL-0.02), compR=clamp(LsEq-(yR-Math.max(tR+BIKE.WR,yR-BIKE.TRAVEL)),-0.12,BIKE.TRAVEL-0.02);
-    r.spinF+=r.v*dt/BIKE.WR; r.spinR+=r.v*dt/BIKE.WR;
+    { const vw=r.vi!=null?r.vi:r.v; r.spinF+=vw*dt/BIKE.WR; r.spinR+=vw*dt/BIKE.WR; }   /* the wheels turn with the bike's drawn speed this frame (hotfix: the smoothed speed spun them on a bike drawn standing still) */
     const crouch=clamp((compF+compR)*1.6,0,0.6)+(isGate?0.5:0);
     const gy=Math.min(tF,tR), hAir=Math.max(0,oy-gy);
     /* the per-rider state every module reads (CONTRACT.md) */
