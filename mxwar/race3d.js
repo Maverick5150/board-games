@@ -616,6 +616,9 @@ export function create(host,hooks){
       const sub=Math.max(1,Math.ceil(dt/(1/120))), h=dt/sub, vgF=(gF-r.gF)/dt, vgR=(gR-r.gR)/dt;
       const vyIn=(r.F.v+r.Rr.v)*0.5;
       for(let k=0;k<sub;k++){ axle(r.F,aF,gF,vgF,h,r.v); axle(r.Rr,aR,gR,vgR,h,r.v); }
+      // [hook:motion]
+      if(!aF&&!aR) holdAir(r,gF,gR,dt);   /* (hotfix) off a jump arc the bike is ridden, not thrown */
+      // [/hook:motion]
       r.gF=gF; r.gR=gR;
       const inAir=!!(aF||aR);
       landed=r.air&&!inAir; if(landed) impact=Math.max(0,-vyIn);   /* (the dust: r3d-fx.js, FX.rider below) */
@@ -694,10 +697,17 @@ export function create(host,hooks){
     FX.rider(st,dt);   /* landing dust, the roost off the rear wheel (r3d-fx.js) */
     // [/hook:fx]
   }
-  function gnd(r,s,onStart,off){ if(onStart) return (r.fr.y||0)+0.02; return MX.Course.ground(C,s+off,r.lat); }
+  function gnd(r,s,onStart,off){ if(onStart) return startG(r,off); return MX.Course.ground(C,s+off,r.lat); }
   // [hook:motion]
+  /* (hotfix, QD milestone 2 defect 1: the lap-1 rocket bikes) THE START PATH BLENDS INTO THE LOOP: the start path is flat, the loop where it joins is not (the berm on the outside of the
+     turn it joins, the relief), so a wheel crossing from one to the other met a step of up to 0.65 m in one frame (the outer lanes), and the shock fired the bike 4-12 m into the air.
+     Over the start path's last 8 m each wheel's ground eases from the flat start into the loop's ground under its own lane (what that wheel will meet a moment later): no step. */
+  function startG(r,off){
+    const y0=(r.fr.y||0)+0.02, d=Math.max(0,r.P||0)+off, u=C.S&&C.S.n?sstep(C.Ls-8,C.Ls,d):0;
+    return u>0?y0+(MX.Course.ground(C,C.join+(d-C.Ls),r.lat)-y0)*u:y0;
+  }
   function ride(r,s,onStart,off){
-    if(onStart) return (r.fr.y||0)+0.02;
+    if(onStart) return startG(r,off);
     const g=MX.Course.ground(C,s+off,r.lat), sk=skim(s+off)*sstep(5,9,r.v||0);   /* the skim line over the whoops' tops is a thing of speed: a rider at walking pace (a remount) rolls through the troughs */
     return sk>0?Math.max(g,sk+MX.Course.frame(C,s+off,tmpO).y):g;
   }
@@ -728,11 +738,13 @@ export function create(host,hooks){
     const x=MX.Course.wrap(C,s-J.a); return x<=J.d?arcY(J,x):null;
   }
   // [/hook:motion]
-  /* the skim line through the whoops / rollers: the tops' height, ramped in over the first whoop and a half and out over the last */
+  /* the skim line through the whoops / rollers: the tops' height, ramped in over the first whoop and a half; out AFTER the last top (hotfix: it used to come down between
+     the last two tops, so the last whoop's face rose under the wheels at full speed like a kicker: 14 of the race's 16 near-vertical wheelies were there) down to the dirt
+     1.25 whoops later */
   function skim(s){
     s=MX.Course.wrap(C,s);
-    for(let k=0;k<C.feats.length;k++){ const f=C.feats[k]; if(f.k!=="whoops"&&f.k!=="rollers") continue; if(s<f.from-1||s>f.to+1) continue;
-      const sp=f.sp||((f.to-f.from)/(f.n||5)), h=(f.h||0.8)*0.9; return h*sstep(f.from+sp*0.25,f.from+sp*1.6,s)*(1-sstep(f.to-sp*1.6,f.to-sp*0.25,s)); }
+    for(let k=0;k<C.feats.length;k++){ const f=C.feats[k]; if(f.k!=="whoops"&&f.k!=="rollers") continue; const sp=f.sp||((f.to-f.from)/(f.n||5)); if(s<f.from-1||s>f.to+sp) continue;
+      const h=(f.h||0.8)*0.9; return h*sstep(f.from+sp*0.25,f.from+sp*1.6,s)*(1-sstep(f.to-sp*0.5,f.to+sp*0.75,s)); }
     return 0;
   }
   function initAxle(A,g,air,v){ const LsEq=BIKE.TRAVEL-BIKE.SAG; if(air){ A.y=air.y+BIKE.WR+BIKE.TRAVEL*0.85; A.v=air.dy*v; } else { A.y=g+BIKE.WR+LsEq; A.v=0; } }
@@ -746,10 +758,27 @@ export function create(host,hooks){
     // [hook:motion]
     /* a PROGRESSIVE spring (stiffer over the last 55% of the travel, 4x at the bottom) and a hydraulic bump stop (more compression damping deep in
        the stroke): a 4 m/s landing uses about 0.13 m of the shock, a 6 m/s landing 0.16 m, only 7 m/s and more bottoms it (it bottomed from 4 m/s) */
-    if(Ls<BIKE.TRAVEL){ const Lc=Math.max(Ls,0.03), xp=clamp((BIKE.TRAVEL-Lc-0.45*BIKE.TRAVEL)/(0.55*BIKE.TRAVEL),0,1), dv=A.v-vg; a+=K*(1+3*xp*xp)*(LREST-Lc)-2*Z*Math.sqrt(K)*(dv<0?1+7*xp*xp:1)*dv; }   /* (the force of the bottom of the stroke at most: a wheel that finds itself under a step in the dirt is not shot into the sky) */
+    /* (hotfix, QD milestone 2 defect 1) WHAT THE GROUND CAN PUSH INTO THE CHASSIS IS BOUNDED. The ground's speed under the wheel is at most what a wheel rolling at his speed can
+       climb (1.2 x his speed, 8 m/s at most: a step in the dirt is not a 20-34 m/s ground speed), and the damper's push from a rising ground blows off at 6 g (a real shock's
+       high-speed valve), unless the chassis' own fall asks for more (a landing keeps its full damping): a rising ground lifts the bike, it never fires it */
+    vg=clamp(vg,-Math.min(8,1.2*v+0.5),Math.min(8,1.2*v+0.5));
+    if(Ls<BIKE.TRAVEL){ const Lc=Math.max(Ls,0.03), xp=clamp((BIKE.TRAVEL-Lc-0.45*BIKE.TRAVEL)/(0.55*BIKE.TRAVEL),0,1), dv=A.v-vg, cd=2*Z*Math.sqrt(K)*(dv<0?1+7*xp*xp:1);
+      let fd=-cd*dv; if(fd>0&&vg>0) fd=Math.min(fd,Math.max(60,-cd*A.v));
+      a+=K*(1+3*xp*xp)*(LREST-Lc)+fd; }   /* (the force of the bottom of the stroke at most: a wheel that finds itself under a step in the dirt is not shot into the sky) */
     // [/hook:motion]
     A.v+=a*h; A.y+=A.v*h;
-    if(A.y-gw<0.03){ A.y=gw+0.03; if(A.v<vg) A.v=Math.min(vg,3.2); }
+    if(A.y-gw<0.03){ A.y=gw+0.03; if(A.v<vg) A.v=Math.min(vg,1.5); }   /* bottomed: lifted with the ground, at most 1.5 m/s up (was 3.2: a step's lift became a launch) */
+  }
+  /* (hotfix, QD milestone 2 defect 1: 16 near-vertical wheelies a race, up to 71 degrees) OFF A JUMP ARC THE BIKE IS RIDDEN, NOT THROWN: with both wheels off the ground the rider
+     levels it (the axles' difference in vertical speed decays, tau 0.2 s, and its pitch rate is at most 1.6 rad/s); as a last resort its pitch never passes 40 degrees and
+     neither axle rises more than 0.6 m above its shock's full extension over the line it rides */
+  const PMAX=Math.tan(40*PI/180)*BIKE.WB;
+  function holdAir(r,gF,gR,dt){
+    const F=r.F, B=r.Rr;
+    if(F.y-gF-BIKE.WR>=BIKE.TRAVEL&&B.y-gR-BIKE.WR>=BIKE.TRAVEL){ const vm=(F.v+B.v)/2, dv=clamp((F.v-B.v)*Math.exp(-dt/0.2),-1.6*BIKE.WB,1.6*BIKE.WB); F.v=vm+dv/2; B.v=vm-dv/2; }
+    const d=F.y-B.y; if(d>PMAX){ F.y=B.y+PMAX; if(F.v>B.v) F.v=B.v; } else if(d<-PMAX){ B.y=F.y+PMAX; if(B.v>F.v) B.v=F.v; }   /* (the high end comes down: the low one may be on the ground) */
+    const cF=gF+BIKE.WR+BIKE.TRAVEL+0.6, cR=gR+BIKE.WR+BIKE.TRAVEL+0.6;
+    if(F.y>cF){ F.y=cF; if(F.v>0) F.v=0; } if(B.y>cR){ B.y=cR; if(B.v>0) B.v=0; }
   }
   function standTarget(r,air){
     if(air) return 1; const t=r.fr.tag;
