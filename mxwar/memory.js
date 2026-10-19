@@ -152,7 +152,7 @@ function howOf(G,r,jx){
   if(how.ll) out.push({v:"llpass",claims:[C("ll|"+r+"|"+f.k,1)]});
   if(how.s1>=6) out.push({v:"fromback",d:{fromPlace:how.s1},claims:[C("s1|"+r+"|"+f.k+"|"+w,how.s1)]});
   var wc=(f.cr||[]).filter(function(c){ return c[0]===w; })[0]; if(wc) out.push({v:"crashwin",claims:[C("crash|"+r+"|"+f.k+"|"+w,wc[1])]});
-  if(f.hs===w&&how.wire) out.push({v:"hswire",claims:[C("hs|"+r+"|"+f.k,w),C("wire|"+r+"|"+f.k,1)]});
+  if(f.hs===w&&how.wire) out.push({v:"hswire",claims:[C("rhs|"+r+"|"+f.k,w),C("wire|"+r+"|"+f.k,1)]});
   if(how.m!=null&&how.m>=8) out.push({v:"bigmargin",d:{marginS:how.m},claims:[C("margin|"+r+"|"+f.k,how.m)]});
   else if(how.m!=null&&how.m>0&&how.m<1) out.push({v:"photo",d:{marginS:how.m},claims:[C("margin|"+r+"|"+f.k,how.m)]});
   return out.length?out:null;
@@ -430,6 +430,8 @@ function notesBase(G,R,id,env){
   var pv=resAt(G,R-2); if(pv){ var a=fplace(pv,id), b=fplace(last,id);
     if(a>=1&&b>=1&&a<=5&&b<=5&&last.winner!==id) out.push(S("form","form|"+id+"|"+R,"1",0.7,"formgood",{last:id,placeA:a,placeB:b},[C("place|"+(R-2)+"|"+id,a),C("place|"+r+"|"+id,b)],{ids:[id]}));
     else if(a>10&&b>10&&a<=20&&b<=20) out.push(S("form","form|"+id+"|"+R,"1",0.55,"formbad",{last:id,placeA:a,placeB:b},[C("place|"+(R-2)+"|"+id,a),C("place|"+r+"|"+id,b)],{ids:[id]})); }
+  /* last time out (a finals place: the winner is told by lastwin; two telling rounds by the form note above) */
+  var lp=fplace(last,id); if(lp>=2&&lp<=20&&!out.some(function(s){ return s.kind==="form"; })) out.push(S("lastout","lastout|"+id+"|"+r,"1",0.45,"lastplace",{last:id,lastPlace:lp,lastCity:last.city},[C("place|"+r+"|"+id,lp),C("city|"+r,last.city),C("lastround|"+R,r)],{ids:[id]}));
   /* won here earlier this season */
   var cal=G.cal[R]||{}, here=before(G,R).filter(function(x){ return cityKey(x.city)===cityKey(cal.city)&&x.winner===id; }).pop();
   if(here) out.push(S("venue","venue|"+R,"1",0.75,"venue",{last:id,city:here.city},[C("win|"+here.ri,id),C("city|"+here.ri,here.city)],{ids:[id]}));
