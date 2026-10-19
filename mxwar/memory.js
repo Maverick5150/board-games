@@ -342,10 +342,12 @@ function fresh(s,led,R){ var t=led&&led.told&&led.told[s.key]; if(!t) return tru
 function lead(G,R,env,led,said){
   if(R<1) return null;
   var st=stories(G,R,env,led), lk=led&&led.lead&&led.lead[R-1];
-  var c=st.filter(function(s){ return s.kind!=="title"&&s.kind!=="you"&&s.kind!=="career"&&fresh(s,led,R)&&!anySaid(s,said)&&(s.kind!==lk||s.score>=0.9); });
+  var ok=function(s){ return s.kind!=="title"&&s.kind!=="you"&&s.kind!=="career"&&fresh(s,led,R)&&!anySaid(s,said); };
+  var c=st.filter(function(s){ return ok(s)&&(s.kind!==lk||s.score>=0.9); });
   if(c.length) return c[0];
   var t=st.filter(function(s){ return s.kind==="title"&&s.score>=0.85&&fresh(s,led,R)&&!anySaid(s,said)&&(lk!=="title"||R>=G.cal.length-2); })[0];
-  return t||null;
+  if(t) return t;
+  return st.filter(ok)[0]||null;   /* nothing else to lead with: the same kind as last round's lead after all (a new winner, a new story) */
 }
 function second(G,R,env,led,said,leadKey,o){
   if(R<1) return null; o=o||{};
