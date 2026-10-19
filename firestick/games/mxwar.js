@@ -318,7 +318,7 @@
     Q + ".mxp-pod__c{display:grid;justify-items:center;gap:.35rem;min-width:0;text-align:center}",
     Q + ".mxp-pod__bike{width:6rem;height:4rem}",
     Q + ".mxp-pod__bike svg{display:block;width:100%;height:100%}",
-    Q + ".mxp-pod__nm{max-width:100%;font:var(--fw-ui-strong) var(--fs-md)/1.15 var(--font-ui);color:var(--text-1);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:break-word;text-wrap:balance}",   /* mxfix1: a second line, never an ellipsis on a podium name */
+    Q + ".mxp-pod__nm{max-width:100%;font:var(--fw-ui-strong) var(--fs-md)/1.25 var(--font-ui);color:var(--text-1);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:break-word;text-wrap:balance}",   /* mxfix1: a second line, never an ellipsis on a podium name */
     Q + ".mxp-pod__x{font:var(--fw-ui) var(--fs-micro)/1.2 var(--font-ui);color:var(--text-2)}",
     Q + ".mxp-pod__step{display:grid;place-items:center;width:100%;border-radius:var(--r-md) var(--r-md) 0 0;font:400 var(--fs-3xl)/1 var(--font-display);color:#1a1408;box-shadow:inset 0 3px 0 var(--mk,#c99f5e)}",
     Q + ".mxp-pod__c[data-p='1'] .mxp-pod__step{height:7rem;background:linear-gradient(180deg,#fbeec8,#c99f5e)}",
