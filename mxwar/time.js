@@ -21,6 +21,10 @@ var MX=g.MXWar=g.MXWar||{};
 if(MX.Time) return;
 /* race.js is read lazily (only Race.val, and the old order in adopt): the two files may load in either order */
 function RC(){ return MX.Race||(typeof require==="function"?require("./race.js"):null); }
+/* mxbeat: a race whose G.tm.v is 4 (a beat race: MXWar.Beat, beat.js) is read through the same API (laps, gaps, the tower, the walker, the packets,
+   the clock limit, the holds and the yellow flags); a race of the per-lap model (v3: an old save before its carry-over) keeps the code below */
+function BT(){ return MX.Beat||(typeof require==="function"?require("./beat.js"):null); }
+function v4(G){ return !!(G&&G.tm&&G.tm.v===4); }
 
 /* ---------------- parameters ----------------
    z = the rider's pace index this lap (higher = faster); u = Z0 - z (u > 0: slower than the typical winner lap)
@@ -88,6 +92,7 @@ function handQ(G,s){
 
 /* ---------------- init: right after Race.newRace (before the gate drops) ---------------- */
 function init(G,info){
+  if(info&&info.beat){ var B4=BT(); if(B4) return B4.init(G,info); }   /* mxbeat: a beat race (season.js startRace) */
   var ser=info.series==="mx"||info.series==="smx"?info.series:"sx", kind=info.kind||"main", cls=classOf(ser,kind);
   var E=era(ser,info.year), P=assign({},BASE,CLS[cls]);
   P.s*=E; P.a*=Math.sqrt(E);
@@ -127,6 +132,7 @@ function progNat(R,t,Tnb){
 
 /* ---------------- one lap ---------------- */
 function lap(G){
+  if(v4(G)) return BT().beat(G);
   var tm=G.tm; if(!tm||tm.done) return [];
   var P=tm.P, n=G.n, k=tm.k+1, p=tm.p, L0=G.lastLap||EMPTY, ev=[], L=tm.L;
   if(L0.b!=null&&tm.lb===L0.b) return [];       // this battle was already turned into a lap (a second call changes nothing)
@@ -254,6 +260,7 @@ function lap(G){
 function crashAt(G,k,tm){ var at=G.yellow&&G.yellow.sector!=null?G.yellow.sector:0.5; if(k===1&&at<tm.t1+0.03) at=tm.t1+0.03; return at; }
 /* the engine ended before the flag (every other rider out, a deadlock): the survivors ride the remaining laps on form alone */
 function complete(G){
+  if(v4(G)){ BT().complete(G); return; }
   var tm=G.tm, guard=0;
   while(tm&&!tm.done&&tm.k<tm.L&&guard++<10000){ G.lastLap={ c:{}, w:{}, win:-1, war:0 }; lap(G); }
   if(tm&&!tm.done) finish(G);
@@ -298,6 +305,7 @@ function stories(G,k,st,ev,crashed){
 }
 /* the checkered flag: the leader's L-th crossing; everyone else finishes at his next crossing after it (a rider a lap down finishes a lap short) */
 function finish(G){
+  if(v4(G)) return;   /* (a beat race finishes by itself: every rider at his own line) */
   var tm=G.tm; if(tm.done) return;
   var flag=Infinity, w=-1;
   tm.r.forEach(function(R,s){ if(!R.dnf&&R.T.length>=tm.L&&R.T[tm.L-1]<flag){ flag=R.T[tm.L-1]; w=s; } });
@@ -315,6 +323,7 @@ function finish(G){
 /* the classification / timing tower at the lines: finishers (or riders still racing) by laps then time; DNFs behind (a later DNF ahead of an
    earlier one, then more cards held at the crash, then the gate: CRASH-CONTRACT.md).  Ties on the line: the higher last card, then the gate. */
 function standings(G){
+  if(v4(G)) return BT().standings(G);
   var tm=G.tm, n=G.n, rows=[];
   for(var s=0;s<n;s++){ var R=tm.r[s], T=R.T;
     var laps=R.fin?R.fin.laps:T.length, t=R.fin?R.fin.t:(T.length?T[T.length-1]:0);
@@ -329,6 +338,7 @@ function standings(G){
 }
 /* what Round.record needs: order = rider ids (place 1 first), dnf = {id: {lap, why}}, hs = the holeshot rider's id */
 function result(G){
+  if(v4(G)) return BT().result(G);
   var st=standings(G), dnf={}; st.forEach(function(r){ if(r.dnf) dnf[G.r[r.s].id]={ lap:r.dnf.lap, why:r.dnf.why }; });
   return { order:st.map(function(r){ return G.r[r.s].id; }), dnf:dnf, hs:G.tm.hs>=0?G.r[G.tm.hs].id:null, margin:st.length>1&&!st[1].dnf&&st[1].laps===st[0].laps?(st[1].t-st[0].t)/1000:null };
 }
@@ -338,6 +348,7 @@ function result(G){
    own speed profile).  A rider's lap k is a list of KNOTS [phase, ms]: the line to the line, plus the turn-1 funnel (lap 1), a crash hold (a vertical
    step: the rider is down at that phase for that long) and the yellow section (everybody crosses it in the same time, so nobody can pass in it). */
 function knots(G,s,k){
+  if(v4(G)) return null;   /* (a beat race has no per-lap knots: progressAt / timeAt / the walker read its own) */
   var tm=G.tm, R=tm.r[s], T=R.T; if(T[k-1]==null&&!(R.dnf&&R.dnf.lap===k)) return null;
   var t0=k>1?T[k-2]:0, dn=R.dnf&&R.dnf.lap===k&&R.dnf.why==="crash";
   var hold=R.hold[k], yz=tm.yz[k], f1=k===1;
@@ -367,6 +378,7 @@ function progress(R,t){
   var t0=lo>0?T[lo-1]:0; return lo+(t-t0)/Math.max(1,T[lo]-t0);
 }
 function progressAt(G,s,t){
+  if(v4(G)) return BT().progressAt(G,s,t);
   var tm=G.tm, R=tm.r[s], T=R.T, i;
   if(R.dnf&&R.dnf.why==="crash"&&t>=R.dnf.t) return R.dnf.lap-1+R.dnf.at;
   if(!T.length||t>=T[T.length-1]){
@@ -382,6 +394,7 @@ function progressAt(G,s,t){
 }
 /* the clock time (ms) at which the rider reaches progress pr (laps, fractional): the loop time of a real timing system */
 function timeAt(G,s,pr){
+  if(v4(G)) return BT().timeAt(G,s,pr);
   var tm=G.tm, R=tm.r[s], k=Math.min(Math.floor(pr)+1,R.T.length); if(pr<=0) return 0; if(k<1) return null;
   if(pr>=R.T.length) return pr>R.T.length&&!R.fin?null:R.T[R.T.length-1];
   var kn=knots(G,s,k), ph=pr-(k-1);
@@ -394,6 +407,7 @@ function splits(G,s,k,M){
 }
 /* the live timing tower at clock t (ms): every rider by distance covered; gap = how long ago the leader was where he is now; int = the same to the rider ahead */
 function tower(G,t){
+  if(v4(G)) return BT().tower(G,t);
   var tm=G.tm, rows=[];
   for(var s=0;s<G.n;s++){ var R=tm.r[s], pr=progressAt(G,s,t); rows.push({ s:s, pr:pr, dnf:R.dnf&&t>=R.dnf.t?R.dnf:null }); }
   rows.sort(function(a,b){ return (!!a.dnf-!!b.dnf)||(b.pr-a.pr)||(a.s-b.s); });
@@ -409,6 +423,7 @@ function tower(G,t){
 }
 /* the per-lap packet: all the 3D view (and a Party phone) needs to ride lap k: T[k-1], T[k] per rider in ms, holds, the yellow section, crash-outs, events */
 function packet(G,k){
+  if(v4(G)) return BT().packet(G,k);
   var tm=G.tm, la=tm.laps[k-1]; if(!la||la.k!==k){ la=null; for(var i=0;i<tm.laps.length;i++) if(tm.laps[i].k===k){ la=tm.laps[i]; break; } }   // (trim keeps the last laps only: found by number)
   if(!la) return null;
   return { k:k, yellow:tm.yz[k]||null, next:tm.yz[k+1]||null, flag:tm.flag, start:k===1?tm.start:null,
@@ -418,7 +433,7 @@ function packet(G,k){
 
 /* keep G.tm small: drop the events of all but the last `keep` laps (the lap packets the view has already played).  T, holds and the yellow sections stay, so
    every position, tower and replay can still be recomputed; a finished race can be trimmed to 0. */
-function trim(G,keep){ var tm=G.tm; if(tm&&tm.laps.length>keep) tm.laps.splice(0,tm.laps.length-keep); return tm; }
+function trim(G,keep){ var tm=G.tm; if(tm&&tm.laps&&tm.laps.length>keep) tm.laps.splice(0,tm.laps.length-keep); return tm; }   /* (a beat race keeps its last 8 beats' events by itself) */
 
 /* the info the model needs from Round.raceInfo (race: the entry of RG.races; or the object raceInfo returns) */
 function infoOf(inf,series,year,kind){
@@ -487,6 +502,7 @@ function ordText(n){ var t=n%100; return n+((t>=11&&t<=13)?"th":(["th","st","nd"
 function lapTimes(G,s){ var T=G.tm.r[s].T, out=[], i; for(i=0;i<T.length;i++) out.push((T[i]-(i?T[i-1]:0))/1000); return out; }
 /* the last completed lap (at clock t in ms; null = all) and the best clean lap of rider s (not lap 1, not a lap with a crash hold, not a yellow lap) */
 function lapStats(G,s,t){
+  if(v4(G)) return BT().lapStats(G,s,t);
   var tm=G.tm, R=tm.r[s], T=R.T, last=null, lastK=0, best=null, bestK=0, i;
   for(i=0;i<T.length;i++){
     if(t!=null&&T[i]>t) break;
@@ -497,6 +513,7 @@ function lapStats(G,s,t){
 }
 /* the clock window [t0, t1] (ms) in which rider s lies at his crash site in lap k (a remount's hold); null when he does not; a crash-out: [crash time, Infinity] */
 function holdWindow(G,s,k){
+  if(v4(G)) return BT().holdWindow(G,s,k);
   var R=G.tm.r[s], d=R.dnf;
   if(d&&d.why==="crash"&&d.lap===k) return [d.t,Infinity];
   if(!R.hold[k]) return null;
@@ -508,6 +525,7 @@ function holdWindow(G,s,k){
    crash or the first rider's entry into the section, to the last rider's exit; to = null while the yellow lap is not decided yet), by (seats)}].
    A back-marker can crash after the leader has ridden the yellow lap's section already: the flag then flies from the crash, and every rider is slowed in his own yellow lap. */
 function yellowWindows(G){
+  if(v4(G)) return BT().yellowWindows(G);
   var tm=G.tm, out=[], keys=Object.keys(tm.yz).map(Number).sort(function(a,b){ return a-b; });
   keys.forEach(function(j){
     if(j>tm.L) return;   // a crash on the last lap raises a flag for a lap that is never ridden
@@ -522,18 +540,20 @@ function yellowWindows(G){
 }
 /* the clock time (ms) the first rider ends lap k (the leader's line crossing; the start of lap k + 1); null when no rider has it */
 function leaderLine(G,k){
+  if(v4(G)) return BT().leaderLine(G,k);
   var best=null, i, T; if(k<1) return 0;
   for(i=0;i<G.n;i++){ T=G.tm.r[i].T; if(T.length>=k&&(best==null||T[k-1]<best)) best=T[k-1]; }
   return best;
 }
 /* the clock time (ms) the race clock may run up to before the next battle must be fought: the first line crossing of the last lap decided
    (Infinity once the flag has fallen; 0 before the first lap) */
-function clockLimit(G){ var tm=G.tm; if(tm.done) return Infinity; if(tm.k<1) return 0; var b=leaderLine(G,tm.k); return b==null?0:b; }
+function clockLimit(G){ if(v4(G)) return BT().clockLimit(G); var tm=G.tm; if(tm.done) return Infinity; if(tm.k<1) return 0; var b=leaderLine(G,tm.k); return b==null?0:b; }
 
 /* ---- where is everyone on the clock: progressAt with the knots of each rider's lap kept, for a view that asks every rider every frame ----
    w.at(s, t) is exactly progressAt(G, s, t) (a test checks it) and sets w.state: "run" | "down" (in a crash hold: w.h0, w.h1 = its clock window in ms) |
    "out" (crashed out and gone) | "pits" (out of cards and pulled off) | "fin" (past his flag line). */
 function walker(G){
+  if(v4(G)) return BT().walker(G);
   var tm=G.tm, kc=[], w={ state:"run", h0:0, h1:0, G:G };
   function knotsOf(s,k){ var c=kc[s]; if(c&&c.k===k&&c.n===tm.r[s].T.length) return c.kn; var kn=knots(G,s,k); kc[s]={ k:k, n:tm.r[s].T.length, kn:kn }; return kn; }
   w.at=function(s,t){
@@ -583,6 +603,7 @@ function lapPlace(G,s,k){
 
 /* ---- the facts of a battle for the YOU readout: read right after the battle (G.lastLap is that lap's) and kept by the page until the rider ends the lap ---- */
 function facts(G,s){
+  if(v4(G)) return null;   /* (a beat race: the YOU card's beat line, MXWar.Beat.beatLine) */
   var tm=G.tm, L0=G.lastLap; if(!tm||!L0||L0.c==null) return null;
   var c=L0.c[s], Rc=RC(), P=tm.P, k=tm.k, crash=null;
   (L0.cr||[]).forEach(function(x){ if(x.s===s) crash=x.kind; });
@@ -600,6 +621,23 @@ function worth(G,f){
 }
 var RWORD={ 11:"Jack", 12:"Queen", 13:"King", 14:"Ace", 15:"Joker" };
 function rankWord(r){ return RWORD[r]||String(r); }
+/* mxbeat: the crash hold of rider s in lap k as [phase, ms down] (the per-lap model's R.hold[k]; a beat race: the hold whose spot is on lap k) */
+function holdOf(G,s,k){
+  if(k<1) return null;
+  if(!v4(G)) return G.tm.r[s].hold[k]||null;
+  var R=G.tm.r[s]; for(var i=0;i<R.hold.length;i++){ var h=R.hold[i]; if(Math.floor(h[2]/100000)+1===k) return [h[2]/100000-(k-1),h[1]-h[0]]; }
+  return null;
+}
+/* the yellow flag of lap k (the per-lap model: the yellow lap; a beat race: a section raised on lap k) */
+function yelOf(G,k){ if(!v4(G)) return G.tm.yz[k]||null; var y=G.tm.yz.filter(function(q){ return q.lap===k; })[0]; return y||null; }
+/* the model's events of rider s's lap k (the per-lap model: that lap's; a beat race: the beats kept (the last 8) inside his lap) */
+function lapEvents(G,s,k){
+  var tm=G.tm, out=[];
+  if(!v4(G)){ tm.laps.forEach(function(l){ if(l.k===k) out=l.ev; }); return out; }
+  var T=tm.r[s].T, t0=k>1?T[k-2]:0, t1=T[k-1]; if(t1==null) return out;
+  tm.ev.forEach(function(b){ b.ev.forEach(function(e){ if(e.t!=null&&e.t>=t0&&e.t<=t1&&(e.e==="held"||e.e==="lapping"||e.e==="pass")) out.push(e); }); });
+  return out;
+}
 
 /* ---- the YOU readout for rider s at the end of lap k (call it when he crosses the line: T[k-1] exists).
    f = facts(G, s) kept from that lap's battle (null = the reasons come from the lap's events only), nameOf(seat) = "#12 Name" or the like.
@@ -615,8 +653,8 @@ function you(G,s,k,f,nameOf){
   if(fin) out.gain=typ-out.time;
   out.to=lapPlace(G,s,k); out.from=k>1?lapPlace(G,s,k-1):null; out.moved=out.from!=null?out.from-out.to:0;
   if(fin){ var lead=leaderLine(G,k); out.gap=(T[k-1]-lead)/1000; var ahead=null; for(i=0;i<G.n;i++){ var Ti=tm.r[i].T; if(i!==s&&Ti.length>=k&&Ti[k-1]<=T[k-1]&&(ahead==null||Ti[k-1]>ahead)) ahead=Ti[k-1]; } out.int=ahead==null?null:(T[k-1]-ahead)/1000; }
-  var ev=[]; tm.laps.forEach(function(l){ if(l.k===k) ev=l.ev; });
-  var hold=R.hold[k], d=R.dnf; out.down=hold?hold[1]/1000:0;
+  var ev=lapEvents(G,s,k);
+  var hold=holdOf(G,s,k), d=R.dnf; out.down=hold?hold[1]/1000:0;
   if(d&&d.why==="crash"&&d.lap===k) out.crash="out"; else if(hold) out.crash="remount";
   var rs=out.reasons, w=worth(G,f);
   function add(kind,text,sec){ rs.push({ kind:kind, text:text, sec:sec }); }
@@ -635,10 +673,11 @@ function you(G,s,k,f,nameOf){
     else if(e.e==="pass"&&e.a===s&&!e.crash) add("pass","passed "+nm(e.d),0);
     else if(e.e==="pass"&&e.d===s&&!e.crash) add("passed","passed by "+nm(e.a),0);
   });
-  if(tm.yz[k]&&out.crash==null) add("yellow","yellow flag slowed everybody",-tm.P.YLF*p);
-  if(!out.crash&&(R.hold[k-1]||R.hold[k-2]||R.hold[k-3])) add("fire","attacking after the crash",0);   // the 3 laps after a remount (FIRE)
+  if(yelOf(G,k)&&out.crash==null) add("yellow","yellow flag slowed everybody",-tm.P.YLF*p);
+  if(!out.crash&&(holdOf(G,s,k-1)||holdOf(G,s,k-2)||holdOf(G,s,k-3))) add("fire","attacking after the crash",0);   // the 3 laps after a remount (FIRE)
+  if(v4(G)&&G.pile&&G.pile.indexOf(s)>=0&&k===1&&out.crash==="remount") rs.splice(0,1,{ kind:"crash", text:"lowest card off the gate: down in the pack, back on the bike", sec:-out.down });   /* mxbeat: the CEO's gate-drop pile-up */
   /* a lap at the model's slowest pace (rmax x the typical lap: the pace curve stops there): the card chips cannot explain a lap that is already at the floor, so say so (first chip) */
-  if(fin&&k>1&&!out.crash&&!hold&&!tm.yz[k]&&Math.abs(out.time-p*tm.P.rmax)<=0.003){
+  if(fin&&k>1&&!out.crash&&!hold&&!yelOf(G,k)&&Math.abs(out.time-p*tm.P.rmax)<=0.003){
     /* the pace curve is flat down there: this lap's card and result did not change his time, so no seconds are claimed for them (a pot or a war still names what happened) */
     for(var ci=rs.length-1;ci>=0;ci--){ if(rs[ci].kind==="card") rs.splice(ci,1); else if(rs[ci].kind==="result") rs[ci].sec=0; }
     rs.unshift({ kind:"cap", text:"at the slowest lap (+"+Math.round((tm.P.rmax-1)*100)+"%)", sec:0 });
@@ -675,15 +714,18 @@ function eventLine(G,e,nameOf,me){
     case "pass": if(e.crash) return null; if(e.pos<=3||human(e.a)||human(e.d)) return nm(e.a)+" passes "+nm(e.d)+" for "+ordText(e.pos)+"."; return null;
     case "lapped": return nm(e.by)+" laps "+nm(e.s)+".";
     case "fastest": return "Fastest lap: "+nm(e.s)+", "+fmtLap(e.time)+" (lap "+e.k+").";
-    case "yellowOn": return "Yellow flag: no passing there until the end of lap "+e.lap+".";
+    case "yellowOn": return v4(G)?"Yellow flag: no passing there.":"Yellow flag: no passing there until the end of lap "+e.lap+".";
+    case "timeup": case "twotogo": case "lastlap": case "flagfall": case "chase": return BT()?BT().eventLine(G,e,nm,human):null;   /* mxbeat: the timed race's boards and the flag */
   }
   return null;
 }
 
 /* the crash rules in one sentence (the War decides them; the model only adds the seconds): shown on the gate card of the hub and the phones */
 var RULES="Lose a double war: crash and remount. Lose a triple war: crash out. Yellow flag next lap.";
+/* mxbeat: the gate panel of a beat race teaches the 10-second rule before the first card (ACTION-PLAN-v3.md 2.3) and the CEO's gate-drop pile-up */
+var RULES_BEAT="Flip every 10 seconds. Miss one and Auto flip takes over (one tap turns it off). The lowest card off the gate goes down in the pack.";
 
-var MX_Time={ RULES:RULES, BASE:BASE, CLS:CLS, classOf:classOf, era:era, cardsFor:cardsFor, init:init, adopt:adopt, trim:trim, lap:lap, complete:complete, finish:finish, standings:standings, result:result,
+var MX_Time={ RULES:RULES, RULES_BEAT:RULES_BEAT, v4:v4, holdOf:holdOf, BASE:BASE, CLS:CLS, classOf:classOf, era:era, cardsFor:cardsFor, init:init, adopt:adopt, trim:trim, lap:lap, complete:complete, finish:finish, standings:standings, result:result,
   knots:knots, progress:progress, progressAt:progressAt, timeAt:timeAt, splits:splits, tower:tower, packet:packet, infoOf:infoOf, run:run, ratio:ratio, handQ:handQ,
   fmtLap:fmtLap, fmtRace:fmtRace, fmtGap:fmtGap, fmtGapShort:fmtGapShort, gapText:gapText, secText:secText, ordText:ordText, rankWord:rankWord, lapTimes:lapTimes, lapStats:lapStats, holdWindow:holdWindow, yellowWindows:yellowWindows,
   leaderLine:leaderLine, clockLimit:clockLimit, walker:walker, lapPlace:lapPlace, facts:facts, worth:worth, you:you, towerCells:towerCells, eventLine:eventLine };
