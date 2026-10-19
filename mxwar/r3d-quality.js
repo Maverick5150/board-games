@@ -88,7 +88,7 @@ export const TIERS={
     fx:{particles:520,scale:1},
     crowd:{detail:1,anim:true},
     scenery:{trees:1,terrain:1},
-    riders:{full:12,mid:10,near:30,far:80},riderHi:6,bikeLod:[8,22],bikeHi:4,dirtTier:"hi",replay:true,
+    riders:{full:12,mid:10,near:30,far:80},riderHi:6,bikeLod:[8,18],bikeHi:3,dirtTier:"hi",replay:true,
     stadium:{nearPeople:2,cardRows:3,twinkle:true,roofBanks:18,heroSigns:22,shaftI:0.065},   /* (twinkle: the phone flashes of a crowd that does not move; an animated crowd has its own) */
     tex:{max:1024,aniso:8,budgetMB:96},
     budget:{calls:90,tris:350000,geoMB:16}},

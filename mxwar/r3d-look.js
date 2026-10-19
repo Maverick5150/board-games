@@ -43,6 +43,7 @@ export function createLook(renderer,opts){
   const sun=new THREE.DirectionalLight(0xeef3ff,4.4); sun.position.set(-78,50,36); scene.add(sun); scene.add(sun.target);
   sun.castShadow=SHADOWS; sun.shadow.mapSize.set(1024,1024); sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.025;
   sun.shadow.camera.near=60; sun.shadow.camera.far=270; sun.shadow.radius=1.5; let shHalf=0;
+  sun.shadow.camera.layers.enable(1);   /* (milestone 2 polish: layer 1 = the shadow proxies of the riders and bikes: cheap casters only the shadow map sees) */
   const fill=new THREE.DirectionalLight(0x8fa6ff,0.42); fill.position.set(80,40,-60); scene.add(fill);
   const rim=new THREE.DirectionalLight(0xffe0bc,2.2); rim.position.set(0,30,100); scene.add(rim);          /* the warm rim: ahead of the camera, it lights the edges of whatever faces it */
   const kick=new THREE.DirectionalLight(0xa9bcff,0.5); kick.position.set(0,40,-100); scene.add(kick);       /* a soft cool fill from behind the camera: the jersey numbers stay readable */
@@ -243,8 +244,8 @@ export function createLook(renderer,opts){
   /* ---- the frame ---- */
   L.render=function(sc,cam,tw){
     renderer.info.autoReset=false; renderer.info.reset();
-    if(L.post&&L.post.render) L.post.render(sc,cam,tw); else renderer.render(sc,cam);
     MX_MASK.value=(L.post&&L.post.render&&L.flags&&L.flags.motionBlur>0)?1:0;   /* (polish: the chase subject's motion-blur mask only where the chain reads it; never on a frame drawn straight to the canvas) */
+    if(L.post&&L.post.render) L.post.render(sc,cam,tw); else renderer.render(sc,cam);
   };
   L.resize=function(W,H,pr){ if(L.post&&L.post.resize) L.post.resize(W,H,pr); };
   /* tests: make the capture again now (-> its time in ms, the real clock) */

@@ -173,6 +173,9 @@ export function createRiders(list,opts){
   cloth.addEventListener("dispose",()=>{ boneTex.dispose(); depth.dispose(); });   /* (the bone texture and the shadow pass material are not reached by a tree walk) */
   const part=(geo,mat,shadow,order)=>{ const m=new THREE.Mesh(geo,mat); m.frustumCulled=false; m.castShadow=!!shadow; if(shadow) m.customDepthMaterial=depth; if(order) m.renderOrder=order; grp.add(m); return m; };
   const S={hiBody:part(instGeo(hiModel.body,hiInst),cloth,true), hiHelmet:part(instGeo(hiModel.helmet,hiInst),shell,true), hiBack:part(instGeo(hiModel.back,hiInst),decal,false), loBody:part(instGeo(loModel.body,loInst),clothLo,true)};
+  /* SHADOW PROXY (milestone 2 polish, director notes D6 / N7: tier cost): the near riders cast their shadow through the thin model (816 triangles instead of 5,496 a rider,
+     one draw call instead of two): it lives on layer 1 only, which the key light's shadow camera sees (r3d-look.js) and no scene camera does; same bones, same instances */
+  if(!lo){ S.hiShadow=part(instGeo(loModel.body,hiInst),clothLo,true); S.hiShadow.layers.set(1); S.hiBody.castShadow=false; S.hiHelmet.castShadow=false; }
   /* the near riders receive the key's shadow (the helmet's on the shoulders, the arm's on the jersey, the bike's on the legs): the physically based tiers only */
   if(KT!=="low"&&!lo){ S.hiBody.receiveShadow=true; S.hiHelmet.receiveShadow=true; S.loBody.receiveShadow=true; }
   /* plates (3 a bike) use the atlas */
@@ -274,6 +277,7 @@ export function commit(R,cam,dt){
     I.C.array[s*4]=R.mud[i]; I.C.array[s*4+1]=R.style[i]; I.C.array[s*4+2]=R.cell[i*2]; I.C.array[s*4+3]=R.cell[i*2+1]; }
   H.A.needsUpdate=H.B.needsUpdate=H.C.needsUpdate=true; L.A.needsUpdate=L.B.needsUpdate=L.C.needsUpdate=true;
   const S=R.S; S.hiBody.geometry.instanceCount=nh; S.hiHelmet.geometry.instanceCount=nh; S.hiBack.geometry.instanceCount=nh; S.loBody.geometry.instanceCount=nl;
+  if(S.hiShadow){ S.hiShadow.geometry.instanceCount=nh; S.hiShadow.visible=nh>0; }
   S.hiBody.visible=S.hiHelmet.visible=S.hiBack.visible=nh>0; S.loBody.visible=nl>0; R.stats.hi=nh; R.stats.lo=nl;
   R.boneTex.needsUpdate=true;
 }

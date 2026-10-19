@@ -284,6 +284,14 @@ export function createBike(n,lo,mk,q){
     sets.push(S); return S;
   };
   if(!lo) mkSet(0,d2); mkSet(1,d1); mkSet(2,buildFarBike(),true);
+  /* SHADOW PROXIES (milestone 2 polish, director notes D6 / N7: the shadow pass drew every bike a second time at its full level of detail, about 230k of HIGH's 630k triangles at the
+     cover chase). The key's shadow map is 1024 px over 32-104 m: a bike's shadow needs no knobs, spokes or chain links. The close bikes (LOD 0) cast through LOD 1's parts (7.0k
+     triangles instead of 26.9k) on LOD 0's own instance matrices, the mid bikes (LOD 1) through the far bike (778) on their body matrix. A proxy lives on layer 1 only: the key
+     light's shadow camera sees it (r3d-look.js), no scene camera does; it follows its set's count (S.meshes). The far set casts as before. */
+  { const prox=(S,geo,src)=>{ const m=mk(instGeo(geo),n,mat); m.instanceMatrix=src.instanceMatrix; m.castShadow=true; m.receiveShadow=false; m.layers.set(1); m.count=0; m.visible=false; S.meshes.push(m); return m; };
+    const s0=sets.find(S=>S.lod===0), s1=sets.find(S=>S.lod===1), far=buildFarBike();
+    if(s0&&s1){ PARTS.forEach(k=>{ const src=s0.parts[k]; M["bk0_shadow_"+k]=prox(s0,d1[k],src); src.castShadow=false; }); }
+    if(s1){ M.bk1_shadow=prox(s1,far,s1.parts.body); PARTS.forEach(k=>{ s1.parts[k].castShadow=false; }); } }
   M.bk={n:n,lo:!!lo,sets:sets,cur:new Int8Array(n).fill(-1),lastI:1e9,hiMax:q.bikeHi!=null?q.bikeHi:(lo?0:4),dist:new Float32Array(n).fill(1e9),cutD:1e9,pc:new Float32Array(n*3).fill(1),ac:new Float32Array(n*3).fill(1),
     /* the distances at which a bike leaves one level for the next (m): hysteresis of 8% */
     th:lo?[q.bikeLod&&q.bikeLod[0]||8]:(q.bikeLod&&q.bikeLod.length>1?q.bikeLod:[9.5,36]),sp:new Float32Array(n*2),
