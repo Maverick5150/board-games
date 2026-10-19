@@ -475,6 +475,26 @@
     return '<div class="bg-seg mxp-seg mxp-aseg" role="group" aria-label="Announcers">' + [["voice", "Announcers on"], ["captions", "Captions only"], ["off", "Off"]].map(function (s) { var on = s[0] === m; return '<button type="button" class="aibtn' + (on ? " on" : "") + '" aria-pressed="' + on + '" data-mxa="' + s[0] + '">' + s[1] + "</button>"; }).join("") + "</div>" +
       '<p class="ps-vdesc"><b>Announcers:</b> two commentators (both men) call every race on the TV, out loud and in captions. A TV with no male voice installed shows captions only. The phones stay silent.</p>';
   }
+  /* [bcast] the broadcast's music (mxshow S0): the lobby's Music credits row and its sheet (the tracks, their authors and licences: MXWar.Music, mxwar/mxmusic.js) */
+  var bcRuns = 0;
+  function bcCredRow() {
+    if (!(MX.Music && window.Sound && Sound.show)) return "";
+    return '<button type="button" class="bg-row aibtn mxp-cred" id="mxpCred" aria-haspopup="dialog"><span class="bg-row__main"><span class="bg-row__title">Music credits</span><span class="bg-row__desc">The music plays on the TV (the phones stay silent): the tracks, their authors and their licences</span></span></button>';
+  }
+  function bcCredSheet() {
+    var B = BG(); if (!B || !B.sheet || !MX.Music) return;
+    MX.Music.credits("base").then(function (list) {
+      var old = document.getElementById("mxpCredSheet"); if (old && old.parentNode) { try { if (B.sheet.isOpen(old)) B.sheet.close(old); } catch (e) { } old.parentNode.removeChild(old); }
+      var el = document.createElement("section"); el.className = "bg-sheet ps-rj"; el.id = "mxpCredSheet"; el.setAttribute("aria-labelledby", "mxpCredT"); document.body.appendChild(el);
+      el.innerHTML = '<div class="bg-sheet__grip" aria-hidden="true"></div><div class="bg-sheet__head"><div><span class="bg-eyebrow">Music</span><h2 class="bg-sheet__title" id="mxpCredT">Music credits</h2>' +
+        '<p class="bg-sheet__sub">Every track you hear in Motocross War, by its author and under its licence.</p></div></div>' + MX.Music.creditsHTML(list, { tv: true }) +
+        '<div class="pm-acts"><button type="button" class="bg-btn bg-btn--primary bg-btn--lg" id="mxpCredClose" data-autofocus>Close</button></div>';
+      var close = function () { if (B.sheet.isOpen(el)) B.sheet.close(el); };
+      document.getElementById("mxpCredClose").onclick = close;
+      B.sheet.open(el, { dismissible: true, focus: "#mxpCredClose", onClose: function () { setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); var cb = document.getElementById("mxpCred"); if (cb) setFocus(cb); }, 0); } });
+    });
+  }
+  /* [/bcast] */
   function lobby(api, cfg, el) {
     fixSeason(cfg); keep(cfg);
     var B = BG(), af = document.activeElement, keepSel = af && af.getAttribute && (af.id && /^mxp/.test(af.id) ? "#" + af.id : af.getAttribute("data-mxs") ? '[data-mxs="' + af.getAttribute("data-mxs") + '"]' : af.getAttribute("data-mxl") ? '[data-mxl="' + af.getAttribute("data-mxl") + '"]' : af.getAttribute("data-mxa") ? '[data-mxa="' + af.getAttribute("data-mxa") + '"]' : null);
@@ -493,9 +513,10 @@
         esc(n + (n === 1 ? " rider" : " riders") + " from this table race every round against the real riders of " + si.year + (fieldN ? "; a night needs " + fieldN + " riders" + (si.riders + n < fieldN ? ", so labelled privateers fill the gate" : "") : "") + ".") + "</p>" : "<p class=\"ps-vdesc\">No season for this series.</p>") +
       '<div class="bg-seg mxp-seg mxp-seg--2 mxp-lseg" role="group" aria-label="Race length">' + [["real", "Real length"], ["half", "Half length"]].map(function (s) { var on = s[0] === cfg.length; return '<button type="button" class="aibtn' + (on ? " on" : "") + '" aria-pressed="' + on + '" data-mxl="' + s[0] + '">' + s[1] + "</button>"; }).join("") + "</div>" +
       '<p class="ps-vdesc"><b>Real time:</b> every lap takes the round\'s real lap time (Supercross about a minute, outdoors about two), whatever the Game speed (it paces the cards, banners and results). ' + (cfg.length === "half" ? "<b>Half length:</b> half of each race's real laps." : "<b>Real length:</b> every race runs the laps its real race ran.") + " Every lap is one War flip on every phone, and the cards decide the lap times: the first rider across the line after the last lap wins. The season saves after every lap.</p>" +
-      '<p class="ps-vdesc">' + esc(BR && BR.skillNote ? BR.skillNote : "War has no choices to make: the cards decide every race.") + "</p>" + announcersRow() + "</section>";
+      '<p class="ps-vdesc">' + esc(BR && BR.skillNote ? BR.skillNote : "War has no choices to make: the cards decide every race.") + "</p>" + announcersRow() + /* [bcast] */ bcCredRow() + /* [/bcast] */ "</section>";
     if (vsec) vsec.insertAdjacentHTML("afterend", ssec); else el.insertAdjacentHTML("beforeend", ssec);
     Array.prototype.forEach.call(el.querySelectorAll("[data-mxa]"), function (b) { b.onclick = function () { try { MX.Booth.store({ mode: b.getAttribute("data-mxa") }); } catch (e) { } api.redraw(); }; });
+    /* [bcast] */ var cbtn = el.querySelector("#mxpCred"); if (cbtn) cbtn.onclick = bcCredSheet; /* [/bcast] */
     if (sv) {
       var sh = sv.G.humans.length, ok = sh === n, names = sv.G.humans.map(function (h) { return sv.G.riders[h].name; });
       var res = '<section class="ps-sec mxp-res0"><div class="bg-section"><h2 class="bg-eyebrow" data-stage-text>Saved season</h2></div><div class="ps-rules"><div class="ps-rule"><span class="bg-tag bg-tag--official">saved</span>' +
@@ -678,7 +699,26 @@
       '<ol class="mxp-tower" id="mxpTower" aria-label="Timing: places, gaps, last laps"></ol><ol class="mxp-log" id="mxpLog" aria-label="What happened"></ol></aside>' +
       '<div class="mxp-cap" id="mxpCap" aria-label="The announcers"></div><div class="mxp-panel" id="mxpPanel" hidden></div></div>', "Players: watch the TV");
     var $ = H.$;
-    H.music(ID);
+    /* [bcast] the broadcast's music (mxshow S0): the CEO's picks through mxwar/mxmusic.js, the same director and the same moments as the game page (the TV
+       plays them; the phones load none of it). The broadcast mixer while Motocross War is up, today's chain again when it ends. Without the package files:
+       today's synthesized playlist. */
+    var BCM = null, bcRun = ++bcRuns;
+    if (MX.Music && window.Sound && Sound.mix && Sound.show) { try { Sound.mix.profile("broadcast"); BCM = MX.Music.create({ pkg: "base", game: ID }); } catch (e) { BCM = null; } }
+    if (BCM) H.onEnd(function () { try { BCM.at("off"); } catch (e) { } try { Sound.mix.profile(null); } catch (e) { } }); else H.music(ID);
+    stats.bcm = BCM;
+    function bcNew() { return G && !G.over && !G.race && !(G.round && G.round.races.some(function (r) { return r.res; })) ? bcRun + "|" + G.sid + "|" + G.ri : null; }
+    function bcPanel(kind) {   /* the panel on the TV is the moment: sign-up = the Menu; season, line-up and standings with the next race = the season screen */
+      if (!BCM) return;
+      try {
+        if (kind === "signup") BCM.at("menu");
+        else if (kind === "results" || (kind === "standings" && ui.pendRound)) BCM.at("results", { last: !!ui.pendRound, G: G });   /* (the standings looked at from the round's last results: the post-race music goes on) */
+        else if (kind === "podium") { var rs = G.results[G.results.length - 1]; BCM.at("podium", { round: bcRun + "|" + G.sid + "|" + (rs ? rs.ri : G.ri) }); }
+        else if (kind === "final") BCM.at("over");
+        else BCM.at("season", { round: bcNew() });
+      } catch (e) { }
+    }
+    function bcFlag(fx) { if (!BCM) { H.sfx(fx); return; } var rc = ui.rc, fin = !!rc && (rc.kind === "main" || !G.round); BCM.at("flag"); BCM.flag(fin, fx); }
+    /* [/bcast] */
     var rv = raceView($("mxpLane"), $("mxpV3")); stats.rv = rv;
     rv.onMode(function (on) { var p = $("mxp"); if (p) p.classList.toggle("is-3d", on); });
     $("mxpGate").innerHTML = A.gate();
@@ -1251,7 +1291,7 @@
           ui.lap = Math.min(e.b, rc.o.len); rv.lap(e.b, rc.o.len); rv.flag("checkered"); if (!rv.is3D()) annShown("checkered", { s: e.order[0] });   /* (3D: the picture calls it as the winner crosses the line) */
           var w = e.order[0], hw = kOfS(w) >= 0;
           ui.order = e.order.slice(); chips(); renderTower({ win: w }); drawDuel(w);
-          H.sfx(hw ? "win" : "conquer"); pushNow();
+          /* [bcast] the checkered fanfare (MX War Theme) on a Main or the round's last race; a heat keeps today's effect */ bcFlag(hw ? "win" : "conquer"); /* [/bcast] */ pushNow();
           await banner("Checkered flag", nm(w) + " wins" + (e.why === "all" ? ": every card" : ""), dl(1500), "is-flag", A.flag());
           return;
         }
@@ -1267,6 +1307,7 @@
       ui.order = RC.standings(rc).map(function (r) { return r.s; }); ui.lap = rc.phase === "gate" ? 0 : Math.min(rc.battle + 1, rc.o.len); ui.need = []; ui.intents = {};
       if (rc.lastLap && rc.lastLap.c) Object.keys(rc.lastLap.c).forEach(function (s) { ui.lastCards[s] = rc.lastLap.c[s]; });
       hidePanel(); ui.ph = rc.phase === "gate" ? "gate" : "race"; ui.pinfo = null; stats.races++;
+      /* [bcast] no music from the gate to the flag (the booth runs the start procedure; engines and the booth only) */ if (BCM) BCM.at("race"); /* [/bcast] */
       head(); renderTower(null); layoutTower(); setupRace(); chips();
       if (rc.phase === "war" && rc.part && rc.part.length) { ui.war = { n: rc.warN, seats: rc.part.slice(), tied: [] }; drawWar(rc.part, false); } else { $("mxpWar").innerHTML = ""; pipNote(null); drawDuel(); }
       pushNow();
@@ -1331,6 +1372,7 @@
     function stopCountdown() { if (!panelT) return; clearInterval(panelT); panelT = 0; var b = $("mxpPanel") && $("mxpPanel").querySelector("[data-cd]"); if (b) { var s = b.querySelector("small"); if (s) s.textContent = b.getAttribute("data-sub") || ""; } }
     function panel(o) {
       stopCountdown();
+      /* [bcast] */ bcPanel(o.kind); /* [/bcast] */
       var p = $("mxpPanel"); ui.ph = o.ph || "panel"; ui.pinfo = o.info || null; ui.rc = o.keepRace ? ui.rc : null; stats.panels.push(o.kind);
       if (!o.keepRace) { rv.live(false); chips(); prepNext(); }
       p.innerHTML = '<div class="mxp-ph"><div><span class="bg-eyebrow" data-stage-text>' + esc(o.eyebrow || "") + '</span><h2 id="mxpPTitle">' + esc(o.title || "") + "</h2>" + (o.sub ? "<p>" + o.sub + "</p>" : "") + "</div>" + (o.sum || "") + "</div>" +
@@ -1448,7 +1490,8 @@
       ui.pendRound = null; stats.podiums++;
       var res = G.results[G.results.length - 1]; if (!res) return;
       var c = G.cal[res.ri], L = S.standings(G), top = L.length ? L[0].pts : 0;
-      H.sfx("win"); var B = BG(); if (B && B.celebrate && !reduced()) try { B.celebrate(); } catch (e) { }
+      /* [bcast] the podium's music (Megasong's finish) plays instead of the old fanfare when the package is on */ if (!(BCM && BCM.plays())) H.sfx("win"); /* [/bcast] */
+      var B = BG(); if (B && B.celebrate && !reduced()) try { B.celebrate(); } catch (e) { }
       var tops = '<ol class="mxp-res" data-cols="1" aria-label="Season standings">' + L.slice(0, 5).map(function (r) { return resLi(r.id, r.place, '<span class="mxp-rx">' + r.pts + (r.place > 1 ? " · -" + (top - r.pts) : " pts") + "</span>"); }).join("") + "</ol>";
       await panel({ kind: "podium", eyebrow: "Round " + (res.ri + 1) + " of " + G.cal.length + " · " + (c.venue || c.city), title: (c.city || c.venue) + " podium",
         sub: esc(G.riders[res.cls[0]].name + " wins the night" + (c.title ? "" : " (no points: an exhibition)")),
