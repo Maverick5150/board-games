@@ -632,7 +632,7 @@ export function create(host,hooks){
     if(r.crash){ crashPose(i,r,tw,dt); return; }
     let landed=false, impact=0;   /* this frame the bike touches down, and how hard: the axles' downward speed just before (m/s) */
     if(!r.init||dt<=0){
-      initAxle(r.F,gF,aF,r.v); initAxle(r.Rr,gR,aR,r.v); r.init=true;
+      initAxle(r.F,gF,aF,r.v); initAxle(r.Rr,gR,aR,r.v); r.init=true; r.eF=r.eR=null;   /* (scale: the wheels are placed afresh too: wheelExt) */
       // [hook:motion]
       r.rem=false;
       // [/hook:motion]
@@ -672,9 +672,14 @@ export function create(host,hooks){
     if(r.air&&aF&&aF.A&&aF.A.b-aF.A.a>14&&!LO){ const u=aF.u; const wsg=((i*13)%3)-1; roll+=wsg*0.55*Math.sin(PI*clamp(u*1.15,0,1)); yaw+=wsg*0.18*Math.sin(PI*u); }
     eul.set(roll,yaw,pz,"YZX"); q.setFromEuler(eul);
     BW.compose(v3.set(x,oy,z),q,sc1);
-    const compF=clamp(LsEq-(yF-Math.max(tF+BIKE.WR,yF-BIKE.TRAVEL)),-0.12,BIKE.TRAVEL-0.02), compR=clamp(LsEq-(yR-Math.max(tR+BIKE.WR,yR-BIKE.TRAVEL)),-0.12,BIKE.TRAVEL-0.02);
+    /* (scale, 2026-10-19: the CEO, "the suspension needs to be better") THE WHEELS: the dirt pushes a wheel up at once; off the dirt it comes back down no faster than the fork's and
+       the shock's rebound (wheelExt), to full extension at most. Through the whoops the tyres ride the tops and leave the backs, the fork and the shock working from full extension to
+       about 0.15 m at every crest; the drawn stroke ends at the real bottom (0.19 m from sag: 0.29 of the 0.30 m travel; it was drawn to 0.28 from sag, past the bottom) */
+    const compF=clamp(LsEq-wheelExt(r,"eF",yF,tF,dt),-BIKE.SAG,LsEq-0.01), compR=clamp(LsEq-wheelExt(r,"eR",yR,tR,dt),-BIKE.SAG,LsEq-0.01);
     { const vw=r.vi!=null?r.vi:r.v; r.spinF+=vw*dt/BIKE.WR; r.spinR+=vw*dt/BIKE.WR; }   /* the wheels turn with the bike's drawn speed this frame (hotfix: the smoothed speed spun them on a bike drawn standing still) */
-    const crouch=clamp((compF+compR)*1.6,0,0.6)+(isGate?0.5:0);
+    /* the rider crouches with the CHASSIS' load (the springs over the ground the chassis rides: a landing, a compression), not with a wheel punching a whoop's crest under a calm
+       chassis (scale: the drawn wheels now track every crest, and a crouch from them bobbed the rider 4-5 cm at every whoop) */
+    const crouch=clamp((2*LsEq-(yF-gF-BIKE.WR)-(yR-gR-BIKE.WR))*1.6,0,0.6)+(isGate?0.5:0);
     const gy=Math.min(tF,tR), hAir=Math.max(0,oy-gy);
     /* the per-rider state every module reads (CONTRACT.md) */
     const st=RST[i];
@@ -723,6 +728,15 @@ export function create(host,hooks){
     // [/hook:fx]
   }
   function gnd(r,s,onStart,off){ if(onStart) return startG(r,off); return MX.Course.ground(C,s+off,r.lat); }
+  /* (scale) a wheel's spring length this frame (its axle point yA over the wheel's centre): it extends at most REB m/s (rebound) up to full extension, the dirt t stops it at once;
+     a placement frame puts it on the dirt or hanging out. 2.2 m/s: over a whoop's back (the dirt falls 5-6 m/s under a wheel at 14 m/s) the tyre leaves the dirt and the next face
+     catches it, the fork about full out (a real fork set up for whoops rebounds about that fast) */
+  const REB=2.2;
+  function wheelExt(r,key,yA,t,dt){
+    const eG=yA-(t+BIKE.WR); let e=r[key];
+    if(e==null||!(dt>0)) e=Math.min(BIKE.TRAVEL,eG); else { e=Math.min(BIKE.TRAVEL,e+REB*dt); if(e>eG) e=eG; }
+    e=Math.max(0.01,e); r[key]=e; return e;
+  }
   // [hook:motion]
   /* (hotfix, QD milestone 2 defect 1: the lap-1 rocket bikes) THE START PATH BLENDS INTO THE LOOP: the start path is flat, the loop where it joins is not (the berm on the outside of the
      turn it joins, the relief), so a wheel crossing from one to the other met a step of up to 0.65 m in one frame (the outer lanes), and the shock fired the bike 4-12 m into the air.
@@ -731,10 +745,15 @@ export function create(host,hooks){
     const y0=(r.fr.y||0)+0.02, d=Math.max(0,r.P||0)+off, u=C.S&&C.S.n?sstep(C.Ls-8,C.Ls,d):0;
     return u>0?y0+(MX.Course.ground(C,C.join+(d-C.Ls),r.lat)-y0)*u:y0;
   }
+  const SKD=0.13, SKF=0.3;   /* (scale) the skim line SKD under the crests; a crest through it pushes the chassis SKF of its height (skim(), ride()) */
   function ride(r,s,onStart,off){
     if(onStart) return startG(r,off);
     const g=MX.Course.ground(C,s+off,r.lat), sk=skim(s+off)*sstep(5,9,r.v||0);   /* the skim line over the whoops' tops is a thing of speed: a rider at walking pace (a remount) rolls through the troughs */
-    return sk>0?Math.max(g,sk+MX.Course.frame(C,s+off,tmpO).y):g;
+    if(sk<=0) return g;
+    /* (scale, 2026-10-19: the CEO, "the suspension needs to be better") the chassis rides the skim line; a crest poking through it pushes the CHASSIS only SKF of its height (a
+       real shock's high-speed compression blows off): the wheel takes the rest (wheelY: the fork and shock work, the chassis stays calm, no pogo off every top) */
+    const line=sk+MX.Course.frame(C,s+off,tmpO).y;
+    return g>line?line+(g-line)*SKF:line;
   }
   /* JUMP ARCS THAT FOLLOW THE SPEED (view side). course.js gives every jump ONE spatial arc, flown at its design speed (A.vx); the riders reach the
      lip at their own speed (the cards' gaps move them up to 16% either side of the schedule), so a fixed arc made slow riders hang (an implied
@@ -766,16 +785,21 @@ export function create(host,hooks){
   /* the skim line through the whoops / rollers: the tops' height, ramped in over the first whoop and a half; out AFTER the last top (hotfix: it used to come down between
      the last two tops, so the last whoop's face rose under the wheels at full speed like a kicker: 14 of the race's 16 near-vertical wheelies were there) down to the dirt
      1.25 whoops later */
+  /* (scale, 2026-10-19) the skim line is SKD under the whoops' own crests (course.js gives every whoop its crest and height: the line follows them from crest to crest), so every
+     top pokes about SKD through it: the wheel is pushed up that much (the fork and the shock compress about 0.12 m at each crest and hang out over the troughs), never the whole
+     whoop (the 0.9 x the height line of before left the tyres floating 0.85 m over 1.05 m whoops). Rollers (outdoors, 15-25 m apart) are ridden, not skimmed. */
   function skim(s){
     s=MX.Course.wrap(C,s);
-    for(let k=0;k<C.feats.length;k++){ const f=C.feats[k]; if(f.k!=="whoops"&&f.k!=="rollers") continue; const sp=f.sp||((f.to-f.from)/(f.n||5)); if(s<f.from-1||s>f.to+sp) continue;
-      const h=(f.h||0.8)*0.9; return h*sstep(f.from+sp*0.25,f.from+sp*1.6,s)*(1-sstep(f.to-sp*0.5,f.to+sp*0.75,s)); }
+    for(let k=0;k<C.feats.length;k++){ const f=C.feats[k]; if(f.k!=="whoops") continue; const sp=f.sp||((f.to-f.from)/(f.n||5)); if(s<f.from-1||s>f.to+sp) continue;
+      let h=(f.h||0.75); const cr=f.crests;
+      if(cr&&cr.length){ let j=0; while(j<cr.length-1&&cr[j+1][0]<s) j++; const a=cr[j], b=cr[Math.min(cr.length-1,j+1)]; h=b[0]>a[0]?a[1]+(b[1]-a[1])*clamp((s-a[0])/(b[0]-a[0]),0,1):a[1]; }
+      return Math.max(0,h-SKD)*sstep(f.from+sp*0.25,f.from+sp*1.6,s)*(1-sstep(f.to-sp*0.5,f.to+sp*0.75,s)); }
     return 0;
   }
   function initAxle(A,g,air,v){ const LsEq=BIKE.TRAVEL-BIKE.SAG; if(air){ A.y=air.y+BIKE.WR+BIKE.TRAVEL*0.85; A.v=air.dy*v; } else { A.y=g+BIKE.WR+LsEq; A.v=0; } }
   /* one axle: the chassis point above a wheel. On the ground a spring (about 1.6 Hz, sag 10 cm, 30 cm travel) and a damper; off the ground
      it falls (g); in a jump's arc it rides the arc (the wheels follow the flight path, the suspension hangs out); bottoming never launches */
-  const K=100, Z=0.45, LREST=BIKE.TRAVEL-BIKE.SAG+G/K;
+  const K=100, Z=0.45, ZR=0.9, LREST=BIKE.TRAVEL-BIKE.SAG+G/K;   /* (scale: ZR = the rebound's damping ratio; it was Z both ways) */
   function axle(A,air,g,vg,h,v){
     if(air){ const ty=air.y+BIKE.WR+BIKE.TRAVEL*0.88; A.v=air.dy*v; A.y+=(ty-A.y)*Math.min(1,h*30); return; }
     const gw=g+BIKE.WR, Ls=A.y-gw;
@@ -787,7 +811,10 @@ export function create(host,hooks){
        climb (1.2 x his speed, 8 m/s at most: a step in the dirt is not a 20-34 m/s ground speed), and the damper's push from a rising ground blows off at 6 g (a real shock's
        high-speed valve), unless the chassis' own fall asks for more (a landing keeps its full damping): a rising ground lifts the bike, it never fires it */
     vg=clamp(vg,-Math.min(8,1.2*v+0.5),Math.min(8,1.2*v+0.5));
-    if(Ls<BIKE.TRAVEL){ const Lc=Math.max(Ls,0.03), xp=clamp((BIKE.TRAVEL-Lc-0.45*BIKE.TRAVEL)/(0.55*BIKE.TRAVEL),0,1), dv=A.v-vg, cd=2*Z*Math.sqrt(K)*(dv<0?1+7*xp*xp:1);
+    /* (scale, 2026-10-19: the CEO, "the suspension needs to be better") THE REBOUND IS DAMPED HARDER THAN THE COMPRESSION, as on a real fork and shock: the spring comes back to its
+       ride height without throwing the bike up past it (a landing's rebound overshot the ride height by 6 cm at p90 and the chassis bobbed twice: the pogo); the compression
+       stays as soft as it was (the landings and the whoops use the same travel) */
+    if(Ls<BIKE.TRAVEL){ const Lc=Math.max(Ls,0.03), xp=clamp((BIKE.TRAVEL-Lc-0.45*BIKE.TRAVEL)/(0.55*BIKE.TRAVEL),0,1), dv=A.v-vg, cd=2*Math.sqrt(K)*(dv<0?Z*(1+7*xp*xp):ZR);
       let fd=-cd*dv; if(fd>0&&vg>0) fd=Math.min(fd,Math.max(60,-cd*A.v));
       a+=K*(1+3*xp*xp)*(LREST-Lc)+fd; }   /* (the force of the bottom of the stroke at most: a wheel that finds itself under a step in the dirt is not shot into the sky) */
     // [/hook:motion]
