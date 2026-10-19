@@ -1181,7 +1181,7 @@ function layoutArena(){
 /* the big window's lap note ("Lap 3 of 9"): on a phone at the cards' height between the two cards, clear of the names under them (it sat on them);
    with one card (mxfix1: the person's card is the top card) beside it, never on it. The TV keeps its place between the two slots. */
 function placeMid(){
-  var mid=$("midNote"), big=pipBig(), one=$("table").classList.contains("is-one"); mid.hidden=!big; if(!GEO) return;
+  var mid=$("midNote"), big=pipBig(), one=$("table").classList.contains("is-one"); mid.hidden=!big||$("youSlot").hidden; if(!GEO||mid.hidden) return;   /* (a war shows its columns: no note) */
   mid.style.left=big&&one?"76%":"";
   mid.style.top=Math.round(onTV()&&!one?GEO.th*.48:GEO.midY)+"px";
   if(big&&!one&&!onTV()){   /* centred in the gap between the two cards (at 360 px it touched the left one); where the gap is too narrow for it, left out: the race's lap chip says the same */
