@@ -342,6 +342,7 @@ function create(o){
     if(!G.wk) fallbackVoice(C);
     /* the pack: a recorded bed of many bikes (this era's stroke when there is one) */
     var pk=core&&core.buf[era.stroke===2&&core.buf.pack2s?"pack2s":"pack"];
+    G.packK=era.stroke===2&&!(core&&core.buf.pack2s)?dbl(-4.4):1;   /* a two-stroke season: the recorded (modern) pack is only texture under the far pack of two-strokes */
     G.packG=track(C.createGain()); G.packG.gain.value=0; G.packLP=track(C.createBiquadFilter()); G.packLP.type="lowpass"; G.packLP.frequency.value=3000; G.packLP.Q.value=0.4;
     G.packLP.connect(G.packG); G.packG.connect(G.beds);
     if(pk){ G.pack=track(C.createBufferSource()); G.pack.buffer=pk; G.pack.loop=true; loopPts(G.pack,era.stroke===2&&core.buf.pack2s?"pack2s":"pack"); G.pack.connect(G.packLP); G.pack.start(T,G.pack.loopStart+rnd()*(G.pack.loopEnd-G.pack.loopStart)*0.9); }
