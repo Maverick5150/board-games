@@ -307,6 +307,9 @@
   .mx-tchip__sep{flex:none; width:1px; height:1.3rem; margin:0 .15rem; background:rgba(231,202,144,.4)}
   .mx-tchip__n{min-width:0; overflow:hidden; text-overflow:ellipsis; font:600 .8125rem/1.1 var(--mx-cond); color:var(--text-1)}
   .mx-tchip__w{flex:none; font:var(--fw-caps) var(--fs-micro)/1 var(--font-ui); letter-spacing:.04em; text-transform:uppercase; color:#f0d48a}
+  /* a war gets a wider window (three fighters' plates and cards; game.js warWin, --pip-ww: still about an eighth of the picture) and smaller plates in its columns */
+  html:not([data-tv]) body.mx-3d .mx-table.is-pip.is-war:not(.is-rest){width:var(--pip-ww,var(--pip-w))}
+  html:not([data-tv]) .mx-table.is-pip .mx-fight__who .mx-pl{font-size:var(--fs-micro); min-width:2.1em; padding:.05rem .2rem .05rem .45em}
   /* the banners over the 3D picture on a phone: under the row of the camera button and the cards chip, beside the open cards window */
   html:not([data-tv]) body.mx-3d .mx-banner{top:3.5rem; left:calc((100% - var(--tbl-w,0px)) / 2); max-width:calc(100% - var(--tbl-w,0px) - 1rem)}
   .mx-banner.is-war{background:linear-gradient(180deg,rgba(24,22,28,.97),rgba(12,11,15,.97)); box-shadow:inset 0 0 0 2px #f72d2e, 0 .8rem 2rem rgba(0,0,0,.6)}

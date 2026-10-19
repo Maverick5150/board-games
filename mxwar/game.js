@@ -1087,9 +1087,13 @@ function leaderLap(k){
    smaller again. The course keeps clear of the small window (track.js setHole). */
 function pipBig(){ return $("table").classList.contains("is-big"); }
 function pipSize(W,H){
-  var rem=remPx(), tv=onTV(), land=!tv&&W>H*1.25, d3=restable();   /* mxfix1: over the 3D picture on a phone the open window is smaller (about a tenth of the picture) */
-  var w=tv?Math.round(rem*14):land?clamp(Math.round(W*0.3),Math.round(rem*8.5),Math.round(rem*12)):d3?clamp(Math.round(W*0.36),Math.round(rem*8.5),Math.round(rem*11)):clamp(Math.round(W*0.4),Math.round(rem*9.5),Math.round(rem*13));
-  var h=tv?Math.round(rem*8.4):d3?Math.round(Math.max(rem*6.6,Math.min(w*0.78,H*0.3))):Math.round(Math.max(rem*7.4,Math.min(w*0.78,H*0.36)));
+  var rem=remPx(), tv=onTV(), land=!tv&&W>H*1.25;
+  if(restable()){   /* mxfix1: over the 3D picture on a phone the open window is about a tenth of the picture (by area: 390 x 844 and the CEO's 360 px phone alike), never smaller than its cards need */
+    var h3=clamp(Math.round(Math.sqrt(W*H*0.105/1.3)),Math.round(rem*5.6),Math.round(rem*7.4));
+    return {w:clamp(Math.round(W*H*0.105/h3),Math.round(rem*7.4),Math.round(rem*11)),h:h3};
+  }
+  var w=tv?Math.round(rem*14):land?clamp(Math.round(W*0.3),Math.round(rem*8.5),Math.round(rem*12)):clamp(Math.round(W*0.4),Math.round(rem*9.5),Math.round(rem*13));
+  var h=tv?Math.round(rem*8.4):Math.round(Math.max(rem*7.4,Math.min(w*0.78,H*0.36)));
   return {w:w,h:h};
 }
 /* mxfix1 (the CEO, 2026-10-19: "the card box is way too big and blocking the screen"): over the 3D picture on a phone the cards window RESTS as a slim chip
@@ -1104,7 +1108,7 @@ function syncRest(){
   if(on!==was) morphTable(function(){ tb.classList.toggle("is-rest",on); if(on) drawChip(); });
   $("arena").style.setProperty("--tbl-w",restable()&&!on&&!pipBig()&&!tb.classList.contains("is-left")?(tb.offsetWidth+Math.round(remPx()*1.25))+"px":"0px");
 }
-function pipReset(){ clearTimeout(pipT); pipT=0; ui.pipUp=false; var tb=$("table"); tb.classList.remove("is-one","is-left"); $("topSlot").hidden=false; }   /* a new race: the window rests on the right */
+function pipReset(){ clearTimeout(pipT); pipT=0; ui.pipUp=false; var tb=$("table"); tb.classList.remove("is-one","is-left","is-war"); $("topSlot").hidden=false; }   /* a new race: the window rests on the right */
 function pipOpen(){ clearTimeout(pipT); pipT=0; if(ui.pipUp) return; ui.pipUp=true; syncRest(); }
 function pipRestSoon(ms){ clearTimeout(pipT); var my=gen; pipT=setTimeout(function(){ pipT=0; if(my!==gen) return; ui.pipUp=false; syncRest(); },Math.max(0,ms)); }
 /* a one-shot grow / shrink from the window's corner (transform only) around a change of its size */
@@ -1146,6 +1150,7 @@ function layoutArena(){
   var small=pipSize(W,H), edge=Math.round(rem*(tv?1:.75));
   var bw=big?Math.round(Math.min(W-edge*2,tv?rem*44:W)):small.w, bh=big?Math.round(Math.min(H-edge*2-rem*(tv?3.2:2.6),Math.max(H*0.62,rem*13))):small.h;
   tb.style.setProperty("--pip-w",bw+"px"); tb.style.setProperty("--pip-h",bh+"px"); tb.style.setProperty("--pip-e",edge+"px");
+  var ww=!big&&restable()?Math.round(clamp(W*H*0.13/small.h,small.w,rem*13.5)):bw; tb.style.setProperty("--pip-ww",ww+"px");   /* mxfix1: a war's window on a phone over the 3D race: wider (three fighters' plates), about an eighth of the picture */
   var lab=big?rem*(tv?1.05:1):rem*(tv?0.95:0.85), who=big?rem*(tv?1.3:1.35):rem*(tv?1.15:1.1);
   var cw=Math.round(Math.min((bh-lab-who-rem*.8)/1.4,bw*(big?0.2:0.27),rem*(tv?7.5:7)));
   cw=Math.max(cw,tv?Math.round(2.6*rem):big?34:26);
@@ -1154,7 +1159,7 @@ function layoutArena(){
   you.style.top=top.style.top=Math.round(rem*(big?.35:.25))+"px";
   if(big){ you.style.left=tb.classList.contains("is-one")?"50%":"24%"; top.style.left="76%"; you.style.width=top.style.width=Math.round(bw*.4)+"px"; }
   mid.style.top=Math.round(bh*.48)+"px"; mid.hidden=!big;
-  GEO={W:W,H:H,laneH:H,cw:cw,tw:bw,th:bh};
+  GEO={W:W,H:H,laneH:H,cw:cw,tw:bw,th:bh,ww:ww};
   relabel();
   var T=track(); if(T){ T.setHole({w:small.w+edge,h:small.h+edge}); T.resize(); placeGate(); }
   if(race3D()){ try{ V3.resize(); }catch(e){} }   /* the 3D picture fills the lane's place (#v3, index.html); its cameras frame the race themselves */
@@ -1345,13 +1350,14 @@ function renderRace(){
 function leftLab(h){ if(h>=0) lab($("youLab"),G.humans.length>1?"Card of":"Your card",G.humans.length>1?"Card":"You"); else lab($("youLab"),"Race leader","Leader"); }
 /* mxfix1: the left slot's rider (the person, or the race leader when nobody of this device rides) holds the top card: ONE card, marked as the top card,
    never the same card twice (the CEO's podium screenshot showed A♥ 68 beside A♥ 68) */
+function warWin(on){ var tb=$("table"); if(on===tb.classList.contains("is-war")) return; morphTable(function(){ tb.classList.toggle("is-war",!!on); }); }   /* mxfix1: the war's wider window (phone, 3D; CSS), off again with the next lap's cards */
 function setOne(on){ var tb=$("table"); tb.classList.toggle("is-one",!!on); $("topSlot").hidden=!!on; if(pipBig()) $("youSlot").style.left=on?"50%":"24%"; else placeSlots(); }
 function oneCard(h){
   setOne(true); $("youCard").classList.add("is-win");
   if(h>=0) lab($("youLab"),G.humans.length>1?"Top card":"Top card: yours",G.humans.length>1?"Top":"You · top"); else lab($("youLab"),"Leader: top card","Leader · top");
 }
 function drawDuel(winS){
-  $("youSlot").hidden=false; $("topSlot").hidden=false; $("midNote").hidden=false;
+  $("youSlot").hidden=false; $("topSlot").hidden=false; $("midNote").hidden=false; warWin(false);
   var rc=ui.rc, h=focusHuman(), lc=ui.lastCards;
   var left=h>=0?h:(ui.order.length?ui.order[0]:0);
   leftLab(h);
@@ -1699,7 +1705,7 @@ async function animEvent(my,e){
         e.cards.forEach(function(x){ ui.lastCards[x.s]=x.c; disp.cnt[x.s]=Math.max(0,disp.cnt[x.s]-1); });
         Sound.sfx("card");
         if(restable()) pipOpen();   /* mxfix1: the resting chip opens for the lap's reveal (it rests again a moment after the cards have turned) */
-        setOne(false);
+        setOne(false); warWin(false);
         var h=focusHuman(), left=h>=0&&ui.lastCards[h]!=null?h:null, ls;
         $("midBig").textContent="Lap "+Math.min(ui.lap,rc.o.len); $("midSmall").textContent="of "+rc.o.len;
         var best=bestOf(e.cards), ps=[];
@@ -1851,7 +1857,7 @@ function colOf(cols,s){ for(var i=0;i<cols.length;i++) if(+cols[i].getAttribute(
 /* the war on the table: one column per fighter (the people first, up to 4; "+n more" beyond), the tied card, then 3 down + the 4th */
 /* the war's cards in the card window: up to 3 fighters in the small window on a phone (4 on TV), 4 / 5 in the big one; "+n more" */
 function warCw(cols,more){
-  var rem=remPx(), W=GEO?GEO.tw:300, H=GEO?GEO.th:160, big=pipBig(), tv=onTV();
+  var rem=remPx(), W=GEO?(GEO.ww&&!pipBig()&&$("table").classList.contains("is-war")?GEO.ww:GEO.tw):300, H=GEO?GEO.th:160, big=pipBig(), tv=onTV();   /* (mxfix1: a war on a phone over the 3D race has a wider window: GEO.ww) */
   var colW=(W-rem*.6)/(cols+(more?0.7:0))-rem*.4;
   /* review fix (task2): a column fits the window's height: the war's insets (index.html .mx-war: small .3rem / TV .5rem at the bottom, below
      the expand icon at the top; big 2rem + .5rem / TV 3rem + .75rem), the plate row (+ the "tied with" row in the big window) and the pile
@@ -1860,7 +1866,7 @@ function warCw(cols,more){
   return Math.round(Math.max(tv?2.4*rem:big?30:22,Math.min(colW*(big?.62:.6),hcw,GEO?GEO.cw:70)));
 }
 function drawWar(seats,tb,fresh){
-  $("youSlot").hidden=true; $("topSlot").hidden=true; $("midNote").hidden=true;
+  $("youSlot").hidden=true; $("topSlot").hidden=true; $("midNote").hidden=true; warWin(true);
   var hs=seats.filter(function(s){ return isHumanId(seatId(s)); }), rest=seats.filter(function(s){ return hs.indexOf(s)<0; });
   var big=pipBig(), vis=hs.concat(rest).slice(0,onTV()?(big?5:4):(big?4:3)), more=seats.length-vis.length;
   var row=$("warRow");
