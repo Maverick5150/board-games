@@ -65,6 +65,7 @@
   .mx-col{display:contents}
   .mx-hero{order:1} .mx-sec--series{order:2} .mx-sec--players{order:3} .mx-sec--names{order:4} .mx-sec--length{order:5} .mx-sec--speed{order:6}
   .mx-sec--ann{order:7} .mx-sec--gfx{order:8} .mx-sec--rules{order:9} .mx-sec--save{order:10} .mx-back{order:11} .mx-dock{order:12}
+  /* [bcast] */ .mx-sec--music{order:10} html[data-tv] .mx-sec--music{order:4} #credBox .mxm-cred{margin-bottom:.75rem} /* [/bcast] */
   .mx-hero{position:relative; min-height:0; margin:0 calc(-1 * var(--gutter)); padding-top:46%; border-radius:0; background:transparent}
   .mx-hero .bg-hero__layer{bottom:auto; height:auto; aspect-ratio:16/9; border-radius:0; background-color:transparent;
     background-image:url("../ui/art/hero-mxwar.svg"); background-size:100% auto; background-position:100% 0;
@@ -821,6 +822,10 @@
 <script>/* a no-op Sound with every method this page uses, in case sound.js fails to load */
 window.Sound=window.Sound||{music:function(){},stop:function(){},skip:function(){},nowPlaying:function(){return "";},sfx:function(){},fromText:function(){},mountButton:function(){},openPanel:function(){},closePanel:function(){},panelOpen:function(){return false;},addStyle:function(){return false;},hasStyle:function(){return false;},duck:function(){}};
 window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";}};</script>
+<!-- /* [bcast] */ the broadcast's sound (mxshow): the mixer profile, the show music and the replay sounds (mxsound.js), the music director (mxmusic.js: the CEO's picks on the screens) -->
+<script src="mxsound.js"></script>
+<script src="mxmusic.js"></script>
+<!-- /* [/bcast] */ -->
 </head>
 <body class="bg-app bg-app--scene mx-in-setup">
   <header class="bg-topbar">
@@ -916,6 +921,17 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
         <div class="bg-seg bg-seg--text" id="gfxSeg" role="group" aria-labelledby="gfxHead"></div>
         <p class="mx-legend" id="gfxNote" data-stage-text aria-live="polite"></p>
       </section>
+      <!-- /* [bcast] */ the music's credits (game.js shows this section when the music director is on) -->
+      <section class="mx-sec mx-sec--music" id="musicSec" aria-labelledby="musicHead" hidden>
+        <div class="bg-section"><h2 class="bg-eyebrow" id="musicHead" data-stage-text>Music</h2></div>
+        <div class="bg-rows">
+          <button class="bg-row mx-disclose" id="credBtn" type="button" aria-haspopup="dialog">
+            <span class="bg-row__main"><span class="bg-row__title">Music credits</span><span class="bg-row__desc">The tracks you hear, their authors and their licences</span></span>
+            <span class="mx-chev" data-icon="chevron" aria-hidden="true"></span>
+          </button>
+        </div>
+      </section>
+      <!-- /* [/bcast] */ -->
       <section class="mx-sec mx-sec--save" aria-labelledby="saveHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="saveHead" data-stage-text>Save and load</h2></div>
         <div id="svbar"></div>
@@ -1027,6 +1043,7 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
   <section class="bg-sheet" id="boardBox" aria-labelledby="boardTitle"><div id="boardSheet"></div></section>
   <section class="bg-sheet" id="lineBox" aria-labelledby="lineTitle"><div id="lineSheet"></div></section>
   <section class="bg-sheet" id="timesBox" aria-labelledby="timesTitle"><div id="timesSheet"></div></section>
+  <!-- /* [bcast] */ --><section class="bg-sheet" id="credBox" aria-labelledby="credTitle"><div id="credSheet"></div></section><!-- /* [/bcast] */ -->
 
   <div class="bg-win" id="winBox" aria-labelledby="winTitle">
     <div class="bg-win__scrim"></div>

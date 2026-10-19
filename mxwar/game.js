@@ -683,6 +683,7 @@ function showSetup(on,resume){
 }
 function setView(v,keepBody){
   var was=ui.view; ui.view=v; var b=document.body;
+  /* [bcast] */ bcSync(); /* [/bcast] */
   b.classList.toggle("mx-v-season",v==="season"); b.classList.toggle("mx-v-race",v==="race");
   var setup=setupShown();
   b.classList.toggle("bg-app--scene",setup||v==="season"); b.classList.toggle("bg-app--felt",!setup&&v==="race");
@@ -718,7 +719,7 @@ function loadSaved(d){
   resetUI();
   ui.view=G.race?"race":"season"; ui.rc=G.race; ui.lap=0; ui.rmap=G.rmap?G.rmap.slice():null; ui.label=G.race?raceLabel():"";
   closeSheets(); closeWin();
-  Sound.music(GAME);
+  /* [bcast] */ if(!BCM) Sound.music(GAME); /* [/bcast] */
   showSetup(false); drawSetup(); armBack();
   if(G.over){ ui.finished=gen; setView("season"); setTimeout(function(){ if(G&&G.over&&!setupShown()) openWin(); },300); }
   /* mxtimewire: a save from before the per-round timing: attach it from the season file (mxsave: the race under way then takes its researched length) */
@@ -829,7 +830,7 @@ function startSeason(){
     var B=BG(); if(B&&B.toast&&B.toast.hide) B.toast.hide();
     try{ G=S.newSeason(D,IDX,seasonOpts(),humanList()); }catch(e){ toast("This season can't be raced: "+e.message); return; }
     resetUI(); ui.view="season"; annNew(null);
-    Sound.music(GAME);
+    /* [bcast] */ if(!BCM) Sound.music(GAME); /* [/bcast] */
     save(); showSetup(false); setView("season"); armBack();
     focusTV($("goBtn"));
   },function(){ if(my===gen) toast("Couldn't load that season (offline?). Try another year or go online once."); });
@@ -1746,7 +1747,7 @@ async function animEvent(my,e){
       if(race3D()){ try{ V3.setFlag("checkered"); }catch(x){} } else annShown("checkered",{s:e.order[0]});   /* (3D: the view calls it as the winner crosses the line) */
       var w=e.order[0], hw=isHumanId(seatId(w));
       ui.order=e.order.slice(); renderTower({win:w});
-      Sound.sfx(hw?"win":"conquer");
+      /* [bcast] the checkered fanfare (MX War Theme) on a Main or the round's last race; a heat keeps today's effect */ bcFlag(hw?"win":"conquer"); /* [/bcast] */
       $("midBig").textContent="Flag"; $("midSmall").textContent="";
       await banner("Checkered flag",nm(w)+" wins"+(e.why==="all"?": every card":e.why==="deadlock"?"":""),dl(1500),"is-flag",true);
       return;
@@ -1927,7 +1928,7 @@ function openPodium(){
     (mine.length?'<p class="mx-line"><b>'+(me.length>1?"Your riders":"Your night")+":</b> "+esc(mine.join(" · "))+"</p>":"")+
     '<ol class="mx-tops">'+L.slice(0,5).map(function(r){ var R=G.riders[r.id]; return '<li class="'+(me.indexOf(r.id)>=0?"is-me":"")+'"><span class="mx-st__p">'+r.place+"</span>"+plateHTML(R)+'<span class="mx-st__n">'+esc(R.name)+'</span><span class="mx-st__v">'+r.pts+'</span><span class="mx-st__g">'+(r.place>1?"-"+(top-r.pts):"")+"</span></li>"; }).join("")+"</ol>"+
     '<div class="mx-sacts"><button class="bg-btn bg-btn--primary bg-btn--lg" id="podGo" type="button">'+(G.over?"The champion":"Season standings")+"</button></div>";
-  if(!reduced()) Sound.sfx("win");
+  /* [bcast] the podium's music (Megasong's finish) plays instead of the old fanfare when the package is on */ if(!(BCM&&BCM.plays())&&!reduced()) Sound.sfx("win"); /* [/bcast] */
   sheetOpen($("podBox"),{focus:"#podGo",onClose:function(reason){ if(reason!=="go"){ setView("season"); if(G.over) finishSeason(); else drive(); } }});
   $("podGo").addEventListener("click",function(){ sheetClose($("podBox"),"go"); setView("season"); if(G.over) finishSeason(); else drive(); });
 }
@@ -2064,6 +2065,48 @@ function hintSync(){
 }
 document.addEventListener("bgui:sheet",hintSync); document.addEventListener("bgui:win",function(e){ if(e.detail&&!e.detail.open) hintSync(); });
 
+/* [bcast] ================= the broadcast's music (mxshow S0: the CEO's picks on today's screens) =================
+   mxwar/mxmusic.js decides what plays (the same director as the Party TV's, so both play the same music at the same moments); this page only tells it what
+   the screen shows (bcSync, after the task, so a sheet that closes and the next that opens count once): the Menu, the season screen (a round that comes up:
+   its open, once), a race's results (the round's last race: the post-race music), the podium, the race (no music from the gate to the flag), the flag (the
+   checkered fanfare on a Main or the round's last race), the season's end. The broadcast mixer (Sound.mix "broadcast") ducks the music under every booth
+   line. The Menu's Music credits sheet lists every track with its licence (the CC BY lines in full). Without mxmusic.js / mxsound.js: today's playlist. */
+var BCM=null, bcT=0;
+function bcNew(){ if(!G||G.over||G.race) return null; var RG=G.round; if(RG&&RG.races.some(function(r){ return r.res; })) return null; return gen+"|"+G.sid+"|"+G.ri; }
+function bcMoment(){
+  if(!G||setupShown()) return ["menu"];
+  if(sheetIsOpen("podBox")){ var rs=G.results[G.results.length-1]; return ["podium",{round:gen+"|"+G.sid+"|"+(rs?rs.ri:G.ri)}]; }
+  if(sheetIsOpen("resBox")) return ["results",{last:!!ui.pendRound,G:G}];
+  if(G.over) return ["over"];
+  if(ui.view==="race"&&ui.rc) return [ui.rc.over?"flag":"race"];
+  return ["season",{round:bcNew()}];
+}
+function bcSync(){ if(!BCM||bcT) return; bcT=setTimeout(function(){ bcT=0; try{ var m=bcMoment(); BCM.at(m[0],m[1]); }catch(e){} },0); }
+function bcFlag(fx){
+  if(!BCM){ Sound.sfx(fx); return; }
+  var rc=ui.rc, fin=!!rc&&(rc.kind==="main"||!G.round);   /* a Main, or the race that ended the round (season.js endRound clears G.round) */
+  BCM.at("flag"); BCM.flag(fin,fx);
+}
+function bcCredits(){
+  if(!BCM) return;
+  BCM.credits().then(function(list){
+    var sh=$("credSheet"); if(!sh) return;
+    sh.innerHTML='<div class="bg-sheet__grip" aria-hidden="true"></div><div class="mx-shd"><span class="bg-eyebrow">Music</span><h2 class="bg-sheet__title" id="credTitle">Music credits</h2>'+
+      '<p class="bg-sheet__sub">Every track you hear in Motocross War, by its author and under its licence.</p></div>'+MX.Music.creditsHTML(list,{tv:onTV()})+
+      '<div class="mx-sacts"><button class="bg-btn bg-btn--primary bg-btn--lg" id="credClose" type="button">Close</button></div>';
+    sheetOpen($("credBox"),{focus:"#credClose"});
+    $("credClose").addEventListener("click",function(){ sheetClose($("credBox")); });
+  });
+}
+if(MX.Music&&window.Sound&&Sound.mix&&Sound.show){
+  try{ Sound.mix.profile("broadcast"); BCM=MX.Music.create({pkg:"base",game:GAME}); }catch(e){ BCM=null; try{ console.warn("mxwar: the music director is off:",e&&e.message); }catch(x){} }
+}
+if(BCM){
+  document.addEventListener("bgui:sheet",bcSync); document.addEventListener("bgui:win",bcSync);
+  if($("musicSec")){ $("musicSec").hidden=false; $("credBtn").addEventListener("click",bcCredits); }
+}
+/* [/bcast] */
+
 /* ================= keys, the remote's Back ================= */
 function backStep(){
   if(!setupShown()&&G&&ui.view==="race"&&pipBig()){ setPip(false,true); return "cards"; }
@@ -2112,7 +2155,8 @@ if(MX.Booth&&MX.Announce&&window.BGVoice){
     annMode();
   }catch(e){ BOOTH=null; try{ console.warn("mxwar: announcers off:",e&&e.message); }catch(x){} }
 }
-Sound.mountButton(); Sound.music(GAME);
+Sound.mountButton();
+/* [bcast] the CEO's picks when the package is on (mxmusic.js), else today's synthesized playlist */ if(BCM) bcSync(); else Sound.music(GAME); /* [/bcast] */
 deviceCopy(); drawSetup(); saveBar.refresh(); showSetup(true); contOffer();
 if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(function(){}); }
 window.__mxwar={get G(){ return G; },get booth(){ return BOOTH; },get v3(){ return V3; },get v3state(){ return v3state; },use3D:function(){ return use3D(); },race3D:function(){ return race3D(); },hold3D:function(){ return hold3D(); },gfx:gfx,setGfx:setGfx,camNext:camNext,rows:function(){ return liveRows(); },drawTower:drawTower,toSeason:function(){ ui.rc=null; setView("season"); drive(); },cfg:cfg,ui:ui,drive:drive,act:act,simNow:simNow,enterRace:enterRace,startSeason:startSeason,loadSeason:loadSeason,
