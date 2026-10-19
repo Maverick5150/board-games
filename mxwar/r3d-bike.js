@@ -14,8 +14,8 @@
    st.mud (0..1), st.steer (rad, + right; when absent it is worked out from the track's curvature st.k). hideBike(M, i). */
 import * as THREE_NS from "../ui/vendor/three-0.160.0.module.min.js";
 const THREE=THREE_NS;
-import {bone,canvas,clamp,lin,MX_KEEP,KEEP_VS_DECL,KEEP_VS_SET,KEEP_FS_DECL} from "./r3d-util.js";
-import {BIKE,buildBike,buildFarBike,buildWheel,triCount,MAT,UA,A0,ARM} from "./r3d-bike-model.js";
+import {bone,canvas,clamp,MAT as KIT,getKitTier,MX_KEEP,MX_MASK,KEEP_VS_DECL,KEEP_VS_SET,KEEP_FS_DECL} from "./r3d-util.js";
+import {BIKE,buildBike,buildFarBike,buildWheel,buildBlurDisc,triCount,UA,A0,ARM} from "./r3d-bike-model.js";
 export {BIKE};
 
 /* ---------------- textures (made once per page, shared by every race) ---------------- */
@@ -37,107 +37,291 @@ function envTexture(size){
   const sg=x.createRadialGradient(px(0.918),py(0.7175),1,px(0.918),py(0.7175),h*0.10); sg.addColorStop(0,"rgba(255,248,230,1)"); sg.addColorStop(0.35,"rgba(255,236,200,0.85)"); sg.addColorStop(1,"rgba(255,230,190,0)"); x.fillStyle=sg; x.fillRect(px(0.918)-h*0.12,py(0.7175)-h*0.12,h*0.24,h*0.24);
   const t=new THREE.CanvasTexture(c); t.mapping=THREE.EquirectangularReflectionMapping; t.colorSpace=THREE.SRGBColorSpace; t.generateMipmaps=false; t.minFilter=THREE.LinearFilter; t.magFilter=THREE.LinearFilter; return t;
 }
-/* the livery: one mask, red = the accent colour, green = black, blue = white. The upper half is the side view (x -1.2..0.6 across, y 0.45..1.2 up),
-   the lower half the view from above (x across, z up the picture) for the fenders. */
-function liveryTexture(size){
-  const c=canvas(size,size), x=c.getContext("2d"), K=size/512, u=px=>px*K;
-  x.fillStyle="#000"; x.fillRect(0,0,size,size);
-  const X=xx=>(xx+1.2)/2.4*512, Y=yy=>256-(yy-0.45)/0.75*256;                 /* bike side view -> pixels (upper half) */
-  const poly=(pts,col)=>{ x.fillStyle=col; x.beginPath(); pts.forEach((p,k)=>{ const a=X(p[0])*K, b=Y(p[1])*K; if(k) x.lineTo(a,b); else x.moveTo(a,b); }); x.closePath(); x.fill(); };
-  /* the shroud: a swoosh from the lower front sweeping up and back, a dark lower edge */
-  poly([[0.52,0.60],[0.44,0.63],[0.30,0.73],[0.15,0.86],[0.03,0.945],[-0.05,0.95],[0.10,0.84],[0.25,0.71],[0.40,0.60]],"rgb(255,0,0)");
-  poly([[0.52,0.585],[0.40,0.585],[0.30,0.64],[0.20,0.70],[0.10,0.72],[0.18,0.665],[0.30,0.61]],"rgb(0,255,0)");
-  /* the side panel: a wedge and a thin line behind it */
-  poly([[-0.04,0.735],[-0.30,0.775],[-0.55,0.80],[-0.80,0.835],[-0.80,0.90],[-0.55,0.86],[-0.30,0.84],[-0.04,0.80]],"rgb(255,0,0)");
-  poly([[-0.04,0.715],[-0.34,0.745],[-0.80,0.805],[-0.80,0.82],[-0.34,0.76],[-0.04,0.73]],"rgb(0,0,255)");
-  /* the airbox cover and the rear: a block of the accent colour */
-  poly([[-0.62,0.935],[-0.80,0.945],[-0.80,0.965],[-0.62,0.955]],"rgb(255,0,0)");
-  /* from above: a centre stripe along the rear fender, a band on the front fender */
-  const zrow=z=>(1-0.5*clamp(0.5+z*2.6,0,1))*512*K, XT=xx=>X(xx)*K;
-  x.fillStyle="rgb(255,0,0)"; x.fillRect(XT(-1.14),zrow(0.026),XT(-0.40)-XT(-1.14),zrow(-0.026)-zrow(0.026)); x.fillRect(XT(0.55),zrow(0.022),XT(1.12)-XT(0.55),zrow(-0.022)-zrow(0.022));
-  x.fillStyle="rgb(0,255,0)"; x.fillRect(XT(0.55),zrow(0.058),XT(1.12)-XT(0.55),zrow(0.040)-zrow(0.058)); x.fillRect(XT(0.55),zrow(-0.040),XT(1.12)-XT(0.55),zrow(-0.058)-zrow(-0.040));
-  x.fillStyle="rgb(0,0,255)"; x.fillRect(XT(-1.14),zrow(0.058),XT(-0.40)-XT(-1.14),zrow(0.044)-zrow(0.058)); x.fillRect(XT(-1.14),zrow(-0.044),XT(-0.40)-XT(-1.14),zrow(-0.058)-zrow(-0.044));
-  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.NoColorSpace; t.wrapS=t.wrapT=THREE.ClampToEdgeWrapping; t.anisotropy=4; t.generateMipmaps=true; t.minFilter=THREE.LinearMipmapLinearFilter; return t;
+/* THE LIVERY v2 (milestone 2): four masks in one RGBA texture (a DataTexture packed from four canvases, so no channel is lost to premultiplied alpha):
+   r = the accent colour, g = black, b = white, a = where the team colour carries the team's fine pattern (hexes, halftone dots, pinstripes or shards, drawn by the shader).
+   The upper half is the side view (x LIV.x0..x1 across, y LIV.y1 at the top .. LIV.y0), the lower half the view from above for the fenders (x LIV.tx0..tx1, z -tz..tz).
+   The shader works the texture coordinates out from the model position, so every level of detail wears the same graphics. Original art: angular blades, pinstripes,
+   chevrons, no logos, no lettering but the rider's own number and name. */
+const LIV={x0:-0.86,x1:0.58,y0:0.56,y1:1.00,tx0:-1.17,tx1:1.19,tz:0.15};
+function liveryTexture(W){
+  const H=W/2, cs=[0,1,2,3].map(()=>{ const c=canvas(W,H), x=c.getContext("2d"); x.fillStyle="#000"; x.fillRect(0,0,W,H); return {c:c,x:x}; });
+  const SX=v=>(v-LIV.x0)/(LIV.x1-LIV.x0)*W, SY=v=>(LIV.y1-v)/(LIV.y1-LIV.y0)*H/2, TX=v=>(v-LIV.tx0)/(LIV.tx1-LIV.tx0)*W, TZ=v=>H/2+(v+LIV.tz)/(2*LIV.tz)*H/2;
+  const path=(x,pts,top)=>{ x.beginPath(); pts.forEach((p,i)=>{ const u=top?TX(p[0]):SX(p[0]), v=top?TZ(p[1]):SY(p[1]); if(i) x.lineTo(u,v); else x.moveTo(u,v); }); };
+  const poly=(k,pts,top,al)=>{ const x=cs[k].x; x.fillStyle="rgba(255,255,255,"+(al==null?1:al)+")"; path(x,pts,top); x.closePath(); x.fill(); };
+  const line=(k,pts,wm,top)=>{ const x=cs[k].x; x.strokeStyle="#fff"; x.lineWidth=Math.max(1,wm*W/(top?(LIV.tx1-LIV.tx0):(LIV.x1-LIV.x0))); x.lineJoin="miter"; x.lineCap="butt"; path(x,pts,top); x.stroke(); };
+  const mir=pts=>pts.map(p=>[p[0],-p[1]]);
+  const AC=0, BK=1, WT=2, PT=3;
+  /* the pattern zones first (soft edges) */
+  cs[PT].x.filter="blur("+Math.max(1,Math.round(W/340))+"px)";
+  poly(PT,[[0.56,0.70],[0.56,0.80],[0.36,0.86],[0.20,0.93],[0.10,1.0],[-0.08,1.0],[-0.08,0.95],[0.06,0.885],[0.22,0.80],[0.42,0.73]],false,0.95);
+  poly(PT,[[-0.56,0.74],[-0.87,0.77],[-0.87,0.99],[-0.56,0.99]],false,0.85);
+  [1,-1].forEach(sg=>{ poly(PT,[[-0.42,0.046*sg],[-1.02,0.030*sg],[-1.02,0.12*sg],[-0.42,0.13*sg]],true,0.85); poly(PT,[[0.55,0.040*sg],[1.06,0.024*sg],[1.06,0.13*sg],[0.55,0.14*sg]],true,0.6); });
+  cs[PT].x.filter="none";
+  /* the shroud: a black lower band, a wide accent blade from the vent up to the tank, a thinner slash above it, white pinstripes */
+  poly(BK,[[0.57,0.550],[0.30,0.628],[0.10,0.722],[-0.08,0.782],[-0.08,0.815],[0.10,0.763],[0.28,0.680],[0.57,0.606]]);
+  poly(AC,[[0.57,0.700],[0.40,0.742],[0.26,0.812],[0.13,0.892],[0.02,0.960],[-0.08,1.0],[-0.08,0.925],[0.02,0.874],[0.15,0.800],[0.30,0.722],[0.57,0.650]]);
+  poly(AC,[[0.45,0.796],[0.30,0.862],[0.18,0.936],[0.10,0.988],[0.03,1.0],[0.10,0.944],[0.22,0.871],[0.36,0.806],[0.46,0.782]]);
+  poly(BK,[[0.20,0.792],[0.08,0.866],[0.03,0.866],[0.15,0.792]]);
+  line(WT,[[0.57,0.638],[0.30,0.709],[0.15,0.787],[0.02,0.862],[-0.08,0.913]],0.0075);
+  line(WT,[[0.57,0.619],[0.28,0.692],[0.10,0.776],[-0.08,0.827]],0.0050);
+  line(WT,[[0.47,0.776],[0.36,0.797],[0.22,0.864],[0.10,0.937],[0.02,0.988]],0.0042);
+  poly(WT,[[0.545,0.772],[0.47,0.800],[0.545,0.800]]);
+  /* the side panel: a black front corner, an accent band under the seat edge with a white pinstripe, two chevrons behind the number, a black tail */
+  poly(BK,[[-0.01,0.730],[-0.27,0.755],[-0.27,0.802],[-0.01,0.777]]);
+  poly(AC,[[-0.01,0.902],[-0.87,0.950],[-0.87,0.990],[-0.01,0.938]]);
+  line(WT,[[-0.01,0.895],[-0.87,0.943]],0.0042);
+  poly(AC,[[-0.598,0.790],[-0.668,0.790],[-0.632,0.872],[-0.668,0.950],[-0.598,0.950],[-0.562,0.872]]);
+  poly(WT,[[-0.688,0.805],[-0.736,0.805],[-0.706,0.874],[-0.736,0.950],[-0.688,0.950],[-0.658,0.874]]);
+  poly(BK,[[-0.775,0.800],[-0.87,0.812],[-0.87,0.990],[-0.795,0.990]]);
+  /* the fenders from above: an accent centre stripe with white pinstripes, a black chevron at the tip */
+  poly(AC,[[-0.39,-0.030],[-1.13,-0.012],[-1.13,0.012],[-0.39,0.030]],true); poly(AC,[[0.50,-0.026],[1.17,-0.010],[1.17,0.010],[0.50,0.026]],true);
+  [1,-1].forEach(sg=>{ poly(WT,[[-0.39,0.036*sg],[-1.10,0.017*sg],[-1.10,0.022*sg],[-0.39,0.043*sg]],true); poly(WT,[[0.50,0.032*sg],[1.15,0.015*sg],[1.15,0.020*sg],[0.50,0.039*sg]],true); });
+  poly(BK,[[-1.035,-0.13],[-1.18,-0.13],[-1.18,0.13],[-1.035,0.13],[-0.985,0.0]],true);
+  poly(BK,[[1.095,-0.13],[1.20,-0.13],[1.20,0.13],[1.095,0.13],[1.045,0.0]],true);
+  void mir;
+  /* pack the four masks into one RGBA texture */
+  const d=new Uint8Array(W*H*4), im=cs.map(o=>o.x.getImageData(0,0,W,H).data);
+  for(let i=0,j=0;i<W*H;i++,j+=4){ d[j]=im[0][j]; d[j+1]=im[1][j]; d[j+2]=im[2][j]; d[j+3]=im[3][j]; }
+  const t=new THREE.DataTexture(d,W,H,THREE.RGBAFormat,THREE.UnsignedByteType);
+  t.colorSpace=THREE.NoColorSpace; t.wrapS=t.wrapT=THREE.ClampToEdgeWrapping; t.anisotropy=4; t.generateMipmaps=true; t.minFilter=THREE.LinearMipmapLinearFilter; t.magFilter=THREE.LinearFilter; t.needsUpdate=true;
+  return t;
 }
-function tex(lo){ const k=lo?"lo":"hi"; if(!TEX[k]) TEX[k]={env:lo?null:envTexture(256),liv:liveryTexture(lo?256:512)}; return TEX[k]; }
+/* THE MUD FIELD (milestone 2): one tileable RGBA texture made once per page from a private seeded generator: r = splats flung back off the wheels (ellipses 1.7x longer
+   along the bike, each with a "level": a splat shows once st.mud passes its level, and it grows with st.mud: the value is a dome, the shader thresholds it), small satellite
+   drops round the big ones; g = smooth noise (6 and 24 cells a tile), b = finer noise (32 and 96 cells). Mipmapped, so a distant bike shows the mean, never a shimmer. */
+function mudTexture(S){
+  let sd=20261018; const rnd=()=>{ sd=(sd*16807)%2147483647; return sd/2147483647; };
+  const R=new Float32Array(S*S);
+  const dome=(cx,cy,r,v,ax)=>{ const x0=Math.floor(cx-r*ax), x1=Math.ceil(cx+r*ax), y0=Math.floor(cy-r), y1=Math.ceil(cy+r);
+    for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++){ const dx=(x+0.5-cx)/ax, dy=y+0.5-cy, q=(dx*dx+dy*dy)/(r*r); if(q>=1) continue; const val=v*(1-q), k=((y%S+S)%S)*S+((x%S+S)%S); if(val>R[k]) R[k]=val; } };
+  const n=Math.round(S*S/420);
+  for(let k=0;k<n;k++){ const cx=rnd()*S, cy=rnd()*S, r=(0.006+0.022*Math.pow(rnd(),1.6))*S, v=1-0.97*rnd(); dome(cx,cy,r,v,1.7);
+    const nd=Math.floor(rnd()*4); for(let j=0;j<nd;j++){ const a=rnd()*6.2832, dd=r*(1.25+rnd()*1.3); dome(cx+Math.cos(a)*dd*1.7,cy+Math.sin(a)*dd,r*(0.12+0.18*rnd()),v*(0.75+0.25*rnd()),1.3); } }
+  const lattice=P=>{ const g=new Float32Array(P*P); for(let i=0;i<P*P;i++) g[i]=rnd(); return g; };
+  const vn=(g,P,x,y)=>{ const fx=x*P/S, fy=y*P/S, ix=Math.floor(fx), iy=Math.floor(fy); let tx=fx-ix, ty=fy-iy; tx=tx*tx*(3-2*tx); ty=ty*ty*(3-2*ty);
+    const a=g[(iy%P)*P+(ix%P)], b=g[(iy%P)*P+((ix+1)%P)], c=g[((iy+1)%P)*P+(ix%P)], d=g[((iy+1)%P)*P+((ix+1)%P)]; return (a+(b-a)*tx)+((c+(d-c)*tx)-(a+(b-a)*tx))*ty; };
+  const g6=lattice(6), g24=lattice(24), g32=lattice(32), g96=lattice(96), D=new Uint8Array(S*S*4);
+  for(let y=0;y<S;y++) for(let x=0;x<S;x++){ const k=y*S+x, j=k*4;
+    D[j]=Math.round(Math.min(1,R[k])*255); D[j+1]=Math.round((vn(g6,6,x,y)*0.65+vn(g24,24,x,y)*0.35)*255); D[j+2]=Math.round((vn(g32,32,x,y)*0.6+vn(g96,96,x,y)*0.4)*255); D[j+3]=255; }
+  const t=new THREE.DataTexture(D,S,S,THREE.RGBAFormat,THREE.UnsignedByteType); t.colorSpace=THREE.NoColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=4;
+  t.generateMipmaps=true; t.minFilter=THREE.LinearMipmapLinearFilter; t.magFilter=THREE.LinearFilter; t.needsUpdate=true; return t;
+}
+function tex(lo){ const k=lo?"lo":"hi"; if(!TEX[k]) TEX[k]={env:lo?null:envTexture(256),liv:liveryTexture(lo?512:1024),mud:mudTexture(lo?256:512),mudS:lo?256:512}; return TEX[k]; }
+
+/* THE NUMBER ON THE SIDE PANELS (milestone 2): a per-race atlas, one cell per rider, three masks: r = the number background, g = the numerals and the rider's name, b = a thin
+   border. The shader projects the cell onto both side panels (mirrored on the left so it reads the right way), paints the class colours (PLATE_CLASS: 450 = white
+   with black numerals; the points leader's red plate with white numerals from the rider's st.red, no redraw), and the mud and the clear coat go over it like the rest of the plastic. */
+const DEC={x0:-0.560,w:0.320,y0:0.785,h:0.170};   /* the side-panel number: the front of the panel, above the muffler on the right */
+export const PLATE_CLASS={"450":{bg:"#f4f1e8",fg:"#121216"},"250":{bg:"#121216",fg:"#f4f1e8"},red:{bg:"#c8101c",fg:"#ffffff"}};
+let plateClass="450";
+export function setPlateClass(c){ plateClass=PLATE_CLASS[c]?String(c):"450"; }
+function surname(nm){ const w=String(nm||"").trim().split(/\s+/); return (w[w.length-1]||"").toUpperCase(); }
+function rrect(x,px,py,w,h,r){ x.beginPath(); x.moveTo(px+r,py); x.lineTo(px+w-r,py); x.quadraticCurveTo(px+w,py,px+w,py+r); x.lineTo(px+w,py+h-r); x.quadraticCurveTo(px+w,py+h,px+w-r,py+h); x.lineTo(px+r,py+h); x.quadraticCurveTo(px,py+h,px,py+h-r); x.lineTo(px,py+r); x.quadraticCurveTo(px,py,px+r,py); x.closePath(); }
+function fitFont(x,t,max,base,min,style){ let fs=base; x.font=style+" "+fs+"px Manrope, system-ui, sans-serif"; while(x.measureText(t).width>max&&fs>min){ fs-=1; x.font=style+" "+fs+"px Manrope, system-ui, sans-serif"; } return fs; }
+function decalAtlas(n,lo){
+  const CW=lo?64:128, CH=lo?36:72, cols=8, rows=Math.max(1,Math.ceil(n/cols)), c=canvas(cols*CW,rows*CH), x=c.getContext("2d");
+  x.fillStyle="#000"; x.fillRect(0,0,c.width,c.height);
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.NoColorSpace; t.anisotropy=4; t.generateMipmaps=true; t.minFilter=THREE.LinearMipmapLinearFilter;
+  return {c:c,x:x,t:t,CW:CW,CH:CH,cols:cols,rows:rows};
+}
+function drawDecal(D,i,R){
+  const x=D.x, k=D.CW/128, px=(i%D.cols)*D.CW, py=Math.floor(i/D.cols)*D.CH, num=String(R.num==null?"":R.num), nm=surname(R.name);
+  x.save(); x.beginPath(); x.rect(px,py,D.CW,D.CH); x.clip(); x.globalCompositeOperation="source-over"; x.fillStyle="#000"; x.fillRect(px,py,D.CW,D.CH);
+  x.globalCompositeOperation="lighter";
+  const bx=px+4*k, by=py+4*k, bw=D.CW-8*k, bh=53*k;
+  rrect(x,bx,by,bw,bh,7*k); x.fillStyle="rgb(255,0,0)"; x.fill();
+  x.lineWidth=2.2*k; x.strokeStyle="rgb(0,0,255)"; rrect(x,bx+1.1*k,by+1.1*k,bw-2.2*k,bh-2.2*k,6*k); x.stroke();
+  x.fillStyle="rgb(0,255,0)"; x.textAlign="center"; x.textBaseline="middle";
+  if(nm){ fitFont(x,nm,bw-16*k,Math.round(10.5*k),Math.max(5,Math.round(6*k)),"800"); x.fillText(nm,px+D.CW/2,by+8.5*k); }
+  fitFont(x,num,bw-14*k,Math.round(40*k),Math.round(18*k),"italic 900"); x.fillText(num,px+D.CW/2,by+(nm?33:28)*k);
+  x.restore(); D.t.needsUpdate=true;
+}
+/* a team's graphic style (0..3: which mask takes which colour, and the fine pattern) from its colour, so a team's bikes match */
+function styleOf(col){ let h=43; const s=String(col||"").toLowerCase(); for(let i=0;i<s.length;i++) h=Math.imul(h^s.charCodeAt(i),16777619)>>>0; return (h>>>7)%4; }   /* (the seven modern makes spread over the four styles, at most two a style)
 
 /* ---------------- the material ---------------- */
-const GLSL_NOISE="float bkHash(vec3 p){ p=fract(p*0.3183099+0.1); p*=17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }\n"+
-  "float bkNoise(vec3 x){ vec3 i=floor(x), f=fract(x); f=f*f*(3.0-2.0*f); return mix(mix(mix(bkHash(i),bkHash(i+vec3(1,0,0)),f.x),mix(bkHash(i+vec3(0,1,0)),bkHash(i+vec3(1,1,0)),f.x),f.y),mix(mix(bkHash(i+vec3(0,0,1)),bkHash(i+vec3(1,0,1)),f.x),mix(bkHash(i+vec3(0,1,1)),bkHash(i+vec3(1,1,1)),f.x),f.y),f.z); }\n";
-function bikeMaterial(lo){
-  const T=tex(lo), std=!lo;
-  const m=std?new THREE.MeshStandardMaterial({vertexColors:true,roughness:1,metalness:0,envMap:T.env,envMapIntensity:1.7}):new THREE.MeshLambertMaterial({vertexColors:true});
+/* integer hashes (no float hash: frames stay byte-identical), value noise, the mud splats (one splat at most per cell, its size, place and presence from one hash),
+   the team's fine pattern; every high-frequency term fades to its mean where a pixel covers more than a cell (no shimmer on the FIRE TV tier, which has no anti-aliasing) */
+const GLSL_LIB=[
+"uint bkU(uvec3 v){ v=v*1664525u+1013904223u; v.x+=v.y*v.z; v.y+=v.z*v.x; v.z+=v.x*v.y; v^=v>>16u; v.x+=v.y*v.z; v.y+=v.z*v.x; v.z+=v.x*v.y; return v.x^v.y^v.z; }",
+"float bkPat(vec2 p,float sty,float fw){ float v=0.0, avg=0.3, cs=0.024;",
+"  if(sty<0.5){ vec2 q=p/0.024, r=vec2(1.0,1.7320508), h=r*0.5; vec2 a=mod(q,r)-h, b=mod(q-h,r)-h; vec2 g=dot(a,a)<dot(b,b)?a:b; vec2 qa=abs(g); float d=max(dot(qa,vec2(0.5,0.8660254)),qa.x); v=smoothstep(0.40,0.46,d); avg=0.32; }",
+"  else if(sty<1.5){ cs=0.016; vec2 g=fract(p/cs)-0.5; float rr=0.10+0.27*smoothstep(-0.85,0.55,p.x); v=1.0-smoothstep(rr-0.07,rr+0.07,length(g)); avg=3.14159*rr*rr; }",
+"  else if(sty<2.5){ cs=0.011; float s=fract((p.x*0.8+p.y)/cs); v=smoothstep(0.24,0.31,s)*(1.0-smoothstep(0.62,0.69,s)); avg=0.38; }",
+"  else { cs=0.05; vec2 q=p/cs; q.x+=q.y*0.5; vec2 i=floor(q), f=fract(q); uint h=bkU(uvec3(uvec2(ivec2(i)+32768),uint(step(f.x,f.y))+11u)); v=step(0.60,float(h&255u)*(1.0/255.0)); avg=0.4; }",
+"  return mix(v,avg,smoothstep(0.35,0.9,fw/cs)); }",
+""].join("\n");
+const NBK=64;   /* bikes a race at most in the per-bike uniform arrays (a field is 22 to 40) */
+function bikeMaterial(lo,D,U){
+  const T=tex(lo), std=!lo, phys=std&&getKitTier()==="high";
+  const o={vertexColors:true,roughness:1,metalness:0,envMap:T.env,envMapIntensity:1.7};
+  /* the plastics' clear coat comes from the lead's material kit on the high tier (MeshPhysicalMaterial, gloss preset); the shader keeps the coat on the plastics only, off the mud.
+     (milestone 2 merge, the lead's request: the coated bike reflects scene.environment, the stadium the look captured (r3d-look.js), at the lead's 1.25, not the bike's own painted map;
+     the look's run-time "bikeCoat" stand-in is retired: the bike carries its coat itself) */
+  const m=lo?new THREE.MeshLambertMaterial({vertexColors:true}):(phys?KIT.gloss(null,Object.assign(o,{envMap:null,envMapIntensity:1.25,clearcoat:1,clearcoatRoughness:0.07})):new THREE.MeshStandardMaterial(o));
   m.userData.keepMaps=true;
+  const cl=PLATE_CLASS[plateClass]||PLATE_CLASS["450"], bg=new THREE.Color(cl.bg), fg=new THREE.Color(cl.fg);
   m.onBeforeCompile=sh=>{
-    sh.uniforms.uLiv={value:T.liv}; sh.uniforms.uMudCol={value:new THREE.Vector3(0.115,0.066,0.032)}; sh.uniforms.uMxKeep=MX_KEEP;   /* (milestone 2 merge: the chase subject's bike is never dissolved near the lens: r3d-util.js MX_KEEP) */
+    sh.uniforms.uLiv={value:T.liv}; sh.uniforms.uDec={value:D.t}; sh.uniforms.uDecG={value:new THREE.Vector4(D.cols,D.rows,0,0)}; sh.uniforms.uBkC={value:U.c}; sh.uniforms.uBkA={value:U.a};
+    sh.uniforms.uMxKeep=MX_KEEP;   /* (milestone 2 merge: the chase subject's own bike is never dissolved near the lens: r3d-util.js MX_KEEP, CAMS.keep) */
+    sh.uniforms.uMudCol={value:new THREE.Vector3(0.115,0.066,0.032)}; sh.uniforms.uMudT={value:T.mud}; sh.uniforms.uPlBg={value:new THREE.Vector3(bg.r,bg.g,bg.b)}; sh.uniforms.uPlFg={value:new THREE.Vector3(fg.r,fg.g,fg.b)};
     sh.vertexShader=sh.vertexShader
       .replace("#include <project_vertex>","#include <project_vertex>"+KEEP_VS_SET)
-      .replace("#include <common>","#include <common>\n"+KEEP_VS_DECL+"attribute vec4 aMat;\nattribute vec3 aAccent;\nattribute vec3 aMud;\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec3 vMud;\nvarying vec3 vLoc;\nvarying vec2 vLiv;")
-      .replace("#include <color_vertex>","#include <color_vertex>\n{ float wl=step(7.5,aMat.z); float tn=aMat.z-8.0*wl; tn-=4.0*step(3.5,tn); float sty=aMud.y; vec3 fc=sty>0.5&&sty<1.5?vec3(0.86):(sty>1.5&&sty<2.5?aAccent:instanceColor.rgb); vec3 tint=tn<0.5?vec3(1.0):(tn<1.5?instanceColor.rgb:(tn<2.5?aAccent:fc)); vColor.rgb=color.rgb*tint; }\nvMat=aMat; vAcc=aAccent; vMud=aMud; vLoc=position; vLiv=uv;");
-    let fs=sh.fragmentShader.replace("#include <common>","#include <common>\n"+KEEP_FS_DECL+"uniform sampler2D uLiv;\nuniform vec3 uMudCol;\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec3 vMud;\nvarying vec3 vLoc;\nvarying vec2 vLiv;\n"+(std?GLSL_NOISE:""));
-    fs=fs.replace("#include <color_fragment>",
-      "#include <color_fragment>\n"+
-      "{ float bkZ=vViewPosition.z; if(bkZ<1.7&&!mxKept()){ float bkA=smoothstep(0.8,1.7,bkZ); if(bkA<fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))))) discard; } }\n"+   /* the near-lens fade: no bike ever fills the lens (director note D12) */
-      "float bkWl=step(7.5,vMat.z); float bkTn=vMat.z-8.0*bkWl; float bkSp=step(3.5,bkTn); bkTn-=4.0*bkSp;\n"+
-      "if(bkSp>0.5&&vMud.z>0.02){ if(fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453)<vMud.z) discard; }\n"+
-      "{ float lk=step(0.5,bkTn)*(1.0-step(1.5,bkTn))+step(2.5,bkTn)*0.85; vec3 lv=texture2D(uLiv,vLiv).rgb; float sty=vMud.y; vec3 b0=diffuseColor.rgb; vec3 cA=vAcc, cB=vec3(0.010), cC=vec3(0.80);\n"+
-      "  if(sty>0.5&&sty<1.5){ cA=vec3(0.010); cB=vAcc; } else if(sty>1.5&&sty<2.5){ cA=vec3(0.80); cC=vAcc; } else if(sty>2.5){ cA=vAcc; cB=vec3(0.80); cC=vec3(0.010); }\n"+
-      "  b0=mix(b0,cA,lv.r*lk); b0=mix(b0,cB,lv.g*lk); b0=mix(b0,cC,lv.b*lk); diffuseColor.rgb=b0; }\n"+
-      "float mudK=0.0;\n"+
-      (std?"if(vMud.x>0.002){ float hm=mix(1.0-smoothstep(0.28,0.80,vLoc.y),0.46,bkWl); float nz=bkNoise(vLoc*(bkWl>0.5?34.0:30.0))*0.60+bkNoise(vLoc*95.0+7.3)*0.40; float thr=1.0-vMud.x*(0.38+1.30*hm); mudK=smoothstep(thr-0.17,thr+0.17,nz); diffuseColor.rgb=mix(diffuseColor.rgb,uMudCol*(0.62+0.75*nz),mudK); }\n"
-          :"if(vMud.x>0.002){ float hm=mix(1.0-smoothstep(0.28,0.80,vLoc.y),0.62,bkWl); mudK=clamp(vMud.x*(0.30+1.2*hm)*1.1-0.12,0.0,1.0)*0.85; diffuseColor.rgb=mix(diffuseColor.rgb,uMudCol*1.2,mudK); }\n"));
+      .replace("#include <common>","#include <common>\n"+KEEP_VS_DECL+"attribute vec4 aMat;\nuniform vec4 uBkC["+NBK+"];\nuniform vec4 uBkA["+NBK+"];\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec4 vMud;\nvarying vec3 vLoc;\nvarying vec3 vNl;")
+      .replace("#include <color_vertex>","#include <color_vertex>\n{ int bi=int(instanceColor.r); vec4 kc=uBkC[bi], ka=uBkA[bi]; float sty=mod(kc.w,8.0), red=step(7.5,kc.w);\n  float wl=step(31.5,aMat.z); float rr=aMat.z-32.0*wl; float kd=floor((rr+0.5)/4.0); float tn=rr-4.0*kd; vec3 fc=sty>0.5&&sty<1.5?vec3(0.62):(sty>1.5&&sty<2.5?ka.rgb:kc.rgb); vec3 tint=tn<0.5?vec3(1.0):(tn<1.5?kc.rgb:(tn<2.5?ka.rgb:fc)); vColor.rgb=color.rgb*tint;\n  vAcc=ka.rgb; vMud=vec4(instanceColor.b,sty,instanceColor.g,float(bi)+0.5*red); }\nvMat=aMat; vLoc=position; vNl=normal;");
+    let fs=sh.fragmentShader.replace("#include <common>","#include <common>\n"+KEEP_FS_DECL+"uniform sampler2D uLiv;\nuniform sampler2D uDec;\nuniform vec4 uDecG;\nuniform vec3 uMudCol;\nuniform sampler2D uMudT;\nuniform vec3 uPlBg;\nuniform vec3 uPlFg;\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec4 vMud;\nvarying vec3 vLoc;\nvarying vec3 vNl;\n"+GLSL_LIB);
+    const f=n=>n.toFixed(4);
+    fs=fs.replace("#include <color_fragment>",[
+      "#include <color_fragment>",
+      "float bkW=step(31.5,vMat.z); float bkR=vMat.z-32.0*bkW; float bkK=floor((bkR+0.5)/4.0); float bkTn=bkR-4.0*bkK;",
+      "float bkIgn=fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))));",
+      "{ float bkZ=vViewPosition.z; if(bkZ<1.15&&!mxKept()){ if(smoothstep(0.5,1.15,bkZ)<bkIgn) discard; } }",   /* the near-lens fade: no bike ever fills the lens (director note D12) */
+      "if(bkK>0.5&&bkK<1.5&&vMud.z>0.02){ if(bkIgn<vMud.z*0.82) discard; }",   /* the spokes of a fast wheel thin out: the translucent blur disc shows the spinning wheel */
+      "vec3 bkN=normalize(vNl); vec3 bkAN=abs(bkN); vec2 bkPP=bkAN.z>max(bkAN.x,bkAN.y)?vLoc.xy:(bkAN.y>bkAN.x?vLoc.xz:vLoc.zy); float bkFW=length(fwidth(bkPP));",
+      /* the livery: the side view for the team plastics, the view from above for the fenders */
+      "float bkTop=step(2.5,bkTn)*(1.0-step(3.5,bkTn));",
+      "vec4 bkL=texture2D(uLiv,mix(vec2((vLoc.x-("+f(LIV.x0)+"))/"+f(LIV.x1-LIV.x0)+",clamp(("+f(LIV.y1)+"-vLoc.y)/"+f(LIV.y1-LIV.y0)+",0.004,0.996)*0.5),vec2((vLoc.x-("+f(LIV.tx0)+"))/"+f(LIV.tx1-LIV.tx0)+",0.5+clamp((vLoc.z+"+f(LIV.tz)+")/"+f(2*LIV.tz)+",0.004,0.996)*0.5),bkTop));",
+      "float bkLk=(bkTn>0.5&&bkTn<1.5&&bkK<0.5)?1.0:(bkTop>0.5?0.85:0.0);",
+      "vec3 b0=diffuseColor.rgb; float sty=vMud.y;",
+      "if(bkLk>0.0){ vec3 S=b0*0.42+0.004; b0=mix(b0,S,bkPat(bkPP,sty,bkFW)*bkL.a*0.85*bkLk);",
+      "  vec3 cA=vAcc, cB=vec3(0.010), cC=vec3(0.60);",
+      "  if(sty>0.5&&sty<1.5){ cA=vec3(0.010); cB=vAcc; } else if(sty>1.5&&sty<2.5){ cA=vec3(0.60); cC=vAcc; } else if(sty>2.5){ cA=vAcc; cB=vec3(0.60); cC=vec3(0.010); }",
+      "  b0=mix(b0,cA,bkL.r*bkLk); b0=mix(b0,cB,bkL.g*bkLk); b0=mix(b0,cC,bkL.b*bkLk); }",
+      /* the side-panel number: the rider's cell projected on both panels */
+      "vec2 bkDu=vec2((vLoc.x-("+f(DEC.x0)+"))/"+f(DEC.w)+",(vLoc.y-"+f(DEC.y0)+")/"+f(DEC.h)+");",
+      "float bkDin=step(0.0,bkDu.x)*step(bkDu.x,1.0)*step(0.0,bkDu.y)*step(bkDu.y,1.0)*step(0.5,bkAN.z)*step(0.5,bkTn)*(1.0-step(1.5,bkTn))*(1.0-step(0.5,bkK));",
+      "bkDu=clamp(bkDu,0.0,1.0); if(vLoc.z<0.0) bkDu.x=1.0-bkDu.x;",
+      "float bkCi=floor(vMud.w+0.01), bkRed=step(0.25,vMud.w-bkCi), bkCol=mod(bkCi,uDecG.x), bkRow=floor(bkCi/uDecG.x+0.001);",
+      /* (the front plate's face, kind 6: the same cell in the plate's own frame (across = -z, up leaning back 0.30 rad), stretched tall over the plate as real front numbers are; one fetch for both) */
+      "vec3 bkFr=vLoc-vec3(0.508,1.035,0.0); vec2 bkFu=vec2((-bkFr.z/0.25+0.5-0.05)/0.90,(dot(bkFr.xy,vec2(-0.29552,0.95534))/0.215+0.5+0.08)/0.96);",
+      "float bkFin=step(5.5,bkK)*(1.0-step(6.5,bkK))*step(0.0,bkFu.x)*step(bkFu.x,1.0)*step(0.0,bkFu.y)*step(bkFu.y,1.0); bkDu=mix(bkDu,clamp(bkFu,0.0,1.0),step(5.5,bkK));",
+      "vec3 bkD=texture2D(uDec,vec2((bkCol+bkDu.x)/uDecG.x,1.0-(bkRow+1.0-bkDu.y)/uDecG.y)).rgb*max(bkDin,bkFin);",
+      "b0=mix(b0,mix(uPlBg,vec3(0.578,0.005,0.012),bkRed),bkD.r); b0=mix(b0,mix(uPlFg,vec3(0.86),bkRed),bkD.g); b0=mix(b0,mix(vAcc,vec3(0.86),bkRed),bkD.b);",
+      /* the radiator vent behind the louvre fins */
+      "float bkVx=vLoc.x+(vLoc.y-0.742)*0.447; float bkVent=step(0.5,bkTn)*(1.0-step(1.5,bkTn))*(1.0-step(0.5,bkK))*step(0.6,bkAN.z)*step(0.286,bkVx)*step(bkVx,0.462)*step(abs(vLoc.y-0.742),0.060);",
+      "b0=mix(b0,vec3(0.012),bkVent); diffuseColor.rgb=b0;",
+      "float bkPl=step(0.5,bkTn)*(1.0-bkVent); float bkMk=0.0;",
+      /* the seat cover: gripper ribs across it */
+      "float bkRib=0.0; if(bkK>4.5&&bkK<5.5){ bkRib=(1.0-smoothstep(0.30,0.55,abs(fract(vLoc.x/0.026)-0.5)*2.0))*(1.0-smoothstep(0.4,0.9,bkFW/0.026)); diffuseColor.rgb*=0.80+0.55*bkRib; }",
+      /* the tyres: moulded marks and a raised ring on the sidewalls (the physically based tiers) */
+      std?"if(bkK>1.5&&bkK<2.5){ float r=length(vLoc.xy), sd=abs(vLoc.z), th=atan(vLoc.y,vLoc.x); float inG=step(fract(th*0.3183099+0.08),0.30);":"",
+      std?"  uint h=bkU(uvec3(uint(floor((th+3.1415927)*r*88.0))+7u,uint(step(0.284,r)),5u)); float lt=step(0.32,float(h&255u)*(1.0/255.0))*inG*step(0.272,r)*(1.0-step(0.297,r));":"",
+      std?"  bkMk=max(lt,1.0-smoothstep(0.0009,0.0022,abs(r-0.2995)))*step(0.02,sd)*(1.0-smoothstep(0.6,1.2,bkFW*150.0)); diffuseColor.rgb=mix(diffuseColor.rgb,vec3(0.075,0.070,0.064),bkMk*0.9); }":"",
+      /* MUD: splats flung back off the wheels (stretched along the bike) at two sizes, and a caked coat that creeps up from the lower parts, the rear, the undersides,
+         the skid plate and the tyres as st.mud grows; wet (dark, glossy) and dry (light, rough) patches */
+      "float mudK=0.0, bkWet=0.5;",
+      "if(vMud.x>0.002){ float mud=vMud.x; float low=1.0-smoothstep(0.28,0.86,vLoc.y), rear=smoothstep(0.15,-0.95,vLoc.x)*0.35, under=smoothstep(0.15,-0.7,bkN.y)*0.55;",
+      "  float w=mix(clamp(low*0.85+rear+under,0.0,1.4),0.80,bkW); if(bkK>3.5&&bkK<4.5) w=max(w,1.15); if(bkK>1.5&&bkK<2.5) w=max(w,0.95);",
+      "  vec2 sp=bkPP*vec2(bkAN.y>0.8?1.0:0.55,1.0); float d1=clamp(mud*(0.20+0.95*w),0.0,0.9), d2=clamp(mud*(0.28+1.15*w),0.0,0.94);",
+      "  vec4 bkM1=texture2D(uMudT,sp*2.5); float nz=bkM1.g;",   /* a 0.40 m tile: the big splats, the coat's noise */
+      std?"  vec4 bkM2=texture2D(uMudT,sp*7.7+0.37); nz=nz*0.62+bkM2.b*0.38;":"",   /* a 0.13 m tile: the drops, the finer noise */
+      "  float thr=1.0-mud*w*1.02; float coat=smoothstep(thr-0.13,thr+0.13,nz);",
+      "  float c1=mix(smoothstep(0.965-d1,1.035-d1,bkM1.r),d1*0.30,smoothstep(1.0,3.0,bkFW*2.5*"+(lo?"256.0":"512.0")+"));",
+      std?"  float c2=mix(smoothstep(0.965-d2,1.035-d2,bkM2.r),d2*0.30,smoothstep(1.0,3.0,bkFW*7.7*512.0));\n  mudK=max(coat,max(c1,c2*0.9)); bkWet=bkM1.b;"
+         :"  mudK=max(coat,c1);",
+      "  diffuseColor.rgb=mix(diffuseColor.rgb,uMudCol*(0.58+0.85*nz)*mix(1.25,0.75,bkWet),mudK); }",
+      ""].join("\n"));
     if(std){
-      fs=fs.replace("#include <roughnessmap_fragment>","float roughnessFactor=mix(vMat.y,0.94,mudK);").replace("#include <metalnessmap_fragment>","float metalnessFactor=vMat.x*(1.0-mudK);");
+      fs=fs.replace("#include <roughnessmap_fragment>","float roughnessFactor=mix(mix(mix(mix(vMat.y,"+(phys?"0.42":"0.30")+",bkPl),0.62,bkMk*0.5),0.55,bkRib*0.6),mix(0.96,0.50,bkWet),mudK);")
+           .replace("#include <metalnessmap_fragment>","float metalnessFactor=vMat.x*(1.0-mudK);");
+      if(phys) fs=fs.replace("#include <lights_physical_fragment>","#include <lights_physical_fragment>\nmaterial.clearcoat*=bkPl*(1.0-mudK);");
       fs=fs.replace("#include <lights_fragment_maps>",THREE.ShaderChunk.lights_fragment_maps.replace("iblIrradiance += getIBLIrradiance( geometryNormal );",""));
-      fs=fs.replace("#include <aomap_fragment>","reflectedLight.indirectDiffuse*=vMat.w;\n#ifdef USE_ENVMAP\nreflectedLight.indirectSpecular*=mix(vMat.w,1.0,0.35);\n#endif\n");
-    } else fs=fs.replace("#include <aomap_fragment>","reflectedLight.indirectDiffuse*=vMat.w;\n");
+      fs=fs.replace("#include <aomap_fragment>","reflectedLight.indirectDiffuse*=vMat.w;\n#ifdef USE_ENVMAP\nreflectedLight.indirectSpecular*=mix(vMat.w,1.0,0.35);\n#endif\n"+
+        /* milestone 2 polish (director note D3): a soft knee on the bike's specular. The captured stadium's HDR bulbs spread over a satin lobe and the rim light's broad
+           highlight made the muffler, the pipes and the white plastics glow like neon tubes under the bloom (polish p0 H1, H4); below 0.8 (1.2 direct) nothing changes,
+           above it a highlight rolls off towards about 2.5 (it still blooms a little: the cover's hot speculars) */
+        "{ vec3 e=max(reflectedLight.indirectSpecular-0.8,0.0); reflectedLight.indirectSpecular=min(reflectedLight.indirectSpecular,vec3(0.8))+e/(1.0+e*0.6);\n"+
+        "  e=max(reflectedLight.directSpecular-1.2,0.0); reflectedLight.directSpecular=min(reflectedLight.directSpecular,vec3(1.2))+e/(1.0+e*0.5); }\n"+
+        "#ifdef USE_CLEARCOAT\n{ vec3 e=max(clearcoatSpecularIndirect-0.8,0.0); clearcoatSpecularIndirect=min(clearcoatSpecularIndirect,vec3(0.8))+e/(1.0+e*0.6);\n"+
+        "  e=max(clearcoatSpecularDirect-1.2,0.0); clearcoatSpecularDirect=min(clearcoatSpecularDirect,vec3(1.2))+e/(1.0+e*0.5); }\n#endif\n");
+    } else { fs=fs.replace("#include <aomap_fragment>","reflectedLight.indirectDiffuse*=vMat.w;\n");
+      /* the Fire TV tier (Lambert, no environment map): a cheap Blinn highlight of the key light on the plastics and the metal, so the bikes still read glossy on the TV */
+      fs=fs.replace("#include <emissivemap_fragment>","#include <emissivemap_fragment>\n#if NUM_DIR_LIGHTS > 0\n{ vec3 bkV=normalize(vViewPosition); vec3 bkH=normalize(directionalLights[0].direction+bkV); float bkS=pow(max(dot(normal,bkH),0.0),mix(36.0,90.0,bkPl))*(1.0-mudK)*max(bkPl,vMat.x*0.8); totalEmissiveRadiance+=directionalLights[0].color*bkS*0.22; }\n#endif\n"); }
+    fs=fs.replace("#include <opaque_fragment>","#include <opaque_fragment>\n if(uMxMask>0.5&&mxKept()) gl_FragColor.a=0.0;"); sh.uniforms.uMxMask=MX_MASK;   /* (polish: the chase subject's own bike is never smeared by the camera motion blur: the crumb mask, as the rider) */
     sh.fragmentShader=fs;
   };
-  m.customProgramCacheKey=()=>"mxbike-"+(std?"std":"lam");
+  m.customProgramCacheKey=()=>"mxbike2-"+(phys?"phys":std?"std":"lam");
+  m.addEventListener("dispose",()=>{ D.t.dispose(); });
+  return m;
+}
+/* the wheel's blur disc (milestone 2, director note: "airborne and fast-spinning wheels are hollow hoops"): a translucent, lit disc in each plane of spokes, densest at the hub
+   (where the spokes crowd), as the spokes thin out; one instanced draw per level of detail for both wheels of every bike, no shadow, faded near the lens like the bike */
+function blurMaterial(){
+  const m=new THREE.MeshLambertMaterial({color:0x9a9da6,transparent:true,depthWrite:false,side:THREE.DoubleSide}); m.forceSinglePass=true;   /* (a transparent double-sided material is two draws in three.js; the disc has no inside to sort) */
+  m.onBeforeCompile=sh=>{
+    sh.uniforms.uMxKeep=MX_KEEP;   /* (milestone 2 merge: the chase subject's own wheels keep their blur disc near the lens, like his bike) */
+    sh.vertexShader=sh.vertexShader.replace("#include <common>","#include <common>\n"+KEEP_VS_DECL+"varying float vBl;\nvarying vec2 vRd;").replace("#include <begin_vertex>","#include <begin_vertex>\nvBl=instanceColor.r; vRd=position.xy;").replace("#include <project_vertex>","#include <project_vertex>"+KEEP_VS_SET);
+    sh.fragmentShader=sh.fragmentShader.replace("#include <common>","#include <common>\n"+KEEP_FS_DECL+"varying float vBl;\nvarying vec2 vRd;").replace("#include <color_fragment>",
+      "#include <color_fragment>\ndiffuseColor.rgb=diffuse;\n{ float r=length(vRd), an=atan(vRd.y,vRd.x); float a=vBl*(0.13+0.40*pow(0.19/max(r,0.19),1.35))*(0.86+0.14*cos(an*9.0));\n"+
+      " a*=smoothstep(0.19,0.25,r)*(1.0-smoothstep(0.93,1.0,r))*(mxKept()?1.0:smoothstep(0.5,1.15,vViewPosition.z)); diffuseColor.a*=a; }");
+  };
+  m.customProgramCacheKey=()=>"mxbike2-blur";
   return m;
 }
 
 /* ---------------- createBike: the level-of-detail sets, one InstancedMesh per part ---------------- */
 /* Each level of detail is a SET of instanced meshes. Bikes are packed into the slots 0..count-1 of the set their distance picks (the count is what is drawn, so
-   a mid-distance bike costs nothing in the close set and the draw counters stay honest): slot, colour, accent and mud are rewritten every frame. */
+   a mid-distance bike costs nothing in the close set and the draw counters stay honest): slot, colour, accent and mud are rewritten every frame.
+   Per slot only the instance matrix and the instance COLOUR change (both are what the replay records): instanceColor = (the bike's index + 0.5, the wheels' blur 0..0.9, mud 0..1);
+   the team colour, the accent, the team's graphic style and the red plate are per bike in two uniform arrays (U.c, U.a) the shader reads by that index (a replay shows every bike in its own colours and numbers). */
 const PARTS=["body","steer","fork","swing","shock","wheelF","wheelR"];
 const _Z=new THREE.Matrix4().makeScale(0,0,0);
-function instGeo(src,S){
-  const g=new THREE.BufferGeometry(); g.setIndex(src.index); Object.keys(src.attributes).forEach(k=>g.setAttribute(k,src.attributes[k]));
-  g.setAttribute("aAccent",S.acc); g.setAttribute("aMud",S.mud); return g;
+function instGeo(src){
+  const g=new THREE.BufferGeometry(); g.setIndex(src.index); Object.keys(src.attributes).forEach(k=>g.setAttribute(k,src.attributes[k])); return g;
 }
+/* the blur discs' radius: the spokes' rim ends (front 21 inch, rear 19 inch rims) */
+const BLUR_R=[0.2667-0.016,0.2413-0.016];
 /* mk(geo, count, material): the instancing glue of r3d-riders.js; q = the quality options (optional) */
 export function createBike(n,lo,mk,q){
-  q=q||{}; const mat=bikeMaterial(lo), M={}, sets=[], d2=lo?null:buildBike(2), d1=buildBike(1);
+  q=q||{}; const D=decalAtlas(n,lo), U={c:new Float32Array(NBK*4).fill(1),a:new Float32Array(NBK*4).fill(1)}, mat=bikeMaterial(lo,D,U), bmat=blurMaterial(), M={}, sets=[], d2=lo?null:buildBike(2), d1=buildBike(1);
   const mkSet=(lod,src,far)=>{
-    const S={lod:lod,cnt:0,meshes:[],parts:{},far:null,col:new THREE.InstancedBufferAttribute(new Float32Array(n*3).fill(1),3),acc:new THREE.InstancedBufferAttribute(new Float32Array(n*3).fill(1),3),mud:new THREE.InstancedBufferAttribute(new Float32Array(n*3),3)};
-    S.col.setUsage(THREE.DynamicDrawUsage); S.acc.setUsage(THREE.DynamicDrawUsage); S.mud.setUsage(THREE.DynamicDrawUsage);
-    const one=(name,geo)=>{ const m=mk(instGeo(geo,S),n,mat); m.instanceColor=S.col; m.castShadow=true; m.receiveShadow=!far&&!lo; m.count=0; m.visible=false; M["bk"+lod+"_"+name]=m; S.meshes.push(m); return m; };
-    if(far) S.far=one("far",src); else PARTS.forEach(k=>{ S.parts[k]=one(k,src[k]); });
+    const S={lod:lod,cnt:0,meshes:[],parts:{},far:null,blur:null,col:new THREE.InstancedBufferAttribute(new Float32Array(n*3),3)};
+    S.col.setUsage(THREE.DynamicDrawUsage);
+    const one=(name,geo)=>{ const m=mk(instGeo(geo),n,mat); m.instanceColor=S.col; m.castShadow=true; m.receiveShadow=!far&&!lo; m.count=0; m.visible=false; M["bk"+lod+"_"+name]=m; S.meshes.push(m); return m; };
+    if(far) S.far=one("far",src); else { PARTS.forEach(k=>{ S.parts[k]=one(k,src[k]); });
+      /* the wheels' blur discs: two instances a bike (front, rear), translucent, drawn after the opaque scene */
+      S.blur=mk(buildBlurDisc(lod===0?32:20),n*2,bmat); S.blur.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(n*2*3),3); S.blur.instanceColor.setUsage(THREE.DynamicDrawUsage); S.blur.castShadow=false; S.blur.receiveShadow=false; S.blur.count=0; S.blur.visible=false; S.blur.renderOrder=3; M["bk"+lod+"_blur"]=S.blur; }
     sets.push(S); return S;
   };
   if(!lo) mkSet(0,d2); mkSet(1,d1); mkSet(2,buildFarBike(),true);
+  /* SHADOW PROXIES (milestone 2 polish, director notes D6 / N7: the shadow pass drew every bike a second time at its full level of detail, about 230k of HIGH's 630k triangles at the
+     cover chase). The key's shadow map is 1024 px over 32-104 m: a bike's shadow needs no knobs, spokes or chain links. The close bikes (LOD 0) cast through LOD 1's parts (7.0k
+     triangles instead of 26.9k) on LOD 0's own instance matrices, the mid bikes (LOD 1) through the far bike (778) on their body matrix. A proxy lives on layer 1 only: the key
+     light's shadow camera sees it (r3d-look.js), no scene camera does; it follows its set's count (S.meshes). The far set casts as before. */
+  { const prox=(S,geo,src)=>{ const m=mk(instGeo(geo),n,mat); m.instanceMatrix=src.instanceMatrix; m.castShadow=true; m.receiveShadow=false; m.layers.set(1); m.count=0; m.visible=false; S.meshes.push(m); return m; };
+    const s0=sets.find(S=>S.lod===0), s1=sets.find(S=>S.lod===1), far=buildFarBike();
+    if(s0&&s1){ PARTS.forEach(k=>{ const src=s0.parts[k]; M["bk0_shadow_"+k]=prox(s0,d1[k],src); src.castShadow=false; }); }
+    if(s1){ M.bk1_shadow=prox(s1,far,s1.parts.body); PARTS.forEach(k=>{ s1.parts[k].castShadow=false; }); } }
   M.bk={n:n,lo:!!lo,sets:sets,cur:new Int8Array(n).fill(-1),lastI:1e9,hiMax:q.bikeHi!=null?q.bikeHi:(lo?0:4),dist:new Float32Array(n).fill(1e9),cutD:1e9,pc:new Float32Array(n*3).fill(1),ac:new Float32Array(n*3).fill(1),
-    /* the distances at which a bike leaves one set for the next (m): hysteresis of 8% */
-    th:lo?[q.bikeLod&&q.bikeLod[0]||8]:(q.bikeLod&&q.bikeLod.length>1?q.bikeLod:[9.5,36]),sp:new Float32Array(n*2)};
+    /* the distances at which a bike leaves one level for the next (m): hysteresis of 8% */
+    th:lo?[q.bikeLod&&q.bikeLod[0]||8]:(q.bikeLod&&q.bikeLod.length>1?q.bikeLod:[9.5,36]),sp:new Float32Array(n*2),
+    /* milestone 2: the side-panel number atlas, each team's graphic style */
+    dec:D,style:new Uint8Array(n),U:U};
   return M;
 }
-/* the team colours of rider i's bike: the plastics in the team colour, the graphics in the accent colour (written into the sets' instance attributes as the bikes are posed) */
+/* the team colours of rider i's bike: the plastics in the team colour, the graphics in the accent colour (written into the sets' instance attributes as the bikes are posed);
+   milestone 2: the team's graphic style and the rider's number and name on the side panels */
 const _col=new THREE.Color();
 export function colorBike(M,i,R){
   const K=M.bk; _col.set(R.color||"#888"); K.pc[i*3]=_col.r; K.pc[i*3+1]=_col.g; K.pc[i*3+2]=_col.b;
   _col.set(R.accent||"#f2f2f6"); K.ac[i*3]=_col.r; K.ac[i*3+1]=_col.g; K.ac[i*3+2]=_col.b;
+  K.style[i]=styleOf(R.color); if(K.dec) drawDecal(K.dec,i,R);
+  if(i<NBK){ const c=K.U.c, a=K.U.a; c[i*4]=K.pc[i*3]; c[i*4+1]=K.pc[i*3+1]; c[i*4+2]=K.pc[i*3+2]; c[i*4+3]=K.style[i]+(R.red?8:0); a[i*4]=K.ac[i*3]; a[i*4+1]=K.ac[i*3+1]; a[i*4+2]=K.ac[i*3+2]; a[i*4+3]=0; }
 }
-/* the number plate's face in the riders' atlas: a black plastic plate, the white (or red, for the points leader) face with the team colour across its top,
-   a black (white on red) number; x = the atlas canvas context, rr = rounded-rect path helper, fit = shrink the font to the plate, (px, py) = the cell's corner */
+/* the front number plate's face in the riders' atlas (milestone 2): the team-coloured plastic plate with a dark rim, the rider's name across its top, the number background
+   in the class colours (PLATE_CLASS: 450 white with black numerals; the points leader red with white numerals), a gold ring for the person's own rider.
+   x = the atlas canvas context, rr = rounded-rect path helper, fit = shrink the font to the plate, (px, py) = the cell's corner */
 export function drawPlate(x,rr,fit,px,py,cell,R,t){
-  x.fillStyle="#0b0b0e"; rr(px+1,py+7,cell-2,cell-14,17); x.fill();
-  x.fillStyle=R.red?"#c8101c":"#f4f1e8"; rr(px+5,py+11,cell-10,cell-22,12); x.fill();
-  x.save(); rr(px+5,py+11,cell-10,cell-22,12); x.clip(); x.fillStyle=R.color||"#444"; x.fillRect(px+5,py+11,cell-10,14);
-  const g=x.createLinearGradient(0,py+11,0,py+cell-11); g.addColorStop(0,"rgba(255,255,255,.0)"); g.addColorStop(1,"rgba(0,0,0,.10)"); x.fillStyle=g; x.fillRect(px+5,py+25,cell-10,cell-36); x.restore();
-  x.lineWidth=4; x.strokeStyle=R.me?"#f0c040":"rgba(0,0,0,.6)"; rr(px+5,py+11,cell-10,cell-22,12); x.stroke();
-  x.fillStyle=R.red?"#ffffff":"#121216"; x.textAlign="center"; x.textBaseline="middle"; fit(t,cell-24,84); x.fillText(t,px+cell/2,py+cell/2+9);
-  x.fillStyle="#2a2a2e"; [[px+14,py+17],[px+cell-14,py+17]].forEach(p=>{ x.beginPath(); x.arc(p[0],p[1],2.4,0,Math.PI*2); x.fill(); });
+  const cl=R.red?PLATE_CLASS.red:(PLATE_CLASS[R.cls]||PLATE_CLASS[plateClass]||PLATE_CLASS["450"]), k=cell/128, nm=surname(R.name);
+  x.fillStyle="#0b0b0e"; rr(px+2*k,py+4*k,cell-4*k,cell-8*k,19*k); x.fill();
+  x.fillStyle=R.color||"#444"; rr(px+5*k,py+7*k,cell-10*k,cell-14*k,16*k); x.fill();
+  const g=x.createLinearGradient(0,py+7*k,0,py+cell-7*k); g.addColorStop(0,"rgba(255,255,255,.16)"); g.addColorStop(0.45,"rgba(255,255,255,0)"); g.addColorStop(1,"rgba(0,0,0,.22)"); x.fillStyle=g; rr(px+5*k,py+7*k,cell-10*k,cell-14*k,16*k); x.fill();
+  x.fillStyle=cl.bg; rr(px+12*k,py+29*k,cell-24*k,cell-44*k,10*k); x.fill();
+  x.lineWidth=2.5*k; x.strokeStyle=R.me?"#f0c040":"rgba(0,0,0,.55)"; rr(px+12*k,py+29*k,cell-24*k,cell-44*k,10*k); x.stroke();
+  x.textAlign="center"; x.textBaseline="middle";
+  if(nm){ const c=new THREE.Color(R.color||"#444"), lum=0.2126*c.r+0.7152*c.g+0.0722*c.b; x.fillStyle=lum>0.45?"#121216":"#ffffff"; let fs=Math.round(15*k); x.font="800 "+fs+"px Manrope, system-ui, sans-serif"; while(x.measureText(nm).width>cell-30*k&&fs>8){ fs--; x.font="800 "+fs+"px Manrope, system-ui, sans-serif"; } x.fillText(nm,px+cell/2,py+18.5*k); }
+  x.fillStyle=cl.fg; fit(t,cell-34*k,Math.round(70*k)); x.fillText(t,px+cell/2,py+cell/2+14*k);
+  x.fillStyle="#2a2a2e"; [[px+15*k,py+15*k],[px+cell-15*k,py+15*k]].forEach(p=>{ x.beginPath(); x.arc(p[0],p[1],2.4*k,0,Math.PI*2); x.fill(); });
 }
 
 /* ---------------- posing ---------------- */
@@ -174,7 +358,7 @@ function lodOf(K,i,d){
 /* the close level of detail (LOD 0, 21.8k triangles a bike, drawn twice with the shadow pass) is for the nearest q.bikeHi bikes only: the cut distance is the N-th nearest of the last frame (polish step, director note D6: the tier flag the bike never read) */
 function capHi(K,l,d){ return (l===0&&!K.lo&&K.sets[0].lod===0&&(d>K.cutD||K.hiMax<=0))?1:l; }
 /* every frame starts with the first bike posed or hidden again (the riders are posed in order, each once a frame): the sets are emptied */
-function newFrame(K,i){ if(i<=K.lastI){ for(const S of K.sets){ S.cnt=0; for(const m of S.meshes){ m.count=0; m.visible=false; } }
+function newFrame(K,i){ if(i<=K.lastI){ for(const S of K.sets){ S.cnt=0; for(const m of S.meshes){ m.count=0; m.visible=false; } if(S.blur){ S.blur.count=0; S.blur.visible=false; } }
     const n=K.n, hm=K.hiMax; if(hm>0&&hm<n){ const a=Array.prototype.slice.call(K.dist); a.sort((x,y)=>x-y); K.cutD=a[hm-1]+0.001; } else K.cutD=1e9; K.dist.fill(1e9); }
   K.lastI=i; }
 /* the bike's pose: B = the bike's world matrix; st = the per-frame state (compF, compR, spinF, spinR, lodD, mud, steer, k) */
@@ -189,8 +373,8 @@ export function poseBike(M,i,B,st){
   const blur=dsp>6?0:clamp((dsp-0.16)/0.5,0,0.9);
   for(const m of S0.meshes){ m.count=S0.cnt; m.visible=true; }
   /* this bike's colours and mud in its slot */
-  S0.col.setXYZ(slot,K.pc[i*3],K.pc[i*3+1],K.pc[i*3+2]); S0.acc.setXYZ(slot,K.ac[i*3],K.ac[i*3+1],K.ac[i*3+2]); S0.mud.setXYZ(slot,Math.max(st.mud||0,0.16),i%4,blur);   /* (polish: a bike in a main event is never clean: a floor of dirt on the lower parts, as the cover's) */
-  S0.col.needsUpdate=true; S0.acc.needsUpdate=true; S0.mud.needsUpdate=true;
+  S0.col.setXYZ(slot,Math.min(i,NBK-1)+0.5,blur,Math.max(st.mud||0,0.16)); S0.col.needsUpdate=true;   /* (polish: a bike in a main event is never clean: a floor of dirt on the lower parts, as the cover's) */
+  if(i<NBK) K.U.c[i*4+3]=K.style[i]+(st.red?8:0);   /* the red plate follows st.red (V.setRed) */
   let delta=0;
   if(S0.far){ S0.far.setMatrixAt(slot,B); } else {
     const P=S0.parts; delta=steerOf(st);
@@ -200,10 +384,12 @@ export function poseBike(M,i,B,st){
     _a.copy(UA).multiplyScalar(cf); _m2.makeTranslation(_a.x,_a.y,_a.z); _F.multiplyMatrices(_S,_m2); P.fork.setMatrixAt(slot,_F);
     /* the front wheel: at the axle on the sliding fork, spinning about z */
     _q1.setFromAxisAngle(_c.set(0,0,1),-(st.spinF||0)); _a.copy(BIKE.FA).addScaledVector(UA,cf); _m1.compose(_a,_q1,_s1); _m2.multiplyMatrices(_S,_m1); P.wheelF.setMatrixAt(slot,_m2);
+    if(S0.blur){ S0.blur.count=S0.cnt*2; S0.blur.visible=true; S0.blur.instanceColor.setXYZ(slot*2,blur,0,0); _m3.makeScale(BLUR_R[0],BLUR_R[0],1); _m1.multiplyMatrices(_m2,_m3); S0.blur.setMatrixAt(slot*2,_m1); }
     /* the swingarm pivots; the rear axle rides its arc */
     const sn=clamp((BIKE.RA.y+cr-BIKE.PIVOT.y)/ARM,-0.97,0.97), ang=-Math.asin(sn), rax=BIKE.PIVOT.x-ARM*Math.sqrt(1-sn*sn), ray=BIKE.PIVOT.y+sn*ARM;
     _q1.setFromAxisAngle(_c.set(0,0,1),ang); _m1.compose(BIKE.PIVOT,_q1,_s1); _m2.multiplyMatrices(B,_m1); P.swing.setMatrixAt(slot,_m2);
     _q1.setFromAxisAngle(_c.set(0,0,1),-(st.spinR||0)); _a.set(rax,ray,0); _m1.compose(_a,_q1,_s1); _m2.multiplyMatrices(B,_m1); P.wheelR.setMatrixAt(slot,_m2);
+    if(S0.blur){ S0.blur.instanceColor.setXYZ(slot*2+1,blur,0,0); _m3.makeScale(BLUR_R[1],BLUR_R[1],1); _m1.multiplyMatrices(_m2,_m3); S0.blur.setMatrixAt(slot*2+1,_m1); S0.blur.instanceColor.needsUpdate=true; S0.blur.instanceMatrix.needsUpdate=true; }
     /* the shock: from the linkage (it rises as the wheel does) to the frame mount */
     _a.copy(BIKE.SHOCK_TOP).sub(BIKE.SHOCK_BOT).normalize(); _b.copy(BIKE.SHOCK_BOT).addScaledVector(_a,clamp(cr/BIKE.TRAVEL,-0.45,1)*BIKE.SHOCK_STROKE).applyMatrix4(B); _c.copy(BIKE.SHOCK_TOP).applyMatrix4(B);
     _fw.set(1,0,0).transformDirection(B); bone(P.shock,slot,_b,_c,1,_fw);
@@ -211,7 +397,10 @@ export function poseBike(M,i,B,st){
   /* plates (fixed slots, 3 a bike): the front one turns with the bars, the sides stay on the panels */
   if(Math.abs(delta)>1e-4){ steerMatrix(delta,_m1); _m3.multiplyMatrices(_m1,PLATE_L[0]); _m2.multiplyMatrices(B,_m3); } else _m2.multiplyMatrices(B,PLATE_L[0]);
   M.plate.setMatrixAt(i*3,_m2);
-  for(let k=1;k<3;k++){ _m2.multiplyMatrices(B,PLATE_L[k]); M.plate.setMatrixAt(i*3+k,_m2); }
+  for(let k=1;k<3;k++) M.plate.setMatrixAt(i*3+k,_Z);
+  /* (milestone 2: the numbers are part of the bike now: the side panels and the curved front plate (steer group) are painted by the bike's shader from the rider's cell, with the mud,
+     the clear coat and the near-lens fade of the bike; the riders' flat plate quads are kept posed for old callers but not drawn: one draw call less) */
+  if(M.plate.visible) M.plate.visible=false;
 }
 export function hideBike(M,i){
   const K=M.bk; newFrame(K,i); K.cur[i]=-1; K.dist[i]=1e9;
@@ -219,7 +408,8 @@ export function hideBike(M,i){
 }
 /* how many bikes each level of detail holds this frame (tests, the viewer) */
 export function lodCounts(M){ return M.bk.sets.map(S=>S.cnt); }
-export function plateGeo(){ return new THREE.PlaneGeometry(1,1); }
+/* the front plate (milestone 2): curved round the fork, its edges 2 cm back (the plate quad's local x across, z its face) */
+export function plateGeo(){ const g=new THREE.PlaneGeometry(1,1,8,1), P=g.attributes.position; for(let i=0;i<P.count;i++){ const x=P.getX(i); P.setZ(i,-0.022*4*x*x); } g.computeVertexNormals(); return g; }
 /* the old geometry names (the model is r3d-bike-model.js now): the close body and the wheels */
 export function chassisGeo(){ return buildBike(1).body; }
 export function wheelGeo(){ return buildWheel(1,true); }

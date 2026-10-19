@@ -33,11 +33,11 @@ const GL=typeof window!=="undefined"?window:globalThis;
    bank = how strongly the dust glows when it is seen against the ring of floodlight banks (forward scattering); size = crumbs and clods larger on the
    lower resolutions and smaller pools (FIRE TV draws 960x540: a 1 cm crumb there is under a pixel at 5 m) */
 const TIERS={
-  high:  {n:"high",   specks:20000, spk:1.00, clods:1400, puffs:300, haze:36, motes:170, lens:6, rock:20, rate:1.00, atlas:128, pbr:true,  depth:true,  veil:0.30, maxPx:12, bank:0.30, size:1.0},
-  medium:{n:"medium", specks:5000, spk:0.75, clods:640,  puffs:150, haze:14, motes:80,  lens:0, rock:20, rate:0.85, atlas:128, pbr:true,  depth:true,  veil:0.28, maxPx:11, bank:0.26, size:1.15},
-  low:   {n:"low",    specks:1200, spk:0.55, clods:240,  puffs:64,  haze:0,  motes:0,   lens:0, rock:8,  rate:0.7,  atlas:96,  pbr:false, depth:false, veil:0.24, maxPx:9,  bank:0.22, size:1.5},
-  ultra: {n:"ultra",  specks:26000, spk:1.20, clods:2000, puffs:380, haze:44, motes:210, lens:6, rock:20, rate:1.00, atlas:128, pbr:true,  depth:true,  veil:0.32, maxPx:13, bank:0.30, size:1.0},
-  stick: {n:"stick",  specks:1400, spk:0.55, clods:160,  puffs:40,  haze:0,  motes:0,   lens:0, rock:8,  rate:0.6,  atlas:96,  pbr:false, depth:false, veil:0.22, maxPx:9,  bank:0.22, size:1.7}
+  high:  {n:"high",   specks:20000, spk:1.30, ssz:1.30, clods:1400, puffs:300, haze:36, motes:170, lens:6, rock:20, rate:1.00, atlas:128, pbr:true,  depth:true,  veil:0.30, maxPx:12, bank:0.20, size:1.0},
+  medium:{n:"medium", specks:5000, spk:0.90, ssz:1.15, clods:640,  puffs:150, haze:14, motes:80,  lens:0, rock:20, rate:0.85, atlas:128, pbr:true,  depth:true,  veil:0.28, maxPx:11, bank:0.18, size:1.15},
+  low:   {n:"low",    specks:1200, spk:0.55, clods:240,  puffs:64,  haze:0,  motes:0,   lens:0, rock:8,  rate:0.7,  atlas:96,  pbr:false, depth:false, veil:0.24, maxPx:9,  bank:0.10, size:1.5},
+  ultra: {n:"ultra",  specks:26000, spk:1.45, ssz:1.30, clods:2000, puffs:380, haze:44, motes:210, lens:6, rock:20, rate:1.00, atlas:128, pbr:true,  depth:true,  veil:0.32, maxPx:13, bank:0.20, size:1.0},
+  stick: {n:"stick",  specks:1400, spk:0.55, clods:160,  puffs:40,  haze:0,  motes:0,   lens:0, rock:8,  rate:0.6,  atlas:96,  pbr:false, depth:false, veil:0.22, maxPx:9,  bank:0.10, size:1.7}
 };
 const ALIAS={firetv:"stick",stick:"stick",low:"low",balanced:"medium",medium:"medium",high:"high",ultra:"ultra"};
 function tierOf(o){
@@ -216,7 +216,7 @@ LIGHT_FN,
 "  vec3 vd=normalize(vVP);",
 "  vec2 sv=q.x*vDir+q.y*vec2(-vDir.y,vDir.x); vec3 n=normalize(vec3(sv,sqrt(max(0.0,1.0-dot(sv,sv)))+0.15));",   /* m2: a lump of dirt: the normal of a ball under the fragment (a lit side and a dark side) */
 "  vec3 L=sceneLight(n,vd,0.7);",
-"  vec3 col=vCol*L*uGain*1.1+vCol*vBank*vec3(1.0,0.72,0.42)*(0.2+0.6*r)+vGlint*vec3(1.0,0.82,0.58)*1.6;",
+"  vec3 col=vCol*L*uGain*1.1+vCol*vBank*vec3(1.0,0.72,0.42)*(0.2+0.6*r)+vGlint*vec3(1.0,0.82,0.58)*0.85;",
 "  gl_FragColor=vec4(col,a);",
 "  #include <tonemapping_fragment>",
 "  #include <colorspace_fragment>",
@@ -357,7 +357,7 @@ export function createFx(opts){
   const speckC=()=>{ const r=rnd(); return r<0.35?COL.wet:r<0.8?COL.mid:COL.dry; };
   /* radius (m): about 0.4-2.6 cm, median 1 cm (the cover's crumbs near the lead rider are 2-5 px at 720p, 2-3 m from the lens); the first cut's 1.3-10 mm drew
      sub-pixel dots that faded to nothing at the chase distance */
-  const speckR=chip=>SZ*(chip?logn(0.012,0.55,0.005,0.034):logn(0.009,0.6,0.003,0.03));
+  const SSZ=T.ssz||1, speckR=chip=>SZ*SSZ*(chip?logn(0.012,0.55,0.005,0.034):logn(0.009,0.6,0.003,0.03));
 
   /* ================= SPRITES: dust puffs and haze, one instanced draw call ================= */
   const NPF=T.puffs, NHZ=T.haze, NS=NPF+NHZ, H0=NPF;
@@ -473,14 +473,14 @@ export function createFx(opts){
   /* ---------------- landing: dust and a ring of clods and crumbs, bigger for a harder landing (st.impact, m/s) ---------------- */
   function landing(st,cth,sth,rx,rz){
     const im=st.impact, big=clamp((im-1)/7,0,1), dc=COL.dust;
-    const nC=Math.round((7+im*3.5)*RATE), nS=Math.round((60+im*30)*RATE*SPK), nP=Math.max(2,Math.round((3+im*0.7)*Math.min(1,0.4+RATE)));
+    const nC=Math.round((7+im*3.5)*RATE), nS=Math.round((60+im*30)*RATE*SPK), nP=Math.max(2,Math.round((4+im*0.9)*Math.min(1,0.4+RATE)));
     for(let w=0;w<2;w++){                      /* the rear wheel lands under the bike, the front a wheelbase ahead */
       const off=w?0.72:-0.72, px=st.x+cth*off, pz=st.z+sth*off, gy=(w?st.tF:st.tR)+0.03, wt=w?0.45:0.55, s0=st.onStart?-1:st.s+off;
       for(let k=0,n=Math.round(nC*wt);k<n;k++){ const a=rnd()*6.283, sp=(0.9+2.6*rnd()+0.28*im)*(0.5+0.5*rnd()), up=1.4+0.4*im*rnd()+2.4*rnd();
         clod(px,gy+0.02,pz,Math.cos(a)*sp+cth*st.v*0.35,up,Math.sin(a)*sp+sth*st.v*0.35,clodR()*(1+0.4*big),1.0+0.9*rnd(),clodC(),gy,s0,st.lat,st.th); }
       for(let k=0,n=Math.round(nS*wt);k<n;k++){ const a=rnd()*6.283, sp=(1.4+4.2*rnd()+0.4*im)*(0.5+0.5*rnd()), chip=rnd()<0.3; speck(px,gy+0.04,pz,Math.cos(a)*sp+cth*st.v*0.4,1.2+3.2*rnd()+0.3*im,Math.sin(a)*sp+sth*st.v*0.4,speckR(chip),0.5+0.6*rnd(),speckC(),gy-0.04,chip?1:0,rnd()*0.5); }
       for(let k=0,n=Math.max(1,Math.round(nP*wt));k<n;k++){ const a=(k/n+rnd()*0.4)*6.283, sp=0.9+1.9*rnd()+0.25*im;
-        puff(px+Math.cos(a)*0.2,gy+0.14,pz+Math.sin(a)*0.2,Math.cos(a)*sp+cth*st.v*0.45,0.2+0.4*rnd(),Math.sin(a)*sp+sth*st.v*0.45,0.28+0.14*rnd()+0.03*im,0.7+0.35*rnd(),1.1+0.7*rnd()+0.12*im,0.18+0.24*big+0.1*rnd(),dc,0.15,1.7,gy); }
+        puff(px+Math.cos(a)*0.2,gy+0.14,pz+Math.sin(a)*0.2,Math.cos(a)*sp+cth*st.v*0.45,0.2+0.4*rnd(),Math.sin(a)*sp+sth*st.v*0.45,(0.28+0.14*rnd()+0.03*im)*1.7,(0.7+0.35*rnd())*1.3,1.3+0.8*rnd()+0.14*im,0.22+0.26*big+0.1*rnd(),dc,0.15,1.7,gy); }   /* (polish, director note N4: 1.7x / 1.3x: the landing dust reads in mid and wide shots) */
     }
     if(burst.length>5) burst.shift(); burst.push([st.x,st.y,st.z,0.35+0.5*big]);
   }
@@ -552,10 +552,10 @@ export function createFx(opts){
   /* ---------------- a crash begins at f ({x, z, th}, the centre line) where the rider r was, the ground gy: a burst of dirt and a cloud of dust ---------------- */
   FX.crashStart=function(f,gy,r){
     const p=r&&r.pos?r.pos:null, x=p?p.x:f.x, z=p?p.z:f.z, th=r&&r.th!=null?r.th:f.th||0, v=r&&r.v?Math.min(20,r.v):10, cth=Math.cos(th), sth=Math.sin(th), g=gy+0.05;
-    const nC=Math.round(36*RATE), nS=Math.round(260*RATE*SPK), nP=Math.max(3,Math.round(9*Math.min(1,0.35+RATE)));
+    const nC=Math.round(36*RATE), nS=Math.round(260*RATE*SPK), nP=Math.max(4,Math.round(12*Math.min(1,0.35+RATE)));
     for(let k=0;k<nC;k++){ const a=rnd()*6.283, sp=1.2+4.2*rnd(), fw=v*(0.25+0.45*rnd()); clod(x+(rnd()-0.5)*0.9,g+0.1+0.4*rnd(),z+(rnd()-0.5)*0.9,Math.cos(a)*sp+cth*fw,2+4.5*rnd(),Math.sin(a)*sp+sth*fw,clodR()*(rnd()<0.08?1.6:1),1.2+1.0*rnd(),clodC(),g,-1,0,th); }
     for(let k=0;k<nS;k++){ const a=rnd()*6.283, sp=1.5+5.5*rnd(), fw=v*(0.2+0.5*rnd()), chip=rnd()<0.3; speck(x+(rnd()-0.5)*0.8,g+0.1+0.5*rnd(),z+(rnd()-0.5)*0.8,Math.cos(a)*sp+cth*fw,1.5+5*rnd(),Math.sin(a)*sp+sth*fw,speckR(chip),0.6+0.7*rnd(),speckC(),g-0.05,chip?1:0,rnd()*0.4); }
-    for(let k=0;k<nP;k++){ const a=(k/nP+rnd()*0.3)*6.283, sp=0.8+2.4*rnd(), fw=v*(0.12+0.3*rnd()); puff(x+Math.cos(a)*0.3,g+0.3+0.35*rnd(),z+Math.sin(a)*0.3,Math.cos(a)*sp+cth*fw,0.45+0.9*rnd(),Math.sin(a)*sp+sth*fw,0.5+0.3*rnd(),0.9+0.5*rnd(),1.8+1.1*rnd(),0.32+0.18*rnd(),COL.dust,0.22,1.2,g); }
+    for(let k=0;k<nP;k++){ const a=(k/nP+rnd()*0.3)*6.283, sp=0.8+2.4*rnd(), fw=v*(0.12+0.3*rnd()); puff(x+Math.cos(a)*0.3,g+0.3+0.35*rnd(),z+Math.sin(a)*0.3,Math.cos(a)*sp+cth*fw,0.45+0.9*rnd(),Math.sin(a)*sp+sth*fw,(0.5+0.3*rnd())*1.6,(0.9+0.5*rnd())*1.3,2.1+1.2*rnd(),0.34+0.18*rnd(),COL.dust,0.22,1.2,g); }   /* (polish, N4: the crash cloud 1.6x / 1.3x) */
     burst.push([x,g,z,0.9]); if(burst.length>6) burst.shift();
   };
   /* the crash script, every frame: dust where the rider hits the dirt and at each bounce (c.fx counts them), a plough of dirt behind the sliding bike

@@ -98,7 +98,7 @@ export function createCams(VIEW){
   function sees(a,b,margin){
     const d=Math.hypot(b.x-a.x,b.z-a.z), n=Math.max(2,Math.ceil(d/1.2)), m=margin!=null?margin:0.25;
     const hf=VIEW.world&&VIEW.world.ctx.hf;
-    if(a.y<8&&legInSight(a,b,0.75)) return false;   /* a finish-arch leg across the sight line (milestone 2) */
+    if(a.y<8&&(legInSight(a,b,0.75)||legInFrame(a,b))) return false;   /* a finish-arch leg across the sight line (milestone 2), or standing inside the frame near the lens (the merge) */
     for(let k=1;k<n;k++){ const t=k/n; if(t*d>d-2.2) break; const x=a.x+(b.x-a.x)*t, z=a.z+(b.z-a.z)*t, y=a.y+(b.y-a.y)*t; if(dirtCell(x,z)>y-m) return false; if(hf&&hf(x,z)>y-m-0.3) return false; }   /* the dirt, and outdoors the hills */
     return true;
   }
@@ -110,10 +110,14 @@ export function createCams(VIEW){
   function archLegs(){ const w=VIEW.world, fin=w&&w.fin; if(!fin||!VIEW.C) return null; if(fin.__legs) return fin.__legs; const f=MX.Course.frame(VIEW.C,0,{}), hw=Math.abs(fin.lat)-1.6, sd=fin.side||-1;
     fin.__legs=[-sd*(hw+2.3),sd*(hw+3.5)].map(l=>({x:f.x-Math.sin(f.th)*l,z:f.z+Math.cos(f.th)*l})); return fin.__legs; }
   function blocked(x,z,pad){ const fa=VIEW.world&&VIEW.world.fin&&VIEW.world.fin.flagAt; if(fa&&Math.hypot(x-fa.x,z-fa.z)<3.6+(pad||0)) return true;
-    const lg=archLegs(); if(lg) for(const p of lg) if(Math.hypot(x-p.x,z-p.z)<1.6+(pad||0)) return true; return false; }
+    const lg=archLegs(); if(lg) for(const p of lg) if(Math.hypot(x-p.x,z-p.z)<4.2+(pad||0)) return true; return false; }   /* (the merge: 5 m from a leg with the pickers' 0.8 pad, was 2.4 m: a jump camera 3.4 m from the near leg had it 28 degrees off its axis, a dark band in the frame) */
   /* does the sight line from a to b pass within r metres of an arch leg (a steel post across the lens)? */
   function legInSight(a,b,r){ const lg=archLegs(); if(!lg) return false; const dx=b.x-a.x, dz=b.z-a.z, L2=dx*dx+dz*dz||1;
     for(const p of lg){ const t=clamp(((p.x-a.x)*dx+(p.z-a.z)*dz)/L2,0,1); if(t>0.02&&Math.hypot(a.x+dx*t-p.x,a.z+dz*t-p.z)<r) return true; } return false; }
+  /* (milestone 2 merge) is an arch leg inside the frame near the lens: within 8 m of the camera and within 45 degrees of the line to the subject (a 0.36 m post at 2-6 m fills a band of the
+     frame without crossing its centre: the merge's Reduce-effects run caught the jump camera that way) */
+  function legInFrame(a,b){ const lg=archLegs(); if(!lg) return false; const dx=b.x-a.x, dz=b.z-a.z, L=Math.hypot(dx,dz)||1;
+    for(const p of lg){ const vx=p.x-a.x, vz=p.z-a.z, d=Math.hypot(vx,vz); if(d<8&&d>0.05&&(vx*dx+vz*dz)/(d*L)>0.7071) return true; } return false; }
   /* ---------------- where things are on the course ---------------- */
   const pa={}, pb={};
   /* a point of the rider's path: race distance D (the gate = 0; before it the start's first heading, extended back), lateral lat (+ right) -> {x, z, th, hw, k, s, onStart, g (the dirt's height there)} */
@@ -139,7 +143,7 @@ export function createCams(VIEW){
   function nextCorner(s){ let best=null, bd=1e9; CORN.forEach(c=>{ const d=MX.Course.wrap(VIEW.C,c.sa-6-s); if(d<bd){ bd=d; best=c; } }); return best?{c:best,d:bd+6}:null; }
 
   /* ---------------- the camera director: the whole lap at real speed, cut between sections as the leader rides them ---------------- */
-  const newK=()=>({yaw:new Sd(),pitch:new Sd(),y:new Sd(),roll:new Sd(),air:new Sd(),tx:new Sd(),ty:new Sd(),tz:new Sd(),fx:new Sd(),zoom:new Sd(),init:false,
+  const newK=()=>({yaw:new Sd(),pitch:new Sd(),y:new Sd(),roll:new Sd(),air:new Sd(),tx:new Sd(),ty:new Sd(),tz:new Sd(),fx:new Sd(),zoom:new Sd(),lift:new Sd(),init:false,
     wasAir:false,vyMin:0,py:0,shkA:0,shkT:9,bx:0,by:0,bz:0,drift:0,a0:0});
   function setShot(s){ shot=s; shot.t=0; shot.k=newK(); camS.snap=true; if(s.why==="yellow"&&VIEW.yellow) VIEW.yellow.shown=true; shot.cam=typeof s.cam==="function"?s.cam():(s.cam||null); shotLog.push(s.type+(s.why?":"+s.why:"")); if(shotLog.length>12) shotLog.shift(); if(s.type==="onboard") onbCool=30; }
   function nextFeat(s){
@@ -625,8 +629,15 @@ export function createCams(VIEW){
     T.set(K.tx.step(bT.x,0.9,dt),K.ty.step(bT.y,0.9,dt),K.tz.step(bT.z,0.9,dt));
     const dist=Math.max(8,E.distanceTo(T)), wantW=clamp(ext*1.6+12,est?60:20,est?110:70), hf=2*Math.atan(wantW/2/dist);   /* (the pack over about 60% of the frame's width, as in the CEO's broadcast reference: at ext*2+16 it filled a third) */
     let vf=clamp(2*Math.atan(Math.tan(hf/2)/Math.max(0.56,asp))*R2D,12,est?50:42);
-    if(!K.init){ K.zoom.snap(vf); K.init=true; } vf=K.zoom.step(vf,1.0,dt);
-    T.y+=0.12*Math.tan(vf*PI/360)*dist;   /* the pack a little below the middle: the stands and the lights above it */
+    /* THE LIGHTS IN THE FRAME (milestone 2 polish, director note N6, the CEO's broadcast reference): the establishing frame and the first 5 s of the Broadcast button widen
+       (at most 60 degrees) and tilt so the lowest light bank within 26 degrees of the aim sits in the top of the frame, the pack at about a fifth of the height; then the lens closes in */
+    let lift=0; const LB=VIEW.world&&VIEW.world.ctx&&VIEW.world.ctx.lightBanks;
+    if(LB&&LB.length&&(est||shot.t<5)){
+      const dx=T.x-E.x, dz=T.z-E.z, dh=Math.max(1,Math.hypot(dx,dz)), yaw=Math.atan2(dz,dx), ep=Math.atan2(T.y-E.y,dh); let eb=1e9;
+      for(const b of LB){ const bx=b[0]-E.x, bz=b[2]-E.z, bh=Math.hypot(bx,bz); if(bh<dh+10) continue; const dy=wrapA(Math.atan2(bz,bx)-yaw); if(Math.abs(dy)>0.45) continue; eb=Math.min(eb,Math.atan2(b[1]-E.y,bh)); }
+      K.bk=eb<1e8?[+(eb*R2D).toFixed(1),+(ep*R2D).toFixed(1)]:null; if(eb<1e8){ const need=(eb+0.075-ep)/0.76*R2D; if(need<=60){ vf=Math.max(vf,need); lift=1; } } }
+    if(!K.init){ K.zoom.snap(vf); K.lift.snap(lift); K.init=true; } vf=K.zoom.step(vf,1.0,dt); const lf=K.lift.step(lift,1.2,dt);
+    T.y+=Math.tan((0.06+0.23*lf)*vf*PI/180)*dist;   /* the pack a little below the middle: the stands and the lights above it (lower still while a light bank is framed: the pack at about a fifth of the height) */
     cFocus.copy(T);
     RG.fov=vf; RG.roll=0; RG.near=0.5; RG.clr=2.5; RG.follow=false;
   }

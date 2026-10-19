@@ -417,6 +417,7 @@ export function stadium(C,look,q,root,ctx){
     banks.push({c:c0.clone(),w:bw});
   }
   /* the roof ring: banks of 4 x 2 floodlights (3 x 2 on FIRE TV) hung under the roof lip between the towers, aimed at the floor */
+  const roofC=[];
   const nRoof=dome?0:(q.roofBanks!=null?q.roofBanks:(lo?8:det>=1?18:12)), rcols=lo?3:4, rrows=2, rsp=1.45, rimL=LV(PR.roof[0]).len;
   for(let k=0;k<nRoof;k++){
     const f=(k+0.25)/nRoof; let near=false; for(const tf of towerF){ let d=Math.abs(f-tf); d=Math.min(d,1-d)*rimL; if(d<16) near=true; } if(near) continue;
@@ -427,8 +428,9 @@ export function stadium(C,look,q,root,ctx){
     const frm=xf(paint(new THREE.BoxGeometry(bw+0.3,0.25,1.2),steelC),0,bh/2+0.1,-0.3); frm.applyMatrix4(Mb); parts.push(frm);
     for(let j=0;j<rrows;j++) for(let i=0;i<rcols;i++){ const lm=new THREE.Matrix4().makeTranslation((i-(rcols-1)/2)*rsp,(j-(rrows-1)/2)*rsp,0.27); addBulb(Mb.clone().multiply(lm),lo?2.8:2.3,true,lo?0.85:0.72); }
     const c0=new THREE.Vector3(0,0,0.8).applyMatrix4(Mb);
-    glows.push({x:c0.x,y:c0.y,z:c0.z,s:bw*2.3,r:1.0,g:0.86,b:0.62,k:0,a:0.24});
+    glows.push({x:c0.x,y:c0.y,z:c0.z,s:bw*2.3,r:1.0,g:0.86,b:0.62,k:0,a:0.24}); roofC.push([c0.x,c0.y,c0.z]);
   }
+  ctx.lightBanks=banks.map(b=>[b.c.x,b.c.y,b.c.z]).concat(roofC);   /* (milestone 2 polish, director note N6: where the light banks are, for the broadcast camera's establishing frame) */
   const discs=bulbs.map(b=>{ const g=new THREE.CircleGeometry(b.rim?0.52:0.8,lo?8:12); g.applyMatrix4(b.M); return paint(g,[4.2,4.0,3.5]); });
   root.add(new THREE.Mesh(merge([MA.geo()].concat(parts,discs)),new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.DoubleSide,fog:false})));
   const sheet=glowSheet(), gm=glowSprites(sheet,glows,U); root.add(gm); ctx.glowMesh=gm;

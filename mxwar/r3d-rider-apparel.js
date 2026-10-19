@@ -23,6 +23,10 @@ export const AP_VERT_SET=`
 const AP_FS_DECL=`
 #ifdef MX_APPAREL
 varying vec3 vApP; varying vec4 vApI; varying vec3 vApT; varying vec4 vApA; uniform float uTime;
+/* milestone 2 polish (director note D3): REAL MATERIALS per part of the outfit on the near riders of the physically based tiers, set while painting and read by the
+   roughness / metalness and the physical lights below: knit jersey, heavy nylon pants, leather knee panels, synthetic-leather gloves, moulded boots on rubber soles,
+   the glossy coated shell, a mirrored iridium goggle lens; mud makes any of them rough, takes the fabric sheen and the clear coat off */
+float apRo=-1.0; float apMe=0.0; float apSh=1.0; float apCc=1.0; float apMk=0.0;
 float apH(vec3 p){ uvec3 q=uvec3(ivec3(p)+ivec3(32768)); uint h=(q.x*1597334677u)^(q.y*3812015801u)^(q.z*2798796415u); h^=h>>15; h*=2246822519u; h^=h>>13; h*=3266489917u; h^=h>>16; return float(h&16777215u)*5.9604645e-8; }   /* (an INTEGER hash: bit-exact whatever the compiler does with float multiply-adds) */
 float apN(vec3 x){ vec3 i=floor(x), f=fract(x); f=f*f*(3.0-2.0*f);
   return mix(mix(mix(apH(i),apH(i+vec3(1,0,0)),f.x),mix(apH(i+vec3(0,1,0)),apH(i+vec3(1,1,0)),f.x),f.y),
@@ -159,6 +163,17 @@ const AP_FS_COLOR=`
    float sk=apN(P*vec3(70.0,8.0,70.0)+vApI.w*5.3)*0.75+0.25*nz;
    float sw2=wgt*clamp(mud*1.25,0.0,1.0)*smoothstep(-0.01,0.03,P.x);
    c=mix(c,vec3(0.105,0.064,0.033),smoothstep(0.66,0.80,sk)*sw2*0.85);
+   apMk=max(mk*0.88,smoothstep(0.66,0.80,sk)*sw2*0.85);
+   #ifdef MX_APPAREL_HELMET
+    if(part>8.5&&part<9.5){ apRo=0.07; apMe=0.9; apCc=0.0; c=mix(mix(vec3(0.40,0.22,0.06),vec3(0.07,0.18,0.42),float(sty&1)),c,apMk); }   /* the goggle lens: a mirror (orange or blue iridium) that catches the floodlight banks */
+    else if(part>7.5&&part<8.5){ apRo=0.86; apCc=0.0; }      /* the strap: woven elastic */
+    else if(part>10.5){ apRo=0.52; apCc=0.2; }               /* the goggles' frame: moulded rubber */
+   #else
+    if(part<1.5) apRo=0.88;                                  /* jersey and sleeves: knit polyester (the sheen catches the floodlights at the folds) */
+    else if(part<2.5){ apRo=0.62; apSh=0.3; }                /* gloves: a synthetic-leather palm, a mesh back */
+    else if(part<3.5){ float kp=apBand(P.y,-0.545,-0.330,fw)*smoothstep(-0.005,0.03,P.x); apRo=mix(0.80,0.46,kp); apSh=1.0-0.85*kp; }   /* pants: heavy nylon, leather knee panels */
+    else if(part<4.5){ float vk=max(max(vc.r,vc.g),vc.b); apRo=mix(0.92,0.40,smoothstep(0.05,0.20,vk)); apSh=0.0; }                        /* boots: moulded plastic and leather on a rubber sole */
+   #endif
   #else
    float md=clamp(mud+0.08,0.0,1.0);
    #ifndef MX_APPAREL_HELMET
@@ -168,6 +183,23 @@ const AP_FS_COLOR=`
   #endif
   diffuseColor.rgb=c;
 }
+#endif
+`;
+
+/* the materials (level 2, physically based tiers): roughness / metalness per part and mud, then the sheen and the clear coat (lights_physical_fragment) */
+const AP_FS_ROUGH=`
+#if defined(MX_APPAREL) && defined(MX_APPAREL_HI)
+ roughnessFactor=mix(apRo<0.0?roughnessFactor:apRo,0.93,apMk); metalnessFactor=mix(max(metalnessFactor,apMe),0.0,apMk);
+#endif
+`;
+const AP_FS_PHYS=`
+#if defined(MX_APPAREL) && defined(MX_APPAREL_HI)
+ #ifdef USE_SHEEN
+  material.sheenColor*=apSh*(1.0-apMk);
+ #endif
+ #ifdef USE_CLEARCOAT
+  material.clearcoat*=apCc*(1.0-apMk);
+ #endif
 #endif
 `;
 
@@ -201,5 +233,7 @@ export function applyApparel(sh,level,kind){
   fs=fs.replace("#include <common>","#include <common>\n"+AP_FS_DECL);
   fs=fs.replace("#include <color_fragment>","#include <color_fragment>\n"+AP_FS_COLOR);
   fs=fs.replace("#include <normal_fragment_maps>","#include <normal_fragment_maps>\n"+AP_FS_BUMP);
+  fs=fs.replace("#include <metalnessmap_fragment>","#include <metalnessmap_fragment>\n"+AP_FS_ROUGH);
+  fs=fs.replace("#include <lights_physical_fragment>","#include <lights_physical_fragment>\n"+AP_FS_PHYS);
   sh.fragmentShader=fs;
 }
