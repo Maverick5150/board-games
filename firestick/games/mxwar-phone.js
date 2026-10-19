@@ -205,6 +205,7 @@
     ].join("\n");
     document.head.appendChild(st);
   }
+  var GSTG = { board: "30-second board", side: "board sideways", drop: "the gate drops" };
   function ord(n) { var t = n % 100; return n + ((t >= 11 && t <= 13) ? "th" : (["th", "st", "nd", "rd"][n % 10] || "th")); }
   function plural(n, w) { return n + " " + w + (n === 1 ? "" : "s"); }
   function mkStyle(mk) { return mk ? "--mk:" + mk[0] + ";--mk-ink:" + mk[1] : ""; }
@@ -236,7 +237,7 @@
       } else if (st.ph === "over" || (se && se.over)) { title = "Season over"; sub = pn && pn.title ? pn.title : se ? "You finished " + ord(se.place) + " with " + plural(se.pts, "point") : ""; }
       else if (R && (st.ph === "race" || st.ph === "gate")) {
         if (!R.inRace) { title = "Watching " + R.label; sub = "You're not in this race."; }
-        else if (R.gate) { title = "On the gate"; sub = R.label + " · " + R.n + " riders. The gate drops on the TV."; }
+        else if (R.gate) { title = "On the gate"; sub = R.label + " · " + R.n + " riders" + (GSTG[R.gateStage] ? " · " + GSTG[R.gateStage] : "") + ". The gate drops on the TV."; }   /* (the start's stage, from the TV's intro card) */
         else if (asking && kind === "war") { title = R.warN > 1 ? (R.warN === 2 ? "Double war!" : R.warN === 3 ? "Triple war!" : "War x" + R.warN + "!") : "War!"; sub = "Lay 3 face down, then turn the 4th: it decides."; }
         else if (asking) { title = "Flip!"; sub = "Lap " + R.lap + " of " + R.len + " · your card turns as the leader starts the lap."; }
         else if (R.out) { title = R.dnf === "crash" ? "Crashed out" : "Out of cards"; sub = "Watch the rest of " + R.label + " on the TV."; }

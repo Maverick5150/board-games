@@ -163,7 +163,8 @@ function annGate(rc,hs){
     var d=BOOTH.gate({G:G,label:ui.label,people:people,
       drop:function(){ if(my!==gen||!G||ui.rc!==rc||rc.phase!=="gate"||rc.over) return true; if(busy||setupShown()||ui.view!=="race"||hold3D()||gateWait3D()>0) return false; var ok=act({t:"drop"}); if(ok) ui.gate=null; return !!ok; },   /* (hold3D: the 3D picture is not ready yet, or has shown the gate only a moment: asked again at the booth's next tick) */
       stage:function(name){ if(my!==gen) return;
-        if(name==="board") banner("30-second board","The riders are on the gate",dl(1700),"is-calm");
+        if(introShown()){}   /* (the intro card's start strip shows the stage) */
+        else if(name==="board") banner("30-second board","The riders are on the gate",dl(1700),"is-calm");
         else if(name==="side") banner("Board sideways","The gate drops any moment",dl(1500),"is-calm");
         syncControls(); }});
     if(!d) return false;
@@ -1093,6 +1094,61 @@ function holdUI(){
   if(on!==document.body.classList.contains("mx-3dhold")) document.body.classList.toggle("mx-3dhold",on);
   if(on){ var t=$("v3holdT"), w=ui.rc.phase==="gate"?"The riders roll up to the gate":"The 3D race is getting ready"; if(t&&t.textContent!==w) t.textContent=w; }
 }
+/* ================= the race intro (05_RACE_INTRO): the card on the gate and over the 3D hold (index.html #mxIntro) =================
+   It says where we are (the round, the series and year, the city, the race) and the start as it really runs: the announcers' procedure (booth.js:
+   open, the 30-second board, sideways, the drop) as four pills, or one honest line when they are off (a person drops the gate, Auto, or watching).
+   It leaves at the drop (animEvent "gate"), before the drop sound plays out. A phone: in the YOU panel's place (which the gate hides); TV: inside the arena, over
+   its top centre. */
+var INTRO_ST=["open","board","side","drop"], introSig="";
+function introMotion(){ var h=document.documentElement, B=BG(); return h.getAttribute("data-motion")==="reduce"||!!(B&&B.reducedMotion&&B.reducedMotion())?0:h.getAttribute("data-effects")==="reduced"?1:2; }
+function introShown(){ var el=$("mxIntro"); return !!el&&!el.hidden&&!el.classList.contains("is-leaving"); }
+function introSync(){
+  var el=$("mxIntro"); if(!el) return;
+  var rc=ui.rc, hold=document.body.classList.contains("mx-3dhold");
+  var on=!!(G&&rc&&ui.view==="race"&&!setupShown()&&!rc.over&&(rc.phase==="gate"||hold));
+  if(!on){ if(!el.hidden&&!el.classList.contains("is-leaving")) introHide(false); return; }
+  var gate=rc.phase==="gate", hs=raceHumans(), gs=gate&&annOn()?annGateStage():null, st=gs?INTRO_ST.indexOf(gs.stage):-1;
+  var c=G.cal[Math.min(G.ri,G.cal.length-1)]||{}, city=c.city||c.venue||"";
+  var eye="Round "+(G.ri+1)+" of "+G.cal.length+" · "+(LONG[G.series]||"")+" "+G.year, race=[ui.label,plural(rc.o.len,"lap"),fieldWords()].filter(Boolean).join(" · ");
+  var ok=gate&&hs.length>0&&!cfg.auto, line=st>=0||!gate?"":ok?"OK to drop the gate":hs.length?"The gate drops by itself (Auto)":"Watching the pros";
+  var state=hold?(gate?"The riders roll up to the gate":"The 3D race is getting ready"):"";
+  if(el.classList.contains("is-leaving")){ try{ el.getAnimations().forEach(function(a){ a.cancel(); }); }catch(e){} el.classList.remove("is-leaving"); el.hidden=true; }
+  var show=el.hidden;
+  if(show){ var yb=$("youBox"); if(onTV()){ if(el.parentNode!==$("arena")) $("arena").appendChild(el); } else if(yb&&el.nextElementSibling!==yb) yb.parentNode.insertBefore(el,yb); }   /* (TV: over the picture's top; a phone: the YOU panel's place, so the gate's button never moves) */
+  var sig=[gen,G.ri,G.rkey,city,race,st,line,state,show?1:0].join("|");
+  if(sig!==introSig){
+    var cityCh=$("introCity").textContent!==city;
+    introSig=sig;
+    $("introEye").textContent=eye; $("introCity").textContent=city; $("introRace").textContent=race;
+    $("introLineT").textContent=line; $("introState").textContent=state; $("introRules").textContent=MX.Time&&MX.Time.RULES?MX.Time.RULES:"";
+    el.classList.toggle("has-strip",st>=0); el.classList.toggle("has-line",!!line); el.classList.toggle("is-hold",hold); el.classList.toggle("is-ok",ok&&!!line);
+    var lis=$("introStrip").children, pop=!show&&introMotion()===2;
+    for(var i=0;i<lis.length;i++){
+      var live=i===st;
+      if(live&&pop&&!lis[i].classList.contains("is-live")&&lis[i].animate) try{ lis[i].animate([{transform:"scale(.9)"},{transform:"scale(1)"}],{duration:160,easing:"cubic-bezier(.2,.8,.2,1)"}); }catch(e){}   /* (the new live stage pops) */
+      lis[i].classList.toggle("is-live",live); lis[i].classList.toggle("is-done",st>=0&&i<st);
+    }
+    if(cityCh&&!show) introFit();
+  }
+  if(show){
+    el.hidden=false; document.body.classList.add("mx-intro-on"); introFit();
+    var m=introMotion(); if(m&&el.animate) try{ el.animate(m===2?[{opacity:0,transform:"translateY(-10px)"},{opacity:1,transform:"none"}]:[{opacity:0},{opacity:1}],{duration:280,easing:"cubic-bezier(.2,.8,.2,1)"}); }catch(e){}
+  }
+}
+/* the city in one line: a long name ("Salt Lake City") is set a little smaller, never cut */
+function introFit(){ var h=$("introCity"); if(!h) return; h.style.fontSize=""; if(h.scrollWidth>h.clientWidth+1){ var f=parseFloat(getComputedStyle(h).fontSize)||40; h.style.fontSize=Math.max(f*.55,f*h.clientWidth/h.scrollWidth-.5).toFixed(1)+"px"; } }
+function introHide(anim){
+  var el=$("mxIntro"); if(!el||el.hidden||el.classList.contains("is-leaving")) return;
+  document.body.classList.remove("mx-intro-on"); introSig="";
+  var m=anim?introMotion():0;
+  if(m&&el.animate){
+    el.classList.add("is-leaving");
+    try{ var a=el.animate(m===2?[{opacity:1,transform:"none"},{opacity:0,transform:"translateY(-12px)"}]:[{opacity:1},{opacity:0}],{duration:240,easing:"cubic-bezier(.4,0,1,1)",fill:"forwards"});
+      a.onfinish=function(){ if(!el.classList.contains("is-leaving")) return; el.classList.remove("is-leaving"); el.hidden=true; try{ a.cancel(); }catch(e){} }; return; }
+    catch(e){ el.classList.remove("is-leaving"); }
+  }
+  el.hidden=true;
+}
 function driveSoon(){ var my=gen; setTimeout(function(){ if(my===gen&&G&&!busy&&!setupShown()&&ui.view==="race") drive(); },0); }   /* (after the current task: never inside a render) */
 /* the GPU went away (a lost WebGL context) or the device is too slow at the lowest quality: the race goes on on the 2D track, from where the clock is */
 function to2D(){ if(V3) try{ V3.show(false); }catch(e){} mode3D(); drawGfx(); if(ui.view==="race"&&ui.rc){ layoutArena(); trackRiders(); trackShow(); if(!busy) renderRace(); driveSoon(); } }
@@ -1616,7 +1672,7 @@ function drawYou(rows){
   var R=G.riders[seatId(s)], n=rows.length, y=ui.you[s], c=T.towerCells(row), who=hs.length>1?R.name:"You", tv=onTV();
   var pre=rc.phase==="gate"||rc.tm.k===0;
   var pos=pre?"On the gate":c.tag==="out"?"DNF":c.tag==="pits"?"out of cards":T.ordText(row.place)+" of "+n;
-  var gap=pre?"the gate drops on your tap, then flip your card for lap 1":c.tag==="down"?"down: getting going again":c.tag==="out"?"crashed out of the race":c.tag==="pits"?"pulled off":row.place===1?"leading the race":c.gap+(tv?" leader":" to the leader")+(row.int!=null?" · "+T.secText(row.int,1)+(tv?" ahead":" to the rider ahead"):"");
+  var gap=rc.phase==="gate"?"gate pick "+T.ordText(row.place):pre?"the gate drops on your tap, then flip your card for lap 1":c.tag==="down"?"down: getting going again":c.tag==="out"?"crashed out of the race":c.tag==="pits"?"pulled off":row.place===1?"leading the race":c.gap+(tv?" leader":" to the leader")+(row.int!=null?" · "+T.secText(row.int,1)+(tv?" ahead":" to the rider ahead"):"");
   $("youTag").textContent=who; $("youPos").textContent=pos; $("youGap").textContent=gap; $("youLaps").hidden=pre;   /* no laps to show on the gate */
   $("youLast").textContent="Last lap "+(row.last!=null?T.fmtLap(row.last):"-"); $("youBest").textContent="Best "+(row.best!=null?T.fmtLap(row.best):"-")+(row.fl?" · fastest of the race":"");
   box.classList.toggle("is-down",c.tag==="down"); box.classList.toggle("is-out",c.tag==="out"||c.tag==="pits");
@@ -1661,7 +1717,7 @@ function mainControl(){
 }
 function syncControls(){
   var rc=ui.rc, f=$("flipBtn"), auto=$("autoBtn"), skip=$("skipBtn"), stat=$("stat");
-  holdUI();
+  holdUI(); introSync();
   if(!G||ui.view!=="race"||!rc){ return; }
   var hs=raceHumans(), alive=humansAlive(), need=rc.over?[]:RC.need(rc);
   var gate=rc.phase==="gate", proc=gate&&annOn(), gs=proc?annGateStage():null, peo=hs.length>0&&!cfg.auto;   /* proc: the announcers run the start procedure (booth.js); peo: a person decides when the show goes on */
@@ -1808,6 +1864,7 @@ async function animEvent(my,e){
   if(!rc) return;   /* the race was simmed under the show: nothing left to draw */
   switch(e.e){
     case "gate": {
+      introHide(true);   /* (05: the intro card leaves before the drop sound plays out) */
       if(race3D()){ Sound.sfx("jail"); logLine("The gate drops!"); $("gate").style.display="none"; ui.lap=1; chips(); var T7=track(); if(T7){ T7.gate(false); T7.lap(0,rc.o.len); } try{ await V3.drop(); }catch(x){} return; }   /* 3D: the pads fall (the 2D track keeps the clock) */
       Sound.sfx("jail"); logLine("The gate drops!");
       var gt=$("gate"), du=$("dust");

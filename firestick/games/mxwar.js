@@ -502,6 +502,41 @@
     Q + ".mx-pv__rk{color:var(--mx-secondary-text)}",
     Q + ".mx-pv__riders .mx-mk{font:700 .9em/1.3 var(--mx-font-hud);letter-spacing:.04em;text-transform:uppercase}",
     Q + ".mx-pv__load{font:600 1.05em/1.3 var(--mx-font-hud);letter-spacing:.04em;text-transform:uppercase}",
+    /* THE MXWAR SKIN, step 5 (05_RACE_INTRO, as mxwar/index.html): on the gate the intro card over the picture's top centre (the round, the series and year, the city in
+       Anton, the race line, and the start as it runs: the announcers' procedure as four pills, or one honest line), the 3D hold's bar and words in its foot over our own gate
+       render; the line-up panel's rows as 07's (zebra, the HUD face, the phones ringed gold) */
+    Q + ".mxp-intro{position:absolute;z-index:5;top:.6rem;left:.75rem;right:.75rem;max-width:29rem;margin:0 auto;padding:.95rem 1.2rem 1.05rem;border-radius:var(--mx-r-card);color:var(--mx-hud-white);background:var(--mx-hud-panel-strong);box-shadow:inset 0 0 0 2px var(--mx-hud-white);pointer-events:none}",
+    Q + ".mxp-intro[hidden]{display:none !important}",
+    Q + ".mxp-intro__head{display:flex;align-items:center;gap:.75rem;margin:.2rem 0 0}",
+    Q + ".mxp-intro__mark{flex:none;display:block;width:auto;height:1.25rem}",
+    Q + ".mxp-intro__eye{display:block;font:700 var(--mx-fs-hud-m)/1.25 var(--mx-font-hud);letter-spacing:.1em;text-transform:uppercase;color:var(--mx-stadium-gold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+    Q + ".mxp-intro__city{display:block;flex:1 1 auto;min-width:0;margin:0;overflow:hidden;white-space:nowrap;font:400 3.25rem/1 var(--mx-font-display);letter-spacing:.01em;text-transform:uppercase}",
+    Q + ".mxp-intro__race{display:block;margin:.3rem 0 0;font:700 1.0625rem/1.2 var(--mx-font-hud);letter-spacing:.05em;text-transform:uppercase}",
+    Q + ".mxp-intro__strip{display:none;grid-template-columns:repeat(4,minmax(0,1fr));gap:.4rem;margin:.6rem 0 0;padding:0;list-style:none}",
+    Q + ".mxp-intro.has-strip .mxp-intro__strip{display:grid}",
+    Q + ".mxp-intro__strip li{display:flex;align-items:center;justify-content:center;min-height:2rem;padding:.25rem .3rem;border-radius:.45rem;text-align:center;font:700 var(--mx-fs-hud-s)/1.05 var(--mx-font-hud);letter-spacing:.06em;text-transform:uppercase;color:var(--mx-secondary-text);box-shadow:inset 0 0 0 1.5px var(--mx-row-edge)}",
+    Q + ".mxp-intro__strip li.is-done{color:var(--mx-stadium-gold);box-shadow:inset 0 0 0 1.5px rgba(236,185,103,.6)}",
+    Q + ".mxp-intro__strip li.is-done::before{content:'';flex:none;width:.3em;height:.6em;margin:0 .45em .15em 0;border:solid var(--mx-stadium-gold);border-width:0 .15em .15em 0;transform:rotate(45deg)}",
+    Q + ".mxp-intro__strip li.is-live{color:#FFFFFF;background:var(--mx-red-fill);box-shadow:inset 0 0 0 2px var(--mx-edge-warm)}",
+    Q + ".mxp-intro__line{display:none;margin:.55rem 0 0;font:700 var(--mx-fs-display-s)/1.15 var(--mx-font-hud);letter-spacing:.06em;text-transform:uppercase;color:var(--mx-red-text)}",
+    Q + ".mxp-intro.has-line .mxp-intro__line{display:block}",
+    Q + ".mxp-intro__hold{display:none;gap:.5rem;margin:.65rem 0 0}",
+    Q + ".mxp-intro__state{font:700 var(--mx-fs-hud-m)/1.2 var(--mx-font-hud);letter-spacing:.12em;text-transform:uppercase;color:var(--mx-stadium-gold)}",
+    Q + ".mxp-main.is-3dhold .mxp-intro__hold{display:grid}",
+    Q + ".mxp-main.is-3dhold .mxp-intro__strip," + Q + ".mxp-main.is-3dhold .mxp-intro__line{display:none}",
+    Q + ".mxp-main.has-intro .mxp-chips{visibility:hidden}",
+    Q + ".mxp-main.has-intro .mxp-v3hold__card{display:none}",
+    Q + ".mxp-main.is-3dhold .mxp-v3hold{background:linear-gradient(180deg,rgba(9,12,18,.15),rgba(9,12,18,.55) 70%,rgba(9,12,18,.85)),url('../mxwar/assets/menu/gate-1920.webp') 50% 45%/cover no-repeat,#090c12}",
+    Q + "#mxpPanel[data-kind=lineup] .mxp-lu__h{font:400 var(--mx-fs-display-s)/1.1 var(--mx-font-display);letter-spacing:.02em;text-transform:uppercase;color:var(--mx-hud-white)}",
+    Q + "#mxpPanel[data-kind=lineup] .mxp-lu__h span{margin-left:.5rem;font:700 var(--mx-fs-hud-m)/1.2 var(--mx-font-hud);letter-spacing:.05em;text-transform:uppercase;color:var(--mx-secondary-text)}",
+    Q + "#mxpPanel[data-kind=lineup] .mxp-lu__tm .mx-mk{font:700 var(--mx-fs-hud-s)/1.3 var(--mx-font-hud);letter-spacing:.05em;text-transform:uppercase}",
+    Q + "#mxpPanel[data-kind=lineup] .mxp-res{row-gap:0}",
+    Q + "#mxpPanel[data-kind=lineup] .mxp-res li{border-radius:.3rem;background:transparent;font:700 var(--mx-fs-hud-m)/1 var(--mx-font-hud);letter-spacing:.02em}",
+    Q + "#mxpPanel[data-kind=lineup] .mxp-res li:nth-child(odd){background:var(--mx-row)}",
+    Q + "#mxpPanel[data-kind=lineup] .mxp-res li.is-me{background:rgba(236,185,103,.13);box-shadow:inset .3rem 0 0 var(--seat,#e7ca90),inset 0 0 0 2px var(--mx-stadium-gold)}",
+    Q + "#mxpPanel[data-kind=lineup] .mxp-res li.is-sep{background:none;box-shadow:none}",
+    Q + "#mxpPanel[data-kind=lineup] .mxp-rp{font:700 var(--mx-fs-hud-m)/1 var(--mx-font-hud);color:var(--mx-secondary-text)}",
+    Q + "#mxpPanel[data-kind=lineup] .mxp-res .mx-mk{font:700 var(--mx-fs-hud-s)/1.3 var(--mx-font-hud);letter-spacing:.05em;text-transform:uppercase}",
     /* reduced effects: nothing moves */
     'html[data-effects="reduced"] ' + Q + ".mxp *{animation:none !important;transition:none !important}"
   ].join("\n");
@@ -837,6 +872,9 @@
       '<div class="mxp-v3hold" aria-hidden="true"><div class="mxp-v3hold__card"><span class="mxp-v3hold__t">The riders roll up to the gate</span><span class="mxp-v3hold__bar"></span></div></div>' +
       '<div class="mxp-gate" id="mxpGate" aria-hidden="true"></div><div class="mxp-dust" id="mxpDust" aria-hidden="true"></div>' +
       '<div class="mxp-chips"><span class="mxp-chip is-hot" id="mxpLapC"></span><span class="mxp-chip" id="mxpHsC"></span><span class="mxp-chip" id="mxpYelC"></span><span class="mxp-chip" id="mxpFieldC"></span></div>' +
+      '<div class="mxp-intro" id="mxpIntro" hidden><span class="mxp-intro__eye" id="mxpIntroEye"></span><div class="mxp-intro__head"><b class="mxp-intro__city" id="mxpIntroCity"></b><img class="mxp-intro__mark" src="../mxwar/assets/brand/wordmark-lockup.svg" alt="" aria-hidden="true" width="900" height="120"></div><span class="mxp-intro__race" id="mxpIntroRace"></span>' +
+      '<ol class="mxp-intro__strip" id="mxpIntroStrip" aria-label="The start"><li>On the gate</li><li>30-second board</li><li>Sideways</li><li>Gate drop</li></ol><span class="mxp-intro__line" id="mxpIntroLine"></span>' +
+      '<div class="mxp-intro__hold"><span class="mxp-intro__state">The riders roll up to the gate</span><span class="mxp-v3hold__bar"></span></div></div>' +
       '<div class="mxp-banner" id="mxpBanner" aria-live="polite"><b id="mxpBannerT"></b><span id="mxpBannerS"></span></div>' +
       '<div class="mxp-flash" id="mxpFlash"></div>' +
       '<div class="mxp-pip" id="mxpPip" aria-label="The cards"><div class="mxp-duel" id="mxpDuel"></div><div class="mxp-war" id="mxpWar"></div><div class="mxp-note" id="mxpNote"></div></div>' +
@@ -955,7 +993,7 @@
             you = { place: mr.place, of: rows.length, gap: pre ? "" : mc.gap, tag: mc.tag, last: mr.last != null ? T.fmtLap(mr.last) : "", best: mr.best != null ? T.fmtLap(mr.best) : "", fl: mr.fl ? 1 : 0, int: pre || mr.int == null ? null : mr.int,
               line: yy ? yy.line : pre ? T.RULES : "", why: yy ? yy.reasons.slice(0, 4).map(function (q) { return [q.text, Math.abs(q.sec) >= 0.05 ? (q.sec > 0 ? "+" : "-") + T.secText(q.sec) : "", q.sec > 0.04 ? 1 : q.sec < -0.04 ? -1 : 0]; }) : [] }; }
         }
-        st.race = { label: ui.label, city: cal().city || cal().venue, lap: Math.min(Math.max(ui.lap, 1), rc.o.len), len: rc.o.len, gate: rc.phase === "gate", over: rc.over, n: rc.n, inRace: s >= 0, meS: s, place: myPlace, cnt: s >= 0 ? cnt[s] : 0, tw: tw, you: you, fl: fl,
+        st.race = { label: ui.label, city: cal().city || cal().venue, lap: Math.min(Math.max(ui.lap, 1), rc.o.len), len: rc.o.len, gate: rc.phase === "gate", gateStage: rc.phase === "gate" ? (ui.gstage || "open") : null, over: rc.over, n: rc.n, inRace: s >= 0, meS: s, place: myPlace, cnt: s >= 0 ? cnt[s] : 0, tw: tw, you: you, fl: fl,
           last: s >= 0 && ui.lastCards[s] != null ? ui.lastCards[s] : null, out: !!(mine && mine.out), dnf: mine && mine.dnf ? mine.dnf.why : null, cr: mine ? mine.crashes | 0 : 0,
           war: w ? { n: w.n, down: w.down, up: w.up, won: w.won, lost: w.lost } : null, warOn: !!(ui.war && s >= 0 && ui.war.seats.indexOf(s) >= 0), warN: ui.war ? ui.war.n : 0,
           phase: rc.phase, need: s >= 0 && ui.need.indexOf(s) >= 0 && !ui.intents[s], hs: ui.hs != null ? nm(ui.hs) : "", yellow: !!(rc.yellow && !rc.over), top: top };
@@ -1238,6 +1276,39 @@
     }
     document.addEventListener("keydown", onKey, true);
     function teamLine(rc) { var cnt = {}; rc.r.forEach(function (p, s) { var b = riderOfS(s).bike || "Privateer"; cnt[b] = (cnt[b] || 0) + 1; }); return Object.keys(cnt).sort(function (a, b) { return cnt[b] - cnt[a] || (a < b ? -1 : 1); }).map(function (b) { return b + " " + cnt[b]; }).join(" · "); }
+    /* ---------- the race intro (05_RACE_INTRO, as mxwar/game.js): on the gate the card over the picture's top centre names the round, the city and the race, and
+         shows the start as it runs: the announcers' procedure as four pills, or one honest line; the phones get its stage (race.gateStage) ---------- */
+    var PSTG = ["open", "board", "side", "drop"];
+    function pMotion() { var h = document.documentElement, B = BG(); return h.getAttribute("data-motion") === "reduce" || !!(B && B.reducedMotion && B.reducedMotion()) ? 0 : h.getAttribute("data-effects") === "reduced" ? 1 : 2; }
+    function pIntro(stage, proc) {
+      var el = $("mxpIntro"), rc = ui.rc; if (!el || !rc || !G) return;
+      var c = cal(), st = proc ? PSTG.indexOf(stage) : -1, show = el.hidden;
+      ui.gstage = stage || "open";
+      $("mxpIntroEye").textContent = "Round " + (G.ri + 1) + " of " + G.cal.length + " · " + (LONG[G.series] || "") + " " + G.year;
+      $("mxpIntroCity").textContent = c.city || c.venue || "";
+      $("mxpIntroRace").textContent = [ui.label, plural(rc.o.len, "lap"), fieldWords()].filter(Boolean).join(" · ");
+      $("mxpIntroLine").textContent = st >= 0 ? "" : stage === "board" ? "30-second board: the gate drops" : "The gate drops by itself · OK skips ahead";
+      el.classList.toggle("has-strip", st >= 0); el.classList.toggle("has-line", st < 0);
+      Array.prototype.forEach.call($("mxpIntroStrip").children, function (li, i) {
+        var live = i === st;
+        if (live && !show && !li.classList.contains("is-live") && pMotion() === 2 && li.animate) try { li.animate([{ transform: "scale(.9)" }, { transform: "scale(1)" }], { duration: 160, easing: "cubic-bezier(.2,.8,.2,1)" }); } catch (e) { }   /* (the new live stage pops) */
+        li.classList.toggle("is-live", live); li.classList.toggle("is-done", st >= 0 && i < st);
+      });
+      if (show) {
+        el.hidden = false; $("mxpMain").classList.add("has-intro"); pIntroFit();
+        var m = pMotion(); if (m && el.animate) try { el.animate(m === 2 ? [{ opacity: 0, transform: "translateY(-10px)" }, { opacity: 1, transform: "none" }] : [{ opacity: 0 }, { opacity: 1 }], { duration: 280, easing: "cubic-bezier(.2,.8,.2,1)" }); } catch (e) { }
+      }
+      pushSoon();
+    }
+    /* the city in one line: a long name is set a little smaller, never cut */
+    function pIntroFit() { var h = $("mxpIntroCity"); if (!h) return; h.style.fontSize = ""; if (h.scrollWidth > h.clientWidth + 1) { var f = parseFloat(getComputedStyle(h).fontSize) || 60; h.style.fontSize = Math.max(f * .55, f * h.clientWidth / h.scrollWidth - .5).toFixed(1) + "px"; } }
+    function pIntroHide(anim) {
+      var el = $("mxpIntro"); ui.gstage = null; if (!el || el.hidden) return;
+      var mn = $("mxpMain"); if (mn) mn.classList.remove("has-intro");
+      var m = anim ? pMotion() : 0;
+      if (m && el.animate) { try { var a = el.animate(m === 2 ? [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(-12px)" }] : [{ opacity: 1 }, { opacity: 0 }], { duration: 240, easing: "cubic-bezier(.4,0,1,1)", fill: "forwards" }); a.onfinish = function () { el.hidden = true; try { a.cancel(); } catch (e) { } }; return; } catch (e) { } }
+      el.hidden = true;
+    }
     async function gateShow() {
       var rc = ui.rc; ui.ph = "gate"; skipGate = false; pushNow();
       status(ui.label + ": " + rc.n + " riders behind the gate");
@@ -1245,12 +1316,13 @@
       logLine((cal().city || cal().venue) + " " + ui.label + ": " + rc.n + " riders behind the gate.");
       try { var rb = realBit(S.next(G)); if (rb) logLine(rb); } catch (e) { }
       H.sfx("bell");
-      var b = banner(ui.label + " · on the gate", teamLine(rc), dl(2200), "is-calm");
+      pIntro("open", annOn()); logLine(ui.label + ", the teams on the gate: " + teamLine(rc) + ".");   /* (05: the intro card shows the gate; it replaces the gate banners) */
+      var b = raw(dl(2200));
       var gd = null, dropped = false;
       if (annOn()) {
         /* the announcers call the start (booth.js): the opening, the 30-second board, the board sideways, the drop; OK skips ahead (a second OK drops the gate at once) */
         gd = booth.gate({ G: G, label: ui.label, people: false, drop: function () { if (rv.holding() || rv.gateWait() > 0) return false; dropped = true; return true; },   /* (the 3D picture is not ready yet, or has shown the gate only a moment: the booth asks again at its next tick) */
-          stage: function (n) { if (n === "board") banner("30-second board", "The riders are on the gate", dl(1700), "is-calm"); else if (n === "side") banner("Board sideways", "The gate drops any moment", dl(1500), "is-calm"); } });
+          stage: function (n) { pIntro(n, true); } });   /* (the intro card's start strip shows the stage) */
         H.hint("OK: skip ahead to the gate drop");
       }
       if (gd) {
@@ -1258,11 +1330,12 @@
       } else {
         for (var t = 0; t < 26 && !skipGate && H.live(); t++) await wait(100);
         await b;
-        if (!skipGate) { banner("30-second board", "The gate drops", dl(1200), "is-calm"); for (t = 0; t < 14 && !skipGate && H.live(); t++) await wait(100); }
+        if (!skipGate) { pIntro("board", false); for (t = 0; t < 14 && !skipGate && H.live(); t++) await wait(100); }
       }
       if (rv.holding()) { status("The riders roll up to the gate..."); while (rv.holding() && H.live()) await raw(150); }   /* the 3D picture loads or warms its shaders: the gate drops once it can show it */
       while (rv.gateWait() > 0 && H.live()) await raw(Math.min(250, rv.gateWait() + 20));   /* (and once it has shown the riders at the gate a moment) */
       if (!H.live()) return;
+      pIntroHide(true);   /* (the card leaves as the gate drops) */
       ui.ph = "race";
       var pre = rc.r.map(function (p) { return p.pk.length; });
       var r = S.apply(G, { t: "drop" });
@@ -1532,7 +1605,7 @@
     function hidePanel() { stopCountdown(); var p = $("mxpPanel"); if (p) { p.hidden = true; p.innerHTML = ""; } if ($("mxp")) $("mxp").classList.remove("is-panel"); panelRes = null; }
     function stopCountdown() { if (!panelT) return; clearInterval(panelT); panelT = 0; var b = $("mxpPanel") && $("mxpPanel").querySelector("[data-cd]"); if (b) { var s = b.querySelector("small"); if (s) s.textContent = b.getAttribute("data-sub") || ""; var cd = b.querySelector(".mxp-cd"); if (cd) cd.remove(); b.classList.remove("is-cd"); } }
     function panel(o) {
-      stopCountdown();
+      stopCountdown(); if (typeof pIntroHide === "function") pIntroHide(false);
       /* [bcast] */ bcPanel(o.kind); /* [/bcast] */
       var p = $("mxpPanel"); ui.ph = o.ph || "panel"; ui.pinfo = o.info || null; ui.rc = o.keepRace ? ui.rc : null; stats.panels.push(o.kind);
       if (!o.keepRace) { rv.live(false); chips(); prepNext(); }
@@ -1730,7 +1803,7 @@
       if (heats.length) { var sp = RD.teamSplit(RG, 0); heats.forEach(function (r, i) { cols.push({ label: r.label, ids: r.ent.slice(), teams: (sp[i] || {}).teams || {}, rule: RG.st[0].toMain ? "top " + RG.st[0].toMain + " to the " + (F.finals.kind === "moto" ? "motos" : F.finals.label) : RG.st[0].toNext && RG.st[0].toNext !== "rest" ? "top " + RG.st[0].toNext + " move on" : "" }); }); }
       else { var t = {}; (RG.fin || []).forEach(function (id) { var m = G.riders[id].bike || "Privateer"; t[m] = (t[m] || 0) + 1; }); cols.push({ label: (RG.races[0] || {}).label || "The gate", ids: (RG.fin || []).slice(), teams: t, rule: F.finals.kind === "moto" ? "the motos, the overall by points" : "" }); }
       luCols = cols;
-      var per = cols.length === 1 ? 3 : cols.length === 2 ? 2 : 1, mine = {}, mineW = [];
+      var per = cols.length === 1 ? (cols[0].ids.length > 30 ? 4 : 3) : cols.length === 2 ? 2 : 1, mine = {}, mineW = [];
       G.humans.forEach(function (h, k) { var col = cols.filter(function (x) { return x.ids.indexOf(h) >= 0; })[0], lab = col ? col.label : F.direct ? "seeded to the motos" : ""; if (lab) { mine[SEATS[k].color] = lab; mineW.push(G.riders[h].name + ": " + lab); } });
       var body = '<div class="mxp-lu" style="--lu-cols:' + cols.length + '">' + cols.map(function (col, i) {
         var tm = Object.keys(col.teams).sort(function (a, b) { return col.teams[b] - col.teams[a] || (a < b ? -1 : 1); });
@@ -1743,6 +1816,7 @@
       var p = panel({ kind: "lineup", eyebrow: "Round " + (G.ri + 1) + " of " + G.cal.length + " · " + (c.city || c.venue), title: title,
         sub: esc((heats.length > 1 ? "Balanced by team: every team's riders split as evenly as they can be over the heats, the top seeds alternating as in qualifying." : "Every rider on the gate, in gate-pick order.") + (mineW.length ? " " + (mineW.length > 4 ? plural(mineW.length, "rider") + " from this table" : mineW.join(" · ")) + "." : "") + (rb ? " " + rb : "")),
         body: body, buttons: btns, countdown: 20000, info: { kind: "lineup", title: title, mine: mine, next: (c.city || c.venue) + " · " + nx.nx.label } });
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { if (luCols && ui.ph !== "race") fitLineup(); });
       var res = await p; luCols = null; return res;
     }
 

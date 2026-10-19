@@ -1247,6 +1247,69 @@
   html[data-game="mxwar"] .mx-pv__rk{color:var(--mx-secondary-text)}
   html[data-game="mxwar"] .mx-pv__riders .mx-mk{font:700 .9em/1.3 var(--mx-font-hud); letter-spacing:.04em; text-transform:uppercase}
   html[data-game="mxwar"] .mx-pv__load{font:600 1.05em/1.3 var(--mx-font-hud); letter-spacing:.04em; text-transform:uppercase}
+  /* ================= THE MXWAR SKIN, step 5: the race intro (UI-SPEC 4.3, 05_RACE_INTRO) =================
+     On the gate, and while the 3D picture gets ready, the race opens with 05's card: the round and the series in gold, the city huge in Anton, the race line, and the
+     start as it really runs: the announcers' procedure as four pills (the live stage red, the done ones gold with a check, the later ones outlined), or one honest
+     line when they are off (a person drops the gate / Auto / watching). The 3D hold's light bar and its words sit in the card's foot, over our own gate render.
+     A phone (both ways): in the YOU panel's place, under the gate's controls (they never move); TV: over the picture's top centre, clear of the riders. */
+  .mx-intro[hidden]{display:none !important}
+  .mx-intro{position:relative; z-index:9; display:block; margin:.6rem 0 0; padding:.8rem .95rem .95rem; border-radius:var(--mx-r-card); color:var(--mx-hud-white);
+    background:var(--mx-hud-panel-strong); box-shadow:inset 0 0 0 2px var(--mx-hud-white); pointer-events:none}
+  .mx-intro__eye{display:block; font:700 var(--mx-fs-hud-m)/1.25 var(--mx-font-hud); letter-spacing:.1em; text-transform:uppercase; color:var(--mx-stadium-gold)}
+  .mx-intro__head{display:flex; align-items:center; gap:.75rem; margin:.2rem 0 0}
+  .mx-intro__mark{flex:none; display:block; width:auto; height:.95rem}
+  .mx-intro__city{flex:1 1 auto; min-width:0; margin:0; overflow:hidden; white-space:nowrap; font:400 var(--mx-fs-display-xl)/1 var(--mx-font-display); letter-spacing:.01em; text-transform:uppercase; color:var(--mx-hud-white)}
+  .mx-intro__race{margin:.3rem 0 0; font:700 var(--mx-fs-hud-l)/1.2 var(--mx-font-hud); letter-spacing:.05em; text-transform:uppercase; color:var(--mx-hud-white)}
+  .mx-intro__strip{display:none; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.4rem; margin:.6rem 0 0; padding:0; list-style:none}
+  .mx-intro.has-strip .mx-intro__strip{display:grid}
+  .mx-intro__strip li{display:flex; align-items:center; justify-content:center; min-height:2.4rem; padding:.25rem .3rem; border-radius:.45rem; text-align:center;
+    font:700 var(--mx-fs-hud-s)/1.05 var(--mx-font-hud); letter-spacing:.06em; text-transform:uppercase; color:var(--mx-secondary-text); box-shadow:inset 0 0 0 1.5px var(--mx-row-edge)}
+  .mx-intro__strip li.is-done{color:var(--mx-stadium-gold); box-shadow:inset 0 0 0 1.5px rgba(236,185,103,.6)}
+  .mx-intro__strip li.is-done::before{content:""; flex:none; width:.3em; height:.6em; margin:0 .45em .15em 0; border:solid var(--mx-stadium-gold); border-width:0 .15em .15em 0; transform:rotate(45deg)}
+  .mx-intro__strip li.is-live{color:#FFFFFF; background:var(--mx-red-fill); box-shadow:inset 0 0 0 2px var(--mx-edge-warm)}
+  .mx-intro__line{display:none; align-items:center; gap:.6rem; margin:.55rem 0 0; font:700 1.25rem/1.15 var(--mx-font-hud); letter-spacing:.06em; text-transform:uppercase; color:var(--mx-red-text)}
+  .mx-intro.has-line .mx-intro__line{display:flex}
+  .mx-intro__ok{display:none; flex:none}
+  html[data-tv] .mx-intro.is-ok .mx-intro__ok{display:inline-grid}
+  .mx-intro__hold{display:none; gap:.5rem; margin:.65rem 0 0}
+  .mx-intro.is-hold .mx-intro__hold{display:grid}
+  .mx-intro.is-hold .mx-intro__strip, .mx-intro.is-hold .mx-intro__line{display:none}
+  .mx-intro__state{font:700 var(--mx-fs-hud-m)/1.2 var(--mx-font-hud); letter-spacing:.12em; text-transform:uppercase; color:var(--mx-stadium-gold)}
+  .mx-intro__rules{margin:.6rem 0 0; font:600 var(--mx-fs-hud-s)/1.35 var(--mx-font-hud); letter-spacing:.05em; text-transform:uppercase; color:var(--mx-secondary-text)}
+  html[data-tv] .mx-intro__rules{display:none}
+  /* on the gate the card is the YOU panel's place on a phone (the rules are in the card); on the TV it takes the top centre, where the race chip sits */
+  html:not([data-tv]) body.mx-intro-on #youBox{display:none !important}
+  html[data-tv] body.mx-intro-on .mx-rhead{visibility:hidden}
+  /* the 3D hold: our own gate render behind the cards; on a TV the hold's small card rests while the intro card is up */
+  body.mx-3dhold .mx-v3hold{background:linear-gradient(180deg,rgba(9,12,18,.15),rgba(9,12,18,.55) 70%,rgba(9,12,18,.85)),url("assets/menu/gate-1920.webp") 50% 45%/cover no-repeat,#090c12}
+  html[data-tv] body.mx-intro-on .mx-v3hold__card{display:none}   /* (TV: the intro card over the picture carries the bar; a phone keeps the hold's own card in its picture) */
+  /* TV: the card over the picture's top centre (Z-TC; game.js puts it inside the arena on a TV), between the timing tower and the YOU panel; the city shrinks to one
+     line (game.js introFit) */
+  html[data-tv] .mx-intro{position:absolute; top:.75rem; left:1rem; right:1rem; width:auto; max-width:29rem; margin:0 auto; padding:1rem 1.25rem 1.1rem}
+  html[data-tv] body.mx-3d .mx-intro{left:calc(2.25rem + min(21.5rem, 28%) + .75rem); right:calc(2.25rem + min(25rem, 32%) + .75rem)}
+  html[data-tv] .mx-intro__mark{height:1.25rem}
+  html[data-tv] .mx-intro__eye{white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  html[data-tv] .mx-intro__city{font-size:3.25rem}
+  html[data-tv] .mx-intro__race{font-size:1.0625rem}
+  html[data-tv] .mx-intro__strip li{min-height:2rem}
+  html[data-tv] .mx-intro__line{font-size:var(--mx-fs-display-s)}
+  /* phone sideways: in the right panel, in the YOU panel's place */
+  @media (orientation: landscape) and (max-height: 31.25em){
+    html:not([data-tv]) .mx-intro{margin:.35rem 0 .5rem; padding:.6rem .75rem .75rem}
+    html:not([data-tv]) .mx-intro__city{font-size:var(--mx-fs-display-l)}
+    html:not([data-tv]) .mx-intro__strip li{min-height:2.1rem}
+  }
+  /* the line-up sheet (05 in a sheet): the gold eyebrow and the Anton title (step 1), the race line of each column in Barlow caps, the rows as 07's (zebra, the HUD face, the
+     person ringed gold), the team chips in Barlow caps; "To the gate" stays the primary */
+  html[data-game="mxwar"] .mx-shd .bg-eyebrow{font:700 var(--mx-fs-hud-m)/1.2 var(--mx-font-hud); letter-spacing:.1em; color:var(--mx-stadium-gold)}
+  html[data-game="mxwar"] .mx-lu__h{font:400 var(--mx-fs-display-s)/1.1 var(--mx-font-display); letter-spacing:.02em; text-transform:uppercase; color:var(--mx-hud-white)}
+  html[data-game="mxwar"] .mx-lu__h span{margin-left:.5rem; font:700 var(--mx-fs-hud-m)/1.2 var(--mx-font-hud); letter-spacing:.05em; text-transform:uppercase; color:var(--mx-secondary-text)}
+  html[data-game="mxwar"] .mx-lu__tm .mx-mk{font:700 var(--mx-fs-hud-s)/1.3 var(--mx-font-hud); letter-spacing:.05em; text-transform:uppercase}
+  html[data-game="mxwar"] .mx-lu__l li{font-family:var(--mx-font-hud); font-weight:700; letter-spacing:.02em; background:transparent; border-radius:.3rem}
+  html[data-game="mxwar"] .mx-lu__l li:nth-child(odd){background:var(--mx-row)}
+  html[data-game="mxwar"] .mx-lu__l li.is-me{background:rgba(236,185,103,.13); box-shadow:inset 0 0 0 2px var(--mx-stadium-gold)}
+  html[data-game="mxwar"] .mx-lu__g{font-family:var(--mx-font-hud); font-weight:700; color:var(--mx-secondary-text)}
+  html[data-game="mxwar"] .mx-lu__mk{font:700 var(--mx-fs-hud-s)/1.3 var(--mx-font-hud); letter-spacing:.05em; text-transform:uppercase}
 </style>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
@@ -1476,6 +1539,15 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
     </div>
     <p class="mx-stat" id="stat" data-stage-text aria-live="polite"></p>
     <section class="mx-tower" aria-labelledby="towerHead">
+      <section class="mx-intro" id="mxIntro" aria-labelledby="introCity" hidden>
+        <span class="mx-intro__eye" id="introEye"></span>
+        <div class="mx-intro__head"><h2 class="mx-intro__city" id="introCity"></h2><img class="mx-intro__mark" src="assets/brand/wordmark-lockup.svg" alt="" aria-hidden="true" width="900" height="120" decoding="async"></div>
+        <p class="mx-intro__race" id="introRace"></p>
+        <ol class="mx-intro__strip" id="introStrip" aria-label="The start"><li>On the gate</li><li>30-second board</li><li>Sideways</li><li>Gate drop</li></ol>
+        <p class="mx-intro__line"><span class="bg-key mx-intro__ok" aria-hidden="true">OK</span><span id="introLineT"></span></p>
+        <div class="mx-intro__hold"><span class="mx-intro__state" id="introState"></span><span class="mx-v3hold__bar"></span></div>
+        <p class="mx-intro__rules" id="introRules"></p>
+      </section>
       <section class="mx-yc" id="youBox" aria-label="You" hidden>
         <div class="mx-yc__top"><span class="mx-yc__tag" id="youTag">You</span><b class="mx-yc__pos" id="youPos"></b><span class="mx-yc__gap" id="youGap"></span><span class="mx-yc__laps" id="youLaps"><span id="youLast"></span><span id="youBest"></span></span></div>
         <p class="mx-yc__line" id="youLine" aria-live="polite"></p>
