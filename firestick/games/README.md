@@ -206,3 +206,12 @@ attrs, color)` (a seat-coloured button), `api.afkHTML(id)` (the "computer is pla
 - The TV tower lists every rider (up to 40) without scrolling: one column up to 22 riders, two columns beyond (`is-cols2`), the row height follows the room left.
 - Test hooks: `window.__mxp.phoneSt(color)` returns the snapshot that phone would get; `window.__mxpLap` (ms) sets the lap length of the race clock. Tests:
   BG_audit/sprint/mxtimebuild/ (s4-party.js is the TV + 3 phones round trip).
+- THE 3D RACE on the TV (mxlive, 2026-10-18): the race view adapter (`raceView`) also loads the phone game's 3D view (`../mxwar/race3d.js`, an ES
+  module imported at run time; the classic scripts it rides on, `../mxwar/course.js`, `../mxwar/layouts.js`, `../mxwar/data/tracks.js`, are in the registry
+  line) and draws the race over the lane wherever WebGL2 works. The 2D track stays: it keeps THE race clock (model mode: the clock, the events) and the
+  3D view rides it (`V3.setModel(rc, {clock})`: every rider where the time model says, in the tower's order); it is also the fallback (no WebGL2, `?gl=0`,
+  the device's Graphics = Classic 2D in the phone game's Menu, a lost GPU, a device too slow for 3D). The TV starts at the FIRE TV quality (`html[data-quality]`)
+  unless the device picked one in the phone game's Menu. Over the picture the corner window moves to the top right (the hero camera keeps the person's
+  rider low in the right third); a war flashes across the top; C or Play/Pause on the remote cycles the cameras. The phones stay controllers (no 3D).
+  The announcers hear the 3D picture's moments (`hooks.shown`: the holeshot into turn 1, crashes, passes, lapped riders, the checkered flag). Hooks:
+  `window.__mxp.rv.is3D()`, `rv.kind` ("3d" | "2d"), `window.__mxpv3` (the view). Tests: BG_audit/sprint/mxlive/tools/p5-party.js.
