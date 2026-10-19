@@ -108,7 +108,7 @@ function adopt(G,info){
   st.forEach(function(r){
     var R=tm.r[r.s], rank=r.place-1, P=G.r[r.s]; R.q=0; R.h=P.pk.length; R.n=k; R.f=0;
     if(!P.out){ for(var i=1;i<=k;i++) R.T.push(ms(i*p+(i===k?0.6*rank:0))); return; }
-    var d=P.dnf||{ lap:k, why:"cards" }, done=d.why==="crash"?d.lap-1:d.lap;
+    var d=P.dnf||{ lap:P.outAt>0?Math.min(P.outAt,k):k, why:"cards" }, done=d.why==="crash"?d.lap-1:d.lap;   // (an engine before the DNF record kept only outAt: the battle he ran out of cards in)
     for(var j=1;j<=done;j++) R.T.push(ms(j*p));
     var at=d.why==="crash"?(d.sector!=null?d.sector:0.5):1;
     R.dnf={ lap:d.lap, why:d.why, at:at, t:ms((d.lap-1)*p+at*p) };
