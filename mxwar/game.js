@@ -1332,10 +1332,12 @@ function liveRows(){
   var rc=ui.rc, T=track(); if(!rc||!rc.tm||!MX.Time||!T||!T.model||!T.model()||!T.rows) return null;
   return T.rows();
 }
+/* mxfix1: the short names of this race's riders, one rule everywhere (art.js shortNames: the surname, "Katin Jr.", "J. Evans" / "T. Evans" when two share it) */
+function shortNamesOf(rc){ var a=[], s; for(s=0;s<rc.n;s++) a.push(String(G.riders[seatId(s)].name||"")); return A.shortNames?A.shortNames(a):a.map(function(x){ return x.split(" ").pop(); }); }
 function twBuild(rc){
-  var html=[], s;
-  for(s=0;s<rc.n;s++){ var R=G.riders[seatId(s)], me=R.kind==="human", ln=String(R.name||"").split(" ").pop();
-    html.push('<li data-s="'+s+'" class="'+(me?"is-me":"")+'"><span class="mx-tw__p"></span>'+plateHTML(R)+'<span class="mx-tw__n"><span class="mx-tw__f">'+esc(R.name)+'</span><span class="mx-tw__s">'+esc(ln)+'</span></span><span class="mx-tw__c"></span><span class="mx-tw__l"></span><span class="mx-tw__g"></span></li>'); }
+  var html=[], s, sn=shortNamesOf(rc);
+  for(s=0;s<rc.n;s++){ var R=G.riders[seatId(s)], me=R.kind==="human";
+    html.push('<li data-s="'+s+'" class="'+(me?"is-me":"")+'"><span class="mx-tw__p"></span>'+plateHTML(R)+'<span class="mx-tw__n"><span class="mx-tw__f">'+esc(R.name)+'</span><span class="mx-tw__s">'+esc(sn[s])+'</span></span><span class="mx-tw__c"></span><span class="mx-tw__l"></span><span class="mx-tw__g"></span></li>'); }
   var tw=$("tower"); tw.innerHTML=html.join(""); TW.els={}; TW.cells={}; TW.ord="";
   [].forEach.call(tw.children,function(li){ TW.els[+li.getAttribute("data-s")]={li:li,p:li.querySelector(".mx-tw__p"),c:li.querySelector(".mx-tw__c"),l:li.querySelector(".mx-tw__l"),g:li.querySelector(".mx-tw__g")}; });
 }
@@ -1359,12 +1361,13 @@ function drawTower(){
   sig=sig.join(",");
   if(sig!==TW.ord){ TW.ord=sig; for(i=0;i<n;i++) tw.appendChild(TW.els[rows[i].s].li); }
   for(i=0;i<n;i++){
-    r=rows[i]; e=TW.els[r.s]; c=T.towerCells(r); if(pre){ c.gap=""; c.last=""; }
+    r=rows[i]; e=TW.els[r.s]; c=T.towerCells(r); if(pre){ c.gap=""; c.short=""; c.last=""; }
+    var gt=compact&&c.short!=null?c.short:c.gap;   /* mxfix1: the phone's two-column board writes its gaps short ("+2.09", "+1:10.3") */
     var card=ui.lastCards[r.s], chip=(card!=null&&c.tag!=="out"&&c.tag!=="pits")?A.chip(card):"", cls=(r.status==="down"?" is-down":"")+(c.tag==="out"||c.tag==="pits"?" is-out":"")+(r.fl&&r.lastK===r.bestK?" is-fl":"")+(mark&&mark.win===r.s?" is-win":"")+(mark&&mark.fight&&mark.fight.indexOf(r.s)>=0?" is-fight":"")+(G.riders[seatId(r.s)].kind==="human"?" is-me":"");
-    var v=r.place+"|"+c.gap+"|"+c.last+"|"+cls+"|"+(card==null?"":card)+"|"+(r.fl&&r.lastK===r.bestK?1:0), old=TW.cells[r.s];
+    var v=r.place+"|"+gt+"|"+c.last+"|"+cls+"|"+(card==null?"":card)+"|"+(r.fl&&r.lastK===r.bestK?1:0), old=TW.cells[r.s];
     if(old===v) continue;
     TW.cells[r.s]=v;
-    e.p.textContent=r.place; e.g.textContent=c.gap; e.l.textContent=c.last; e.li.className=cls.trim();
+    e.p.textContent=r.place; e.g.textContent=gt; e.l.textContent=c.last; e.li.className=cls.trim();
     e.c.innerHTML=chip; e.c.className="mx-tw__c"+(A.chipRed(card)?" is-red":"");
   }
   var fl=null; rows.forEach(function(x){ if(x.fl) fl=x; });

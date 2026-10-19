@@ -425,11 +425,16 @@
   .mx-tw__s{display:none}
   /* every rider at once: 24+ riders in two columns (a TV: left to right, top to bottom in the DOM order, column after column); on a phone the compact row: place, plate, last name, gap */
   .mx-tw.is-two{grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-flow:column; grid-template-rows:repeat(var(--tw-rows,20),var(--tw-row)); column-gap:.6rem}
-  .mx-tw.is-compact{--tw-row:1.5rem; gap:.1rem}
-  .mx-tw.is-compact li{grid-template-columns:1.1rem auto minmax(0,1fr) 3.5rem; gap:.25rem; padding:0 .25rem}
+  /* mxfix1 (the CEO: "on the live leader board, I can't see the full names"): the phone's two-column board writes the surname (art.js shortNames) in a
+     condensed face, its gaps short ("+2.09", "+1:10.3", time.js fmtGapShort) and its columns tight, so the names read in full; still every row at once */
+  .mx-race{--mx-cond:"Barlow Condensed","Roboto Condensed","sans-serif-condensed","Arial Narrow","Avenir Next Condensed","Bahnschrift Condensed",sans-serif}
+  .mx-tw.is-compact{--tw-row:1.5rem; gap:.1rem .3rem}
+  .mx-tw.is-compact li{grid-template-columns:1.05rem auto minmax(0,1fr) auto; gap:.2rem; padding:0 .3rem 0 .15rem}
   .mx-tw.is-compact .mx-tw__c, .mx-tw.is-compact .mx-tw__l, .mx-tw.is-compact .mx-tw__f{display:none}
-  .mx-tw.is-compact .mx-tw__s{display:block}
-  .mx-tw.is-compact .mx-tw__p{font-size:var(--fs-micro)}
+  .mx-tw.is-compact .mx-tw__s{display:block; font:600 .8125rem/1.15 var(--mx-cond); letter-spacing:.01em}
+  .mx-tw.is-compact .mx-tw__p{font:700 .8125rem/1 var(--mx-cond)}
+  .mx-tw.is-compact .mx-tw__g{font:600 .8125rem/1 var(--mx-cond)}
+  .mx-tw.is-compact .mx-pl{min-width:1.85em; padding:.06rem .16rem .06rem .45em}
   /* mxtime: the YOU card: your place and gap now, your last and best lap, and what the lap you just rode was worth */
   .mx-yc{margin:0 0 .5rem; padding:.55rem .7rem .6rem; border-radius:var(--r-lg); display:grid; gap:.3rem; background:linear-gradient(180deg,rgba(231,202,144,.16),rgba(231,202,144,.05)); box-shadow:inset 0 0 0 1.5px var(--gold-200)}
   .mx-yc[hidden]{display:none}
@@ -731,7 +736,7 @@
     html:not([data-tv]) .mx-race{padding-inline:.5rem}
     html:not([data-tv]) .mx-acts{margin-inline:-.5rem}
     html:not([data-tv]) .mx-tw li{grid-template-columns:1.4rem auto minmax(0,1fr) 2.2rem 3.5rem 4.1rem; gap:.3rem}
-    html:not([data-tv]) .mx-tw.is-compact li{grid-template-columns:1.1rem auto minmax(0,1fr) 3.5rem; gap:.25rem}
+    html:not([data-tv]) .mx-tw.is-compact li{grid-template-columns:1.05rem auto minmax(0,1fr) auto; gap:.2rem}
   }
 
   /* the caption band: landscape phone (the arena has the full height: three small lines) and the TV (three lines of 1rem) */
