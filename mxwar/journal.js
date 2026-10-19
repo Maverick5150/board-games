@@ -18,9 +18,12 @@
    RoundRec {ri, n, c city, v venue, d date, t title, m mult, tc, fk finals kind, w, p podium, top, fin [RaceRec], q [RaceRec with people],
              hq {hid: "seed" | "heat" | "semi" | "lcq" | "qual" | "out"}, tb [[id, place, pts]] (the standings after it: top 10 + the people),
              red, dv 1 = derived, lite 1 = details dropped by the size cap }
-   THE CAREER BOOK (per device, localStorage "bg_mxwar_career"): {v:1, p:{normName:[{id, sid, series, year, name, rounds, n, wins, pod, best,
-   top10, over, pl}]}}, at most 12 seasons a person and 16 people; Journal.keep(G) upserts the season by G.jr.id from both hosts' save(); the
-   booth reads it through an injected career(name) (announce.js stays storage-free). pl (the championship place) is kept, never spoken. */
+   THE CAREER BOOK (per device, localStorage "bg_mxwar_career"), compact: {v:2, p:{normName:[[h, sid, year, rounds, wins, pod, best, full(,
+   series)]]}}: the people in the order they were last kept (at most 16: the first goes when a 17th comes), at most 12 seasons a person; h a short
+   hash of the season's journal id (Journal.keep(G) upserts by it, from both hosts' save()), full 1 = the season over with every round scored,
+   series only when it is not the sid's prefix. 16 people x 12 seasons stay under 8 KB. A v1 book (records as objects, an o list) is read too.
+   The booth reads it through an injected career(name) (announce.js stays storage-free); Journal.career returns records as objects
+   {id (h), sid, series, year, rounds, n (the season's length when full, else 0), wins, pod, best, over}. */
 (function(g){
 "use strict";
 var MX=g.MXWar=g.MXWar||{};
@@ -197,7 +200,17 @@ var STORE=null, lastSig=null;
 function store(){ if(STORE) return STORE; try{ return g.localStorage||null; }catch(e){ return null; } }
 function setStore(s){ STORE=s||null; lastSig=null; }
 function normName(n){ return String(n||"").replace(/\s+/g," ").trim().toLowerCase(); }
-function readBook(st){ try{ var x=JSON.parse(st.getItem(BOOKKEY)||"null"); if(x&&x.v===1&&x.p&&typeof x.p==="object") return x; }catch(e){} return {v:1,p:{},o:[]}; }
+function hid(s){ var h=0x811c9dc5; s=String(s||""); for(var i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,0x01000193)>>>0; } return h.toString(36); }
+function pack(x){ if(Array.isArray(x)) return x; var n=x.n|0, a=[hid(x.id),String(x.sid||""),+x.year||0,x.rounds|0,x.wins|0,x.pod|0,x.best|0,x.over&&n>=1&&(x.rounds|0)>=n?1:0], pre=String(x.sid||"").split("-")[0]; if(x.series&&x.series!==pre) a.push(String(x.series)); return a; }
+function unpack(a){ if(!Array.isArray(a)) return a&&typeof a==="object"?JSON.parse(JSON.stringify(a)):null; var full=a[7]===1; return {id:a[0],sid:a[1],series:a[8]||String(a[1]||"").split("-")[0],year:a[2],rounds:a[3],n:full?a[3]:0,wins:a[4],pod:a[5],best:a[6],over:full?1:0}; }
+function readBook(st){
+  var b={v:2,p:{}};
+  try{ var x=JSON.parse(st.getItem(BOOKKEY)||"null"); if(x&&(x.v===1||x.v===2)&&x.p&&typeof x.p==="object"){
+    var own=function(k){ return Object.prototype.hasOwnProperty.call(x.p,k); }, ord=Array.isArray(x.o)?x.o.filter(own):[];
+    Object.keys(x.p).forEach(function(k){ if(ord.indexOf(k)<0) ord.push(k); });
+    ord.forEach(function(k){ if(Array.isArray(x.p[k])) b.p[k]=x.p[k].filter(function(r){ return r&&typeof r==="object"; }).map(pack); }); } }catch(e){}
+  return b;
+}
 /* one person's season so far: rounds raced, wins, round podiums, the best round place in the finals, top tens; the championship place (never spoken) */
 function seasonRec(G,h){
   var R=G.riders[h], rec={id:G.jr.id,sid:G.sid,series:G.series,year:G.year,name:String(R.name||""),rounds:0,n:G.cal.length,wins:0,pod:0,best:0,top10:0,over:G.over?1:0};
@@ -210,21 +223,21 @@ function keep(G,st){
   try{
     st=st||store(); if(!st||!G||!G.jr||!G.jr.id||!G.humans||!G.humans.length||!G.results) return false;
     var sig=G.jr.id+"|"+G.results.length+"|"+(G.over?1:0)+"|"+G.humans.length; if(lastSig===sig) return false;
-    var book=readBook(st); if(!Array.isArray(book.o)) book.o=Object.keys(book.p);
+    var book=readBook(st);
     G.humans.forEach(function(h){ var R=G.riders[h]; if(!R) return; var k=normName(R.name); if(!k) return;
-      var list=Array.isArray(book.p[k])?book.p[k]:(book.p[k]=[]), rec=seasonRec(G,h), at=-1;
-      for(var i=0;i<list.length;i++) if(list[i]&&list[i].id===rec.id){ at=i; break; }
+      var list=book.p[k]||[], rec=pack(seasonRec(G,h)), at=-1;
+      for(var i=0;i<list.length;i++) if(list[i][0]===rec[0]){ at=i; break; }
       if(at>=0) list.splice(at,1); list.push(rec); while(list.length>BOOKSEASONS) list.shift();
-      book.o=book.o.filter(function(x){ return x!==k; }); book.o.push(k); });
-    while(book.o.length>BOOKPEOPLE){ var gone=book.o.shift(); delete book.p[gone]; }
+      delete book.p[k]; book.p[k]=list; });   /* kept last: the most recent */
+    var ks=Object.keys(book.p); while(ks.length>BOOKPEOPLE) delete book.p[ks.shift()];
     st.setItem(BOOKKEY,JSON.stringify(book)); lastSig=sig; return true;
   }catch(e){ return false; }
 }
 /* a person's seasons in the book (copies), or [] */
 function career(st,name){
-  try{ st=st||store(); if(!st) return []; var b=readBook(st), list=b.p[normName(name)]; return Array.isArray(list)?JSON.parse(JSON.stringify(list)):[]; }catch(e){ return []; }
+  try{ st=st||store(); if(!st) return []; var b=readBook(st), list=b.p[normName(name)]; return Array.isArray(list)?list.map(unpack).filter(Boolean):[]; }catch(e){ return []; }
 }
 MX.Journal={VER:VER,MAXB:MAXB,BOOKKEY:BOOKKEY,create:create,race:race,round:round,upgrade:upgrade,sync:sync,check:check,shadowStand:shadowStand,lineOrder:lineOrder,derivedRound:derivedRound,
-  keep:keep,career:career,setStore:setStore,normName:normName,seasonRec:seasonRec};
+  keep:keep,career:career,setStore:setStore,normName:normName,seasonRec:seasonRec,hid:hid};
 if(typeof module!=="undefined"&&module.exports) module.exports=MX.Journal;
 })(typeof window!=="undefined"?window:globalThis);
