@@ -1705,7 +1705,7 @@ function create(o){
     var r=A.race; if(!memOn()||!r||A.tk.relax||o.chatter==="less") return false;
     if(!r.isFinal&&!humanSeats().length) return false;
     /* a qualifier (a heat, a semi, the LCQ) with a person in it: one memory line a race, two a round, so the round's budget keeps room for its final */
-    if(!r.isFinal&&((r.memN|0)>=1||((A.memQ&&A.memQ.ri===memRi())?A.memQ.n:0)>=2)) return false;
+    if(!r.isFinal&&((r.memN|0)>=1||((A.memQ&&A.memQ.k===memL().jid+"|"+memRi())?A.memQ.n:0)>=2)) return false;
     var len=r.len|0, lap=r.lap|0, edge=Math.max(2,Math.round(0.15*len)); if(lap<=edge||lap>len-edge) return false;
     var now=A.now; if(now-(r.memAt||-1e9)<(o.chatter==="more"?50000:75000)) return false;
     if(now-A.booth.lastAction<4000) return false; var n3=nextDue(now,3); if(n3&&n3.due-now<4000) return false;
@@ -1716,7 +1716,7 @@ function create(o){
     return memRoom(memRi(),10);             /* the round's budget: the wrap keeps its room (a round stays within 12) */
   }
   /* a memory line said in a race: its time, its count, and a qualifier's share of the round (memGate) */
-  function memRace(r){ r.memAt=A.now; r.memN=(r.memN|0)+1; if(!r.isFinal){ var R=memRi(); if(!A.memQ||A.memQ.ri!==R) A.memQ={ri:R,n:0}; A.memQ.n++; } }
+  function memRace(r){ r.memAt=A.now; r.memN=(r.memN|0)+1; if(!r.isFinal){ var k=memL().jid+"|"+memRi(); if(!A.memQ||A.memQ.k!==k) A.memQ={k:k,n:0}; A.memQ.n++; } }
   /* the riders in focus: the story of the last 12 s, the camera's shot of the last 8 s, the person when the last line was about the person */
   function memFocus(){
     var out=[], seen={}, now=A.now; function add(s){ if(s==null||s<0||seen[s]) return; seen[s]=1; out.push(s); }
