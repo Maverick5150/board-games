@@ -98,7 +98,7 @@ export function createCams(VIEW){
   function sees(a,b,margin){
     const d=Math.hypot(b.x-a.x,b.z-a.z), n=Math.max(2,Math.ceil(d/1.2)), m=margin!=null?margin:0.25;
     const hf=VIEW.world&&VIEW.world.ctx.hf;
-    if(a.y<8&&legInSight(a,b,0.75)) return false;   /* a finish-arch leg across the sight line (milestone 2) */
+    if(a.y<8&&(legInSight(a,b,0.75)||legInFrame(a,b))) return false;   /* a finish-arch leg across the sight line (milestone 2), or standing inside the frame near the lens (the merge) */
     for(let k=1;k<n;k++){ const t=k/n; if(t*d>d-2.2) break; const x=a.x+(b.x-a.x)*t, z=a.z+(b.z-a.z)*t, y=a.y+(b.y-a.y)*t; if(dirtCell(x,z)>y-m) return false; if(hf&&hf(x,z)>y-m-0.3) return false; }   /* the dirt, and outdoors the hills */
     return true;
   }
@@ -110,10 +110,14 @@ export function createCams(VIEW){
   function archLegs(){ const w=VIEW.world, fin=w&&w.fin; if(!fin||!VIEW.C) return null; if(fin.__legs) return fin.__legs; const f=MX.Course.frame(VIEW.C,0,{}), hw=Math.abs(fin.lat)-1.6, sd=fin.side||-1;
     fin.__legs=[-sd*(hw+2.3),sd*(hw+3.5)].map(l=>({x:f.x-Math.sin(f.th)*l,z:f.z+Math.cos(f.th)*l})); return fin.__legs; }
   function blocked(x,z,pad){ const fa=VIEW.world&&VIEW.world.fin&&VIEW.world.fin.flagAt; if(fa&&Math.hypot(x-fa.x,z-fa.z)<3.6+(pad||0)) return true;
-    const lg=archLegs(); if(lg) for(const p of lg) if(Math.hypot(x-p.x,z-p.z)<1.6+(pad||0)) return true; return false; }
+    const lg=archLegs(); if(lg) for(const p of lg) if(Math.hypot(x-p.x,z-p.z)<4.2+(pad||0)) return true; return false; }   /* (the merge: 5 m from a leg with the pickers' 0.8 pad, was 2.4 m: a jump camera 3.4 m from the near leg had it 28 degrees off its axis, a dark band in the frame) */
   /* does the sight line from a to b pass within r metres of an arch leg (a steel post across the lens)? */
   function legInSight(a,b,r){ const lg=archLegs(); if(!lg) return false; const dx=b.x-a.x, dz=b.z-a.z, L2=dx*dx+dz*dz||1;
     for(const p of lg){ const t=clamp(((p.x-a.x)*dx+(p.z-a.z)*dz)/L2,0,1); if(t>0.02&&Math.hypot(a.x+dx*t-p.x,a.z+dz*t-p.z)<r) return true; } return false; }
+  /* (milestone 2 merge) is an arch leg inside the frame near the lens: within 8 m of the camera and within 45 degrees of the line to the subject (a 0.36 m post at 2-6 m fills a band of the
+     frame without crossing its centre: the merge's Reduce-effects run caught the jump camera that way) */
+  function legInFrame(a,b){ const lg=archLegs(); if(!lg) return false; const dx=b.x-a.x, dz=b.z-a.z, L=Math.hypot(dx,dz)||1;
+    for(const p of lg){ const vx=p.x-a.x, vz=p.z-a.z, d=Math.hypot(vx,vz); if(d<8&&d>0.05&&(vx*dx+vz*dz)/(d*L)>0.7071) return true; } return false; }
   /* ---------------- where things are on the course ---------------- */
   const pa={}, pb={};
   /* a point of the rider's path: race distance D (the gate = 0; before it the start's first heading, extended back), lateral lat (+ right) -> {x, z, th, hw, k, s, onStart, g (the dirt's height there)} */
