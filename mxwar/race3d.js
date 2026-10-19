@@ -766,12 +766,13 @@ export function create(host,hooks){
   const SKD=0.13, SKF=0.3;   /* (scale) the skim line SKD under the crests; a crest through it pushes the chassis SKF of its height (skim(), ride()) */
   function ride(r,s,onStart,off){
     if(onStart) return startG(r,off);
-    const g=MX.Course.ground(C,s+off,r.lat), sk=skim(s+off)*sstep(5,9,r.v||0);   /* the skim line over the whoops' tops is a thing of speed: a rider at walking pace (a remount) rolls through the troughs */
+    const g=MX.Course.ground(C,s+off,r.lat), w=sstep(5,9,r.v||0), sk=w>0?skim(s+off):0;   /* the skim line over the whoops' tops is a thing of speed: a rider at walking pace (a remount) rolls through the troughs */
     if(sk<=0) return g;
     /* (scale, 2026-10-19: the CEO, "the suspension needs to be better") the chassis rides the skim line; a crest poking through it pushes the CHASSIS only SKF of its height (a
-       real shock's high-speed compression blows off): the wheel takes the rest (wheelY: the fork and shock work, the chassis stays calm, no pogo off every top) */
-    const line=sk+MX.Course.frame(C,s+off,tmpO).y;
-    return g>line?line+(g-line)*SKF:line;
+       real shock's high-speed compression blows off): the wheel takes the rest (wheelExt: the fork and shock work, the chassis stays calm, no pogo off every top). Below skimming
+       speed the whole of it fades to the dirt itself (w: one blend, so a rider slowing through the whoops is never handed a crest's full height in one frame) */
+    const line=sk+MX.Course.frame(C,s+off,tmpO).y, rs=g>line?line+(g-line)*SKF:line;
+    return g+(rs-g)*w;
   }
   /* JUMP ARCS THAT FOLLOW THE SPEED (view side). course.js gives every jump ONE spatial arc, flown at its design speed (A.vx); the riders reach the
      lip at their own speed (the cards' gaps move them up to 16% either side of the schedule), so a fixed arc made slow riders hang (an implied
