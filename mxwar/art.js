@@ -158,6 +158,8 @@ function nameParts(n){
   return {first:w.slice(0,i).join(" "),last:w.slice(i).join(" "),suf:suf};
 }
 function shortName(n){ var p=nameParts(n), s=p.last+(p.suf?" "+p.suf:""); return s||String(n==null?"":n).trim(); }
+/* the name with the first name as an initial, for a list that cannot hold the whole name: "A. Pocorobba Jr.", "J. Roy" (the surname by the one rule) */
+function initialName(n){ var p=nameParts(n), s=shortName(n); return p.first?p.first.charAt(0).toUpperCase()+". "+s:s; }
 function shortNames(list){
   list=list||[]; var out=list.map(shortName), by={};
   out.forEach(function(s,i){ var k=s.toLowerCase(); (by[k]=by[k]||[]).push(i); });
@@ -169,6 +171,6 @@ function shortNames(list){
 }
 
 MX.Art={MK:MK,MODERN:MODERN,mk:mk,mkStyle:mkStyle,bike:bike,track:track,gate:gate,flag:flag,wflag:wflag,yflag:yflag,pipIcon:pipIcon,suit:suit,info:info,rankLabel:rankLabel,face:face,cardInner:cardInner,chip:chip,chipRed:chipRed,short:short,
-  shortName:shortName,shortNames:shortNames};
+  shortName:shortName,shortNames:shortNames,initialName:initialName};
 if(typeof module!=="undefined"&&module.exports) module.exports=MX.Art;
 })(typeof window!=="undefined"?window:globalThis);
