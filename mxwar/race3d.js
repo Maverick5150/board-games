@@ -1265,8 +1265,9 @@ export function create(host,hooks){
        queue and the next frames are not DRAWN (the picture holds still; the race, its riders, the director and the moments for the announcers go on step by step, as
        do the page, the clock and the tower; the ladder does not measure meanwhile) while the fence is polled once a frame (never waited for); once the GPU has done the
        frames before it, the canvas takes its new size and that frame is drawn at it. A GPU still busy after a try (3 frames, 0.4 s at least; longer at each try, 2 s
-       at most: one shared with other work): the picture draws on at the size it has and tries again 2 s later; the third try takes the size even then (a slow device
-       needs it: the ladder at its floor with the old size would call the device too slow for 3D). The view's own resize (a new layout, a new race: it applies the
+       at most: one shared with other work): the picture draws on at the size it has and tries again 2 s later (then every 4 s; the next race's own resize applies it
+       at the latest). Only with the ladder at its floor does the third try take the size even then (a stall: there the old size would make the ladder demote the
+       tier, or call the device too slow for 3D, after 10 s of long frames; elsewhere a busy GPU stalled 1.6-5.3 s here on a forced size). The view's own resize (a new layout, a new race: it applies the
        ladder's current ratio) and V.fixPR (tests) set the size at once, as before. V.sizeLog: the last tries (fence wait, apply ms, ok). */
     {
       const gl=renderer.getContext(), sPR=renderer.setPixelRatio, sSZ=renderer.setSize;
@@ -1295,7 +1296,9 @@ export function create(host,hooks){
           else {
             let s=true; try{ s=gl.getSyncParameter(fence,gl.SYNC_STATUS)===gl.SIGNALED; }catch(e){ s=true; }
             if(s) apply();
-            else if(now()-fT>=tryMs){ if(tries<2){ unfence(); tries++; nextT=now()+2000; log({t:Math.round(fT),wait:Math.round(now()-fT),ok:false,tries:tries,pr:+want.toFixed(3)}); } else apply(); }
+            else if(now()-fT>=tryMs){
+              let floor=false; if(tries>=2) try{ const q=QUAL.summary(); floor=!!q&&q.rungs>0&&q.rung>=q.rungs-1; }catch(e){ floor=false; }
+              if(!floor){ unfence(); tries=Math.min(tries+1,9); nextT=now()+(tries<3?2000:4000); log({t:Math.round(fT),wait:Math.round(now()-fT),ok:false,tries:tries,pr:+want.toFixed(3)}); } else apply(); }
           }
         }
         return skip0.call(QUAL,t);
