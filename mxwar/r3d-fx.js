@@ -327,7 +327,11 @@ export function createFx(opts){
     jS=new THREE.InstancedBufferAttribute(kS,4).setUsage(THREE.DynamicDrawUsage), jC=new THREE.InstancedBufferAttribute(kC,4).setUsage(THREE.DynamicDrawUsage);
   kg.setAttribute("aP",jP); kg.setAttribute("aV",jV); kg.setAttribute("aS",jS); kg.setAttribute("aK",jC); kg.instanceCount=NK;
   const km=new THREE.ShaderMaterial({uniforms:THREE.UniformsUtils.merge([THREE.UniformsLib.lights,THREE.UniformsLib.fog,{uTime:{value:0},uH:{value:720},uShutter:{value:1/250},uMaxPx:{value:T.maxPx},uGain:{value:1},uBank:{value:T.bank||0},uCamV:{value:new THREE.Vector3()},uMaxTrail:{value:40}}]),
-    vertexShader:SPK_VS,fragmentShader:SPK_FS,lights:true,fog:true,transparent:true,depthWrite:!!T.depth,depthTest:true,defines:T.depth?{SPK_DEPTH:1}:{}});
+    vertexShader:SPK_VS,fragmentShader:SPK_FS,lights:true,fog:true,transparent:true,depthWrite:!!T.depth,depthTest:true,defines:T.depth?{SPK_DEPTH:1}:{},
+    /* THE CRUMB MASK (milestone 2 merge, the lead's request): the colour blends as before, the scene target's ALPHA becomes 1 - the crumb's coverage, so the post chain's half-resolution
+       camera motion blur (r3d-lead-post.js: a scene alpha under 0.5 packs a negative depth) leaves the crumbs alone: they already streak themselves with their own shutter. The canvas has no
+       alpha (alpha: false), so a frame drawn straight to the screen (FIRE TV) is unchanged. */
+    blending:THREE.CustomBlending,blendSrc:THREE.SrcAlphaFactor,blendDst:THREE.OneMinusSrcAlphaFactor,blendSrcAlpha:THREE.ZeroFactor,blendDstAlpha:THREE.OneMinusSrcAlphaFactor});
   const specks=new THREE.Mesh(kg,km); specks.frustumCulled=false; specks.renderOrder=3.5; specks.name="fx-specks";   /* after the dust (renderOrder 3) */
   const _v2=new THREE.Vector2();
   function targetH(r){ const rt=r.getRenderTarget(); return rt?rt.height:r.getDrawingBufferSize(_v2).y; }

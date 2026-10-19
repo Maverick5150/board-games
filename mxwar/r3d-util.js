@@ -131,4 +131,13 @@ export function pbrFromPhong(m,tier){
   return r;
 }
 
+/* THE CHASE SUBJECT IS SPARED FROM THE NEAR-LENS FADE (milestone 2 merge, the cams' request): the riders' and bikes' materials dissolve whatever is within 1.7 m of the lens (a dither: no body
+   ever fills the lens), which also ate the chased rider's own rear wheel and fender. MX_KEEP.value = (the chase subject's hip x, y, z, a radius; w = 0: nobody) is copied from CAMS.keep by
+   race3d.js every frame after the camera; a fragment inside that sphere is never dissolved. A material adds the uniform (sh.uniforms.uMxKeep = MX_KEEP), KEEP_VS_DECL + KEEP_VS_SET (after
+   <project_vertex>: the world position as a varying, instanced or not) and KEEP_FS_DECL; its dither test then reads "if(z < 1.7 && !mxKept()) ...". */
+export const MX_KEEP={value:new THREE.Vector4(0,0,0,0)};
+export const KEEP_VS_DECL="varying vec3 vMxW;\n";
+export const KEEP_VS_SET="\n#ifdef USE_INSTANCING\n vMxW=(modelMatrix*instanceMatrix*vec4(transformed,1.0)).xyz;\n#else\n vMxW=(modelMatrix*vec4(transformed,1.0)).xyz;\n#endif\n";
+export const KEEP_FS_DECL="varying vec3 vMxW;\nuniform vec4 uMxKeep;\nbool mxKept(){ return uMxKeep.w>0.0&&distance(vMxW,uMxKeep.xyz)<uMxKeep.w; }\n";
+
 export {lin,mixc,clamp,sstep,hash2,vnoise,fbm,hashp,pnoise,pfbm,canvas,tex,normalTex,rngf,clear,clearDist};

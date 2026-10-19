@@ -63,6 +63,7 @@ export const TIERS={
     crowd:{detail:0.7,anim:false},   /* milestone 2 (QD look #5, "dark flat lower stands"): the crowd CARDS on the TV too (0.35 = none): +1 draw call, +28k triangles, +1.3 MB textures; no measurable frame cost here (table/ab-firetv.json). Reduce effects keeps 0.35 (Q.options) */
     scenery:{trees:0.4,terrain:0.5},
     riders:{full:4,mid:6,near:14,far:40},riderHi:3,bikeLod:[8],bikeHi:0,dirtTier:"lo",replay:false,
+    stadium:{nearPeople:0,cardRows:3,twinkle:true,roofBanks:8,heroSigns:0,shaftI:0.065},   /* (milestone 2 merge, the stadium's request: the tier owns these; the values are the stadium's own defaults. cardRows = the cut-out rows when the tier draws no crowd cards; heroSigns 0: the simple world) */
     tex:{max:512,aniso:1,budgetMB:24},
     budget:{calls:46,tris:150000,geoMB:6}},   /* triangles 110k -> 150k (milestone 2): the target is now a Mali-G52 MC2 class stick (the CEO's 4K Max), not a G31 MP2; 150k x 30 fps is far below its vertex rate. Calls stay 46: the stick's CPU is the limit */
   balanced:{id:"balanced",rank:1,label:"BALANCED",aliases:["medium","mid"],fps:60,fpsTV:30,lo:false,msaa:false,
@@ -75,6 +76,7 @@ export const TIERS={
     crowd:{detail:0.7,anim:false},
     scenery:{trees:0.7,terrain:0.8},
     riders:{full:8,mid:8,near:22,far:60},riderHi:4,bikeLod:[6,17],bikeHi:2,dirtTier:"hi",replay:true,
+    stadium:{nearPeople:0,cardRows:3,twinkle:true,roofBanks:12,heroSigns:22,shaftI:0.065},
     tex:{max:1024,aniso:4,budgetMB:48},
     budget:{calls:60,tris:200000,geoMB:10}},
   high:{id:"high",rank:2,label:"HIGH",aliases:[],fps:60,fpsTV:60,lo:false,msaa:false,
@@ -87,6 +89,7 @@ export const TIERS={
     crowd:{detail:1,anim:true},
     scenery:{trees:1,terrain:1},
     riders:{full:12,mid:10,near:30,far:80},riderHi:6,bikeLod:[8,22],bikeHi:4,dirtTier:"hi",replay:true,
+    stadium:{nearPeople:2,cardRows:3,twinkle:true,roofBanks:18,heroSigns:22,shaftI:0.065},   /* (twinkle: the phone flashes of a crowd that does not move; an animated crowd has its own) */
     tex:{max:1024,aniso:8,budgetMB:96},
     budget:{calls:90,tris:350000,geoMB:16}},
   ultra:{id:"ultra",rank:3,label:"ULTRA",aliases:["max"],fps:60,fpsTV:60,lo:false,msaa:false,
@@ -99,6 +102,7 @@ export const TIERS={
     crowd:{detail:1,anim:true},
     scenery:{trees:1,terrain:1},
     riders:{full:22,mid:0,near:60,far:120},riderHi:10,bikeLod:[12,34],bikeHi:8,dirtTier:"hi",replay:true,
+    stadium:{nearPeople:3,cardRows:3,twinkle:true,roofBanks:18,heroSigns:22,shaftI:0.065},
     tex:{max:2048,aniso:16,budgetMB:192},
     budget:{calls:140,tris:600000,geoMB:32}}
 };
@@ -414,6 +418,8 @@ export function createQuality(env){
     const e=LO?TIERS.firetv:tier;
     return {lo:!!(LO||e.lo),tier:e.id,rank:e.rank,label:e.label,shadow:e.shadow,post:e.post,fog:e.fog,fx:e.fx,crowd:e.crowd,scenery:e.scenery,riders:e.riders,tex:e.tex,res:e.res,budget:e.budget,
       particles:e.fx.particles,texMax:e.tex.max,aniso:e.tex.aniso,crowdDetail:LO?Math.min(0.35,e.crowd.detail):e.crowd.detail,crowdAnim:e.crowd.anim,trees:e.scenery.trees,terrainDetail:e.scenery.terrain,riderLod:e.riders,riderHi:e.riderHi,bikeLod:e.bikeLod,bikeHi:e.bikeHi,dirtTier:e.dirtTier,replay:e.replay!==false,
+      /* the stadium's milestone 2 flags (r3d-stadium-bowl.js reads them): Reduce effects / reduced motion ask for a still, simpler world: no phone flashes, no cut-out rows, no 3D front rows */
+      nearPeople:LO?0:e.stadium.nearPeople,cardRows:LO?0:e.stadium.cardRows,twinkle:LO?false:e.stadium.twinkle,roofBanks:e.stadium.roofBanks,heroSigns:e.stadium.heroSigns,shaftI:e.stadium.shaftI,
       live:live,key:e.id+(LO?"+lo":"")};
   };
   /* what makes a world new for the cache: the tier's build flags (a tier switch rebuilds the world on the next race) */
@@ -526,8 +532,12 @@ export function createQuality(env){
     else { calmSince+=dt; if(calmSince>20&&nowMs()-persistT>15000){ persistT=nowMs(); Q.save(); calmSince=0; } }
     /* the ladder is at the bottom and OUR frames still run long: the tier itself is too high for this device (an automatic choice only): drop it now, the world follows with the next race */
     if(ladder.k>=ladder.n-1&&source!=="url"&&source!=="manual"&&tier.rank>0&&ladder.mean>ladder.T*1.25&&ladder.med>ladder.T*1.15&&ladder.own()){ lowT+=dt; if(lowT>10){ lowT=0; Q.demote("the ladder is at its floor and frames still run "+ladder.mean.toFixed(0)+" ms"); } } else lowT=0;
+    /* (milestone 2 merge) THE DEVICE IS TOO SLOW FOR 3D: the FIRE TV tier (nothing lower to demote to) at the bottom of its ladder and OUR frames still run long for 10 s. Q.tooSlow is set once and
+       the "slow" event fires (race3d.js: V.tooSlow(), hooks.slow(info)): the game may run the 2D track from the next race. The view never switches itself off mid-race. */
+    if(!Q.tooSlow&&ladder.k>=ladder.n-1&&tier.rank===0&&ladder.mean>ladder.T*1.25&&ladder.med>ladder.T*1.15&&ladder.own()){ slowT+=dt; if(slowT>10){ Q.tooSlow={why:"FIRE TV at its floor and frames still run "+ladder.mean.toFixed(0)+" ms (target "+ladder.T.toFixed(0)+" ms)",ms:+ladder.mean.toFixed(1),w:env.W(),h:env.H(),pr:+pr.toFixed(2)}; emit("slow",Q.tooSlow); } } else slowT=0;
   };
-  let lowT=0;
+  let lowT=0, slowT=0;
+  Q.tooSlow=null;
   /* THE START OF A FRAME (the view's shadowed requestAnimationFrame calls this first, every callback): true = skip this callback.
      A frame cap for a 30 fps target: on a 60 Hz TV it gives an even 33.3 ms cadence instead of a 16 / 33 / 50 ms mix, and the GPU idles half the time (a Fire TV Stick throttles when it runs hot).
      A frame that will be drawn first reads the last frame's fence and applies a resolution step that waited for a camera cut. */

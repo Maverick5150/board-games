@@ -22,7 +22,7 @@
    - Performance: every part type is one instanced draw call (about 26-32 draw calls), low-poly (about 80k triangles with 22 riders), the
      pixel ratio capped (phone 1.75, TV at most 1280 x 720, Reduce effects 960 x 540) and lowered on the fly when frames run long; the
      clock stops while the page is hidden or the race isn't on screen; reduced motion = a still wide frame every 2 s, no camera moves.
-   API (game.js): supported(); create(host, hooks {onLap(n), onFinish()}) -> V: V.setRace(o), V.gate(), V.drop(), V.lap(result) -> show
+   API (game.js): supported(); create(host, hooks {onLap(n), onFinish(), lost(), shown(kind, info)}) -> V: V.setRace(o), V.gate(), V.drop(), V.lap(result) -> show
    {at(name): Promise (holeshot | pass | crash | yellow | line | done)}, V.hold(o), V.standings(order, cnt, lap), V.setFlag(k), V.setRed(s),
    V.markOut(s), V.show(on), V.resize(), V.skip(), V.state(), V.stats(), V.shot(name) (tests).
    THE FILE SPLIT (2026-10-17, no visual change): this file is the view's core (create(), the race state machine, rider motion and the cards
@@ -31,7 +31,7 @@
    slot), r3d-quality.js (adaptive pixel ratio, weak GPU), r3d-track.js (the dirt surface), r3d-world.js (the stadium and everything round
    the track), r3d-bike.js, r3d-riders.js, r3d-fx.js (roost, dust), r3d-cams.js (the director and every camera). See CONTRACT.md. */
 import * as THREE_NS from "../ui/vendor/three-0.160.0.module.min.js";
-import {clamp,sstep,now,clear} from "./r3d-util.js";
+import {clamp,sstep,now,clear,MX_KEEP} from "./r3d-util.js";
 import {isTV,motionMode,createQuality} from "./r3d-quality.js";
 import {createLook} from "./r3d-look.js";
 import {buildWorld,gateBuild,flaggerBuild,flagTex} from "./r3d-world.js";
@@ -78,7 +78,7 @@ export function create(host,hooks){
   /* ---------------- state ---------------- */
   let C=null, look=null, world=null, worldKey="", R=null, FX=null, rs=[], N=0, list=[], gate=null, flagger=null, marshal=null;
   let T=0, lapNo=1, lenLaps=30, mode="idle", show=null, holdInfo=null, flag=null, running=false, want=false, raf=0, lastT=0, yellow=null, lapPlan=null, finished=false, stillT=0;
-  let meSeats=[], redSeat=-1;
+  let meSeats=[], redSeat=-1, lappedK=[], shownHs=false;   /* (the announcers' seam, hooks.shown: lappedK = how many laps down each rider was last seen, shownHs = the holeshot was called) */
   const texFlags={};
   const stats={frames:0,ms:0,msMax:0,calls:0,tris:0,fpsT0:now(),fpsN:0,fps:0,ft:[]};
   const tmpO={}, tmpO2={}, q=new THREE.Quaternion(), eul=new THREE.Euler(0,0,0,"YZX"), v3=new THREE.Vector3(), sc1=new THREE.Vector3(1,1,1);
@@ -160,7 +160,7 @@ export function create(host,hooks){
       Dl:-0.95-gridBack(k),P:-gridBack(k),sb:0,vl:0,al:0,alF:0,psi:0,psiHold:0,sd:{},jF:null,jR:null,jDone:null,czone:0,rem:false}));
     // [/hook:motion]
     RST=list.map((r0,k)=>newState(k,r0));
-    lenLaps=o.len||30; lapNo=1; T=0; holdInfo=null; flag=null; yellow=null; lapPlan=null; finished=false; show=null;
+    lenLaps=o.len||30; lapNo=1; T=0; holdInfo=null; flag=null; yellow=null; lapPlan=null; finished=false; show=null; lappedK=[]; shownHs=false;
     // [hook:cams]
     CAMS.reset();
     // [/hook:cams]
@@ -290,6 +290,10 @@ export function create(host,hooks){
     if(MX.Course.airAt(C,s)) return MX.Course.wrap(C,s+25);
     return s;
   }
+  /* THE ANNOUNCERS' SEAM (milestone 2 merge): hooks.shown(kind, info) is called when the picture shows a moment the commentators call (the booth's booth.shown: the game
+     wires it to annShown): "holeshot" {s} (the leader into turn 1 on lap 1), "pass" {s} (the lap winner's first pass), "crash" {s, kind} (the bike goes down), "lapped" {s, by}
+     (the leader rides past a rider a lap down), "checkered" {s} (the winner takes the flag). s / by = the game's seats. Called after the frame (a timeout), never inside it. */
+  function shown(kind,info){ if(hooks.shown) setTimeout(()=>{ try{ hooks.shown(kind,info); }catch(e){} },0); }
   function makeShow(){ const S={fired:{},waits:{},ended:false}; S.at=n=>S.fired[n]?Promise.resolve():new Promise(r=>(S.waits[n]=S.waits[n]||[]).push(r)); S.fire=n=>{ if(S.fired[n]) return; S.fired[n]=true; (S.waits[n]||[]).splice(0).forEach(f=>{ try{ f(); }catch(e){} }); }; S.done=S.at("done"); return S; }
   function endShow(){ if(!show) return; show.ended=true; ["holeshot","pass","crash","yellow","line"].forEach(k=>show.fire(k)); show.fire("done"); }
   function leaderIdx(){ let b=-1, bd=-1e9; rs.forEach((r,i)=>{ if(!r.gone&&!r.crash&&r.D>bd){ bd=r.D; b=i; } }); return b; }
@@ -301,7 +305,7 @@ export function create(host,hooks){
     if(!C) return;
     const alive=order.filter(s=>rs[s]&&!rs[s].gone), gg=MX.Course.gaps(alive,cnt,C.Tlap,{base:0.5,extra:1.4});
     rs.forEach((r,i)=>{ r.g=gg[i]!=null?gg[i]:r.g+3; r.tg=null; r.init=false; });
-    lapNo=Math.max(1,n||1); T=lapStartT(lapNo)+0.05; mode="race"; finished=false; gate.set(1); gate.drop=1; gate.dropT=1;
+    lapNo=Math.max(1,n||1); T=lapStartT(lapNo)+0.05; mode="race"; finished=false; gate.set(1); gate.drop=1; gate.dropT=1; lappedK=[]; shownHs=lapNo>1;
     CAMS.pickShot(true); renderOnce();
   };
   V.markOut=function(seat){ const r=rs[seat]; if(r) r.gone=true; };
@@ -312,7 +316,7 @@ export function create(host,hooks){
   V.drop=function(){
     return new Promise(res=>{
       if(!C){ res(); return; }
-      mode="race"; lapNo=1; T=0; finished=false; gate.dropT=now();
+      mode="race"; lapNo=1; T=0; finished=false; gate.dropT=now(); lappedK=[]; shownHs=false;
       { const shot=CAMS.shot; if(shot&&shot.type==="gate"){ shot.min=2.6; shot.max=3.4; shot.pri=1; shot.t=0; } }
       if(motion()==="off"){ gate.set(1); renderOnce(); res(); return; }
       setTimeout(res,650);
@@ -365,7 +369,7 @@ export function create(host,hooks){
   }
 
   /* ---------------- one step of the world ---------------- */
-  const BW=new THREE.Matrix4();
+  const BW=new THREE.Matrix4(), keepCam=new THREE.Vector3();
   function step(dt){
     if(!C||!R) return;
     const tw=now()/1000, racing=mode==="race";
@@ -374,7 +378,7 @@ export function create(host,hooks){
       /* the leader starts a lap: the cards of that lap turn (the game); the end of the last lap is the checkered flag */
       while(!finished&&T>=lapStartT(lapNo+1)){
         if(show) show.fire("line");
-        if(lapNo>=lenLaps||(lapPlan&&lapPlan.over&&lapPlan.n>=lapNo)){ finished=true; if(show) show.fire("done"); if(hooks.onFinish) setTimeout(()=>hooks.onFinish(),0); break; }
+        if(lapNo>=lenLaps||(lapPlan&&lapPlan.over&&lapPlan.n>=lapNo)){ finished=true; if(show) show.fire("done"); if(hooks.onFinish) setTimeout(()=>hooks.onFinish(),0); { const Lw=leaderIdx(); if(Lw>=0) shown("checkered",{s:rs[Lw].seat}); } break; }
         if(show) show.fire("done");
         lapNo++;
         // [hook:stadium]
@@ -519,7 +523,15 @@ export function create(host,hooks){
     if(show&&!show.ended&&racing){
       const L=leaderIdx();
       if(lapNo===1&&L>=0&&rs[L].D>=C.hsD-6) show.fire("holeshot");
-      if(lapPlan&&lapPlan.win!=null&&lapPlan.win>=0&&!show.fired.pass){ const rk=trackRank(lapPlan.win); if(lapPlan.rank0>=0&&rk<lapPlan.rank0) show.fire("pass"); }
+      if(lapPlan&&lapPlan.win!=null&&lapPlan.win>=0&&!show.fired.pass){ const rk=trackRank(lapPlan.win); if(lapPlan.rank0>=0&&rk<lapPlan.rank0){ show.fire("pass"); if(rs[lapPlan.win]) shown("pass",{s:rs[lapPlan.win].seat}); } }
+    }
+    /* the announcers' moments that need no lap result (hooks.shown): the holeshot, a rider lapped by the leader */
+    if(racing&&dt>0&&!finished&&hooks.shown){
+      const L=leaderIdx();
+      if(!shownHs&&lapNo===1&&L>=0&&rs[L].D>=C.hsD-6){ shownHs=true; shown("holeshot",{s:rs[L].seat}); }
+      if(L>=0&&!rs[L].onStart){ const DL=rs[L].D;
+        for(let i=0;i<N;i++){ const r=rs[i]; if(i===L||r.gone||r.crash||r.onStart) continue; const k=Math.floor((DL-r.D)/C.L);
+          if(lappedK[i]==null) lappedK[i]=k; else if(k>lappedK[i]){ lappedK[i]=k; if(k>=1) shown("lapped",{s:r.seat,by:rs[L].seat}); } } }
     }
     for(let i=0;i<N;i++){ const r=rs[i]; if((r.gone&&!r.crash)||!r.fr){ hideRider(R,i); RST[i].visible=false; continue; } rider(i,r,dt,atGate,tw); }
     // [hook:fx]
@@ -541,9 +553,13 @@ export function create(host,hooks){
     CAMS.director(dt);   /* which shot next */
     CAMS.camera(dt);     /* the camera: position, look-at, field of view */
     // [/hook:cams]
+    keepCam.copy(cam.position);   /* (where the director put the lens: the near-lens keep sphere below holds only for the director's own camera) */
     // [hook:harness]
     if(V.camHook){ const h=V.camHook(dt,rs,T); if(h){ cam.position.set(h.eye[0],h.eye[1],h.eye[2]); CAMS.target.set(h.target[0],h.target[1],h.target[2]); cam.lookAt(CAMS.target); if(h.fov&&Math.abs(cam.fov-h.fov)>1e-4){ cam.fov=h.fov; cam.updateProjectionMatrix(); } } }   /* the capture harness' camera (demo.js; null in the game): after the director, before the sky and the shadow box follow the lens */
     // [/hook:harness]
+    /* the chase subject is spared from the riders' and bikes' near-lens fade (milestone 2 merge, the cams' request: CAMS.keep = his hip and a radius, w = 0 for nobody; r3d-util.js MX_KEEP);
+       a camera the capture harness placed elsewhere spares nobody */
+    MX_KEEP.value.copy(CAMS.keep); if(cam.position.distanceToSquared(keepCam)>1e-10) MX_KEEP.value.w=0;
     if(CAMS.shot){ if(world.ctx.skyMesh) world.ctx.skyMesh.position.copy(cam.position); if(LOOK.shadows) LOOK.fitShadow(cam,CAMS.target); }   /* the sky follows the lens; the shadow box follows the action */
     LOOK.frame(cam,CAMS.target,dt,tw,subjectDist());   /* the camera-relative lights (rim, kick) and the depth of field's focus (r3d-look.js) */
     tags();
@@ -739,6 +755,7 @@ export function create(host,hooks){
     // [/hook:fx]
     { const shot=CAMS.shot; placeMarshalS(r.s,r.crash.side,shot&&shot.type==="crash"?shot.cam:null,r.crash.kind); }
     if(show){ show.fire("crash"); const S=show; setTimeout(()=>S.fire("yellow"),2400); }
+    shown("crash",{s:r.seat,kind:c.kind});
     // [hook:cams]
     { const shot=CAMS.shot; if(shot&&shot.type!=="crash") CAMS.pickShot(true); }
     // [/hook:cams]
@@ -929,6 +946,10 @@ export function create(host,hooks){
   V.bench=o=>QUAL.bench.start(o);
   V.benchResult=()=>QUAL.bench.result;
   V.perfRaces=()=>QUAL.bench.races();   /* how the last races really ran on this device (the passive record in r3d-perf-bench.js: no page to open, nothing on screen) */
+  /* (milestone 2 merge) the 2D track as the automatic fallback for a device too slow for 3D: V.tooSlow() -> null | {why, ms, w, h, pr} once the FIRE TV tier has sat at its floor with frames
+     still too long for 10 s (r3d-quality.js); hooks.slow(info) is called once then (after the frame). The game decides (the next race in 2D); this view keeps drawing the race it is in. */
+  V.tooSlow=()=>QUAL.tooSlow||null;
+  QUAL.onChange((what,info)=>{ if(what==="slow"&&hooks.slow) setTimeout(()=>{ try{ hooks.slow(info); }catch(e){} },0); });
   /* The look (r3d-look.js) may have its own tier table (high / medium / low / stick): our tier drives it, and the ladder's cuts (post chain, bloom, depth of field) are forwarded as flags it understands.
      Guarded: a look without setTier / setFlags is left alone (the base look). The post flags of a tier are the MOST it may draw; the ladder only switches them off. */
   const LOOKTIER={firetv:()=>QUAL.dev.tv?"stick":"low",balanced:()=>"medium",high:()=>(QUAL.dev.mobile||QUAL.dev.tv)?"medium":"high",ultra:()=>"ultra"};

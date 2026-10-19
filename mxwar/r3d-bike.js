@@ -14,7 +14,7 @@
    st.mud (0..1), st.steer (rad, + right; when absent it is worked out from the track's curvature st.k). hideBike(M, i). */
 import * as THREE_NS from "../ui/vendor/three-0.160.0.module.min.js";
 const THREE=THREE_NS;
-import {bone,canvas,clamp,lin} from "./r3d-util.js";
+import {bone,canvas,clamp,lin,MX_KEEP,KEEP_VS_DECL,KEEP_VS_SET,KEEP_FS_DECL} from "./r3d-util.js";
 import {BIKE,buildBike,buildFarBike,buildWheel,triCount,MAT,UA,A0,ARM} from "./r3d-bike-model.js";
 export {BIKE};
 
@@ -69,14 +69,15 @@ function bikeMaterial(lo){
   const m=std?new THREE.MeshStandardMaterial({vertexColors:true,roughness:1,metalness:0,envMap:T.env,envMapIntensity:1.7}):new THREE.MeshLambertMaterial({vertexColors:true});
   m.userData.keepMaps=true;
   m.onBeforeCompile=sh=>{
-    sh.uniforms.uLiv={value:T.liv}; sh.uniforms.uMudCol={value:new THREE.Vector3(0.115,0.066,0.032)};
+    sh.uniforms.uLiv={value:T.liv}; sh.uniforms.uMudCol={value:new THREE.Vector3(0.115,0.066,0.032)}; sh.uniforms.uMxKeep=MX_KEEP;   /* (milestone 2 merge: the chase subject's bike is never dissolved near the lens: r3d-util.js MX_KEEP) */
     sh.vertexShader=sh.vertexShader
-      .replace("#include <common>","#include <common>\nattribute vec4 aMat;\nattribute vec3 aAccent;\nattribute vec3 aMud;\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec3 vMud;\nvarying vec3 vLoc;\nvarying vec2 vLiv;")
+      .replace("#include <project_vertex>","#include <project_vertex>"+KEEP_VS_SET)
+      .replace("#include <common>","#include <common>\n"+KEEP_VS_DECL+"attribute vec4 aMat;\nattribute vec3 aAccent;\nattribute vec3 aMud;\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec3 vMud;\nvarying vec3 vLoc;\nvarying vec2 vLiv;")
       .replace("#include <color_vertex>","#include <color_vertex>\n{ float wl=step(7.5,aMat.z); float tn=aMat.z-8.0*wl; tn-=4.0*step(3.5,tn); float sty=aMud.y; vec3 fc=sty>0.5&&sty<1.5?vec3(0.86):(sty>1.5&&sty<2.5?aAccent:instanceColor.rgb); vec3 tint=tn<0.5?vec3(1.0):(tn<1.5?instanceColor.rgb:(tn<2.5?aAccent:fc)); vColor.rgb=color.rgb*tint; }\nvMat=aMat; vAcc=aAccent; vMud=aMud; vLoc=position; vLiv=uv;");
-    let fs=sh.fragmentShader.replace("#include <common>","#include <common>\nuniform sampler2D uLiv;\nuniform vec3 uMudCol;\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec3 vMud;\nvarying vec3 vLoc;\nvarying vec2 vLiv;\n"+(std?GLSL_NOISE:""));
+    let fs=sh.fragmentShader.replace("#include <common>","#include <common>\n"+KEEP_FS_DECL+"uniform sampler2D uLiv;\nuniform vec3 uMudCol;\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec3 vMud;\nvarying vec3 vLoc;\nvarying vec2 vLiv;\n"+(std?GLSL_NOISE:""));
     fs=fs.replace("#include <color_fragment>",
       "#include <color_fragment>\n"+
-      "{ float bkZ=vViewPosition.z; if(bkZ<1.7){ float bkA=smoothstep(0.8,1.7,bkZ); if(bkA<fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))))) discard; } }\n"+   /* the near-lens fade: no bike ever fills the lens (director note D12) */
+      "{ float bkZ=vViewPosition.z; if(bkZ<1.7&&!mxKept()){ float bkA=smoothstep(0.8,1.7,bkZ); if(bkA<fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))))) discard; } }\n"+   /* the near-lens fade: no bike ever fills the lens (director note D12) */
       "float bkWl=step(7.5,vMat.z); float bkTn=vMat.z-8.0*bkWl; float bkSp=step(3.5,bkTn); bkTn-=4.0*bkSp;\n"+
       "if(bkSp>0.5&&vMud.z>0.02){ if(fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453)<vMud.z) discard; }\n"+
       "{ float lk=step(0.5,bkTn)*(1.0-step(1.5,bkTn))+step(2.5,bkTn)*0.85; vec3 lv=texture2D(uLiv,vLiv).rgb; float sty=vMud.y; vec3 b0=diffuseColor.rgb; vec3 cA=vAcc, cB=vec3(0.010), cC=vec3(0.80);\n"+

@@ -27,7 +27,7 @@ const realNow=(GL.Performance&&GL.Performance.prototype&&GL.Performance.prototyp
 export function createWarm(renderer){
   const W={runs:0,last:null,keepers:0};
   let tiny=null, empty=null;
-  const kScenes={screen:null,target:null}, keepers=new Map();
+  const kScenes={screen:null,target:null}, keepers=new Map(), vpTmp=new THREE.Matrix4();
   const progCount=()=>{ const p=renderer.info&&renderer.info.programs; return p?p.length:-1; };
   function target(){ if(!tiny) tiny=new THREE.WebGLRenderTarget(16,16,{type:THREE.HalfFloatType,depthBuffer:true,stencilBuffer:false,generateMipmaps:false}); return tiny; }
   function uniq(a){ const o=[]; (a||[]).forEach(x=>{ if(o.indexOf(x)<0) o.push(x); }); return o; }
@@ -90,7 +90,9 @@ export function createWarm(renderer){
     if(!empty) empty=new THREE.Scene();
     const seen=[], orig=renderer.render;
     renderer.render=function(s){ if(s&&s!==empty&&s.isScene&&s.children.length===1){ const o=s.children[0], m=o.material; if(m&&m.isShaderMaterial) seen.push([m,renderer.getRenderTarget()===null,o.geometry]); } return orig.apply(renderer,arguments); };
-    try{ if(f.dof&&P.setDof) P.setDof(0.5,8); P.render(empty,ctx.cam,0); } finally { renderer.render=orig; }
+    /* (milestone 2 merge) the lead's half-resolution chain draws its prepass, its gather (depth of field + camera motion blur) and its contact-shadow pass only while a subject is near and
+       the camera moves: all three are switched on for this one draw so their programs get keepers too (the next frame's LOOK.frame sets the real values again before anything is drawn) */
+    try{ if(f.dof&&P.setDof) P.setDof(0.5,8); if(P.setAo) P.setAo(true); if(P.setMotion){ ctx.cam.updateMatrixWorld(); vpTmp.multiplyMatrices(ctx.cam.projectionMatrix,ctx.cam.matrixWorldInverse); P.setMotion(vpTmp,1); } P.render(empty,ctx.cam,0); } finally { renderer.render=orig; }
     seen.forEach(([m,toScreen,geo])=>{
       const pp=renderer.properties.get(m), prog=pp&&pp.currentProgram; if(!prog) return;
       const key=prog.cacheKey; if(keepers.has(key)) return;

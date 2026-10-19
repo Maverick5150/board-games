@@ -10,7 +10,7 @@
 import * as THREE_NS from "../ui/vendor/three-0.160.0.module.min.js";
 const THREE=THREE_NS;
 import {lin,mixc,clamp,sstep,canvas,tex,rngf,merge,paint,xf,clear} from "./r3d-util.js";
-import {SOIL,dirtMaps} from "./r3d-track.js";
+import {SOIL,dirtMaps,floorMaterial} from "./r3d-track.js";
 import {CROWD,crowdAtlas,boardsTex,ribbonTex,suitesTex,drawBoard,glowSheet,BRAND,PROPS,propsUV,propsTex} from "./r3d-stadium-art.js";
 
 const sgn=v=>v<0?-1:1;
@@ -304,10 +304,10 @@ export function stadium(C,look,q,root,ctx){
   const fancy=q.fancy!=null?!!q.fancy:(q.crowdAnim!=null?!!q.crowdAnim:!lo), hazeOn=q.haze!=null?!!q.haze:(q.post&&q.post.shafts!=null?!!q.post.shafts:!lo);
   const segs=q.segs||(det>=1?128:det>=0.7?96:72), nTow=q.towers||(det>=1?10:det>=0.7?8:6), nCards=q.cards!=null?q.cards:(det>=1?(q.tier==="ultra"?2:1):det>=0.7?1:0), nBan=q.banners!=null?q.banners:(det>=0.7?14:0);
   const U={uTime:{value:0}}, R=rngf(4151);
-  /* the dirt floor */
-  const fm=dirtMaps(look.soil,lo,true); fm.map.repeat.set(W/7,D/7); fm.normal.repeat.set(W/7,D/7);
+  /* the dirt floor: the dirt specialist's floor material (milestone 2 merge, the dirt's request: r3d-track.js floorMaterial: the same calm floor maps plus a second, rotated sample and
+     damp / dry patches 15-30 m across, so the floor no longer repeats every 7 m when seen from the stands; 2 texture samples and 1 program more) */
   const Sx=SOIL[look.soil]||SOIL["stadium-dirt"], fc=mixc(lin(Sx[0]),lin(Sx[2]),0.6);
-  const floor=new THREE.Mesh(new THREE.PlaneGeometry(W+4,D+4),new THREE.MeshLambertMaterial({map:fm.map,normalMap:fm.normal,normalScale:new THREE.Vector2(0.8,0.8),color:new THREE.Color().setRGB(fc[0]*0.86,fc[1]*0.86,fc[2]*0.86)}));
+  const floor=new THREE.Mesh(new THREE.PlaneGeometry(W+4,D+4),floorMaterial(look,lo,[fc[0]*0.86,fc[1]*0.86,fc[2]*0.86],W,D));
   floor.rotation.x=-Math.PI/2; floor.position.set(cx,-0.16,cz); floor.receiveShadow=true; root.add(floor);   /* under the deepest rut of the track, so it never shows through the dirt */
   /* the footprint and the profile of the bowl: [distance out, height, distance out, height] */
   const ring=makeRing(cx,cz,W/2+1.5,D/2+1.5,6,segs), LV=levelFn(ring);
