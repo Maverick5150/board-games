@@ -606,6 +606,9 @@ function create(o){
         EX.kick(IMP.huge); }
     } else { lineOn=false; lineEnd=T; }
     if(own){ set(own.duck.gain,on?dbl(lv>=3?-3:-5):1,T,on?0.12:0.6); set(own.pocket.gain,on?-4:0,T,on?0.12:0.6); }
+    /* the device's own speech (outside Web Audio: its loudness cannot be matched): the race steps back 3 dB more under its lines */
+    var tts=false; try{ var V=o.voice||g.BGVoice, rd=V&&V.ready?V.ready():null; tts=!!(rd&&(rd.engine==="native"||rd.engine==="speech")); }catch(e){ tts=false; }
+    if(tts||G.ttsDown){ G.ttsDown=on&&tts; set(G.hold.gain,(held?dbl(-12):1)*(on&&tts?dbl(-3):1),T,on?0.12:0.6); }
   };
   RS.replay=function(on,op){
     if(dead||!G) return; inReplay=!!on; var T=ctx.currentTime, p=on?(op&&op.slow===false?1:0.667):1;
@@ -614,7 +617,7 @@ function create(o){
     set(G.beds.gain,on?dbl(-10):1,T,0.25);
     RS._log.push(["replay",+T.toFixed(3),!!on]);
   };
-  RS.hold=function(on){ if(dead||!G) return; held=!!on; set(G.hold.gain,on?dbl(-12):1,ctx.currentTime,0.15); };
+  RS.hold=function(on){ if(dead||!G) return; held=!!on; set(G.hold.gain,(on?dbl(-12):1)*(G.ttsDown?dbl(-3):1),ctx.currentTime,0.15); };
   RS.stop=function(){
     if(dead||!G) return; var T=ctx.currentTime;
     set(G.out.gain,0,T,0.4);
