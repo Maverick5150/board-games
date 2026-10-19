@@ -320,7 +320,7 @@ export function create(host,hooks){
   const slideOf=v=>v*v/15;   /* the crash script's bike slide for its speed v0 (crashPose: v0 t - 3.75 t^2 to t = v0 / 7.5) */
   function livePlanOf(r,Rm,k){
     r.lastK=k;
-    const h=Rm.hold[k], d=Rm.dnf&&Rm.dnf.why==="crash"&&Rm.dnf.lap===k?Rm.dnf:null; if(!h&&!d) return;
+    const h=MX.Time.holdOf?MX.Time.holdOf(LIVE.G,r.seat,k):Rm.hold[k], d=Rm.dnf&&Rm.dnf.why==="crash"&&Rm.dnf.lap===k?Rm.dnf:null; if(!h&&!d) return;   /* (mxbeat: holdOf reads a beat race's holds too: [phase, ms]) */
     const ph=d?d.at:h[0], Dc=MX.Course.dOfT(C,tauPr(k-1+ph)), v=clamp(MX.Course.vOfD(C,Dc)*(LIVE.rate||1),6,10), Ds=Dc-slideOf(v), at=MX.Course.atD(C,Math.max(0,Ds),{});
     if(at.onStart||Ds<r.D+2) return;
     let w=null; try{ w=MX.Time.holdWindow(LIVE.G,r.seat,k); }catch(e){ w=null; }
@@ -388,7 +388,7 @@ export function create(host,hooks){
     LIVE.ord=ord.map(r=>r.seat);
     if(lp>=0){ const nl=clamp(Math.floor(lp)+1,1,lenLaps); if(nl>lapNo||jump){ lapNo=nl; if(world.ctx.screen) world.ctx.screen(lapNo,lenLaps,null); } }   /* the leader's lap (the big screen) */
     liveYellow(ct);
-    if(!finished&&tm.done&&tm.flag!=null&&ct>=tm.flag){ finished=true; if(show) show.fire("done"); if(hooks.onFinish) setTimeout(()=>hooks.onFinish(),0); if(tm.win>=0) shown("checkered",{s:tm.win}); }
+    if(!finished&&(tm.done||tm.v===4)&&tm.flag!=null&&ct>=tm.flag){ finished=true;   /* (mxbeat: a beat race knows its flag at the winner's line, long before the last rider is in) */ if(show) show.fire("done"); if(hooks.onFinish) setTimeout(()=>hooks.onFinish(),0); if(tm.win>=0) shown("checkered",{s:tm.win}); }
   }
   // [/hook:live]
   /* a lap's result: every rider rides from where they are to the new standings over the rest of the lap */
