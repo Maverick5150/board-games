@@ -1,5 +1,5 @@
 // Offline cache for Monopoly (bump VERSION to force update)
-const VERSION = "monopoly-v41";
+const VERSION = "monopoly-v42";
 const PREFIX = VERSION.replace(/v[0-9]+$/, "");   // every game shares one origin (one CacheStorage): only ever delete THIS game's old caches
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.png", "./board.js", "./brain.js", "./edition.js",
   // editions (batch 1): the catalogue list and every edition file, so any edition plays offline
