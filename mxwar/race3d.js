@@ -167,6 +167,9 @@ export function create(host,hooks){
     // [/hook:motion]
     RST=list.map((r0,k)=>newState(k,r0));
     lenLaps=o.len||30; lapNo=1; T=0; holdInfo=null; flag=null; yellow=null; lapPlan=null; finished=false; show=null; lappedK=[]; shownHs=false;
+    // [hook:dirt]
+    if(world.dirt&&world.dirt.setNight) world.dirt.setNight(nightOf(o));   /* the night's wear: this race's place in the round's program (r3d-track.js nightFrame) */
+    // [/hook:dirt]
     // [hook:cams]
     CAMS.reset();
     // [/hook:cams]
@@ -181,6 +184,21 @@ export function create(host,hooks){
     // [/hook:perf]
     return V.courseInfo;
   };
+  // [hook:dirt]
+  /* THE NIGHT'S WEAR (2026-10-19, the CEO: "the ruts get deeper as the night goes on. So for the heat races ... the track should be perfect, but the ruts get deeper and deeper as the
+     night goes on, just like actual motocross physics"): the dirt wears race by race through the round's program and lap by lap inside a race (r3d-track.js nightFrame). The game
+     passes V.setRace({..., night: {k, lens}}): k = this race's index in the round's program (0 = the first heat), lens = every race's laps in the program's order (G.round.races[i].len;
+     G.rkey picks k); or {base, total} in laps. Without it the race is taken as the night's last (a Main after as many laps of racing as it has itself). The same numbers on every
+     screen (Party Mode too): the dirt is a function of the round, the race and the leader's laps. V.setNight(night) sets it for the race on show (a test, a restored race);
+     V.night() -> {base, total, len, p, m, wN} (p = the night's progress, m = the ruts' depth: 1 = milestone 2's). */
+  function nightOf(o){ const len=Math.max(1,(o&&o.len)||lenLaps||1), n=o&&o.night;
+    if(n&&Array.isArray(n.lens)&&n.lens.length){ const L2=n.lens.map(x=>Math.max(0,+x||0)), k=clamp(Math.round(+n.k||0),0,L2.length-1), base=L2.slice(0,k).reduce((a,b)=>a+b,0), total=L2.reduce((a,b)=>a+b,0);
+      return {base:base,total:Math.max(total,base+(L2[k]||len)),len:L2[k]||len}; }
+    if(n&&+n.total>0) return {base:Math.max(0,+n.base||0),total:+n.total,len:Math.max(1,+n.len||len)};
+    return {base:len,total:2*len,len:len}; }
+  V.setNight=function(n){ if(!world||!world.dirt||!world.dirt.setNight) return null; world.dirt.setNight(nightOf({night:n,len:lenLaps})); renderOnce(); return V.night(); };
+  V.night=function(){ const N=world&&world.dirt&&world.dirt.night; return N?{base:N.base,total:N.total,len:N.len,p:+(N.p||0).toFixed(4),m:+(N.m||0).toFixed(4),wN:+(N.wN||0).toFixed(4)}:null; };
+  // [/hook:dirt]
   // [hook:motion]
   /* THE START GRID (the motion specialist, milestone 2). The old grid put 22 riders in ONE row of 0.9 m slots on a gate wider than the start
      (19.8 m on a 17 m start): the outer slots were clamped onto each other (riders 17, 19, 21 stood in one spot) and slotOf() sent rider 21 to

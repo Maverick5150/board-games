@@ -750,6 +750,9 @@ function placeGate(){
   du.style.left=Math.round(r.x-r.h*0.2)+"px"; du.style.top=Math.round(r.y-r.h*0.2)+"px"; du.style.height=Math.round(r.h*1.4)+"px"; du.style.width=Math.round(r.h*3)+"px";
 }
 function redId(){ if(!G) return null; var k=gen+"|"+G.results.length+"|"+G.ri; if(ui.redK!==k){ ui.redK=k; ui.red=S.redPlate(G); } return ui.red; }
+/* the night's wear for the 3D race (race3d.js V.setRace night, 2026-10-19: the heats on a groomed track, the ruts deeper race by race, the Main the deepest): this race's place in
+   the round's program and every race's laps, from the round (the same on every screen) */
+function night3D(){ var RG=G&&G.round; if(!RG||!RG.races||!RG.races.length) return null; var k=-1; RG.races.forEach(function(r,i){ if(r.key===G.rkey) k=i; }); if(k<0) k=Math.min(RG.cur||0,RG.races.length-1); return {k:k,lens:RG.races.map(function(r){ return r.len||0; })}; }
 /* the track's riders for this race (team colours, plates, the red plate, the people) */
 function trackRiders(){
   var rc=ui.rc; if(!rc) return;
@@ -758,7 +761,7 @@ function trackRiders(){
     ui.trkKey=key3;
     var c3=G.cal[Math.min(G.ri,G.cal.length-1)], red3=redId();
     try{
-      V3.setRace({series:G.series,year:G.year,round:c3.n||(G.ri+1),cal:c3,len:rc.o.len,lapT:(G.round&&G.round.lapT)||0,riders:rc.r.map(function(p,s){ var R=G.riders[seatId(s)], m=A.mk(R.bike); return {s:s,color:m[0],accent:m[0]==="#f2f4f8"?"#183a8c":(m[1]==="#0b0a12"?"#16161c":"#f2f2f6"),num:R.plate,name:R.name,red:R.id===red3,me:R.kind==="human"}; })});
+      V3.setRace({series:G.series,year:G.year,round:c3.n||(G.ri+1),cal:c3,len:rc.o.len,lapT:(G.round&&G.round.lapT)||0,night:night3D(),riders:rc.r.map(function(p,s){ var R=G.riders[seatId(s)], m=A.mk(R.bike); return {s:s,color:m[0],accent:m[0]==="#f2f4f8"?"#183a8c":(m[1]==="#0b0a12"?"#16161c":"#f2f2f6"),num:R.plate,name:R.name,red:R.id===red3,me:R.kind==="human"}; })});
     }catch(e){ try{ console.warn("mxwar: 3D race",e); }catch(x){} v3state="failed"; mode3D(); ui.trkKey=null; renderRace(); return; }
     if(V3.warm){ try{ var wp=V3.warm(); if(wp&&wp.then) wp.then(function(){ syncControls(); },function(){ syncControls(); }); }catch(e){} }   /* compile every shader of the new race now, while the gate shows (a weak GPU would hitch for seconds on the first frames); the view draws its first frame and drops the gate only once they are ready (race3d.js: the warm hold) */
     ui.show=null; ui.yellowNext=null; ui.yellowOn=null; ui.lapReady=0; ui.finish3=false;
