@@ -1668,8 +1668,10 @@ function create(o){
      post-race talk stays within 45% the season: the points lines and the memory lines said since the flag (wrapL / wrapS, counted in emit2 as the
      lines are said), this one too. A single-Main night with the person in it (the flag, the winner, two rundowns, two points lines) has room for
      one: the most interesting one comes first (onRoundDone). A race skipped to its finish or simmed has its short summary instead of the
-     post-race show: the wrap's own cap only */
-  function wrapBudget(fn){ return function(){ var rr=A.race; if(!rr||(rr.wrapN|0)>=(rr.wrapW|0)) return null; if(rr.ckSaid&&((rr.wrapS|0)+1)/((rr.wrapL|0)+1)>0.45) return null; var c=fn(); if(c){ var d0=c.memDone; c.memDone=function(){ rr.wrapN=(rr.wrapN|0)+1; if(d0) d0(); }; } return c; }; }
+     post-race show: the wrap's own cap only. The person's milestone of the night (a first win or podium of the season, a season best, a career
+     mark) is the night's story: it is said even past the 45% */
+  var MILESTONE={youFirstWin:1,youFirstPod:1,youBest:1,youCareer:1};
+  function wrapBudget(fn){ return function(){ var rr=A.race; if(!rr||(rr.wrapN|0)>=(rr.wrapW|0)) return null; var over=rr.ckSaid&&((rr.wrapS|0)+1)/((rr.wrapL|0)+1)>0.45; var c=fn(); if(c&&over&&!(c.mem&&c.mem.kind==="you"&&MILESTONE[c.mem.v])) c=null; if(c){ var d0=c.memDone; c.memDone=function(){ rr.wrapN=(rr.wrapN|0)+1; if(d0) d0(); }; } return c; }; }
   /* how the pick did (final: the season's scorecard). good: only a pick that won or made the podium (news, said first in the wrap) */
   function pickResCtx(final,good){
     return function(){
