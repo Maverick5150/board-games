@@ -29,7 +29,17 @@
    (mxwar/time.js, MXWar.Time) turns every battle into a lap: endBattle calls MX.Time.lap(G) right after the battle, standings(G) is then the
    order of RACE TIMES (the same rows as before plus laps, t, gap, gs, int; the old cards order stays as chest(G)), and finish(G) takes the
    classification from the model. War itself (the pot, the wars, G.rs, the House rules) is untouched; a race without G.tm (an old save) runs
-   exactly as before. */
+   exactly as before.
+   mxbeat (the CEO, 2026-10-19: "Every 10 seconds, there needs to be a card flip"; BG_audit/sprint/mxact/ACTION-PLAN-v3.md, the reference v3/war3.js):
+   a race built with tminfo.beat (G.o.beat = 10000 ms) is a BEAT race: every 10 s of race clock every rider still racing turns a card (G.battle counts
+   BEATS); the battle is fought on TABLES of up to 4 riders within reach of each other on the track (MXWar.Beat.tables; the gate = one table, its
+   winner the holeshot) with every House rule per table, and a rider on his own CHASES the rider just ahead (MXWar.Beat.chases: time, no cards); a whole
+   battle is decided at once (War has no decisions: a war is part of its beat); 52 cards per rider whatever the House row says; the flag comes from
+   the time model (the last rider in: G.tm.done). The drop ({t:"drop"}) fights the gate's battle in the same act: the riders leave as the gate drops
+   (the CEO's addendum). THE GATE-DROP PILE-UP (the addendum, 2026-10-19 ~13:20): on the gate-drop battle only, every rider whose card is the lowest
+   card of the deck (lowestVal: the 2s; the 3s when deuces are wild ...; a wild card never) goes down in the bunch and remounts (a crash with pile = 1;
+   one crash even if he also lost a double war at the gate). A person's flip in a beat race only LOCKS his card ({t:"flip"} marks it); step(G, {clock})
+   turns every card at the lock. */
 (function(g){
 "use strict";
 var MX=g.MXWar=g.MXWar||{};
@@ -88,8 +98,8 @@ var HOUSE=[
   ["acesWild","Aces are wild","bool",null,1],
   ["jokersWild","Jokers are wild","bool",null,1],
   ["wildAs","Wild cards count as","choice",[["top","Higher than every card"],["ace","An Ace"]],1],
-  ["form","Real form: the year's top riders get a small edge","bool",null,1],
-  ["cards","Cards per rider","choice",[["auto","Auto (52 in a long stadium race, else 26)"],[13,"13 (a quick race)"],[26,"26 (half a deck each)"],[52,"52 (a full deck each)"]],0]
+  ["form","Real form: the year's top riders get a small edge","bool",null,1]
+  /* (mxbeat: the "Cards per rider" row left the sheet: a beat race deals 52 cards per rider whatever it says; options.cards stays in saves for the per-lap races) */
 ];
 function mergeOpts(o){ var d=defaultOpts(); for(var k in (o||{})) if(o[k]!==undefined&&d.hasOwnProperty(k)) d[k]=o[k]; return d; }
 function versionOf(id){ for(var i=0;i<VERSIONS.length;i++) if(VERSIONS[i].id===id) return VERSIONS[i]; return null; }
@@ -141,12 +151,16 @@ function TM(){ return MX.Time||(typeof require==="function"?require("./time.js")
    entrants: [{id, name, human}] in GATE order (the gate pick: index 0 picks first). seed: 32-bit int (the season draws it). */
 function newRace(opts,entrants,seed,tminfo){
   var n=(entrants||[]).length; if(n<MINR||n>MAXR) throw new Error("A race is for 2 to 40 riders.");
-  var o=normalize(mergeOpts(opts),n);
+  var o=normalize(mergeOpts(opts),n), bt=!!(tminfo&&tminfo.beat);
+  /* mxbeat: a beat race deals 52 cards per rider whatever the House row says (13 / 26 run riders out of cards in a race of 45-230 battles); the row's
+     value is kept (o.house); o.pileup === false (tests only, never the game) leaves out the CEO's gate-drop pile-up */
+  if(bt){ o.house=opts&&opts.cards!=null?opts.cards:"auto"; o.cards=52; o.nd=Math.max(1,Math.ceil(n*52/52)); o.beat=10000; if(opts&&opts.pileup===false) o.pileup=false; }
   var G={v:VER,id:"mxrace",o:o,n:n,rs:(seed==null?Math.floor(Math.random()*4294967296):seed)>>>0,
-    r:entrants.map(function(e,i){ return {id:e&&e.id!=null?e.id:i,name:String((e&&e.name)||("Rider "+(i+1))),human:!!(e&&e.human),edge:o.form?Math.max(0,Math.min(2,(e&&e.edge)|0)):0,pk:[],out:false,outAt:-1,outN:0,bn:0,lc:0,crashes:0,dnf:null}; }),
+    r:entrants.map(function(e,i){ var p={id:e&&e.id!=null?e.id:i,name:String((e&&e.name)||("Rider "+(i+1))),human:!!(e&&e.human),edge:o.form?Math.max(0,Math.min(2,(e&&e.edge)|0)):0,pk:[],out:false,outAt:-1,outN:0,bn:0,lc:0,crashes:0,dnf:null}; if(bt) p.fin=false; return p; }),
     kitty:[],aside:[],tb:[],cur:{},part:[],bpart:[],warN:0,down:0,wars:0,phase:"gate",battle:0,need:[],pick:{},
     hs:-1,over:false,why:"",res:null,last:null,yellow:null,
     st:{won:[],led:[],wars:0,chain:0,pot:0,leader:-1,changes:0,crashes:0},log:[]};
+  if(bt){ G.st.d2=0; G.st.d3=0; G.st.tables=0; G.st.lone=0; G.st.pile=0; G.flips=[]; }
   for(var i=0;i<n;i++){ G.st.won.push(0); G.st.led.push(0); }
   var deck=shuffle(G,buildDeck(o)), per=Math.floor(deck.length/n);
   for(i=0;i<per*n;i++) G.r[i%n].pk.push(deck[i]);
@@ -185,25 +199,30 @@ function apply(G,m){
   var ev=[];
   if(G.phase==="gate"){
     if(m.t!=="drop"||!onlyKeys(m,["t","s"])) return fail("The gate hasn't dropped yet.");
-    dropGate(G,ev); return {ok:true,ev:ev};
+    dropGate(G,ev);
+    if(isBeat(G)) beatNow(G,ev,null);   /* mxbeat (the CEO's addendum): the riders leave as the gate drops: the gate's battle is fought in the same act, every card turned */
+    return {ok:true,ev:ev};
   }
   if(m.t!=="flip"||!onlyKeys(m,["t","s"])) return fail("Turn up your card.");
   var s=+m.s; if(!G.r[s]) return fail("No such rider.");
   if(G.need.indexOf(s)<0||G.pick[s]) return fail(nm(G,s)+" has nothing to do now.");
   G.pick[s]=1; ev.push({e:"acted",s:s});
+  if(isBeat(G)) return {ok:true,ev:ev};   /* mxbeat: an early flip LOCKS his card for the beat; the battle comes at the lock (step) */
   if(allActed(G)) resolve(G,ev);
   return {ok:true,ev:ev};
 }
 function allActed(G){ for(var i=0;i<G.need.length;i++) if(!G.pick[G.need[i]]) return false; return true; }
-/* everyone still pending acts (computers never wait; a human on Auto or a quiet Party phone) and the phase resolves */
-function step(G){
+/* everyone still pending acts (computers never wait; a human on Auto or a quiet Party phone) and the phase resolves.
+   mxbeat: opt = {clock: [seats whose shot clock ran out]} (the page's / the TV's record; nothing in the race depends on it) */
+function step(G,opt){
   var ev=[]; if(!G||G.over) return ev;
-  if(G.phase==="gate"){ dropGate(G,ev); return ev; }
+  if(G.phase==="gate"){ dropGate(G,ev); if(isBeat(G)) beatNow(G,ev,null); return ev; }
+  if(isBeat(G)){ beatNow(G,ev,opt||null); return ev; }
   G.need.forEach(function(s){ if(!G.pick[s]){ G.pick[s]=1; ev.push({e:"acted",s:s,auto:true}); } });
   resolve(G,ev); return ev;
 }
 /* a whole battle (wars included) */
-function battle(G){ var ev=[], b=G.battle, k=0; if(G.phase==="gate") dropGate(G,ev); while(!G.over&&G.battle===b&&k++<10000) ev=ev.concat(step(G)); return ev; }
+function battle(G){ var ev=[], b=G.battle, k=0; if(G.phase==="gate"){ dropGate(G,ev); if(isBeat(G)){ beatNow(G,ev,null); return ev; } } while(!G.over&&G.battle===b&&k++<10000) ev=ev.concat(step(G)); return ev; }
 function run(G){ var k=0; while(!G.over&&k++<1e6) step(G); return G; }
 function defaultMove(G,s){ var L=legal(G,s); return L.length?L[0]:null; }
 
@@ -368,6 +387,146 @@ function finish(G,why,ev){
   log(G,why==="all"?nm(G,L[0].s)+" has every card: the race is over.":"Checkered flag! "+nm(G,L[0].s)+" wins"+(TM2?"":" with "+L[0].count+" cards")+".","flag");
 }
 
+/* ================= mxbeat: THE BEAT MODE OF WAR (the reference BG_audit/sprint/mxact/v3/war3.js, v3.1; ACTION-PLAN-v3.md step 1) =================
+   A beat race (G.o.beat): every 10 s every rider still racing turns a card; the tables (MXWar.Beat.tables: up to 4 riders within reach on the track, the
+   gate = one table) each play the CEO's War with every House rule (the top card takes the table's cards; a tie for it is a war of the tied riders, 3
+   down and the 4th decides, Rule A / Rule B; a lost double war = crash and remount, a lost triple war or deeper = crash out, his cards to the war's
+   winner; a deadlock sets the table's cards aside; the kitty goes to the first war winner); a rider on his own chases the rider just ahead (time, not
+   cards). A whole battle at once, wars included; the model writes the beat's 10 s right after (MXWar.Beat.beat). The arithmetic and the order of every
+   card move are the reference's (a Party phone and the TV compute the same race). */
+function BM(){ return MX.Beat||(typeof require==="function"?require("./beat.js"):null); }
+function isBeat(G){ return !!(G&&G.o&&G.o.beat); }
+function canPlayB(G,s){ var p=G.r[s]; return !p.out&&!p.fin&&p.pk.length>0; }
+function startBeat(G){ G.phase="flip"; G.pick={}; G.need=[]; for(var s=0;s<G.n;s++) if(G.r[s].human&&canPlayB(G,s)) G.need.push(s); }
+/* the lowest value a card of this race's deck can have under the House rules (the gate-drop pile-up): the 2s; the 3s with deuces wild; a wild card never */
+function lowestVal(G){ var o=G.o, lo=Infinity; for(var b=0;b<54;b++){ if(b>=52&&!o.jokersWild) continue; if(isWild(G,b)) continue; var v=val(G,b); if(v<lo) lo=v; } return lo; }
+/* the beat: every pending person turns his card (Auto, or his shot clock ran out: opt.clock), the record of who flipped himself, then the battle */
+function beatNow(G,ev,opt){
+  var b=G.battle+1, clock=opt&&opt.clock?opt.clock:[], gate=b===1, own=[], ck=[];
+  G.need.forEach(function(s){
+    if(G.pick[s]){ if(!gate){ own.push(s); G.r[s].own=(G.r[s].own|0)+1; } return; }
+    G.pick[s]=1; var e={e:"acted",s:s,auto:true};
+    if(gate) e.gate=true;
+    else { G.r[s].auto=(G.r[s].auto|0)+1; if(clock.indexOf(s)>=0){ e.clock=true; ck.push(s); if(G.r[s].aon==null) G.r[s].aon=b; } }
+    ev.push(e);
+  });
+  if(!gate){ if(!G.flips) G.flips=[]; G.flips.push({k:b,own:own,clock:ck}); if(G.flips.length>12) G.flips.shift(); }   /* (the record: who flipped himself, whose shot clock ran out; G.fl is the race's first lap) */
+  beatBattle(G,ev);
+}
+function beatBattle(G,ev){
+  var B=BM(), b=G.battle+1;
+  G.lap={b:b,c:{},w:{},tabs:[],cr:[]};
+  var live=[], cards=[], s; for(s=0;s<G.n;s++) if(canPlayB(G,s)) live.push(s);
+  live.forEach(function(x){ var p=G.r[x]; p.bn=p.pk.length; var c=p.pk.shift(); G.cur[x]=c; G.lap.c[x]=c; cards.push({s:x,c:c}); });
+  ev.push({e:"reveal",w:0,b:b,cards:cards});
+  /* the tables: the gate (battle 1) is one table; else the packs on the track (the time model) */
+  var tabs=b===1||!B||!G.tm?[live.slice()]:B.tables(G,live);
+  /* the chases: every rider alone at his table (and riding) plays his card against the rider directly ahead of him ({chaser: target}): time, never cards */
+  G.lap.ch=b>1&&B&&G.tm?B.chases(G,live,tabs):{};
+  tabs.forEach(function(seats,ti){ settleTable(G,seats,ti,ev); });
+  if(b===1&&G.o.pileup!==false) pileUp(G,live,ev);
+  endBeat(G,ev);
+}
+function winnersOfSeats(G,seats){ var best=-1, w=[]; seats.forEach(function(s){ var v=val(G,G.cur[s]); if(v>best){ best=v; w=[s]; } else if(v===best) w.push(s); }); return w; }
+/* the winner takes the table's pot (the kitty with the first war won) */
+function takePot(G,w,pot,depth,tab,ti,ev){
+  if(depth>0&&G.kitty.length){ G.kitty.forEach(function(c){ pot.push(c); }); ev.push({e:"kitty",s:w,n:G.kitty.length}); G.kitty=[]; }
+  shuffle(G,pot); pot.forEach(function(c){ G.r[w].pk.push(c); });
+  G.st.won[w]++; if(G.hs<0){ G.hs=w; ev.push({e:"holeshot",s:w,b:G.battle+1}); log(G,"Holeshot: "+nm(G,w)+"!","holeshot"); }
+  if(depth>G.st.chain) G.st.chain=depth; if(pot.length>G.st.pot) G.st.pot=pot.length;
+  tab.win=w; tab.war=depth; tab.n=pot.length; tab.wc=G.cur[w];
+  ev.push({e:"win",s:w,n:pot.length,war:depth,c:G.cur[w],tab:ti});
+}
+/* one table's War (settle / startWar / warFlip / win / crash, per table): the top card takes the pot; a tie = a war of the tied riders (House "only the
+   tied" off: everyone at the table), 3 down (the Version / noDown) and the next up, Rule A (the last card plays) or House Rule B (short = out, his cards
+   to the pot; a war that ends without its deciding cards is no crash); a lost double war = remount, triple or deeper = crash out; deadlocks */
+function settleTable(G,seats,ti,ev){
+  var tab={s:seats.slice(),win:-1,war:0,n:0,wc:null}; G.lap.tabs.push(tab);
+  if(seats.length===1){ var s1=seats[0]; G.r[s1].pk.push(G.cur[s1]); tab.win=s1; tab.alone=1; tab.wc=G.cur[s1]; G.st.lone++; return; }
+  G.st.tables++;
+  var pot=seats.map(function(s){ return G.cur[s]; }), onlyTied=G.o.onlyTied!==false&&seats.length>=3;   /* (a battle of 2 has no "only the tied") */
+  var part=seats.slice(), depth=0;
+  function dead(best){ pot.forEach(function(c){ G.aside.push(c); }); tab.win=-1; tab.war=depth; tab.dead=1; ev.push({e:"deadlock",seats:best.slice(),n:pot.length,tab:ti}); }
+  for(var guard=0;guard<60;guard++){
+    var best=winnersOfSeats(G,part);
+    if(best.length===1){ var w=best[0]; takePot(G,w,pot,depth,tab,ti,ev); if(depth>=2) crashB(G,w,part,depth,ti,ev); return; }
+    var fighters=onlyTied?best:part.slice();
+    if(best.every(function(s){ return G.r[s].pk.length===0; })){ var rest=fighters.filter(function(s){ return best.indexOf(s)<0&&G.r[s].pk.length>0; }); if(!rest.length||!canBeat(G,G.cur[best[0]])){ dead(best); return; } }
+    if(!fighters.some(function(s){ return G.r[s].pk.length>0; })){ dead(best); return; }
+    depth++; G.wars++; G.st.wars++;
+    if(G.o.outLoses){   /* House Rule B: too few cards to complete the war = out (his cards go into the pot) */
+      var k=G.o.down, shortS=fighters.filter(function(s){ return G.r[s].pk.length<k+1; });
+      if(shortS.length){
+        shortS.forEach(function(s){ var p=G.r[s]; p.pk.forEach(function(c){ pot.push(c); }); p.pk=[]; });
+        ev.push({e:"short",seats:shortS.slice(),tab:ti});
+        var rest2=fighters.filter(function(s){ return shortS.indexOf(s)<0; });
+        if(!rest2.length){ pot.forEach(function(c){ G.aside.push(c); }); tab.win=-1; tab.war=depth; tab.dead=1; return; }
+        if(rest2.length===1){ takePot(G,rest2[0],pot,depth,tab,ti,ev); return; }   /* (no crash: the war ended without its deciding cards) */
+        fighters=rest2;
+      }
+    }
+    ev.push({e:"war",n:depth,seats:fighters.slice(),tied:best.slice(),down:G.o.down,tab:ti});
+    part=fighters; var laid=[];
+    part.forEach(function(s){
+      var p=G.r[s], a=p.pk.length, nd=0, up=G.cur[s], held=true;
+      if(a>0){ nd=Math.min(G.o.down,a-1); for(var i=0;i<nd;i++) pot.push(p.pk.shift()); up=p.pk.shift(); pot.push(up); G.cur[s]=up; held=false; }
+      laid.push({s:s,down:nd,c:up,held:held});
+      (G.lap.w[s]=G.lap.w[s]||[]).push([nd,held?null:up]);
+    });
+    ev.push({e:"reveal",w:depth,cards:laid,tab:ti});
+  }
+}
+function crashB(G,w,part,depth,ti,ev){
+  var kind=depth>=3?"out":"remount", losers=part.filter(function(s){ return s!==w; }), gain=[];
+  if(depth>=3) G.st.d3++; else G.st.d2++;
+  losers.forEach(function(s){
+    var p=G.r[s]; p.crashes++; G.st.crashes++;
+    ev.push({e:"crash",s:s,kind:kind,depth:depth,by:w,tab:ti});
+    G.lap.cr.push({s:s,kind:kind,depth:depth,by:w,tab:ti});
+    if(kind==="out"){ p.outN=p.pk.length; p.pk.forEach(function(c){ gain.push(c); }); p.pk=[]; p.out=true; p.outAt=G.battle+1; p.dnf={lap:G.battle+1,why:"crash"}; }
+  });
+  if(gain.length){ shuffle(G,gain); gain.forEach(function(c){ G.r[w].pk.push(c); }); ev.push({e:"crashCards",s:w,n:gain.length}); }
+  if(losers.length) log(G,"Crash! "+names(G,losers)+(kind==="out"?" crash out.":" go down and remount."),"crash");
+}
+/* THE GATE-DROP PILE-UP (the CEO's addendum): on the gate-drop battle only, every rider whose first card is the lowest card of the deck goes down in the
+   bunch and remounts (one crash: a rider already down from a gate war is not penalised twice). The model places it at the first-turn funnel. */
+function pileUp(G,live,ev){
+  var lo=lowestVal(G), have={}, seats=[];
+  G.lap.cr.forEach(function(c){ have[c.s]=1; });
+  live.forEach(function(s){ var c=G.lap.c[s]; if(c==null||have[s]||G.r[s].out||isWild(G,c)||val(G,c)!==lo) return; seats.push(s); });
+  if(!seats.length) return;
+  G.pile=seats.slice(); G.st.pile+=seats.length;
+  ev.push({e:"pileup",seats:seats.slice(),r:lo,b:1});
+  seats.forEach(function(s){ var p=G.r[s]; p.crashes++; G.st.crashes++;
+    ev.push({e:"crash",s:s,kind:"remount",depth:0,by:-1,tab:0,pile:1});
+    G.lap.cr.push({s:s,kind:"remount",depth:0,by:-1,tab:0,pile:1}); });
+  log(G,"Trouble in turn one: "+names(G,seats)+(seats.length>1?" go":" goes")+" down in the pack.","crash");
+}
+function endBeat(G,ev){
+  var B=BM(), s;
+  G.battle++;
+  G.lastLap=G.lap; G.lap=null;
+  Object.keys(G.cur).forEach(function(x){ if(G.cur[x]!=null) G.r[x].lc=val(G,G.cur[x]); });
+  G.cur={}; G.pick={}; G.need=[];
+  var outs=[];
+  for(s=0;s<G.n;s++){ var p=G.r[s]; if(p.out||p.fin) continue; if(p.pk.length===0){ p.out=true; p.outAt=G.battle; p.outN=p.bn; p.dnf={lap:G.battle,why:"cards"}; outs.push(s); } }
+  if(outs.length){ ev.push({e:"out",seats:outs,b:G.battle}); log(G,names(G,outs)+(outs.length>1?" are":" is")+" out of cards.","out"); }
+  if(B&&G.tm) B.beat(G);   /* the model writes this beat's 10 s (its events stay in G.tm.ev: the views read them on the race clock) */
+  var tm=G.tm;
+  if(tm?tm.done:G.battle>=G.o.len){ endBeatRace(G,"flag",ev); return; }
+  var alive=0; for(s=0;s<G.n;s++) if(canPlayB(G,s)) alive++;
+  if(!alive&&B&&tm){ B.complete(G); endBeatRace(G,"all",ev); return; }
+  startBeat(G);
+}
+function endBeatRace(G,why,ev){
+  var B=BM(), st=G.tm&&B?B.standings(G):null;
+  G.over=true; G.phase="over"; G.why=why; G.need=[]; G.pick={};
+  G.res=G.tm&&B?B.result(G).order:chest(G).map(function(r){ return r.id; });
+  var order=st?st.map(function(r){ return r.s; }):chest(G).map(function(r){ return r.s; });
+  ev.push({e:"flag",why:why,b:G.battle,order:order});
+  log(G,"Checkered flag! "+nm(G,order[0])+" wins.","flag");
+}
+
 /* ---------------- the running order: every rider their own place 1..N ---------------- */
 /* the WAR CHEST order (the old running order, before the time model): riders still in by cards held; equal cards: the higher card in the last
    battle, then the gate order. A race with G.tm is ranked by time (standings below); the chest stays for the "cards" readouts and old saves. */
@@ -424,16 +583,20 @@ function snapshot(G,seat){
 function check(G){
   var err=[], seen={}, deck=buildDeck(G.o), s, i;
   function see(c,where){ if(seen[c]) err.push("card "+c+" twice ("+where+")"); seen[c]=1; }
-  for(s=0;s<G.n;s++){ var p=G.r[s]; p.pk.forEach(function(c){ see(c,"pk"+s); }); if(p.out&&p.pk.length) err.push("out rider "+s+" holds cards"); if(!p.out&&!p.pk.length&&G.phase==="flip") err.push("rider "+s+" in with no cards"); }
+  for(s=0;s<G.n;s++){ var p=G.r[s]; p.pk.forEach(function(c){ see(c,"pk"+s); }); if(p.out&&p.pk.length) err.push("out rider "+s+" holds cards"); if(!p.out&&!p.fin&&!p.pk.length&&G.phase==="flip") err.push("rider "+s+" in with no cards"); }
   G.tb.forEach(function(e){ see(e.c,"table"); }); G.kitty.forEach(function(c){ see(c,"kitty"); }); G.aside.forEach(function(c){ see(c,"aside"); });
   var cnt=Object.keys(seen).length; if(cnt!==deck.length) err.push("cards "+cnt+" != "+deck.length);
   for(i=0;i<deck.length;i++) if(!seen[deck[i]]) { err.push("missing card "+deck[i]); break; }
   if(["gate","flip","war","over"].indexOf(G.phase)<0) err.push("phase "+G.phase);
   G.need.forEach(function(x){ if(!G.r[x]||!G.r[x].human) err.push("need "+x+" is not a human rider"); });
   if(G.over){ if(!G.res||G.res.length!==G.n) err.push("no result"); else { var u={}; G.res.forEach(function(id){ if(u[id]) err.push("result twice "+id); u[id]=1; }); } }
-  if(G.battle>G.o.len) err.push("past the flag");
-  if(G.tm&&G.tm.k>G.battle&&!(G.over&&G.why!=="flag")) err.push("the time model is ahead of the war ("+G.tm.k+" > "+G.battle+")");   /* (a War that ended early: complete() rides the laps that are left) */
-  if(G.tm&&G.tm.k>G.tm.L) err.push("the time model rode past the flag");
+  if(isBeat(G)){   /* mxbeat: G.battle counts beats; the model has written every beat fought (a War that ended early: complete() rides the beats that are left) */
+    if(G.tm&&G.tm.v===4&&G.tm.k!==G.battle&&!(G.over&&G.why!=="flag")) err.push("the beat model is not at the war's beat ("+G.tm.k+" != "+G.battle+")");
+  } else {
+    if(G.battle>G.o.len) err.push("past the flag");
+    if(G.tm&&G.tm.k>G.battle&&!(G.over&&G.why!=="flag")) err.push("the time model is ahead of the war ("+G.tm.k+" > "+G.battle+")");   /* (a War that ended early: complete() rides the laps that are left) */
+    if(G.tm&&G.tm.k>G.tm.L) err.push("the time model rode past the flag");
+  }
   for(s=0;s<G.n;s++){ var q=G.r[s]; if(q.dnf&&!q.out) err.push("dnf rider "+s+" not out"); if(q.out&&q.dnf&&q.dnf.why!=="crash"&&q.dnf.why!=="cards") err.push("dnf why "+s); }
   return err;
 }
@@ -441,6 +604,7 @@ function check(G){
 MX.Race={VER:VER,MINR:MINR,MAXR:MAXR,defaultOpts:defaultOpts,VERSIONS:VERSIONS,HOUSE:HOUSE,normalize:normalize,mergeOpts:mergeOpts,buildDeck:buildDeck,
   newRace:newRace,legal:legal,apply:apply,step:step,battle:battle,run:run,defaultMove:defaultMove,need:needList,
   standings:standings,chest:chest,snapshot:snapshot,check:check,firstPlayer:firstPlayer,winnersOf:winnersOf,isWild:isWild,val:val,
-  rank:rank,suit:suit,isRed:isRed,isJoker:isJoker,base:base,copyOf:copyOf,shortName:shortName,cardName:cardName,rankLabel:rankLabel,total:total};
+  rank:rank,suit:suit,isRed:isRed,isJoker:isJoker,base:base,copyOf:copyOf,shortName:shortName,cardName:cardName,rankLabel:rankLabel,total:total,
+  isBeat:isBeat,lowestVal:lowestVal,canPlayB:canPlayB};
 if(typeof module!=="undefined"&&module.exports) module.exports=MX.Race;
 })(typeof window!=="undefined"?window:globalThis);
