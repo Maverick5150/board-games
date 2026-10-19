@@ -5,14 +5,16 @@
    BGVoice's, the page mounts them). It never breaks the game: every call is guarded, a failing commentator or voice means a silent booth.
 
      var booth = MXWar.Booth.create({ speed: fn -> "slow"|"medium"|"fast", ctx: fn -> {hold, quiet}, onStory, sayNames: fn -> {typed name: respelling},
-                                       voice, announce, now, timer:false (tests) });
+                                       clock: fn -> {t, rate} (the race clock the picture is at), estimate: fn(line) -> ms, voice, announce, now, timer:false (tests) });
      booth.feed(G, events)            the SAME event array the page plays (startRace, step / apply, simRace); skipped while the announcers are Off
      booth.shown(kind, info)          the race view's moments: "crash" {s}, "holeshot", "checkered" (2D); "pass" {s}, "lapped" {s, by} (3D, later)
      booth.shot(shot) / booth.setTrack({layout, sectionAt}) / booth.setLapMs(ms)    the camera director / the track / a compressed lap, for the 3D view
      booth.gate({G, key, people, drop(), stage(name)})   the start procedure (the opening, the 30-second board, sideways, the drop); .go() = a tap
      booth.state() / booth.restore(st) / booth.newSeason(st)         what a save keeps (the variety memory) / a fresh commentator
      booth.settings() / booth.set(key, value)   mode "voice" | "captions" | "off", chatter "less" | "normal" | "more", vol 0.2..1, a / b (voice names)
-     booth.voices() / booth.sample(who)         the pickers' list (men's voices only; la / lb = friendly names, why / info = why there is only captions and what the device has) / a test line in a voice
+     booth.voices() / booth.sample(who, queue, lv)   the pickers' list (men's voices only; la / lb = friendly names, why / info = why there is only captions and what the device has) / a test line in a voice (at level lv)
+   A line's intensity (line.lv: 0 calm, 1 lively, 2 BIG, 3 HUGE, decided in announce.js by intensity.js) reaches the voice as its tier "T"+lv: the
+   device voice lifts its rate and pitch a little by level and the caption marks a BIG or HUGE line; a HUGE line is an interrupt that nothing cuts.
      booth.attach(hosts)              mounts the caption strips: {band: element, top: element}
    ctx() is asked on every tick (150 ms): hold = the game is paused (the Menu): the commentator is paused too and the voice stops; quiet = a sheet
    that must stay silent is open (the battle board, the race times ...): the voice stops and the lines meant for that time are dropped. Time is
@@ -90,7 +92,7 @@ function create(o){
     if(!AN||!AN.create) return null;
     var st=null; try{ st=prev&&prev.state?prev.state():null; }catch(e){ st=null; }
     var a=null;
-    try{ a=AN.create({say:say,onStory:function(s){ try{ if(typeof o.onStory==="function") o.onStory(s); }catch(e){} },speed:speedNow(),chatter:S.chatter,sayNames:sayMap(),seed:o.seed}); }
+    try{ a=AN.create({say:say,onStory:function(s){ try{ if(typeof o.onStory==="function") o.onStory(s); }catch(e){} },speed:speedNow(),chatter:S.chatter,sayNames:sayMap(),seed:o.seed,estimate:o.estimate,clock:o.clock}); }   /* estimate: a clip pack's real length of a line (INTENSITY.md 5.2); clock: the race clock the picture is at */
     catch(e){ try{ if(g.console&&g.console.warn) g.console.warn("booth: no commentator:",e&&e.message); }catch(x){} return null; }
     if(st){ delete st.sit; try{ a.restore(st,now()); }catch(e){} }   /* the variety memory goes on; the sitting's flags start again */
     return a;
@@ -130,12 +132,20 @@ function create(o){
     var list=v&&v.list?v.list:[];
     return {ready:!!(r&&r.ready),engine:r?r.engine:"captions",native:!!(r&&r.engine==="native"),list:list,a:v&&v.a?v.a.name:"",b:v&&v.b?v.b.name:"",la:v&&v.a?(v.a.label||v.a.name):"",lb:v&&v.b?(v.b.label||v.b.name):"",same:!!(v&&v.same),why:r&&r.why?r.why:"",info:r&&r.info?r.info:"",picks:{a:S.a,b:S.b}};
   };
-  /* a test line in a voice (the settings' "Hear the announcers"): returns the text said, or "" when the announcers are Off; queue = after the line playing */
-  B.sample=function(who,queue){
+  /* a test line in a voice (the settings' "Hear the announcers"): returns the text said, or "" when the announcers are Off; queue = after the line playing.
+     With lv (0 calm, 1 lively, 2 BIG, 3 HUGE; Hutch tops out at BIG) it is a REAL line of the phrase bank with no slot, said at that level (the
+     intensity design's ladder, INTENSITY.md 5.3), so a recorded pack has a take of it; without lv each announcer says who he is. */
+  var LADDER={a:[["lapped","The leaders are into lapped traffic."],["board_30","Thirty seconds. Here we go."],["board_sideways","Board's sideways."],["gate_drop","And the gate drops!"]],
+    b:[["race_intro_heat","Heat races are short. Get a bad start and you're scrambling the whole way."],["race_intro_main","This is the race they came for. Everything before it was just getting here."],["lead_change","That's a statement pass. Now, can he hold it?"]]}, sampleN=0;
+  function tplOf(ev,text){ var BK=MX.AnnounceLines, E=BK&&BK.events&&BK.events[ev]; if(!E) return null; for(var i=0;i<E.L.length;i++) if(E.L[i].split("|").slice(2).join("|")===text) return ev+"#"+i; return null; }
+  B.sample=function(who,queue,lv){
     if(!V||!on()) return "";
     who=who==="b"?"b":"a";
-    var text=who==="a"?"Wes Calloway here, and the gate is about to drop!":"Hutch Bramlett with you. Watch the first corner.";
-    try{ return V.speak(text,{who:who,say:text,tier:"T1",interrupt:!queue,ttl:8000})!=null?text:""; }catch(e){ return ""; }
+    var text, line=null, tier="T1", pri=1;
+    if(lv==null){ text=who==="a"?"Wes Calloway here, and the gate is about to drop!":"Hutch Bramlett with you. Watch the first corner."; }
+    else { var L=LADDER[who], i=clamp(lv|0,0,L.length-1), pk=L[i]; text=pk[1]; tier="T"+i; pri=i>=3?3:1;
+      line={id:"smp"+(++sampleN),who:who,tpl:tplOf(pk[0],pk[1]),ev:pk[0],lv:i,E:i,tier:tier,text:text,say:text,pri:pri,parts:[{t:"lit",c:text,s:text}]}; }
+    try{ return V.speak(text,{who:who,say:text,tier:tier,interrupt:!queue,priority:pri,ttl:8000,line:line})!=null?text:""; }catch(e){ return ""; }
   };
 
   /* ---------------- the captions ---------------- */

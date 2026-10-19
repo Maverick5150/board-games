@@ -608,7 +608,8 @@
     }
     if (MX.Booth && MX.Announce && window.BGVoice) {
       try {
-        booth = MX.Booth.create({ speed: function () { return H.speed ? H.speed() : "medium"; }, ctx: function () { return { hold: false, quiet: skipSheetUp() }; }, onChange: annBand });
+        booth = MX.Booth.create({ speed: function () { return H.speed ? H.speed() : "medium"; }, ctx: function () { return { hold: false, quiet: skipSheetUp() }; }, onChange: annBand,
+          clock: function () { return modelOn() ? { t: rv.clock(), rate: modelRate(ui.rc) } : null; } });   /* the race clock the picture is at: the commentator reads the race at that moment */
         var capEls = booth.attach({ band: $("mxpCap") });
         if (capEls && capEls.band) { var idle = document.createElement("span"); idle.className = "mxp-capidle"; idle.textContent = "Calloway and Bramlett on the call"; $("mxpCap").appendChild(idle); }
         annBand();
@@ -824,7 +825,7 @@
           banner("Yellow flag", (who.length > 2 ? who.length + " riders" : listNames(who)) + (outN ? (who.length > 1 ? " are" : " is") + " out of the race" : (who.length > 1 ? " go down and remount" : " goes down and remounts")) + " · no passing there next lap", dl(1500), "is-yellow", A.yflag());
           break; }
         case "yellowOff": chips(); pushSoon(); break;
-        case "pass": if (e.pos <= 10 && !e.crash) annShown("pass", { s: e.a }); { var pl = T.eventLine(rc, e, nameOfSeat, me); if (pl) logLine(pl); } break;
+        case "pass": if (e.pos <= 10 && !e.crash) annShown("pass", { s: e.a, d: e.d, pos: e.pos }); { var pl = T.eventLine(rc, e, nameOfSeat, me); if (pl) logLine(pl); } break;
         case "lapped": annShown("lapped", { s: e.s, by: e.by }); if (me(e.s) || me(e.by)) logLine(T.eventLine(rc, e, nameOfSeat, me)); break;
         case "fastest": if (e.k >= 3) logLine(T.eventLine(rc, e, nameOfSeat, me)); break;
       }
