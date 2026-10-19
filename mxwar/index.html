@@ -64,7 +64,7 @@
   .mx-setup{display:flex; flex-direction:column; width:min(100%,40rem); margin:0 auto; padding:0 var(--gutter)}
   .mx-col{display:contents}
   .mx-hero{order:1} .mx-sec--series{order:2} .mx-sec--players{order:3} .mx-sec--names{order:4} .mx-sec--length{order:5} .mx-sec--speed{order:6}
-  .mx-sec--ann{order:7} .mx-sec--rules{order:8} .mx-sec--save{order:9} .mx-back{order:10} .mx-dock{order:11}
+  .mx-sec--ann{order:7} .mx-sec--gfx{order:8} .mx-sec--rules{order:9} .mx-sec--save{order:10} .mx-back{order:11} .mx-dock{order:12}
   .mx-hero{position:relative; min-height:0; margin:0 calc(-1 * var(--gutter)); padding-top:46%; border-radius:0; background:transparent}
   .mx-hero .bg-hero__layer{bottom:auto; height:auto; aspect-ratio:16/9; border-radius:0; background-color:transparent;
     background-image:url("../ui/art/hero-mxwar.svg"); background-size:100% auto; background-position:100% 0;
@@ -258,6 +258,27 @@
   .mx-gate svg{display:block; width:100%; height:100%}
   .mx-dust{position:absolute; top:4%; height:var(--lane-h,38%); width:30%; z-index:3; pointer-events:none; opacity:0;
     background:radial-gradient(50% 50% at 30% 60%,rgba(214,180,140,.55),rgba(214,180,140,0))}
+  /* ---------- the 3D race (race3d.js, game.js body.mx-3d): the 3D picture takes the lane's place (the arena above the caption band); the 2D
+     lane, its gate and its dust rest (the 2D track still keeps the race clock); the cards window, the banners, the caption band and the chips stay ---------- */
+  .mx-v3, .mx-cambtn, .mx-stdbtn{display:none}
+  body.mx-3d .mx-v3{display:block; position:absolute; left:0; right:0; top:0; height:var(--lane-h,100%); z-index:2; overflow:hidden; pointer-events:none; background:#05060a}
+  body.mx-3d .mx-v3 canvas{display:block}
+  body.mx-3d .mx-lane, body.mx-3d .mx-gate, body.mx-3d .mx-dust, body.mx-3d .mx-track{display:none !important}
+  body.mx-3d .mx-arena{background:#05060a}
+  body.mx-3d .mx-cambtn:not([hidden]){display:inline-flex}
+  .mx-cambtn{position:absolute; left:.5rem; top:.5rem; z-index:7; align-items:center; gap:.4rem; min-height:2.75rem; margin:0; padding:.3rem .75rem .3rem .55rem; border:0; border-radius:var(--r-pill);
+    background:rgba(8,6,4,.72); box-shadow:inset 0 0 0 1px rgba(231,202,144,.45); color:var(--gold-100); font:var(--fw-ui-strong) var(--fs-xs)/1.1 var(--font-ui); cursor:pointer; -webkit-tap-highlight-color:transparent}
+  .mx-cambtn .bg-ico{width:1.15rem; height:1.15rem}
+  .mx-cambtn:focus-visible{outline:3px solid var(--gold-100); outline-offset:2px}
+  /* THE HUD OVER THE 3D PICTURE (06_GAMEPLAY_HUD): the hero chase keeps your rider in the right third, low (race3d.js / r3d-cams.js: his hip at about 71% across,
+     64% down), so everything over the picture keeps to the other edges: the cards window moves to the top-right corner (it sat bottom-right, on your rider),
+     the camera button stays top-left; the war flashes across the top (08_WAR_EVENT_FLASH) */
+  body.mx-3d .mx-table{bottom:auto; top:var(--pip-e,.75rem); transform-origin:100% 0}
+  .mx-banner.is-war{background:linear-gradient(180deg,rgba(24,22,28,.97),rgba(12,11,15,.97)); box-shadow:inset 0 0 0 2px #f72d2e, 0 .8rem 2rem rgba(0,0,0,.6)}
+  .mx-banner.is-war b{color:#f72d2e; letter-spacing:.02em}
+  .mx-banner.is-war span{color:#ecb967; letter-spacing:.04em; text-transform:uppercase}
+  /* the Menu's Graphics row (six choices: three across) */
+  #gfxSeg{grid-template-columns:repeat(3,minmax(0,1fr))}
   /* the card window (the CEO, 20:06: "wars will be in a tiny box window ... Put it in a corner"): small in the bottom-right corner, a tap /
      OK makes it bigger and smaller again; its size and the cards' size come from layoutArena (--pip-w / --pip-h / --cw) */
   .mx-table{position:absolute; right:var(--pip-e,.75rem); bottom:calc(var(--pip-e,.75rem) + var(--cap-h,0px)); width:var(--pip-w,10rem); height:var(--pip-h,7.5rem); z-index:5;
@@ -538,10 +559,10 @@
     mask-image:linear-gradient(90deg,rgba(0,0,0,0),#000 8%,#000 96%,rgba(0,0,0,0)),linear-gradient(180deg,rgba(0,0,0,0),#000 9%,#000 58%,rgba(0,0,0,0));
     mask-composite:intersect}
   html[data-tv] .mx-hero .bg-hero__body{padding:0}
-  html[data-tv] #seriesSeg, html[data-tv] #lengthSeg, html[data-tv] #speedSeg, html[data-tv] #skillSeg, html[data-tv] #versionSeg{gap:1.5rem}
+  html[data-tv] #seriesSeg, html[data-tv] #lengthSeg, html[data-tv] #speedSeg, html[data-tv] #skillSeg, html[data-tv] #versionSeg, html[data-tv] #gfxSeg{gap:1.5rem}
   html[data-tv] .mx-rules .bg-row{min-height:0; padding:.5rem .875rem}
   html[data-tv] .mx-col--b{display:flex; flex-direction:column}
-  html[data-tv] .mx-sec--players{order:1} html[data-tv] .mx-dock{order:2} html[data-tv] .mx-sec--speed{order:3} html[data-tv] .mx-sec--save{order:4} html[data-tv] .mx-back{order:5}
+  html[data-tv] .mx-sec--players{order:1} html[data-tv] .mx-dock{order:2} html[data-tv] .mx-sec--speed{order:3} html[data-tv] .mx-sec--gfx{order:3} html[data-tv] .mx-sec--save{order:4} html[data-tv] .mx-back{order:5}
   html[data-tv] .mx-dock{position:static; gap:1.75rem; margin:0; padding:1.5rem 0 0; background:none}
   html[data-tv] .bg-topbar__end, html[data-tv] .bg-topbar__start{gap:1.5rem}
   html[data-tv] #svbar button{grid-template-columns:minmax(0,1fr); justify-items:center; align-content:center; row-gap:.3rem; padding:.625rem .5rem}
@@ -631,6 +652,32 @@
   html[data-tv] .mx-table.is-big .mx-pipbtn{width:3rem; height:3rem}
   html[data-tv] .mx-pipnote{top:.4rem}
   html[data-tv] .mx-bike svg{width:2.6rem; height:1.7rem}
+  /* TV, the 3D race (06_GAMEPLAY_HUD, 07_FULL_40_RIDER_STANDINGS): the picture takes the screen's whole width. Over it, at the edges, clear of the hero camera's rider
+     (his hip at about 71% across, 64% down): the timing tower as a small panel at the top-left (the top 8 and you), the YOU card at the top-right, the cards window
+     low, left of the middle, the camera button in the bottom-right corner; all above the caption band. The Standings button lays every rider of the gate over the
+     screen at once (07: two columns, no scrolling, the same live rows); Back or the button again takes them away */
+  html[data-tv] body.mx-3d .mx-race{grid-template-columns:minmax(0,1fr) auto; grid-template-rows:auto minmax(0,1fr) auto auto; grid-template-areas:"head head" "arena arena" "acts stat" "log log"; column-gap:1.25rem}
+  html[data-tv] body.mx-3d .mx-stat{align-self:center}
+  html[data-tv] body.mx-3d .mx-tower{grid-area:arena; z-index:9; align-self:stretch; justify-self:stretch; min-height:0; margin:0; padding:.75rem .75rem calc(var(--cap-h,0px) + .75rem); overflow:hidden;
+    display:grid; grid-template-columns:min(24rem,26%) minmax(0,1fr) min(26rem,30%); grid-template-rows:auto auto minmax(0,1fr); grid-template-areas:"twh . you" "twl . you" "twl . ."; column-gap:.75rem;
+    background:none; box-shadow:none; border-radius:0; pointer-events:none}
+  html[data-tv][data-ann] body.mx-3d .mx-tower{--cap-h:4.9rem}
+  html[data-tv] body.mx-3d .mx-tower__h{grid-area:twh; margin:0; padding:.45rem .65rem .3rem; border-radius:var(--r-lg) var(--r-lg) 0 0; background:rgba(9,12,18,.84); box-shadow:inset 0 1px 0 rgba(236,185,103,.3)}
+  html[data-tv] body.mx-3d .mx-tw{grid-area:twl; align-self:start; padding:0 .45rem .45rem; border-radius:0 0 var(--r-lg) var(--r-lg); background:rgba(9,12,18,.84)}
+  html[data-tv] body.mx-3d .mx-tw.is-hud li{display:none; grid-template-columns:1.6rem auto minmax(0,1fr) 4.6rem}
+  html[data-tv] body.mx-3d .mx-tw.is-hud li:nth-child(-n+8), html[data-tv] body.mx-3d .mx-tw.is-hud li.is-me{display:grid}
+  html[data-tv] body.mx-3d .mx-tw.is-hud li.is-me:nth-child(n+9){margin-top:.35rem}
+  html[data-tv] body.mx-3d .mx-tw.is-hud .mx-tw__c, html[data-tv] body.mx-3d .mx-tw.is-hud .mx-tw__l, html[data-tv] body.mx-3d .mx-tw.is-hud .mx-tw__f{display:none}
+  html[data-tv] body.mx-3d .mx-tw.is-hud .mx-tw__s{display:inline}
+  html[data-tv] body.mx-3d .mx-tower .mx-yc{grid-area:you; align-self:start; margin:0; background:linear-gradient(180deg,rgba(28,24,16,.9),rgba(12,11,9,.88)); pointer-events:auto}
+  html[data-tv] body.mx-3d .mx-table{top:auto; right:auto; bottom:calc(var(--pip-e,.75rem) + var(--cap-h,0px)); left:31%; transform-origin:0 100%}
+  html[data-tv] body.mx-3d.mx-std .mx-tower{position:fixed; left:var(--gutter); right:var(--gutter); top:calc(var(--bg-bar-h,4.75rem) + .5rem); bottom:4.4rem; z-index:60; display:flex; flex-direction:column;
+    padding:.75rem 1rem .6rem; border-radius:var(--r-xl); background:rgba(9,12,18,.96); box-shadow:inset 0 0 0 1px rgba(236,185,103,.35), 0 1rem 3rem rgba(0,0,0,.6); pointer-events:auto}
+  html[data-tv] body.mx-3d.mx-std .mx-tower .mx-yc{display:none}
+  html[data-tv] body.mx-3d.mx-std .mx-tower__h{padding:0 .25rem .5rem; background:none; box-shadow:none; font-size:var(--fs-sm); color:#ecb967}
+  html[data-tv] body.mx-3d.mx-std .mx-tw{flex:1 1 auto; align-self:stretch; min-height:0; padding:0; background:none}
+  html[data-tv] body.mx-3d .mx-cambtn{left:auto; top:auto; right:.75rem; bottom:calc(var(--cap-h,0px) + .75rem); min-height:2.6rem; padding:.3rem .9rem .3rem .7rem; font-size:var(--fs-sm)}
+  html[data-tv] body.mx-3d .mx-stdbtn{display:inline-flex}
   html[data-tv] body:not(.mx-in-setup) .bg-toast{left:calc(100vw - var(--gutter) - 21rem); max-width:30rem}
   html[data-tv] .mx-sacts, html[data-tv] #fullBox .bg-sheet__options{gap:1.5rem}
   /* the results sheet lists every rider's time or gap (mxtime): two columns of 28 rem each leave room for the name next to the time and the tags (to the Main, DNF, points) */
@@ -830,6 +877,11 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
           <p class="mx-legend" id="annHearNote" data-stage-text aria-live="polite"></p>
         </div>
       </section>
+      <section class="mx-sec mx-sec--gfx" id="gfxSec" aria-labelledby="gfxHead">
+        <div class="bg-section"><h2 class="bg-eyebrow" id="gfxHead" data-stage-text>Graphics</h2></div>
+        <div class="bg-seg bg-seg--text" id="gfxSeg" role="group" aria-labelledby="gfxHead"></div>
+        <p class="mx-legend" id="gfxNote" data-stage-text aria-live="polite"></p>
+      </section>
       <section class="mx-sec mx-sec--save" aria-labelledby="saveHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="saveHead" data-stage-text>Save and load</h2></div>
         <div id="svbar"></div>
@@ -893,6 +945,8 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
     <div class="mx-arena" id="arena" data-stage-solid aria-label="The track">
       <div class="mx-track" id="trackArt" aria-hidden="true"></div>
       <div class="mx-lane" id="lane" aria-hidden="true"></div>
+      <div class="mx-v3" id="v3" aria-hidden="true"></div>
+      <button class="mx-cambtn" id="camBtn" type="button" data-icon="camera" aria-label="Change the camera" hidden><span id="camName">Director</span></button>
       <div class="mx-dust" id="dust" aria-hidden="true"></div>
       <div class="mx-gate" id="gate" aria-hidden="true"></div>
       <div class="mx-table is-pip" id="table">
@@ -911,6 +965,7 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
       <button class="bg-btn bg-btn--primary bg-btn--lg" id="flipBtn" type="button" data-focus-first><span class="bg-btn__label" id="flipLabel">Flip</span><span class="bg-btn__sub" id="flipSub"></span></button>
       <button class="bg-row mx-auto" id="autoBtn" type="button" role="switch" aria-checked="false"><span class="bg-row__main"><span class="bg-row__title">Auto</span></span><span class="bg-toggle" aria-hidden="true"></span></button>
       <button class="bg-btn bg-btn--secondary" id="boardBtn" type="button" data-icon="board" aria-haspopup="dialog">Battle board</button>
+      <button class="bg-btn bg-btn--secondary mx-stdbtn" id="stdBtn" type="button" data-icon="board" aria-pressed="false"><span id="stdLab">Standings</span></button>
       <button class="bg-btn bg-btn--secondary" id="skipBtn" type="button" aria-haspopup="dialog" hidden>Skip to the finish</button>
     </div>
     <p class="mx-stat" id="stat" data-stage-text aria-live="polite"></p>
