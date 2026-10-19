@@ -1160,6 +1160,7 @@ function layoutArena(){
   ar.style.setProperty("--lane-h",H+"px");
   var small=pipSize(W,H), edge=Math.round(rem*(tv?1:.75));
   var bw=big?Math.round(Math.min(W-edge*2,tv?rem*44:W)):small.w, bh=big?Math.round(Math.min(H-edge*2-rem*(tv?3.2:2.6),Math.max(H*0.62,rem*13))):small.h;
+  if(big&&restable()) bh=Math.min(bh,Math.round(H-rem*3.65-edge));   /* mxfix1: on a phone over the 3D race the big window sits under the camera button's row (index.html) */
   tb.style.setProperty("--pip-w",bw+"px"); tb.style.setProperty("--pip-h",bh+"px"); tb.style.setProperty("--pip-e",edge+"px");
   var ww=!big&&restable()?Math.round(clamp(W*H*0.13/small.h,small.w,rem*13.5)):bw; tb.style.setProperty("--pip-ww",ww+"px");   /* mxfix1: a war's window on a phone over the 3D race: wider (three fighters' plates), about an eighth of the picture */
   var lab=big?rem*(tv?1.05:1):rem*(tv?0.95:0.85), who=big?rem*(tv?1.3:1.35):rem*(tv?1.15:1.1);
@@ -1169,17 +1170,29 @@ function layoutArena(){
   var you=$("youSlot"), top=$("topSlot"), mid=$("midNote");
   you.style.top=top.style.top=Math.round(rem*(big?.35:.25))+"px";
   if(big){ you.style.left=tb.classList.contains("is-one")?"50%":"24%"; top.style.left="76%"; you.style.width=top.style.width=Math.round(bw*.4)+"px"; }
-  mid.style.top=Math.round(bh*.48)+"px"; mid.hidden=!big;
-  GEO={W:W,H:H,laneH:H,cw:cw,tw:bw,th:bh,ww:ww};
+  GEO={W:W,H:H,laneH:H,cw:cw,tw:bw,th:bh,ww:ww,midY:Math.round(rem*(big?.35:.25)+lab+rem*.3+cw*.7)};
+  placeMid();
   relabel();
   var T=track(); if(T){ T.setHole({w:small.w+edge,h:small.h+edge}); T.resize(); placeGate(); }
   if(race3D()){ try{ V3.resize(); }catch(e){} }   /* the 3D picture fills the lane's place (#v3, index.html); its cameras frame the race themselves */
   syncRest();
   return true;
 }
+/* the big window's lap note ("Lap 3 of 9"): on a phone at the cards' height between the two cards, clear of the names under them (it sat on them);
+   with one card (mxfix1: the person's card is the top card) beside it, never on it. The TV keeps its place between the two slots. */
+function placeMid(){
+  var mid=$("midNote"), big=pipBig(), one=$("table").classList.contains("is-one"); mid.hidden=!big; if(!GEO) return;
+  mid.style.left=big&&one?"76%":"";
+  mid.style.top=Math.round(onTV()&&!one?GEO.th*.48:GEO.midY)+"px";
+  if(big&&!one&&!onTV()){   /* centred in the gap between the two cards (at 360 px it touched the left one); where the gap is too narrow for it, left out: the race's lap chip says the same */
+    var ys=$("youSlot"), ts=$("topSlot"), yc=$("youCard"), tc=$("topCard");   /* layout values (a slot is centred on its left by translateX(-50%); a flip's transform does not count) */
+    var l=ys.offsetLeft-ys.offsetWidth/2+yc.offsetLeft+yc.offsetWidth, r=ts.offsetLeft-ts.offsetWidth/2+tc.offsetLeft;
+    mid.style.left=Math.round((l+r)/2)+"px"; if(r-l<mid.offsetWidth+12) mid.hidden=true;
+  }
+}
 /* the slot labels: full words in the big window, short ones in the small corner window */
-function lab(el,long,short){ el.setAttribute("data-l",long); el.setAttribute("data-s",short||long); el.textContent=pipBig()?long:(short||long); placeSlots(); }
-function relabel(){ ["youLab","topLab"].forEach(function(id){ var el=$(id); if(el.hasAttribute("data-l")) el.textContent=pipBig()?el.getAttribute("data-l"):el.getAttribute("data-s"); }); placeSlots(); }
+function lab(el,long,short){ el.setAttribute("data-l",long); el.setAttribute("data-s",short||long); el.textContent=pipBig()?long:(short||long); placeSlots(); if(pipBig()) placeMid(); }
+function relabel(){ ["youLab","topLab"].forEach(function(id){ var el=$(id); if(el.hasAttribute("data-l")) el.textContent=pipBig()?el.getAttribute("data-l"):el.getAttribute("data-s"); }); placeSlots(); placeMid(); }
 /* review fix (task2): in the small window the two slots sit from their labels' real widths: the top slot's label and card stay left of the
    expand icon in the top-right corner (.mx-pipbtn__ic: phone right .25rem + 1.3rem, TV .4rem + 2.4rem; "TOP" ran under it and read "TO"),
    the left slot as far right as 26% but never into the top slot ("LEADER" next to "TOP"); the cards keep their size */
@@ -1362,7 +1375,7 @@ function leftLab(h){ if(h>=0) lab($("youLab"),G.humans.length>1?"Card of":"Your 
 /* mxfix1: the left slot's rider (the person, or the race leader when nobody of this device rides) holds the top card: ONE card, marked as the top card,
    never the same card twice (the CEO's podium screenshot showed A♥ 68 beside A♥ 68) */
 function warWin(on){ var tb=$("table"); if(on===tb.classList.contains("is-war")) return; morphTable(function(){ tb.classList.toggle("is-war",!!on); }); pipAvoid(); }   /* mxfix1: the war's wider window (phone, 3D; CSS), off again with the next lap's cards */
-function setOne(on){ var tb=$("table"); tb.classList.toggle("is-one",!!on); $("topSlot").hidden=!!on; if(pipBig()) $("youSlot").style.left=on?"50%":"24%"; else placeSlots(); }
+function setOne(on){ var tb=$("table"); tb.classList.toggle("is-one",!!on); $("topSlot").hidden=!!on; if(pipBig()) $("youSlot").style.left=on?"50%":"24%"; else placeSlots(); placeMid(); }
 function oneCard(h){
   setOne(true); $("youCard").classList.add("is-win");
   if(h>=0) lab($("youLab"),G.humans.length>1?"Top card":"Top card: yours",G.humans.length>1?"Top":"You · top"); else lab($("youLab"),"Leader: top card","Leader · top");
