@@ -518,7 +518,7 @@ export function createCams(VIEW){
     if(!K.cs) K.cs=costs.map(c=>c.cost); else { const a=Math.min(1,Math.max(0,dt)/0.25); for(let i=0;i<M.length;i++) K.cs[i]+=(costs[i].cost-K.cs[i])*a; }
     for(let i=0;i<M.length;i++) if(K.cs[i]<bc){ bc=K.cs[i]; best=i; }
     if(first||K.mi<0||K.mi>=M.length) K.mi=best;
-    else if(best!==K.mi){ const cc=K.cs[K.mi]; if((bc<cc-0.3&&K.mT>1.4)||(costs[K.mi].I>0.6&&bc<cc-0.35&&K.mT>0.5)){ K.mi=best; K.mT=0; } }
+    else if(best!==K.mi){ const cc=K.cs[K.mi]; if((bc<cc-0.3&&K.mT>1.8)||(costs[K.mi].I>0.6&&bc<cc-0.45&&K.mT>1.1)){ K.mi=best; K.mT=0; } }   /* (scale: a dwell of 1.8 s, 1.1 s when the lens is badly blocked (was 1.4 / 0.5): the lower, closer mounts meet rivals more often, and the rig hunted 28 times a minute (milestone 2: 14); the push and the lift round a rival do the rest) */
     const m=M[K.mi]; K.mount=m.id; K.lensI=costs[K.mi].I;
     if(first){ K.hb.snap(m.b); K.hs.snap(m.s); K.hu.snap(m.u); K.hx.snap(m.x); K.hyy.snap(m.y); }
     const b=K.hb.step(m.b,0.5,dt), sd=K.hs.step(m.s,0.5,dt), u=K.hu.step(m.u,0.45,dt), xT=clamp(K.hx.step(m.x,0.55,dt)-clamp(kS*2.5,-0.22,0.22),-0.6,0.6)*xs, yT=K.hyy.step(m.y,0.5,dt);
@@ -580,7 +580,10 @@ export function createCams(VIEW){
        smoothed, so the suspension's bob over the whoops does not shake the frame) */
     if(first){ K.sy.snap(S.y); K.roll.snap(0); K.init=true; }
     const syS=K.sy.step(S.y,0.05,dt), be=Math.atan2(S.z-E.z,S.x-E.x), hd=Math.max(0.6,Math.hypot(S.x-E.x,S.z-E.z)), el=Math.atan2(syS-E.y,hd);
-    const psi=be-Math.atan(xT*tanH), pit=clamp(el-Math.atan(yT*tanV),-0.7,0.8)+shk*0.4, cp=Math.cos(pit);
+    let psi=be-Math.atan(xT*tanH); const pit=clamp(el-Math.atan(yT*tanV),-0.7,0.8)+shk*0.4, cp=Math.cos(pit);
+    /* (scale) the lens pans at most 115 degrees a second inside the shot (a camera operator's pan): a mount change, a hairpin at walking pace or a rival's push close to the lens no
+       longer swing the view faster than the eye may move round him (the hotfix's 120 degrees a second); the tilt is not held back (a landing drops him fast, he stays in frame) */
+    if(first||cut||K.psiL==null||!(dt>0)) K.psiL=psi; else { const lim=2.0*dt; psi=K.psiL+clamp(wrapA(psi-K.psiL),-lim,lim); K.psiL=psi; }
     T.set(E.x+Math.cos(psi)*cp*14,E.y+Math.sin(pit)*14,E.z+Math.sin(psi)*cp*14);
     cFocus.copy(S);
     const lean=st?st.lean:(r.lean||0), roll=K.roll.step(crash?0:clamp(lean*0.22,-0.12,0.12),0.35,dt);   /* the bike's lean banks it a little in a berm */
