@@ -1156,6 +1156,11 @@ export function create(host,hooks){
     const keyOf=o=>{ const lo=motion()!=="full", pick=MX.Layouts.pick(o.series,o.year,o.round,o.cal||{}); return {lo:lo,pick:pick,key:pick.layout.id+"|"+(pick.look.around)+"|"+(lo?"lo":"hi")+"|"+(o.lapT>0?Math.round(o.lapT):"")+"|"+QUAL.buildKey(lo)}; };   /* (= setRace's key) */
     V.worldKey=o=>{ try{ return keyOf(o).key; }catch(e){ return null; } };
     V.worldReady=o=>{ try{ return keyOf(o).key===worldKey; }catch(e){ return false; } };
+    /* the canvas at the race's size AHEAD, in a task of its own (V.prepareWorld's last step): a new drawing buffer took 0.8 s inside setRace's V.resize on the TV here (setRace's
+       own resize then finds the size made: nothing to re-allocate). As V.resize does it (the ladder's ratio for this size); a hidden page (the season screen: no size) waits for setRace */
+    const sizeAhead=()=>{ const w=Math.max(1,Math.round(host.clientWidth)), h=Math.max(1,Math.round(host.clientHeight)); if(w<8||h<8||V.lost) return false;
+      const pr=QUAL.resize(w,h,W,H,LO); if(w===W&&h===H&&Math.abs(renderer.getPixelRatio()-pr)<1e-4) return false;
+      W=w; H=h; sizeOK++; try{ renderer.setPixelRatio(pr); renderer.setSize(W,H,false); } finally { sizeOK--; } cv.style.width=W+"px"; cv.style.height=H+"px"; LOOK.resize(W,H,pr); cam.aspect=W/H; cam.updateProjectionMatrix(); return true; };
     V.prepareWorld=function(o){
       try{ if(o&&inflight&&inflight.key===keyOf(o).key) return inflight.p; }catch(e){}
       const tok=++prepTok; let me=null;
@@ -1165,7 +1170,7 @@ export function create(host,hooks){
           if(!o||V.lost){ res(false); return; }
           const lo=motion()!=="full"; if(lo!==LO){ LO=lo; worldKey=""; LOOK.setShadows(QUAL.shadowsWanted(LO)); if(typeof driveLook==="function") driveLook(); }   /* (as setRace) */
           const K=keyOf(o), pick=K.pick, key=K.key;
-          if(key===worldKey){ res(true); return; }
+          if(key===worldKey){ setTimeout(()=>{ try{ if(tok===prepTok) sizeAhead(); }catch(e){} res(true); },0); return; }   /* (the world is there: the canvas size only, in a task of its own) */
           me={key:key,p:null}; inflight=me;
           raceGen++; drawHold=holdWanted(); warmHold=null;   /* nothing draws while the world is replaced (a warm in flight for the old race stops) */
           const q=QUAL.options(LO), alive=()=>tok===prepTok&&!V.lost;
@@ -1197,7 +1202,7 @@ export function create(host,hooks){
               });
             }catch(e){ fail(e); return; }
             n++;
-            if(done){ V.prepared={key:key,steps:n}; res(true); return; }
+            if(done){ V.prepared={key:key,steps:n}; setTimeout(()=>{ try{ if(alive()) sizeAhead(); }catch(e){} res(true); },0); return; }   /* (then the canvas size, in a task of its own) */
             setTimeout(step,0);
           };
           setTimeout(step,0);
