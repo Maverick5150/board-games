@@ -71,7 +71,7 @@ function licLine(x){
 function injectCSS(){
   if(!doc||doc.getElementById("mxm-css")) return;
   var st=doc.createElement("style"); st.id="mxm-css";
-  st.textContent=".mxm-cred{display:grid;gap:.4rem;margin:0 0 .75rem;padding:0;list-style:none;max-height:min(52vh,30rem);overflow-y:auto;overscroll-behavior:contain}"+
+  st.textContent=".mxm-cred{display:grid;gap:.4rem;margin:0 0 .75rem;padding:.25rem;list-style:none;max-height:min(52vh,30rem);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain}"+
     ".mxm-cred li{display:grid;gap:.15rem;min-width:0;padding:.45rem .65rem;border-radius:var(--r-md,10px);background:var(--ink-3,rgba(255,255,255,.05));box-shadow:inset 0 0 0 1px var(--line-1,rgba(255,255,255,.1));"+
       "font:var(--fw-ui,500) var(--fs-xs,.8rem)/1.4 var(--font-ui,system-ui,sans-serif);color:var(--text-2,#c9c9d2);overflow-wrap:anywhere}"+
     ".mxm-cred b{font-weight:700;color:var(--text-1,#f2f2f6)}.mxm-cred .mxm-use{color:var(--text-1,#f2f2f6)}"+
