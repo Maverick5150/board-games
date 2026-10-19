@@ -354,7 +354,7 @@ function create(o){
     G.react=track(C.createGain()); G.react.gain.value=dbl(o.reactDb==null?-6:o.reactDb); G.react.connect(G.hold); G.react.connect(G.verb);
     G.rpan=[-0.35,0.35].map(function(p){ var pn=C.createStereoPanner?track(C.createStereoPanner()):track(C.createGain()); if(pn.pan) pn.pan.value=p; pn.connect(G.react); return pn; });
     G.rpan.splice(1,0,G.react);   /* left, centre (the bus itself), right */
-    G.pass=track(C.createGain()); G.pass.gain.value=dbl(o.passDb==null?-9:o.passDb); G.pass.connect(G.eng);
+    G.pass=track(C.createGain()); G.pass.gain.value=dbl(o.passDb==null?9:o.passDb); G.pass.connect(G.eng);
     route();
     G.out.gain.setTargetAtTime(1,T,0.15);
     LIVE.push(RS); hookVoice(o.voice||g.BGVoice);
@@ -451,7 +451,7 @@ function create(o){
   function react(kind,lv,T,info){
     if(!G||!core||lv<=0) return;
     if(T-lastReact<1.5&&!(info&&info.force)) return;
-    var cap=lineOn?(lineLv>=3?-1:-3):0;   /* under a booth line the reaction gives way (the voice stays 10 LU over the race, 8 under a HUGE call) */
+    var cap=lineOn?-3:0;   /* under a booth line the reaction gives way (the voice stays 10 LU over the race, 8 under a HUGE call) */
     var pool, db=0, pan=(rnd()-0.5)*0.6, k;
     if(kind==="crash"||kind==="out"){
       pool=lv>=3||kind==="out"?"ooh":"gasp"; k=draw(pool,T)||draw("gasp",T);
@@ -505,11 +505,11 @@ function create(o){
     if(dead) return; if(!G){ if(loadP) loadP.then(function(){ RS.gate(stage); }); return; }
     var T=ctx.currentTime; gateSt={stage:stage,t:T};
     var P=G.P;
-    if(stage==="open"){ if(P){ set(P("gGain"),dbl(-6),T,0.8); set(P("gRev"),0.25,T,1.2); set(P("gWig"),1,T,0.2); } EX.kick(0.05); if(o.main!==false&&era.venue==="stadium") pyro(T+0.2); var kw=draw("whistle",T); if(kw) shot(kw,T+1.2,{db:-4,pan:-0.3}); }
-    else if(stage==="board"){ if(P){ set(P("gRev"),0.75,T,0.6); set(P("gWig"),1,T,0.2); set(P("gGain"),dbl(-3),T,0.5); } horns(T+0.1,1); EX.kick(0.12); var kb=draw("cheerS",T); if(kb) shot(kb,T+0.9,{db:-6,pan:0.3}); }
-    else if(stage==="side"){ if(P){ set(P("gRev"),1.0,T,0.4); set(P("gWig"),0.15,T,0.4); set(P("gGain"),dbl(-2),T,0.4); } RS._hush=T; var ks=draw("whistle",T); if(ks) shot(ks,T+0.4,{db:-8,pan:0.3}); }
+    if(stage==="open"){ if(P){ set(P("gGain"),dbl(0),T,0.8); set(P("gRev"),0.25,T,1.2); set(P("gWig"),1,T,0.2); } EX.kick(0.05); if(o.main!==false&&era.venue==="stadium") pyro(T+0.2); var kw=draw("whistle",T); if(kw) shot(kw,T+1.2,{db:-4,pan:-0.3}); }
+    else if(stage==="board"){ if(P){ set(P("gRev"),0.75,T,0.6); set(P("gWig"),1,T,0.2); set(P("gGain"),dbl(3),T,0.5); } horns(T+0.1,1); EX.kick(0.12); var kb=draw("cheerS",T); if(kb) shot(kb,T+0.9,{db:-6,pan:0.3}); }
+    else if(stage==="side"){ if(P){ set(P("gRev"),1.0,T,0.4); set(P("gWig"),0.15,T,0.4); set(P("gGain"),dbl(4),T,0.4); } RS._hush=T; var ks=draw("whistle",T); if(ks) shot(ks,T+0.4,{db:-8,pan:0.3}); }
     else if(stage==="drop"){
-      gateSlam(T); if(P){ set(P("gRev"),1.2,T,0.08); set(P("gWig"),0,T,0.05); set(P("gGain"),dbl(-1),T,0.05); set(P("gRev"),0.9,T+1.6,0.8); set(P("gWig"),0.7,T+1.6,0.5); set(P("gLp"),3500,T+1.2,1.2); }
+      gateSlam(T); if(P){ set(P("gRev"),1.2,T,0.08); set(P("gWig"),0,T,0.05); set(P("gGain"),dbl(5),T,0.05); set(P("gRev"),0.9,T+1.6,0.8); set(P("gWig"),0.7,T+1.6,0.5); set(P("gLp"),3500,T+1.2,1.2); }
       G.farFrom=T+2.2;   /* (from here RS.frame sets the far pack's level) */
       EX.kick(0.55); react("drop",3,T+0.15,{force:true}); gateSt={stage:"drop",t:T,done:true};
       if(G.packG) set(G.packG.gain,dbl(-8),T+0.4,0.6);
@@ -532,7 +532,8 @@ function create(o){
       var rv=revs[r.seat]||(revs[r.seat]=new Rev(era,seed+r.seat*101));
       var e=rv.step(dt,+r.v||0,+r.a||0,r.air?1:0,+r.land||0,r.crash|0,gateNow);
       if(e.thump&&r.d<25) thump(T,e.thump*clamp(8/r.d,0,1));
-      if(e.start&&r.d<40){ var kk=era.stroke===2||era.year<2010?"kick":"estart"; if(core&&core.buf[kk]) shot(kk,T,{db:-6+20*Math.log10(clamp(8/r.d,0.1,1)),pan:clamp(r.az*PANK,-1,1),to:G.eng}); }
+      /* the remount's start: a kick in the two-stroke eras and on four-strokes before electric starters took over (the big 450s from about 2017) */
+      if(e.start&&r.d<40&&(era.stroke===2||!(era.year>=2017))&&core&&core.buf.kick) shot("kick",T,{db:-6+20*Math.log10(clamp(8/r.d,0.1,1)),pan:clamp(r.az*PANK,-1,1),to:G.eng});
       if(snap.mode!=="gate"&&!r.crash) dens+=1/(1+(r.d/28)*(r.d/28));
       if(r.d<dmin) dmin=r.d;
       if(snap.mode==="run"&&!r.crash) tryPass(r,T);
@@ -553,7 +554,7 @@ function create(o){
     }
     /* the far pack: the gate chorus's bikes, further off, in this season's engines: louder and brighter with more riders near the lens */
     if(G.P&&G.farFrom&&T>=G.farFrom&&snap.mode!=="gate"){
-      var fl=snap.mode==="fin"?dbl(-16):dbl(-13+5*Math.log(1+dn)/Math.log(4))*(dmin<6?0.7:1)*(inReplay?dbl(-10):1);
+      var fl=snap.mode==="fin"?dbl(-4):dbl(-1+5*Math.log(1+dn)/Math.log(4))*(dmin<6?0.7:1)*(inReplay?dbl(-10):1);
       set(G.P("gGain"),fl,T,0.4); set(G.P("gLp"),clamp(1800+1800*Math.log(1+dn),1800,7000),T,0.5); set(G.P("gRev"),0.82+0.1*Math.sin(EX.t*0.21),T,1.2);
     }
     /* the crowd breathes with the race */
@@ -569,8 +570,8 @@ function create(o){
     if(!G.crowdG) return;
     var E=EX.step(dt), hush=RS._hush&&gateSt&&gateSt.stage==="side"?dbl(-6):1;
     var breathe=1+0.12*Math.sin(EX.t*0.9)+0.06*Math.sin(EX.t*0.37+1.3);
-    var db=-21+12*E;   /* -21 dB calm .. -9 dB a roaring crowd (the bed is mastered at -16 LUFS; the race bus sets the rest) */
-    if(lineOn) db=Math.min(db,lineLv>=3?-12:-14);
+    var db=-16+12*E;   /* the bed is mastered at -16 LUFS: about -28 LUFS at a Main's baseline (MUSIC-PLAN 4.1, the crowd alone), -20 when it roars */
+    if(lineOn) db=Math.min(db,lineLv>=3?-10:-12);
     set(G.crowdG.gain,dbl(db)*hush*breathe*(inReplay?dbl(-10):1),T,0.25); set(G.shelf.gain,6*E,T,0.3);
     lastE=E;
   }
