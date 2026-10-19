@@ -666,31 +666,51 @@
   html[data-tv] .mx-table.is-big .mx-pipbtn{width:3rem; height:3rem}
   html[data-tv] .mx-pipnote{top:.4rem}
   html[data-tv] .mx-bike svg{width:2.6rem; height:1.7rem}
-  /* TV, the 3D race (06_GAMEPLAY_HUD, 07_FULL_40_RIDER_STANDINGS): the picture takes the screen's whole width. Over it, at the edges, clear of the hero camera's rider
-     (his hip at about 71% across, 64% down): the timing tower as a small panel at the top-left (the top 8 and you), the YOU card at the top-right, the cards window
-     low, left of the middle, the camera button in the bottom-right corner; all above the caption band. The Standings button lays every rider of the gate over the
-     screen at once (07: two columns, no scrolling, the same live rows); Back or the button again takes them away */
-  html[data-tv] body.mx-3d .mx-race{grid-template-columns:minmax(0,1fr) auto; grid-template-rows:auto minmax(0,1fr) auto auto; grid-template-areas:"head head" "arena arena" "acts stat" "log log"; column-gap:1.25rem}
-  html[data-tv] body.mx-3d .mx-stat{align-self:center}
-  html[data-tv] body.mx-3d .mx-tower{grid-area:arena; z-index:9; align-self:stretch; justify-self:stretch; min-height:0; margin:0; padding:.75rem .75rem calc(var(--cap-h,0px) + .75rem); overflow:hidden;
-    display:grid; grid-template-columns:min(24rem,26%) minmax(0,1fr) min(26rem,30%); grid-template-rows:auto auto minmax(0,1fr); grid-template-areas:"twh . you" "twl . you" "twl . ."; column-gap:.75rem;
+  /* TV, the 3D race (06_GAMEPLAY_HUD, 07_FULL_40_RIDER_STANDINGS, the pack's tokens: night black, panel black, war red, stadium gold): THE PICTURE TAKES THE WHOLE SCREEN
+     under the top bar, edge to edge, and everything else sits over it at the edges, inside the safe area and clear of the hero camera's rider (his hip at about 71% across,
+     64% down): the timing tower as a small panel at the top-left (the top 8 and you), the lap at the top in the middle, the YOU card at the top-right, the cards window in the
+     bottom-left corner, the camera button bottom-right, the announcers' caption band, and at the foot ONE compact bar: the buttons, the status line (one line, never
+     wrapping the buttons) and the remote's hints. The rem scale is the screen's (theme.css: 1/80 of the width), so 1920x1080 and a 960x540 Fire TV WebView lay out the
+     same. The Standings button lays every rider of the gate over the picture at once (07: two columns, no scrolling, the live rows); Back or the button again takes them away */
+  html[data-tv] body.mx-3d .mx-race{--tvbar:4.4rem; grid-template-columns:auto minmax(0,1fr) auto; grid-template-rows:minmax(0,1fr) var(--tvbar); grid-template-areas:"arena arena arena" "acts stat hints";
+    column-gap:1.1rem; row-gap:0; padding:.2rem 0 0}
+  html[data-tv] body.mx-3d .mx-race::before{content:""; grid-row:2; grid-column:1/-1; z-index:10; pointer-events:none;
+    background:linear-gradient(180deg,rgba(9,12,18,.55),rgba(9,12,18,.9) 30%,rgba(9,12,18,.94)); box-shadow:0 -1px 0 rgba(236,185,103,.22)}
+  html[data-tv] body.mx-3d .mx-arena{grid-row:1/3; grid-column:1/-1; height:auto; border-radius:0}
+  html[data-tv] body.mx-3d .mx-v3, html[data-tv] body.mx-3d .mx-v3hold{height:100%}
+  html[data-tv] body.mx-3d .mx-capband{bottom:var(--tvbar); left:2.25rem; right:auto; width:min(36rem,45%); justify-content:flex-start; background:none; box-shadow:none}   /* (the left half: the hero camera's rider rides the right third) */
+  html[data-tv] body.mx-3d .mx-capidle{display:none}
+  html[data-tv] body.mx-3d .mx-capband .bgv-cap{margin:0; max-width:100%; background:rgba(13,17,27,.88); box-shadow:inset 0 0 0 1px rgba(236,185,103,.3)}
+  html[data-tv] body.mx-3d .mx-rhead{grid-row:1; grid-column:1/-1; align-self:start; justify-self:center; z-index:9; min-height:0; margin:.75rem 0 0; padding:0; pointer-events:none}
+  html[data-tv] body.mx-3d .mx-rhead > :not(#lapChip):not(#yelChip){display:none}
+  html[data-tv] body.mx-3d #lapChip, html[data-tv] body.mx-3d #yelChip{box-shadow:inset 0 0 0 1px rgba(236,185,103,.55); background:rgba(9,12,18,.86)}
+  html[data-tv] body.mx-3d .mx-acts{grid-area:acts; z-index:11; flex-wrap:nowrap; align-items:center; gap:.85rem; margin:0; padding:0 0 0 var(--gutter); min-width:0}
+  html[data-tv] body.mx-3d .mx-acts > *{flex:none; min-height:3rem; padding-block:.3rem; font-size:var(--fs-sm)}
+  html[data-tv] body.mx-3d #flipBtn{flex:none; min-width:11rem}
+  html[data-tv] body.mx-3d #flipSub{display:none}
+  html[data-tv] body.mx-3d .mx-stat{grid-area:stat; z-index:11; align-self:center; justify-self:stretch; min-width:0; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:var(--fs-sm); color:var(--text-2,#d8d4e6)}
+  html[data-tv] body.mx-3d .mx-logw{grid-area:hints; z-index:11; align-self:center; padding:0 var(--gutter) 0 0}
+  html[data-tv] body.mx-3d .mx-log, html[data-tv] body.mx-3d .mx-hints > span:nth-child(n+2){display:none}
+  html[data-tv] body.mx-3d .mx-tower{grid-row:1; grid-column:1/-1; z-index:9; align-self:stretch; justify-self:stretch; min-height:0; margin:0; padding:.75rem 2.25rem calc(var(--cap-h,0px) + .75rem); overflow:hidden;
+    display:grid; grid-template-columns:min(21.5rem,28%) minmax(0,1fr) min(25rem,32%); grid-template-rows:auto auto minmax(0,1fr); grid-template-areas:"twh . you" "twl . you" "twl . ."; column-gap:.75rem;
     background:none; box-shadow:none; border-radius:0; pointer-events:none}
   html[data-tv][data-ann] body.mx-3d .mx-tower{--cap-h:4.9rem}
-  html[data-tv] body.mx-3d .mx-tower__h{grid-area:twh; margin:0; padding:.45rem .65rem .3rem; border-radius:var(--r-lg) var(--r-lg) 0 0; background:rgba(9,12,18,.84); box-shadow:inset 0 1px 0 rgba(236,185,103,.3)}
-  html[data-tv] body.mx-3d .mx-tw{grid-area:twl; align-self:start; padding:0 .45rem .45rem; border-radius:0 0 var(--r-lg) var(--r-lg); background:rgba(9,12,18,.84)}
+  html[data-tv] body.mx-3d .mx-tower__h{grid-area:twh; margin:0; padding:.45rem .65rem .3rem; border-radius:var(--r-lg) var(--r-lg) 0 0; background:rgba(13,17,27,.86); box-shadow:inset 0 1px 0 rgba(236,185,103,.3)}
+  html[data-tv] body.mx-3d .mx-tw{grid-area:twl; align-self:start; padding:0 .45rem .45rem; border-radius:0 0 var(--r-lg) var(--r-lg); background:rgba(13,17,27,.86)}
   html[data-tv] body.mx-3d .mx-tw.is-hud li{display:none; grid-template-columns:1.6rem auto minmax(0,1fr) 4.6rem}
   html[data-tv] body.mx-3d .mx-tw.is-hud li:nth-child(-n+8), html[data-tv] body.mx-3d .mx-tw.is-hud li.is-me{display:grid}
   html[data-tv] body.mx-3d .mx-tw.is-hud li.is-me:nth-child(n+9){margin-top:.35rem}
   html[data-tv] body.mx-3d .mx-tw.is-hud .mx-tw__c, html[data-tv] body.mx-3d .mx-tw.is-hud .mx-tw__l, html[data-tv] body.mx-3d .mx-tw.is-hud .mx-tw__f{display:none}
   html[data-tv] body.mx-3d .mx-tw.is-hud .mx-tw__s{display:inline}
   html[data-tv] body.mx-3d .mx-tower .mx-yc{grid-area:you; align-self:start; margin:0; background:linear-gradient(180deg,rgba(28,24,16,.9),rgba(12,11,9,.88)); pointer-events:auto}
-  html[data-tv] body.mx-3d .mx-table{top:auto; right:auto; bottom:calc(var(--pip-e,.75rem) + var(--cap-h,0px)); left:31%; transform-origin:0 100%}
-  html[data-tv] body.mx-3d.mx-std .mx-tower{position:fixed; left:var(--gutter); right:var(--gutter); top:calc(var(--bg-bar-h,4.75rem) + .5rem); bottom:4.4rem; z-index:60; display:flex; flex-direction:column;
+  html[data-tv] body.mx-3d .mx-table{top:auto; right:auto; bottom:calc(var(--pip-e,.75rem) + var(--cap-h,0px) + var(--tvbar,0px)); left:2.25rem; transform-origin:0 100%}
+  html[data-tv] body.mx-3d .mx-banner{top:16%}
+  html[data-tv] body.mx-3d.mx-std .mx-tower{position:fixed; left:var(--gutter); right:var(--gutter); top:calc(var(--bg-bar-h,4.75rem) + .5rem); bottom:calc(var(--tvbar,4.4rem) + .5rem); z-index:60; display:flex; flex-direction:column;
     padding:.75rem 1rem .6rem; border-radius:var(--r-xl); background:rgba(9,12,18,.96); box-shadow:inset 0 0 0 1px rgba(236,185,103,.35), 0 1rem 3rem rgba(0,0,0,.6); pointer-events:auto}
   html[data-tv] body.mx-3d.mx-std .mx-tower .mx-yc{display:none}
   html[data-tv] body.mx-3d.mx-std .mx-tower__h{padding:0 .25rem .5rem; background:none; box-shadow:none; font-size:var(--fs-sm); color:#ecb967}
   html[data-tv] body.mx-3d.mx-std .mx-tw{flex:1 1 auto; align-self:stretch; min-height:0; padding:0; background:none}
-  html[data-tv] body.mx-3d .mx-cambtn{left:auto; top:auto; right:.75rem; bottom:calc(var(--cap-h,0px) + .75rem); min-height:2.6rem; padding:.3rem .9rem .3rem .7rem; font-size:var(--fs-sm)}
+  html[data-tv] body.mx-3d .mx-cambtn{left:auto; top:auto; right:var(--gutter); bottom:calc(var(--cap-h,0px) + var(--tvbar,0px) + .75rem); min-height:2.6rem; padding:.3rem .9rem .3rem .7rem; font-size:var(--fs-sm)}
   html[data-tv] body.mx-3d .mx-stdbtn{display:inline-flex}
   html[data-tv] body:not(.mx-in-setup) .bg-toast{left:calc(100vw - var(--gutter) - 21rem); max-width:30rem}
   html[data-tv] .mx-sacts, html[data-tv] #fullBox .bg-sheet__options{gap:1.5rem}
