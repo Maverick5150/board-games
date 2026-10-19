@@ -456,19 +456,27 @@ function fmtRace(msv){
   var m=Math.round(msv), h=Math.floor(m/3600000), r=m-h*3600000, mi=Math.floor(r/60000); r-=mi*60000; var ss=Math.floor(r/1000), mm=r-ss*1000;
   return (h?h+":"+(mi<10?"0":""):"")+mi+":"+(ss<10?"0":"")+ss+"."+(mm<10?"00":mm<100?"0":"")+mm;
 }
-/* a gap in seconds for a narrow cell: "+3.412" up to 99.999, then "+1:43.2" */
+/* a gap in seconds: "+3.412"; a minute and more reads minutes and seconds, as a TV graphic writes it: 76.289 -> "+1:16.289" (from 59.9995: "+1:00.000") */
 function fmtGap(g){
   if(g==null||!isFinite(g)) return "";
   if(g<0) g=0;
-  if(g<99.9995) return "+"+g.toFixed(3);
-  var m=Math.floor(g/60), r=g-m*60; return "+"+m+":"+(r<10?"0":"")+r.toFixed(1);
+  var ms=Math.round(g*1000);
+  return "+"+(ms<60000?(ms/1000).toFixed(3):fmtLap(ms/1000));
 }
-/* a row's gap cell: "Leader" | "+3.412" | "+1 Lap" | "DNF" (a running rider whose gap is not known yet: "") */
-function gapText(row){
+/* the same gap for a compact board (the phone's two-column timing board): "+2.09" under 10 s, "+43.6" under a minute, "+1:10.3" */
+function fmtGapShort(g){
+  if(g==null||!isFinite(g)) return "";
+  if(g<0) g=0;
+  var c=Math.round(g*100); if(c<1000) return "+"+(c/100).toFixed(2);
+  var d=Math.round(g*10); if(d<600) return "+"+(d/10).toFixed(1);
+  var m=Math.floor(d/600), r=d-m*600; return "+"+m+":"+(r<100?"0":"")+(r/10).toFixed(1);
+}
+/* a row's gap cell: "Leader" | "+3.412" | "+1 Lap" | "DNF" (a running rider whose gap is not known yet: ""); short: the compact board's form ("+3.41") */
+function gapText(row,short){
   if(!row) return "";
   if(row.dnf) return "DNF";
   if(row.gap==="Leader"||(row.gap&&row.gap.charAt(0)==="+"&&/Lap/.test(row.gap))) return row.gap;
-  return row.gs!=null?fmtGap(row.gs):(row.gap||"");
+  return row.gs!=null?(short?fmtGapShort(row.gs):fmtGap(row.gs)):(row.gap||"");
 }
 /* seconds as text for the YOU readout: 0.9 -> "0.9 s", 12.34 -> "12.3 s" */
 function secText(x,d){ x=Math.abs(+x||0); return (x>=10?x.toFixed(1):x.toFixed(d==null?1:d))+" s"; }
@@ -651,11 +659,12 @@ function you(G,s,k,f,nameOf){
   return out;
 }
 
-/* ---- a tower row as the words in its cells: { p (place), gap ("Leader" | "+3.412" | "+1 Lap" | "DNF" | "DOWN" | "OUT"), last ("49.812" or ""), tag (run | down | out | pits | fin) } ---- */
+/* ---- a tower row as the words in its cells: { p (place), gap ("Leader" | "+3.412" | "+1 Lap" | "DNF" | "DOWN" | "OUT"), short (the same for a compact board: "+3.41"),
+   last ("49.812" or ""), tag (run | down | out | pits | fin) } ---- */
 function towerCells(r){
-  var tag=r.status||"run", gap;
-  if(tag==="out"||(r.dnf&&r.dnf.why==="crash")) gap="DNF"; else if(tag==="pits"||(r.dnf&&r.dnf.why==="cards")) gap="OUT"; else if(tag==="down") gap="DOWN"; else gap=gapText(r);
-  return { p:r.place, gap:gap, last:r.last!=null?fmtLap(r.last):"", tag:tag };
+  var tag=r.status||"run", gap, short;
+  if(tag==="out"||(r.dnf&&r.dnf.why==="crash")) gap="DNF"; else if(tag==="pits"||(r.dnf&&r.dnf.why==="cards")) gap="OUT"; else if(tag==="down") gap="DOWN"; else { gap=gapText(r); short=gapText(r,true); }
+  return { p:r.place, gap:gap, short:short!=null?short:gap, last:r.last!=null?fmtLap(r.last):"", tag:tag };
 }
 /* ---- what a model event says (null = nothing worth a line). nameOf(seat) = "#12 Name"; me(seat) = a person rides that seat ---- */
 function eventLine(G,e,nameOf,me){
@@ -676,7 +685,7 @@ var RULES="Lose a double war: crash and remount. Lose a triple war: crash out. Y
 
 var MX_Time={ RULES:RULES, BASE:BASE, CLS:CLS, classOf:classOf, era:era, cardsFor:cardsFor, init:init, adopt:adopt, trim:trim, lap:lap, complete:complete, finish:finish, standings:standings, result:result,
   knots:knots, progress:progress, progressAt:progressAt, timeAt:timeAt, splits:splits, tower:tower, packet:packet, infoOf:infoOf, run:run, ratio:ratio, handQ:handQ,
-  fmtLap:fmtLap, fmtRace:fmtRace, fmtGap:fmtGap, gapText:gapText, secText:secText, ordText:ordText, rankWord:rankWord, lapTimes:lapTimes, lapStats:lapStats, holdWindow:holdWindow, yellowWindows:yellowWindows,
+  fmtLap:fmtLap, fmtRace:fmtRace, fmtGap:fmtGap, fmtGapShort:fmtGapShort, gapText:gapText, secText:secText, ordText:ordText, rankWord:rankWord, lapTimes:lapTimes, lapStats:lapStats, holdWindow:holdWindow, yellowWindows:yellowWindows,
   leaderLine:leaderLine, clockLimit:clockLimit, walker:walker, lapPlace:lapPlace, facts:facts, worth:worth, you:you, towerCells:towerCells, eventLine:eventLine };
 
 MX.Time=MX_Time;
