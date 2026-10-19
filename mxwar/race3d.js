@@ -1140,7 +1140,7 @@ export function create(host,hooks){
     const HC=GL.HTMLCanvasElement&&GL.HTMLCanvasElement.prototype;
     if(HC&&HC.getContext&&!HC.getContext.__mxLive){ const gc0=HC.getContext; const gc=function(t,o){ if((GL.__mxWRF|0)>0&&!GL.__mxWRFdone&&t==="2d") o=Object.assign({willReadFrequently:true},o||{}); return gc0.call(this,t,o); }; gc.__mxLive=true; HC.getContext=gc; }
     const building=fn=>{ GL.__mxWRF=(GL.__mxWRF|0)+1; try{ return fn(); } finally { GL.__mxWRF=Math.max(0,(GL.__mxWRF|0)-1); } };
-    let prepTok=0, gap=false, BWS=null, SWS=null, inflight=null;
+    let prepTok=0, gap=false, BWS=null, SWS=null, inflight=null, sizeOK=0;
     try{ import("./r3d-world.js").then(m=>{ BWS=m&&m.buildWorldSteps||null; },()=>{}); import("./r3d-track.js").then(m=>{ SWS=m&&m.soilWarmSteps||null; },()=>{}); }catch(e){}
     const setRace0=V.setRace, resize0=V.resize;
     V.setRace=function(){ prepTok++; inflight=null; gap=false; const r=building(()=>setRace0.apply(V,arguments)); GL.__mxWRFdone=true; return r; };   /* (a setRace cancels a world still being prepared) */
@@ -1150,7 +1150,7 @@ export function create(host,hooks){
       if(gap) return;
       const w=Math.max(1,Math.round(host.clientWidth)), h=Math.max(1,Math.round(host.clientHeight));
       if(w===W&&h===H&&!warmPending&&C&&!V.lost){ CAMS.snap(); renderOnce(); return; }
-      return resize0.apply(V,arguments);
+      sizeOK++; try{ return resize0.apply(V,arguments); } finally { sizeOK--; }   /* (the view's own resize sets its size at once: 6 below) */
     };
     /* V.worldKey(o): the key of the world race o needs (setRace's key); V.prepareWorld(o) for a world already built or being built is that build (no new one) */
     const keyOf=o=>{ const lo=motion()!=="full", pick=MX.Layouts.pick(o.series,o.year,o.round,o.cal||{}); return {lo:lo,pick:pick,key:pick.layout.id+"|"+(pick.look.around)+"|"+(lo?"lo":"hi")+"|"+(o.lapT>0?Math.round(o.lapT):"")+"|"+QUAL.buildKey(lo)}; };   /* (= setRace's key) */
@@ -1252,6 +1252,42 @@ export function create(host,hooks){
           if(r&&now()-t0<6000) setTimeout(step,r===2?30:0); else { if(rep&&typeof rep==="object"){ rep.firstUseMs=+(now()-t0).toFixed(1); rep.firstUseSlices=n; } res(rep); } };
         step(); }));
     };
+    /* 6. A NEW SIZE NEVER STALLS THE RACE. A resolution step of the ladder (r3d-quality.js applyPR: renderer.setPixelRatio, at a camera cut) gives the canvas a new drawing
+       buffer, and that call waits until the GPU process has done every frame already queued: 0.6-2.5 s mid-race here (the BALANCED phone race, the TV), the review's
+       mid-race stalls; with nothing queued it takes about 10 ms. So the new ratio is applied only when nothing is queued: at the ladder's request the next frames are
+       not drawn (the picture holds still; the page, the clock, the tower and the announcers go on) while a fence is polled once a frame (never waited for); once the
+       GPU has done the frames before it, the canvas takes its new size and that frame is drawn at it. A GPU still busy after TRY_MS (one shared with other work):
+       the picture goes on at the size it has, and the new one waits for the ladder's next request or the next race (the view's own resize, a new layout or a new
+       race, applies the ladder's current ratio at once, as before, as does V.fixPR). V.sizeLog: the last tries (fence wait, apply ms, ok). */
+    {
+      const gl=renderer.getContext(), sPR=renderer.setPixelRatio, sSZ=renderer.setSize, TRY_MS=400;
+      let want=0, tried=false, fence=null, fT=0;
+      const unfence=()=>{ if(fence){ try{ gl.deleteSync(fence); }catch(e){} fence=null; } };
+      const drop=()=>{ want=0; tried=false; unfence(); };
+      const log=o=>{ V.sizeLog.push(o); if(V.sizeLog.length>24) V.sizeLog.shift(); };
+      V.sizeLog=[];
+      renderer.setPixelRatio=function(p){
+        if(sizeOK||V.lost||!gl.fenceSync){ drop(); return sPR.call(renderer,p); }
+        if(Math.abs(p-renderer.getPixelRatio())<1e-4){ drop(); return; }   /* (a step back to the size it has: nothing to do) */
+        want=p; tried=false; unfence();   /* (the ladder's own state says p already: QUAL.summary().pr) */
+      };
+      renderer.setSize=function(w,h,u){ if(want&&!sizeOK) return; return sSZ.call(renderer,w,h,u); };   /* (the ladder's setSize after its ratio: the same size, nothing to do) */
+      const fix0=QUAL.fix; QUAL.fix=function(){ sizeOK++; try{ return fix0.apply(QUAL,arguments); } finally { sizeOK--; } };
+      const skip0=QUAL.skipFrame;
+      QUAL.skipFrame=function(t){
+        if(want&&!tried&&!V.lost){
+          if(!fence){ try{ fence=gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE,0); gl.flush(); }catch(e){ fence=null; } fT=now(); if(fence) return true; }
+          else {
+            let s=true; try{ s=gl.getSyncParameter(fence,gl.SYNC_STATUS)===gl.SIGNALED; }catch(e){ s=true; }
+            if(!s){ if(now()-fT<TRY_MS) return true; unfence(); tried=true; log({t:Math.round(fT),wait:Math.round(now()-fT),ok:false,pr:+want.toFixed(3)}); return skip0.call(QUAL,t); }
+          }
+          const p=want, t0=now(); drop(); sizeOK++;
+          try{ sPR.call(renderer,p); sSZ.call(renderer,W,H,false); }catch(e){} finally { sizeOK--; }
+          log({t:Math.round(t0),wait:Math.round(t0-fT),ms:+(now()-t0).toFixed(1),ok:true,pr:+p.toFixed(3)});
+        }
+        return skip0.call(QUAL,t);
+      };
+    }
   }
   // [/hook:live]
   V.dispose=function(){ V.stop(); if(world) disposeTree(world.root); if(R) disposeTree(R.grp); if(FX) disposeTree(FX.group); LOOK.dispose(); renderer.dispose(); cv.remove(); };
