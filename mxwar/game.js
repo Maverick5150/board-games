@@ -116,6 +116,8 @@ var BOOTH=null, QUIET_BOXES=["boardBox","fullBox","newBox","lineBox","skipBox","
 function annOn(){ return !!(BOOTH&&BOOTH.callsRace()); }
 function annFeed(ev){ if(BOOTH&&G) try{ BOOTH.feed(G,ev); }catch(e){} }
 function annShown(kind,info){ if(BOOTH) try{ BOOTH.shown(kind,info); }catch(e){} }
+/* the race clock the picture is at (the view riding the time model): the commentator reads its gaps, places and lap times at that moment */
+function annClock(){ var T=TRK; if(!T||!T.model||!T.model()||!ui.rc||!ui.rc.tm||ui.view!=="race") return null; return {t:T.clock(),rate:T.rate>0?T.rate:1}; }
 function annNew(st){ if(ui.gate){ try{ ui.gate.d.cancel(); }catch(e){} ui.gate=null; } if(BOOTH) try{ BOOTH.newSeason(st||null); }catch(e){} }
 function annTrack(layout,sectionAt){ if(BOOTH) try{ BOOTH.setTrack({layout:layout||null,sectionAt:sectionAt||null}); }catch(e){} }
 function sheetIsOpen(id){ var B=BG(), el=$(id); if(!el) return false; if(luxe()&&B.sheet.isOpen) return B.sheet.isOpen(el); return el.classList.contains("show"); }
@@ -1238,7 +1240,7 @@ function onTrackEvent(e){
       var who=by.map(function(x){ var R=G.riders[seatId(x)]; return "#"+R.plate+" "+R.name; }), plur=who.length>1||(by.length===1&&/^you$/i.test(G.riders[seatId(by[0])].name));
       var sub=(who.length>2?who.length+" riders":listNames(who))+(outN?(plur?" are":" is")+" out of the race":(plur?" go down and remount":" goes down and remounts"))+" · no passing there next lap";
       logLine(T.eventLine(rc,e,nameOfSeat,me)); banner("Yellow flag",sub,dl(1500),"is-yellow"); break; }
-    case "pass": if(e.pos<=10&&!e.crash) annShown("pass",{s:e.a}); { var pl=T.eventLine(rc,e,nameOfSeat,me); if(pl) logLine(pl); } break;
+    case "pass": if(e.pos<=10&&!e.crash) annShown("pass",{s:e.a,d:e.d,pos:e.pos}); { var pl=T.eventLine(rc,e,nameOfSeat,me); if(pl) logLine(pl); } break;
     case "lapped": annShown("lapped",{s:e.s,by:e.by}); if(me(e.s)||me(e.by)) logLine(T.eventLine(rc,e,nameOfSeat,me)); break;
     case "fastest": if(e.k>=3) logLine(T.eventLine(rc,e,nameOfSeat,me)); break;
   }
@@ -1866,7 +1868,7 @@ readRiders();
 /* the announcers: the booth, its captions (the band under the track; one on top for the sheets and the season) and its mode on the page */
 if(MX.Booth&&MX.Announce&&window.BGVoice){
   try{
-    BOOTH=MX.Booth.create({speed:function(){ return cfg.speed; },ctx:annCtx,sayNames:annNames,onChange:annMode});
+    BOOTH=MX.Booth.create({speed:function(){ return cfg.speed; },ctx:annCtx,sayNames:annNames,onChange:annMode,clock:annClock});
     capEls=BOOTH.attach({band:$("capBand"),top:document.body})||null;
     if(capEls&&capEls.top) capEls.top.el.classList.add("mx-capfix");
     if(capEls&&capEls.band){ var idle=document.createElement("span"); idle.className="mx-capidle"; idle.textContent="Calloway and Bramlett on the call"; $("capBand").appendChild(idle); }

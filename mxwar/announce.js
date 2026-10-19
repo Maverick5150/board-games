@@ -4,11 +4,12 @@
    (the analyst, voice "b"); the phrase bank is mxwar/announce-lines.js, the research and the rules BG_audit/games/mxwar/ANNOUNCERS.md.
    It never touches the game: it READS the season (G), the race (G.race) and the events the engine already returns, and it says lines
    through the page's callback (ui/voice.js speaks them; a caption always shows them).
-     var ann = MXWar.Announce.create({say, caption, onStory, speed, chatter, era, sayNames, sectionAt, layout, gapAt, lapMs, seed});
+     var ann = MXWar.Announce.create({say, caption, onStory, speed, chatter, era, sayNames, sectionAt, layout, gapAt, lapMs, seed, clock, estimate});
        say(line)         the page speaks it (ui/voice.js BGVoice.speak); line = {id, who:"a"|"b", name, role:"C"|"A", text (the caption),
                          say (the speech respelling), pri 0..3 (3 = interrupt), interrupt, tier "T0".."T3" (delivery energy), ttl (ms the
                          line stays true), ev, tpl, lap, race, est (ms), parts (the template cut into literal / slot pieces, for a
-                         recorded-voice player), facts (what the line states, for tests)}
+                         recorded-voice player), lv 0..3 (the intensity: calm, lively, BIG, HUGE; tier = "T"+lv), why (the rules that
+                         set it), facts (what the line states, for tests)}
        caption(line)     optional: the same line for a caption (BGVoice shows captions itself)
        onStory(story)    the camera director hears every change of what the commentary is about
        speed             "slow" | "medium" | "fast" (the Slow / Medium / Fast option: Slow busier, Fast quieter); chatter "less" | "normal" | "more"
@@ -16,6 +17,9 @@
        sectionAt(sector) -> {type, name, turn} of the track at a lap position 0..1 (the 3D track), or layout = a track-layouts.json layout
        gapAt(seatA, seatB) -> seconds between two riders (the 3D time model); without it the gap is told in cards
        lapMs             the length of a lap on screen when the page compresses it (the 2D view: 6-14 s); 0 = the real lap times
+       clock()           the race clock the picture is at, {t: ms of the time model, rate: race ms per page ms} (the view that rides the model); without
+                         it the commentator works the clock out from the lap on screen
+       estimate(line)    a clip pack's real length of a line in ms (the booth then holds the floor for it), 0 = the words-per-second estimate
      ann.feed(G, events, now)      after every Season.startRace / step / apply / simRace (the same batch the page plays); now = the page clock (ms)
      ann.tick(now)                 every 100-250 ms while the race screen is up (cheap)
      ann.phase(kind, info, now)    page moments: "lineup" | "engines" | "board30" | "sideways" | "podium" | "pause" | "resume"
@@ -25,10 +29,20 @@
      ann.story() / ann.upcoming()  what the commentary is about now / next (for the camera director)
      ann.setTrack({layout, sectionAt}) / ann.set(key, value) / ann.pause() / ann.resume(now) / ann.state() / ann.restore(state, now) / ann.reset()
    Pacing (ANNOUNCERS.md D): one voice at a time; INTERRUPT lines (gate, holeshot, wars, crashes, lead changes, white flag, checkered)
-   cut normal and filler lines; the lap's main story where the race view shows it; colour only in silence; a budget of lines per lap
-   from the lap's length on screen (a real 55 s Supercross lap: 3-6 lines; a 2:00 outdoor lap: 4-8; a compressed 6-14 s lap: 1-3),
-   scaled by the speed (Slow busier, Fast quieter) and the Chatter setting. Facts are always TRUE: every slot comes from the engine or
-   the season data; a line whose fact changed before it was spoken is dropped, never spoken late. */
+   cut a calm or lively line, never a BIG or HUGE one; the lap's main story where the race view shows it; a budget of event lines per
+   lap from the lap's length on screen, scaled by the speed (Slow busier, Fast quieter) and the Chatter setting.
+   THE TALK (mxann3; the CEO, 2026-10-18: "I want the announcers to talk the entire time ... it should be talking about the race itself"):
+   between the calls the booth talks (talk()): with real lap times no silence over about 4 s from the gate to the flag. What it talks
+   about, in the CEO's order: the live battles (the gap in seconds and its trend at the line, side by side, the war that set it up), the
+   person's own rider, the leader's gap and the top five, lap times and the fastest lap, what a crash cost, the points as they run; then
+   the context: the rider's season so far, his history in earlier seasons, the venue and the series last. When nothing longer fits before
+   the next lap's cards, a few words on the leader at the line. A lap shown short (the 2D view) is talked through less.
+   Variety: the same words never twice inside 10 minutes, never the same template twice in a row; a line with no fact in it is heard once
+   in a race; a fact (a rider's title, his last result) is told once in a race, in whatever words.
+   History: only seasons that ENDED before this round (data/history.js, read as of the round's date) and this season's own results: never
+   a later year, and never "the real" anything. Intensity: mxwar/intensity.js gives every line its level (HUGE stays rare).
+   Facts are always TRUE: every slot comes from the engine or the season data; a line whose fact changed before it was spoken is dropped,
+   never spoken late; once the results are read, nothing more is said about that race's laps. */
 (function(g){
 "use strict";
 var MX=g.MXWar=g.MXWar||{};
@@ -38,6 +52,10 @@ function BANK(){ return MX.AnnounceLines||req("./announce-lines.js"); }
 function RC(){ return MX.Race||req("./race.js"); }
 function RD(){ return MX.Round||req("./round.js"); }
 function SN(){ return MX.Season||req("./season.js"); }
+function TIME(){ return MX.Time||req("./time.js"); }
+function INT(){ return MX.Intensity||(req("./intensity-data.js"),req("./intensity.js")); }
+/* the history book (data/history.js): read only for seasons that were over before the round being raced */
+function HIST(){ if(g.MXWarHistory) return g.MXWarHistory; req("./data/history.js"); return g.MXWarHistory||null; }
 
 /* ---------------- words for speech (ANNOUNCERS.md E.2) ---------------- */
 var ONES=["zero","one","two","three","four","five","six","seven","eight","nine","ten","eleven","twelve","thirteen","fourteen","fifteen","sixteen","seventeen","eighteen","nineteen"];
@@ -65,6 +83,30 @@ function secV(x){   /* a lap time: one decimal; over a minute as m:ss.s */
   return V(m+":"+(r<10?"0":"")+r.toFixed(1),words(m)+(m===1?" minute, ":" minutes, ")+words(ri)+(rd?" point "+words(rd):"")+" seconds");
 }
 function raceTimeV(t){ var m=String(t||"").match(/^(\d+):(\d\d)(?:\.\d+)?$/); if(!m) return null; var mi=+m[1], s=+m[2]; return V(mi+":"+m[2],words(mi)+(mi===1?" minute, ":" minutes, ")+words(s)+(s===1?" second":" seconds")); }
+/* a gap in seconds as the booth says it: under a second in tenths ("0.6 seconds" / "six tenths of a second"), then one decimal up to 10 s
+   ("1.4 seconds" / "one point four seconds"), then whole seconds */
+function gapSecV(x){
+  x=+x; if(!(x>=0.05)) return null;
+  var d=Math.round(x*10)/10;
+  if(d<1){ var tn=Math.round(d*10); return V(d.toFixed(1)+" seconds",tn===1?"a tenth of a second":words(tn)+" tenths of a second"); }
+  if(d<10){ var i=Math.floor(d), f=Math.round((d-i)*10); return f?V(d.toFixed(1)+" seconds",words(i)+" point "+words(f)+" seconds"):V(i+(i===1?" second":" seconds"),words(i)+(i===1?" second":" seconds")); }
+  var n=Math.round(x); return V(n+" seconds",words(n)+" seconds");
+}
+/* a lap time as the booth reads it off the timing screen: "53.4" ("fifty-three point four"), outdoors "2:05.3" ("two oh five point three") */
+function lapTimeV(x){
+  x=Math.round((+x)*10)/10; if(!(x>0)) return null;
+  var tenth=Math.round((x-Math.floor(x))*10);
+  if(x<60){ var i=Math.floor(x); return V(x.toFixed(1),words(i)+" point "+words(tenth)); }
+  var m=Math.floor(x/60), s=Math.floor(x-m*60);
+  return V(m+":"+(s<10?"0":"")+s+"."+tenth,words(m)+" "+(s<10?"oh "+words(s):words(s))+" point "+words(tenth));
+}
+/* the series in its own era's words: outdoors it was the AMA Motocross Championship until 1985 and Pro Motocross from 1986 (the season's own
+   name says which); SuperMotocross only exists from 2023 */
+function seriesV(Gs){ if(!Gs) return null; if(Gs.series==="sx") return V("Supercross"); if(Gs.series==="smx") return V("SuperMotocross"); return /Pro Motocross/.test(String(Gs.name||""))?V("Pro Motocross"):V("Motocross"); }
+var TIMESW=["","one-time","two-time","three-time","four-time","five-time","six-time","seven-time","eight-time","nine-time","ten-time","eleven-time","twelve-time"];
+/* the history book's names: the same key the book was built with (no nickname, no brackets, lower case, no dots or commas) */
+function normName(n){ return String(n||"").replace(/\s*\([^)]*\)/g," ").replace(/\s*"[^"]*"\s*/g," ").replace(/\s+/g," ").trim().toLowerCase().replace(/[.,]/g,"").replace(/\s+/g," ").trim(); }
+function fnv(s){ var h=0x811c9dc5; s=String(s); for(var i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,0x01000193)>>>0; } return ("0000000"+h.toString(16)).slice(-8); }
 function clsV(c){ c=String(c||""); if(/^500/.test(c)) return V("500cc","five hundred"); if(/^450/.test(c)) return V("450","four-fifty"); if(/^250/.test(c)) return V("250","two-fifty"); if(/^125/.test(c)) return V("125","one twenty-five"); return c?V(c,c):null; }
 var RW={2:"two",3:"three",4:"four",5:"five",6:"six",7:"seven",8:"eight",9:"nine",10:"ten",11:"Jack",12:"Queen",13:"King",14:"Ace",15:"Joker"};
 function rankOf(id){ var R=RC(); return R?R.rank(id):((id%54)>=52?15:2+(id%54)%13); }
@@ -122,7 +164,11 @@ var PRONOUN=/\b(he|him|his|he's|himself)\b/i;
 var ACTION={lap_win:1,big_move:1,pass_top:1,war_won:1,wild_card:1,transfer_change:1,lead_battle:1,bubble:1,midpack_battle:1,teammates:1,privateer:1,runaway:1,
   out_of_cards:1,deadlock:1,kitty:1,you_up:1,you_down:1,lead_change:1,crash_remount:1,crash_out:1,multi_crash:1,holeshot:1,war_start:1,double_war:1,triple_war:1,last_lap_battle:1};
 var YOULOW={halfway:1,laps_to_go:1,white_flag:1,show_open:1,race_intro_heat:1,race_intro_semi:1,race_intro_lcq:1,race_intro_qual:1,race_intro_main:1,race_intro_moto:1,lineup_gate:1,first_lap_order:1,heat_transfers:1,lcq_result:1,moto_done:1,overall:1,round_podium:1,records:1,championship_math:1};
-var NAMED=/\{(rider|last|num|you|by|p1|last1|a|red|cutRider|bubble|star|riders|humans)\}/;
+var NAMED=/\{(rider|last|num|you|by|p1|last1|a|red|cutRider|bubble|star|riders|humans|aLast|bLast|cLast|otherLast|last2|bestBy|quickLast|redLast|secondLast|leaderLast|aheadLast|behindLast|hsLast|wLast|lLast|p4|p5|hchamp|hwinner|champion)\}/;
+/* the talk and the passes on the track: an analyst line said on its own (not as the answer to a call) must name who it is about, or the
+   room hears "that's a proper fight" without knowing whose */
+var TALKEV={talk_battle:1,talk_you:1,talk_leader:1,talk_top5:1,talk_laps:1,talk_crash:1,talk_points:1,talk_stats:1,talk_season:1,talk_history:1,talk_venue:1,talk_series:1,talk_open:1,track_pass:1};
+var TALKSOLO={talk_battle:1,talk_leader:1,talk_top5:1,talk_laps:1,talk_crash:1,talk_points:1,talk_stats:1,talk_season:1,talk_history:1,track_pass:1};
 function wc(t){ var m=String(t).match(/[A-Za-z0-9'’-]+/g); return m?m.length:0; }
 function sentenceCase(t){ t=String(t).replace(/\s+/g," ").trim(); t=t.charAt(0).toUpperCase()+t.slice(1); return t.replace(/([.!?]\s+)([a-z])/g,function(m,p,c){ return p+c.toUpperCase(); }); }
 
@@ -175,7 +221,9 @@ function create(o){
     recent:[],hype:{},bags:{},named:{},cd:{},names:{},sid:null,rounds:{},used:{},
     sit:{party:false,lcqSaid:false,redHist:[],redSeen:-1,clinched:false},
     story:{kind:"leader",label:"the leader",riders:[],ids:[],section:null,lap:0,at:0,until:0},shotInfo:null,
-    track:{layout:o.layout||null,sectionAt:o.sectionAt||null,features:null},hist:[],paused:false,pausedAt:0};
+    track:{layout:o.layout||null,sectionAt:o.sectionAt||null,features:null},hist:[],paused:false,pausedAt:0,
+    said:{},saidN:0,   /* the texts said in the last 10 minutes (a hash of the caption -> when): no line is said twice inside 10 minutes */
+    tk:{at:{},pair:{},rider:{},sig:{},gap:null,wait:0,n:0,ctxAt:-1e9,last:null},hb:null};   /* talk: when each topic, pair and rider was last talked about */
   var say=typeof o.say==="function"?o.say:function(){}, capt=typeof o.caption==="function"?o.caption:null, onStory=typeof o.onStory==="function"?o.onStory:null;
   var sayNames=o.sayNames||{};
 
@@ -194,6 +242,13 @@ function create(o){
   function sstand(){ var Gs=A.G; if(!Gs||!SN()) return []; var k=Gs.results.length+"|"+Gs.ri+"|"+(Gs.over?1:0); if(seasonCache.k!==k||seasonCache.G!==Gs){ seasonCache={k:k,G:Gs,L:SN().standings(Gs)}; } return seasonCache.L; }
   function redNow(){ var L=sstand(); return L.length&&L[0].pts>0?L[0].id:null; }
   function splace(id){ var L=sstand(); for(var i=0;i<L.length;i++) if(L[i].id===id) return L[i]; return null; }
+  /* the season as the talk tells it during a race: the engine scores a round the moment its last race ends, while the picture still shows
+     that last lap; until the winner is called the talk uses the standings and the results from before this round */
+  function preRound(){ var r=A.race, rc=r&&r.rc; return !!(rc&&!r.ckSaid&&A.G&&(A.G.results||[]).some(function(x){ return x.ri===rc.ri; })); }
+  function standNow(){ return preRound()&&A.race.rc.stand?A.race.rc.stand:sstand(); }
+  function resNow(){ var R=(A.G&&A.G.results)||[]; if(!preRound()) return R; var ri=A.race.rc.ri; return R.filter(function(x){ return x.ri<ri; }); }
+  function splaceNow(id){ var L=standNow(); for(var i=0;i<L.length;i++) if(L[i].id===id) return L[i]; return null; }
+  function redPre(){ var L=standNow(); return L.length&&L[0].pts>0?L[0].id:null; }
   function rstand(){ var R=A.R; if(!R||!RC()) return []; return RC().standings(R); }
   function placeIn(L,s){ for(var i=0;i<L.length;i++) if(L[i].s===s) return i+1; return 0; }
   function alive(L){ return L.filter(function(r){ return !r.out; }).length; }
@@ -319,7 +374,7 @@ function create(o){
     var key=Gs.sid+"|"+ri, rc=A.rounds[key];
     if(!rc){
       var cal=Gs.cal[Math.max(0,Math.min(ri,Gs.cal.length-1))], res=(Gs.results||[]).filter(function(x){ return x.ri===ri; })[0];
-      rc=A.rounds[key]={key:key,ri:ri,cal:cal,redBefore:res?redBeforeFrom(res):redNow(),opened:false,F:null};
+      rc=A.rounds[key]={key:key,ri:ri,cal:cal,redBefore:res?redBeforeFrom(res):redNow(),opened:false,F:null,stand:res?null:sstand().map(function(x){ return Object.assign({},x); })};   /* stand: the standings as the round began */
     }
     if(!rc.F){ if(Gs.round&&Gs.round.ri===ri) rc.F=Gs.round.F; else if(rc.cal&&SN()){ try{ rc.F=SN().calFormat(Gs,rc.cal); }catch(e){ rc.F=null; } } }
     return rc;
@@ -350,11 +405,15 @@ function create(o){
       if(rc&&rc.F&&rc.F.finals&&rc.F.finals.kind==="main") tags.hasmain=1;   /* the night ends with a Main Event (the 1974-76 nights and the outdoor days are motos) */
       sl.year=V(String(Gs.year),yearWords(Gs.year));
       sl.cls=clsV(Gs.cls);
-      sl.series=Gs.series==="sx"?V("Supercross"):Gs.series==="mx"?V("Pro Motocross"):V("SuperMotocross");
+      sl.series=seriesV(Gs);
+      /* the era's own words: the red plate marks the points leader from 2012 (before, the leader is "the points leader"); a four-fifty is
+         the class from its data name (450cc from 2006) */
+      if(Gs.year>=2012) tags.redplate=1;
+      if(/^450/.test(String(Gs.cls))) tags.fourfifty=1;
       sl.rn=numV(ri+1); sl.rounds=numV(Gs.cal.length);
       if(ri===0) tags.first=1; if(ri===Gs.cal.length-1) tags.last=1;
       var hum=Gs.humans||[]; if(hum.length) sl.humans=listV(hum,false);
-      var red=redNow(); if(red){ sl.red=nameRec(red)?nameRec(red).full:null; var L=sstand(); if(L[1]){ sl.second=nameRec(L[1].id).full; var ld=L[0].pts-L[1].pts; if(ld>0) sl.leadN=cntV(ld,"point","points"); if(ld>0&&ld<=10) tags.ptsclose=1; } if(L[2]) sl.third=nameRec(L[2].id).full; }
+      var red=redPre(); if(red){ sl.red=nameRec(red)?nameRec(red).full:null; var L=standNow(); if(L[1]){ sl.second=nameRec(L[1].id).full; var ld=L[0].pts-L[1].pts; if(ld>0) sl.leadN=cntV(ld,"point","points"); if(ld>0&&ld<=10) tags.ptsclose=1; } if(L[2]) sl.third=nameRec(L[2].id).full; }
       var wv=Gs.o&&Gs.o.war; if(wv){ if(wv.noDown) tags.nodown=1; else if(wv.version==="classic") tags.classic=1; else tags.three=1; }
       var feat=featureOf(A.track.layout); if(feat){ sl.feature=feat; tags.feature=1; }
       var lq=lcqOf(rc&&rc.F||(Gs.round&&Gs.round.F)); sl.lcq=lq;
@@ -374,7 +433,6 @@ function create(o){
       if(A.rmap&&A.rmap[0]) sl.first=nameRec(A.rmap[0])?nameRec(A.rmap[0]).full:null;
       if(r.cur) orderSlots(sl,r.cur);
       if(r.timed&&A.race.gated&&!r.timeUp){ var cl=clockLeft(); if(cl!=null&&cl>0) sl.clockNow=clockWords(cl); }
-      if(r.real) tags.real=1;
       if(A.G&&A.G.o&&A.G.o.war&&A.G.o.war.outLoses) tags.shortrule=1;
     }
     return {tags:tags,slots:sl,facts:f};
@@ -390,7 +448,7 @@ function create(o){
   }
   /* the gap between two riders: the race view's seconds when it gives them (o.gapAt), else the cards between them; level on cards = no gap
      to speak of (a line that needs {gap} is skipped) */
-  function secV(x){ return x<10?V(x.toFixed(1)+" seconds",words(Math.floor(x))+" point "+words(Math.round((x-Math.floor(x))*10)%10)+" seconds"):cntV(Math.round(x),"second","seconds"); }
+  function secV(x){ return gapSecV(x); }
   function gapV(sa,sb,cards,secs){
     if(typeof o.gapAt==="function"){ try{ var x=+o.gapAt(sa,sb); if(x>0) return secV(x); }catch(e){} }
     if(secs!=null) return secs>=0.05?secV(secs):null;   /* mxtime: the race's own seconds; level (under a twentieth) = no gap to speak of */
@@ -408,6 +466,7 @@ function create(o){
 
   /* ---------------- rendering one line from the bank ---------------- */
   function parse(ev){ var E=EV[ev]; if(!E) return []; if(!E._p){ E._p=E.L.map(function(t,i){ var a=t.split("|"); return {id:ev+"#"+i,role:a[0],tags:a[1]?a[1].split(" ").filter(Boolean):[],text:a.slice(2).join("|")}; }); } return E._p; }
+  function tplTags(id){ var i=String(id).indexOf("#"), P=i>0?parse(String(id).slice(0,i)):[], x=P[+String(id).slice(i+1)]; return x?x.tags:[]; }
   function tplText(id){ var i=String(id).indexOf("#"), P=i>0?parse(String(id).slice(0,i)):[], x=P[+String(id).slice(i+1)]; return x?x.text:""; }
   function eligible(tp,ctx){
     var e=era(), Gs=A.G;
@@ -431,35 +490,53 @@ function create(o){
     if(!P.length) return null;
     var now=A.now, rec={}; A.recent.forEach(function(id){ rec[id]=1; });
     /* a line that names a home rider never says he / him / his (a person is only ever "{you}") unless its template is tagged you */
-    var humanRef=!!ctx.human||((ctx.facts&&ctx.facts.named)||[]).some(function(id){ var R=rider(id); return !!(R&&R.kind==="human"); }), solo=role==="A"&&!ctx.follow&&ACTION[ev];
+    var humanRef=!!ctx.human||((ctx.facts&&ctx.facts.named)||[]).some(function(id){ var R=rider(id); return !!(R&&R.kind==="human"); }), solo=role==="A"&&!ctx.follow&&(ACTION[ev]||TALKSOLO[ev]);
     P=P.filter(function(tp){ if(rec[tp.id]) return false; if(tp.tags.indexOf("you")<0&&PRONOUN.test(tp.text)&&(humanRef||printsHuman(tp.text,ctx.slots))) return false; if(solo&&!NAMED.test(tp.text)) return false; return true; });
     if(!P.length) return null;
     if(ctx.onlyYou) P=P.filter(function(tp){ return tp.tags.indexOf("you")>=0; });
     if(!P.length) return null;
+    if(ctx.only){ var po=P.filter(function(tp){ return tp.tags.indexOf(ctx.only)>=0; }); if(po.length) P=po; }   /* a line that must say it (the home rider passed): those lines first */
     /* a line already heard in this race sounds canned: prefer templates this race has not used yet, then ones not heard in the last
        4 minutes (colour and filler: 10) */
     var ru=A.race&&A.race.usedT; if(ru){ var fresh=P.filter(function(tp){ return !ru[tp.id]; }); if(fresh.length) P=fresh; }
-    var span=EV[ev].p==="F"?600000:240000, older=P.filter(function(tp){ return !(A.used[tp.id]&&now-A.used[tp.id]<span); }); if(older.length) P=older; else if(strict&&PRI[EV[ev].p]<3) return null;
-    /* hype words: a 3-minute cooldown */
-    var cool=P.filter(function(tp){ var low=tp.text.toLowerCase(); return !HYPE.some(function(h){ return low.indexOf(h)>=0&&A.hype[h]&&now-A.hype[h]<180000; }); });
-    if(cool.length) P=cool;
-    /* era lines about half the time; the human's own lines most of the time */
-    var e=era(), eraL=P.filter(function(tp){ return tp.tags.some(function(t){ return eraOK(t,e)===true; }); }), plain=P.filter(function(tp){ return eraL.indexOf(tp)<0; });
-    if(eraL.length&&plain.length) P=chance(0.4)?eraL:plain;
-    if(ctx.tags.you){ var yl=P.filter(function(tp){ return tp.tags.indexOf("you")>=0; }); if(yl.length&&chance(YOULOW[ev]?0.3:0.75)) P=yl; }
-    /* least recently used first: never-used templates in random order, then the oldest (a little randomness among the three oldest) */
-    var tries=P.slice().sort(function(a,b2){ return (A.used[a.id]||0)-(A.used[b2.id]||0)||rnd()-0.5; });
-    var nUnused=tries.filter(function(tp){ return !A.used[tp.id]; }).length;
-    if(nUnused>1){ var head=tries.slice(0,nUnused); for(var hi=head.length-1;hi>0;hi--){ var hj=Math.floor(rnd()*(hi+1)), ht=head[hi]; head[hi]=head[hj]; head[hj]=ht; } tries=head.concat(tries.slice(nUnused)); }
-    else if(tries.length>2&&chance(0.5)){ var sw=Math.floor(rnd()*Math.min(3,tries.length)), st=tries[0]; tries[0]=tries[sw]; tries[sw]=st; }
-    while(tries.length){
-      var tp=tries.shift();
-      var out=fill(tp.text,ctx.slots);
-      if(!out) continue;
-      if(!out.c||/undefined|null|NaN|\{|\}/.test(out.c+out.s)) continue;
-      return {tpl:tp.id,text:out.c,say:out.s,parts:out.parts};
+    /* talk with no fact in it (no number, place, gap or year: "that's a proper fight") is heard once in a race; a talk topic with nothing else to say gives way */
+    if(ru&&EV[ev].p==="F"){ P=P.filter(function(tp){ return !(ru[tp.id]&&!FACTSLOT.test(tp.text)); }); if(!P.length) return null; }
+    var span=EV[ev].p==="F"?600000:240000, older=P.filter(function(tp){ return !(A.used[tp.id]&&now-A.used[tp.id]<span); }), stages;
+    if(older.length) stages=EV[ev].p==="F"?[older,P.filter(function(tp){ return older.indexOf(tp)<0; })]:[older];   /* the talk: when every template not heard for 10 minutes fails (its words were said), new facts in a template heard sooner (never the same words) */
+    else if(strict&&PRI[EV[ev].p]<3) return null;
+    else stages=[P];
+    var fb=null, fbAt=Infinity;
+    for(var si=0;si<stages.length;si++){
+      var P2=stages[si]; if(!P2.length) continue;
+      /* hype words: a 3-minute cooldown */
+      var cool=P2.filter(function(tp){ var low=tp.text.toLowerCase(); return !HYPE.some(function(h){ return low.indexOf(h)>=0&&A.hype[h]&&now-A.hype[h]<180000; }); });
+      if(cool.length) P2=cool;
+      /* era lines about half the time; the human's own lines most of the time: a preference, so when the preferred lines were all heard in
+         the last 10 minutes the others are tried before any words are said again */
+      var e=era(), eraL=P2.filter(function(tp){ return tp.tags.some(function(t){ return eraOK(t,e)===true; }); }), plain=P2.filter(function(tp){ return eraL.indexOf(tp)<0; }), pref=P2;
+      if(eraL.length&&plain.length) pref=chance(0.4)?eraL:plain;
+      if(ctx.tags.you){ var yl=pref.filter(function(tp){ return tp.tags.indexOf("you")>=0; }); if(yl.length&&chance(YOULOW[ev]?0.3:0.75)) pref=yl; }
+      var pools=pref.length<P2.length?[pref,P2.filter(function(tp){ return pref.indexOf(tp)<0; })]:[P2];
+      for(var pi=0;pi<pools.length;pi++){
+        /* least recently used first: never-used templates in random order, then the oldest (a little randomness among the three oldest) */
+        var tries=pools[pi].slice().sort(function(a,b2){ return (A.used[a.id]||0)-(A.used[b2.id]||0)||rnd()-0.5; });
+        var nUnused=tries.filter(function(tp){ return !A.used[tp.id]; }).length;
+        if(nUnused>1){ var head=tries.slice(0,nUnused); for(var hi=head.length-1;hi>0;hi--){ var hj=Math.floor(rnd()*(hi+1)), ht=head[hi]; head[hi]=head[hj]; head[hj]=ht; } tries=head.concat(tries.slice(nUnused)); }
+        else if(tries.length>2&&chance(0.5)){ var sw=Math.floor(rnd()*Math.min(3,tries.length)), st=tries[0]; tries[0]=tries[sw]; tries[sw]=st; }
+        /* the same words twice inside 10 minutes sound canned (the CEO): a text said in the last 10 minutes is skipped; a call that must be made
+           (an interrupt) takes the one heard longest ago when every template it has was said that recently */
+        while(tries.length){
+          var tp=tries.shift();
+          var out=fill(tp.text,ctx.slots);
+          if(!out) continue;
+          if(!out.c||/undefined|null|NaN|\{|\}/.test(out.c+out.s)) continue;
+          var heard=A.said[fnv(out.c)];
+          if(heard!=null&&now-heard<600000){ if(PRI[EV[ev].p]>=3&&heard<fbAt){ fbAt=heard; fb={tpl:tp.id,text:out.c,say:out.s,parts:out.parts}; } continue; }
+          return {tpl:tp.id,text:out.c,say:out.s,parts:out.parts};
+        }
+      }
     }
-    return null;
+    return fb;
   }
 
   /* ---------------- the queue and the booth (one voice at a time) ---------------- */
@@ -481,42 +558,69 @@ function create(o){
   function resolveAfter(id){ A.q.forEach(function(x){ if(x.after===id){ x.after=null; x.due=Math.max(x.due,A.now+x.delay); x.exp=Math.max(x.exp,x.due+x.ttlMs); if(x.hard!=null) x.exp=Math.min(x.exp,x.hard); } }); }   /* hard: the last race's leftovers never outlive the next race's first 8 s (review) */
   function estMs(who,text){ var w=wc(text); return Math.round((who==="a"?w/2.7:w/2.5)*1000+350+(/^Sideways\.$|^Board's sideways\.$/.test(text)?600:0)); }
   function boothBusy(){ var b=A.booth; if(A.now<b.until) return true; if(b.fb&&b.cur&&!b.cur.done&&A.now<b.cur.at+b.cur.est*2.5) return true; return false; }
-  function emit(it,cut){
+  /* a line is made in the context of ITS race (a line spoken after the next race has been set up still reads its own race) */
+  function inRace(it,fn){
     var sv={race:A.race,rmap:A.rmap,R:A.R};
     if(it.rc){ A.race=it.rc; A.rmap=it.rm; A.R=it.Rr; }
-    try{ return emit2(it,cut); } finally{ A.race=sv.race; A.rmap=sv.rmap; A.R=sv.R; }
+    try{ return fn(); } finally{ A.race=sv.race; A.rmap=sv.rmap; A.R=sv.R; }
   }
-  function emit2(it,cut){
+  function emit(it,cut){ return inRace(it,function(){ return emit2(it,cut); }); }
+  /* the line itself: its context (the facts, read now), the voice and the template (the talk picks a line before it speaks it, to see that it
+     fits before the next call) */
+  function prepare(it){
     var ctx=null; try{ ctx=it.ctx?it.ctx():baseCtx(); }catch(e){ ctx=null; if(o.debug) throw e; }
-    if(!ctx) return false;
+    if(!ctx) return null;
     ctx.follow=it.follow;
     var E=EV[it.ev], roles=it.role==="any"?roleOrder(E,it):[it.role], out=null, role=null, i;
     for(i=0;i<roles.length&&!out;i++){ role=roles[i]; out=render(it.ev,role,ctx,true); }
     for(i=0;i<roles.length&&!out;i++){ role=roles[i]; out=render(it.ev,role,ctx,false); }
-    if(!out) return false;
-    var who=role==="C"?"a":"b", crew=B.crew[who];
+    if(!out) return null;
+    var who=role==="C"?"a":"b";
+    return {ctx:ctx,role:role,out:out,who:who,est:estMs(who,out.text)};
+  }
+  function emit2(it,cut){
+    if(it.follow&&it.parent&&(!A.booth.cur||A.booth.cur.id!==it.parent)) return false;   /* another line came between the call and its answer: the answer is dropped */
+    var pr=it.pre||prepare(it); it.pre=null;
+    if(!pr) return false;
+    var ctx=pr.ctx, role=pr.role, out=pr.out, E=EV[it.ev];
+    var who=pr.who, crew=B.crew[who];
     var line={id:"L"+(++A.id),who:who,name:crew.short,role:role,text:out.text,say:out.say,pri:it.pri,interrupt:!!cut||it.pri===3,ev:it.ev,tpl:out.tpl,
-      lap:lapNo(),race:A.race?A.race.key:null,at:A.now,est:estMs(who,out.text),ttl:Math.max(1000,it.exp-A.now),facts:ctx.facts,words:wc(out.text),
+      lap:lapNo(),race:A.race?A.race.key:null,at:A.now,est:pr.est,ttl:Math.max(1000,it.exp-A.now),facts:ctx.facts,words:wc(out.text),
       tier:E.t||"T1",parts:out.parts};
+    /* INTENSITY (BG_audit/sprint/mxvoice/intensity, INTENSITY.md): how excited the line sounds, 0 calm, 1 lively, 2 BIG, 3 HUGE, decided here from
+       the race facts by mxwar/intensity.js (+ intensity-data.js). line.tier follows it, so the device voices lift their rate and pitch a little
+       by level too; a recorded-voice player picks the take by line.lv. A HUGE line is an interrupt for the voice as well: nothing cuts it. */
+    var IN=INT(), lvr=null;
+    if(IN&&IN.decide){ try{ lvr=IN.decide({ev:it.ev,tpl:out.tpl,role:role,follow:it.follow,A:A,it:it,ctx:ctx,lapMs:lapLen(lapNo())}); }catch(e){ if(o.debug) throw e; lvr=null; } }
+    if(lvr){ line.lv=lvr.lv; line.E=lvr.E; line.why=lvr.why; line.tier="T"+lvr.lv; }
+    if(lvr&&lvr.lv>=3&&line.pri<3){ line.pri=3; line.interrupt=true; }
+    if(typeof o.estimate==="function"){ try{ var ee=+o.estimate(line); if(ee>0) line.est=Math.round(ee); }catch(e){} }   /* a clip pack knows how long its recording is */
     if(ctx.story) line.story=ctx.story;
     var b=A.booth;
-    b.cur={id:line.id,at:A.now,est:line.est,pri:it.pri,who:who,done:false,ev:it.ev};
+    b.cur={id:line.id,at:A.now,est:line.est,pri:it.pri,who:who,done:false,ev:it.ev,lv:lvr?lvr.lv:0,post:!!it.post};
     b.until=A.now+line.est; b.run=b.lastWho===who?b.run+1:1; b.lastWho=who; b.lastPri=it.pri; b.lastEv=it.ev;
     if(it.pri===3&&role==="C") b.lastAction=A.now;
     A.recent.push(out.tpl); if(A.recent.length>12) A.recent.shift(); A.used[out.tpl]=A.now;
-    if(A.race&&/\{realWinner\}/.test(tplText(out.tpl))) A.race.realWinnerSaid=true;
+    if(it.ev==="talk_you") noteYouFacts(out.tpl,ctx);
+    A.said[fnv(out.text)]=A.now; if(++A.saidN%40===0) pruneSaid();
+    if(it.ev==="holeshot"&&A.race) A.race.hsCalled=true;
     if(A.race) (A.race.usedT=A.race.usedT||{})[out.tpl]=1;
     var low=out.text.toLowerCase(); HYPE.forEach(function(h){ if(low.indexOf(h)>=0) A.hype[h]=A.now; });
     (ctx.facts.named||[]).forEach(function(id){ A.named[id]=A.now; });
     if(A.race&&it.budget&&!it.build&&!it.post) A.race.tokens-=1;
     if(A.race){ var lc=A.race.lineCount; lc[lapNo()]=(lc[lapNo()]||0)+1; }
     setStory(it,ctx,line);
-    A.hist.push(line); if(A.hist.length>60) A.hist.shift();
+    var tpc=TOPIC_OF[it.ev]; if(tpc&&A.race&&A.race.gated) A.tk.at[tpc]=A.now;   /* an event line that told a topic's facts counts as that topic */
+    A.hist.push(line); if(A.hist.length>400) A.hist.shift();
     A.q=A.q.filter(function(x){ return x!==it; }); resolveAfter(it.id);
+    /* the flag has fallen: what the race was doing is old news (a pass or a crash at the line is still called, before the results are read);
+       once the results are read, nothing more from that race's laps */
+    if(it.ev==="checkered"||it.ev==="photo_finish"){ if(it.rc) it.rc.ckSaid=true; } if(it.ev==="checkered"||it.ev==="photo_finish") dropQ(function(x){ return x.race===it.race&&!x.post&&!x.build&&!ATLINE[x.ev]; });
+    else if(it.post) dropQ(function(x){ return x.race===it.race&&!x.post&&!x.build; });
     if(it.ev==="board_sideways"&&A.race) A.race.sideways=true;
     if(it.ev==="engines"&&A.race){ A.race.enginesSaid=true; A.q=A.q.filter(function(x){ return x.ev!=="engines"||x.follow; }); }
     /* the analyst's follow-up of a call (one line, about 1.2 s after an interrupt, 0.7 s after a pass) */
-    if(role==="C"&&it.followP&&chance(it.followP)) q(it.ev,{role:"A",pri:1,due:A.now+line.est+(it.pri===3?1200:700),ttl:5,ctx:it.ctx,follow:true,budget:false,story:it.story,key:it.pri===3&&/war/.test(it.ev)?"warf@"+lapNo():null});
+    if(role==="C"&&it.followP&&chance(it.followP)){ var fu=q(it.ev,{role:"A",pri:1,due:A.now+line.est+(it.pri===3?1200:700),ttl:5,ctx:it.ctx,follow:true,budget:false,story:it.story,key:it.pri===3&&/war/.test(it.ev)?"warf@"+lapNo():null}); if(fu) fu.parent=line.id; }
     try{ say(line); }catch(e){}
     if(capt) try{ capt(line); }catch(e){}
     return true;
@@ -557,14 +661,39 @@ function create(o){
       if(A.race&&A.race.sideways&&it.ev!=="gate_drop"){ /* nothing between "sideways" and the drop */ return; }
       /* an interrupt cuts a normal or filler line that is speaking, unless that line is nearly over (under 0.9 s left: it waits for the
          end, nobody is cut off in the last word) or has run long (past 1.4 times its length: a slow voice is cut after all) */
-      if(busy){ if(it.pri===3&&b.cur&&b.cur.pri<3&&!b.cur.done&&(b.until-t>900||t>b.cur.at+b.cur.est*1.4)){ emit(it,true); } return; }
+      if(busy){ if(it.pri===3&&b.cur&&b.cur.pri<3&&!b.cur.done&&cutOK(b.cur,t,it)){ emit(it,true); } return; }
       var gap=gapNeeded(it); if(t<lastEnd()+gap) return;
+      /* a normal line that would still be speaking when the next lap's cards turn (a war call there would cut it) waits for that moment, while it
+         stays true long enough */
+      if(it.pri<=2&&!it.post&&!it.build&&A.race&&A.race.gated){ var le2=nextBigAt(t);
+        if(isFinite(le2)&&le2-t<6000&&le2-t>-500){
+          if(!(it.follow&&it.parent&&(!b.cur||b.cur.id!==it.parent))){ var pr2=inRace(it,function(){ return prepare(it); }); if(pr2) it.pre=pr2; }
+          var need=it.pre?it.pre.est+200:3000;
+          if(need>le2-t&&(LIVEFACT[it.ev]||it.follow)&&it.pre&&le2-t>=1300){ for(var tr=0;tr<4;tr++){ var pr4=inRace(it,function(){ return prepare(it); }); if(pr4&&pr4.est+200<=le2-t){ it.pre=pr4; need=pr4.est+200; break; } } }   /* a shorter way to say it may fit */
+          if(need>le2-t){ it.pre=null; if(it.exp>le2+3000){ if(LIVEFACT[it.ev]) it.held=true; if(!busy) talk(); return; }   /* while it waits, a few words that fit may still come (the leader at the line) */ A.q=A.q.filter(function(x){ return x!==it; }); resolveAfter(it.id); return; }   /* it would still be speaking when a big call (or the next cards) comes: it waits for it, or, when it cannot wait that long, is dropped (never cut) */
+        } }
       if(it.budget&&A.race&&!it.build&&!it.post&&A.race.gated&&!A.race.flagged&&A.race.tokens<(it.pri>=2?-0.5:0.999)){ A.q=A.q.filter(function(x){ return x!==it; }); resolveAfter(it.id); return; }
       if(!emit(it)){ A.q=A.q.filter(function(x){ return x!==it; }); resolveAfter(it.id); }
       return;
     }
-    if(!busy) filler();
+    if(!busy) talk();
   }
+  /* may an interrupt cut the line that is speaking? A BIG or HUGE line: never (unless it has run past 2.5 times its length: a stuck engine).
+     A lively or calm line: when more than 0.9 s of it is left, or it has run long (1.4 times its length). A line chained after another
+     (the post-race read-outs) waits for it instead of cutting it (INTENSITY.md 5.2, 6.3). */
+  function cutOK(cur,t,it){ if(it.post) return false; var lv=cur.lv|0, left=A.booth.until-t; if(lv>=2) return t>cur.at+cur.est*2.5; return left>900||t>cur.at+cur.est*1.4; }
+  /* the next line in the queue that will come due (a chained line waits for its predecessor and is not counted) */
+  /* the lines whose facts are read live when they are said (the race clock, the view's own moment): one held back for the next cards may still be
+     said early in the next lap; every other line is about its own lap and goes stale with it */
+  var CARRY={crash_remount:1,crash_out:1,multi_crash:1,lead_change:1};
+  var FACTSLOT=/\{(?!(rider|last|other|otherLast|you|by|p[1-5]|last[1-5]|a|b|c|aLast|bLast|cLast|red|redLast|second|secondLast|third|first|cutRider|bubble|star|riders|others|humans|lapper|champion|champ|next|old|m1winner|bestBy|quickLast|leaderLast|aheadLast|behindLast|hsLast|wLast|lLast|hwinner|hchamp|num)\})[A-Za-z0-9]+\}/;   /* a slot that is a fact (any slot but a name or a plate) */
+  var ATLINE={track_pass:1,pass_top:1,big_move:1,you_up:1,you_down:1,crash_remount:1,crash_out:1,multi_crash:1,last_lap_battle:1,transfer_change:1};   /* still news after the winner's call */
+  function dropQ(pred){ var gone=[]; A.q=A.q.filter(function(x){ if(pred(x)){ gone.push(x.id); return false; } return true; }); gone.forEach(resolveAfter); }
+  var LIVEFACT={lapped:1,track_pass:1,talk_battle:1,talk_you:1,talk_leader:1,talk_top5:1,talk_laps:1,talk_crash:1,talk_points:1,talk_stats:1,talk_season:1,talk_history:1,talk_venue:1,talk_series:1};
+  function nextDue(t,minPri){ var best=null; for(var i=0;i<A.q.length;i++){ var x=A.q[i]; if(x.after!=null||x.due<=t||(minPri!=null&&x.pri<minPri)) continue; if(!best||x.due<best.due) best=x; } return best; }
+  /* the next moment a big call may start: the next interrupt in the queue, or the next lap's cards (a war), or the flag */
+  function nextBigAt(t){ var n3=nextDue(t,3), at=n3?n3.due:Infinity, le=lapEndAt(); if(le!=null&&le>t-500&&le<at) at=le; return at; }
+  function pruneSaid(){ var t=A.now; for(var k in A.said) if(t-A.said[k]>=600000) delete A.said[k]; }
   function lastEnd(){ var b=A.booth; return b.cur?(b.cur.done?b.cur.end:b.cur.at+b.cur.est):b.lastEnd; }
   function gapNeeded(it){
     var b=A.booth; if(!b.cur) return 0;
@@ -577,36 +706,693 @@ function create(o){
     return g2;
   }
 
-  /* ---------------- fillers: colour, history, records, the pack (only in silence) ---------------- */
-  function filler(){
-    var r=A.race; if(!r||!r.gated||r.flagged||r.sim||A.paused) return;
-    if(o.chatter==="less") return;
-    var L=lapLen(r.lap), x=(A.now-r.lapAt)/L;
-    if(x<0.3||x>0.88) return;
-    if(r.lap>=r.len-1||(r.lap<2&&!(r.lap===1&&Lms()>=40000))) return;   /* no filler on the opening lap of a compressed (2D) race or in the last two laps; the opening lap of a real-time race (laps of 40 s and up; ANNOUNCERS.md D.2: colour at 20-40 s) gets its colour line, not half a minute of silence after the holeshot */
-    if(A.now<lastEnd()+4000) return;
-    if(r.tokens<1) return;
-    /* colour and filler: at most one colour line a lap (ANNOUNCERS.md D.4), a second filler only on a long lap (outdoors, or Slow) */
-    var cap=o.speed==="fast"?1:(L>=90000?2:1)+(o.speed==="slow"&&L>=40000?1:0);
-    if(r.lap===1&&o.speed!=="fast") cap=Math.max(cap,2);   /* the opening lap of a real-time race is the busiest minute of the broadcast: up to two colour lines in it */
-    if(r.fillLap===r.lap&&r.fillN>=cap) return;
-    var opts=[], colorOK=r.colorLap!==r.lap;
-    if(colorOK){ var sec=curSection(); if(sec) opts.push(["color_technique",3]); else opts.push(["color_technique",1]); opts.push(["color_bike",0.8]); }
-    opts.push(["idle_filler",1.2]);
-    if(r.real&&(r.histN|0)<2) opts.push(["real_history",1.6]);
-    if(!(r.recN|0)) opts.push(["records",0.8]);
-    if(r.lap-r.lastMid>=3){ opts.push(["midpack_battle",1.4],["teammates",1],["privateer",1]); }
-    if(r.lap-r.lastRun>=4) opts.push(["runaway",1.5]);
-    var tot=opts.reduce(function(s,a){ return s+a[1]; },0);
-    for(var tries=0;tries<4&&opts.length;tries++){
-      var x2=rnd()*tot, k=0; for(;k<opts.length-1;k++){ x2-=opts[k][1]; if(x2<=0) break; }
-      var ev=opts[k][0]; tot-=opts[k][1]; opts.splice(k,1);
-      var ctxf=fillerCtx(ev); if(!ctxf) continue;
-      var it=q(ev,{pri:0,ctx:ctxf,ttl:6});
-      if(it&&emit(it)){ if(r.fillLap!==r.lap){ r.fillLap=r.lap; r.fillN=0; } r.fillN++; if(ev==="color_technique"||ev==="color_bike") r.colorLap=r.lap;
-        if(ev==="real_history") r.histN=(r.histN|0)+1; if(ev==="records") r.recN=1; if(ev==="midpack_battle"||ev==="teammates"||ev==="privateer") r.lastMid=r.lap; if(ev==="runaway") r.lastRun=r.lap; return; }
-      if(it) A.q=A.q.filter(function(z){ return z!==it; });
+  /* =================================================================================================================================
+     TALK: the whole race (the CEO, 2026-10-18: "I want the announcers to talk the entire time, even if they got to bring up history. But it
+     should be talking about the race itself"). In the silences of green-flag racing the booth picks the freshest true thing worth saying:
+     the race first (the live battles and the gap trends, the war that decided a fight, the person's own rider, the leader and the top five,
+     lap times and the fastest lap, crashes and what they cost, the points as they run, the race's numbers), then the riders' season so far
+     (this season, as raced here), their history in EARLIER seasons (data/history.js: only seasons over before this round), and the venue and
+     the series last. A silence is about 1 to 2.5 s at real lap times (never much over 4 s; Chatter Less about 5 to 8 s, More about 0.6 to
+     1.5 s), shorter in proportion when a lap on screen is shorter than the real lap. Every fact is read at the moment it is said, from the
+     race clock the picture is at (the time model's lap times and gaps, MXWar.Time), so a line never tells what the picture has not shown.
+     Wes calls it (numbers, fights, the order), Hutch explains it (what it means, what a rider needs, the history).
+     ================================================================================================================================= */
+  function TMm(){ var R=A.R, T=TIME(); return R&&R.tm&&T?T:null; }
+  /* the race clock (model ms) the picture is at: the leader's line at the start of this lap plus the time since, never past the line of the
+     last lap decided (the field waits there for the next cards); a lap shown shorter than the real one runs the clock faster in proportion */
+  function lapSpan(b){ var R=A.R, T=TMm(), tm=R.tm, t0=b>1?T.leaderLine(R,b-1):0, t1=tm.k>=b?T.leaderLine(R,b):null; if(t0==null) t0=0; return {t0:t0,span:t1!=null&&t1>t0?t1-t0:(b===1&&tm.fl>0?tm.fl:tm.p)*1000}; }
+  /* the page's own race clock when it gives one (o.clock() -> {t: ms, rate: race ms per page ms}: the view that rides the time model) */
+  function pageClock(){ if(typeof o.clock!=="function") return null; var c=null; try{ c=o.clock(); }catch(e){ c=null; } return c&&c.t>=0&&isFinite(c.t)?c:null; }
+  function rclock(){
+    var r=A.race, R=A.R, T=TMm(); if(!r||!T||!r.gated) return null;
+    var pc=pageClock(); if(pc){ var lim0=T.clockLimit(R), c0=pc.t; if(isFinite(lim0)&&c0>lim0) c0=lim0; if(R.tm.done&&R.tm.flag!=null&&c0>R.tm.flag) c0=R.tm.flag; return Math.max(0,Math.round(c0)); }
+    var b=Math.max(1,r.lap|0), ls=lapSpan(b), rate=o.lapMs>0?ls.span/Math.max(1,lapLen(b)):1;
+    var c=ls.t0+Math.max(0,A.now-rideAt(r,b))*rate, lim=T.clockLimit(R);
+    if(isFinite(lim)&&c>lim) c=lim;
+    if(R.tm.done&&R.tm.flag!=null&&c>R.tm.flag) c=R.tm.flag;
+    return Math.max(0,Math.round(c));
+  }
+  /* the commentator's own time of a moment of the race clock in the lap now riding (a pass the picture will show) */
+  function screenAt(cms){ var r=A.race; if(!r||!TMm()) return A.now; var pc=pageClock(); if(pc) return A.now+(cms-pc.t)/(pc.rate>0?pc.rate:1); var b=Math.max(1,r.lap|0), ls=lapSpan(b), rate=o.lapMs>0?ls.span/Math.max(1,lapLen(b)):1; return rideAt(r,b)+(cms-ls.t0)/rate; }
+  /* when the race clock started riding lap b on screen: as its battle was decided (the cards turn as the leader reaches the line; a war holds the
+     field there until it is settled) */
+  function rideAt(r,b){ return r.rideLap===b&&r.rideAt!=null?r.rideAt:(r.lapAt||A.now); }
+  var rowsMemo={c:-1,k:-1,R:null,rows:null};
+  function liveRows(at){
+    var T=TMm(), c=at!=null?at:rclock(); if(!T||c==null) return null;
+    var R=A.R; if(rowsMemo.R===R&&rowsMemo.c===c&&rowsMemo.k===R.tm.k) return rowsMemo.rows;
+    var rows=null; try{ rows=T.walker(R).rows(c); }catch(e){ if(o.debug) throw e; rows=null; }
+    rowsMemo={c:c,k:R.tm.k,R:R,rows:rows}; return rows;
+  }
+  function rowOf(rows,s){ for(var i=0;i<rows.length;i++) if(rows[i].s===s) return rows[i]; return null; }
+  /* laps down on the leader (the tower's "+1 Lap"): 0 on the lead lap; a lapped rider's gap is told in laps, never in seconds */
+  /* the gap to the rider just ahead (s): the tower's own (riders on the lead lap), else from the time model for two lapped riders racing each other */
+  function intOf(x,ah,cl){ if(!x||!ah) return null; if(x.int!=null) return x.int; var T=TMm(); if(!T||x.pr==null||ah.pr==null||ah.pr<x.pr) return null; var ta=null; try{ ta=T.timeAt(A.R,ah.s,x.pr); }catch(e){ ta=null; } return ta==null?null:Math.round(cl-ta)/1000; }
+  function lapsDown(rows,x){ var ld=rows&&rows[0]; if(!ld||!x||x===ld||ld.pr==null||x.pr==null) return 0; var a=Math.floor(ld.pr), b=Math.floor(x.pr), dl=a-b-(ld.pr-a<x.pr-b?1:0); return dl>0?dl:0; }
+  function onTrack(x){ return !!(x&&!x.dnf&&x.status!=="out"&&x.status!=="pits"); }
+  function racingRow(x){ return !!(x&&!x.dnf&&x.status==="run"); }
+  function crossT(s,k){ var T=A.R.tm.r[s].T; return k>=1&&T.length>=k?T[k-1]:null; }
+  function lapsBy(s,c){ var T=A.R.tm.r[s].T, n=0; while(n<T.length&&T[n]<=c) n++; return n; }
+  function crossGap(sa,sb,k){ var a=crossT(sa,k), b=crossT(sb,k); return a!=null&&b!=null?(b-a)/1000:null; }
+  function lineLeader(k){ var best=-1, bt=Infinity, n=A.R.tm.r.length; for(var s=0;s<n;s++){ var t=crossT(s,k); if(t!=null&&t<bt){ bt=t; best=s; } } return best; }
+  /* the gap from a (ahead) to b over the last laps at the line: "closing" (b gains 0.4 s or more), "away" (a pulls out), "steady" (locked
+     within 0.3 s, both under 1.5 s behind) - and the live gap now must agree with the trend */
+  function trendOf(sa,sb,c,now){
+    var K=Math.min(lapsBy(sa,c),lapsBy(sb,c)); if(K<3) return null;
+    for(var m=3;m>=2;m--){
+      if(K-m<1) continue;
+      var g1=crossGap(sa,sb,K), g0=crossGap(sa,sb,K-m); if(g1==null||g0==null||g1<0||g0<0) continue;
+      var d=g1-g0, live=now!=null?now:g1;
+      if(d<=-0.4&&live<g0-0.2) return {kind:"closing",m:m,g0:g0,g1:g1,d:d,K:K};
+      if(d>=0.4&&live>g0+0.2) return {kind:"away",m:m,g0:g0,g1:g1,d:d,K:K};
+      if(Math.abs(d)<0.3&&Math.max(g0,g1)<=1.5&&Math.abs(live-g0)<0.4) return {kind:"steady",m:m,g0:g0,g1:g1,d:d,K:K};
+      return null;
     }
+    return null;
+  }
+  /* the live running order as slots (p1..p5 full names, last1..last5 last names) */
+  function liveOrderSlots(sl,rows){
+    ["p1","p2","p3","p4","p5","last1","last2","last3","last4","last5","gap"].forEach(function(k){ delete sl[k]; });
+    var al=rows.filter(onTrack);
+    ["p1","p2","p3","p4","p5"].forEach(function(k,i){ if(al[i]) sl[k]=nameRec(seatId(al[i].s)).full; });
+    ["last1","last2","last3","last4","last5"].forEach(function(k,i){ if(al[i]) sl[k]=nameRec(seatId(al[i].s)).last; });
+    return al;
+  }
+  /* a talk line's context: the round and the race as always, the order from the clock, the facts it states (checked by the tests) */
+  function talkBase(topic,cl,rows){
+    var c=baseCtx(); c.facts.ev="talk"; c.facts.topic=topic; c.facts.clock=cl; c.facts.named=[];
+    if(rows) liveOrderSlots(c.slots,rows);
+    return c;
+  }
+  function humanSeats(){ var out=[]; (A.rmap||[]).forEach(function(id,s){ var R=rider(id); if(R&&R.kind==="human") out.push(s); }); return out; }
+  function leftLaps(){ var r=A.race; return r?r.len-r.lap+1:0; }
+  /* least recently used among a topic's variants that have something to say */
+  function pickVar(topic,list){
+    if(!list.length) return null; var m=A.tk.sig[topic]||(A.tk.sig[topic]={});
+    list.sort(function(a,b){ return (m[a.v]||0)-(m[b.v]||0)||(b.w||1)-(a.w||1); });
+    var top=list.filter(function(x){ return (m[x.v]||0)===(m[list[0].v]||0); });
+    var pk=top.length>1?top[Math.floor(rnd()*top.length)]:list[0];
+    return pk;
+  }
+  function useVar(topic,v){ (A.tk.sig[topic]||(A.tk.sig[topic]={}))[v]=A.now; }
+
+  /* ---- 1. the live battles: two riders inside 1.2 s, side by side or closing, the trend at the line, the war that set it up ---- */
+  function topicBattle(rows,cl){
+    var r=A.race, cands=[];
+    for(var i=1;i<rows.length&&i<16;i++){
+      var a=rows[i-1], b=rows[i]; if(!racingRow(a)||!racingRow(b)||b.place!==a.place+1||b.int==null||b.int>1.2) continue;
+      var hum=isHumanSeat(a.s)||isHumanSeat(b.s), key=Math.min(a.s,b.s)+"|"+Math.max(a.s,b.s), lastP=A.tk.pair[key];
+      if(lastP!=null&&A.now-lastP<(hum?16000:24000)) continue;
+      cands.push({a:a,b:b,key:key,sc:1.3-Math.min(a.place,12)*0.06+(hum?0.5:0)+(b.int<=0.35?0.15:0)});
+    }
+    if(!cands.length) return null;
+    cands.sort(function(x,y){ return y.sc-x.sc; }); var pk=cands[0];
+    return {k:"battle",ev:"talk_battle",sc:pk.sc,fp:0.3,ctx:battleCtx(pk.a.s,pk.b.s),subj:[pk.a.s,pk.b.s],mark:function(){ A.tk.pair[pk.key]=A.now; A.tk.rider[seatId(pk.a.s)]=A.now; A.tk.rider[seatId(pk.b.s)]=A.now; }};
+  }
+  function battleCtx(sa,sb){
+    return function(){
+      var r=A.race, cl=rclock(), rows=cl!=null?liveRows(cl):null; if(!rows) return null;
+      var a=rowOf(rows,sa), b=rowOf(rows,sb); if(!racingRow(a)||!racingRow(b)||b.place!==a.place+1||b.int==null||b.int>1.5) return null;
+      var c=talkBase("battle",cl,rows), sl=c.slots, t=c.tags, ia=seatId(sa), ib=seatId(sb), na=nameRec(ia), nb=nameRec(ib);
+      sl.a=na.full; sl.b=nb.full; sl.aLast=na.last; sl.bLast=nb.last; sl.place=ordV(a.place); var gv=gapSecV(b.int); if(gv) sl.gap=gv;
+      if(b.int<=0.35) t.side=1; else t.close=1;
+      c.facts.seats=[sa,sb]; c.facts.places=[a.place,b.place]; c.facts.gapS=b.int; c.facts.named=[ia,ib]; c.facts.livePlace=a.place;
+      var tr=trendOf(sa,sb,cl,b.int);
+      if(tr){ t[tr.kind]=1; var g0=gapSecV(tr.g0), cut=gapSecV(Math.abs(tr.d)); if(g0) sl.gap0=g0; if(cut) sl.cutBy=cut; sl.kLaps=cntV(tr.m,"lap","laps"); c.facts.trend={kind:tr.kind,m:tr.m,K:tr.K,g0:tr.g0,g1:tr.g1}; }
+      /* the war that set this fight up: both of them tied, one of them won it, in the last five laps */
+      var wl=(r.warLog||[]).filter(function(w){ return w.seats.indexOf(sa)>=0&&w.seats.indexOf(sb)>=0&&(w.win===sa||w.win===sb)&&w.lap>=r.lap-5; }).pop();
+      if(wl){ var cp=wl.card!=null?cardPV(wl.card):null, wc=wl.wc!=null?cardV(wl.wc):null, los=wl.win===sa?sb:sa;
+        if(cp&&wc){ t.war=1; sl.warLap=numV(wl.lap); sl.cardp=(RC()&&A.R&&RC().isWild(A.R,wl.card))?V("wild cards"):cp; sl.wLast=nameRec(seatId(wl.win)).last; sl.lLast=nameRec(seatId(los)).last; sl.wcard=wc; c.facts.war={lap:wl.lap,win:seatId(wl.win),los:seatId(los),card:rankOf(wl.card),wc:rankOf(wl.wc)}; } }
+      var cc=rows[b.place]; if(racingRow(cc)&&cc.place===b.place+1&&cc.int!=null&&cc.int<=1.2){ var nc=nameRec(seatId(cc.s)); t.many=1; sl.c=nc.full; sl.cLast=nc.last; c.facts.seats.push(cc.s); c.facts.named.push(nc.id); c.facts.places.push(cc.place); c.facts.gapC=cc.int; }
+      if(a.place===1) t.lead=1; else if(a.place===2) t.second=1; else if(a.place===3) t.third=1;
+      if(a.place<=5&&a.place>1) t.top5=1;
+      var hum=na.human||nb.human; if(a.place>=8&&!hum) t.back=1;
+      if(na.make&&nb.make&&na.make.c===nb.make.c){ t.mates=1; sl.make=na.make; }
+      if(r.cut>0&&a.place===r.cut) t.cutfight=1;
+      if(na.human){ t.you=1; t.youAhead=1; sl.you=na.full; sl.otherLast=nb.last; c.human=true; }
+      else if(nb.human){ t.you=1; t.youBehind=1; sl.you=nb.full; sl.otherLast=na.last; c.human=true; }
+      if(cc&&t.many&&isHumanSeat(cc.s)) c.human=true;
+      c.story={kind:"battle",riders:c.facts.seats.slice()};
+      return c;
+    };
+  }
+
+  /* ---- 2. the person's own rider: the place, the gaps ahead and behind, what he needs ---- */
+  function topicYou(rows,cl){
+    var hs=humanSeats().filter(function(s){ var x=rowOf(rows,s); return x&&onTrack(x)&&x.status!=="down"; });
+    if(!hs.length) return null;
+    hs.sort(function(a,b){ return (A.tk.rider[seatId(a)]||0)-(A.tk.rider[seatId(b)]||0); });
+    var s=hs[0], me=rowOf(rows,s), ah=me&&me.place>1?rows[me.place-2]:null, bh=me?rows[me.place]:null;
+    var sig="you:"+s+":"+(me?me.place:0)+":"+(ah?ah.s:-1)+":"+(bh?bh.s:-1);
+    return {k:"you",ev:"talk_you",sc:me&&me.place===1?0.75:me&&lapsDown(rows,me)>0?0.7:me&&me.place>10?0.85:1,sig:sig,fp:0.3,ctx:youTalkCtx(s),subj:[s],mark:function(){ A.tk.rider[seatId(s)]=A.now; }};
+  }
+  /* what the person's own talk last told (which fact, its value, when): the same fact is not told again inside 75 s unless it changed (no
+     "Pinney is 1.7 seconds back" and then "Pinney is 1.8 seconds behind Maverick") */
+  var YOUF={ahead:function(f){ return f.ahead+":"+Math.round((f.gapA||0)*2); },behind:function(f){ return f.behind+":"+Math.round((f.gapB||0)*2); },
+    gapL:function(f){ return Math.round((f.gapL||0)/2); },lapped:function(f){ return f.down+":"+f.lp; },placeNew:function(f){ return f.lp; }};
+  function noteYouFacts(tpl,ctx){ var m=A.tk.yf||(A.tk.yf={}); tplTags(tpl).forEach(function(tg){ if(YOUF[tg]) m[tg]={v:YOUF[tg](ctx.facts||{}),at:A.now}; }); }
+  function youFresh(tag,f){ var m=A.tk.yf&&A.tk.yf[tag]; return !(m&&A.now-m.at<75000&&m.v===YOUF[tag](f)); }
+  function youTalkCtx(s){
+    return function(){
+      var r=A.race, cl=rclock(), rows=cl!=null?liveRows(cl):null; if(!rows) return null;
+      var me=rowOf(rows,s); if(!onTrack(me)) return null;
+      var c=talkBase("you",cl,rows), sl=c.slots, t=c.tags, id=seatId(s), p=me.place;
+      sl.you=nameRec(id).full; sl.place=ordV(p); c.human=true; c.facts.you=id; c.facts.lp=p; c.facts.named=[id]; c.facts.livePlace=p;
+      var ah=p>1?rows[p-2]:null, bh=rows[p]||null;
+      var iA=ah&&onTrack(ah)?intOf(me,ah,cl):null, iB=bh&&onTrack(bh)?intOf(bh,me,cl):null;
+      if(iA!=null&&iA>=0){ var ga=gapSecV(iA); if(ga){ t.ahead=1; sl.aheadLast=nameRec(seatId(ah.s)).last; sl.gapA=ga; c.facts.ahead=seatId(ah.s); c.facts.gapA=iA; if(iA<=1.5) t.aheadClose=1; } }
+      if(iB!=null&&iB>=0){ var gb=gapSecV(iB); if(gb){ t.behind=1; sl.behindLast=nameRec(seatId(bh.s)).last; sl.gapB=gb; c.facts.behind=seatId(bh.s); c.facts.gapB=iB; if(iB<=1.5) t.behindClose=1; } }
+      if(p===1) t.lead=1; else if(p<=3) t.podium=1;
+      if(p>=4&&p<=6){ t.toPodium=1; sl.toPodN=cntV(p-3,"spot","spots"); if(p===4) t.reach=1; }
+      if(p>=7&&p<=10&&!(r.cut>0)) t.top10=1;   /* a heat's story is the transfer line, not the top ten */
+      if(p>=11&&p<=15&&!(r.cut>0)){ t.toTen=1; sl.toTenN=cntV(p-10,"spot","spots"); }
+      if(p>=12) t.back=1;
+      if(r.cut>0){ if(p<=r.cut) t.in=1; else { t.out=1; sl.toCutN=cntV(p-r.cut,"spot","spots"); if(p===r.cut+1) t.bubble=1; } c.facts.cut=r.cut; }
+      var dn=lapsDown(rows,me);
+      if(dn>0){ t.lapped=1; sl.downN=dn===1?V("a lap"):cntV(dn,"lap","laps"); c.facts.down=dn; }
+      else if(p>1&&me.gs!=null&&rows[0]&&onTrack(rows[0])){ var gl=gapSecV(me.gs); if(gl){ t.gapL=1; sl.gapL=gl; sl.leaderLast=nameRec(seatId(rows[0].s)).last; c.facts.gapL=me.gs; c.facts.leader=seatId(rows[0].s); } }
+      /* against the opening lap: the spots made up or lost since (a race of more than two laps) */
+      var sp=r.startPlace&&r.startPlace[s];
+      if(sp>0&&r.lap>=3&&!t.lapped){ if(sp-p>=2){ t.gainedStart=1; sl.gainN=cntV(sp-p,"spot","spots"); sl.startPlace=ordV(sp); c.facts.startPlace=sp; } else if(p-sp>=2){ t.lostStart=1; sl.lostN=cntV(p-sp,"spot","spots"); sl.startPlace=ordV(sp); c.facts.startPlace=sp; } }
+      if(!t.lapped&&(p<=Math.max(3,Math.ceil(rows.filter(onTrack).length/2))||t.gainedStart)) t.smart=1;   /* "a smart race" only for a rider who is having one */
+      if(t.ahead&&!youFresh("ahead",c.facts)){ delete t.ahead; delete t.aheadClose; }
+      if(t.behind&&!youFresh("behind",c.facts)){ delete t.behind; delete t.behindClose; }
+      if(t.gapL&&!youFresh("gapL",c.facts)) delete t.gapL;
+      if(t.lapped&&!youFresh("lapped",c.facts)) delete t.lapped;
+      if(youFresh("placeNew",c.facts)) t.placeNew=1;
+      c.story={kind:"you",riders:[s],label:nameRec(id).full.c};
+      return c;
+    };
+  }
+
+  /* ---- 3. the leader: the lead in seconds, its trend at the line, the laps he has led ---- */
+  function topicLeader(rows,cl){
+    var a=rows[0], b=rows[1]; if(!racingRow(a)||!onTrack(b)||b.gs==null||b.gs<0.4) return null;
+    if(isHumanSeat(a.s)) return null;   /* the person leading: his own talk tells the lead (no "Maverick leads by 4 s" twice over) */
+    return {k:"leader",ev:"talk_leader",sc:1,sig:"leader:"+a.s+":"+b.s+":"+Math.round(b.gs),fp:0.3,ctx:leaderTalkCtx(a.s,b.s),subj:[a.s,b.s],mark:function(){ A.tk.rider[seatId(a.s)]=A.now; }};
+  }
+  function leaderTalkCtx(sa,sb){
+    return function(){
+      var r=A.race, cl=rclock(), rows=cl!=null?liveRows(cl):null; if(!rows) return null;
+      var a=rows[0], b=rows[1]; if(!a||!b||a.s!==sa||b.s!==sb||!racingRow(a)||!onTrack(b)||b.gs==null||lapsDown(rows,b)) return null;
+      var gv=gapSecV(b.gs); if(!gv) return null;
+      var c=talkBase("leader",cl,rows), sl=c.slots, t=c.tags; sl.gap=gv;
+      c.facts.seats=[sa,sb]; c.facts.gapS=b.gs; c.facts.named=[seatId(sa),seatId(sb)]; c.facts.livePlace=1;
+      if(b.gs<=1.5) t.small=1; else if(b.gs>=5) t.big=1;
+      var K=Math.min(lapsBy(sa,cl),lapsBy(sb,cl));
+      if(K>=3){ var m=K>=4?3:2, g1=crossGap(sa,sb,K), g0=crossGap(sa,sb,K-m);
+        if(g1!=null&&g0!=null&&g1>0&&g0>0){ var d=g1-g0;
+          if(d>=0.5&&b.gs>g0+0.2) t.growing=1; else if(d<=-0.5&&b.gs<g0-0.2) t.shrinking=1; else if(Math.abs(d)<0.3&&Math.abs(b.gs-g0)<0.5) t.steady=1;
+          if(t.growing||t.shrinking||t.steady){ var gg=gapSecV(g0); if(gg) sl.gap0=gg; sl.kLaps=cntV(m,"lap","laps"); c.facts.trend={m:m,K:K,g0:g0,g1:g1}; } } }
+      var KL=lapsBy(sa,cl), led=0; for(var k=1;k<=KL;k++) if(lineLeader(k)===sa) led++;
+      if(led>=3){ t.ledk=1; sl.ledN=cntV(led,"lap","laps"); c.facts.led=led; }
+      if(KL>=4&&led===KL){ t.ledall=1; c.facts.ledAll=KL; }
+      if(isHumanSeat(sa)||isHumanSeat(sb)) c.human=true;
+      c.story={kind:"leader",riders:[sa,sb]};
+      return c;
+    };
+  }
+
+  /* ---- the leader at the line: a few words while the next lap's cards are a moment away (only when nothing longer fits before them) ---- */
+  function lineTalkCtx(){
+    return function(){
+      var r=A.race, cl=rclock(), rows=cl!=null?liveRows(cl):null; if(!rows||r.flagged) return null;
+      var a=rows[0], b=rows[1]; if(!racingRow(a)) return null;
+      var c=talkBase("line",cl,rows), sl=c.slots, t=c.tags, ia=seatId(a.s);
+      c.facts.seats=[a.s]; c.facts.named=[ia]; c.facts.livePlace=1;
+      if(r.lap<r.len){ t.next=1; sl.nextLap=numV(r.lap+1); }
+      if(onTrack(b)&&b.gs!=null&&!lapsDown(rows,b)){ if(b.gs<=1){ t.near=1; c.facts.named.push(seatId(b.s)); c.facts.seats.push(b.s); c.facts.gapS=b.gs; } else if(b.gs>=3){ t.clear=1; c.facts.gapS=b.gs; } }
+      if(isHumanSeat(a.s)||(t.near&&isHumanSeat(b.s))) c.human=true;
+      c.story={kind:"leader",riders:[a.s]};
+      return c;
+    };
+  }
+
+  /* ---- 4. the top five ---- */
+  function topicTop5(rows,cl){
+    var al=rows.filter(onTrack); if(al.length<8) return null;
+    return {k:"top5",ev:"talk_top5",sc:1,fp:0.15,ctx:function(){
+      var cl2=rclock(), rows2=cl2!=null?liveRows(cl2):null; if(!rows2) return null;
+      var c=talkBase("top5",cl2,rows2), sl=c.slots, t=c.tags, al2=rows2.filter(onTrack); if(al2.length<5) return null;
+      c.facts.order=al2.slice(0,5).map(function(x){ return seatId(x.s); }); c.facts.named=c.facts.order.slice(); c.facts.livePlace=1;
+      [[2,"gap3"],[3,"gap4"],[4,"gap5"]].forEach(function(z){ var x=al2[z[0]]; if(x&&x.gs!=null&&!lapsDown(rows2,x)){ var v=gapSecV(x.gs); if(v){ sl[z[1]]=v; t[z[1]]=1; c.facts[z[1]]=x.gs; } } });
+      if(al2.slice(1,5).every(function(x){ return x.int!=null&&x.int>=2; })) t.spread=1;
+      if(t.gap5&&al2[4].gs<=5) t.tight5=1;
+      if(al2.slice(0,5).some(function(x){ return isHumanSeat(x.s); })) c.human=true;
+      c.story={kind:"leader",riders:al2.slice(0,3).map(function(x){ return x.s; })};
+      return c; }};
+  }
+
+  /* ---- 5. lap times: the fastest lap of the race, a new one, the leader's last lap, the person's, the quickest on the last lap ---- */
+  function topicLaps(rows,cl){
+    var r=A.race, R=A.R, T=TMm(), lead=rows[0]; if(!lead||!onTrack(lead)) return null;
+    var best=null; rows.forEach(function(x){ if(x.best!=null&&x.bestK>=2&&(!best||x.best<best.t)) best={s:x.s,t:x.best,k:x.bestK}; });
+    var vs=[], bestKey=best?best.s+"@"+best.k:null, lspan=lapSpan(Math.max(1,r.lap|0)).span;
+    if(best){ var bt=crossT(best.s,best.k); var fresh=bt!=null&&bt<=cl&&cl-bt<lspan*0.8&&A.tk.bestSaid!==bestKey; vs.push({v:fresh?"bestNew":"best",w:fresh?3:1}); if(isHumanSeat(best.s)) vs.push({v:"bestYou",w:2}); }
+    if(lead.last!=null&&lead.lastK>=2) vs.push({v:"leadLap",w:1});
+    var hs=humanSeats().filter(function(s){ var x=rowOf(rows,s); return x&&onTrack(x)&&x.last!=null&&x.lastK>=2; }); if(hs.length) vs.push({v:"youLap",w:1.5});
+    var K=lead.lastK|0, quick=null;
+    if(K>=2) rows.forEach(function(x){ if(!onTrack(x)||lapsBy(x.s,cl)<K||R.tm.r[x.s].hold[K]||R.tm.yz[K]) return; var lt=(crossT(x.s,K)-crossT(x.s,K-1))/1000; if(!quick||lt<quick.t) quick={s:x.s,t:lt,k:K}; });
+    if(quick&&quick.s!==lead.s) vs.push({v:"quick",w:1});
+    var pk=pickVar("laps",vs); if(!pk) return null;
+    return {k:"laps",ev:"talk_laps",sc:pk.v==="bestNew"?1.4:1,fp:0.25,ctx:lapsTalkCtx(pk.v,best,quick,hs[0]),mark:function(){ useVar("laps",pk.v); if(pk.v==="bestNew"||pk.v==="best"||pk.v==="bestYou") A.tk.bestSaid=bestKey; }};
+  }
+  function lapsTalkCtx(v,best,quick,hseat){
+    return function(){
+      var cl=rclock(), rows=cl!=null?liveRows(cl):null; if(!rows) return null;
+      var c=talkBase("laps",cl,rows), sl=c.slots, t=c.tags, lead=rows[0]; c.facts.v=v;
+      if(v==="best"||v==="bestNew"||v==="bestYou"){ if(!best) return null; var bx=rowOf(rows,best.s); if(!bx||bx.best==null||Math.abs(bx.best-best.t)>0.0005) return null;
+        t[v==="bestYou"?"bestYou":v]=1; if(v==="bestYou"){ t.you=1; sl.you=nameRec(seatId(best.s)).full; c.human=true; } sl.bestBy=nameRec(seatId(best.s)).last; sl.bestLap=lapTimeV(best.t); sl.bestLapNo=numV(best.k);
+        c.facts.best={s:best.s,t:best.t,k:best.k}; c.facts.named=[seatId(best.s)]; c.facts.livePlace=bx.place; }
+      else if(v==="leadLap"){ if(!onTrack(lead)||lead.last==null) return null; t.leadLap=1; sl.lapTime=lapTimeV(lead.last); c.facts.lapOf={s:lead.s,t:lead.last,k:lead.lastK}; c.facts.named=[seatId(lead.s)]; c.facts.livePlace=1; }
+      else if(v==="youLap"){ var me=rowOf(rows,hseat); if(!me||me.last==null) return null; t.youLap=1; t.you=1; sl.you=nameRec(seatId(hseat)).full; sl.lapTime=lapTimeV(me.last); c.human=true; c.facts.lapOf={s:hseat,t:me.last,k:me.lastK}; c.facts.named=[seatId(hseat)]; c.facts.livePlace=me.place; }
+      else if(v==="quick"){ if(!quick) return null; var qx=rowOf(rows,quick.s); if(!qx) return null; t.quick=1; sl.quickLast=nameRec(seatId(quick.s)).last; sl.quickTime=lapTimeV(quick.t); c.facts.quick={s:quick.s,t:quick.t,k:quick.k}; c.facts.named=[seatId(quick.s)]; c.facts.livePlace=qx.place; if(isHumanSeat(quick.s)) c.human=true; }
+      if(A.race&&A.race.lap>A.race.len/2) t.half2=1;
+      c.story={kind:"leader",riders:lead?[lead.s]:[]};
+      return c;
+    };
+  }
+
+  /* ---- 6. crashes and what they cost: where he was when he went down, where he is now ---- */
+  function topicCrash(rows,cl){
+    var r=A.race, R=A.R, T=TMm(), log=(r.crashLog||[]).filter(function(x){ return x.at<=A.now-6000&&(x.n|0)<2&&A.now-(x.said||-1e9)>25000&&x.lap>=r.lap-6; });
+    if(!log.length) return null;
+    log.sort(function(a,b){ return (isHumanSeat(b.s)?1:0)-(isHumanSeat(a.s)?1:0)||a.from-b.from||b.lap-a.lap; });
+    var x=log[0];
+    return {k:"crash",ev:"talk_crash",sc:1+(x.from<=5?0.3:0),fp:0.35,ctx:crashTalkCtx(x),subj:[x.s],mark:function(){ x.n=(x.n|0)+1; x.said=A.now; }};
+  }
+  function crashPlace(x){
+    var R=A.R, T=TMm(), hw=T.holdWindow(R,x.s,x.lap), at=hw?hw[0]:null;
+    if(at==null) return x.from;
+    try{ var tw=T.tower(R,Math.max(0,at-50)), rw=rowOf(tw,x.s); return rw?rw.place:x.from; }catch(e){ return x.from; }
+  }
+  function crashTalkCtx(x){
+    return function(){
+      var cl=rclock(), rows=cl!=null?liveRows(cl):null; if(!rows) return null;
+      var me=rowOf(rows,x.s); if(!me) return null;
+      var c=talkBase("crash",cl,rows), sl=c.slots, t=c.tags, id=seatId(x.s), was=crashPlace(x);
+      riderSlots(sl,id); sl.crashLap=numV(x.lap); sl.from=ordV(was); c.facts.crash2={s:x.s,lap:x.lap,kind:x.kind,was:was}; c.facts.named=[id];
+      var out=!!(me.dnf&&me.dnf.why==="crash");
+      if(out){ t.out=1; c.facts.out=true; c.facts.livePlace=was; }
+      else { if(!onTrack(me)||me.status==="down") return null; t.remount=1; sl.place=ordV(me.place); c.facts.lp=me.place; c.facts.livePlace=me.place;
+        if(me.place>was){ t.lost=1; sl.lostN=cntV(me.place-was,"spot","spots"); } else t.back=1; }
+      if(isHumanSeat(x.s)){ t.you=1; sl.you=nameRec(id).full; c.human=true; c.facts.you=id; }
+      c.story={kind:"battle",riders:[x.s]};
+      return c;
+    };
+  }
+
+  /* ---- 7. the points as they run (a final that pays points race by race: the season's points + this round's finals so far + this race now) ---- */
+  function pointsCase(rows){
+    var r=A.race, Gs=A.G, rc=r.rc||roundCtx(), F=r.F; if(!r.isFinal||!F||F.pointsOn!=="race"||!F.table||!rc||!rc.cal||!rc.cal.title) return null;
+    var mult=rc.cal.mult||1, T2=F.table, now={}, base={}, RG=Gs.round&&Gs.round.ri===rc.ri?Gs.round:null;
+    /* the engine may have scored this round already (its last race ended; the picture still shows the last lap): the points before it */
+    var done=(Gs.results||[]).filter(function(x){ return x.ri===rc.ri; })[0], dp=done&&done.pts||{};
+    var L0=sstand(); if(L0.length<2) return null;
+    L0.forEach(function(x){ base[x.id]=(x.pts||0)-(dp[x.id]||0); });
+    var L=L0.slice().sort(function(a,b){ return base[b.id]-base[a.id]; }); if(!(base[L[0].id]>0)) return null;
+    var fin=RG?RG.races.filter(function(x){ return x.st<0; }):(done?(done.races||[]).filter(function(x){ return /^final-/.test(x.key); }):[]);
+    fin.forEach(function(x){ if(x.res&&x.key!==r.key) x.res.forEach(function(id,p){ base[id]=(base[id]||0)+(T2[p]||0)*mult; }); });
+    var al=rows.filter(function(x){ return !!x; });
+    for(var id in base) now[id]=base[id];
+    al.forEach(function(x){ var rid=seatId(x.s); now[rid]=(now[rid]||base[rid]||0)+(T2[x.place-1]||0)*mult; });
+    return {T:T2,mult:mult,base:base,now:now,red:L[0].id,second:L[1].id};
+  }
+  function topicPoints(rows,cl){
+    var pc=pointsCase(rows); if(!pc) return null;
+    var redRow=rowOf(rows,(A.rmap||[]).indexOf(pc.red)), vs=[], top=null, tn=-1, tie=false;
+    for(var id in pc.now){ if(pc.now[id]>tn){ tn=pc.now[id]; top=id; tie=false; } else if(pc.now[id]===tn) tie=true; }
+    if(!tie&&top===pc.red&&redRow) vs.push({v:"keeps",w:1});
+    if(!tie&&top!==pc.red&&(A.rmap||[]).indexOf(top)>=0) vs.push({v:"newRed",w:2.5});
+    if(redRow&&onTrack(redRow)) vs.push({v:"red",w:1});
+    var sRow=rowOf(rows,(A.rmap||[]).indexOf(pc.second)); if(redRow&&sRow&&onTrack(sRow)&&sRow.place<redRow.place&&(pc.T[sRow.place-1]||0)>(pc.T[redRow.place-1]||0)) vs.push({v:"gain",w:1.5});
+    var hs=humanSeats().filter(function(s){ var x=rowOf(rows,s); return x&&onTrack(x)&&(pc.T[x.place-1]||0)>0; }); if(hs.length) vs.push({v:"you",w:1.5});
+    var pk=pickVar("points",vs); if(!pk) return null;
+    return {k:"points",ev:"talk_points",sc:pk.v==="newRed"?1.3:1,fp:0.35,ctx:pointsTalkCtx(pk.v,top,hs[0]),mark:function(){ useVar("points",pk.v); }};
+  }
+  function pointsTalkCtx(v,top,hseat){
+    return function(){
+      var cl=rclock(), rows=cl!=null?liveRows(cl):null; if(!rows) return null;
+      var pc=pointsCase(rows); if(!pc) return null;
+      var c=talkBase("points",cl,rows), sl=c.slots, t=c.tags, seatOfId=function(id){ return (A.rmap||[]).indexOf(id); }, redS=seatOfId(pc.red), redRow=rowOf(rows,redS);
+      var nr=nameRec(pc.red); sl.red=nr.full; sl.redLast=nr.last; c.facts.v=v; c.facts.points={red:pc.red,second:pc.second};
+      if(v==="keeps"){ var tn=-1, tp=null; for(var id in pc.now) if(pc.now[id]>tn){ tn=pc.now[id]; tp=id; } if(tp!==pc.red) return null; t.keeps=1; t.red=1; c.facts.named=[pc.red]; c.facts.points.now=pc.now[pc.red]; }
+      else if(v==="newRed"){ if(!top||seatOfId(top)<0) return null; var tn2=pc.now[top]; for(var id2 in pc.now) if(id2!==top&&pc.now[id2]>=tn2) return null; t.newRed=1; riderSlots(sl,top); c.facts.named=[top]; c.facts.points.top=top; c.facts.points.now=tn2; c.facts.livePlace=(rowOf(rows,seatOfId(top))||{}).place; }
+      else if(v==="red"){ if(!onTrack(redRow)) return null; t.red=1; sl.place=ordV(redRow.place); c.facts.lp=redRow.place; c.facts.named=[pc.red]; c.facts.livePlace=redRow.place; }
+      else if(v==="gain"){ var sRow=rowOf(rows,seatOfId(pc.second)); if(!sRow||!redRow) return null; var g=((pc.T[sRow.place-1]||0)-(pc.T[redRow.place-1]||0))*pc.mult; if(!(g>0)) return null;
+        t.gain=1; var ns=nameRec(pc.second); sl.secondLast=ns.last; sl.place=ordV(sRow.place); sl.gainN=cntV(g,"point","points"); c.facts.gain=g; c.facts.lp=sRow.place; c.facts.named=[pc.second,pc.red]; c.facts.livePlace=Math.min(sRow.place,redRow.place); }
+      else if(v==="you"){ var me=rowOf(rows,hseat); if(!me) return null; var pts=(pc.T[me.place-1]||0)*pc.mult; if(!(pts>0)) return null; t.you=1; sl.you=nameRec(seatId(hseat)).full; sl.ptsN=cntV(pts,"point","points"); c.facts.youPts=pts; c.facts.lp=me.place; c.human=true; c.facts.named=[seatId(hseat)]; c.facts.livePlace=me.place; }
+      if(c.facts.named.some(function(id){ var R=rider(id); return R&&R.kind==="human"; })) c.human=true;
+      return c;
+    };
+  }
+
+  /* ---- 8. the race's numbers: wars, lead changes at the line, riders down, laps and wars won, the holeshot rider ---- */
+  function topicStats(rows,cl){
+    var r=A.race, vs=[], b=r.lap|0;
+    if((r.wars|0)>=3) vs.push({v:"wars"});
+    var KL=rows[0]?lapsBy(rows[0].s,cl):0, ch=0; for(var k=2;k<=KL;k++){ var l1=lineLeader(k), l0=lineLeader(k-1); if(l1>=0&&l0>=0&&l1!==l0) ch++; }
+    if(ch>=2) vs.push({v:"changes"});
+    var down=(r.crashLog||[]).filter(function(x){ return x.at<=A.now; }), who={}; down.forEach(function(x){ who[x.s]=1; }); var nd=Object.keys(who).length;
+    if(nd>=2) vs.push({v:"crashes"}); else if(nd===1&&b>=4) vs.push({v:"crash1"}); else if(nd===0&&b>=4&&b>=r.len/4) vs.push({v:"nocrash"});
+    var lw=r.lapWins||{}, ls=-1, ln=0; for(var s in lw) if(lw[s]>ln){ ln=lw[s]; ls=+s; } if(ln>=3) vs.push({v:"lapsWon"});
+    var ww=r.warsWon||{}, ws=-1, wn=0; for(var s2 in ww) if(ww[s2]>wn){ wn=ww[s2]; ws=+s2; } if(wn>=2) vs.push({v:"warsWon"});
+    if(r.hs>=0&&b>=3){ var hx=rowOf(rows,r.hs); if(hx&&onTrack(hx)) vs.push({v:hx.place===1?"hslead":"hsnow"}); }
+    var pk=pickVar("stats",vs); if(!pk) return null;
+    return {k:"stats",ev:"talk_stats",sc:1,fp:0.3,ctx:statsTalkCtx(pk.v,ch,nd,down,ls,ln,ws,wn),mark:function(){ useVar("stats",pk.v); }};
+  }
+  function statsTalkCtx(v,ch,nd,down,ls,ln,ws,wn){
+    return function(){
+      var r=A.race, cl=rclock(), rows=cl!=null?liveRows(cl):null; if(!rows) return null;
+      var c=talkBase("stats",cl,rows), sl=c.slots, t=c.tags; c.facts.v=v; t[v]=1;
+      if(v==="wars"){ sl.warsN=cntV(r.wars,"war","wars"); c.facts.wars=r.wars; }
+      else if(v==="changes"){ sl.changesN=cntV(ch,"lead change","lead changes"); c.facts.changes=ch; }
+      else if(v==="crashes"){ sl.crashedN=cntV(nd,"rider","riders"); c.facts.crashed=nd; }
+      else if(v==="crash1"){ riderSlots(sl,seatId(down[0].s)); c.facts.crashed=1; c.facts.named=[seatId(down[0].s)]; if(isHumanSeat(down[0].s)) c.human=true; }
+      else if(v==="nocrash"){ c.facts.crashed=0; }
+      else if(v==="lapsWon"){ riderSlots(sl,seatId(ls)); sl.wonN=cntV(ln,"lap","laps"); c.facts.lapsWon={s:ls,n:ln}; c.facts.named=[seatId(ls)]; if(isHumanSeat(ls)) c.human=true; }
+      else if(v==="warsWon"){ riderSlots(sl,seatId(ws)); sl.warsWonN=cntV(wn,"war","wars"); c.facts.warsWon={s:ws,n:wn}; c.facts.named=[seatId(ws)]; if(isHumanSeat(ws)) c.human=true; }
+      else if(v==="hslead"||v==="hsnow"){ var hx=rowOf(rows,r.hs); if(!hx||!onTrack(hx)||(v==="hslead")!==(hx.place===1)) return null; riderSlots(sl,seatId(r.hs)); sl.place=ordV(hx.place); c.facts.hs=r.hs; c.facts.lp=hx.place; c.facts.named=[seatId(r.hs)]; c.facts.livePlace=hx.place; if(isHumanSeat(r.hs)) c.human=true; }
+      if(sl.you) c.human=true;
+      return c;
+    };
+  }
+
+  /* ---- 9. the riders' season so far (THIS season, as raced here: the game's own results) ---- */
+  function talkRiders(rows){
+    var out=[], seen={}; function add(s){ if(s==null||s<0||seen[s]) return; var x=rowOf(rows,s); if(!x||!onTrack(x)) return; seen[s]=1; out.push(s); }
+    var st=A.story; if(st&&st.riders) st.riders.forEach(add);
+    rows.slice(0,10).forEach(function(x){ add(x.s); });
+    return out;
+  }
+  function seasonFacts(id){
+    var Gs=A.G, res=resNow(); if(!res.length) return null;
+    var sp=splaceNow(id), L=standNow(), f={wins:0,lastWin:false,lastPlace:0,lastCity:null,pts:sp?sp.pts:0,place:sp?sp.place:0,pod:sp?sp.pod:0,hs:sp?sp.hs:0,rounds:res.length};
+    res.forEach(function(x){ if(x.winner===id) f.wins++; });
+    var lr=res[res.length-1]; f.lastCity=lr.city||lr.venue||null; var lp=lr.cls?lr.cls.indexOf(id):-1; f.lastPlace=lp>=0?lp+1:0; f.lastWin=lr.winner===id;
+    var hsMax=0, hsTie=false; L.forEach(function(x){ if(x.id===id) return; if(x.hs>hsMax){ hsMax=x.hs; } }); f.hsMost=f.hs>=3&&f.hs>hsMax;
+    return f;
+  }
+  /* a FACT (a rider's wins, his last result, a title...) is told once in a race, in whatever words: never the same fact twice over (and not again
+     inside 30 minutes in the next race of the round) */
+  function factUsed(key){ var m=A.tk.facts||(A.tk.facts={}), x=m[key]; return !!(x&&((A.race&&x.race===A.race.key)||A.now-x.at<1800000)); }
+  function factSay(key){ (A.tk.facts||(A.tk.facts={}))[key]={race:A.race?A.race.key:null,at:A.now}; }
+  function seasonVars(f){
+    var vs=[];
+    if(f.wins>=1) vs.push({v:"wins",w:f.wins>=3?2:1.5});
+    if(f.lastCity&&placeV(f.lastCity)&&(f.lastWin||(f.lastPlace>=2&&f.lastPlace<=10))) vs.push({v:"last",w:f.lastWin?2:1});
+    if(f.pts>0&&f.place>=1&&f.place<=10) vs.push({v:"pts",w:f.place===1?2:1});
+    if(f.pod>=2) vs.push({v:"pod",w:1});
+    if(f.hsMost) vs.push({v:"hs",w:1});
+    if(f.wins===0&&f.rounds>=3&&f.pts>0&&f.place<=8) vs.push({v:"nowin",w:1});
+    return vs;
+  }
+  function topicSeason(rows,cl){
+    var cand=talkRiders(rows).filter(function(s){ var id=seatId(s); return A.now-(A.tk.rider[id]||-1e9)>20000&&A.now-(A.tk.season&&A.tk.season[id]||-1e9)>150000; });
+    for(var i=0;i<cand.length;i++){ var s=cand[i], id=seatId(s), f=seasonFacts(id); if(!f) return null;
+      var vs=seasonVars(f).filter(function(x){ return !factUsed(id+"|s|"+x.v); }); if(!vs.length) continue;
+      vs.sort(function(a,b){ return b.w-a.w; }); var pk=vs[Math.floor(rnd()*Math.min(2,vs.length))];
+      return {k:"season",ev:"talk_season",sc:1,fp:0,ctx:seasonTalkCtx(s,pk.v),subj:[s],mark:function(){ (A.tk.season=A.tk.season||{})[id]=A.now; A.tk.rider[id]=A.now; factSay(id+"|s|"+pk.v); }}; }
+    return null;
+  }
+  function seasonTalkCtx(s,v){
+    return function(){
+      var cl=rclock(), rows=cl!=null?liveRows(cl):null; if(!rows) return null;
+      var id=seatId(s), f=seasonFacts(id); if(!f) return null;
+      var c=talkBase("season",cl,rows), sl=c.slots, t=c.tags, hum=isHumanSeat(s), me=rowOf(rows,s);
+      riderSlots(sl,id); if(hum){ t.you=1; sl.you=nameRec(id).full; c.human=true; c.facts.you=id; }
+      c.facts.season={id:id,wins:f.wins,lastWin:f.lastWin,lastPlace:f.lastPlace,lastCity:f.lastCity,place:f.place,pts:f.pts,pod:f.pod,hs:f.hs}; c.facts.named=[id]; if(me) c.facts.livePlace=me.place;
+      if(v==="wins"){ if(f.wins<1) return null; t.wins=1; sl.winsN=cntV(f.wins,"win","wins"); if(f.wins>=3) t.winsMany=1; }
+      else if(v==="last"){ var lc=f.lastCity?placeV(f.lastCity):null; if(!lc) return null; sl.lastCity=lc; if(f.lastWin) t.lastwin=1; else if(f.lastPlace>=2&&f.lastPlace<=10){ t.lastRound=1; sl.lastPlace=ordV(f.lastPlace); } else return null; }
+      else if(v==="pts"){ if(!(f.pts>0)) return null; if(f.place===1) t.ptsLead=1; else if(f.place>=2&&f.place<=10){ t.ptsPos=1; sl.ptsPlace=ordV(f.place); } else return null; }
+      else if(v==="pod"){ if(f.pod<2) return null; t.pod=1; sl.podN=cntV(f.pod,"podium","podiums"); }
+      else if(v==="hs"){ if(!f.hsMost) return null; t.hs=1; t.hsMost=1; sl.hsN=cntV(f.hs,"holeshot","holeshots"); }
+      else if(v==="nowin"){ if(f.wins!==0) return null; t.nowin=1; }
+      else return null;
+      c.facts.fact=v;
+      c.story={kind:"battle",riders:[s]};
+      return c;
+    };
+  }
+
+  /* ---- 10. history (EARLIER seasons only: data/history.js read as of this round's date) ---- */
+  function hbook(){
+    var H=HIST(), Gs=A.G, rc=(A.race&&A.race.rc)||roundCtx(); if(!H||!Gs||!rc||!rc.cal) return null;
+    var date=String(rc.cal.date||""), key=Gs.sid+"|"+date; if(A.hb&&A.hb.key===key) return A.hb;
+    var ok={}, S=H.s;
+    H.seasons.forEach(function(x,i){ if(date&&x[4]&&x[4]<date&&x[0]!==Gs.sid&&x[2]<=Gs.year) ok[i]=1; });
+    var hb={key:key,date:date,H:H,ok:ok,people:{},city:normName(String(rc.cal.city||"").replace(/\s*,.*$/,""))};
+    H.rs.forEach(function(r){ if(!ok[r[1]]) return; var p=hb.people[r[0]]||(hb.people[r[0]]={rs:[],titles:[]}); p.rs.push({i:r[1],pos:r[2],w:r[3]}); });
+    H.seasons.forEach(function(x,i){ if(!ok[i]) return; var p=hb.people[x[5]]||(hb.people[x[5]]={rs:[],titles:[]}); p.titles.push(i); });
+    hb.rounds=H.rounds.filter(function(rr){ return ok[rr[0]]&&rr[2]<date; });
+    hb.series=[]; H.seasons.forEach(function(x,i){ if(ok[i]&&x[1]===Gs.series) hb.series.push(i); });
+    hb.series.sort(function(a,b){ return H.seasons[a][4]<H.seasons[b][4]?-1:1; });
+    A.hb=hb; return hb;
+  }
+  function hsx(i){ var x=A.hb.H.seasons[i]; return {i:i,id:x[0],series:x[1],year:x[2],last:x[4],champ:x[5],label:x[7]}; }
+  function hname(pi){ var H=HIST(); return H.s[H.p[pi]]; }
+  function personOf(id){ var H=HIST(), R=rider(id); if(!H||!R||R.kind==="human") return null; var k=normName(R.name), a=H.amb&&H.amb[k]; if(a) return a[A.G.sid]!=null?a[A.G.sid]:null; var p=H.names[k]; return p!=null?p:null; }
+  function riderHist(pi){
+    var hb=hbook(); if(!hb||pi==null) return null; var p=hb.people[pi]; if(!p) return null;
+    var Gs=A.G, ser=Gs.series, out={titles:[],titlesSer:0,defending:false,lastYear:null,bestPos:null,lastWins:null,careerWins:0,wonHere:null};
+    p.titles.forEach(function(i){ var x=hsx(i); out.titles.push(x); if(x.series===ser) out.titlesSer++; });
+    out.titles.sort(function(a,b){ return a.last<b.last?-1:1; });
+    var lastSer=hb.series.length?hsx(hb.series[hb.series.length-1]):null; if(lastSer&&lastSer.champ===pi) out.defending=lastSer;
+    p.rs.forEach(function(r){ var x=hsx(r.i); if(x.series!==ser) return; out.careerWins+=r.w;
+      if(x.year===Gs.year-1&&r.pos>=1&&r.pos<=10) out.lastYear={x:x,pos:r.pos};
+      if(r.pos>=2&&r.pos<=3&&x.year!==Gs.year-1&&(!out.bestPos||r.pos<out.bestPos.pos||(r.pos===out.bestPos.pos&&x.year>out.bestPos.x.year))) out.bestPos={x:x,pos:r.pos};
+      if(r.w>0&&(!out.lastWins||x.last>out.lastWins.x.last)) out.lastWins={x:x,w:r.w}; });
+    hb.rounds.forEach(function(rr){ var x=hsx(rr[0]); if(x.series!==ser||rr[4]!==pi||normName(hb.H.s[rr[3]])!==hb.city) return; if(!out.wonHere||rr[2]>out.wonHere.date) out.wonHere={x:x,date:rr[2]}; });
+    return out;
+  }
+  function topicRider(rows,cl){
+    if(!hbook()) return null;
+    var cand=talkRiders(rows).filter(function(s){ var id=seatId(s); return A.now-(A.tk.rider[id]||-1e9)>15000; });
+    for(var i=0;i<cand.length;i++){
+      var s=cand[i], id=seatId(s), pi=personOf(id), h=pi!=null?riderHist(pi):null; if(!h) continue;
+      var vs=[], lt=h.titles.length?h.titles[h.titles.length-1]:null, add=function(v,w,key){ key="P"+pi+"|"+key; if(!factUsed(key)) vs.push({v:v,w:w,key:key}); };   /* keyed by the person: the venue and the series talk share them */
+      if(lt) add("champ",2,"t"+lt.i); if(h.titlesSer>=2) add("titles",2,"n"+h.titlesSer); if(h.defending) add("defending",3,"t"+h.defending.i);
+      if(h.lastYear) add("lastyear",1.5,(h.lastYear.pos===1?"t":"p")+h.lastYear.x.i); if(h.bestPos) add("pos",1,"p"+h.bestPos.x.i); if(h.lastWins) add("hwins",1.2,"w"+h.lastWins.x.i);
+      if(h.careerWins>=3) add("cwins",1.2,"c"); if(h.wonHere) add("wonhere",2,"h"+h.wonHere.date);
+      if(!vs.length) continue;
+      vs.sort(function(a,b){ return (b.w||1)-(a.w||1); }); var pk=vs[Math.floor(rnd()*Math.min(2,vs.length))];
+      return {k:"rider",ev:"talk_history",sc:1,fp:0,ctx:riderTalkCtx(s,pi,pk.v),subj:[s],mark:function(){ factSay(pk.key); A.tk.rider[id]=A.now; }};
+    }
+    return null;
+  }
+  function riderTalkCtx(s,pi,v){
+    return function(){
+      var cl=rclock(), rows=cl!=null?liveRows(cl):null; if(!rows) return null;
+      var id=seatId(s), h=riderHist(pi), me=rowOf(rows,s); if(!h||!me) return null;
+      var c=talkBase("history",cl,rows), sl=c.slots, t=c.tags, refs=[];
+      riderSlots(sl,id); sl.place=ordV(me.place); c.facts.lp=me.place; c.facts.named=[id]; c.facts.livePlace=me.place; c.facts.v=v; c.facts.person=pi;
+      function yr(x){ refs.push({sid:x.id,year:x.year,last:x.last}); return V(String(x.year),yearWords(x.year)); }
+      if(v==="champ"){ var tl=h.titles[h.titles.length-1]; t.champ=1; sl.hyear=yr(tl); sl.hseries=V(tl.label); }
+      else if(v==="titles"){ t.titles=1; sl.titlesN=cntV(h.titlesSer,"title","titles"); sl.titlesT=V(TIMESW[h.titlesSer]||words(h.titlesSer)+"-time"); h.titles.forEach(function(x){ if(x.series===A.G.series) yr(x); }); c.facts.titles=h.titlesSer; }
+      else if(v==="defending"){ t.defending=1; yr(h.defending); }
+      else if(v==="lastyear"){ t.lastyear=1; sl.hpos=ordV(h.lastYear.pos); yr(h.lastYear.x); c.facts.hpos=h.lastYear.pos; }
+      else if(v==="pos"){ t.pos=1; sl.hpos=ordV(h.bestPos.pos); sl.hyear=yr(h.bestPos.x); c.facts.hpos=h.bestPos.pos; }
+      else if(v==="hwins"){ t[h.lastWins.x.year===A.G.year-1?"hwinsLast":"hwins"]=1; sl.hwinsN=cntV(h.lastWins.w,"win","wins"); sl.hyear=yr(h.lastWins.x); c.facts.hwins=h.lastWins.w; }
+      else if(v==="cwins"){ t.cwins=1; sl.cwinsN=cntV(h.careerWins,"win","wins"); c.facts.cwins=h.careerWins; refs.push({sid:"all-before",year:A.G.year-1,last:A.hb.date}); }
+      else if(v==="wonhere"){ t.wonhere=1; sl.hyear=yr(h.wonHere.x); var cv=placeV((A.race&&A.race.rc&&A.race.rc.cal&&A.race.rc.cal.city)||""); if(cv) sl.city=cv; c.facts.wonHere=h.wonHere.date; }
+      c.facts.hist=refs;
+      c.story={kind:"battle",riders:[s]};
+      return c;
+    };
+  }
+  /* the venue: this series in this city before (earlier seasons), and earlier this season (the game's own results) */
+  function venueFacts(){
+    var hb=hbook(), Gs=A.G; if(!hb) return null;
+    var ser=Gs.series, here=hb.rounds.filter(function(rr){ var x=hsx(rr[0]); return x.series===ser&&normName(hb.H.s[rr[3]])===hb.city; });
+    here.sort(function(a,b){ return a[2]<b[2]?-1:1; });
+    var f={n:here.length,first:here[0]||null,last:here[here.length-1]||null,most:null,earlier:null};
+    var cnt={}; here.forEach(function(rr){ cnt[rr[4]]=(cnt[rr[4]]||0)+1; }); var mx=0, mi=null, tie=false; for(var k in cnt){ if(cnt[k]>mx){ mx=cnt[k]; mi=+k; tie=false; } else if(cnt[k]===mx) tie=true; } if(mx>=2&&!tie) f.most={pi:mi,n:mx};
+    var rc=(A.race&&A.race.rc)||roundCtx(); (Gs.results||[]).forEach(function(x){ if(rc&&x.ri<rc.ri&&normName(String(x.city||"").replace(/\s*,.*$/,""))===hb.city) f.earlier=x; });
+    return f;
+  }
+  function topicVenue(rows,cl){
+    var f=venueFacts(); if(!f) return null; var vs=[];
+    var lastKey=f.last?"P"+f.last[4]+"|h"+f.last[2]:null;
+    if(f.last&&f.n>=1&&!factUsed(lastKey)) vs.push({v:"lastHere"}); if(f.n>=2) vs.push({v:"countHere"}); if(f.n>=2&&f.first) vs.push({v:"firstHere"}); if(f.most) vs.push({v:"mostHere"});
+    if(f.n===0&&!f.earlier) vs.push({v:"newHere"}); if(f.earlier) vs.push({v:"earlierHere",w:2});
+    vs=vs.filter(function(x){ return A.now-((A.tk.vv||{})[x.v]||-1e9)>900000; });
+    var pk=pickVar("venue",vs); if(!pk) return null;
+    return {k:"venue",ev:"talk_venue",sc:1,fp:0,ctx:venueTalkCtx(pk.v),mark:function(){ useVar("venue",pk.v); (A.tk.vv=A.tk.vv||{})[pk.v]=A.now; if(pk.v==="lastHere") factSay(lastKey); }};
+  }
+  function venueTalkCtx(v){
+    return function(){
+      var cl=rclock(), rows=cl!=null?liveRows(cl):null, f=venueFacts(); if(!f) return null;
+      var c=talkBase("venue",cl,rows), sl=c.slots, t=c.tags, refs=[], H=HIST(); c.facts.v=v; t[v]=1;
+      function yr(rr){ var x=hsx(rr[0]); refs.push({sid:x.id,year:x.year,last:x.last,date:rr[2]}); return V(String(x.year),yearWords(x.year)); }
+      if(v==="lastHere"){ sl.hyear=yr(f.last); sl.hwinner=nameV(hname(f.last[4])); }
+      else if(v==="countHere"){ sl.countN=cntV(f.n,"round","rounds"); refs.push({sid:"all-before",year:A.G.year-1,last:A.hb.date}); c.facts.count=f.n; }
+      else if(v==="firstHere"){ sl.hfirst=yr(f.first); }
+      else if(v==="mostHere"){ sl.hwinner=nameV(hname(f.most.pi)); sl.winsHereN=cntV(f.most.n,"time","times"); refs.push({sid:"all-before",year:A.G.year-1,last:A.hb.date}); c.facts.most=f.most; }
+      else if(v==="earlierHere"){ if(!f.earlier||!f.earlier.winner) return null; sl.hwinner=nameRec(f.earlier.winner).full; c.facts.earlier=f.earlier.ri; if(rider(f.earlier.winner)&&rider(f.earlier.winner).kind==="human") c.human=true; }
+      c.facts.hist=refs;
+      return c;
+    };
+  }
+  /* the series: how long it has run, its first champion, last year's champion, the most titles so far (earlier seasons only) */
+  function seriesFacts(){
+    var hb=hbook(); if(!hb) return null; var L=hb.series.map(hsx), f={n:L.length,first:L[0]||null,last:L[L.length-1]||null,most:null};
+    var cnt={}; L.forEach(function(x){ cnt[x.champ]=(cnt[x.champ]||0)+1; }); var mx=0, mi=null, tie=false; for(var k in cnt){ if(cnt[k]>mx){ mx=cnt[k]; mi=+k; tie=false; } else if(cnt[k]===mx) tie=true; } if(mx>=2&&!tie) f.most={pi:mi,n:mx};
+    return f;
+  }
+  function topicSeries(rows,cl){
+    var f=seriesFacts(); if(!f) return null; var vs=[];
+    if(f.n>=1) vs.push({v:"nth"}); if(f.n===0) vs.push({v:"firstSeason"}); if(f.first&&f.n>=2) vs.push({v:"firstChamp"});
+    var defKey=f.last?"P"+f.last.champ+"|t"+f.last.i:null;
+    if(f.last&&!factUsed(defKey)){ vs.push({v:"defending"}); var dp=f.last.champ, id=null; (A.rmap||[]).forEach(function(rid){ if(personOf(rid)===dp) id=rid; }); if(id) vs.push({v:"defendingIn",w:2}); }
+    if(f.most) vs.push({v:"mostTitles"});
+    vs=vs.filter(function(x){ return A.now-((A.tk.sv||{})[x.v]||-1e9)>1200000; });
+    var pk=pickVar("series",vs); if(!pk) return null;
+    return {k:"series",ev:"talk_series",sc:1,fp:0,ctx:seriesTalkCtx(pk.v),mark:function(){ useVar("series",pk.v); (A.tk.sv=A.tk.sv||{})[pk.v]=A.now; if(pk.v==="defending"||pk.v==="defendingIn") factSay(defKey); }};
+  }
+  function seriesTalkCtx(v){
+    return function(){
+      var cl=rclock(), rows=cl!=null?liveRows(cl):null, f=seriesFacts(); if(!f) return null;
+      var c=talkBase("series",cl,rows), sl=c.slots, t=c.tags, refs=[]; c.facts.v=v; t[v]=1;
+      function yr(x){ refs.push({sid:x.id,year:x.year,last:x.last}); return V(String(x.year),yearWords(x.year)); }
+      if(v==="nth"){ sl.hfirst=yr(f.first); sl.nthN=numV(f.n+1); c.facts.nth=f.n+1; }
+      else if(v==="firstChamp"){ sl.hfirst=yr(f.first); sl.hchamp=nameV(hname(f.first.champ)); }
+      else if(v==="defending"){ sl.hyear=yr(f.last); sl.hchamp=nameV(hname(f.last.champ)); }
+      else if(v==="defendingIn"){ var id=null; (A.rmap||[]).forEach(function(rid){ if(personOf(rid)===f.last.champ) id=rid; }); var me=id&&rows?rowOf(rows,(A.rmap||[]).indexOf(id)):null; if(!me) return null; sl.hyear=yr(f.last); sl.hchamp=nameRec(id).full; sl.place=ordV(me.place); c.facts.lp=me.place; c.facts.named=[id]; c.facts.livePlace=me.place; }
+      else if(v==="mostTitles"){ sl.hchamp=nameV(hname(f.most.pi)); sl.titlesN=cntV(f.most.n,"title","titles"); refs.push({sid:"all-before",year:A.G.year-1,last:A.hb.date}); c.facts.most=f.most; }
+      c.facts.hist=refs;
+      return c;
+    };
+  }
+
+  /* ---- 11. the opening lap ---- */
+  function topicOpen(rows,cl){
+    var r=A.race; if((r.lap|0)>1||!rows[0]||lapsBy(rows[0].s,cl)>0) return null;
+    var pre1=!r.hsCalled;   /* before the holeshot call: the drag race into turn one (short calls that fit before it) */
+    return {k:"open",ev:"talk_open",sc:pre1?3:1,fp:pre1?0:0.2,ctx:function(){
+      var cl2=rclock(), rows2=cl2!=null?liveRows(cl2):null; if(!rows2) return null;
+      var c=talkBase("open",cl2,rows2), sl=c.slots, t=c.tags;
+      if(!r.hsCalled){ t.turn1=1; return c; } t.after1=1;
+      if(r.hs>=0&&A.now>=(r.gateAt||0)+6000){ t.hs=1; sl.hsLast=nameRec(seatId(r.hs)).last; c.facts.hs=r.hs; if(rows2[0]&&rows2[0].s===r.hs){ t.hslead=1; c.facts.livePlace=1; } if(isHumanSeat(r.hs)) c.human=true; }
+      var hs2=humanSeats(); if(hs2.length){ t.you=1; sl.you=nameRec(seatId(hs2[0])).full; c.human=true; }
+      var red=redPre(), rs=red&&A.rmap?A.rmap.indexOf(red):-1; if(rs>=0&&!isHumanSeat(rs)){ t.red=1; sl.redLast=nameRec(red).last; }
+      return c; }};
+  }
+
+  /* ---- 12. colour (the analyst's eye, the bikes, the crowd, the race's records) and the pack (mid-pack fights, teammates, a privateer, a
+     runaway leader): the old fillers, now one topic each ---- */
+  function topicColour(rows,cl){
+    var r=A.race; if(r.lap>=r.len-1) return null; if(r.lap<=1&&lapLen(1)<40000) return null;
+    var vs=[]; if(r.colorLap!==r.lap){ vs.push({v:"color_technique",w:curSection()?3:1}); vs.push({v:"color_bike",w:0.8}); }
+    vs.push({v:"idle_filler",w:1.2}); if(!(r.recN|0)) vs.push({v:"records",w:0.8});
+    var tot=vs.reduce(function(s,a){ return s+a.w; },0), x=rnd()*tot, k=0; for(;k<vs.length-1;k++){ x-=vs[k].w; if(x<=0) break; }
+    var ev=vs[k].v, ctxf=fillerCtx(ev); if(!ctxf) return null;
+    return {k:"colour",ev:ev,sc:r.lap===1?1.8:1,fp:0,ctx:ctxf,mark:function(){ if(ev==="color_technique"||ev==="color_bike") r.colorLap=r.lap; if(ev==="records") r.recN=1; }};
+  }
+  function topicPack(rows,cl){
+    var r=A.race; if(r.lap<=1&&lapLen(1)<40000) return null; if(!r.cur) return null;
+    var vs=[]; if(r.lap-r.lastMid>=3) vs.push({v:"midpack_battle",w:1.4},{v:"teammates",w:1},{v:"privateer",w:1}); if(r.lap-r.lastRun>=4) vs.push({v:"runaway",w:1.5});
+    if(!vs.length) return null;
+    var tot=vs.reduce(function(s,a){ return s+a.w; },0), x=rnd()*tot, k=0; for(;k<vs.length-1;k++){ x-=vs[k].w; if(x<=0) break; }
+    var ev=vs[k].v;
+    return {k:"pack",ev:ev,sc:r.lap===1?1.5:1,fp:0,ctx:fillerCtx(ev),mark:function(){ if(ev==="runaway") r.lastRun=r.lap; else r.lastMid=r.lap; }};
+  }
+
+  /* ---- the choice: the race topics first (higher weight, shorter rest), the context ones when the race has been told; never a context line
+     in the last two laps; Chatter Less = the race only ---- */
+  var TOPICS=[["open",topicOpen,9,6000,1],["battle",topicBattle,10,7000,1],["you",topicYou,9,13000,1],["leader",topicLeader,8,17000,1],["crash",topicCrash,7.5,18000,1],
+    ["laps",topicLaps,6,22000,1],["top5",topicTop5,5.5,30000,1],["points",topicPoints,5,40000,1],["stats",topicStats,4.5,40000,1],["pack",topicPack,4,28000,1],
+    ["season",topicSeason,3.6,26000,0],["rider",topicRider,3.2,34000,0],["colour",topicColour,2.6,34000,0],["venue",topicVenue,1.1,140000,0],["series",topicSeries,1,190000,0]];
+  function talkCands(rows,cl){
+    var r=A.race, t=A.now, out=[], late=r.lap>=r.len-1, less=o.chatter==="less", tk=A.tk;
+    /* the context (season, history, colour) gets about one talk line in five: more when it has been quiet for a while, none in a row */
+    var rk=tk.recentK||[], ctxShare=rk.length?rk.filter(function(x){ return !x; }).length/rk.length:0, ctxBoost=(t-tk.ctxAt>35000&&ctxShare<0.2)?3:1;
+    TOPICS.forEach(function(T){
+      var k=T[0], race=T[4];
+      if(!race&&(late||less)) return;
+      if(!rows&&k!=="colour"&&k!=="pack") return;
+      var el=t-(tk.at[k]||-1e9), x=el/T[3], f=x>=1?Math.min(1.8,1+(x-1)*0.3):0.06+0.22*x*x;
+      if(!race){ if(t-tk.ctxAt<18000) f*=0.25; else f*=ctxBoost; }
+      var cd=null; try{ cd=T[1](rows||[],cl); }catch(e){ if(o.debug) throw e; cd=null; }
+      if(!cd) return;
+      cd.k=k; cd.race=race; cd.score=T[2]*f*(cd.sc||1)*(0.8+0.4*rnd());
+      if(cd.sig&&tk.sigAt&&tk.sigAt[cd.sig]!=null&&t-tk.sigAt[cd.sig]<45000) cd.score*=0.3;   /* the same fact again inside 45 s: only when there is nothing fresher */
+      out.push(cd);
+    });
+    out.sort(function(a,b){ return b.score-a.score; });
+    return out;
+  }
+  /* the event lines that already said a topic's facts count as that topic (no "the lead is 2.1 s" right after the order read said it) */
+  var TOPIC_OF={running_order:"top5",first_lap_order:"top5",halfway:"leader",laps_to_go:"leader",lead_battle:"leader",runaway:"leader",clock:"leader",white_flag:"leader",last_lap_lead:"leader",
+    you_up:"you",you_down:"you",bubble:"you",crash_remount:"crash",crash_out:"crash",multi_crash:"crash"};
+  /* the next lap's cards on the commentator's clock (the leader at the line, less the 350 ms the page turns them early); null when unknown */
+  function lapEndAt(){ var r=A.race, R=A.R, T=TMm(); if(!T||!r||!r.gated||r.lap<1) return null; if(r.flagged) return r.flagAt||null; if(r.lap>=r.len||R.tm.k<r.lap) return null; var tl=T.leaderLine(R,r.lap); return tl==null?null:screenAt(tl)-350; }
+  function talkOK(){
+    var r=A.race; if(!(r&&r.gated&&!r.sim&&!A.paused&&!r.sideways&&A.R)) return false;
+    if(r.flagged) return A.now<(r.flagAt||0)-1500;   /* the flag is decided as the last lap STARTS: that lap is talked through, up to the checkered call */
+    return !r.done&&!A.R.over;
+  }
+  function talkGapMs(){
+    var lo=1000, hi=2500; if(o.chatter==="less"){ lo=5200; hi=8200; } else if(o.chatter==="more"){ lo=600; hi=1500; }
+    var r=A.race, b=Math.max(1,r.lap|0), real=(b===1&&r.fl>0?r.fl:r.lapS)*1000, scr=lapLen(b), k=real>0&&scr<real*0.9?Math.max(0.3,scr/real):1;
+    return Math.round((lo+rnd()*(hi-lo))*k);
+  }
+  function talk(){
+    if(!talkOK()) return false;
+    var t=A.now, tk=A.tk;
+    if(t<tk.wait) return false;
+    if(tk.gap==null) tk.gap=talkGapMs();
+    var gapNow=tk.gap, bigSoon=nextBigAt(t); if(isFinite(bigSoon)&&bigSoon-lastEnd()<7000) gapNow=Math.min(gapNow,600);   /* a big call or the next cards are near: start sooner, so a line fits before them */
+    if(t<lastEnd()+gapNow) return false;
+    var nd=nextDue(t); if(nd&&nd.due-t<1200) return false;   /* a call is about to come: it has the floor */
+    var n3=nextDue(t,3), room=n3?n3.due-t-300:Infinity;      /* a talk line ends before the next interrupt, or that call would cut it */
+    /* the next lap's cards turn as the leader reaches the line (a war there is a call that cuts a talk line): a talk line should end before it */
+    var lapEnd=lapEndAt();
+    if(lapEnd!=null&&lapEnd-t<900&&lapEnd-t>-500) return false;   /* the next cards (or the flag) are a moment away: they have the floor */
+    if(lapEnd!=null&&lapEnd>t) room=Math.min(room,lapEnd-t-300); else lapEnd=null;
+    var bigAt=n3?n3.due:Infinity; if(lapEnd!=null&&lapEnd<bigAt) bigAt=lapEnd;
+    var fit=room+700;   /* a line may end up to 0.7 s after the next call is due: that call waits for it (a line with under 0.9 s left is never cut) */
+    var cl=rclock(), rows=cl!=null?liveRows(cl):null;
+    var cands=talkCands(rows,cl), short=null;
+    function said(cd,it){ tk.at[cd.k]=t; if(!cd.race) tk.ctxAt=t; tk.gap=null; tk.n++; if(cd.mark) cd.mark();
+      (tk.recentK=tk.recentK||[]).push(!!cd.race); if(tk.recentK.length>10) tk.recentK.shift();
+      if(cd.sig) (tk.sigAt=tk.sigAt||{})[cd.sig]=t; return true; }
+    for(var i=0;i<cands.length&&i<8;i++){
+      var cd=cands[i], it=q(cd.ev,{pri:0,ctx:cd.ctx,ttl:4,budget:false,story:cd.story||null,followP:cd.fp||0,subj:cd.subj||null});
+      if(!it) continue;
+      it.talk=cd.k;
+      var pre=inRace(it,function(){ return prepare(it); });
+      if(!pre){ A.q=A.q.filter(function(x){ return x!==it; }); continue; }
+      if(pre.est>fit){ if(!short||pre.est<short.pre.est) short={cd:cd,pre:pre,ev:cd.ev}; A.q=A.q.filter(function(x){ return x!==it; }); continue; }
+      it.pre=pre;
+      if(emit(it)) return said(cd,it);
+      A.q=A.q.filter(function(x){ return x!==it; });
+    }
+    /* nothing fitted: a shorter way to say one of the best topics (another template) may fit before the next big call */
+    if(isFinite(room)&&room>=1800){
+      for(var j=0;j<cands.length&&j<4;j++){
+        for(var tr=0;tr<3;tr++){
+          var cd3=cands[j], it3=q(cd3.ev,{pri:0,ctx:cd3.ctx,ttl:4,budget:false,story:cd3.story||null,followP:0,subj:cd3.subj||null}); if(!it3) break;
+          it3.talk=cd3.k; var pre3=inRace(it3,function(){ return prepare(it3); });
+          if(pre3&&pre3.est<=fit){ it3.pre=pre3; if(emit(it3)) return said(cd3,it3); }
+          A.q=A.q.filter(function(x){ return x!==it3; });
+          if(!pre3) break;
+        }
+      }
+    }
+    /* the leader is a moment from the line (the next lap's cards) and nothing else fits before it: a few words on him there */
+    if(lapEnd!=null&&lapEnd-t<5000&&room>=1100&&t-(tk.at.line||-1e9)>20000){
+      var itL=q("talk_line",{pri:0,ctx:lineTalkCtx(),ttl:4,budget:false,story:"leader",followP:0});
+      if(itL){ itL.talk="line";
+        for(var tl=0;tl<8;tl++){ var preL=inRace(itL,function(){ return prepare(itL); }); if(!preL) break; if(preL.est<=fit){ itL.pre=preL; if(emit(itL)) return said({k:"line",race:true},itL); break; } }
+        A.q=A.q.filter(function(x){ return x!==itL; }); }
+    }
+    /* nothing fits before the next big call: when waiting for it would leave more than 4 s of silence, the shortest line is said anyway (a calm or
+       lively line may be cut by the call; a BIG or HUGE one never is) */
+    if(short&&isFinite(bigAt)&&bigAt-lastEnd()>4500){
+      var it2=q(short.ev,{pri:0,ctx:short.cd.ctx,ttl:4,budget:false,story:short.cd.story||null,followP:0,subj:short.cd.subj||null});
+      if(it2){ it2.talk=short.cd.k; it2.pre=short.pre; if(emit(it2)) return said(short.cd,it2); A.q=A.q.filter(function(x){ return x!==it2; }); }
+    }
+    tk.wait=t+600; return false;
   }
   function curSection(){
     var s=A.shotInfo; if(s&&s.section&&A.now-s.at<8000) return {type:s.section};
@@ -628,21 +1414,12 @@ function create(o){
         if(m1&&m2&&m1.make&&m2.make&&m1.make.c!==m2.make.c&&!(best&&bn>=3)){ t.make2=1; sl.make=m1.make; sl.make2=m2.make; c.facts.makes=[m1.make.c,m2.make.c]; }
         return c;
       }
-      if(ev==="real_history"){
-        var R=r.real, Gs2=A.G, said=!!r.realWinnerSaid;   /* the real winner is told once a race (the Main's intro may have said it) */
-        if(R&&R.w&&!said){ sl.realWinner=nameV(R.w); } if(R&&R.t&&!said){ var tv=raceTimeV(R.t); if(tv&&R.w){ sl.realTime=tv; t.realtime=1; } }
-        if(R&&R.b>0&&R.bb){ sl.realBest=secV(R.b); sl.realBestBy=nameV(R.bb); t.realbest=1; }
-        var cand=al.slice(0,8).map(function(z){ return seatId(z.s); }).filter(function(id){ var Rr=rider(id); return Rr&&Rr.kind==="pro"&&(Rr.pos!=null&&Rr.pos<=10||Rr.realWins>0); });
-        if(cand.length){ var id=pick(cand), Rr=rider(id); riderSlots(sl,id); c.facts.rid=id; c.facts.named=[id]; if(Rr.pos!=null&&Rr.pos<=10){ sl.realPos=ordV(Rr.pos); t.realpos=1; } if(Rr.realWins>0){ sl.realWinsN=cntV(Rr.realWins,"race","races"); t.realwins=1; } }
-        var ch=realChamp(); if(ch){ sl.champ=ch; t.champ=1; }
-        return c;
-      }
       if(ev==="records"){
         var Rs=A.R&&A.R.st; if(!Rs) return null; var any=false;
         if(Rs.pot>=Math.max(2*r.n,20)){ sl.pot=numV(Rs.pot); t.pot=1; any=true; c.facts.pot=Rs.pot; }
         if(Rs.chain>=3){ sl.depthw=V(depthWord(Rs.chain)); t.deep=1; any=true; c.facts.depth=Rs.chain; }
         if(Rs.changes>=4){ sl.changesN=cntV(Rs.changes,"lead change","lead changes"); t.changes=1; any=true; c.facts.changes=Rs.changes; }
-        var lid=al[0]&&seatId(al[0].s), sp=lid&&splace(lid);
+        var lid=al[0]&&seatId(al[0].s), sp=lid&&splaceNow(lid);
         if(sp&&sp.wins>=3){ riderSlots(sl,lid); sl.winsN=cntV(sp.wins,"win","wins"); t.wins=1; any=true; c.facts.rid=lid; c.facts.wins=sp.wins; }
         if(sp&&sp.hs>=3){ riderSlots(sl,lid); sl.hsN=cntV(sp.hs,"holeshot","holeshots"); t.hs=1; any=true; c.facts.rid=lid; c.facts.hs=sp.hs; }
         return any?c:null;
@@ -675,7 +1452,6 @@ function create(o){
       return c;
     };
   }
-  function realChamp(){ var Gs=A.G; if(!Gs) return null; for(var id in Gs.riders){ var R=Gs.riders[id]; if(R.kind==="pro"&&R.pos===1){ var n=nameRec(id); return n?n.full:null; } } return null; }
   function depthWord(n){ return n<=1?"single":n===2?"double":n===3?"triple":n===4?"quadruple":n===5?"quintuple":words(n)+"-deep"; }
 
   /* =================================================================================================================================
@@ -748,10 +1524,12 @@ function create(o){
     if(simmed) return;
     if(RG&&RG.tc&&r.kind==="main"&&r.i>0) chain("triple_crown",{role:"C",ctx:introCtx("triple_crown")});
     var ik="race_intro_"+(r.kind==="qual"?"qual":r.kind);
-    if(EV[ik]){ chain(ik,{role:"C",ctx:introCtx(ik)}); if(chance(0.8)) chain(ik,{role:"A",ctx:introCtx(ik),delay:650}); }
+    /* the first race of the round a person rides in: the analyst always names him in its intro (later races: now and then) */
+    var yf=!rc.youNamed&&(A.rmap||[]).some(function(id){ return rider(id)&&rider(id).kind==="human"; }); if(yf) rc.youNamed=true;
+    if(EV[ik]){ chain(ik,{role:"C",ctx:introCtx(ik)}); if(yf||chance(0.8)) chain(ik,{role:"A",ctx:introCtx(ik,yf),delay:650}); }
     if(o.autoEngines!==false) chain("engines",{ctx:introCtx("engines"),delay:900});
   }
-  function introCtx(ev){
+  function introCtx(ev,youFirst){
     return function(){
       var c=baseCtx(), sl=c.slots, t=c.tags, r=A.race, Gs=A.G; c.facts.ev=ev; c.facts.named=[];
       var red=redNow(), redIn=!!(red&&A.rmap&&A.rmap.indexOf(red)>=0);
@@ -759,9 +1537,10 @@ function create(o){
       var hum=(A.rmap||[]).filter(function(id){ return rider(id)&&rider(id).kind==="human"; });
       if(hum.length&&ev!=="show_open"&&ev!=="party_welcome"){ var hid=pick(hum); var hn=nameRec(hid); sl.you=hn.full; sl.num=hn.num; t.you=1; c.facts.you=hid; c.human=true; }
       if(ev==="show_open"&&(Gs.humans||[]).length===1){ sl.you=nameRec(Gs.humans[0]).full; t.you=1; c.facts.you=Gs.humans[0]; }
+      if(youFirst&&t.you) c.only="you";
       if(ev==="party_welcome"){ sl.k=numV((Gs.humans||[]).length); }
       if(ev==="race_intro_lcq"&&r){ var star=starIn(A.rmap); if(star){ sl.star=nameRec(star).full; t.star=1; c.facts.star=star; } }
-      if(ev==="race_intro_main"&&r&&r.real&&r.real.w){ sl.realWinner=nameV(r.real.w); sl.realYear=sl.year; } else delete t.real;
+      if(ev==="race_intro_main"){ var vf=venueFacts(); if(vf&&vf.last){ var hx=hsx(vf.last[0]); t.histcity=1; sl.hyear=V(String(hx.year),yearWords(hx.year)); sl.hwinner=nameV(hname(vf.last[4])); c.facts.hist=[{sid:hx.id,year:hx.year,last:hx.last,date:vf.last[2]}]; } }
       if(ev==="smx_playoff"){ var mult=(r&&r.rc&&r.rc.cal&&r.rc.cal.mult)||1; t["x"+mult]=1; if(mult>1) t.mult=1; var F=Gs.round&&Gs.round.F; if(F&&F.direct&&F.qual&&F.qual.length){ t.seeds=1; sl.tm=numV(F.qual[0].toMain); sl.seedsN=numV(F.direct); } }
       if(ev==="triple_crown"&&r&&r.kind==="main"){ t["main"+(r.i+1)]=1; }
       if(ev==="triple_crown"&&(!r||r.kind!=="main")) t.main1=1;
@@ -787,12 +1566,12 @@ function create(o){
     if(!r.gated){ r.gated=true; r.gateAt=A.now; }
     var b=e.b;
     if(r.lap>=1&&b===r.lap+1&&r.lapAt>0){ var d=A.now-r.lapAt; if(r.lap>=2&&d>800) r.lapLens.push(d); }
-    A.q=A.q.filter(function(x){ return x.post||x.build||x.race!==r.key||x.lap>=b; });   /* the last lap's unsaid lines are stale now */
+    A.q=A.q.filter(function(x){ return x.post||x.build||x.race!==r.key||x.lap>=b||((x.held||CARRY[x.ev])&&x.exp>A.now); });   /* the last lap's unsaid lines are stale now (a line held back for the cards, and the call of a crash or a new leader that came at the very end of the lap, keep their own time to live: still true a moment later) */
     r.lap=b; r.lapAt=A.now; r.cards={}; r.up={}; r.warLap=null; r.crashQ=[]; r.crashGain=0; r.leadEv=null; r.winEv=null; r.dead=null;
     checkCompressed();
     (e.cards||[]).forEach(function(x){ r.cards[x.s]=x.c; r.up[x.s]=x.c; });
     /* the lap budget: lines this lap from its length on screen */
-    var L=lapLen(b)/1000, base=L>=90?8:L>=40?5:L>=15?2:1, k=speedK()*chatK();
+    var L=lapLen(b)/1000, base=L>=90?12:L>=40?8:L>=15?3:1.5, k=speedK()*chatK();   /* the calls (the action) have room every lap; the talk fills the silences without using the budget */
     r.tokens=Math.min(r.tokens,1.5)+base*k;
     if(b<=1) r.tokens=Math.max(r.tokens,base*k);
     /* the lap's milestones, as the leader reaches the line */
@@ -802,7 +1581,9 @@ function create(o){
     else if(b===Math.floor(r.len/2)+1&&r.len>=6&&!r.milestones.half){ r.milestones.half=true; q("halfway",{ctx:milestoneCtx("halfway",b-1),due:A.now+300,ttl:8}); }
     else if((left===5||left===3||left===2)&&r.len>=8&&!r.milestones["l"+left]&&(!r.timed||b>r.timed.k0)){ r.milestones["l"+left]=true; q("laps_to_go",{ctx:milestoneCtx("laps_to_go",b),due:A.now+300,ttl:8}); }
     /* the yellow flag flies on this lap where the last one went down (CRASH-CONTRACT.md: the game's rule) */
-    if(r.yellowNext&&r.yellowNext.lap===b){ var y=r.yellowNext; r.yellowNext=null; q("yellow_flag",{ctx:yellowCtx(y),due:A.now+Math.min(2500,lapLen(b)*0.12),ttl:10,pri:1}); }
+    if(r.yellowNext&&r.yellowNext.lap===b){ var y=r.yellowNext, cw=null; r.yellowNext=null;
+      A.q.forEach(function(x){ if(x.key==="crash@"+(b-1)) cw=x; });   /* a rider deep in the field goes down after the leader has started this lap: the yellow waits for the crash call */
+      q("yellow_flag",{ctx:yellowCtx(y),due:A.now+Math.min(2500,lapLen(b)*0.12),ttl:10,pri:1,after:cw?cw.id:null,delay:2500}); }
   }
   function onWarCards(e){ var r=A.race; if(!r) return; (e.cards||[]).forEach(function(x){ if(!x.held&&x.c!=null) r.up[x.s]=x.c; }); }
   function onWar(e){
@@ -812,6 +1593,7 @@ function create(o){
     r.warLap=true; r.lastWarSeats=(e.seats||e.tied).slice();
     if(n>=2) A.q=A.q.filter(function(x){ return !(x.follow&&/war/.test(x.ev)&&x.lap===r.lap); });
     var tied=e.tied.slice(), L=r.cur||[], inTop=tied.some(function(s){ var p=placeIn(L,s); return p>0&&p<=5; }), hum=tied.some(isHumanSeat);
+    if(n===1) r.curWar={lap:r.lap,seats:tied.slice(),card:r.up[tied[0]],depth:1}; else if(r.curWar) r.curWar.depth=n;   /* talk: the war the riders fought (who, the card, the depth), kept with its winner below */
     if(n===1&&r.wars>=(lapLen(r.lap)<15000?3:5)&&!inTop&&!hum) return;   /* from the 5th war (3rd on a short lap), only the front, the people or a deeper war get a call */
     /* a short (2D) lap has room for the big calls only (ANNOUNCERS.md D.1): a plain war just for the people, and a double war is
        carried by the crash call it causes */
@@ -819,7 +1601,7 @@ function create(o){
     var gateWait=r.gateAt?Math.max(0,r.gateAt+1500-A.now):0;
     var follow=n===1?(r.wars<=1?0.4:0.15):n===2?0.5:0.75;
     if(lapLen(r.lap)<15000) follow*=0.4;
-    q(ev,{role:"C",key:"war@"+r.lap,ctx:warCtx(e),due:A.now+gateWait,ttl:4,followP:follow,story:"war"});
+    q(ev,{role:"C",key:"war@"+r.lap,ctx:warCtx(e),due:A.now+gateWait,ttl:6,followP:follow,story:"war"});   /* 6 s, not 4: a double war waits behind the war call that announced it (INTENSITY.md 6.3) */
   }
   function warCtx(e){
     var r=A.race, tied=e.tied.slice(), n=e.n, up=Object.assign({},r.up), L=(r.cur||[]).slice(), wl=r.lap;
@@ -836,7 +1618,11 @@ function create(o){
       return c;
     };
   }
-  function onWin(e){ var r=A.race; if(!r) return; r.winEv={s:e.s,n:e.n,war:e.war,c:e.c}; if(e.war>0){ r.warsWon[e.s]=(r.warsWon[e.s]||0)+1; } }
+  function onWin(e){ var r=A.race; if(!r) return; r.winEv={s:e.s,n:e.n,war:e.war,c:e.c}; if(e.war>0){ r.warsWon[e.s]=(r.warsWon[e.s]||0)+1; }
+    (r.lapWins=r.lapWins||{})[e.s]=(r.lapWins[e.s]|0)+1;
+    /* talk: the war that decided a fight (its riders, the card they tied on, the depth, who won it and with what) */
+    if(e.war>0&&r.curWar&&r.curWar.lap===r.lap&&r.curWar.seats.indexOf(e.s)>=0){ var w=r.curWar; (r.warLog=r.warLog||[]).push({lap:w.lap,seats:w.seats.slice(),card:w.card,depth:Math.max(w.depth,e.war),win:e.s,wc:e.c}); }
+    r.curWar=null; }
   function onHoleshot(e){
     var r=A.race; if(!r) return; r.hs=e.s;
     var L1=lapLen(1), d=Math.max(1500,Math.min(L1*0.12,8000));
@@ -858,11 +1644,20 @@ function create(o){
   function onDeadlock(e){ var r=A.race; if(!r) return; r.dead={seats:e.seats.slice(),n:e.n}; }
   function onKitty(e){ var r=A.race; if(!r||r.kittySaid) return; r.kittySaid=true; r.kitty={s:e.s,n:e.n}; }
 
+  /* the moment (screen time) the picture shows rider s make the pass of lap b that puts him in place pos (pos -1: his last pass of the lap),
+     from the time model's passes; no model or no such pass: def */
+  function passAt(b,s,pos,def){
+    var T=TMm(); if(!T) return def; var R=A.R, ev=null, i; for(i=R.tm.laps.length-1;i>=0;i--) if(R.tm.laps[i].k===b){ ev=R.tm.laps[i].ev; break; } if(!ev) return def;
+    var hit=null; ev.forEach(function(e){ if(e.e!=="pass"||e.a!==s||e.crash) return; if(pos>0&&e.pos!==pos) return; if(!hit||(pos<0&&e.at>hit.at)||(pos>0&&e.at<hit.at)) hit=e; });
+    if(!hit) return def; var tp=null; try{ tp=T.timeAt(R,s,b-1+hit.at); }catch(x){ tp=null; } if(tp==null) return def;
+    return Math.max(A.now+300,screenAt(tp)+300);
+  }
   /* ---------------- after a lap's result: what the field will ride this lap, and what the booth says about it ---------------- */
   function onLapDone(){
     var r=A.race, R=A.R; if(!r||!R) return;
     var cur=rstand(); r.prev=r.cur||gateOrder(); r.cur=cur;
     var prev=r.prev, b=r.lap, L=lapLen(b), t0=r.lapAt, last=b===r.len||R.over;
+    r.rideAt=A.now; r.rideLap=b;
     var lead=cur[0]; if(lead){ r.led[lead.s]=(r.led[lead.s]|0)+1; r.ledRun=r.lastLeader===lead.s?(r.ledRun|0)+1:1; r.lastLeader=lead.s; }
     if(b===1) cur.forEach(function(x,i){ r.startPlace[x.s]=i+1; });
     var passT=t0+Math.max(L*0.35,(r.warLap?2500:0)), main=null, used={}, fp=L>=40000?0.35:L>=15000?0.15:0;
@@ -870,10 +1665,11 @@ function create(o){
     /* crashes: called where the race view shows them (sector x lap, or the view's own moment) */
     if(r.crashQ.length){
       var cq=r.crashQ.slice(), sector=r.yellowSector!=null?r.yellowSector:0.5, at=t0+Math.max(Math.min(L*sector,L*0.92),Math.min(2000,L*0.25));
+      if(TMm()){ try{ var hw=TMm().holdWindow(R,cq[0].s,b); if(hw&&isFinite(hw[0])) at=Math.max(A.now+300,screenAt(hw[0])+250); }catch(x){} }   /* mxtime: the moment he goes down on the race clock */
       var gain=r.crashGain|0;
-      if(cq.length>=2) q("multi_crash",{role:"C",ctx:crashCtx(cq,sector,gain),due:at,ttl:5,followP:0.8,key:"crash@"+b,story:"crash",subj:cq.map(function(x){ return x.s; })});
-      else q(cq[0].kind==="out"?"crash_out":"crash_remount",{role:"C",ctx:crashCtx(cq,sector,gain),due:at,ttl:5,followP:cq[0].kind==="out"?0.85:0.7,key:"crash@"+b,story:"crash",subj:[cq[0].s]});
-      cq.forEach(function(x){ used[x.s]=1; });
+      if(cq.length>=2) q("multi_crash",{role:"C",ctx:crashCtx(cq,sector,gain),due:at,ttl:7,followP:0.8,key:"crash@"+b,story:"crash",subj:cq.map(function(x){ return x.s; })});
+      else q(cq[0].kind==="out"?"crash_out":"crash_remount",{role:"C",ctx:crashCtx(cq,sector,gain),due:at,ttl:7,followP:cq[0].kind==="out"?0.85:0.7,key:"crash@"+b,story:"crash",subj:[cq[0].s]});
+      cq.forEach(function(x){ used[x.s]=1; (r.crashLog=r.crashLog||[]).push({s:x.s,lap:b,kind:x.kind,from:placeIn(prev,x.s)||placeIn(cur,x.s),at:at}); });   /* talk: what each crash cost, told later */
     }
     /* the main story of the lap */
     var le=r.leadEv;
@@ -882,7 +1678,7 @@ function create(o){
     if(le){ r.lastLeadCall=b;
       r.changes++; r.changeLaps.push(b);
       var ev=last?"last_lap_battle":"lead_change";
-      main=q(ev,{role:"C",ctx:leadCtx(le,last),due:passT,ttl:5,followP:L>=15000?0.6:0.25,story:last?"last-lap":"lead-change",subj:[le.s]});
+      main=q(ev,{role:"C",ctx:leadCtx(le,last),due:passAt(b,le.s,1,passT),ttl:5,followP:L>=15000?0.6:0.25,story:last?"last-lap":"lead-change",subj:[le.s]}); if(main) main.passPos=1;
       used[le.s]=1;
     }
     var tcDone=false;
@@ -907,8 +1703,8 @@ function create(o){
       else if(wild){ main=q("wild_card",{ctx:winCtx("wild_card",w,wm),due:passT,ttl:6,followP:fp,subj:[w.s]}); }
       else if(w.war>0&&!crashWar&&(front||w.war>=2||isHumanSeat(w.s)||chance(0.55))){ main=q("war_won",{ctx:winCtx("war_won",w,wm),due:passT,ttl:6,story:"pass",subj:[w.s],followP:fp}); }
       else if(crashWar){ }
-      else if(wm&&wm.d>0&&wm.p>=2&&wm.p<=5&&(wm.d<big||chance(0.5))){ main=q("pass_top",{ctx:passCtx(wm,prev),due:passT,ttl:6,subj:[w.s],followP:fp}); }
-      else if(wm&&wm.d>=big&&(!deep||chance(0.45)||isHumanSeat(w.s))){ main=q("big_move",{ctx:moveCtx("big_move",wm),due:passT,ttl:6,subj:[w.s],followP:fp}); }
+      else if(wm&&wm.d>0&&wm.p>=2&&wm.p<=5&&(wm.d<big||chance(0.5))){ main=q("pass_top",{ctx:passCtx(wm,prev),due:passAt(b,w.s,wm.p,passT),ttl:6,subj:[w.s],followP:fp}); if(main) main.passPos=wm.p; }
+      else if(wm&&wm.d>=big&&(!deep||chance(0.45)||isHumanSeat(w.s))){ main=q("big_move",{ctx:moveCtx("big_move",wm),due:passAt(b,w.s,-1,passT),ttl:6,subj:[w.s],followP:fp}); if(main) main.passPos=wm.p; }
       else if(r.lapWinN/(b-1)<0.6&&lapLen(b)>=8000&&!deep){ main=q("lap_win",{ctx:winCtx("lap_win",w,wm),due:passT,ttl:6,subj:[w.s],followP:fp*0.7}); r.lapWinN=(r.lapWinN|0)+1; }
       used[w.s]=1;
     }
@@ -927,9 +1723,26 @@ function create(o){
       if(!isHumanSeat(m.s)||used[m.s]||m.d===0||b===1||youN>=youCap) return;
       var cross=(r.cut>0&&((m.p0>r.cut&&m.p<=r.cut)||(m.p0<=r.cut&&m.p>r.cut)))||((m.p0>3)!==(m.p>3))||((m.p0>10)!==(m.p>10))||Math.abs(m.d)>=swing;
       var lastAt=r.humanCd[m.s]||-1e9; if(A.now-lastAt<(cross?Math.max(20000,L*0.9):Math.max(30000,L*2.4))) return;
-      r.humanCd[m.s]=A.now; youN++;
+      r.humanCd[m.s]=A.now; youN++; used[m.s]=1;
       q(m.d>0?"you_up":"you_down",{ctx:youCtx(m),due:t0+L*(main?0.55:0.4),ttl:8,pri:cross?2:1,story:"you",subj:[m.s]});
     });
+    /* way more action (the CEO): the passes the picture shows, called as they happen. The time model knows every pass of this lap and where on
+       the lap it comes (at); the call is due at that moment and the page's shown("pass") pulls it to the very frame. Never the lead (the lead
+       change is that call), never a rider already called this lap, never a pass on a crashed rider (the crash call is that story); the front
+       and the people first; one a lap on a short lap, two on a stadium lap, three on an outdoor lap. */
+    var Tm=TMm();
+    if(Tm&&b>=2&&L>=15000){
+      var lev=null; for(var li=R.tm.laps.length-1;li>=0;li--) if(R.tm.laps[li].k===b){ lev=R.tm.laps[li].ev; break; }
+      var capP=L>=90000?3:L>=40000?2:1, nP=0, seen={};
+      (lev||[]).filter(function(e){ return e.e==="pass"&&!e.crash&&e.pos>=2&&(e.pos<=8||isHumanSeat(e.a)||isHumanSeat(e.d)); })
+        .sort(function(x,y){ return ((isHumanSeat(y.a)||isHumanSeat(y.d))?1:0)-((isHumanSeat(x.a)||isHumanSeat(x.d))?1:0)||x.pos-y.pos||x.at-y.at; })
+        .forEach(function(e){
+          if(nP>=capP||used[e.a]||seen[e.a]||seen[e.d]) return;
+          var tp2=null; try{ tp2=Tm.timeAt(R,e.a,b-1+e.at); }catch(x){ tp2=null; } if(tp2==null) return;
+          nP++; seen[e.a]=1; seen[e.d]=1;
+          var tpi=q("track_pass",{ctx:trackPassCtx(e,b,tp2),due:Math.max(A.now,screenAt(tp2)+400),ttl:5,pri:2,subj:[e.a],story:"pass",followP:L>=40000?0.2:0}); if(tpi){ tpi.passPos=e.pos; tpi.passD=e.d; }
+        });
+    }
     /* outs (no crash: an empty hand), a dead heat, the spare cards */
     (r.outQ||[]).forEach(function(oq){ q("out_of_cards",{ctx:outCtx(oq),due:t0+L*0.45,ttl:8,pri:1}); }); r.outQ=[];
     if(r.dead){ q("deadlock",{ctx:deadCtx(r.dead),due:t0+Math.min(L*0.3,4000),ttl:8,pri:1}); }
@@ -991,6 +1804,7 @@ function create(o){
     return function(){
       var c=baseCtx(), sl=c.slots, t=c.tags, id=seatId(le.s);
       if(placeIn(rstand(),le.s)!==1&&!last) return null;     /* still the leader when spoken, or never said */
+      if(TMm()&&!last){ var cl=rclock(), lr=cl!=null?liveRows(cl+1500):null; if(lr&&lr[0]&&lr[0].s!==le.s) return null; }   /* mxtime: and the picture shows him in front (a moment of slack for the voice) */
       c.facts.ev=last?"last_lap_battle":"lead_change"; c.facts.rid=id; c.facts.place=1; c.facts.lap=b; c.facts.named=[id];
       riderSlots(sl,id); var n=nameRec(id); if(n.human){ t.you=1; c.human=true; } if(n.make) t.make=1;
       if(le.from>=0){ riderSlots(sl,seatId(le.from),"other"); c.facts.oid=seatId(le.from); c.facts.named.push(c.facts.oid); if(isHumanSeat(le.from)) c.human=true; }
@@ -1051,12 +1865,41 @@ function create(o){
     return function(){ var c=baseCtx(), sl=c.slots, t=c.tags, id=seatId(m.s); c.facts.ev=ev; c.facts.rid=id; c.facts.place=m.p; c.facts.from=m.p0; c.facts.lap=b; c.facts.named=[id];
       riderSlots(sl,id); if(nameRec(id).human){ t.you=1; c.human=true; } sl.place=ordV(m.p); sl.from=ordV(m.p0); sl.gained=numV(m.d); c.facts.gained=m.d; t[m.d>=8?"huge":"small"]=1; c.story={kind:"pass",riders:[m.s]}; return c; };
   }
+  /* the rider he passed for that place: the time model's own pass at that place (the one the picture shows), else a rider who was ahead
+     of him and is now behind him (never a rider who moved up past the place himself) */
+  function passedRider(b,m,prev,cur){
+    var R=A.R, ev=null, i, hit=null, best=null, bp=1e9;
+    if(R&&R.tm&&R.tm.laps) for(i=R.tm.laps.length-1;i>=0;i--) if(R.tm.laps[i].k===b){ ev=R.tm.laps[i].ev; break; }
+    if(ev) ev.forEach(function(e){ if(e.e==="pass"&&e.a===m.s&&!e.crash&&e.pos===m.p&&(!hit||e.at<hit.at)) hit=e; });
+    if(hit&&placeIn(cur,hit.d)>m.p) return hit.d;
+    cur.forEach(function(x,k){ var p0=placeIn(prev,x.s); if(x.s!==m.s&&p0>0&&p0<m.p0&&k+1>m.p&&k+1<bp){ bp=k+1; best=x.s; } });
+    return best;
+  }
   function passCtx(m,prev){
-    var r=A.race, b=r.lap, other=prev[m.p-1]?prev[m.p-1].s:null;
+    var r=A.race, b=r.lap, other=passedRider(b,m,prev,r.cur||[]);
     return function(){ var c=baseCtx(), sl=c.slots, t=c.tags, id=seatId(m.s); c.facts.ev="pass_top"; c.facts.rid=id; c.facts.place=m.p; c.facts.from=m.p0; c.facts.lap=b; c.facts.named=[id];
       riderSlots(sl,id); if(nameRec(id).human){ t.you=1; c.human=true; } sl.place=ordV(m.p); if(m.p<=3) t.podium=1;
-      if(other!=null&&other!==m.s){ riderSlots(sl,seatId(other),"other"); c.facts.oid=seatId(other); c.facts.named.push(c.facts.oid); if(isHumanSeat(other)) c.human=true; }
+      if(other!=null&&other!==m.s){ riderSlots(sl,seatId(other),"other"); c.facts.oid=seatId(other); c.facts.named.push(c.facts.oid); if(isHumanSeat(other)){ c.human=true; t.youOut=1; sl.you=nameRec(c.facts.oid).full; c.only="youOut"; } }
       c.story={kind:"pass",riders:[m.s].concat(other!=null?[other]:[])}; return c; };
+  }
+  /* a pass on the track (the time model's pass event e of lap b, at clock tp): said once the picture has shown it, while the passer is still
+     ahead (a pass undone before it is called is never called) */
+  function trackPassCtx(e,b,tp){
+    var r=A.race;
+    return function(){
+      var cl=rclock(); if(cl==null) return null; cl=Math.max(cl,Math.round(tp)+250);
+      var lim=TMm().clockLimit(A.R); if(isFinite(lim)&&cl>lim) return null;
+      var rows=liveRows(cl); if(!rows) return null;
+      var a=rowOf(rows,e.a), d=rowOf(rows,e.d); if(!onTrack(a)||!d||a.place>=d.place) return null;
+      var c=talkBase("pass",cl,rows), sl=c.slots, t=c.tags, ia=seatId(e.a), idd=seatId(e.d);
+      c.facts.ev="track_pass"; c.facts.seats=[e.a,e.d]; c.facts.lp=a.place; c.facts.lap=b; c.facts.named=[ia,idd]; c.facts.livePlace=a.place;
+      riderSlots(sl,ia); riderSlots(sl,idd,"other"); sl.place=ordV(a.place);
+      if(a.place<=3) t.podium=1; else if(a.place===5) t.top5=1;
+      if(isHumanSeat(e.a)){ t.you=1; sl.you=nameRec(ia).full; c.human=true; } else if(isHumanSeat(e.d)){ t.youOut=1; sl.you=nameRec(idd).full; c.human=true; }
+      var tr=trendOf(e.d,e.a,cl,null); if(tr&&tr.kind==="closing") t.closing=1;   /* he had been closing on the rider he passed, lap after lap: the pass was coming */
+      c.story={kind:"pass",riders:[e.a,e.d]};
+      return c;
+    };
   }
   function youCtx(m){
     var r=A.race, b=r.lap;
@@ -1166,6 +2009,8 @@ function create(o){
     var r=A.race; if(!r) return;
     r.flagged=true;
     var b=r.lap, L=lapLen(b), at=Math.max(A.now,r.lapAt+L);
+    if(TMm()&&A.R.tm.done&&A.R.tm.flag!=null) at=Math.max(A.now,screenAt(A.R.tm.flag));   /* mxtime: the leader's own line on the race clock */
+    r.flagAt=at;
     if(r.leadEv||r.crashQ.length) { /* handled by onLapDone below (same batch) */ }
     var order=e.order.slice(), R=A.R, photo=false;
     if(R&&e.why==="flag"&&order.length>=2){ var a=R.r[order[0]], c2=R.r[order[1]];
@@ -1302,13 +2147,13 @@ function create(o){
     return function(){ var c=baseCtx(), sl=c.slots, t=c.tags; c.facts.ev="round_podium"; c.facts.order=cls.slice(0,3); c.facts.named=cls.slice(0,3);
       ["p1","p2","p3"].forEach(function(k,i){ if(cls[i]) sl[k]=nameRec(cls[i]).full; });
       var mk={}; cls.slice(0,3).forEach(function(id){ var n=nameRec(id); if(n&&n.make) mk[n.make.c]=1; }); if(Object.keys(mk).length===3) t.makes3=1;
-      var R1=rider(cls[0]); if(R1&&R1.kind==="pro"&&R1.realWins>0){ t.real=1; sl.realWinsN=cntV(R1.realWins,"race","races"); c.facts.realWins=R1.realWins; } else delete t.real;
+      var nw=(A.G.results||[]).filter(function(x){ return x.winner===cls[0]; }).length; if(nw>=2){ t.wins=1; sl.winsN=cntV(nw,"win","wins"); c.facts.wins=nw; }
       var hum=cls.slice(0,3).filter(function(id){ return rider(id)&&rider(id).kind==="human"; }); if(hum.length){ t.you=1; sl.you=nameRec(hum[0]).full; c.facts.you=hum[0]; c.human=true; }
       c.story={kind:"podium"}; return c; };
   }
   function redCtx(redA,redB,firstRed){
     return function(){ var c=baseCtx(), sl=c.slots, t=c.tags; c.facts.ev="red_plate_change"; c.facts.red=redA; c.facts.old=redB; c.facts.named=[redA];
-      sl.red=nameRec(redA).full; if(redB){ t.old=1; sl.old=nameRec(redB).full; }
+      sl.red=nameRec(redA).full; if(redB){ t.old=1; sl.old=nameRec(redB).full; } else { t.opening=1; c.only="opening"; }   /* the first round: somebody has to lead (no "new points leader") */
       var Gs=A.G; if(Gs.ri<Gs.cal.length){ t.more=1; sl.nextCity=placeV(Gs.cal[Gs.ri].city); }
       if(firstRed) t.firstred=1;
       if(rider(redA).kind==="human"){ t.you=1; sl.you=nameRec(redA).full; c.human=true; }
@@ -1353,7 +2198,7 @@ function create(o){
     var after=A.postAfter||null, ch=e.champion;
     var it=q("season_champion",{role:"C",post:true,after:after,delay:1500,ttl:40,ctx:function(){ var c=baseCtx(), sl=c.slots, t=c.tags; c.facts.ev="season_champion"; c.facts.rid=ch; c.facts.named=[ch];
       sl.champion=nameRec(ch).full; var sp=splace(ch); if(sp&&sp.wins>=3){ t.wins=1; sl.winsN=cntV(sp.wins,"win","wins"); c.facts.wins=sp.wins; } else if(sp) t.fewwins=1; sl.rounds=numV(A.G.cal.length);
-      var rc2=realChamp(); if(rc2){ t.real=1; sl.champ=rc2; } if(rider(ch).kind==="human"){ t.you=1; sl.you=nameRec(ch).full; c.human=true; } c.story={kind:"podium"}; return c; },followP:1});
+      var pi=personOf(ch), hh=pi!=null?riderHist(pi):null, tn=(hh?hh.titlesSer:0)+1; if(tn>=2){ t.titles=1; sl.titlesN=cntV(tn,"title","titles"); c.facts.titles=tn; } if(rider(ch).kind==="human"){ t.you=1; sl.you=nameRec(ch).full; c.human=true; } c.story={kind:"podium"}; return c; },followP:1});
     if(it) A.postAfter=it.id;
   }
 
@@ -1377,12 +2222,15 @@ function create(o){
   function shown(kind,info,now){
     if(now!=null) A.now=now; info=info||{};
     var r=A.race; if(!r) return;
-    function pull(f){ A.q.forEach(function(x){ if(f(x)&&x.due>A.now){ var d=x.due-A.now; x.due=A.now; x.exp=Math.max(x.exp-d,A.now+3000); } }); }
-    if(kind==="pass") pull(function(x){ return x.race===r.key&&x.lap===r.lap&&x.pri>=2&&x.subj&&x.subj.indexOf(info.s)>=0; });
+    function pull(f){ A.q.forEach(function(x){ if(f(x)&&x.due>A.now){ var d=x.due-A.now; x.due=A.now; x.exp=Math.max(x.exp-d,A.now+(x.pri>=3?6500:3000)); } }); }   /* a big call pulled to the picture keeps time to wait for a BIG line that is never cut */
+    /* a pass the picture shows pulls the call of THAT pass (the view says who passed whom for which place): a pass for second never pulls the
+       lead change the same rider makes later in the lap */
+    if(kind==="pass") pull(function(x){ if(!(x.race===r.key&&x.lap===r.lap&&x.pri>=2&&x.subj&&x.subj.indexOf(info.s)>=0)) return false;
+      if(info.pos!=null&&x.passPos!=null&&x.passPos!==info.pos) return false; if(info.d!=null&&x.passD!=null&&x.passD!==info.d) return false; return true; });
     else if(kind==="crash") pull(function(x){ return x.race===r.key&&/crash/.test(x.ev)&&x.lap===r.lap; });
     else if(kind==="holeshot") pull(function(x){ return x.ev==="holeshot"; });
     else if(kind==="checkered") pull(function(x){ return x.ev==="checkered"||x.ev==="photo_finish"; });
-    else if(kind==="lapped"&&info.s!=null){
+    else if(kind==="lapped"&&info.s!=null&&!r.ckSaid){   /* after the winner's call, traffic is no news */
       /* info.s = the rider being lapped, info.by = the rider lapping him (the view tells us): only a lap by the LEADER is called as the leader's */
       q("lapped",{ctx:function(){
         var c=baseCtx(), sid=seatId(info.s); c.facts.ev="lapped"; c.facts.rid=sid; c.facts.named=[sid]; riderSlots(c.slots,sid,"other");
@@ -1402,8 +2250,8 @@ function create(o){
   function upcoming(){ return A.q.filter(function(x){ return x.story&&x.race===(A.race&&A.race.key); }).map(function(x){ return {kind:x.story,at:x.due,riders:(x.subj||[]).slice(),ev:x.ev,pri:x.pri}; }).sort(function(a,b){ return a.at-b.at; }); }
   function setTrack(t){ t=t||{}; A.track.layout=t.layout||null; A.track.sectionAt=typeof t.sectionAt==="function"?t.sectionAt:null; }
   /* the variety memory (which lines were heard and how long ago) and the sitting's flags, for the page to keep with its save */
-  function state(){ var age={}; for(var k in A.used) age[k]=Math.max(0,Math.round(A.now-A.used[k])); return JSON.parse(JSON.stringify({v:1,recent:A.recent,age:age,sit:A.sit})); }
-  function restore(st,now){ if(!st||st.v!==1) return; if(now!=null) A.now=now; if(Array.isArray(st.recent)) A.recent=st.recent.slice(-12); if(st.age) for(var k in st.age) A.used[k]=A.now-(+st.age[k]||0); if(st.sit) for(var k2 in st.sit) A.sit[k2]=st.sit[k2]; }
+  function state(){ var age={}, sd={}; for(var k in A.used) age[k]=Math.max(0,Math.round(A.now-A.used[k])); for(var h in A.said){ var a=A.now-A.said[h]; if(a<600000) sd[h]=Math.max(0,Math.round(a)); } return JSON.parse(JSON.stringify({v:1,recent:A.recent,age:age,sit:A.sit,said:sd})); }   /* said: the texts of the last 10 minutes (hashes), so a reload never repeats them */
+  function restore(st,now){ if(!st||st.v!==1) return; if(now!=null) A.now=now; if(Array.isArray(st.recent)) A.recent=st.recent.slice(-12); if(st.age) for(var k in st.age) A.used[k]=A.now-(+st.age[k]||0); if(st.sit) for(var k2 in st.sit) A.sit[k2]=st.sit[k2]; if(st.said&&typeof st.said==="object") for(var h in st.said) A.said[h]=A.now-(+st.said[h]||0); }
   function set(k,v){ if(k==="speed"||k==="chatter"||k==="era"||k==="lapMs") o[k]=v; if(k==="sayNames"){ sayNames=v||{}; A.names={}; } }
   function reset(){ A.q=[]; A.race=null; A.R=null; A.rmap=null; A.rounds={}; var b=A.booth; b.until=0; b.cur=null; }
 
