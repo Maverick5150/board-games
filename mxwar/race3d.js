@@ -1121,6 +1121,139 @@ export function create(host,hooks){
   QUAL.bindLook(LOOK); driveLook();
   QUAL.attach({V:V,cam:cam,mode:()=>mode,T:()=>T,W:()=>W,H:()=>H,count:()=>N,lodList:()=>RST});
   // [/hook:perf]
+  // [hook:live]
+  /* THE LIVE GAME'S RACE ENTRY (mxlive 2026-10-19; measured on the real game page: BG_audit/sprint/mxlive/fix). What still blocked the page after the warm hold, and the fix:
+     1. THE WORLD IN STEPS. V.prepareWorld(o) -> Promise: the world of the race o (the course, the surroundings, the stadium, the track's dirt and meshes: 1.5-3 s of work here)
+        is built over several tasks (soilWarmSteps, buildWorldSteps / addTrackSteps / trackMeshSteps: generators, one step a task) while the old world stays whole and nothing draws; the
+        last step puts it in place. The game calls it before V.setRace(o), which then finds the world built (the same key) and makes the riders only. It mirrors setRace's
+        world block (the key, Course.build with the round's lap time, buildWorld, the grid, LOOK.apply, the flaggers): KEEP THEM IN STEP when that block changes upstream.
+     2. FIRST USE WHILE NOTHING DRAWS. three.js asks the driver about a program (its info log, its uniform and attribute tables: synchronous round trips to the GPU process)
+        the first time it DRAWS with it. Inside a frame each call waits behind every draw already queued: the first frames of a race first-used about 47 programs and blocked
+        the page 3-5 s (ANGLE / D3D11 here), and a ladder step (real shadows off, a new size) that first-uses programs the warm had only compiled stalled 1-2 s. Once the
+        warm's parallel compiles are ready, every program is first-used NOW, a few per task, while the warm hold draws nothing (QUAL.warm is wrapped: the hold ends after it).
+     3. AN ENVIRONMENT MAP TO PREFILTER (the bike's painted night stadium, an equirectangular canvas, on the BALANCED tier) is converted the first time a material using it is
+        compiled, with a program compiled and drawn on the spot: inside the warm's compile it waited 1.6-1.8 s for the GPU process (busy with the parallel compiles just
+        sent). Those objects are compiled first, in a task of their own.
+     4. 2D CANVASES READ BACK. The view paints its once-a-page atlases (the crowd, the liveries, the mud) on 2D canvases and reads them back (getImageData): a GPU canvas reads
+        back through the GPU process, 0.4-0.6 s each here. Until the first race is built, a 2D canvas made while the view builds is a CPU canvas (willReadFrequently). */
+  {
+    const HC=GL.HTMLCanvasElement&&GL.HTMLCanvasElement.prototype;
+    if(HC&&HC.getContext&&!HC.getContext.__mxLive){ const gc0=HC.getContext; const gc=function(t,o){ if((GL.__mxWRF|0)>0&&!GL.__mxWRFdone&&t==="2d") o=Object.assign({willReadFrequently:true},o||{}); return gc0.call(this,t,o); }; gc.__mxLive=true; HC.getContext=gc; }
+    const building=fn=>{ GL.__mxWRF=(GL.__mxWRF|0)+1; try{ return fn(); } finally { GL.__mxWRF=Math.max(0,(GL.__mxWRF|0)-1); } };
+    let prepTok=0, gap=false, BWS=null, SWS=null, inflight=null;
+    try{ import("./r3d-world.js").then(m=>{ BWS=m&&m.buildWorldSteps||null; },()=>{}); import("./r3d-track.js").then(m=>{ SWS=m&&m.soilWarmSteps||null; },()=>{}); }catch(e){}
+    const setRace0=V.setRace, resize0=V.resize;
+    V.setRace=function(){ prepTok++; inflight=null; gap=false; const r=building(()=>setRace0.apply(V,arguments)); GL.__mxWRFdone=true; return r; };   /* (a setRace cancels a world still being prepared) */
+    /* V.resize: between the world's last step and setRace the old riders are gone (setRace resizes); and the SAME size re-allocates nothing: the game lays its page out
+       after every lap (layoutArena), and a canvas given its own size again re-allocates its drawing buffer, which waits for the GPU (0.9-1.2 s here while the warm compiles) */
+    V.resize=function(){
+      if(gap) return;
+      const w=Math.max(1,Math.round(host.clientWidth)), h=Math.max(1,Math.round(host.clientHeight));
+      if(w===W&&h===H&&!warmPending&&C&&!V.lost){ CAMS.snap(); renderOnce(); return; }
+      return resize0.apply(V,arguments);
+    };
+    /* V.worldKey(o): the key of the world race o needs (setRace's key); V.prepareWorld(o) for a world already built or being built is that build (no new one) */
+    const keyOf=o=>{ const lo=motion()!=="full", pick=MX.Layouts.pick(o.series,o.year,o.round,o.cal||{}); return {lo:lo,pick:pick,key:pick.layout.id+"|"+(pick.look.around)+"|"+(lo?"lo":"hi")+"|"+(o.lapT>0?Math.round(o.lapT):"")+"|"+QUAL.buildKey(lo)}; };   /* (= setRace's key) */
+    V.worldKey=o=>{ try{ return keyOf(o).key; }catch(e){ return null; } };
+    V.worldReady=o=>{ try{ return keyOf(o).key===worldKey; }catch(e){ return false; } };
+    V.prepareWorld=function(o){
+      try{ if(o&&inflight&&inflight.key===keyOf(o).key) return inflight.p; }catch(e){}
+      const tok=++prepTok; let me=null;
+      const p=new Promise(res0=>{
+        const res=v=>{ if(inflight===me) inflight=null; res0(v); };
+        try{
+          if(!o||V.lost){ res(false); return; }
+          const lo=motion()!=="full"; if(lo!==LO){ LO=lo; worldKey=""; LOOK.setShadows(QUAL.shadowsWanted(LO)); if(typeof driveLook==="function") driveLook(); }   /* (as setRace) */
+          const K=keyOf(o), pick=K.pick, key=K.key;
+          if(key===worldKey){ res(true); return; }
+          me={key:key,p:null}; inflight=me;
+          raceGen++; drawHold=holdWanted(); warmHold=null;   /* nothing draws while the world is replaced (a warm in flight for the old race stops) */
+          const q=QUAL.options(LO), alive=()=>tok===prepTok&&!V.lost;
+          let C2=null, it=null, w2=null, n=0, sit=SWS?SWS(q):null;   /* (first the soil tiles the world needs: once a page, in steps) */
+          const fail=e=>{ try{ console.warn("mxwar 3D: prepareWorld",e); }catch(x){} res(false); };   /* (setRace then builds it the old way) */
+          const commit=()=>{
+            if(R){ disposeTree(R.grp); scene.remove(R.grp); R=null; }   /* the old race's riders, particles and gate go with the old world (setRace makes new ones) */
+            if(FX){ if(FX.dispose) FX.dispose(); disposeTree(FX.group); scene.remove(FX.group); FX=null; }
+            if(world){ disposeTree(world.root); scene.remove(world.root); } gate=null;
+            C=C2; look=pick.look; world=w2; worldKey=key; gap=true;
+            scene.add(world.root); builtTier=QUAL.buildKey(LO); QUAL.fitTextures(world.root);
+            CAMS.buildGrid();
+            LOOK.apply(C,look,world,{lo:LO,tv:tv(),deferEnv:drawHold});
+            const flo=!!QUAL.options(LO).lo;
+            flagger=flaggerBuild(flagT("white"),{lo:flo}); flagger.grp.position.copy(world.fin.flagAt).add(v3.set(0,-0.02,0)); flagger.grp.rotation.y=-world.fin.th+(world.fin.side>0?PI:0); world.root.add(flagger.grp);
+            marshal=flaggerBuild(flagT("yellow"),{marshal:true,lo:flo}); marshal.grp.visible=false; world.root.add(marshal.grp);
+          };
+          const step=()=>{
+            if(!alive()){ res(false); return; }
+            let done=false;
+            try{
+              building(()=>{
+                if(sit){ const r=sit.next(); if(r.done) sit=null; return; }
+                if(!C2){ C2=MX.Course.build(pick.layout); if(o.lapT>0&&Math.abs(C2.Tlap/o.lapT-1)>0.04){ const want=clamp(o.lapT,C2.Tlap*0.87,C2.Tlap*1.15); C2=MX.Course.build(Object.assign({},pick.layout,{vavg:C2.L/want})); } return; }
+                if(!w2){ if(!it&&BWS) it=BWS(C2,pick.look,q); if(it){ const r=it.next(); if(r.done) w2=r.value; } else w2=buildWorld(C2,pick.look,q); return; }
+                commit(); done=true;
+              });
+            }catch(e){ fail(e); return; }
+            n++;
+            if(done){ V.prepared={key:key,steps:n}; res(true); return; }
+            setTimeout(step,0);
+          };
+          setTimeout(step,0);
+        }catch(e){ try{ console.warn("mxwar 3D: prepareWorld",e); }catch(x){} res(false); }
+      });
+      if(me) me.p=p;
+      return p;
+    };
+    const used=new WeakSet();
+    /* first-use every ready program until `until` (ms of now()): 0 = all done, 1 = out of time (more ready ones left), 2 = only programs still compiling left */
+    const firstUse=until=>{ const ps=(renderer.info&&renderer.info.programs)||[], gl=renderer.getContext(); let wait=false;
+      for(const p of ps){ if(!p||used.has(p)) continue; let ok=true; try{ ok=!p.isReady||p.isReady(); }catch(e){ ok=true; } if(!ok){ wait=true; continue; }
+        if(now()>until) return 1;
+        /* a program that did not link is left alone: the warm compiles some variants no frame ever draws (renderer.compile() takes every object, the shadow
+           proxies' colour programs too); three.js reports one only if a frame really draws with it, as before */
+        let linked=true; try{ linked=gl.getProgramParameter(p.program,gl.LINK_STATUS)!==false; }catch(e){ linked=true; }
+        if(linked) try{ p.getUniforms(); p.getAttributes(); }catch(e){}
+        used.add(p); }
+      return wait?2:0; };
+    const preEnv=(ctx)=>{ const sc=ctx&&ctx.scene, cm=ctx&&ctx.cam; if(!sc||!cm) return 0; const objs=[];
+      sc.traverse(o=>{ const ms=o.material?(Array.isArray(o.material)?o.material:[o.material]):[]; if(ms.some(m=>m&&m.isMeshStandardMaterial&&m.envMap&&m.envMap.isTexture&&m.envMap.mapping!==THREE.CubeUVReflectionMapping)) objs.push(o); });
+      objs.forEach(o=>{ try{ renderer.compile(o,cm,sc); }catch(e){} }); return objs.length; };
+    /* 5. EVERY PROGRAM READY BEFORE ANY DRAW. The warm (r3d-perf-warm.js) compiles in parallel and waits at most 15 s, then DRAWS (one shadow draw, the post chain's passes):
+       on a GPU still compiling (a slow one, or one shared with other work) those draws waited synchronously for every program still in the queue (a 10-51 s task here).
+       So every state the ladder can reach is compiled first (the current one, then the rest: as the warm's compileStates) and the warm starts once they are all ready
+       (polled, the page live): it then finds them compiled and ready, and its draws are quick. The hold waits for them up to WARM_MAX (V.warm below, as the view's
+       own with a longer cap than its 20 s: on a GPU shared with other work the compiles took 18-50 s here, and a hold ended early made the first frame wait for
+       them synchronously: one 5.6 s task). Past WARM_MAX the hold goes on only while programs are still compiling (polled; the page stays live: on a GPU shared
+       with other work here the compiles took over 60 s once, and a hold ended at 30 s made the first frame wait 31.7 s for them), WARM_HARD at the most. */
+    let tgt=null;
+    const uniq=a=>a.filter((x,i)=>a.indexOf(x)===i);
+    const compileAs=(sc,cm,into)=>{ const prev=renderer.getRenderTarget(); if(into&&!tgt) tgt=new THREE.WebGLRenderTarget(16,16,{type:THREE.HalfFloatType,depthBuffer:true,stencilBuffer:false,generateMipmaps:false}); renderer.setRenderTarget(into?tgt:null); try{ renderer.compile(sc,cm); } finally { renderer.setRenderTarget(prev); } };
+    const compileNow=ctx=>{ const tg0=!!(ctx.look&&ctx.look.post); compileAs(ctx.scene,ctx.cam,tg0); };
+    const compileRest=ctx=>{ const sh0=ctx.shadowsOn(), tg0=!!(ctx.look&&ctx.look.post), shs=uniq([sh0].concat(ctx.shadowStates||[])), tgs=uniq([tg0].concat(ctx.targetStates||[])), crs=ctx.crowd?uniq([ctx.crowdNow].concat(ctx.crowdStates||[])):[null];
+      try{ for(const sh of shs){ if(sh!==ctx.shadowsOn()) ctx.setShadows(sh); for(const tg of tgs) for(const cr of crs){ if(sh===sh0&&tg===tg0&&(cr==null||cr===ctx.crowdNow)) continue; if(cr!=null) ctx.crowd(cr); compileAs(ctx.scene,ctx.cam,tg); } } }
+      finally{ if(ctx.shadowsOn()!==sh0) ctx.setShadows(sh0); if(ctx.crowd&&ctx.crowdNow!=null) ctx.crowd(ctx.crowdNow); } };
+    const WARM_MAX=30000, WARM_HARD=75000;
+    /* = the view's V.warm (the warm hold), with the cap WARM_MAX instead of 20 s (WARM_HARD while programs still compile) */
+    V.warm=()=>{ try{ if(!R||!C||V.lost){ if(drawHold) releaseHold(); return Promise.resolve(false); } warmPending=false;
+        const g=raceGen, t0=now(), p=QUAL.warm(warmCtx(),true);
+        if(drawHold){ warmHold=p; const done=()=>{ if(warmHold===p) warmHold=null; if(g===raceGen&&drawHold) releaseHold(); };
+          const cap=()=>{ if(g!==raceGen||warmHold!==p) return; if(notReady()>0&&now()-t0<WARM_HARD){ setTimeout(cap,500); return; } done(); };
+          p.then(done,done); setTimeout(cap,WARM_MAX); }
+        return p; }catch(e){ if(drawHold) releaseHold(); return Promise.resolve(false); } };
+    const notReady=()=>{ const ps=(renderer.info&&renderer.info.programs)||[]; let n=0; for(const p of ps){ try{ if(p&&p.isReady&&!p.isReady()) n++; }catch(e){} } return n; };
+    const warm0=QUAL.warm;
+    QUAL.warm=function(ctx,async){
+      if(!async){ preEnv(ctx); const rep=warm0.call(QUAL,ctx,false); firstUse(Infinity); return rep; }
+      const tick=()=>new Promise(r=>setTimeout(r,0)), live=()=>!V.lost&&!(ctx&&ctx.alive&&!ctx.alive()), t00=now(), pre={};
+      const ready=()=>new Promise(r=>{ const t0=now(); const poll=()=>{ if(!live()){ r(); return; } const n=notReady(); pre.notReady=n; if(n===0||now()-t00>WARM_HARD-4000){ pre.readyMs=+(now()-t0).toFixed(0); r(); return; } setTimeout(poll,50); }; poll(); });
+      return tick().then(()=>{ if(live()) preEnv(ctx); }).then(tick).then(()=>{ if(live()) try{ compileNow(ctx); }catch(e){} }).then(tick).then(()=>{ if(live()) try{ compileRest(ctx); }catch(e){} }).then(ready)
+        .then(()=>warm0.call(QUAL,ctx,true)).then(rep=>new Promise(res=>{ const t0=now(); let n=0; if(rep&&typeof rep==="object") rep.pre=pre;
+        const step=()=>{ if(V.lost||(ctx&&ctx.alive&&!ctx.alive())){ res(rep); return; } const r=firstUse(now()+12); n++;
+          if(r&&now()-t0<6000) setTimeout(step,r===2?30:0); else { if(rep&&typeof rep==="object"){ rep.firstUseMs=+(now()-t0).toFixed(1); rep.firstUseSlices=n; } res(rep); } };
+        step(); }));
+    };
+  }
+  // [/hook:live]
   V.dispose=function(){ V.stop(); if(world) disposeTree(world.root); if(R) disposeTree(R.grp); if(FX) disposeTree(FX.group); LOOK.dispose(); renderer.dispose(); cv.remove(); };
   V.renderer=renderer; V.scene=scene; V.camera=cam;
   V._dbg={riders:()=>R,fx:()=>FX,look:()=>LOOK,quality:()=>QUAL,cams:()=>CAMS,state:()=>RST,gate:()=>gate,world:()=>world,marshal:()=>marshal,target:()=>CAMS.target.clone(),sees:(a,b)=>CAMS.sees(a,b),dirt:(x,z)=>CAMS.dirtTop(x,z),hf:(x,z)=>world.ctx.hf?world.ctx.hf(x,z):null,yellow:()=>yellow,shot:()=>CAMS.shot,pos:k=>{ const r=rs.find(x=>x.seat===k); return r&&r.pos?{x:+r.pos.x.toFixed(2),y:+r.pos.y.toFixed(2),z:+r.pos.z.toFixed(2),crash:r.crash?r.crash.kind:null}:null; },
