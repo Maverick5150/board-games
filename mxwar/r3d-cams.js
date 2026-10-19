@@ -531,16 +531,27 @@ export function createCams(VIEW){
     { const fo=Math.cos(th), go=Math.sin(th); let tq=(E.x-S.x)*fo+(E.z-S.z)*go; tq=clamp(tq,-1.05,1.05); const dx=E.x-(S.x+fo*tq), dz=E.z-(S.z+go*tq), d=Math.hypot(dx,dz);
       if(d<1.6&&d>1e-3){ const k=(1.6-d)/d; E.x+=dx*k; E.z+=dz*k; } }
     { const f=r.fr; if(f&&!crash){ const c=Math.cos(f.th), s=Math.sin(f.th), lt=(r.lat||0)+(E.x-S.x)*-s+(E.z-S.z)*c, lim=f.hw+0.3; if(Math.abs(lt)>lim){ const q=Math.sign(lt)*lim-lt; E.x+=-s*q; E.z+=c*q; } } }   /* a push may take it a little over the edge, never into the next lane */
-    /* the push itself glides (tau 0.08 s): two rivals pushing from either side, or one crossing the lens, never throw the eye a metre in one frame */
-    if(first||!K.pxS){ K.pxS=new Sd(E.x-ex0); K.pzS=new Sd(E.z-ez0); } E.x=ex0+K.pxS.step(E.x-ex0,0.08,dt); E.z=ez0+K.pzS.step(E.z-ez0,0.08,dt);
+    /* the push itself glides (tau 0.2 s; the hotfix raised it from 0.08): two rivals pushing from either side, or one crossing the lens, never throw the eye a metre in one frame */
+    if(first||!K.pxS){ K.pxS=new Sd(E.x-ex0); K.pzS=new Sd(E.z-ez0); } E.x=ex0+K.pxS.step(E.x-ex0,0.2,dt); E.z=ez0+K.pzS.step(E.z-ez0,0.2,dt);
+    /* (hotfix, QD milestone 2 defect 6: the rig whipped 3.3-6.4 m in 0.1 s, the view swinging 90 degrees in 3 frames) inside the shot the eye moves round him at most 12 m/s and swings
+       round him at most 120 degrees a second; whatever needs more (a mount change, a hairpin's edge, a rival's push) and leaves the eye more than 2.6 m from where the rig wants it is a CUT:
+       the eye and the lens snap there, never a whip (at most one cut in 1.5 s unless the eye would be 5 m out: no stutter of cuts) */
+    let cut=false;
+    { const ox=E.x-S.x, oz=E.z-S.z; K.cutT=(K.cutT==null?9:K.cutT)+Math.max(0,dt);
+      if(first||K.ox==null||!(dt>0)){ K.ox=ox; K.oz=oz; }
+      else { const lim=12*dt, r0=Math.hypot(K.ox,K.oz), a0=Math.atan2(K.oz,K.ox), rr=r0+clamp(Math.hypot(ox,oz)-r0,-lim,lim), aa=a0+clamp(wrapA(Math.atan2(oz,ox)-a0),-2.1*dt,2.1*dt);
+        let nx=Math.cos(aa)*rr, nz=Math.sin(aa)*rr; const mx=nx-K.ox, mz=nz-K.oz, mm=Math.hypot(mx,mz); if(mm>lim){ nx=K.ox+mx*lim/mm; nz=K.oz+mz*lim/mm; }
+        if(Math.hypot(ox-nx,oz-nz)>(K.cutT>1.5?2.6:5)){ nx=ox; nz=oz; cut=true; camS.snap=true; K.cutT=0; }
+        K.ox=nx; K.oz=nz; }
+      E.x=S.x+K.ox; E.z=S.z+K.oz; }
     K.near=K.near===undefined||first?near:K.near+(near-K.near)*Math.min(1,Math.max(0,dt)*6);
     if(VIEW.C.kind==="stadium") inFloor(E);
     const hAir=crash?0:Math.max(0,(r.oy!=null?r.oy:gS)-gS), air=K.air.step(Math.min(4.5,hAir),0.22,dt);
     const gE=groundNear(r,E.x-S.x,E.z-S.z), gBase=crash?gS:0.5*gE+0.5*gS;
-    if(first) K.gb.snap(gBase); const gb=K.gb.step(gBase,0.28,dt);
+    if(first||cut) K.gb.snap(gBase); const gb=K.gb.step(gBase,0.28,dt);
     let yT2=gb+u+0.8*air+1.8*K.near;   /* (lifted over a rival's head: a helmet is at 1.95 m) */
     { let need=-1e9; for(let q=1;q<=3;q++){ const t=q*0.25, g=groundNear(r,(E.x-S.x)*(1-t),(E.z-S.z)*(1-t))+0.25; need=Math.max(need,(g-t*S.y)/(1-t)); } if(need>yT2) yT2=need; }   /* he stays in sight over a crest */
-    if(first) K.y.snap(yT2); const ys=K.y.step(yT2,0.18,dt);
+    if(first||cut) K.y.snap(yT2); const ys=K.y.step(yT2,0.18,dt);
     const floor=Math.max(gE,groundNear(r,E.x-S.x+fx*0.6,E.z-S.z+fz*0.6),groundNear(r,E.x-S.x-fx*0.6,E.z-S.z-fz*0.6))+0.45;
     E.y=Math.max(ys,floor);
     /* a landing: the camera drops with the bike and comes back (a soft shake) */
