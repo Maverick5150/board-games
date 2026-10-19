@@ -1113,6 +1113,140 @@
     html:not([data-tv]) .mx-hero__pitch{display:none}
     html:not([data-tv]) .mx-hero{margin-bottom:.5rem}
   }
+  /* ================= THE MXWAR SKIN, step 4: the season screen and the year picker (UI-SPEC 4.2, 04_TRACK_SELECT) =================
+     The calendar is 04's list: rows on --mx-row, the next round the selected row (red-deep, a white edge, pale-gold lines, a NEXT tag), a round raced quiet
+     with its winner in gold and a check; the standings and the team table are 07-lite (a red head bar, zebra rows, the person ringed gold, the points in
+     Anton); the next race is 05-lite (a white-edged night card, the gold eyebrow, the Anton title, the facts in Barlow caps, the red CTA with its chevron).
+     TV: the screen sits inside the 6 % safe area, the head is two lines, the panels hug their rows. The year picker's years are 04 rows too. */
+  html[data-game="mxwar"] .mx-shead .bg-eyebrow{display:flex; flex-wrap:wrap; align-items:center; gap:.35rem .6rem; font:700 var(--mx-fs-hud-m)/1.2 var(--mx-font-hud); letter-spacing:.1em; text-transform:uppercase; color:var(--mx-stadium-gold)}
+  html[data-game="mxwar"] .mx-schip{padding:.14rem .45rem .1rem; border-radius:.25rem; font-size:var(--mx-fs-hud-s); letter-spacing:.08em; color:var(--mx-hud-white)}
+  html[data-game="mxwar"] .mx-shead p{font:600 var(--mx-fs-hud-m)/1.3 var(--mx-font-hud); letter-spacing:.06em; text-transform:uppercase; color:var(--mx-secondary-text)}
+  html[data-game="mxwar"] .mx-prog{height:.35rem; margin-top:.45rem; border-radius:.175rem; background:var(--mx-row)}
+  html[data-game="mxwar"] .mx-prog > i{background:var(--mx-war-red)}
+  /* the next race (05-lite) */
+  html[data-game="mxwar"] .mx-next{gap:.7rem; padding:1.1rem 1.15rem 1.15rem; border-radius:var(--mx-r-card); background:var(--mx-panel-black); box-shadow:inset 0 0 0 2px var(--mx-hud-white)}
+  html[data-game="mxwar"] #nextEyebrow{font:700 var(--mx-fs-hud-m)/1.2 var(--mx-font-hud); letter-spacing:.1em; text-transform:uppercase; color:var(--mx-stadium-gold)}
+  html[data-game="mxwar"] .mx-next__t{font:400 var(--mx-fs-display-l)/1 var(--mx-font-display); letter-spacing:.01em; text-transform:uppercase; color:var(--mx-hud-white)}
+  html[data-game="mxwar"] .mx-next__s{display:grid; gap:.4rem; color:var(--mx-secondary-text)}
+  html[data-game="mxwar"] .mx-next__facts{display:block; font:600 var(--mx-fs-hud-m)/1.3 var(--mx-font-hud); letter-spacing:.06em; text-transform:uppercase; color:var(--mx-hud-white)}
+  html[data-game="mxwar"] .mx-next__real{display:block; font:var(--fw-ui) var(--fs-xs)/1.45 var(--font-ui); color:var(--mx-secondary-text)}
+  html[data-game="mxwar"] .mx-next__real b{color:var(--mx-hud-white)}
+  html[data-game="mxwar"] #goBtn{padding-left:2.75rem; padding-right:2.75rem}
+  html[data-game="mxwar"] #goBtn::before{content:""; position:absolute; right:1.25rem; top:50%; width:.6rem; height:.6rem; margin-top:-.32rem; border:solid #FFFFFF; border-width:.16rem .16rem 0 0; transform:rotate(45deg); pointer-events:none}
+  /* the panels: night with a hairline; the calendar is 04's card (a 2 px white edge) */
+  html[data-game="mxwar"] .mx-panel{border-radius:var(--mx-r-card); background:var(--mx-panel-black); box-shadow:inset 0 0 0 1px var(--mx-hairline)}
+  html[data-game="mxwar"] .mx-scol--a .mx-panel{box-shadow:inset 0 0 0 2px var(--mx-hud-white)}
+  html[data-game="mxwar"] .mx-panel > h2.bg-eyebrow{margin:0 0 .65rem}
+  /* the calendar rows */
+  html[data-game="mxwar"] .mx-cal{gap:.375rem}
+  html[data-game="mxwar"] .mx-cal li{grid-template-columns:2.25rem minmax(0,1fr) auto; gap:.1rem .6rem; padding:.45rem .8rem .45rem .4rem; border-radius:var(--mx-r-btn); background:var(--mx-row); color:var(--mx-hud-white)}
+  html[data-game="mxwar"] .mx-cal__n{font:400 1.25rem/1 var(--mx-font-display); color:var(--mx-hud-white); text-align:center; font-variant-numeric:tabular-nums}
+  html[data-game="mxwar"] .mx-cal__c b{font:700 var(--mx-fs-hud-l)/1.15 var(--mx-font-hud); letter-spacing:.04em; text-transform:uppercase}
+  html[data-game="mxwar"] .mx-cal__c span{font:600 var(--mx-fs-hud-m)/1.3 var(--mx-font-hud); letter-spacing:.05em; text-transform:uppercase; color:var(--mx-secondary-text)}
+  html[data-game="mxwar"] .mx-cal__w{max-width:11rem; font:700 var(--mx-fs-hud-m)/1.2 var(--mx-font-hud); letter-spacing:.04em; text-transform:uppercase; color:var(--mx-secondary-text)}
+  html[data-game="mxwar"] .mx-cal li.is-done{background:transparent; box-shadow:inset 0 0 0 1px var(--mx-hairline)}
+  html[data-game="mxwar"] .mx-cal li.is-done .mx-cal__n{color:var(--mx-secondary-text)}
+  html[data-game="mxwar"] .mx-cal li.is-done .mx-cal__w{color:var(--mx-stadium-gold)}
+  html[data-game="mxwar"] .mx-cal__ck{display:inline-block; width:.32em; height:.64em; margin:0 .55em .14em .1em; border:solid var(--mx-stadium-gold); border-width:0 .15em .15em 0; transform:rotate(45deg); vertical-align:middle}
+  html[data-game="mxwar"] .mx-cal li.is-next{background:var(--mx-red-deep); box-shadow:inset 0 0 0 2px var(--mx-hud-white); color:#FFFFFF}
+  html[data-game="mxwar"] .mx-cal li.is-next .mx-cal__n{color:#FFFFFF}
+  html[data-game="mxwar"] .mx-cal li.is-next .mx-cal__c span{color:var(--mx-gold-pale)}
+  html[data-game="mxwar"] .mx-cal__next{display:inline-block; padding:.2em .55em .16em; border-radius:.25rem; font:700 var(--mx-fs-hud-s)/1 var(--mx-font-hud); font-style:normal; letter-spacing:.12em; text-transform:uppercase; color:var(--mx-night-black); background:var(--mx-gold-pale)}
+  /* the standings and the team table (07-lite) */
+  html[data-game="mxwar"] .mx-sthead{display:flex; align-items:center; gap:.5rem; margin:0 0 .2rem; padding:.32rem .5rem .28rem; border-radius:.375rem; background:var(--mx-red-head);
+    font:700 var(--mx-fs-hud-s)/1.2 var(--mx-font-hud); letter-spacing:.1em; text-transform:uppercase; color:#FFFFFF}
+  html[data-game="mxwar"] .mx-sthead[hidden]{display:none}
+  html[data-game="mxwar"] .mx-sthead > span{font:inherit; letter-spacing:inherit; color:inherit}
+  html[data-game="mxwar"] .mx-sthead__pl{flex:none; width:2.5rem; text-align:center}
+  html[data-game="mxwar"] .mx-sthead .mx-st__v{text-align:right}
+  html[data-game="mxwar"] .mx-sthead--team .mx-st__g{text-align:right}
+  html[data-game="mxwar"] .mx-st{gap:0}
+  html[data-game="mxwar"] .mx-st li[hidden]{display:none}
+  html[data-game="mxwar"] .mx-st li{gap:.5rem; padding:.28rem .5rem; border-radius:.3rem; background:transparent; font:700 var(--mx-fs-hud-l)/1.2 var(--mx-font-hud); letter-spacing:.02em; color:var(--mx-hud-white)}
+  html[data-game="mxwar"] .mx-st li:nth-child(odd){background:var(--mx-row)}
+  html[data-game="mxwar"] .mx-st li.is-me{background:rgba(236,185,103,.13); box-shadow:inset 0 0 0 2px var(--mx-stadium-gold)}
+  html[data-game="mxwar"] .mx-st .mx-pl{width:2.5rem; min-width:0; font-size:.875rem}
+  html[data-game="mxwar"] .mx-st__p{min-width:1.75rem; font:700 var(--mx-fs-hud-l)/1 var(--mx-font-hud); color:var(--mx-hud-white)}
+  html[data-game="mxwar"] .mx-st li:first-child .mx-st__p{color:var(--mx-stadium-gold)}
+  html[data-game="mxwar"] .mx-st__v{min-width:2.4em; text-align:right; font:400 1.25rem/1 var(--mx-font-display); color:var(--mx-hud-white)}
+  html[data-game="mxwar"] .mx-st__g{min-width:2.9rem; font:600 var(--mx-fs-hud-s)/1 var(--mx-font-hud); letter-spacing:.04em; text-transform:uppercase; color:var(--mx-secondary-text)}
+  html[data-game="mxwar"] .mx-st .mx-mk{font:700 var(--mx-fs-hud-s)/1.3 var(--mx-font-hud); letter-spacing:.05em; text-transform:uppercase}
+  html[data-game="mxwar"] .mx-st li.is-gap{justify-content:center; padding:.05rem; background:none; box-shadow:none; font:700 var(--mx-fs-hud-s)/1 var(--mx-font-hud); color:var(--mx-secondary-text)}
+  html[data-game="mxwar"] #standList li.is-gap:only-child, html[data-game="mxwar"] #teamList li.is-gap:only-child{justify-content:flex-start; padding:.1rem 0; font:var(--fw-ui) var(--fs-sm)/1.45 var(--font-ui); letter-spacing:0; text-transform:none; text-align:left; white-space:normal}
+  html[data-game="mxwar"] .mx-note{font:var(--fw-ui) var(--fs-xs)/1.45 var(--font-ui); color:var(--mx-secondary-text)}
+  /* TV: inside the safe area; the head in two lines; the calendar one line a round; the panels hug their rows */
+  html[data-tv][data-game="mxwar"] .mx-season{padding:.5rem var(--mx-safe-x) var(--mx-safe-y); grid-template-columns:27rem minmax(0,1fr) minmax(0,1fr); column-gap:2rem; row-gap:1rem}
+  html[data-tv][data-game="mxwar"] .mx-shead{grid-template-columns:auto minmax(0,1fr); align-items:baseline; column-gap:1.5rem; row-gap:.1rem}
+  html[data-tv][data-game="mxwar"] .mx-shead .bg-eyebrow, html[data-tv][data-game="mxwar"] .mx-shead .mx-prog{grid-column:1 / -1}
+  html[data-tv][data-game="mxwar"] .mx-shead p{min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  html[data-tv][data-game="mxwar"] .mx-next{gap:.55rem; padding:.95rem 1.1rem 1rem}
+  html[data-tv][data-game="mxwar"] .mx-next__acts{padding-top:.5rem; padding-bottom:.5rem}
+  html[data-tv][data-game="mxwar"] .mx-next > .bg-btn--ghost{min-height:2.75rem; padding-top:.3rem; padding-bottom:.3rem}
+  html[data-tv][data-game="mxwar"] .mx-next__t{font-size:2.25rem}
+  html[data-tv][data-game="mxwar"] .mx-next__real{font-size:.8125rem}
+  html[data-tv][data-game="mxwar"] .mx-scol--a .mx-panel, html[data-tv][data-game="mxwar"] .mx-scol--b .mx-panel, html[data-tv][data-game="mxwar"] .mx-scol--c .mx-panel{align-self:start; max-height:100%; padding:.8rem 1rem .9rem}
+  html[data-tv][data-game="mxwar"] .mx-panel > h2.bg-eyebrow{margin-bottom:.5rem}
+  html[data-tv][data-game="mxwar"] #teamHead{position:absolute; width:1px; height:1px; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}   /* (TV: the team table's head bar names it, "Team (ours)": its rows get the room) */
+  html[data-tv][data-game="mxwar"] .mx-next__real{line-height:1.38}
+  html[data-tv][data-game="mxwar"] .mx-cal{gap:.3rem}
+  html[data-tv][data-game="mxwar"] .mx-cal li{min-height:1.75rem; padding:.15rem .7rem .15rem .3rem}
+  html[data-tv][data-game="mxwar"] .mx-cal.is-dense{gap:.25rem}
+  html[data-tv][data-game="mxwar"] .mx-cal.is-dense li{min-height:1.375rem; padding-top:.05rem; padding-bottom:.05rem}
+  html[data-tv][data-game="mxwar"] .mx-cal__n{font-size:1.0625rem}
+  html[data-tv][data-game="mxwar"] .mx-cal__c b{font-size:var(--mx-fs-hud-m)}
+  html[data-tv][data-game="mxwar"] .mx-cal__c span{margin-left:.6rem; font-size:var(--mx-fs-hud-s)}
+  html[data-tv][data-game="mxwar"] .mx-cal__w{font-size:var(--mx-fs-hud-s)}
+  html[data-tv][data-game="mxwar"] .mx-st li{padding:.06rem .5rem; font-size:var(--mx-fs-hud-s); line-height:1.15}
+  html[data-tv][data-game="mxwar"] .mx-st .mx-pl{font-size:.75rem; padding-top:.04rem; padding-bottom:.04rem}
+  html[data-tv][data-game="mxwar"] .mx-st__p{font-size:var(--mx-fs-hud-s)}
+  html[data-tv][data-game="mxwar"] .mx-st__v{font-size:1rem}
+  html[data-tv][data-game="mxwar"] .mx-st__g{font-size:.75rem}
+  html[data-tv][data-game="mxwar"] .mx-panel .bg-btn--ghost{margin-top:.6rem}
+  /* the year picker (04's list): the gold head, the years as 04 rows, the chosen year red with a white edge and pale-gold lines; the preview in Barlow */
+  html[data-game="mxwar"] .bg-pk__head .bg-eyebrow, html[data-game="mxwar"] .bg-pk__group{font:700 var(--mx-fs-hud-m)/1.2 var(--mx-font-hud); letter-spacing:.1em; text-transform:uppercase; color:var(--mx-stadium-gold)}
+  html[data-game="mxwar"] .bg-pk__meta, html[data-game="mxwar"] .bg-pk__note{font:600 var(--mx-fs-hud-m)/1.3 var(--mx-font-hud); letter-spacing:.05em; text-transform:uppercase}
+  html[data-game="mxwar"] .bg-pk__note{color:var(--mx-secondary-text)}
+  html[data-game="mxwar"] .bg-pk__opt{gap:.75rem; padding:.7rem .9rem .75rem 1rem; border-radius:var(--mx-r-btn); background:var(--mx-row); box-shadow:none}
+  html[data-game="mxwar"] .bg-pk__opt .bg-sheet__text{display:grid; grid-template-columns:auto auto minmax(0,1fr) auto; align-items:center; column-gap:.75rem; row-gap:.3rem}
+  html[data-game="mxwar"] .bg-pk__opt .bg-sheet__label{grid-area:1 / 1}
+  html[data-game="mxwar"] .bg-pk__opt .bg-pk__tags{grid-area:1 / 2 / 2 / 4}
+  html[data-game="mxwar"] .bg-pk__opt .bg-sheet__detail{grid-area:1 / 4; justify-self:end; margin:0}
+  html[data-game="mxwar"] .bg-pk__opt .bg-sheet__desc{grid-column:1 / -1}
+  @media (min-width: 40em){
+    html[data-game="mxwar"] .bg-pk__opt .bg-sheet__desc{grid-row:2; grid-column:1 / 3; white-space:nowrap}
+    html[data-game="mxwar"] .bg-pk__opt .bg-sheet__desc + .bg-sheet__desc{grid-column:3 / 5; min-width:0; overflow:hidden; text-overflow:ellipsis}
+    html[data-game="mxwar"] .bg-pk__opt .bg-sheet__desc + .bg-sheet__desc::before{content:"\00B7"; margin-right:.55rem; color:var(--mx-row-edge)}
+    html[data-game="mxwar"] .bg-pk__opt.is-best .bg-sheet__desc + .bg-sheet__desc::before{color:var(--mx-gold-pale)}
+  }
+  html[data-game="mxwar"] .bg-pk__opt .bg-sheet__label{font:400 var(--mx-fs-display-s)/1 var(--mx-font-display); letter-spacing:.02em; color:var(--mx-hud-white)}
+  html[data-game="mxwar"] .bg-pk__opt .bg-sheet__desc{font:600 var(--mx-fs-hud-m)/1.25 var(--mx-font-hud); letter-spacing:.05em; text-transform:uppercase; color:var(--mx-secondary-text)}
+  html[data-game="mxwar"] .bg-pk__opt .bg-sheet__detail{font:700 var(--mx-fs-hud-s)/1.2 var(--mx-font-hud); letter-spacing:.08em; text-transform:uppercase; color:var(--mx-stadium-gold); background:transparent; box-shadow:inset 0 0 0 1px rgba(236,185,103,.55)}
+  html[data-game="mxwar"] .bg-pk__opt .bg-tag{font:700 var(--mx-fs-hud-s)/1.25 var(--mx-font-hud); letter-spacing:.08em; text-transform:uppercase}
+  html[data-game="mxwar"] .bg-pk__opt .bg-tag--paper{color:var(--mx-secondary-text); background:transparent; box-shadow:inset 0 0 0 1px var(--mx-row-edge)}
+  html[data-game="mxwar"] .bg-pk__opt .bg-tag--official{color:var(--mx-stadium-gold); background:transparent; box-shadow:inset 0 0 0 1px rgba(236,185,103,.55)}
+  html[data-game="mxwar"] .bg-pk__opt .bg-tag--accent{color:var(--mx-night-black); background:var(--mx-gold-pale); box-shadow:none}
+  html[data-game="mxwar"] .bg-pk__opt.is-peek{background:#2A3039; box-shadow:inset 0 0 0 1.5px rgba(240,241,243,.6)}
+  html[data-game="mxwar"] .bg-pk__opt.is-best{background:var(--mx-red-deep); box-shadow:inset 0 0 0 2px var(--mx-hud-white)}
+  html[data-game="mxwar"] .bg-pk__opt.is-best .bg-sheet__desc{color:var(--mx-gold-pale)}
+  html[data-game="mxwar"] .bg-pk__opt.is-best .bg-sheet__detail, html[data-game="mxwar"] .bg-pk__opt.is-best .bg-tag--paper, html[data-game="mxwar"] .bg-pk__opt.is-best .bg-tag--official{color:var(--mx-gold-pale); box-shadow:inset 0 0 0 1px rgba(252,239,210,.62)}
+  html[data-game="mxwar"] .bg-pk__opt.is-focus, html[data-game="mxwar"] .bg-pk__opt:focus-visible{box-shadow:inset 0 0 0 2px var(--mx-hud-white), var(--focus-ring) !important}
+  html[data-game="mxwar"] .bg-pk__opt.is-best.is-focus, html[data-game="mxwar"] .bg-pk__opt.is-best:focus-visible{box-shadow:inset 0 0 0 2px var(--mx-edge-focus), var(--focus-ring) !important}
+  html[data-game="mxwar"] .bg-pk__opt:active{transform:scale(.985)}
+  html:not([data-tv])[data-game="mxwar"] .bg-pk__big{background:linear-gradient(180deg,#121722,#0E121B); box-shadow:0 1px 0 rgba(236,185,103,.45), 0 .75rem 1rem -.75rem rgba(0,0,0,.85)}
+  @media (orientation: landscape) and (max-height: 600px), (orientation: landscape) and (min-width: 64rem){
+    html:not([data-tv])[data-game="mxwar"] .bg-pk__big{background:none; box-shadow:none}
+  }
+  html[data-game="mxwar"] .mx-pv{background:var(--mx-panel-black)}
+  html[data-game="mxwar"] .mx-pv__s{font:700 1.1em/1.15 var(--mx-font-hud); letter-spacing:.04em; text-transform:uppercase}
+  html[data-game="mxwar"] .mx-pv__c{font:600 1em/1.2 var(--mx-font-hud); letter-spacing:.05em; text-transform:uppercase; color:var(--mx-secondary-text)}
+  html[data-game="mxwar"] .mx-pv__lab{font:700 1em/1.2 var(--mx-font-hud); letter-spacing:.1em; color:var(--mx-stadium-gold)}
+  html[data-game="mxwar"] .mx-pv__city{font:600 1.05em/1.3 var(--mx-font-hud); letter-spacing:.03em; text-transform:uppercase; background:var(--mx-row); border-radius:.3em}
+  html[data-game="mxwar"] .mx-pv__city b{color:var(--mx-stadium-gold); font-weight:700}
+  html[data-game="mxwar"] .mx-pv__more{font:700 1em/1.3 var(--mx-font-hud); letter-spacing:.04em; text-transform:uppercase; color:var(--mx-secondary-text)}
+  html[data-game="mxwar"] .mx-pv__riders li{font:700 1.08em/1.25 var(--mx-font-hud); letter-spacing:.02em}
+  html[data-game="mxwar"] .mx-pv__rk{color:var(--mx-secondary-text)}
+  html[data-game="mxwar"] .mx-pv__riders .mx-mk{font:700 .9em/1.3 var(--mx-font-hud); letter-spacing:.04em; text-transform:uppercase}
+  html[data-game="mxwar"] .mx-pv__load{font:600 1.05em/1.3 var(--mx-font-hud); letter-spacing:.04em; text-transform:uppercase}
 </style>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
@@ -1289,6 +1423,7 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
     <div class="mx-scol mx-scol--b">
       <section class="mx-panel" aria-labelledby="standHead">
         <h2 class="bg-eyebrow" id="standHead">Championship standings</h2>
+        <div class="mx-sthead" id="standHeadRow" aria-hidden="true" hidden><span class="mx-st__p">Pos</span><span class="mx-sthead__pl">#</span><span class="mx-st__n">Rider</span><span class="mx-st__v">Pts</span><span class="mx-st__g"></span></div>
         <ol class="mx-st" id="standList"></ol>
         <button class="bg-btn bg-btn--ghost bg-btn--block" id="fullBtn" type="button">All riders</button>
       </section>
@@ -1296,6 +1431,7 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
     <div class="mx-scol mx-scol--c">
       <section class="mx-panel" aria-labelledby="teamHead">
         <h2 class="bg-eyebrow" id="teamHead">Team standings (ours)</h2>
+        <div class="mx-sthead mx-sthead--team" id="teamHeadRow" aria-hidden="true" hidden><span class="mx-st__p">Pos</span><span class="mx-st__n">Team (ours)</span><span class="mx-st__v">Pts</span><span class="mx-st__g">Wins</span></div>
         <ol class="mx-st" id="teamList"></ol>
         <p class="mx-note" id="teamNote">Each make scores its best finisher's points at every round. Our own table: the series is scored for the riders.</p>
       </section>

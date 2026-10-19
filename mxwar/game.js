@@ -932,11 +932,13 @@ function renderSeason(){
   if(v3state==="off"&&want3D()&&!G.over) setTimeout(function(){ if(v3state==="off"&&want3D()) load3D(); },700);   /* the 3D race loads while the season shows, so the first race opens in 3D */
   else if(use3D()&&!G.over) prepareNext3D();   /* (and its next world is built meanwhile) */
   var si=seasonInfo(G.sid), n=G.cal.length, L=S.standings(G), me=myId(), mine=me?L.filter(function(r){ return r.id===me; })[0]:null;
-  $("seEyebrow").textContent=LONG[G.series]+" · "+G.cls+(G.status&&G.status!=="VERIFIED"?" · partly inferred":"");
+  $("seEyebrow").innerHTML=esc(LONG[G.series]+" · "+G.cls)+(G.status&&G.status!=="VERIFIED"?' <span class="mx-chip mx-schip">Partly inferred</span>':"");
   $("seTitle").textContent=G.year+" season";
   $("seSub").textContent=G.over?"Season over · "+L[0].name+" is the champion"+(mine?" · you finished "+ord(mine.place)+" with "+plural(mine.pts,"point"):""):
     "Round "+(G.ri+1)+" of "+n+(mine&&G.results.length?" · "+(G.humans.length>1?mine.name+" is ":"you are ")+ord(mine.place)+" with "+plural(mine.pts,"point"):" · "+G.roster.length+" real riders"+(G.humans.length?" and "+(G.humans.length>1?G.humans.length+" of you":"you"):""));
-  $("seProg").style.transform="scaleX("+(n?G.ri/n:0).toFixed(3)+")";
+  var pg=$("seProg"), pgTo="scaleX("+(n?G.ri/n:0).toFixed(3)+")";
+  if(pg.style.transform!==pgTo){ var pgFrom=pg.style.transform||"scaleX(0)"; pg.style.transform=pgTo; var Be=BG();
+    if(pg.animate&&!reduced()&&!(Be&&Be.effects&&Be.effects.motion&&Be.effects.motion()!=="full")) try{ pg.animate([{transform:pgFrom},{transform:pgTo}],{duration:420,easing:"cubic-bezier(.2,.8,.2,1)"}); }catch(e){} }   /* (the bar grows once to the round, effects full only) */
   /* the next race */
   var go=$("goBtn"), sim=$("simBtn");
   if(G.over){
@@ -951,26 +953,38 @@ function renderSeason(){
     if(c.venue&&c.city) bits.push(esc(c.venue)); if(c.date) bits.push(esc(fmtDate(c.date)));
     bits.push(esc(plural(nx.len,"lap"))+(nx.lapS?" · about "+Math.max(1,Math.round(nx.len*nx.lapS/60))+" min ("+esc(lapWords(nx.lapS))+" a lap)":""));
     if(nx.n) bits.push(nx.n+" riders");
-    $("nextSub").innerHTML=bits.join(" · ")+"<br>"+realLine(nx)+(nx.newRound?"<br><b>Tonight:</b> "+esc(progWords(F))+".":"")+(!nx.humanIn&&G.humans.length?"<br><b>You're not in this race.</b>":"");
+    $("nextSub").innerHTML='<span class="mx-next__facts">'+bits.join(" · ")+'</span><span class="mx-next__real">'+realLine(nx)+(nx.newRound?"<br><b>Tonight:</b> "+esc(progWords(F))+".":"")+(!nx.humanIn&&G.humans.length?"<br><b>You're not in this race.</b>":"")+"</span>";
     $("timesBtn").hidden=false;
     var final=nx.kind==="main"||nx.kind==="moto";
     ui.goSim=!nx.humanIn&&!final&&cfg.others==="sim"&&G.humans.length>0;
     setBtn(go,ui.goSim?"Sim to results":nx.humanIn||final?"To the gate":"Watch",ui.goSim?"":"play");
     sim.hidden=nx.humanIn||ui.goSim;   /* mxlaps: any race you are not in (the Main too) can be simmed */
   }
-  /* the calendar */
+  /* the calendar (04_TRACK_SELECT's list): the next round is the selected row (red, a white edge, a NEXT tag), a round raced shows its winner with a check */
+  $("calList").classList.toggle("is-dense",G.cal.length>12);
   $("calList").innerHTML=G.cal.map(function(c,i){
     var done=i<G.ri, nxt=i===G.ri&&!G.over, res=G.results.filter(function(r){ return r.ri===i; })[0], w=res?G.riders[res.winner]:null;
     return '<li class="'+(done?"is-done":"")+(nxt?" is-next":"")+'"><span class="mx-cal__n">'+(i+1)+'</span><span class="mx-cal__c"><b>'+esc(c.city||c.venue)+"</b><span>"+esc([c.venue&&c.city?c.venue:"",fmtDate(c.date)].filter(Boolean).join(" · "))+"</span></span>"+
-      '<span class="mx-cal__w">'+(w?esc(w.name):nxt?"Next":c.title?"":"exhibition")+"</span></li>";
+      '<span class="mx-cal__w">'+(w?'<i class="mx-cal__ck" aria-hidden="true"></i>'+esc(w.name):nxt?'<em class="mx-cal__next">Next</em>':c.title?"":"exhibition")+"</span></li>";
   }).join("");
   var none=!G.results.length;
   $("standList").innerHTML=none?'<li class="is-gap">The points start after round 1. The real top riders of '+G.year+': '+esc(realTop(4))+'.</li>':standRows(L,onTV()?20:10);
+  $("standHeadRow").hidden=none;
   $("fullBtn").hidden=none||L.length<=(onTV()?20:10);
   var T=teamTable();
   $("teamList").innerHTML=T.length?T.slice(0,onTV()?10:8).map(function(r){ return '<li><span class="mx-st__p">'+r.place+'</span><span class="mx-mk" style="'+A.mkStyle(r.make)+'">'+esc(r.make)+'</span><span class="mx-st__n"></span><span class="mx-st__v">'+r.pts+'</span><span class="mx-st__g">'+(r.wins?plural(r.wins,"win"):"")+"</span></li>"; }).join(""):
     '<li class="is-gap">After the first round</li>';
+  $("teamHeadRow").hidden=!T.length;
   barTitle();
+  fitRows("standList",3); fitRows("teamList",1,"teamNote");
+}
+/* TV: the season screen is one screen tall, so a table shows the whole rows its panel holds: the tail of the table above the "..." goes first (the person's
+   own rows under it always stay); "All riders" keeps the full table */
+function fitRows(id,min,note){
+  var l=$(id), p=l&&l.closest(".mx-panel"), nt=note?$(note):null; if(!p||!onTV()) return;
+  var li=[].slice.call(l.children), gap=-1; li.forEach(function(x,i){ x.hidden=false; if(gap<0&&i>0&&x.classList.contains("is-gap")) gap=i; });
+  if(nt){ nt.hidden=false; if(p.scrollHeight>p.clientHeight+1) nt.hidden=true; }   /* (the table's note goes before its rows) */
+  for(var end=gap>0?gap-1:li.length-1;end>=min&&p.scrollHeight>p.clientHeight+1;end--) li[end].hidden=true;
 }
 function realTop(k){ return G.roster.map(function(id){ return G.riders[id]; }).filter(function(R){ return R.pos!=null; }).sort(function(a,b){ return a.pos-b.pos; }).slice(0,k).map(function(R){ return R.name; }).join(", "); }
 function setBtn(b,text,ic){ b.innerHTML=(ic?icon(ic):"")+esc(text); }

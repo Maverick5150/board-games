@@ -427,6 +427,81 @@
     Q + ".mxp-ssec .mxp-year.is-focus," + Q + ".mxp-ssec .mxp-year:focus-visible{box-shadow:inset 0 0 0 2px var(--mx-hud-white),var(--focus-ring) !important}",
     Q + ".mxp-ssec .mxp-ythumb{box-shadow:inset 0 0 0 1px rgba(240,241,243,.45)}",
     Q + ".mxp-ssec .mxp-ythumb b{font:400 var(--mx-fs-display-s)/1 var(--mx-font-display);color:#FFFFFF;letter-spacing:.02em}",
+    /* THE MXWAR SKIN, step 4 (04_TRACK_SELECT, as mxwar/index.html): the "season" panel's calendar as 04 rows (round 1 the selected row: red-deep, a white edge, pale-gold
+       lines, a NEXT tag), the "season standings" panel 07-lite (a red head bar over each column, zebra rows, the phones' rows ringed gold, the points in Anton); while the
+       panel's real auto-advance timer runs, its primary shows the time left as 00:19 in Anton; the lobby's year picker as the page's (the years as 04 rows) */
+    Q + "#mxpPanel[data-kind=season] .mxp-res{row-gap:.3rem}",
+    Q + "#mxpPanel[data-kind=season] .mxp-res li{gap:.6rem;padding:0 .8rem 0 .35rem;border-radius:var(--mx-r-btn);background:var(--mx-row);font:600 var(--mx-fs-hud-s)/1 var(--mx-font-hud);letter-spacing:.05em;text-transform:uppercase;color:var(--mx-secondary-text)}",
+    Q + "#mxpPanel[data-kind=season] .mxp-rp{min-width:2rem;font:400 1.125rem/1 var(--mx-font-display);color:var(--mx-hud-white)}",
+    Q + "#mxpPanel[data-kind=season] .mxp-rn b{margin-right:.6rem;font:700 var(--mx-fs-hud-m)/1 var(--mx-font-hud);letter-spacing:.04em;color:var(--mx-hud-white)}",
+    Q + "#mxpPanel[data-kind=season] .mxp-rx{font:700 var(--mx-fs-hud-s)/1 var(--mx-font-hud);letter-spacing:.05em;color:var(--mx-secondary-text)}",
+    Q + "#mxpPanel[data-kind=season] .mxp-res li.is-next{background:var(--mx-red-deep);box-shadow:inset 0 0 0 2px var(--mx-hud-white);color:var(--mx-gold-pale)}",
+    Q + "#mxpPanel[data-kind=season] .mxp-res li.is-next .mxp-rp," + Q + "#mxpPanel[data-kind=season] .mxp-res li.is-next .mxp-rn b{color:#FFFFFF}",
+    Q + "#mxpPanel[data-kind=season] .mxp-res li.is-next .mxp-rx{color:var(--mx-gold-pale)}",
+    Q + ".mxp-next{display:inline-block;margin-right:.6rem;padding:.2em .55em .16em;border-radius:.25rem;font:700 .8125rem/1 var(--mx-font-hud);font-style:normal;letter-spacing:.12em;text-transform:uppercase;color:var(--mx-night-black);background:var(--mx-gold-pale)}",
+    Q + ".mxp-sthead{display:grid;grid-template-columns:repeat(var(--cols,1),minmax(0,1fr));column-gap:1.25rem;margin:0 0 .3rem}",
+    Q + ".mxp-sthead > div{display:flex;align-items:center;gap:.45rem;height:1.6rem;padding:0 .5rem 0 .3rem;border-radius:.375rem;background:var(--mx-red-head);font:700 var(--mx-fs-hud-s)/1 var(--mx-font-hud);letter-spacing:.1em;text-transform:uppercase;color:#FFFFFF}",
+    Q + ".mxp-sthead[data-cols='1'] > div:nth-child(n+2)," + Q + ".mxp-sthead[data-cols='2'] > div:nth-child(n+3)," + Q + ".mxp-sthead[data-cols='3'] > div:nth-child(n+4){display:none}",
+    Q + ".mxp-sthead .mxp-rp{font:inherit;color:inherit}",
+    Q + ".mxp-sthead .mxp-hpl{flex:none;width:2.6rem;text-align:center}",
+    Q + ".mxp-sthead .mxp-rn{flex:1 1 auto;min-width:0}",
+    Q + ".mxp-sthead .mxp-rx{flex:none;padding-right:2.8rem;color:inherit}",
+    Q + "#mxpPanel[data-kind=standings] .mxp-res{row-gap:0}",
+    Q + "#mxpPanel[data-kind=standings] .mxp-res li{border-radius:.3rem;background:transparent;font:700 var(--mx-fs-hud-m)/1 var(--mx-font-hud);letter-spacing:.02em}",
+    Q + "#mxpPanel[data-kind=standings] .mxp-res li:nth-child(odd){background:var(--mx-row)}",
+    Q + "#mxpPanel[data-kind=standings] .mxp-res li.is-me{background:rgba(236,185,103,.13);box-shadow:inset .3rem 0 0 var(--seat,#e7ca90),inset 0 0 0 2px var(--mx-stadium-gold)}",
+    Q + "#mxpPanel[data-kind=standings] .mxp-res li.is-sep{background:none;box-shadow:none}",
+    Q + "#mxpPanel[data-kind=standings] .mxp-rp{font:700 var(--mx-fs-hud-m)/1 var(--mx-font-hud);color:var(--mx-hud-white)}",
+    Q + "#mxpPanel[data-kind=standings] .mxp-res li:first-child .mxp-rp{color:var(--mx-stadium-gold)}",
+    Q + "#mxpPanel[data-kind=standings] .mx-pl{width:2.6rem;min-width:0}",
+    Q + "#mxpPanel[data-kind=standings] .mxp-rx{display:flex;align-items:baseline;gap:.4rem;color:var(--mx-secondary-text)}",
+    Q + "#mxpPanel[data-kind=standings] .mxp-rx b{font:400 1.125rem/1 var(--mx-font-display);color:var(--mx-hud-white)}",
+    Q + "#mxpPanel .mxp-res.is-tight li," + Q + "#mxpPanel .mxp-res.is-tight .mxp-rp{font-size:var(--mx-fs-hud-s)}",
+    Q + "#mxpPanel .mxp-res.is-tight .mx-pl{font-size:.75rem;padding-top:0;padding-bottom:0}",
+    Q + "#mxpPanel .mxp-res.is-tight .mxp-rx b{font-size:1rem}",
+    Q + "#mxpPanel[data-kind=standings] .mxp-rx i{min-width:2.4rem;font:600 .8125rem/1 var(--mx-font-hud);font-style:normal;letter-spacing:.04em;text-align:right;text-transform:uppercase}",
+    Q + ".mxp-acts .bg-btn--primary.is-cd{display:inline-grid;grid-template-columns:minmax(0,auto) auto;align-items:center;justify-items:start;column-gap:1.5rem;row-gap:.15rem;padding-right:1.4rem;text-align:left}",
+    Q + ".mxp-acts .bg-btn--primary.is-cd small{grid-column:1;grid-row:2}",
+    Q + ".mxp-cd{grid-column:2;grid-row:1 / span 2;font:400 2.25rem/1 var(--mx-font-display);letter-spacing:.04em;color:#FFFFFF;font-variant-numeric:tabular-nums}",
+    Q + ".mxp-cds{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}",
+    Q + "#bgPicker{" + REMAP + ";background:linear-gradient(180deg,#121722,#0B0F17 60%);box-shadow:inset 0 1px 0 rgba(236,185,103,.35),var(--elev-3)}",
+    Q + "#bgPicker .bg-sheet__title{font:400 var(--mx-fs-display-m)/1.05 var(--mx-font-display);letter-spacing:.01em;text-transform:uppercase}",
+    Q + ".bg-pk__head .bg-eyebrow," + Q + ".bg-pk__group{font:700 var(--mx-fs-hud-m)/1.2 var(--mx-font-hud);letter-spacing:.1em;text-transform:uppercase;color:var(--mx-stadium-gold)}",
+    Q + ".bg-pk__name{font:400 var(--mx-fs-display-s)/1.1 var(--mx-font-display);letter-spacing:.01em}",
+    Q + ".bg-pk__meta," + Q + ".bg-pk__note{font:600 var(--mx-fs-hud-m)/1.3 var(--mx-font-hud);letter-spacing:.05em;text-transform:uppercase}",
+    Q + ".bg-pk__note{color:var(--mx-secondary-text)}",
+    Q + ".bg-pk__opt{gap:.75rem;padding:.7rem .9rem .75rem 1rem;border-radius:var(--mx-r-btn);background:var(--mx-row);box-shadow:none}",
+    Q + ".bg-pk__opt .bg-sheet__text{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;align-items:center;column-gap:.75rem;row-gap:.3rem}",
+    Q + ".bg-pk__opt .bg-sheet__label{grid-area:1 / 1;font:400 var(--mx-fs-display-s)/1 var(--mx-font-display);letter-spacing:.02em;color:var(--mx-hud-white)}",
+    Q + ".bg-pk__opt .bg-pk__tags{grid-area:1 / 2 / 2 / 4}",
+    Q + ".bg-pk__opt .bg-sheet__detail{grid-area:1 / 4;justify-self:end;margin:0;font:700 var(--mx-fs-hud-s)/1.2 var(--mx-font-hud);letter-spacing:.08em;text-transform:uppercase;color:var(--mx-stadium-gold);background:transparent;box-shadow:inset 0 0 0 1px rgba(236,185,103,.55)}",
+    Q + ".bg-pk__opt .bg-sheet__desc{grid-row:2;grid-column:1 / 3;white-space:nowrap;font:600 var(--mx-fs-hud-m)/1.25 var(--mx-font-hud);letter-spacing:.05em;text-transform:uppercase;color:var(--mx-secondary-text)}",
+    Q + ".bg-pk__opt .bg-sheet__desc + .bg-sheet__desc{grid-column:3 / 5;min-width:0;overflow:hidden;text-overflow:ellipsis}",
+    Q + ".bg-pk__opt .bg-sheet__desc + .bg-sheet__desc::before{content:'\\00B7';margin-right:.55rem;color:var(--mx-row-edge)}",
+    Q + ".bg-pk__opt .bg-tag{font:700 var(--mx-fs-hud-s)/1.25 var(--mx-font-hud);letter-spacing:.08em;text-transform:uppercase}",
+    Q + ".bg-pk__opt .bg-tag--paper{color:var(--mx-secondary-text);background:transparent;box-shadow:inset 0 0 0 1px var(--mx-row-edge)}",
+    Q + ".bg-pk__opt .bg-tag--official{color:var(--mx-stadium-gold);background:transparent;box-shadow:inset 0 0 0 1px rgba(236,185,103,.55)}",
+    Q + ".bg-pk__opt .bg-tag--accent{color:var(--mx-night-black);background:var(--mx-gold-pale);box-shadow:none}",
+    Q + ".bg-pk__opt.is-peek{background:#2A3039;box-shadow:inset 0 0 0 1.5px rgba(240,241,243,.6)}",
+    Q + ".bg-pk__opt.is-best{background:var(--mx-red-deep);box-shadow:inset 0 0 0 2px var(--mx-hud-white)}",
+    Q + ".bg-pk__opt.is-best .bg-sheet__desc{color:var(--mx-gold-pale)}",
+    Q + ".bg-pk__opt.is-best .bg-sheet__desc + .bg-sheet__desc::before{color:var(--mx-gold-pale)}",
+    Q + ".bg-pk__opt.is-best .bg-sheet__detail," + Q + ".bg-pk__opt.is-best .bg-tag--paper," + Q + ".bg-pk__opt.is-best .bg-tag--official{color:var(--mx-gold-pale);box-shadow:inset 0 0 0 1px rgba(252,239,210,.62)}",
+    Q + ".bg-pk__opt.is-focus," + Q + ".bg-pk__opt:focus-visible{box-shadow:inset 0 0 0 2px var(--mx-hud-white),var(--focus-ring) !important}",
+    Q + ".bg-pk__opt.is-best.is-focus," + Q + ".bg-pk__opt.is-best:focus-visible{box-shadow:inset 0 0 0 2px var(--mx-edge-focus),var(--focus-ring) !important}",
+    Q + ".bg-pk__opt:active{transform:scale(.985)}",
+    Q + ".mx-pv{background:var(--mx-panel-black)}",
+    Q + ".mx-pv__y{font-family:var(--mx-font-display)}",
+    Q + ".mx-pv__s{font:700 1.1em/1.15 var(--mx-font-hud);letter-spacing:.04em;text-transform:uppercase}",
+    Q + ".mx-pv__c{font:600 1em/1.2 var(--mx-font-hud);letter-spacing:.05em;text-transform:uppercase;color:var(--mx-secondary-text)}",
+    Q + ".mx-pv__lab{font:700 1em/1.2 var(--mx-font-hud);letter-spacing:.1em;color:var(--mx-stadium-gold)}",
+    Q + ".mx-pv__city{font:600 1.05em/1.3 var(--mx-font-hud);letter-spacing:.03em;text-transform:uppercase;background:var(--mx-row);border-radius:.3em}",
+    Q + ".mx-pv__city b{color:var(--mx-stadium-gold);font-weight:700}",
+    Q + ".mx-pv__more{font:700 1em/1.3 var(--mx-font-hud);letter-spacing:.04em;text-transform:uppercase;color:var(--mx-secondary-text)}",
+    Q + ".mx-pv__riders li{font:700 1.08em/1.25 var(--mx-font-hud);letter-spacing:.02em}",
+    Q + ".mx-pv__rk{color:var(--mx-secondary-text)}",
+    Q + ".mx-pv__riders .mx-mk{font:700 .9em/1.3 var(--mx-font-hud);letter-spacing:.04em;text-transform:uppercase}",
+    Q + ".mx-pv__load{font:600 1.05em/1.3 var(--mx-font-hud);letter-spacing:.04em;text-transform:uppercase}",
     /* reduced effects: nothing moves */
     'html[data-effects="reduced"] ' + Q + ".mxp *{animation:none !important;transition:none !important}"
   ].join("\n");
@@ -1455,7 +1530,7 @@
       }, 1500);
     }
     function hidePanel() { stopCountdown(); var p = $("mxpPanel"); if (p) { p.hidden = true; p.innerHTML = ""; } if ($("mxp")) $("mxp").classList.remove("is-panel"); panelRes = null; }
-    function stopCountdown() { if (!panelT) return; clearInterval(panelT); panelT = 0; var b = $("mxpPanel") && $("mxpPanel").querySelector("[data-cd]"); if (b) { var s = b.querySelector("small"); if (s) s.textContent = b.getAttribute("data-sub") || ""; } }
+    function stopCountdown() { if (!panelT) return; clearInterval(panelT); panelT = 0; var b = $("mxpPanel") && $("mxpPanel").querySelector("[data-cd]"); if (b) { var s = b.querySelector("small"); if (s) s.textContent = b.getAttribute("data-sub") || ""; var cd = b.querySelector(".mxp-cd"); if (cd) cd.remove(); b.classList.remove("is-cd"); } }
     function panel(o) {
       stopCountdown();
       /* [bcast] */ bcPanel(o.kind); /* [/bcast] */
@@ -1476,7 +1551,12 @@
         var first = p.querySelector("[data-pb]"); setTimeout(function () { if (first && first.isConnected) setFocus(first); }, 60);
         if (o.countdown && first && !reduced()) {
           var left = Math.max(5, Math.round(dl(o.countdown) / 1000));
-          var tick = function () { var sm = first.querySelector("small"); if (sm) sm.textContent = (first.getAttribute("data-sub") ? first.getAttribute("data-sub") + " · " : "") + "in " + left + " s"; };
+          var tick = function () {
+            var sm = first.querySelector("small"), sub = first.getAttribute("data-sub") || "";
+            if (sm) sm.innerHTML = esc(sub) + '<span class="mxp-cds">' + (sub ? " · " : "") + "in " + left + " s</span>";
+            var cd = first.querySelector(".mxp-cd"); if (!cd) { cd = document.createElement("b"); cd.className = "mxp-cd"; cd.setAttribute("aria-hidden", "true"); first.appendChild(cd); first.classList.add("is-cd"); }
+            var m = Math.floor(left / 60), sec = left % 60; cd.textContent = (m < 10 ? "0" : "") + m + ":" + (sec < 10 ? "0" : "") + sec;   /* (05's countdown look, on the panel's real timer) */
+          };
           tick();
           panelT = setInterval(function () { if (!H.live() || panelRes !== res) { stopCountdown(); return; } if (document.hidden) return; left--; tick(); if (left <= 0) { stopCountdown(); first.click(); } }, 1000);
         } else if (o.countdown && first) {
@@ -1490,12 +1570,16 @@
       if (body.querySelector("[data-lu]")) { fitLineup(); return; }
       Array.prototype.forEach.call(body.querySelectorAll(".mxp-res"), function (ol) {
         var rowsN = ol.children.length; if (!rowsN) return;
-        var room = (ol.getAttribute("data-room") ? +ol.getAttribute("data-room") * body.clientHeight : body.clientHeight) - 2;
+        var hd = ol.previousElementSibling && ol.previousElementSibling.classList.contains("mxp-sthead") ? ol.previousElementSibling : null;
+        var room = (ol.getAttribute("data-room") ? +ol.getAttribute("data-room") * body.clientHeight : body.clientHeight) - 2 - (hd ? hd.offsetHeight + rem * .3 : 0);
         var maxCols = +(ol.getAttribute("data-cols") || 3), rh = rem * 1.7, cols = 1;
         while (cols < maxCols && Math.ceil(rowsN / cols) * (rh + rem * .2) > room) cols++;
         var per = Math.ceil(rowsN / cols);
-        rh = clamp(Math.floor((room - (per - 1) * rem * .2) / per), Math.round(rem * 1.25), Math.round(rem * 2));
+        var tight = maxCols >= 4;   /* (a four-column table, the season standings: its rows may go a little lower so every row it lists shows whole) */
+        rh = clamp(Math.floor((room - (per - 1) * rem * .2) / per), Math.round(rem * (tight ? .95 : 1.25)), Math.round(rem * 2));
+        ol.classList.toggle("is-tight", rh < rem * 1.25);
         ol.style.setProperty("--cols", String(cols)); ol.style.setProperty("--rows", String(per)); ol.style.setProperty("--rh", rh + "px");
+        if (hd) { hd.style.setProperty("--cols", String(cols)); hd.setAttribute("data-cols", String(cols)); }
       });
       /* mxfix1: on the results and the podium a name its row would cut takes the condensed face first, then the first name as an initial ("A. Pocorobba Jr.",
          the whole name in the title), as the phone game's fitCond does; one that still does not fit keeps its ellipsis */
@@ -1609,11 +1693,12 @@
     }
     async function standingsPanel(withNext) {
       var L = S.standings(G), top = L.length ? L[0].pts : 0, nxt = withNext ? nextRace() : null;
-      var rowsX = capRows(L.map(function (r) { return r.id; }), 48).map(function (x) { if (x.sep) return '<li class="is-sep" aria-hidden="true">...</li>'; var r = L[x.p - 1]; return resLi(r.id, r.place, '<span class="mxp-rx">' + r.pts + (r.place > 1 ? " · -" + (top - r.pts) : " pts") + "</span>"); }).join("");
+      var rowsX = capRows(L.map(function (r) { return r.id; }), 48).map(function (x) { if (x.sep) return '<li class="is-sep" aria-hidden="true">...</li>'; var r = L[x.p - 1]; return resLi(r.id, r.place, '<span class="mxp-rx"><b>' + r.pts + "</b> <i>" + (r.place > 1 ? "-" + (top - r.pts) : "pts") + "</i></span>"); }).join("");
+      var hcell = '<div><span class="mxp-rp">Pos</span><span class="mxp-hpl">#</span><span class="mxp-rn">Rider</span><span class="mxp-rx">Pts</span></div>';
       var btns = nxt ? nxt.buttons.slice() : [{ id: "back", label: "Back to the results" }];
       var info = { kind: "standings", title: "Season standings", next: nxt ? (nxt.nx.round.city || nxt.nx.round.venue) + " · " + nxt.nx.label : "" };
       return panel({ kind: "standings", eyebrow: G.year + " " + LONG[G.series] + " · " + G.cls, title: "Season standings", sub: esc("After " + plural(G.results.length, "round") + " of " + G.cal.length + (L.length && L[0].pts > 0 ? " · the red plate: " + L[0].name : "")),
-        body: '<ol class="mxp-res" aria-label="Season standings">' + rowsX + "</ol>", buttons: btns, countdown: nxt ? 20000 : 0, info: info });
+        body: '<div class="mxp-sthead" aria-hidden="true" data-cols="1">' + hcell + hcell + hcell + hcell + '</div><ol class="mxp-res" data-cols="4" aria-label="Season standings">' + rowsX + "</ol>", buttons: btns, countdown: nxt ? 20000 : 0, info: info });   /* (up to four columns: every rider of a 40-rider gate shows) */
     }
     /* a race in real life, one line (the phone game's realLine, short): its laps, the winner, the winning time */
     function realBit(nx) {
@@ -1785,7 +1870,7 @@
             var nx0 = nextRace(), cl = G.cal;
             ch = await panel({ kind: "season", eyebrow: G.year + " " + LONG[G.series] + " · " + G.cls, title: plural(cl.length, "round") + ", " + G.roster.length + " real riders",
               sub: esc("Round 1: " + (cl[0].city || cl[0].venue) + (cl[0].date ? ", " + fmtDate(cl[0].date) : "") + ". Tonight: " + progWords(G.round.F) + "."),
-              body: '<ol class="mxp-res" aria-label="The calendar">' + cl.map(function (c, i) { return '<li><span class="mxp-rp">' + (i + 1) + '</span><span class="mxp-rn">' + esc((c.city || c.venue) + (c.venue && c.city ? " · " + c.venue : "")) + '</span><span class="mxp-rx">' + esc(c.date ? fmtDate(c.date) : "") + (c.title ? "" : " · no points") + "</span></li>"; }).join("") + "</ol>",
+              body: '<ol class="mxp-res" aria-label="The calendar">' + cl.map(function (c, i) { return '<li' + (i === 0 ? ' class="is-next"' : "") + '><span class="mxp-rp">' + (i + 1) + '</span><span class="mxp-rn"><b>' + esc(c.city || c.venue) + "</b>" + esc(c.venue && c.city ? c.venue : "") + '</span><span class="mxp-rx">' + (i === 0 ? '<em class="mxp-next">Next</em>' : "") + esc(c.date ? fmtDate(c.date) : "") + (c.title ? "" : " · no points") + "</span></li>"; }).join("") + "</ol>",
               buttons: nx0.buttons, countdown: 20000, info: { kind: "season", title: G.year + " " + SHORTS[G.series], next: (cl[0].city || cl[0].venue) + " · " + nx0.nx.label } });
           } else ch = await standingsPanel(true);
         }
