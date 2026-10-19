@@ -180,6 +180,10 @@
       /* the controller's frame (10_PHONE_CONTROLLER_SKIN): the brand strip on night with the war-red stripe, the art band (our own render) away from a race, the info
          card over its foot (a white edge, the gold line, the plate, the Anton title), Watch the TV; the scene behind the controller turns night while it shows */
       "html:has(.mxph) body.bg-app::before{background:radial-gradient(80% 45% at 50% 0%,rgba(247,45,46,.14),rgba(0,0,0,0) 75%),linear-gradient(180deg,#170C0D 0%,#170C0D 10%,#090C12 70%)}",
+      /* the stage behind it changes colour as on the game's own page: the accent orb turns war red, the violet orb and beams rest unseen */
+      "html:has(.mxph) .bg-ambient{--accent-glow:rgba(247,45,46,.22)}",
+      "html:has(.mxph) .bg-ambient .is-violet,html:has(.mxph) .bg-orbs--stage>i:nth-child(3){opacity:0 !important}",
+      ".mxph{margin:0 auto auto}",   /* (the shell centres short screens; the controller keeps its brand strip at the top, as the pack's) */
       Q + ".mxph-brand{position:relative;display:flex;align-items:center;justify-content:center;margin:0 calc(50% - 50vw);padding:.7rem 1rem .6rem;background:var(--mx-night-black)}",
       Q + ".mxph-brand::before{content:'';position:absolute;left:0;right:0;top:0;height:3px;background:var(--mx-war-red)}",
       Q + ".mxph-brand img{display:block;width:auto;height:1.5rem}",
