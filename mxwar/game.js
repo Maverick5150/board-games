@@ -1133,7 +1133,7 @@ function drawChip(){
    side and above, 1.15 m below); null when he is out of the picture or the camera rides on him */
 function riderBox(s){
   if(!V3||!V3.proj||s<0) return null; var p=null; try{ p=V3.proj(s); }catch(e){ p=null; } if(!p||!p.in||p.d<3) return null;
-  var cv=$("v3"), r=cv.getBoundingClientRect(); if(!r.width||!r.height) return null;
+  var cv=$("v3").querySelector("canvas")||$("v3"), r=cv.getBoundingClientRect(); if(!r.width||!r.height) return null;   /* (the picture itself: the projection maps to the canvas, which can lag its box by a resize) */
   var fov=50; try{ var ci=V3.camInfo?V3.camInfo():null; if(ci&&ci.fov>0) fov=ci.fov; }catch(e){}
   var m=r.height/(2*p.d*Math.tan(fov*Math.PI/360)), x=r.left+(p.x+1)/2*r.width, y=r.top+(1-p.y)/2*r.height;
   return {l:x-m,r:x+m,t:y-m,b:y+m*1.15};
@@ -1146,7 +1146,7 @@ function pipAvoid(){
   var tb=$("table"); if(avoidIn) return; if(!restable()||pipBig()||document.hidden){ tb.classList.remove("is-shy"); return; }
   var box=riderBox(focusHuman()), op=tb.offsetParent; if(!box||!op){ tb.classList.remove("is-shy"); return; }
   var pr=op.getBoundingClientRect(), W=tb.offsetWidth, H=tb.offsetHeight, x0=pr.left+op.clientLeft+tb.offsetLeft, y0=pr.top+op.clientTop+tb.offsetTop;
-  var left=tb.classList.contains("is-left"), rem=remPx(), r=$("v3").getBoundingClientRect(), mg=rem*.4;
+  var left=tb.classList.contains("is-left"), rem=remPx(), r=$("v3").getBoundingClientRect(), mg=rem*.75;
   function hit(a){ return Math.min(box.r+mg,a.r)-Math.max(box.l-mg,a.l)>0&&Math.min(box.b+mg,a.b)-Math.max(box.t-mg,a.t)>0; }
   var here={l:x0,r:x0+W,t:y0,b:y0+H}, ox=left?r.right-rem*.5-W:r.left+rem*.5, oy=left?r.top+rem*.5:r.top+rem*3.65, there={l:ox,r:ox+W,t:oy,b:oy+H};
   if(!hit(here)){ tb.classList.remove("is-shy"); return; }
