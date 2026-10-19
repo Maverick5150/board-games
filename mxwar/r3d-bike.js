@@ -168,7 +168,7 @@ function bikeMaterial(lo,D,U){
     sh.vertexShader=sh.vertexShader
       .replace("#include <project_vertex>","#include <project_vertex>"+KEEP_VS_SET)
       .replace("#include <common>","#include <common>\n"+KEEP_VS_DECL+"attribute vec4 aMat;\nuniform vec4 uBkC["+NBK+"];\nuniform vec4 uBkA["+NBK+"];\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec4 vMud;\nvarying vec3 vLoc;\nvarying vec3 vNl;")
-      .replace("#include <color_vertex>","#include <color_vertex>\n{ int bi=int(instanceColor.r); vec4 kc=uBkC[bi], ka=uBkA[bi]; float sty=mod(kc.w,8.0), red=step(7.5,kc.w);\n  float wl=step(31.5,aMat.z); float rr=aMat.z-32.0*wl; float kd=floor((rr+0.5)/4.0); float tn=rr-4.0*kd; vec3 fc=sty>0.5&&sty<1.5?vec3(0.86):(sty>1.5&&sty<2.5?ka.rgb:kc.rgb); vec3 tint=tn<0.5?vec3(1.0):(tn<1.5?kc.rgb:(tn<2.5?ka.rgb:fc)); vColor.rgb=color.rgb*tint;\n  vAcc=ka.rgb; vMud=vec4(instanceColor.b,sty,instanceColor.g,float(bi)+0.5*red); }\nvMat=aMat; vLoc=position; vNl=normal;");
+      .replace("#include <color_vertex>","#include <color_vertex>\n{ int bi=int(instanceColor.r); vec4 kc=uBkC[bi], ka=uBkA[bi]; float sty=mod(kc.w,8.0), red=step(7.5,kc.w);\n  float wl=step(31.5,aMat.z); float rr=aMat.z-32.0*wl; float kd=floor((rr+0.5)/4.0); float tn=rr-4.0*kd; vec3 fc=sty>0.5&&sty<1.5?vec3(0.62):(sty>1.5&&sty<2.5?ka.rgb:kc.rgb); vec3 tint=tn<0.5?vec3(1.0):(tn<1.5?kc.rgb:(tn<2.5?ka.rgb:fc)); vColor.rgb=color.rgb*tint;\n  vAcc=ka.rgb; vMud=vec4(instanceColor.b,sty,instanceColor.g,float(bi)+0.5*red); }\nvMat=aMat; vLoc=position; vNl=normal;");
     let fs=sh.fragmentShader.replace("#include <common>","#include <common>\n"+KEEP_FS_DECL+"uniform sampler2D uLiv;\nuniform sampler2D uDec;\nuniform vec4 uDecG;\nuniform vec3 uMudCol;\nuniform sampler2D uMudT;\nuniform vec3 uPlBg;\nuniform vec3 uPlFg;\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec4 vMud;\nvarying vec3 vLoc;\nvarying vec3 vNl;\n"+GLSL_LIB);
     const f=n=>n.toFixed(4);
     fs=fs.replace("#include <color_fragment>",[
@@ -184,8 +184,8 @@ function bikeMaterial(lo,D,U){
       "float bkLk=(bkTn>0.5&&bkTn<1.5&&bkK<0.5)?1.0:(bkTop>0.5?0.85:0.0);",
       "vec3 b0=diffuseColor.rgb; float sty=vMud.y;",
       "if(bkLk>0.0){ vec3 S=b0*0.42+0.004; b0=mix(b0,S,bkPat(bkPP,sty,bkFW)*bkL.a*0.85*bkLk);",
-      "  vec3 cA=vAcc, cB=vec3(0.010), cC=vec3(0.80);",
-      "  if(sty>0.5&&sty<1.5){ cA=vec3(0.010); cB=vAcc; } else if(sty>1.5&&sty<2.5){ cA=vec3(0.80); cC=vAcc; } else if(sty>2.5){ cA=vAcc; cB=vec3(0.80); cC=vec3(0.010); }",
+      "  vec3 cA=vAcc, cB=vec3(0.010), cC=vec3(0.60);",
+      "  if(sty>0.5&&sty<1.5){ cA=vec3(0.010); cB=vAcc; } else if(sty>1.5&&sty<2.5){ cA=vec3(0.60); cC=vAcc; } else if(sty>2.5){ cA=vAcc; cB=vec3(0.60); cC=vec3(0.010); }",
       "  b0=mix(b0,cA,bkL.r*bkLk); b0=mix(b0,cB,bkL.g*bkLk); b0=mix(b0,cC,bkL.b*bkLk); }",
       /* the side-panel number: the rider's cell projected on both panels */
       "vec2 bkDu=vec2((vLoc.x-("+f(DEC.x0)+"))/"+f(DEC.w)+",(vLoc.y-"+f(DEC.y0)+")/"+f(DEC.h)+");",
@@ -226,7 +226,14 @@ function bikeMaterial(lo,D,U){
            .replace("#include <metalnessmap_fragment>","float metalnessFactor=vMat.x*(1.0-mudK);");
       if(phys) fs=fs.replace("#include <lights_physical_fragment>","#include <lights_physical_fragment>\nmaterial.clearcoat*=bkPl*(1.0-mudK);");
       fs=fs.replace("#include <lights_fragment_maps>",THREE.ShaderChunk.lights_fragment_maps.replace("iblIrradiance += getIBLIrradiance( geometryNormal );",""));
-      fs=fs.replace("#include <aomap_fragment>","reflectedLight.indirectDiffuse*=vMat.w;\n#ifdef USE_ENVMAP\nreflectedLight.indirectSpecular*=mix(vMat.w,1.0,0.35);\n#endif\n");
+      fs=fs.replace("#include <aomap_fragment>","reflectedLight.indirectDiffuse*=vMat.w;\n#ifdef USE_ENVMAP\nreflectedLight.indirectSpecular*=mix(vMat.w,1.0,0.35);\n#endif\n"+
+        /* milestone 2 polish (director note D3): a soft knee on the bike's specular. The captured stadium's HDR bulbs spread over a satin lobe and the rim light's broad
+           highlight made the muffler, the pipes and the white plastics glow like neon tubes under the bloom (polish p0 H1, H4); below 0.8 (1.2 direct) nothing changes,
+           above it a highlight rolls off towards about 2.5 (it still blooms a little: the cover's hot speculars) */
+        "{ vec3 e=max(reflectedLight.indirectSpecular-0.8,0.0); reflectedLight.indirectSpecular=min(reflectedLight.indirectSpecular,vec3(0.8))+e/(1.0+e*0.6);\n"+
+        "  e=max(reflectedLight.directSpecular-1.2,0.0); reflectedLight.directSpecular=min(reflectedLight.directSpecular,vec3(1.2))+e/(1.0+e*0.5); }\n"+
+        "#ifdef USE_CLEARCOAT\n{ vec3 e=max(clearcoatSpecularIndirect-0.8,0.0); clearcoatSpecularIndirect=min(clearcoatSpecularIndirect,vec3(0.8))+e/(1.0+e*0.6);\n"+
+        "  e=max(clearcoatSpecularDirect-1.2,0.0); clearcoatSpecularDirect=min(clearcoatSpecularDirect,vec3(1.2))+e/(1.0+e*0.5); }\n#endif\n");
     } else { fs=fs.replace("#include <aomap_fragment>","reflectedLight.indirectDiffuse*=vMat.w;\n");
       /* the Fire TV tier (Lambert, no environment map): a cheap Blinn highlight of the key light on the plastics and the metal, so the bikes still read glossy on the TV */
       fs=fs.replace("#include <emissivemap_fragment>","#include <emissivemap_fragment>\n#if NUM_DIR_LIGHTS > 0\n{ vec3 bkV=normalize(vViewPosition); vec3 bkH=normalize(directionalLights[0].direction+bkV); float bkS=pow(max(dot(normal,bkH),0.0),mix(36.0,90.0,bkPl))*(1.0-mudK)*max(bkPl,vMat.x*0.8); totalEmissiveRadiance+=directionalLights[0].color*bkS*0.22; }\n#endif\n"); }

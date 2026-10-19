@@ -39,7 +39,7 @@ const K=(hex,mt,rg,tint,ao,kind)=>({c:lin(hex),mt:mt,rg:rg,tint:tint||0,ao:ao==n
 export const MAT={
   alu:K("#bcbfc7",0.92,0.34), aluD:K("#80848c",0.88,0.40), aluB:K("#d3d6dc",0.95,0.26),
   caseM:K("#363940",0.70,0.50), cover:K("#a2a6ae",0.88,0.40), cyl:K("#202127",0.55,0.50), head:K("#4a4c54",0.75,0.42),
-  steel:K("#9a9da5",0.92,0.34), exh:K("#bdb7aa",0.93,0.28), muff:K("#cdced4",0.94,0.26), cap:K("#18191c",0.35,0.42),
+  steel:K("#9a9da5",0.92,0.34), exh:K("#a49e92",0.92,0.34), muff:K("#aeb0b6",0.92,0.36), cap:K("#18191c",0.35,0.42),
   black:K("#111215",0.25,0.55), blackM:K("#0d0e10",0.0,0.82), seat:K("#0b0b0d",0.0,0.80,0,1,5), rubber:K("#0c0c0e",0.0,0.90), tread:K("#101012",0.0,0.88,0,1,2), side:K("#17171a",0.0,0.84),
   gold:K("#d8b050",0.94,0.26), upper:K("#dde0e6",1.0,0.12), anod:K("#17181c",0.85,0.38), anodG:K("#2a2c33",0.85,0.36),
   rim:K("#c8cbd2",0.93,0.30), hub:K("#d8b050",0.92,0.28), spoke:K("#a9acb4",0.90,0.34,0,1,1), disc:K("#b4b8c0",0.92,0.30), discD:K("#4b4d54",0.8,0.45),
