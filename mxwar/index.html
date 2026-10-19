@@ -266,6 +266,20 @@
   body.mx-3d .mx-lane, body.mx-3d .mx-gate, body.mx-3d .mx-dust, body.mx-3d .mx-track{display:none !important}
   body.mx-3d .mx-arena{background:#05060a}
   body.mx-3d .mx-cambtn:not([hidden]){display:inline-flex}
+  /* the 3D race getting ready (game.js hold3D: the view builds its world over short tasks, then compiles its shaders while nothing draws; the gate and the clock wait):
+     a quiet stadium-night card over the picture, its light bar moved by the compositor (it keeps moving even while the page builds) */
+  .mx-v3hold{display:none}
+  body.mx-3dhold .mx-v3hold{display:flex; position:absolute; left:0; right:0; top:0; height:var(--lane-h,100%); z-index:3; align-items:flex-end; justify-content:center; padding:0 1rem 12%; pointer-events:none;
+    background:radial-gradient(120% 70% at 50% 108%,rgba(123,74,43,.55),rgba(9,12,18,0) 62%),radial-gradient(80% 50% at 50% -10%,rgba(236,185,103,.16),rgba(9,12,18,0) 70%),#090c12}
+  .mx-v3hold__card{display:flex; flex-direction:column; align-items:center; gap:.55rem; min-width:min(18rem,80%); padding:.7rem 1.2rem .8rem; border-radius:var(--r-lg,1rem); background:rgba(13,17,27,.86); box-shadow:inset 0 0 0 1px rgba(236,185,103,.38)}
+  .mx-v3hold__t{color:#ecb967; font:var(--fw-ui-strong,700) var(--fs-xs,.8rem)/1.2 var(--font-ui,system-ui); letter-spacing:.14em; text-transform:uppercase; text-align:center}
+  .mx-v3hold__bar{position:relative; width:100%; height:3px; border-radius:2px; overflow:hidden; background:rgba(240,241,243,.12)}
+  .mx-v3hold__bar::after{content:""; position:absolute; top:0; bottom:0; left:0; width:38%; border-radius:2px; background:linear-gradient(90deg,rgba(247,45,46,0),#f72d2e 45%,#ecb967);
+    animation:mxHoldSweep 1.6s cubic-bezier(.45,.05,.35,1) infinite; will-change:transform}
+  @keyframes mxHoldSweep{from{transform:translateX(-100%)} to{transform:translateX(265%)}}
+  @media (prefers-reduced-motion: reduce){ .mx-v3hold__bar::after{animation:none; width:100%; opacity:.6} }
+  html[data-motion="reduce"] .mx-v3hold__bar::after{animation:none; width:100%; opacity:.6}
+  html[data-tv] .mx-v3hold__t{font-size:var(--fs-sm,1rem)}
   .mx-cambtn{position:absolute; left:.5rem; top:.5rem; z-index:7; align-items:center; gap:.4rem; min-height:2.75rem; margin:0; padding:.3rem .75rem .3rem .55rem; border:0; border-radius:var(--r-pill);
     background:rgba(8,6,4,.72); box-shadow:inset 0 0 0 1px rgba(231,202,144,.45); color:var(--gold-100); font:var(--fw-ui-strong) var(--fs-xs)/1.1 var(--font-ui); cursor:pointer; -webkit-tap-highlight-color:transparent}
   .mx-cambtn .bg-ico{width:1.15rem; height:1.15rem}
@@ -946,6 +960,7 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
       <div class="mx-track" id="trackArt" aria-hidden="true"></div>
       <div class="mx-lane" id="lane" aria-hidden="true"></div>
       <div class="mx-v3" id="v3" aria-hidden="true"></div>
+      <div class="mx-v3hold" id="v3hold" aria-hidden="true"><div class="mx-v3hold__card"><span class="mx-v3hold__t" id="v3holdT">The riders roll up to the gate</span><span class="mx-v3hold__bar"></span></div></div>
       <button class="mx-cambtn" id="camBtn" type="button" data-icon="camera" aria-label="Change the camera" hidden><span id="camName">Director</span></button>
       <div class="mx-dust" id="dust" aria-hidden="true"></div>
       <div class="mx-gate" id="gate" aria-hidden="true"></div>
