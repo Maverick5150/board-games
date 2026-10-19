@@ -1431,9 +1431,17 @@
         rh = clamp(Math.floor((room - (per - 1) * rem * .2) / per), Math.round(rem * 1.25), Math.round(rem * 2));
         ol.style.setProperty("--cols", String(cols)); ol.style.setProperty("--rows", String(per)); ol.style.setProperty("--rh", rh + "px");
       });
-      /* mxfix1: on the results and the podium a name its row would cut takes the condensed face first (the phone game's fitCond); one that still does not fit keeps its ellipsis */
+      /* mxfix1: on the results and the podium a name its row would cut takes the condensed face first, then the first name as an initial ("A. Pocorobba Jr.",
+         the whole name in the title), as the phone game's fitCond does; one that still does not fit keeps its ellipsis */
       var kind = $("mxpPanel").getAttribute("data-kind");
-      if (kind === "results" || kind === "podium") Array.prototype.forEach.call(body.querySelectorAll(".mxp-rn"), function (n) { n.classList.remove("is-cond"); if (n.clientWidth > 0 && n.scrollWidth > n.clientWidth + 0.5) n.classList.add("is-cond"); });
+      if (kind === "results" || kind === "podium") Array.prototype.forEach.call(body.querySelectorAll(".mxp-rn"), function (n) {
+        var t = n.firstChild, cut = function () { return n.clientWidth > 0 && n.scrollWidth > n.clientWidth + 0.5; };
+        if (t && t.nodeType === 3 && n.hasAttribute("data-full")) { t.nodeValue = n.getAttribute("data-full"); n.removeAttribute("data-full"); n.removeAttribute("title"); }
+        n.classList.remove("is-cond"); if (!cut()) return;
+        n.classList.add("is-cond"); if (!cut() || !t || t.nodeType !== 3 || !A.initialName) return;
+        var full = t.nodeValue, k = full.indexOf(" ("), head = k >= 0 ? full.slice(0, k) : full.replace(/\s+$/, ""), ini = A.initialName(head) + full.slice(head.length);
+        if (ini !== full) { n.setAttribute("data-full", full); n.setAttribute("title", full.trim()); t.nodeValue = ini; }
+      });
     }
     function resLi(id, place, extra) { var R = G.riders[id], k = kOfId(id); return '<li class="' + (k >= 0 ? "is-me" : "") + '"' + (k >= 0 ? ' style="--seat:' + hex(k) + '"' : "") + '><span class="mxp-rp">' + place + "</span>" + plateHTML(R) + '<span class="mxp-rn">' + nameHTML(R) + "</span>" + (extra || "") + "</li>"; }
     /* a long list: the rows that fit, then the table's riders below them (their real place kept) */

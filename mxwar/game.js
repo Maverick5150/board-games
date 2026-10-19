@@ -1992,8 +1992,20 @@ function resultWords(e,order,me){
   return {t:win.name+" wins · "+rest.join(" · "),hot:fin&&mine[0].p<=3};
 }
 /* mxfix1: a name its row would cut (the results at 360 px: "Anthony Amara...", "Anthony Pocor...") takes the board's condensed face first (index.html
-   .is-cond); one that still does not fit keeps its ellipsis. Measured as the sheet opens and again on the next frame. */
-function fitCond(root){ if(!root) return; function go(){ [].forEach.call(root.querySelectorAll(".mx-res__n, .mx-st__n"),function(n){ n.classList.remove("is-cond"); if(n.clientWidth>0&&n.scrollWidth>n.clientWidth+0.5) n.classList.add("is-cond"); }); } go(); if(window.requestAnimationFrame) requestAnimationFrame(go); }
+   .is-cond), then the first name as an initial ("A. Pocorobba Jr.": art.js initialName; the whole name stays in the title); one that still does not fit keeps
+   its ellipsis. Measured as the sheet opens and again on the next frame. */
+function iniText(full){ var k=full.indexOf(" ("), head=k>=0?full.slice(0,k):full.replace(/\s+$/,""), tail=full.slice(head.length); return (A.initialName?A.initialName(head):head)+tail; }
+function fitCond(root){
+  if(!root) return;
+  function cut(n){ return n.clientWidth>0&&n.scrollWidth>n.clientWidth+0.5; }
+  function go(){ [].forEach.call(root.querySelectorAll(".mx-res__n, .mx-st__n"),function(n){
+    var t=n.firstChild; if(t&&t.nodeType===3&&n.hasAttribute("data-full")){ t.nodeValue=n.getAttribute("data-full"); n.removeAttribute("data-full"); n.removeAttribute("title"); }
+    n.classList.remove("is-cond"); if(!cut(n)) return;
+    n.classList.add("is-cond"); if(!cut(n)||!t||t.nodeType!==3) return;
+    var full=t.nodeValue, ini=iniText(full); if(ini!==full){ n.setAttribute("data-full",full); n.setAttribute("title",full.trim()); t.nodeValue=ini; }
+  }); }
+  go(); if(window.requestAnimationFrame) requestAnimationFrame(go);
+}
 function openResults(e,simmed){
   var T=track(); if(T) T.show(false);
   if(V3) V3.show(false);   /* the 3D race rests under the results */
