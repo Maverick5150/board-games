@@ -14,7 +14,7 @@
    st.mud (0..1), st.steer (rad, + right; when absent it is worked out from the track's curvature st.k). hideBike(M, i). */
 import * as THREE_NS from "../ui/vendor/three-0.160.0.module.min.js";
 const THREE=THREE_NS;
-import {bone,canvas,clamp,MAT as KIT,getKitTier,MX_KEEP,KEEP_VS_DECL,KEEP_VS_SET,KEEP_FS_DECL} from "./r3d-util.js";
+import {bone,canvas,clamp,MAT as KIT,getKitTier,MX_KEEP,MX_MASK,KEEP_VS_DECL,KEEP_VS_SET,KEEP_FS_DECL} from "./r3d-util.js";
 import {BIKE,buildBike,buildFarBike,buildWheel,buildBlurDisc,triCount,UA,A0,ARM} from "./r3d-bike-model.js";
 export {BIKE};
 
@@ -175,7 +175,7 @@ function bikeMaterial(lo,D,U){
       "#include <color_fragment>",
       "float bkW=step(31.5,vMat.z); float bkR=vMat.z-32.0*bkW; float bkK=floor((bkR+0.5)/4.0); float bkTn=bkR-4.0*bkK;",
       "float bkIgn=fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))));",
-      "{ float bkZ=vViewPosition.z; if(bkZ<1.7&&!mxKept()){ if(smoothstep(0.8,1.7,bkZ)<bkIgn) discard; } }",   /* the near-lens fade: no bike ever fills the lens (director note D12) */
+      "{ float bkZ=vViewPosition.z; if(bkZ<1.15&&!mxKept()){ if(smoothstep(0.5,1.15,bkZ)<bkIgn) discard; } }",   /* the near-lens fade: no bike ever fills the lens (director note D12) */
       "if(bkK>0.5&&bkK<1.5&&vMud.z>0.02){ if(bkIgn<vMud.z*0.82) discard; }",   /* the spokes of a fast wheel thin out: the translucent blur disc shows the spinning wheel */
       "vec3 bkN=normalize(vNl); vec3 bkAN=abs(bkN); vec2 bkPP=bkAN.z>max(bkAN.x,bkAN.y)?vLoc.xy:(bkAN.y>bkAN.x?vLoc.xz:vLoc.zy); float bkFW=length(fwidth(bkPP));",
       /* the livery: the side view for the team plastics, the view from above for the fenders */
@@ -237,6 +237,7 @@ function bikeMaterial(lo,D,U){
     } else { fs=fs.replace("#include <aomap_fragment>","reflectedLight.indirectDiffuse*=vMat.w;\n");
       /* the Fire TV tier (Lambert, no environment map): a cheap Blinn highlight of the key light on the plastics and the metal, so the bikes still read glossy on the TV */
       fs=fs.replace("#include <emissivemap_fragment>","#include <emissivemap_fragment>\n#if NUM_DIR_LIGHTS > 0\n{ vec3 bkV=normalize(vViewPosition); vec3 bkH=normalize(directionalLights[0].direction+bkV); float bkS=pow(max(dot(normal,bkH),0.0),mix(36.0,90.0,bkPl))*(1.0-mudK)*max(bkPl,vMat.x*0.8); totalEmissiveRadiance+=directionalLights[0].color*bkS*0.22; }\n#endif\n"); }
+    fs=fs.replace("#include <opaque_fragment>","#include <opaque_fragment>\n if(uMxMask>0.5&&mxKept()) gl_FragColor.a=0.0;"); sh.uniforms.uMxMask=MX_MASK;   /* (polish: the chase subject's own bike is never smeared by the camera motion blur: the crumb mask, as the rider) */
     sh.fragmentShader=fs;
   };
   m.customProgramCacheKey=()=>"mxbike2-"+(phys?"phys":std?"std":"lam");
@@ -252,7 +253,7 @@ function blurMaterial(){
     sh.vertexShader=sh.vertexShader.replace("#include <common>","#include <common>\n"+KEEP_VS_DECL+"varying float vBl;\nvarying vec2 vRd;").replace("#include <begin_vertex>","#include <begin_vertex>\nvBl=instanceColor.r; vRd=position.xy;").replace("#include <project_vertex>","#include <project_vertex>"+KEEP_VS_SET);
     sh.fragmentShader=sh.fragmentShader.replace("#include <common>","#include <common>\n"+KEEP_FS_DECL+"varying float vBl;\nvarying vec2 vRd;").replace("#include <color_fragment>",
       "#include <color_fragment>\ndiffuseColor.rgb=diffuse;\n{ float r=length(vRd), an=atan(vRd.y,vRd.x); float a=vBl*(0.13+0.40*pow(0.19/max(r,0.19),1.35))*(0.86+0.14*cos(an*9.0));\n"+
-      " a*=smoothstep(0.19,0.25,r)*(1.0-smoothstep(0.93,1.0,r))*(mxKept()?1.0:smoothstep(0.8,1.7,vViewPosition.z)); diffuseColor.a*=a; }");
+      " a*=smoothstep(0.19,0.25,r)*(1.0-smoothstep(0.93,1.0,r))*(mxKept()?1.0:smoothstep(0.5,1.15,vViewPosition.z)); diffuseColor.a*=a; }");
   };
   m.customProgramCacheKey=()=>"mxbike2-blur";
   return m;

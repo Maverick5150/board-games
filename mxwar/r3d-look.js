@@ -14,7 +14,7 @@
    Nobody has to call setTier: apply() picks one from Reduce effects / the TV flag / the weak-GPU test; the performance engineer's V.setQuality(name) may call L.setTier(name). */
 import * as THREE_NS from "../ui/vendor/three-0.160.0.module.min.js";
 const THREE=THREE_NS;
-import {clamp,sstep,setKitTier,pbrFromPhong} from "./r3d-util.js";
+import {MX_MASK,clamp,sstep,setKitTier,pbrFromPhong} from "./r3d-util.js";
 import {makeEnvironment,captureEnvironment} from "./r3d-lead-env.js";
 import {createPost,postSupported} from "./r3d-lead-post.js";
 
@@ -244,6 +244,7 @@ export function createLook(renderer,opts){
   L.render=function(sc,cam,tw){
     renderer.info.autoReset=false; renderer.info.reset();
     if(L.post&&L.post.render) L.post.render(sc,cam,tw); else renderer.render(sc,cam);
+    MX_MASK.value=(L.post&&L.post.render&&L.flags&&L.flags.motionBlur>0)?1:0;   /* (polish: the chase subject's motion-blur mask only where the chain reads it; never on a frame drawn straight to the canvas) */
   };
   L.resize=function(W,H,pr){ if(L.post&&L.post.resize) L.post.resize(W,H,pr); };
   /* tests: make the capture again now (-> its time in ms, the real clock) */

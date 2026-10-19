@@ -570,11 +570,13 @@ export function create(host,hooks){
     // [/hook:cams]
     keepCam.copy(cam.position);   /* (where the director put the lens: the near-lens keep sphere below holds only for the director's own camera) */
     // [hook:harness]
-    if(V.camHook){ const h=V.camHook(dt,rs,T); if(h){ cam.position.set(h.eye[0],h.eye[1],h.eye[2]); CAMS.target.set(h.target[0],h.target[1],h.target[2]); cam.lookAt(CAMS.target); if(h.fov&&Math.abs(cam.fov-h.fov)>1e-4){ cam.fov=h.fov; cam.updateProjectionMatrix(); } } }   /* the capture harness' camera (demo.js; null in the game): after the director, before the sky and the shadow box follow the lens */
+    let hkKeep=null;
+    if(V.camHook){ const h=V.camHook(dt,rs,T); if(h){ hkKeep=h.keep||null; cam.position.set(h.eye[0],h.eye[1],h.eye[2]); CAMS.target.set(h.target[0],h.target[1],h.target[2]); cam.lookAt(CAMS.target); if(h.fov&&Math.abs(cam.fov-h.fov)>1e-4){ cam.fov=h.fov; cam.updateProjectionMatrix(); } } }   /* the capture harness' camera (demo.js; null in the game): after the director, before the sky and the shadow box follow the lens */
     // [/hook:harness]
     /* the chase subject is spared from the riders' and bikes' near-lens fade (milestone 2 merge, the cams' request: CAMS.keep = his hip and a radius, w = 0 for nobody; r3d-util.js MX_KEEP);
        a camera the capture harness placed elsewhere spares nobody */
     MX_KEEP.value.copy(CAMS.keep); if(cam.position.distanceToSquared(keepCam)>1e-10) MX_KEEP.value.w=0;
+    if(hkKeep) MX_KEEP.value.set(hkKeep[0],hkKeep[1],hkKeep[2],hkKeep[3]);   /* (polish: a harness rig on a rider spares and un-smears its subject exactly as the game's chase does) */
     if(CAMS.shot){ if(world.ctx.skyMesh) world.ctx.skyMesh.position.copy(cam.position); if(LOOK.shadows) LOOK.fitShadow(cam,CAMS.target); }   /* the sky follows the lens; the shadow box follows the action */
     LOOK.frame(cam,CAMS.target,dt,tw,subjectDist());   /* the camera-relative lights (rim, kick) and the depth of field's focus (r3d-look.js) */
     tags();

@@ -11,7 +11,7 @@
    poseRider(R, i, B, st) with B = the bike's world Matrix4 and st = the per-frame state (CONTRACT.md); commit(R, cam, dt) once a frame after posing. */
 import * as THREE_NS from "../ui/vendor/three-0.160.0.module.min.js";
 const THREE=THREE_NS;
-import {canvas,MAT,getKitTier,MX_KEEP,KEEP_VS_DECL,KEEP_VS_SET,KEEP_FS_DECL} from "./r3d-util.js";
+import {canvas,MAT,getKitTier,MX_KEEP,MX_MASK,KEEP_VS_DECL,KEEP_VS_SET,KEEP_FS_DECL} from "./r3d-util.js";
 import {BIKE,createBike,colorBike,poseBike,hideBike,plateGeo,drawPlate} from "./r3d-bike.js";
 import {buildRider,NB} from "./r3d-rider-model.js";
 import {newRig,poseRide,poseBody,blendStart,blendStep} from "./r3d-rider-pose.js";
@@ -59,7 +59,7 @@ function atlasMat(T,cols,rows,opts){
     sh.uniforms.uGrid={value:new THREE.Vector2(1/cols,1/rows)}; sh.uniforms.uMxKeep=MX_KEEP;   /* (milestone 2 merge: the chase subject's plates are never dissolved near the lens: r3d-util.js MX_KEEP) */
     sh.vertexShader="attribute vec2 aCell;\nuniform vec2 uGrid;\n"+sh.vertexShader.replace("#include <common>","#include <common>\n"+KEEP_VS_DECL).replace("#include <project_vertex>","#include <project_vertex>"+KEEP_VS_SET).replace("#include <uv_vertex>","#include <uv_vertex>\n#ifdef USE_MAP\n vMapUv=vec2((aCell.x+uv.x)*uGrid.x,1.0-(aCell.y+1.0-uv.y)*uGrid.y);\n#endif");
     /* milestone 2 (director's note: a ghost bike near the lens kept an opaque number plate): the plates fade with the bike and the rider (the same dither, 1.7 m to 0.8 m from the lens) */
-    sh.fragmentShader=sh.fragmentShader.replace("#include <common>","#include <common>\n"+KEEP_FS_DECL).replace("#include <color_fragment>","#include <color_fragment>\n { float mxZ=vViewPosition.z; if(mxZ<1.7&&!mxKept()){ float mxA=smoothstep(0.8,1.7,mxZ); if(mxA<fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))))) discard; } }");
+    sh.fragmentShader=sh.fragmentShader.replace("#include <common>","#include <common>\n"+KEEP_FS_DECL).replace("#include <color_fragment>","#include <color_fragment>\n { float mxZ=vViewPosition.z; if(mxZ<1.15&&!mxKept()){ float mxA=smoothstep(0.5,1.15,mxZ); if(mxA<fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))))) discard; } }");
   };
   m.customProgramCacheKey=()=>"atlas-fade"+cols+"x"+rows;
   return m;
@@ -118,8 +118,11 @@ function skinMat(mat,U,kind,opts){
   mat.onBeforeCompile=sh=>{
     sh.uniforms.uBones=U.uBones; sh.uniforms.uTime=U.uTime;
     if(opts.apparel) applyApparel(sh,opts.apparel,opts.kind||"cloth");
-    if(kind==="main"){ sh.uniforms.uMxKeep=MX_KEEP; sh.fragmentShader=sh.fragmentShader.replace("#include <common>","#include <common>\n"+KEEP_FS_DECL); }
-    if(kind==="main") sh.fragmentShader=sh.fragmentShader.replace("#include <color_fragment>","#include <color_fragment>\n/* the near-lens fade (director note D12: no body ever fills the lens): a dithered dissolve between 1.7 m and 0.8 m from the camera; never the chase subject (milestone 2 merge: r3d-util.js MX_KEEP) */\n { float mxZ=vViewPosition.z; if(mxZ<1.7&&!mxKept()){ float mxA=smoothstep(0.8,1.7,mxZ); if(mxA<fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))))) discard; } }");
+    if(kind==="main"){ sh.uniforms.uMxKeep=MX_KEEP; sh.fragmentShader=sh.fragmentShader.replace("#include <common>","#include <common>\n"+KEEP_FS_DECL)
+      /* (milestone 2 polish, director notes D3 / N3: the chase subject rides WITH the lens, so the camera motion blur smeared his own body and bike into ghosts; inside the keep sphere the
+         scene alpha is 0, the post chain's crumb mask (r3d-lead-post.js): never smeared, the depth of field still reads his depth. The canvas has no alpha: no effect without the chain) */
+      .replace("#include <opaque_fragment>","#include <opaque_fragment>\n if(uMxMask>0.5&&mxKept()) gl_FragColor.a=0.0;"); sh.uniforms.uMxMask=MX_MASK; }
+    if(kind==="main") sh.fragmentShader=sh.fragmentShader.replace("#include <color_fragment>","#include <color_fragment>\n/* the near-lens fade (director note D12: no body ever fills the lens): a dithered dissolve between 1.7 m and 0.8 m from the camera; never the chase subject (milestone 2 merge: r3d-util.js MX_KEEP) */\n { float mxZ=vViewPosition.z; if(mxZ<1.15&&!mxKept()){ float mxA=smoothstep(0.5,1.15,mxZ); if(mxA<fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))))) discard; } }");
     if(opts.wrinkle&&!opts.apparel){ sh.vertexShader="#define MX_WRINKLE\n"+sh.vertexShader;
       sh.fragmentShader="#define MX_WRINKLE\nvarying vec3 vMxP; varying float vMxK;\n"+sh.fragmentShader.replace("#include <color_fragment>","#include <color_fragment>\n { float w=sin(vMxP.y*46.0+2.2*sin(vMxP.x*29.0+vMxP.z*35.0))*0.55+sin(vMxP.y*83.0+vMxP.z*41.0+1.7)*0.25; diffuseColor.rgb*=1.0+0.06*w*vMxK; }"); }
     /* a rim of the rider's own colour on the edges facing away from the camera: the riders stand out of the dark stands as in a backlit cover */

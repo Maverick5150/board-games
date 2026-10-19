@@ -137,7 +137,7 @@ function hook(dt, rs) {
   ey = Math.max(ey, dirtAt(ex, ez) + 0.4);   /* never inside the dirt */
   const g = [ex, ey, ez], t = [r.pos.x + fx * c.aim.ahead + rx * c.aim.side, by + c.aim.up, r.pos.z + fz * c.aim.ahead + rz * c.aim.side];
   if (c.prime) { c.e = g; c.t = t; c.prime = false; } else { damp(c.e, g, k, c.tau); damp(c.t, t, k, c.tau); }
-  c.last = { eye: c.e.slice(), target: c.t.slice(), fov: c.fov };
+  c.last = { eye: c.e.slice(), target: c.t.slice(), fov: c.fov, keep: [r.pos.x, r.pos.y, r.pos.z, 1.6] };   /* (milestone 2 polish: the rig's subject is kept like the game's chase subject: no near-lens fade, no camera motion blur on him) */
   return c.last;
 }
 

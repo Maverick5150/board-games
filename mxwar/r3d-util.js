@@ -136,8 +136,11 @@ export function pbrFromPhong(m,tier){
    race3d.js every frame after the camera; a fragment inside that sphere is never dissolved. A material adds the uniform (sh.uniforms.uMxKeep = MX_KEEP), KEEP_VS_DECL + KEEP_VS_SET (after
    <project_vertex>: the world position as a varying, instanced or not) and KEEP_FS_DECL; its dither test then reads "if(z < 1.7 && !mxKept()) ...". */
 export const MX_KEEP={value:new THREE.Vector4(0,0,0,0)};
+/* (milestone 2 polish) MX_MASK.value = 1 while the frame is drawn through the post chain with the camera motion blur (r3d-look.js L.render): only then does a kept fragment write
+   scene alpha 0 (the chain's crumb mask: the chase subject rides with the lens, never smear him). 0 = a frame drawn straight to the canvas (FIRE TV, no chain): alpha stays 1 */
+export const MX_MASK={value:0};
 export const KEEP_VS_DECL="varying vec3 vMxW;\n";
 export const KEEP_VS_SET="\n#ifdef USE_INSTANCING\n vMxW=(modelMatrix*instanceMatrix*vec4(transformed,1.0)).xyz;\n#else\n vMxW=(modelMatrix*vec4(transformed,1.0)).xyz;\n#endif\n";
-export const KEEP_FS_DECL="varying vec3 vMxW;\nuniform vec4 uMxKeep;\nbool mxKept(){ return uMxKeep.w>0.0&&distance(vMxW,uMxKeep.xyz)<uMxKeep.w; }\n";
+export const KEEP_FS_DECL="varying vec3 vMxW;\nuniform vec4 uMxKeep;\nuniform float uMxMask;\nbool mxKept(){ return uMxKeep.w>0.0&&distance(vMxW,uMxKeep.xyz)<uMxKeep.w; }\n";
 
 export {lin,mixc,clamp,sstep,hash2,vnoise,fbm,hashp,pnoise,pfbm,canvas,tex,normalTex,rngf,clear,clearDist};
