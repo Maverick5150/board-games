@@ -1244,7 +1244,7 @@ function create(o){
     for(var i=0;i<cand.length;i++){ var s=cand[i], id=seatId(s), f=seasonFacts(id); if(!f) return null;
       var vs=seasonVars(f).filter(function(x){ if(factUsed(id+"|s|"+x.v)) return false; if(!mem) return true; return !MEM().anySaid({claims:seasonClaims(id,x.v,f)},memL().claims[R]||{}); }); if(!vs.length) continue;
       vs.sort(function(a,b){ return b.w-a.w; }); var pk=vs[Math.floor(rnd()*Math.min(2,vs.length))];
-      return {k:"season",ev:"talk_season",sc:1,fp:0,ctx:seasonTalkCtx(s,pk.v),subj:[s],mark:function(){ (A.tk.season=A.tk.season||{})[id]=A.now; A.tk.rider[id]=A.now; factSay(id+"|s|"+pk.v); if(mem){ var r=A.race; if(r){ r.memAt=A.now; r.memN=(r.memN|0)+1; } } }}; }
+      return {k:"season",ev:"talk_season",sc:1,fp:0,ctx:seasonTalkCtx(s,pk.v),subj:[s],mark:function(){ (A.tk.season=A.tk.season||{})[id]=A.now; A.tk.rider[id]=A.now; factSay(id+"|s|"+pk.v); if(mem){ var r=A.race; if(r){ memRace(r); } } }}; }
     return null;
   }
   function seasonTalkCtx(s,v){
@@ -1354,10 +1354,11 @@ function create(o){
     var f=venueFacts(); if(!f) return null; var vs=[], rl=!!A.tk.relax;
     var lastKey=f.last?"P"+f.last[4]+"|h"+f.last[2]:null;
     if(f.last&&f.n>=1&&!f.earlier&&!factUsed(lastKey)) vs.push({v:"lastHere"}); if(f.total>=2) vs.push({v:"countHere"}); if(f.n>=2&&f.first) vs.push({v:"firstHere"}); if(f.most) vs.push({v:"mostHere"});
-    if(f.total===0) vs.push({v:"newHere"}); if(f.earlier) vs.push({v:"earlierHere",w:2});
+    /* mxann4: "won here earlier this season" is a memory line: like every memory line in a race, only in the middle laps and under their spacing */
+    if(f.total===0) vs.push({v:"newHere"}); if(f.earlier&&(!memOn()||(memGate()&&memFocus().indexOf((A.rmap||[]).indexOf(f.earlier.winner))>=0))) vs.push({v:"earlierHere",w:2});   /* and about a rider in focus */
     vs=vs.filter(function(x){ return A.now-((A.tk.vv||{})[x.v]||-1e9)>(rl?300000:900000); });
     var pk=pickVar("venue",vs); if(!pk) return null;
-    return {k:"venue",ev:"talk_venue",sc:1,fp:0,ctx:venueTalkCtx(pk.v),mark:function(){ useVar("venue",pk.v); (A.tk.vv=A.tk.vv||{})[pk.v]=A.now; if(pk.v==="lastHere") factSay(lastKey); }};
+    return {k:"venue",ev:"talk_venue",sc:1,fp:0,ctx:venueTalkCtx(pk.v),mark:function(){ useVar("venue",pk.v); (A.tk.vv=A.tk.vv||{})[pk.v]=A.now; if(pk.v==="lastHere") factSay(lastKey); if(pk.v==="earlierHere"&&memOn()){ var r=A.race; if(r){ memRace(r); } } }};
   }
   function venueTalkCtx(v){
     return function(){
@@ -1703,6 +1704,8 @@ function create(o){
   function memGate(){
     var r=A.race; if(!memOn()||!r||A.tk.relax||o.chatter==="less") return false;
     if(!r.isFinal&&!humanSeats().length) return false;
+    /* a qualifier (a heat, a semi, the LCQ) with a person in it: one memory line a race, two a round, so the round's budget keeps room for its final */
+    if(!r.isFinal&&((r.memN|0)>=1||((A.memQ&&A.memQ.ri===memRi())?A.memQ.n:0)>=2)) return false;
     var len=r.len|0, lap=r.lap|0, edge=Math.max(2,Math.round(0.15*len)); if(lap<=edge||lap>len-edge) return false;
     var now=A.now; if(now-(r.memAt||-1e9)<(o.chatter==="more"?50000:75000)) return false;
     if(now-A.booth.lastAction<4000) return false; var n3=nextDue(now,3); if(n3&&n3.due-now<4000) return false;
@@ -1710,8 +1713,10 @@ function create(o){
     var per=180000/((o.speed==="fast"?0.7:1)*(o.chatter==="more"?1.3:1)), n=r.memN|0;
     if(n>=Math.floor(cl/per)+1) return false;
     if(Lms()<15000&&n>=1) return false;     /* a race shown short (the 2D view): one at most */
-    return memRoom(memRi(),9);              /* the round's budget: the wrap keeps its room (a round stays within 12) */
+    return memRoom(memRi(),10);             /* the round's budget: the wrap keeps its room (a round stays within 12) */
   }
+  /* a memory line said in a race: its time, its count, and a qualifier's share of the round (memGate) */
+  function memRace(r){ r.memAt=A.now; r.memN=(r.memN|0)+1; if(!r.isFinal){ var R=memRi(); if(!A.memQ||A.memQ.ri!==R) A.memQ={ri:R,n:0}; A.memQ.n++; } }
   /* the riders in focus: the story of the last 12 s, the camera's shot of the last 8 s, the person when the last line was about the person */
   function memFocus(){
     var out=[], seen={}, now=A.now; function add(s){ if(s==null||s<0||seen[s]) return; seen[s]=1; out.push(s); }
@@ -1753,7 +1758,7 @@ function create(o){
     if(focus.length>=2){ var a=seatId(focus[0]), b=seatId(focus[1]); if(a&&b&&!isHumanId(a)&&!isHumanId(b)) cand(M.rivalNote(Gs,R,a,b),focus[0]); }
     if(!best) return null;
     var pk=best;
-    return {k:"memory",ev:"talk_memory",sc:1,fp:0,ctx:memTalkCtx(pk),subj:[pk.seat],mark:function(){ var r=A.race; if(r){ r.memAt=A.now; r.memN=(r.memN|0)+1; } }};
+    return {k:"memory",ev:"talk_memory",sc:1,fp:0,ctx:memTalkCtx(pk),subj:[pk.seat],mark:function(){ var r=A.race; if(r){ memRace(r); } }};
   }
   function memTalkCtx(pk){
     return function(){
@@ -2777,7 +2782,9 @@ function create(o){
     switch(kind){
       case "lineup": if(r&&!r.gated) q("lineup_gate",{ctx:introCtx("lineup_gate"),build:true,ttl:25}); break;
       case "engines": if(r&&!r.gated&&!r.enginesSaid){ A.q=A.q.filter(function(x){ return x.ev!=="engines"; }); q("engines",{ctx:introCtx("engines"),build:true,ttl:20}); } break;
-      case "board30": if(r&&!r.gated){ A.q=A.q.filter(function(x){ return x.ev!=="lineup_gate"&&x.ev!=="engines"; }); q("board_30",{role:"C",ctx:simpleCtx("board_30"),build:true,ttl:10,pri:2}); } break;
+      case "board30": if(r&&!r.gated){ A.q=A.q.filter(function(x){ return x.ev!=="lineup_gate"&&x.ev!=="engines"; });
+        dropQ(function(x){ return x.race===r.key&&MEMEV[x.ev]&&!x.post; });   /* mxann4: a storyline or the pick not said by the 30-second board is not said at the gate */
+        q("board_30",{role:"C",ctx:simpleCtx("board_30"),build:true,ttl:10,pri:2}); } break;
       case "sideways": if(r&&!r.gated){ A.q=A.q.filter(function(x){ return !x.build; }); q("board_sideways",{role:"C",ctx:simpleCtx("board_sideways"),build:true,ttl:5}); } break;
       case "podium": break;
       case "pause": pause(); break;
