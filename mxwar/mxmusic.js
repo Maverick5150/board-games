@@ -18,7 +18,7 @@
        "results", {last, G}   a race's results; last = the round's last race: the post-race music (G, the season: the stakes ladder picks its variant)
        "podium", {round}      the round's podium: its music once, landing on the bar of the post-race bed (which fades into it)
        "flag"                 the flag fell, the results are not up yet: what plays goes on (the checkered fanfare), nothing starts
-       "race"                 the gate and the race: the music fades out within 350 ms (the booth runs the start procedure: never music over it)
+       "race"                 the gate and the race: the music fades out within 250 ms (the booth runs the start procedure: never music over it)
        "over"                 the season is over (the champion, the Victory): the rotation
        "off"                  leaving (the Party game ends): silence, every decoded buffer released
      M.flag(final, fx) -> "pkg" | "sfx"   the checkered flag: final (a Main, or a round's last race) = the checkered fanfare (MX War Theme) on the music
@@ -44,7 +44,7 @@ if(MXW.Music) return;
 var S=g.Sound, doc=g.document||null, ACTIVE=null;
 function dbl(d){ return Math.pow(10,d/20); }
 function okSound(){ return !!(S&&S.show&&S.mix&&typeof S.ctx==="function"&&typeof S.show.bed==="function"); }
-var GAIN_MENU=1, GAIN_BED=dbl(-4), FADE_RACE=350, FADE_CUT=300, FADE_OFF=150;
+var GAIN_MENU=1, GAIN_BED=dbl(-4), FADE_RACE=250, FADE_CUT=300, FADE_OFF=150;
 
 /* ---------- the credits (the package's own lines: pkg.json, through Sound.show.credits()) ---------- */
 function credits(pkg){
