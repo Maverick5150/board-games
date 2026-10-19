@@ -20,6 +20,7 @@
        clock()           the race clock the picture is at, {t: ms of the time model, rate: race ms per page ms} (the view that rides the model); without
                          it the commentator works the clock out from the lap on screen
        estimate(line)    a clip pack's real length of a line in ms (the booth then holds the floor for it), 0 = the words-per-second estimate
+       career(name)      mxann4: the person's earlier seasons on this device (MXWar.Journal.career), for the career note
      ann.feed(G, events, now)      after every Season.startRace / step / apply / simRace (the same batch the page plays); now = the page clock (ms)
      ann.tick(now)                 every 100-250 ms while the race screen is up (cheap)
      ann.phase(kind, info, now)    page moments: "lineup" | "engines" | "board30" | "sideways" | "podium" | "pause" | "resume"
@@ -46,7 +47,14 @@
    History: only seasons that ENDED before this round (data/history.js, read as of the round's date) and this season's own results: never
    a later year, and never "the real" anything. Intensity: mxwar/intensity.js gives every line its level (HUGE stays rare).
    Facts are always TRUE: every slot comes from the engine or the season data; a line whose fact changed before it was spoken is dropped,
-   never spoken late; once the results are read, nothing more is said about that race's laps. */
+   never spoken late; once the results are read, nothing more is said about that race's laps.
+   THE SEASON'S MEMORY (mxann4; the CEO, 2026-10-19: "The announcers should remember previous races ... They should have their own brain and be
+   ever learning as the season goes on. Everything must be balanced though"): mxwar/journal.js keeps every race and round of the season in G.jr,
+   mxwar/memory.js forms the opinions (storylines, form, the pick, records, rivals, the person's arc). The booth says them where a TV booth does:
+   the round's opening (season_story, career_note), the first final's intro (analyst_pick), a context line in the race about a rider in focus
+   (talk_memory, mid race only) and the wrap (round_wrap, pick_result); never at the gate, the start or the last laps. A memory line's facts are
+   claims (line.facts.mem); the ledger (state().mem) keeps what was said: a claim once a round, a story once until it changes. create({career})
+   reads the person's earlier seasons on this device (years before the season only). Without journal.js / memory.js the booth is v3. */
 (function(g){
 "use strict";
 var MX=g.MXWar=g.MXWar||{};
@@ -60,6 +68,8 @@ function TIME(){ return MX.Time||req("./time.js"); }
 function INT(){ return MX.Intensity||(req("./intensity-data.js"),req("./intensity.js")); }
 /* the history book (data/history.js): read only for seasons that were over before the round being raced */
 function HIST(){ if(g.MXWarHistory) return g.MXWarHistory; req("./data/history.js"); return g.MXWarHistory||null; }
+/* mxann4: the season's memory (mxwar/journal.js keeps it in G.jr, mxwar/memory.js forms the opinions); without them the booth is v3 */
+function MEM(){ return MX.Memory||req("./memory.js"); }
 
 /* ---------------- words for speech (ANNOUNCERS.md E.2) ---------------- */
 var ONES=["zero","one","two","three","four","five","six","seven","eight","nine","ten","eleven","twelve","thirteen","fourteen","fifteen","sixteen","seventeen","eighteen","nineteen"];
@@ -168,11 +178,20 @@ var PRONOUN=/\b(he|him|his|he's|himself)\b/i;
 var ACTION={lap_win:1,big_move:1,pass_top:1,war_won:1,wild_card:1,transfer_change:1,lead_battle:1,bubble:1,midpack_battle:1,teammates:1,privateer:1,runaway:1,
   out_of_cards:1,deadlock:1,kitty:1,you_up:1,you_down:1,lead_change:1,crash_remount:1,crash_out:1,multi_crash:1,holeshot:1,war_start:1,double_war:1,triple_war:1,last_lap_battle:1};
 var YOULOW={halfway:1,laps_to_go:1,white_flag:1,show_open:1,race_intro_heat:1,race_intro_semi:1,race_intro_lcq:1,race_intro_qual:1,race_intro_main:1,race_intro_moto:1,lineup_gate:1,first_lap_order:1,heat_transfers:1,lcq_result:1,moto_done:1,overall:1,round_podium:1,records:1,championship_math:1};
-var NAMED=/\{(rider|last|num|you|by|p1|last1|a|red|cutRider|bubble|star|riders|humans|aLast|bLast|cLast|otherLast|last2|bestBy|quickLast|redLast|secondLast|leaderLast|aheadLast|behindLast|hsLast|wLast|lLast|p4|p5|hchamp|hwinner|champion)\}/;
+var NAMED=/\{(rider|last|num|you|by|p1|last1|a|red|cutRider|bubble|star|riders|humans|aLast|bLast|cLast|otherLast|last2|bestBy|quickLast|redLast|secondLast|leaderLast|aheadLast|behindLast|hsLast|wLast|lLast|p4|p5|hchamp|hwinner|champion|oldLast|rivalLast|pickLast)\}/;
 /* the talk and the passes on the track: an analyst line said on its own (not as the answer to a call) must name who it is about, or the
    room hears "that's a proper fight" without knowing whose */
-var TALKEV={talk_battle:1,talk_you:1,talk_leader:1,talk_top5:1,talk_laps:1,talk_crash:1,talk_points:1,talk_stats:1,talk_season:1,talk_history:1,talk_venue:1,talk_series:1,talk_open:1,talk_recap:1,track_pass:1};
-var TALKSOLO={talk_battle:1,talk_leader:1,talk_top5:1,talk_laps:1,talk_crash:1,talk_points:1,talk_stats:1,talk_season:1,talk_history:1,talk_recap:1,track_pass:1};
+var TALKEV={talk_battle:1,talk_you:1,talk_leader:1,talk_top5:1,talk_laps:1,talk_crash:1,talk_points:1,talk_stats:1,talk_season:1,talk_history:1,talk_venue:1,talk_series:1,talk_open:1,talk_recap:1,track_pass:1,talk_memory:1};
+var TALKSOLO={talk_battle:1,talk_leader:1,talk_top5:1,talk_laps:1,talk_crash:1,talk_points:1,talk_stats:1,talk_season:1,talk_history:1,talk_recap:1,track_pass:1,talk_memory:1};
+/* mxann4: the memory slots and what each holds (memory.js gives raw values: a rider id, a number, a city): nl / nf a rider's last / full name,
+   o an ordinal, c a place, w a number in words, [one, many] a count, g a gap in seconds, y a year (the career only), s a series, r a race */
+var MEMSLOT={last:"nl",oldLast:"nl",aLast:"nl",bLast:"nl",rivalLast:"nl",pickLast:"nl",red:"nf",second:"nf",third:"nf",you:"nf",
+  placeA:"o",placeB:"o",placeC:"o",fromPlace:"o",bestPlace:"o",lastPlace:"o",ptsPlace:"o",place:"o",heatPlace:"o",pickPlace:"o",
+  cityA:"c",cityB:"c",bestCity:"c",lastCity:"c",city:"c",rowN:"w",
+  leadN:["point","points"],ptsN:["point","points"],timesN:["time","times"],roundsN:["round","rounds"],upN:["spot","spots"],winsN:["win","wins"],podN:["podium","podiums"],
+  hitsN:["winner","winners"],picksN:["pick","picks"],seasonsN:["season","seasons"],hsN:["holeshot","holeshots"],marginS:"g",hyear:"y",hseries:"s",heatLabel:"r"};
+/* the memory events (a line of these is a memory line: its facts carry claims) */
+var MEMEV={season_story:1,analyst_pick:1,pick_result:1,talk_memory:1,round_wrap:1,career_note:1};
 function wc(t){ var m=String(t).match(/[A-Za-z0-9'’-]+/g); return m?m.length:0; }
 function sentenceCase(t){ t=String(t).replace(/\s+/g," ").trim(); t=t.charAt(0).toUpperCase()+t.slice(1); return t.replace(/([.!?]\s+)([a-z])/g,function(m,p,c){ return p+c.toUpperCase(); }); }
 
@@ -227,7 +246,8 @@ function create(o){
     story:{kind:"leader",label:"the leader",riders:[],ids:[],section:null,lap:0,at:0,until:0},shotInfo:null,
     track:{layout:o.layout||null,sectionAt:o.sectionAt||null,features:null},hist:[],paused:false,pausedAt:0,
     said:{},saidN:0,   /* the texts said in the last 10 minutes (a hash of the caption -> when): no line is said twice inside 10 minutes */
-    tk:{at:{},pair:{},rider:{},sig:{},gap:null,wait:0,n:0,ctxAt:-1e9,last:null},hb:null};   /* talk: when each topic, pair and rider was last talked about */
+    tk:{at:{},pair:{},rider:{},sig:{},gap:null,wait:0,n:0,ctxAt:-1e9,last:null},hb:null,   /* talk: when each topic, pair and rider was last talked about */
+    mem:null,menv:null};   /* mxann4: the ledger of what the booth SAID about the season (memL), the brain's environment for the round (memEnv) */
   var say=typeof o.say==="function"?o.say:function(){}, capt=typeof o.caption==="function"?o.caption:null, onStory=typeof o.onStory==="function"?o.onStory:null;
   var sayNames=o.sayNames||{};
 
@@ -498,6 +518,7 @@ function create(o){
     P=P.filter(function(tp){ if(rec[tp.id]) return false; if(tp.tags.indexOf("you")<0&&PRONOUN.test(tp.text)&&(humanRef||printsHuman(tp.text,ctx.slots))) return false; if(solo&&!NAMED.test(tp.text)) return false; return true; });
     if(!P.length) return null;
     if(ctx.onlyYou) P=P.filter(function(tp){ return tp.tags.indexOf("you")>=0; });
+    if(ctx.must) P=P.filter(function(tp){ return tp.tags.indexOf(ctx.must)>=0; });   /* mxann4: a memory line only from the templates of its variant (they state its claims) */
     if(!P.length) return null;
     if(ctx.only){ var po=P.filter(function(tp){ return tp.tags.indexOf(ctx.only)>=0; }); if(po.length) P=po; }   /* a line that must say it (the home rider passed): those lines first */
     /* a line already heard in this race sounds canned: prefer templates this race has not used yet, then ones not heard in the last
@@ -554,7 +575,7 @@ function create(o){
     var it={id:++A.seq,ev:ev,role:opt.role||"any",pri:pri,rank:opt.rank!=null?opt.rank:(E.rank||50),due:opt.due!=null?opt.due:A.now,
       exp:(opt.due!=null?opt.due:A.now)+(opt.ttl!=null?opt.ttl:(E.ttl||8))*1000,ctx:opt.ctx,key:opt.key||null,after:opt.after||null,delay:opt.delay||0,
       follow:!!opt.follow,race:A.race?A.race.key:null,lap:lapNo(),build:!!opt.build,post:!!opt.post,budget:opt.budget!==false&&pri<3,story:opt.story||E.story||null,subj:opt.subj||null,
-      followP:opt.followP||0,ttlMs:(opt.ttl!=null?opt.ttl:(E.ttl||8))*1000,
+      followP:opt.followP||0,ttlMs:(opt.ttl!=null?opt.ttl:(E.ttl||8))*1000,alt:opt.alt||null,
       rc:A.race,rm:A.rmap,Rr:A.R};   /* the race this line is about: a line spoken after the next race has been set up still reads ITS race (its seats, its lap, its kind) */
     if(it.key){ A.q=A.q.filter(function(x){ return x.key!==it.key||x.pri>it.pri; }); if(A.q.some(function(x){ return x.key===it.key; })) return null; }
     if(it.after!=null&&!A.q.some(function(x){ return x.id===it.after; })) it.after=null;   /* the line it follows is already said (or gone): do not wait for it */
@@ -573,14 +594,17 @@ function create(o){
   function emit(it,cut){ return inRace(it,function(){ return emit2(it,cut); }); }
   /* the line itself: its context (the facts, read now), the voice and the template (the talk picks a line before it speaks it, to see that it
      fits before the next call) */
+  /* mxann4: a line with an alternative (opt.alt {ev, role, ctx}: the season's storyline in place of the old show_open line, the pick in place of the old
+     intro line) that has nothing to say renders its alternative instead */
+  function useAlt(it){ if(!it.alt||it.altUsed) return false; it.altUsed=true; it.ev=it.alt.ev; if(it.alt.role) it.role=it.alt.role; it.ctx=it.alt.ctx; return true; }
   function prepare(it){
     var ctx=null; try{ ctx=it.ctx?it.ctx():baseCtx(); }catch(e){ ctx=null; if(o.debug) throw e; }
-    if(!ctx) return null;
+    if(!ctx) return useAlt(it)?prepare(it):null;
     ctx.follow=it.follow;
     var E=EV[it.ev], roles=it.role==="any"?roleOrder(E,it):[it.role], out=null, role=null, i;
     for(i=0;i<roles.length&&!out;i++){ role=roles[i]; out=render(it.ev,role,ctx,true); }
     for(i=0;i<roles.length&&!out;i++){ role=roles[i]; out=render(it.ev,role,ctx,false); }
-    if(!out) return null;
+    if(!out) return useAlt(it)?prepare(it):null;
     var who=role==="C"?"a":"b";
     return {ctx:ctx,role:role,out:out,who:who,est:estMs(who,out.text)};
   }
@@ -609,6 +633,11 @@ function create(o){
     A.recent.push(out.tpl); if(A.recent.length>12) A.recent.shift(); A.used[out.tpl]=A.now;
     if(it.ev==="talk_you") noteYouFacts(out.tpl,ctx);
     if(ctx.fk) noteFacts(out.tpl,ctx.fk);
+    /* mxann4: a memory line's claims (facts.mem) go into the ledger as it is SAID; a tagged line of an older event (winner_line streak2 ...) is a memory
+       line only when its template carries the tag; a line that states the standings (a red show_open or finals intro) marks them said */
+    if(ctx.memBy){ var mtg=tplTags(out.tpl), mex=[]; mtg.forEach(function(x){ if(ctx.memBy[x]) mex=mex.concat(ctx.memBy[x]); }); if(mex.length) ctx.facts.mem=(ctx.facts.mem||[]).concat(mex); }
+    if(ctx.memMark&&tplTags(out.tpl).indexOf("red")>=0) memMark(ctx.memMark,tplText(out.tpl));
+    if(ctx.facts.mem&&ctx.facts.mem.length) memSaid(ctx,it);
     /* a crash call heard: the lap on screen as it was called is the lap the talk names later (the review: never the rider's own lap count) */
     if(it.crashRefs&&role==="C") it.crashRefs.forEach(function(x){ if(x.calledLap==null) x.calledLap=lapNo(); });
     A.said[fnv(out.text)]=A.now; if(++A.saidN%40===0) pruneSaid();
@@ -698,7 +727,7 @@ function create(o){
   var FACTSLOT=/\{(?!(rider|last|other|otherLast|you|by|p[1-5]|last[1-5]|a|b|c|aLast|bLast|cLast|red|redLast|second|secondLast|third|first|cutRider|bubble|star|riders|others|humans|lapper|champion|champ|next|old|m1winner|bestBy|quickLast|leaderLast|aheadLast|behindLast|hsLast|wLast|lLast|hwinner|hchamp|num)\})[A-Za-z0-9]+\}/;   /* a slot that is a fact (any slot but a name or a plate) */
   var ATLINE={track_pass:1,pass_top:1,big_move:1,you_up:1,you_down:1,crash_remount:1,crash_out:1,multi_crash:1,last_lap_battle:1,transfer_change:1};   /* still news after the winner's call */
   function dropQ(pred){ var gone=[]; A.q=A.q.filter(function(x){ if(pred(x)){ gone.push(x.id); return false; } return true; }); gone.forEach(resolveAfter); }
-  var LIVEFACT={lapped:1,track_pass:1,talk_battle:1,talk_you:1,talk_leader:1,talk_top5:1,talk_laps:1,talk_crash:1,talk_points:1,talk_stats:1,talk_season:1,talk_history:1,talk_venue:1,talk_series:1,talk_recap:1};
+  var LIVEFACT={lapped:1,track_pass:1,talk_battle:1,talk_you:1,talk_leader:1,talk_top5:1,talk_laps:1,talk_crash:1,talk_points:1,talk_stats:1,talk_season:1,talk_history:1,talk_venue:1,talk_series:1,talk_recap:1,talk_memory:1};
   function nextDue(t,minPri){ var best=null; for(var i=0;i<A.q.length;i++){ var x=A.q[i]; if(x.after!=null||x.due<=t||(minPri!=null&&x.pri<minPri)) continue; if(!best||x.due<best.due) best=x; } return best; }
   /* the next moment a big call may start: the next interrupt in the queue, or the next lap's cards (a war), or the flag */
   function nextBigAt(t){ var n3=nextDue(t,3), at=n3?n3.due:Infinity, le=lapEndAt(); if(le!=null&&le>t-500&&le<at) at=le; return at; }
@@ -1191,12 +1220,25 @@ function create(o){
     if(f.wins===0&&f.rounds>=3&&f.pts>0&&f.place<=8) vs.push({v:"nowin",w:1});
     return vs;
   }
+  /* mxann4: the season so far is memory now: only about a rider in focus (not the top ten on track), mid race only, through the same ledger and
+     budget as the memory topic (its facts are claims: a fact once a round) */
+  function seasonClaims(id,v,f){
+    var R=memRi(), c=[];
+    if(v==="wins") c.push({k:"wins|"+id+"|"+R,v:f.wins});
+    else if(v==="last"){ if(f.lastWin) c.push({k:"win|"+(R-1),v:id}); else c.push({k:"place|"+(R-1)+"|"+id,v:f.lastPlace}); c.push({k:"city|"+(R-1),v:f.lastCity},{k:"lastround|"+R,v:R-1}); }
+    else if(v==="pts"){ if(f.place===1) c.push({k:"red|"+(R-1),v:id}); else c.push({k:"ptsplace|"+id+"|"+(R-1),v:f.place}); }
+    else if(v==="pod") c.push({k:"pods|"+id+"|"+R,v:f.pod});
+    else if(v==="hs") c.push({k:"hs|"+id+"|"+R,v:f.hs});
+    else if(v==="nowin") c.push({k:"wins|"+id+"|"+R,v:0});
+    return c;
+  }
   function topicSeason(rows,cl){
-    var rl=!!A.tk.relax, cand=talkRiders(rows).filter(function(s){ var id=seatId(s); return A.now-(A.tk.rider[id]||-1e9)>(rl?10000:20000)&&A.now-(A.tk.season&&A.tk.season[id]||-1e9)>(rl?60000:150000); });
+    var mem=memOn(); if(mem&&!memGate()) return null;
+    var rl=!!A.tk.relax, R=memRi(), focus=mem?memFocus():null, cand=(mem?focus.filter(function(s){ var x=rowOf(rows,s); return x&&onTrack(x); }):talkRiders(rows)).filter(function(s){ var id=seatId(s); return A.now-(A.tk.rider[id]||-1e9)>(rl?10000:20000)&&A.now-(A.tk.season&&A.tk.season[id]||-1e9)>(rl?60000:150000)&&(!mem||riderRoom(id,R,true)); });
     for(var i=0;i<cand.length;i++){ var s=cand[i], id=seatId(s), f=seasonFacts(id); if(!f) return null;
-      var vs=seasonVars(f).filter(function(x){ return !factUsed(id+"|s|"+x.v); }); if(!vs.length) continue;
+      var vs=seasonVars(f).filter(function(x){ if(factUsed(id+"|s|"+x.v)) return false; if(!mem) return true; return !MEM().anySaid({claims:seasonClaims(id,x.v,f)},memL().claims[R]||{}); }); if(!vs.length) continue;
       vs.sort(function(a,b){ return b.w-a.w; }); var pk=vs[Math.floor(rnd()*Math.min(2,vs.length))];
-      return {k:"season",ev:"talk_season",sc:1,fp:0,ctx:seasonTalkCtx(s,pk.v),subj:[s],mark:function(){ (A.tk.season=A.tk.season||{})[id]=A.now; A.tk.rider[id]=A.now; factSay(id+"|s|"+pk.v); }}; }
+      return {k:"season",ev:"talk_season",sc:1,fp:0,ctx:seasonTalkCtx(s,pk.v),subj:[s],mark:function(){ (A.tk.season=A.tk.season||{})[id]=A.now; A.tk.rider[id]=A.now; factSay(id+"|s|"+pk.v); if(mem){ var r=A.race; if(r){ r.memAt=A.now; r.memN=(r.memN|0)+1; } } }}; }
     return null;
   }
   function seasonTalkCtx(s,v){
@@ -1214,6 +1256,7 @@ function create(o){
       else if(v==="nowin"){ if(f.wins!==0) return null; t.nowin=1; }
       else return null;
       c.facts.fact=v;
+      if(memOn()) c.facts.mem=seasonClaims(id,v,f);   /* mxann4: its facts are claims (the ledger, the checker) */
       c.story={kind:"battle",riders:[s]};
       return c;
     };
@@ -1319,7 +1362,8 @@ function create(o){
       else if(v==="countHere"){ if(f.total<1) return null; sl.countN=cntV(f.total,"round","rounds"); refs.push({sid:"all-before",year:A.G.year-1,last:A.hb.date}); c.facts.count=f.total; c.facts.countThis=f.earlierN; }
       else if(v==="firstHere"){ sl.hfirst=yr(f.first); }
       else if(v==="mostHere"){ sl.hwinner=nameV(hname(f.most.pi)); sl.winsHereN=cntV(f.most.n,"time","times"); refs.push({sid:"all-before",year:A.G.year-1,last:A.hb.date}); c.facts.most=f.most; }
-      else if(v==="earlierHere"){ if(!f.earlier||!f.earlier.winner) return null; sl.hwinner=nameRec(f.earlier.winner).full; c.facts.earlier=f.earlier.ri; if(rider(f.earlier.winner)&&rider(f.earlier.winner).kind==="human") c.human=true; }
+      else if(v==="earlierHere"){ if(!f.earlier||!f.earlier.winner) return null; sl.hwinner=nameRec(f.earlier.winner).full; c.facts.earlier=f.earlier.ri; if(rider(f.earlier.winner)&&rider(f.earlier.winner).kind==="human") c.human=true;
+        if(memOn()){ var ecl=[{k:"win|"+f.earlier.ri,v:f.earlier.winner},{k:"city|"+f.earlier.ri,v:f.earlier.city}]; if(MEM().anySaid({claims:ecl},memL().claims[memRi()]||{})) return null; c.facts.mem=ecl; } }   /* mxann4: a memory line, under the ledger */
       c.facts.hist=refs;
       return c;
     };
@@ -1473,13 +1517,244 @@ function create(o){
     };
   }
 
+  /* =================================================================================================================================
+     MEMORY (mxann4; the CEO, 2026-10-19: "The announcers should remember previous races ... give their analysis on how riders did in the previous
+     races. They should have their own brain and be ever learning as the season goes on. Everything must be balanced though ... just make it sound
+     like a normal announcer on TV throughout the season"). The season's journal (G.jr, mxwar/journal.js) and the brain (mxwar/memory.js) give the
+     storylines; the booth says them where a TV booth puts them: the round's opening (Hutch's lead story in place of the old show_open line, Wes's
+     second story at Medium and Slow, the person's earlier seasons once), Hutch's pick before the first final, a context line in the race about a
+     rider who just became the subject (mid race only, 75 s apart, at most one per 3 minutes of racing), and the wrap (the round in the season
+     story, the person's round, how the pick did). The ledger (A.mem, kept by state()) holds what was SAID: a claim once a round in any words, a
+     story once until it changes, the picks that count, the views the booth took (BG_audit/sprint/mxann4/design/MEMORY-PLAN.md 5).
+     ================================================================================================================================= */
+  function memOn(){ var Gs=A.G; return !!(MEM()&&Gs&&Gs.jr&&Gs.jr.r&&Gs.results); }
+  function memNew(jid){ return {v:1,jid:jid,picks:{},told:{},views:{},per:{},career:{},roundN:{},claims:{},lead:{},leadKey:{},youV:{},youSig:{},careerMile:{},patternAt:null,missAt:null,scoreAt:null,rider:{}}; }
+  function memL(){ var Gs=A.G, jid=Gs&&Gs.jr?Gs.jr.id:null, m=A.mem; if(!m||m.v!==1||m.jid!==jid) m=A.mem=memNew(jid); return m; }
+  function memRi(){ var r=A.race; return r&&r.ri!=null?r.ri:(A.G?A.G.ri:0); }
+  /* the ledger stays small: the claims of the last two rounds, the 60 latest stories, the riders' counts of this round; a save from earlier in the
+     season loaded back forgets what was said about rounds that have not been raced */
+  function memPrune(){
+    var m=A.mem; if(!m) return; var ri=memRi(), k;
+    for(k in m.claims) if(+k<ri-1) delete m.claims[k];
+    for(k in m.rider) if(+k<ri) delete m.rider[k];
+    for(k in m.roundN) if(+k<ri-2) delete m.roundN[k];
+    for(k in m.lead) if(+k<ri-2){ delete m.lead[k]; delete m.leadKey[k]; }
+    for(k in m.youSig){ var ys=m.youSig[k]; for(var sg in ys) if(ys[sg]<ri-6) delete ys[sg]; }
+    var keys=Object.keys(m.told); if(keys.length>60){ keys.sort(function(a,b){ return (m.told[a].ri|0)-(m.told[b].ri|0); }); keys.slice(0,keys.length-60).forEach(function(x){ delete m.told[x]; }); }
+    var Gs=A.G, done=Gs&&Gs.results?Gs.results.length:0;
+    for(k in m.picks) if(+k>done) delete m.picks[k];
+  }
+  /* the brain's environment for the round: the history book (last season's place, the defending champion: only seasons over before this round) and
+     the person's earlier seasons on this device (create({career})) */
+  function memEnv(){
+    var Gs=A.G, rc=(A.race&&A.race.rc)||roundCtx(), k=(Gs?Gs.sid:"")+"|"+(rc?rc.ri:0);
+    if(A.menv&&A.menv.k===k) return A.menv.e;
+    var cache={}, e={book:function(id){ if(id in cache) return cache[id]; var out=null; try{ var pi=personOf(id), h=pi!=null?riderHist(pi):null; if(h){ if(h.defending) out={pos:1,defending:true}; else if(h.lastYear) out={pos:h.lastYear.pos}; } }catch(x){ out=null; } cache[id]=out; return out; },
+      career:function(name){ if(typeof o.career!=="function") return []; try{ return o.career(name)||[]; }catch(x){ return []; } }};
+    A.menv={k:k,e:e}; return e;
+  }
+  function isHumanId(id){ var R=rider(id); return !!(R&&R.kind==="human"); }
+  /* the story's raw values as slots (MEMSLOT); a value that cannot be said makes the line fail (never a gap) */
+  function memSlots(sl,d){
+    for(var k in d){ var v=d[k], ty=MEMSLOT[k], x=null; if(v==null||ty==null) continue;
+      if(ty==="nl"||ty==="nf"){ var n=nameRec(v); if(!n) return false; x=ty==="nl"?n.last:n.full; }
+      else if(ty==="o") x=v>0?ordV(v):null; else if(ty==="c") x=placeV(v); else if(ty==="w") x=v>0?V(words(v)):null; else if(ty==="g") x=gapSecV(v);
+      else if(ty==="y") x=V(String(v),yearWords(v)); else if(ty==="s") x=V(String(v),sayify(String(v))); else if(ty==="r") x=raceName(v);
+      else if(Array.isArray(ty)) x=v>=0?cntV(v,ty[0],ty[1]):null;
+      if(!x) return false; sl[k]=x; }
+    return true;
+  }
+  /* a memory line's context: the round's context as always, the story's variant (the templates it may use), its slots and claims (facts.mem) */
+  function memCtx(s,ev){
+    var c=baseCtx(), sl=c.slots, t=c.tags; c.facts.ev=ev; c.facts.named=(s.ids||[]).filter(Boolean); c.facts.mem=s.claims.slice(); c.facts.memKey=s.key; c.facts.memKind=s.kind; c.facts.memV=s.v||s.kind;
+    (s.tags||[]).forEach(function(x){ t[x]=1; }); c.must=s.v||s.kind; if(t.early) c.only="early";
+    if(!memSlots(sl,s.d||{})) return null;
+    if(s.you){ t.you=1; c.human=true; c.facts.you=s.you; if(!sl.you) sl.you=nameRec(s.you).full; }
+    if(c.facts.named.some(isHumanId)) c.human=true;
+    c.mem=s;
+    return c;
+  }
+  /* is a story new to the booth (its key at this version never told) and are its claims unsaid this round (in any words)? */
+  function memFresh(s,R){ var m=memL(), t=m.told[s.key]; if(t&&t.ver===s.ver) return false; return !MEM().anySaid(s,m.claims[R]||{}); }
+  function memRoom(R,cap){ return (memL().roundN[R]|0)<(cap||14); }   /* a round: 14 memory lines at most (all phases) */
+  function riderRoom(id,R,inRaceToo){ var m=memL(), rr=m.rider[R]||{}; if((rr[id]|0)>=(isHumanId(id)?4:3)) return false; if(inRaceToo&&A.race){ var mr=A.race.memRider||{}; if((mr[id]|0)>=2) return false; } return true; }
+  /* a memory line was SAID: its claims, the story, the counts, the views and picks the booth now owns */
+  function memSaid(ctx,it){
+    var m=memL(), ri=memRi(), bag=m.claims[ri]||(m.claims[ri]={}), s=ctx.mem, rk=A.race?A.race.key:null;
+    ctx.facts.mem.forEach(function(c){ bag[c.k]=c.v; });
+    m.roundN[ri]=(m.roundN[ri]|0)+1;
+    var rr=m.rider[ri]||(m.rider[ri]={}), mr=A.race?(A.race.memRider||(A.race.memRider={})):{};
+    (ctx.facts.named||[]).forEach(function(id){ rr[id]=(rr[id]|0)+1; mr[id]=(mr[id]|0)+1; });
+    if(s){
+      if(s.key) m.told[s.key]={ver:s.ver,ri:ri,race:rk};
+      if(s.view&&s.ids&&s.ids[0]) m.views[s.ids[0]]={v:s.view,ri:ri};
+      if(s.kind==="mind"&&s.ids&&m.views[s.ids[0]]) m.views[s.ids[0]].done=1;
+      if(s.kind==="pattern") m.patternAt=ri;
+      if(s.kind==="you"&&s.you){ m.youV[s.you]={v:s.v,ri:ri}; if(s.sig) (m.youSig[s.you]=m.youSig[s.you]||{})[s.sig]=ri; }
+      if(s.you) m.per[s.you]=ri;
+      if(s.careerMile&&s.you) m.careerMile[s.you]=ri;
+      if(s.kind==="career"&&s.you) m.career[s.you]=ri;
+    }
+    if(typeof ctx.memDone==="function") try{ ctx.memDone(); }catch(e){}
+    memPrune();
+  }
+  /* a line that stated the standings (a red show_open or finals intro): the claims its template's slots state are said */
+  function memMark(list,text){ if(!memOn()) return; var m=memL(), ri=memRi(), bag=m.claims[ri]||(m.claims[ri]={}); (list||[]).forEach(function(c){ if(!c.slot||String(text).indexOf("{"+c.slot+"}")>=0) bag[c.k]=c.v; }); }
+  /* the standings after the last round, from the journal: the claims a red line states */
+  function standMarks(){
+    var Gs=A.G, R=memRi(); if(!memOn()||R<1) return null; var jx=null; Gs.jr.r.forEach(function(x){ if(x.ri===R-1) jx=x; }); if(!jx||!jx.tb||jx.tb.length<2||!(jx.tb[0][2]>0)) return null;
+    var a=jx.tb[0], b=jx.tb[1]; return [{k:"red|"+(R-1),v:a[0],slot:"red"},{k:"ptsgap|"+a[0]+"|"+b[0]+"|"+(R-1),v:a[2]-b[2],slot:"leadN"},{k:"ptsplace|"+b[0]+"|"+(R-1),v:2,slot:"second"}];
+  }
+  /* ---- the round's opening: the lead story (Hutch), the second story (Wes), the person's earlier seasons ---- */
+  function storyCtx(which){
+    return function(){
+      if(!memOn()) return null; var Gs=A.G, R=memRi(), M=MEM(); if(R<1||!memRoom(R)) return null;
+      var m=memL(), said=m.claims[R]||{}, env=memEnv(), s=null;
+      if(which==="lead") s=M.lead(Gs,R,env,m,said);
+      else s=M.second(Gs,R,env,m,said,m.leadKey[R]||null,{standingsSaid:said["red|"+(R-1)]!=null,leadKind:m.lead[R]||null});
+      if(!s||(s.ids||[]).some(function(id){ return !riderRoom(id,R,false); })) return null;
+      var c=memCtx(s,"season_story"); if(!c) return null;
+      if(which==="lead") c.memDone=function(){ m.lead[R]=s.kind; m.leadKey[R]=s.key; };
+      return c;
+    };
+  }
+  function careerCtx(){
+    return function(){
+      if(!memOn()) return null; var Gs=A.G, R=memRi(), M=MEM(), m=memL(); if(!memRoom(R)) return null;
+      var s=M.stories(Gs,R,memEnv(),m).filter(function(x){ return x.kind==="career"&&m.career[x.you]==null; })[0];
+      return s?memCtx(s,"career_note"):null;
+    };
+  }
+  /* ---- the finals intro: Hutch's pick (the person on this gate for the first time this round: a you line that names the person too) ---- */
+  function pickCtx(yf){
+    return function(){
+      if(!memOn()) return null; var Gs=A.G, r=A.race, R=memRi(), M=MEM(), m=memL(); if(!r||!memRoom(R)) return null;
+      if(m.picks[R]&&m.picks[R].said) return null;
+      var p=M.pick(Gs,R,(A.rmap||[]).slice(),memEnv(),m); if(!p) return null;
+      var hum=(A.rmap||[]).filter(isHumanId);
+      if(p.v==="none"&&yf&&hum.length) return null;   /* no pick to give, and the person must be named: the old intro line */
+      var s={kind:"pick",key:"pick|"+R,ver:"1",v:p.v,tags:["pick",p.v],d:p.d||{},claims:p.claims.slice(),ids:p.id?[p.id]:[]};
+      if(p.you){ s.you=p.you; s.tags.push("you"); }
+      else if(yf&&hum.length&&p.id){ s.v="youIn"; s.tags=["pick","youIn","you"]; s.d={last:p.id,you:hum[0]}; s.claims=[{k:"pick|"+R,v:p.id}]; s.you=hum[0]; s.ids=[p.id,hum[0]]; }
+      var c=memCtx(s,"analyst_pick"); if(!c) return null;
+      c.memDone=function(){ m.picks[R]={id:p.id,why:p.why,v:s.v,said:1}; };
+      return c;
+    };
+  }
+  /* ---- the wrap: the round in the season story; the person's round; how the pick did; the season's scorecard ---- */
+  function wrapCtx(which){
+    return function(){
+      if(!memOn()) return null; var Gs=A.G, R=memRi(), M=MEM(), m=memL(); if(!memRoom(R)) return null;
+      var L=M.wrap(Gs,R,memEnv(),m).filter(function(s){ return memFresh(s,R)&&(s.ids||[]).every(function(id){ return riderRoom(id,R,false); }); }), s=null;
+      var ys=L.filter(function(x){ return x.kind==="you"; }); ys.sort(function(a,b){ var pa=m.per[a.you]!=null?m.per[a.you]:-1, pb=m.per[b.you]!=null?m.per[b.you]:-1; return b.score-a.score||pa-pb; });
+      var lk=A.race&&A.race.wrapKind, st=L.filter(function(x){ return x.kind!=="you"&&x.kind!==lk; });
+      if(which==="you") s=ys[0]; else if(which==="youfirst") s=ys[0]||st[0]; else s=st[0];
+      if(!s) return null;
+      var c=memCtx(s,"round_wrap"); if(!c) return null;
+      if(s.kind!=="you"&&A.race){ var rr=A.race; c.memDone=function(){ rr.wrapKind=s.kind; }; }
+      return c;
+    };
+  }
+  function pickResCtx(final){
+    return function(){
+      if(!memOn()) return null; var Gs=A.G, R=memRi(), M=MEM(), m=memL(); if(!final&&!memRoom(R)) return null;
+      var p=m.picks[R], n=0, hits=0, k;
+      for(k in m.picks){ var pk=m.picks[k]; if(!pk||!pk.said||!pk.id||+k>R) continue; var gx=M.grade(Gs,+k,pk.id); if(!gx) continue; n++; if(gx.cls==="hit") hits++; }
+      var sc=[{k:"score|"+R,v:hits+"/"+n}], s, due=R-(m.scoreAt==null?-9:m.scoreAt)>=4;
+      if(final){ if(n<2) return null; s={kind:"pickres",key:"score|final",ver:String(n),v:"final",tags:["pickres","final"],d:{hitsN:hits,picksN:n},claims:sc,ids:[]}; }
+      else {
+        if(!p||!p.said||!p.id) return null; var g=M.grade(Gs,R,p.id); if(!g) return null;
+        var v=g.cls, d={last:p.id}, cl=g.claims.slice(), you=isHumanId(p.id);
+        if(you){ v=g.cls==="hit"?"hitYou":g.place>0&&g.place<=20?"missYou":"missYouOut"; d={you:p.id}; if(v==="missYou") d.place=g.place; }
+        else if(v==="hit"){ if(n>=3&&due){ v="hitscore"; d.hitsN=hits; d.picksN=n; cl=cl.concat(sc); } }
+        else if(v==="podium"||v==="top5"||v==="back"){ if(g.place>0&&g.place<=20) d.place=g.place; else v="backout"; }
+        if(v==="back"||v==="backout"){   /* a plain miss: every other round at most; the scorecard instead when it is due */
+          if(n>=4&&due){ v="score"; d={hitsN:hits,picksN:n}; cl=[{k:"pick|"+R,v:p.id}].concat(sc); }
+          else if(m.missAt===R-1) return null; }
+        s={kind:"pickres",key:"pickres|"+R,ver:"1",v:v,tags:["pickres",v],d:d,claims:cl,ids:[p.id]};
+        if(you){ s.you=p.id; s.tags.push("you"); }
+      }
+      var c=memCtx(s,"pick_result"); if(!c) return null;
+      c.memDone=function(){ if(s.v==="back"||s.v==="backout") m.missAt=R; if(s.v==="score"||s.v==="hitscore"||s.v==="final") m.scoreAt=R; };
+      return c;
+    };
+  }
+  /* ---- 14. the season, as context in the race: a rider who just became the subject (a fight, a pass, a crash, the leader, the person, the shot),
+     mid race only (never the gate, the start, the last laps), 75 s apart (Chatter More 50 s), at most one per 3 minutes of racing (Fast fewer,
+     More more), two per rider a race; never within 4 s of a big call; never eased by the last resort before a silence ---- */
+  function memGate(){
+    var r=A.race; if(!memOn()||!r||A.tk.relax||o.chatter==="less") return false;
+    if(!r.isFinal&&!humanSeats().length) return false;
+    var len=r.len|0, lap=r.lap|0, edge=Math.max(2,Math.round(0.15*len)); if(lap<=edge||lap>len-edge) return false;
+    var now=A.now; if(now-(r.memAt||-1e9)<(o.chatter==="more"?50000:75000)) return false;
+    if(now-A.booth.lastAction<4000) return false; var n3=nextDue(now,3); if(n3&&n3.due-now<4000) return false;
+    var cl=rclock(); if(cl==null) return false;
+    var per=180000/((o.speed==="fast"?0.7:1)*(o.chatter==="more"?1.3:1)), n=r.memN|0;
+    if(n>=Math.floor(cl/per)+1) return false;
+    if(Lms()<15000&&n>=1) return false;     /* a race shown short (the 2D view): one at most */
+    return memRoom(memRi(),10);             /* the round's budget: the wrap keeps its room */
+  }
+  /* the riders in focus: the story of the last 12 s, the camera's shot of the last 8 s, the person when the last line was about the person */
+  function memFocus(){
+    var out=[], seen={}, now=A.now; function add(s){ if(s==null||s<0||seen[s]) return; seen[s]=1; out.push(s); }
+    var st=A.story; if(st&&now-st.at<=12000) (st.riders||[]).forEach(add);
+    var sh=A.shotInfo; if(sh&&now-sh.at<=8000) (sh.riders||[]).forEach(add);
+    var h=A.hist[A.hist.length-1]; if(h&&h.facts&&h.facts.you!=null){ var s=(A.rmap||[]).indexOf(h.facts.you); if(s>=0) add(s); }
+    return out;
+  }
+  /* the person's season against the race now (the live place is the stake): best so far, better than last time, the arc, the rival right there */
+  function youLive(hid,x,rows){
+    var M=MEM(), R=memRi(), out=[], p=x.place; if(!(p>=1&&p<=20)) return out;
+    M.youNotes(A.G,R,hid).forEach(function(n){
+      var s=null, key="youlive|"+hid+"|"+R+"|"+n.v;
+      if(n.v==="youBest"&&p<n.best.p&&n.best.p<=20) s={v:"youBest",d:{you:hid,bestPlace:n.best.p},sc:0.95,ok:function(q){ return q<n.best.p; }};
+      else if(n.v==="youLast"&&p<n.last.p) s={v:"youLast",d:{you:hid,lastPlace:n.last.p},sc:0.85,ok:function(q){ return q<n.last.p; }};
+      else if(n.v==="youArc") s={v:"youArc",d:{you:hid,placeA:n.two[0].p,placeB:n.two[1].p},sc:0.75,ok:function(){ return true; }};
+      else if(n.v==="youRival"&&p>1){ var ah=rows[p-2]; if(ah&&seatId(ah.s)===n.rival.id&&onTrack(ah)) s={v:"youRival",d:{you:hid,rivalLast:n.rival.id},sc:0.9,ok:function(q,rws){ var a2=rws[q-2]; return !!(a2&&seatId(a2.s)===n.rival.id); },noPlace:1}; }
+      if(!s) return;
+      out.push({kind:"you",key:key,ver:"1",score:s.sc,v:s.v,tags:["you",s.v],d:s.d,claims:n.claims.slice(),ids:[hid],you:hid,live:!s.noPlace,ok:s.ok});
+    });
+    return out;
+  }
+  /* Wes on Hutch's pick (once a race): out front, or buried */
+  function pickLive(id,x){
+    var m=memL(), R=memRi(), pk=m.picks[R]; if(!pk||!pk.said||pk.id!==id||A.race.teased) return null;
+    var v=x.place===1?"pickLead":x.place>=8?"pickBack":null; if(!v) return null;
+    return {kind:"pick",key:"picklive|"+R+"|"+A.race.key,ver:"1",score:0.7,v:v,tags:["pick",v],d:{last:id},claims:[{k:"pick|"+R,v:id}],ids:[id],live:v==="pickBack",ok:function(q){ return v==="pickLead"?q===1:q>=8; }};
+  }
+  function topicMemory(rows,cl){
+    if(!memGate()) return null;
+    var Gs=A.G, R=memRi(), M=MEM(), m=memL(), env=memEnv(), focus=memFocus(), best=null;
+    function cand(s,seat){ if(!s||!memFresh(s,R)) return; if((s.ids||[]).some(function(id){ return !riderRoom(id,R,true); })) return; if(!best||s.score>best.s.score) best={s:s,seat:seat}; }
+    focus.forEach(function(seat){ var x=rowOf(rows,seat); if(!onTrack(x)) return; var id=seatId(seat); if(!id) return;
+      if(isHumanSeat(seat)){ youLive(id,x,rows).forEach(function(s){ cand(s,seat); }); return; }
+      M.notes(Gs,R,id,env,m).forEach(function(s){ cand(s,seat); });
+      cand(M.heatNote(Gs,R,id),seat); cand(pickLive(id,x),seat); });
+    if(focus.length>=2){ var a=seatId(focus[0]), b=seatId(focus[1]); if(a&&b&&!isHumanId(a)&&!isHumanId(b)) cand(M.rivalNote(Gs,R,a,b),focus[0]); }
+    if(!best) return null;
+    var pk=best;
+    return {k:"memory",ev:"talk_memory",sc:1,fp:0,ctx:memTalkCtx(pk),subj:[pk.seat],mark:function(){ var r=A.race; if(r){ r.memAt=A.now; r.memN=(r.memN|0)+1; } }};
+  }
+  function memTalkCtx(pk){
+    return function(){
+      var cl=rclock(), rows=cl!=null?liveRows(cl):null; if(!rows) return null;
+      var s=pk.s, x=rowOf(rows,pk.seat); if(!onTrack(x)) return null;
+      if(s.ok&&!s.ok(x.place,rows)) return null;   /* the stake no longer holds: nothing is said */
+      var c=memCtx(s,"talk_memory"); if(!c) return null;
+      c.facts.livePlace=x.place; c.facts.clock=cl;
+      if(s.live){ c.slots.place=ordV(x.place); c.facts.mem.push({k:"live|"+memRi()+"|"+A.race.key+"|"+cl+"|"+seatId(pk.seat),v:x.place}); }
+      if(s.kind==="pick"){ var rr=A.race; c.memDone=function(){ rr.teased=1; }; }
+      return c;
+    };
+  }
+
   /* ---- the choice: the race topics first (higher weight, shorter rest), the context ones when the race has been told. In the closing laps (and
      with Chatter Less) the talk is the race: the context comes only after every race topic has failed (with Chatter Less, after 10 s of quiet).
      The review: the closing laps went silent for up to 52 s when the person was winning by a margin; the CEO, 2026-10-18: "talk the entire time,
      even if they got to bring up history. But it should be talking about the race itself" ---- */
   var TOPICS=[["open",topicOpen,9,6000,1],["battle",topicBattle,10,7000,1],["you",topicYou,9,13000,1],["leader",topicLeader,8,17000,1],["crash",topicCrash,7.5,18000,1],
     ["laps",topicLaps,6,22000,1],["recap",topicRecap,5.5,24000,1],["top5",topicTop5,5.5,30000,1],["points",topicPoints,5,40000,1],["stats",topicStats,4.5,40000,1],["pack",topicPack,4,28000,1],
-    ["season",topicSeason,3.6,26000,0],["rider",topicRider,3.2,34000,0],["colour",topicColour,2.6,34000,0],["venue",topicVenue,1.1,140000,0],["series",topicSeries,1,190000,0]];
+    ["memory",topicMemory,4,45000,0],["season",topicSeason,3.6,26000,0],["rider",topicRider,3.2,34000,0],["colour",topicColour,2.6,34000,0],["venue",topicVenue,1.1,140000,0],["series",topicSeries,1,190000,0]];
   function talkCands(rows,cl){
     var r=A.race, t=A.now, out=[], late=r.lap>=r.len-1, less=o.chatter==="less", tk=A.tk, quiet=t-lastEnd();
     /* the context (season, history, colour) gets about one talk line in five: more when it has been quiet for a while, none in a row */
@@ -1711,28 +1986,42 @@ function create(o){
     var tail=A.q.filter(function(x){ return x.post; }).sort(function(a,b){ return b.id-a.id; })[0], prev=tail||null;
     /* a simmed race's lines are "post" lines (they outlive the sim's own cleanup); a watched race's build-up ends at the gate drop */
     function chain(ev,opt){ opt=opt||{}; if(simmed) opt.post=true; else opt.build=true; opt.after=prev?prev.id:null; opt.delay=opt.delay!=null?opt.delay:500; var it=q(ev,opt); if(it) prev=it; return it; }
+    var seq0=A.seq;   /* mxann4: the round's opening lines (marked below): a first race simmed after its call keeps them, as post lines */
     if(first&&!rc.opened){
       rc.opened=true; rc.redBefore=redNow();
       chain("show_open",{role:"C",ctx:introCtx("show_open")});
-      chain("show_open",{role:"A",ctx:introCtx("show_open"),delay:700});
+      /* mxann4: the storylines coming in. Hutch's lead story takes the old show_open line's place (the old line when nothing qualifies); Wes adds
+         the second story at Medium and Slow; the person's earlier seasons once a season. A simmed round: the lead story only */
+      if(memOn()){
+        chain("season_story",{role:"A",ctx:storyCtx("lead"),alt:{ev:"show_open",role:"A",ctx:introCtx("show_open")},delay:700});
+        if(!simmed&&o.speed!=="fast"&&o.chatter!=="less") chain("season_story",{role:"C",ctx:storyCtx("second")});
+        if(!simmed) chain("career_note",{role:"any",ctx:careerCtx()});
+      }
+      else chain("show_open",{role:"A",ctx:introCtx("show_open"),delay:700});
       if(Gs.series==="smx"&&rc.cal) chain("smx_playoff",{role:"C",ctx:introCtx("smx_playoff")});
       if(RG&&RG.tc) chain("triple_crown",{role:"C",ctx:introCtx("triple_crown")});
       if((Gs.humans||[]).length>=2&&!A.sit.party){ A.sit.party=true; chain("party_welcome",{role:"C",ctx:introCtx("party_welcome")}); chain("party_welcome",{role:"A",ctx:introCtx("party_welcome")}); }
       var cm=champCtx("intro"); if(cm) chain("championship_math",{role:"C",ctx:cm});
+      A.q.forEach(function(x){ if(x.id>seq0) x.opening=true; });
     }
     if(simmed) return;
     if(RG&&RG.tc&&r.kind==="main"&&r.i>0) chain("triple_crown",{role:"C",ctx:introCtx("triple_crown")});
     var ik="race_intro_"+(r.kind==="qual"?"qual":r.kind);
     /* the first race of the round a person rides in: the analyst always names him in its intro (later races: now and then) */
     var yf=!rc.youNamed&&(A.rmap||[]).some(function(id){ return rider(id)&&rider(id).kind==="human"; }); if(yf) rc.youNamed=true;
-    if(EV[ik]){ chain(ik,{role:"C",ctx:introCtx(ik)}); if(yf||chance(0.8)) chain(ik,{role:"A",ctx:introCtx(ik,yf),delay:650}); }
+    /* mxann4: the round's first final (the Main, Main 1 of a Triple Crown night, Moto 1): Hutch's pick in his intro slot (the old line when there is none) */
+    var pickNow=r.isFinal&&!rc.pickAsked&&memOn();
+    if(EV[ik]){ chain(ik,{role:"C",ctx:introCtx(ik)});
+      if(pickNow){ rc.pickAsked=true; chain("analyst_pick",{role:"A",ctx:pickCtx(yf),alt:{ev:ik,role:"A",ctx:introCtx(ik,yf)},delay:650}); }
+      else if(yf||chance(0.8)) chain(ik,{role:"A",ctx:introCtx(ik,yf),delay:650}); }
     if(o.autoEngines!==false) chain("engines",{ctx:introCtx("engines"),delay:900});
   }
   function introCtx(ev,youFirst){
     return function(){
       var c=baseCtx(), sl=c.slots, t=c.tags, r=A.race, Gs=A.G; c.facts.ev=ev; c.facts.named=[];
       var red=redNow(), redIn=!!(red&&A.rmap&&A.rmap.indexOf(red)>=0);
-      if(red&&(ev==="show_open"||ev==="championship_math"||redIn)){ t.red=1; c.facts.red=red; }
+      if(red&&(ev==="show_open"||ev==="championship_math"||redIn)){ t.red=1; c.facts.red=red;
+        var sm=standMarks(); if(sm&&sm[0].v===red) c.memMark=sm; }   /* mxann4: a red line states the standings: the storyline after it never repeats them */
       var hum=(A.rmap||[]).filter(function(id){ return rider(id)&&rider(id).kind==="human"; });
       if(hum.length&&ev!=="show_open"&&ev!=="party_welcome"){ var hid=pick(hum); var hn=nameRec(hid); sl.you=hn.full; sl.num=hn.num; t.you=1; c.facts.you=hid; c.human=true; }
       if(ev==="show_open"&&(Gs.humans||[]).length===1){ sl.you=nameRec(Gs.humans[0]).full; t.you=1; c.facts.you=Gs.humans[0]; }
@@ -1740,7 +2029,8 @@ function create(o){
       if(ev==="party_welcome"){ sl.k=numV((Gs.humans||[]).length); }
       if(ev==="race_intro_lcq"&&r){ var star=starIn(A.rmap); if(star){ sl.star=nameRec(star).full; t.star=1; c.facts.star=star; } }
       if(ev==="race_intro_main"){ var vf=venueFacts();
-        if(vf&&vf.earlier&&vf.earlier.winner&&nameRec(vf.earlier.winner)){ t.histearlier=1; sl.hwinner=nameRec(vf.earlier.winner).full; c.facts.earlier=vf.earlier.ri; if(rider(vf.earlier.winner).kind==="human") c.human=true; }   /* the series was here earlier this season: that round is the last visit (the review) */
+        if(vf&&vf.earlier&&vf.earlier.winner&&nameRec(vf.earlier.winner)){ var ecl=[{k:"win|"+vf.earlier.ri,v:vf.earlier.winner},{k:"city|"+vf.earlier.ri,v:vf.earlier.city}];
+          if(!memOn()||!MEM().anySaid({claims:ecl},memL().claims[memRi()]||{})){ t.histearlier=1; sl.hwinner=nameRec(vf.earlier.winner).full; c.facts.earlier=vf.earlier.ri; if(rider(vf.earlier.winner).kind==="human") c.human=true; if(memOn()) c.memBy={histearlier:ecl}; } }   /* the series was here earlier this season: that round is the last visit (the review); mxann4: a memory line, under the ledger */
         else if(vf&&vf.last){ var hx=hsx(vf.last[0]); t.histcity=1; sl.hyear=V(String(hx.year),yearWords(hx.year)); sl.hwinner=nameV(hname(vf.last[4])); c.facts.hist=[{sid:hx.id,year:hx.year,last:hx.last,date:vf.last[2]}]; } }
       if(ev==="smx_playoff"){ var mult=(r&&r.rc&&r.rc.cal&&r.rc.cal.mult)||1; t["x"+mult]=1; if(mult>1) t.mult=1; var F=Gs.round&&Gs.round.F; if(F&&F.direct&&F.qual&&F.qual.length){ t.seeds=1; sl.tm=numV(F.qual[0].toMain); sl.seedsN=numV(F.direct); } }
       if(ev==="triple_crown"&&r&&r.kind==="main"){ t["main"+(r.i+1)]=1; }
@@ -2128,6 +2418,9 @@ function create(o){
         var star=null, L=sstand(); for(var i=0;i<Math.min(5,L.length);i++){ var s=A.rmap?A.rmap.indexOf(L[i].id):-1; if(s>=0&&L[i].pts>0&&L[i].kind!=="human"){ var p=placeIn(cur,s); if(p>10){ star={id:L[i].id,p:p}; break; } } }
         if(star){ t.star=1; riderSlots(sl,star.id); sl.star=nameRec(star.id).full; sl.place=ordV(star.p); c.facts.star=star.id; c.facts.place=star.p; c.facts.rid=star.id; }
         var hs=al.filter(function(x){ return isHumanSeat(x.s); })[0]; if(hs&&!star){ t.you=1; sl.you=nameRec(seatId(hs.s)).full; sl.place=ordV(placeIn(cur,hs.s)); c.facts.you=seatId(hs.s); c.facts.place=placeIn(cur,hs.s); c.human=true; }
+        /* mxann4: Wes on Hutch's pick, buried after the opening lap (once a race) */
+        if(memOn()&&!r.teased){ var mpk=memL().picks[r.ri]; if(mpk&&mpk.said&&mpk.id&&!isHumanId(mpk.id)){ var mps=(A.rmap||[]).indexOf(mpk.id), mpp=mps>=0?placeIn(cur,mps):0;
+          if(mpp>10){ t.pickback=1; sl.pickLast=nameRec(mpk.id).last; sl.pickPlace=ordV(mpp); c.memBy={pickback:[{k:"pick|"+r.ri,v:mpk.id},{k:"lapplace|"+r.ri+"|"+r.key+"|1|"+mpk.id,v:mpp}]}; c.memDone=function(){ r.teased=1; }; if(!star) c.only="pickback"; } } }
       }
       c.story={kind:"leader",riders:[cur[0].s]};
       return c;
@@ -2241,7 +2534,27 @@ function create(o){
       var sp=r.startPlace[s]; if(sp>=5){ t.came=1; sl.startPlace=ordV(sp); c.facts.startPlace=sp; }
       if(R&&R.st&&R.st.led&&R.st.led[s]>=r.len/2) t.lead=1;
       if(r.isFinal&&seasonWinsBefore(id,r.key)===0) t.firstwin=1;
+      winnerMem(c,id,r);
       c.story={kind:"checkered",riders:[s]}; return c; };
+  }
+  /* mxann4: the winner in the season (a night with one final: the round is his): two or three in a row, from a crash out last round to the top step,
+     a win here earlier this season, Hutch's pick ("Told you"); each a memory line only when its tagged template is said (memBy) */
+  function winnerMem(c,id,r){
+    if(!memOn()||!r.isFinal||!r.rc||!r.rc.cal||!r.rc.cal.title||!r.F||!r.F.finals||r.F.finals.races!==1) return;
+    var Gs=A.G, R=r.ri, M=MEM(), m=memL(), t=c.tags, sl=c.slots, mb={};
+    if(!(Gs.results||[]).some(function(x){ return x.ri===R&&x.winner===id; })) return;   /* the round is scored, and it is his */
+    var n=1+M.streak(Gs,id,R-1,"win");
+    if(n===2){ t.streak2=1; mb.streak2=[{k:"streak|win|"+id+"|"+R,v:2}]; } else if(n>=3){ t.streak3=1; sl.rowN=V(words(n)); mb.streak3=[{k:"streak|win|"+id+"|"+R,v:n}]; }
+    var pv=R>=1?M.resAt(Gs,R-1):null; if(pv&&M.crashedOut(Gs,R-1,id)){ t.bounce=1; sl.lastCity=placeV(pv.city); mb.bounce=[{k:"dnf|"+(R-1)+"|"+id,v:1},{k:"city|"+(R-1),v:pv.city}]; }
+    var ck=String(r.rc.cal.city||"").replace(/\s*,.*$/,"").trim().toLowerCase(), here=null;
+    (Gs.results||[]).forEach(function(x){ if(x.ri<R&&x.winner===id&&String(x.city||"").replace(/\s*,.*$/,"").trim().toLowerCase()===ck) here=x; });
+    if(here){ t.venue2=1; mb.venue2=[{k:"win|"+here.ri,v:id},{k:"city|"+here.ri,v:here.city}]; }
+    var pk=m.picks[R]; if(pk&&pk.said&&pk.id===id){ t.pickhit=1; mb.pickhit=[{k:"pick|"+R,v:id}]; }
+    if(t.firstwin) mb.firstwin=[{k:"wins|"+id+"|"+R,v:0}];
+    var said=m.claims[R]||{};
+    Object.keys(mb).forEach(function(k){ if(M.anySaid({claims:mb[k]},said)){ delete mb[k]; if(k!=="firstwin") delete t[k]; } });
+    c.memBy=mb;
+    var mt=Object.keys(mb).filter(function(k){ return k!=="firstwin"; }); if(mt.length&&chance(0.6)) c.only=mt[0];
   }
   function seasonWinsBefore(id,key){
     var Gs=A.G, n=0, rri=A.race&&A.race.rc?A.race.rc.ri:Gs.ri; (Gs.results||[]).forEach(function(res){ (res.races||[]).forEach(function(x){ if((x.kind==="main"||x.kind==="moto")&&x.res&&x.res[0]===id&&!(res.ri===rri&&x.key===key)) n++; }); });
@@ -2266,6 +2579,7 @@ function create(o){
     if(!watched){
       /* Sim to results / Skip to the finish: a short summary from the result (the engine's run() gives no lap events) */
       var live=r.gated&&r.lap>0;
+      if(!live) A.q.forEach(function(x){ if(x.race===r.key&&x.opening&&x.build){ x.build=false; x.post=true; } });   /* mxann4: the round's opening outlives a first race simmed after its call (the sim summary follows it) */
       A.q=A.q.filter(function(x){ return x.race!==r.key||x.post; });
       var tl=A.q.filter(function(x){ return x.post||x.build; }).sort(function(a,b){ return b.id-a.id; })[0], prev=tl||null;
       function ch(ev,opt){ opt=opt||{}; opt.post=true; opt.after=prev?prev.id:null; opt.delay=opt.delay!=null?opt.delay:450; var it=q(ev,opt); if(it) prev=it; return it; }
@@ -2335,6 +2649,14 @@ function create(o){
       ch("points_update",{role:"C",ctx:pointsCtx(false)}); if(Gs.humans&&Gs.humans.length) ch("points_update",{role:"any",ctx:pointsCtx(true),delay:600}); else if(chance(0.4)) ch("points_update",{role:"A",ctx:pointsCtx(false),delay:600});
       var cm=champCtx("after"); if(cm) ch("championship_math",{role:"C",ctx:cm});
     }
+    /* mxann4: the round in the season story, the person's round in the person's season (Medium / Slow: both; Fast or Chatter Less: one, the person's
+       first), how the pick did. The season's last round: the champion first (onSeasonOver), then the person's season and the scorecard */
+    if(memOn()&&!Gs.over){
+      var two=o.speed!=="fast"&&o.chatter!=="less", hum=(Gs.humans||[]).length>0;
+      if(two){ ch("round_wrap",{role:"any",ctx:wrapCtx("story"),delay:900}); ch("round_wrap",{role:"any",ctx:wrapCtx(hum?"you":"story"),delay:700}); }
+      else ch("round_wrap",{role:"any",ctx:wrapCtx(hum?"youfirst":"story"),delay:900});
+      ch("pick_result",{role:"A",ctx:pickResCtx(false),delay:700});
+    }
     A.sit.redHist.push(redA); A.postAfter=after;
   }
   function overallCtx(cls,finals,res){
@@ -2350,7 +2672,8 @@ function create(o){
     return function(){ var c=baseCtx(), sl=c.slots, t=c.tags; c.facts.ev="round_podium"; c.facts.order=cls.slice(0,3); c.facts.named=cls.slice(0,3);
       ["p1","p2","p3"].forEach(function(k,i){ if(cls[i]) sl[k]=nameRec(cls[i]).full; });
       var mk={}; cls.slice(0,3).forEach(function(id){ var n=nameRec(id); if(n&&n.make) mk[n.make.c]=1; }); if(Object.keys(mk).length===3) t.makes3=1;
-      var nw=(A.G.results||[]).filter(function(x){ return x.winner===cls[0]; }).length; if(nw>=2){ t.wins=1; sl.winsN=cntV(nw,"win","wins"); c.facts.wins=nw; }
+      var nw=(A.G.results||[]).filter(function(x){ return x.winner===cls[0]; }).length; if(nw>=2){ t.wins=1; sl.winsN=cntV(nw,"win","wins"); c.facts.wins=nw;
+        if(memOn()){ var wcl=[{k:"wins|"+cls[0]+"|"+(memRi()+1),v:nw}]; if(MEM().anySaid({claims:wcl},memL().claims[memRi()]||{})) delete t.wins; else c.memBy={wins:wcl}; } }   /* mxann4: under the ledger */
       var hum=cls.slice(0,3).filter(function(id){ return rider(id)&&rider(id).kind==="human"; }); if(hum.length){ t.you=1; sl.you=nameRec(hum[0]).full; c.facts.you=hum[0]; c.human=true; }
       c.story={kind:"podium"}; return c; };
   }
@@ -2403,6 +2726,10 @@ function create(o){
       sl.champion=nameRec(ch).full; var sp=splace(ch); if(sp&&sp.wins>=3){ t.wins=1; sl.winsN=cntV(sp.wins,"win","wins"); c.facts.wins=sp.wins; } else if(sp) t.fewwins=1; sl.rounds=numV(A.G.cal.length);
       var pi=personOf(ch), hh=pi!=null?riderHist(pi):null, tn=(hh?hh.titlesSer:0)+1; if(tn>=2){ t.titles=1; sl.titlesN=cntV(tn,"title","titles"); c.facts.titles=tn; } if(rider(ch).kind==="human"){ t.you=1; sl.you=nameRec(ch).full; c.human=true; } c.story={kind:"podium"}; return c; },followP:1});
     if(it) A.postAfter=it.id;
+    /* mxann4: the person's season, and the analyst's season scorecard */
+    if(memOn()){ var aft=A.postAfter||null;
+      [["round_wrap",{role:"any",ctx:wrapCtx("you")}],["pick_result",{role:"A",ctx:pickResCtx(true)}]].forEach(function(z){ var op=z[1]; op.post=true; op.after=aft; op.delay=1200; op.due=A.now; op.ttl=40; var x=q(z[0],op); if(x) aft=x.id; });
+      A.postAfter=aft; }
   }
 
   /* =================================================================================================================================
@@ -2453,8 +2780,11 @@ function create(o){
   function upcoming(){ return A.q.filter(function(x){ return x.story&&x.race===(A.race&&A.race.key); }).map(function(x){ return {kind:x.story,at:x.due,riders:(x.subj||[]).slice(),ev:x.ev,pri:x.pri}; }).sort(function(a,b){ return a.at-b.at; }); }
   function setTrack(t){ t=t||{}; A.track.layout=t.layout||null; A.track.sectionAt=typeof t.sectionAt==="function"?t.sectionAt:null; }
   /* the variety memory (which lines were heard and how long ago) and the sitting's flags, for the page to keep with its save */
-  function state(){ var age={}, sd={}; for(var k in A.used) age[k]=Math.max(0,Math.round(A.now-A.used[k])); for(var h in A.said){ var a=A.now-A.said[h]; if(a<600000) sd[h]=Math.max(0,Math.round(a)); } return JSON.parse(JSON.stringify({v:1,recent:A.recent,age:age,sit:A.sit,said:sd})); }   /* said: the texts of the last 10 minutes (hashes), so a reload never repeats them */
-  function restore(st,now){ if(!st||st.v!==1) return; if(now!=null) A.now=now; if(Array.isArray(st.recent)) A.recent=st.recent.slice(-12); if(st.age) for(var k in st.age) A.used[k]=A.now-(+st.age[k]||0); if(st.sit) for(var k2 in st.sit) A.sit[k2]=st.sit[k2]; if(st.said&&typeof st.said==="object") for(var h in st.said) A.said[h]=A.now-(+st.said[h]||0); }
+  function state(){ var age={}, sd={}; for(var k in A.used) age[k]=Math.max(0,Math.round(A.now-A.used[k])); for(var h in A.said){ var a=A.now-A.said[h]; if(a<600000) sd[h]=Math.max(0,Math.round(a)); }
+    var out={v:1,recent:A.recent,age:age,sit:A.sit,said:sd}; if(A.mem){ memPrune(); out.mem=A.mem; }   /* mxann4: mem = the ledger (what was said about the season: a reload grades the right pick and tells nothing twice) */
+    return JSON.parse(JSON.stringify(out)); }   /* said: the texts of the last 10 minutes (hashes), so a reload never repeats them */
+  function restore(st,now){ if(!st||st.v!==1) return; if(now!=null) A.now=now; if(Array.isArray(st.recent)) A.recent=st.recent.slice(-12); if(st.age) for(var k in st.age) A.used[k]=A.now-(+st.age[k]||0); if(st.sit) for(var k2 in st.sit) A.sit[k2]=st.sit[k2]; if(st.said&&typeof st.said==="object") for(var h in st.said) A.said[h]=A.now-(+st.said[h]||0);
+    if(st.mem&&typeof st.mem==="object"&&st.mem.v===1&&st.mem.jid) try{ A.mem=JSON.parse(JSON.stringify(st.mem)); }catch(e){} }   /* an older state without it restores as before; a ledger of another season is dropped on its first use (memL: the journal's id) */
   function set(k,v){ if(k==="speed"||k==="chatter"||k==="era"||k==="lapMs") o[k]=v; if(k==="sayNames"){ sayNames=v||{}; A.names={}; } }
   function reset(){ A.q=[]; A.race=null; A.R=null; A.rmap=null; A.rounds={}; var b=A.booth; b.until=0; b.cur=null; }
 

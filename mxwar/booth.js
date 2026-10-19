@@ -5,7 +5,8 @@
    BGVoice's, the page mounts them). It never breaks the game: every call is guarded, a failing commentator or voice means a silent booth.
 
      var booth = MXWar.Booth.create({ speed: fn -> "slow"|"medium"|"fast", ctx: fn -> {hold, quiet}, onStory, sayNames: fn -> {typed name: respelling},
-                                       clock: fn -> {t, rate} (the race clock the picture is at), estimate: fn(line) -> ms, voice, announce, now, timer:false (tests) });
+                                       clock: fn -> {t, rate} (the race clock the picture is at), estimate: fn(line) -> ms, voice, announce, now, timer:false (tests),
+                                       career: fn(name) -> the person's earlier seasons on this device (mxann4: MXWar.Journal.career) });
      booth.feed(G, events)            the SAME event array the page plays (startRace, step / apply, simRace); skipped while the announcers are Off
      booth.shown(kind, info)          the race view's moments: "crash" {s}, "holeshot", "checkered" (2D); "pass" {s}, "lapped" {s, by} (3D, later)
      booth.shot(shot) / booth.setTrack({layout, sectionAt}) / booth.setLapMs(ms)    the camera director / the track / a compressed lap, for the 3D view
@@ -55,7 +56,8 @@ function hookVoice(V){
 }
 
 /* what the opening of a race is made of (announce.js: the round's show open, the race intro, the engines): the start procedure waits for these */
-var OPENING={show_open:1,party_welcome:1,smx_playoff:1,triple_crown:1,championship_math:1,race_intro_heat:1,race_intro_semi:1,race_intro_lcq:1,race_intro_qual:1,race_intro_main:1,race_intro_moto:1,engines:1};
+var OPENING={show_open:1,party_welcome:1,smx_playoff:1,triple_crown:1,championship_math:1,race_intro_heat:1,race_intro_semi:1,race_intro_lcq:1,race_intro_qual:1,race_intro_main:1,race_intro_moto:1,engines:1,
+  season_story:1,career_note:1,analyst_pick:1};   /* mxann4: the storylines coming in, the person's earlier seasons, the pick */
 var T={openMin:1800,openMax:32000,openTail:600,lineupAfter:1500,stageMin:900,noLine:900,boardHold:1800,boardCap:11000,sideHoldLo:2600,sideHoldHi:4200,sideCap:14000};
 /* Game speed Fast: the same show, about a third shorter (the opening is let run to 14 s, the holds are half as long: the gate drops after about 24 s instead of 37-40 s); Medium and Slow keep the full procedure */
 var TFAST={openMin:1500,openMax:14000,openTail:400,lineupAfter:1200,stageMin:700,noLine:600,boardHold:900,boardCap:6000,sideHoldLo:1400,sideHoldHi:2400,sideCap:8000};
@@ -92,7 +94,7 @@ function create(o){
     if(!AN||!AN.create) return null;
     var st=null; try{ st=prev&&prev.state?prev.state():null; }catch(e){ st=null; }
     var a=null;
-    try{ a=AN.create({say:say,onStory:function(s){ try{ if(typeof o.onStory==="function") o.onStory(s); }catch(e){} },speed:speedNow(),chatter:S.chatter,sayNames:sayMap(),seed:o.seed,estimate:o.estimate,clock:o.clock}); }   /* estimate: a clip pack's real length of a line (INTENSITY.md 5.2); clock: the race clock the picture is at */
+    try{ a=AN.create({say:say,onStory:function(s){ try{ if(typeof o.onStory==="function") o.onStory(s); }catch(e){} },speed:speedNow(),chatter:S.chatter,sayNames:sayMap(),seed:o.seed,estimate:o.estimate,clock:o.clock,career:o.career}); }   /* estimate: a clip pack's real length of a line (INTENSITY.md 5.2); clock: the race clock the picture is at; career (mxann4): the person's earlier seasons on this device */
     catch(e){ try{ if(g.console&&g.console.warn) g.console.warn("booth: no commentator:",e&&e.message); }catch(x){} return null; }
     if(st){ delete st.sit; try{ a.restore(st,now()); }catch(e){} }   /* the variety memory goes on; the sitting's flags start again */
     return a;
