@@ -17,8 +17,10 @@
      down and remount, a lost triple war = out) and the yellow flag, the red plate on the points leader, the white and checkered flags.
    - After each race: the results (who advances, the points); after each round: the PODIUM (1st, 2nd, 3rd) and the season standings
      (places 1..N, never shared); at the end of the season: the champion's podium and the Victory (H.standings + H.over).
-   - The race view is created and driven through ONE adapter (raceView below): today mxwar/track.js (2D); the 3D view (MX.Race3D) swaps
-     in there (BG_audit/FOLLOWUPS.md "## For integration: mxwar party").
+   - The race view is created and driven through ONE adapter (raceView below): the 3D race (mxwar/race3d.js, the phone game's own view, mxlive
+     2026-10-18) draws the race on the TV wherever WebGL2 works, at the FIRE TV quality by default (the TV; a device's own Graphics choice in the phone
+     game's Menu wins); it rides THE race clock of the time model, which mxwar/track.js keeps in model mode (the 2D track: the clock, the events, and the
+     fallback drawing: no WebGL2, Graphics = Classic 2D, a lost GPU, a device too slow for 3D). The phones stay controllers (their YOU card and timing list).
    - An autosave after every lap and every race (localStorage "party-mxwar-live"; Continue in the lobby when the table has the same number
      of riders); a phone that reloads gets its view back (onReconnect); a phone that leaves is ridden by the computer (Auto) and gets it
      back by Take over or the host's invite.
@@ -185,6 +187,17 @@
     Q + ".mxp-main{position:relative;min-width:0;min-height:0;border-radius:1.1rem;overflow:hidden;background:#140f0c;box-shadow:inset 0 0 0 2px rgba(231,202,144,.45),0 .75rem 2rem rgba(0,0,0,.5)}",
     Q + ".mxp-lane{position:absolute;inset:0;overflow:hidden}",
     Q + ".mxp-lane canvas{position:absolute;left:0;top:0;display:block}",
+    /* the 3D race (raceView): its picture over the lane (the 2D track keeps the clock under it); the corner window moves to the top right (the hero camera keeps the
+       person's rider low in the right third), the 2D gate rests; a war flashes across the top (08_WAR_EVENT_FLASH) */
+    Q + ".mxp-v3{position:absolute;inset:0;z-index:2;display:none;overflow:hidden;pointer-events:none;background:#05060a}",
+    Q + ".mxp-v3 canvas{display:block}",
+    Q + ".mxp.is-3d .mxp-v3{display:block}",
+    Q + ".mxp.is-3d .mxp-lane{visibility:hidden}",
+    Q + ".mxp.is-3d .mxp-gate," + Q + ".mxp.is-3d .mxp-dust{display:none !important}",
+    Q + ".mxp.is-3d .mxp-pip{bottom:auto;top:3.4rem}",
+    Q + ".mxp-banner.is-war{background:linear-gradient(180deg,rgba(24,22,28,.97),rgba(12,11,15,.97));box-shadow:inset 0 0 0 2px #f72d2e,0 .8rem 2rem rgba(0,0,0,.6)}",
+    Q + ".mxp-banner.is-war b{color:#f72d2e}",
+    Q + ".mxp-banner.is-war span{color:#ecb967;letter-spacing:.04em;text-transform:uppercase}",
     Q + ".mxp-gate{position:absolute;z-index:3;pointer-events:none;transform-origin:50% 100%}",
     Q + ".mxp-gate svg{display:block;width:100%;height:100%}",
     Q + ".mxp-dust{position:absolute;z-index:3;pointer-events:none;opacity:0;background:radial-gradient(50% 50% at 30% 60%,rgba(214,180,140,.55),rgba(214,180,140,0))}",
@@ -512,17 +525,53 @@
   }
 
   /* ================= THE RACE VIEW ADAPTER =================
-     The one place that knows the renderer. Today: mxwar/track.js (2D: MX.Track.create(el)). The 3D view (MX.Race3D.create(host, opt))
-     replaces it here and in the registry's tv files (BG_audit/FOLLOWUPS.md "## For integration: mxwar party"). Every call below is what the
-     race needs: the track (series + venue key), the riders (team colours, plates, the red plate, the people), the pace (the real lap and
+     The one place that knows the renderer. mxwar/track.js (2D: MX.Track.create(el)) is always made: it keeps THE race clock of a time-model race
+     (model mode: the clock, its limit at the next line, the events in clock order) and draws the race when there is no 3D. The 3D race (mxwar/race3d.js,
+     loaded by a dynamic import made at run time; the classic scripts it rides on, course.js / layouts.js / data/tracks.js, are in the registry's tv files)
+     draws it over the lane wherever WebGL2 works, riding the 2D track's clock (V3.setModel). Every call below is what the race needs: the track (series +
+     venue key) and the 3D race (race3D: the round, the riders), the riders (team colours, plates, the red plate, the people), the pace (the real lap and
      first lap), the corner hole, the gate, each lap's standings and laps decided, crashes, the yellow flag, the flags, the riding clock. */
-  function raceView(host) {
+  function raceView(host, host3) {
     var T = null, nop = function () { };
     try { T = MX.Track ? MX.Track.create(host) : null; } catch (e) { T = null; }
-    if (!T) return { ok: false, kind: "none", setModel: nop, modelOn: function () { return false; }, rows: function () { return null; }, onEvent: nop, setRate: nop, setWait: nop, setTrack: nop, setHole: nop, size: nop, setRiders: nop, pace: nop, gate: nop, gateRect: function () { return null; }, drop: nop, resume: nop, standings: nop, lap: nop, crash: nop, yellow: nop, yellowOn: function () { return false; }, flag: nop, setRed: nop, ready: function () { return -1; }, untilLine: function () { return 0; }, onLap: nop, live: nop, destroy: nop };
+    if (!T) return { ok: false, kind: "none", is3D: function () { return false; }, race3D: nop, hold: nop, onShown: nop, onMode: nop, camNext: function () { return null; }, setModel: nop, modelOn: function () { return false; }, rows: function () { return null; }, onEvent: nop, setRate: nop, setWait: nop, setTrack: nop, setHole: nop, size: nop, setRiders: nop, pace: nop, gate: nop, gateRect: function () { return null; }, drop: nop, resume: nop, standings: nop, lap: nop, crash: nop, yellow: nop, yellowOn: function () { return false; }, flag: nop, setRed: nop, ready: function () { return -1; }, untilLine: function () { return 0; }, onLap: nop, live: nop, destroy: nop };
+    /* ---- the 3D race on the TV ---- */
+    var V3 = null, st3 = "off", live = false, race = null, model = null, shownFn = null, modeFn = null, dead = false;
+    function gfx() { try { var v = localStorage.getItem("bg_mxwar_gfx"); return v === "2d" || /^(firetv|balanced|high|ultra)$/.test(v || "") ? v : "auto"; } catch (e) { return "auto"; } }   /* the phone game's Graphics choice on this device */
+    function gl2() { try { if (/[?&]gl=0(&|$)/.test(location.search)) return false; var c = document.createElement("canvas"), g = window.WebGL2RenderingContext && c.getContext("webgl2"); if (g) { var lc = g.getExtension("WEBGL_lose_context"); if (lc) lc.loseContext(); } return !!g; } catch (e) { return false; } }
+    function is3() { return st3 === "on" && !!V3 && !V3.lost && !!race; }
+    function clock() { return T.tick ? T.tick() : T.clock(); }   /* the 2D track's model clock brought up to now: the 3D view asks every frame */
+    function show() {
+      var a = is3(); T.show(live && !a); if (V3) { try { V3.show(live && a); } catch (e) { } }
+      if (modeFn) try { modeFn(a); } catch (e) { }
+    }
+    function apply3() {
+      if (!V3 || !race || dead) return;
+      try { V3.setRace(race); V3.setModel(model, { clock: clock }); if (V3.warm) { var w = V3.warm(); if (w && w.catch) w.catch(nop); } }
+      catch (e) { st3 = "failed"; try { console.warn("mxwar party: the 3D race", e); } catch (x) { } }
+    }
+    (function load() {
+      if (!host3 || gfx() === "2d" || !gl2()) return;
+      var imp = null; try { imp = new Function("u", "return import(u)"); } catch (e) { return; }
+      st3 = "loading";
+      var g = gfx(); document.documentElement.setAttribute("data-quality", g === "auto" ? "firetv" : g);   /* the TV: the FIRE TV quality unless this device picked one */
+      imp(new URL("../mxwar/race3d.js", location.href).href).then(function (m) {
+        if (dead) return;
+        if (!m || !m.supported || !m.supported()) { st3 = "failed"; show(); return; }
+        V3 = m.create(host3, { onLap: nop, onFinish: nop, lost: function () { st3 = "failed"; show(); }, slow: function () { st3 = "slow"; show(); },
+          shown: function (k, i) { if (shownFn && is3()) try { shownFn(k, i); } catch (e) { } } });
+        window.__mxpv3 = V3; st3 = "on";
+        apply3(); show(); if (is3()) try { V3.resize(); } catch (e) { }
+      }).catch(function (e) { st3 = "failed"; try { console.warn("mxwar party: the 3D race did not load", e); } catch (x) { } show(); });
+    })();
     return {
-      ok: true, kind: "2d",
-      setModel: function (rc) { if (T.setModel) T.setModel(rc); },                 /* mxtime: the race clock of the time model rides the field */
+      ok: true, get kind() { return is3() ? "3d" : "2d"; }, is3D: is3, state3D: function () { return st3; },
+      race3D: function (o) { race = o || null; apply3(); show(); },                 /* {series, year, round, cal, len, lapT, riders: [{s, color, accent, num, name, red, me}]} */
+      hold: function (o) { if (is3()) try { V3.hold(o || null); } catch (e) { } },  /* a war: the director looks at its riders */
+      onShown: function (fn) { shownFn = fn; },                                   /* the moments the 3D picture shows (the announcers) */
+      onMode: function (fn) { modeFn = fn; },                                     /* 3D on / off (the layout) */
+      camNext: function () { if (!is3() || !V3.camNext) return null; var id = V3.camNext(), l = V3.camModes().filter(function (x) { return x.id === id; })[0]; return l ? l.name : id; },
+      setModel: function (rc) { if (T.setModel) T.setModel(rc); model = rc && rc.tm ? rc : null; if (V3 && race) try { V3.setModel(model, { clock: clock }); } catch (e) { } },   /* mxtime: the race clock of the time model rides the field */
       modelOn: function () { return !!(T.model && T.model()); },
       rows: function () { return T.rows ? T.rows() : null; },                      /* the live timing tower at the race clock */
       clock: function () { return T.clock ? T.clock() : 0; },
@@ -531,25 +580,25 @@
       setWait: function (on) { if (T.setWait) T.setWait(on); },
       setTrack: function (series, key) { T.setLayout(series === "mx" ? "outdoor" : "stadium", key); },
       setHole: function (w, h) { T.setHole({ w: w, h: h }); T.resize(true); },
-      size: function () { T.resize(); },
+      size: function () { T.resize(); if (is3()) try { V3.resize(); } catch (e) { } },
       setRiders: function (list) { T.setRiders(list); },                         /* [{s, color, accent, plate, red, me}] in gate order */
       pace: function (lapMs, firstMs) { T.setPace(lapMs); if (T.setFirst) T.setFirst(firstMs || 0); },
       gate: function (on) { T.gate(on); },
       gateRect: function () { return T.gateRect(); },
-      drop: function (len) { T.gate(false); T.lap(0, len); },
+      drop: function (len) { T.gate(false); T.lap(0, len); if (is3()) try { V3.drop(); } catch (e) { } },
       resume: function (laps, len, parked, yel) { T.gate(false); T.setLaps(laps, len); (parked || []).forEach(function (p) { T.park(p.s, p.sector); }); if (yel) T.setYellow(yel.lap, yel.s, yel.sector); },
       standings: function (order, cnt, outs) { T.update(order, cnt, outs); },
       lap: function (k, len) { T.lap(k, len); },
       crash: function (s, kind) { T.crash(s, kind); },
       yellow: function (lap, s, sector) { T.setYellow(lap, s, sector); },
       yellowOn: function () { return T.yellowOn(); },
-      flag: function (f) { T.setFlag(f); },
-      setRed: function (s) { T.setRed(s); },
+      flag: function (f) { T.setFlag(f); if (is3()) try { V3.setFlag(f); } catch (e) { } },
+      setRed: function (s) { T.setRed(s); if (is3()) try { V3.setRed(s); } catch (e) { } },
       ready: function () { return T.ready(); },                                   /* ms until the next lap's cards may turn; -1 = no riding clock */
       untilLine: function (k) { return T.untilLine(k); },                         /* ms until the leader ends lap k (the checkered flag) */
       onLap: function (fn) { T.onLap = fn; },
-      live: function (on) { T.setLive(on); T.show(on); },
-      destroy: function () { try { T.stop(); } catch (e) { } }
+      live: function (on) { live = !!on; T.setLive(on); show(); },
+      destroy: function () { dead = true; try { T.stop(); } catch (e) { } if (V3) { try { V3.dispose(); } catch (e) { } V3 = null; } st3 = "off"; }
     };
   }
 
@@ -581,7 +630,7 @@
     /* ---- the TV screen ---- */
     H.frame('<div class="mxp" id="mxp">' +
       '<div class="mxp-main" id="mxpMain" data-stage-solid data-toast-avoid>' +
-      '<div class="mxp-lane bg-frame" id="mxpLane" role="img" aria-label="The race on the track"></div>' +
+      '<div class="mxp-lane bg-frame" id="mxpLane" role="img" aria-label="The race on the track"></div><div class="mxp-v3" id="mxpV3" aria-hidden="true"></div>' +
       '<div class="mxp-gate" id="mxpGate" aria-hidden="true"></div><div class="mxp-dust" id="mxpDust" aria-hidden="true"></div>' +
       '<div class="mxp-chips"><span class="mxp-chip is-hot" id="mxpLapC"></span><span class="mxp-chip" id="mxpHsC"></span><span class="mxp-chip" id="mxpYelC"></span><span class="mxp-chip" id="mxpFieldC"></span></div>' +
       '<div class="mxp-banner" id="mxpBanner" aria-live="polite"><b id="mxpBannerT"></b><span id="mxpBannerS"></span></div>' +
@@ -593,7 +642,8 @@
       '<div class="mxp-cap" id="mxpCap" aria-label="The announcers"></div><div class="mxp-panel" id="mxpPanel" hidden></div></div>', "Players: watch the TV");
     var $ = H.$;
     H.music(ID);
-    var rv = raceView($("mxpLane")); stats.rv = rv;
+    var rv = raceView($("mxpLane"), $("mxpV3")); stats.rv = rv;
+    rv.onMode(function (on) { var p = $("mxp"); if (p) p.classList.toggle("is-3d", on); });
     $("mxpGate").innerHTML = A.gate();
 
     /* ---------- the announcers: the TV calls the race (the phones never load the voice: they stay silent). Same booth, same calls as mxwar/game.js ---------- */
@@ -616,6 +666,9 @@
       } catch (e) { booth = null; }
     }
     stats.booth = booth;
+    var hs3 = { seen: false, wait: [] };   /* the holeshot into turn 1 on the 3D picture (the banner waits for it) */
+    rv.onShown(function (k, i) { annShown(k, i); if (k === "holeshot") { hs3.seen = true; hs3.wait.splice(0).forEach(function (f) { try { f(); } catch (e) { } }); } });
+    function seenHs(ms) { return new Promise(function (res) { if (hs3.seen) { res(); return; } var done = false, f = function () { if (!done) { done = true; res(); } }; hs3.wait.push(f); setTimeout(f, ms); }); }
 
     /* ---------- helpers on the season ---------- */
     /* the race seats of the race on show: kept from its start (season.js endRace clears G.rmap while the last lap's show still plays) */
@@ -816,7 +869,7 @@
       var T = MX.Time, me = function (s) { return kOfS(s) >= 0; };
       switch (e.e) {
         case "line": if (me(e.s)) youLap(e.s, e.k); break;
-        case "down": annShown("crash", { s: e.s }); H.sfx(e.kind === "out" ? "lose" : "bump"); logLine(T.eventLine(rc, e, nameOfSeat, me)); twMark = { fight: [e.s], until: Date.now() + 2500 }; renderTower(null); pushSoon(); break;
+        case "down": if (!rv.is3D()) annShown("crash", { s: e.s }); H.sfx(e.kind === "out" ? "lose" : "bump"); logLine(T.eventLine(rc, e, nameOfSeat, me)); twMark = { fight: [e.s], until: Date.now() + 2500 }; renderTower(null); pushSoon(); break;
         case "up": logLine(T.eventLine(rc, e, nameOfSeat, me)); renderTower(null); pushSoon(); break;
         case "yellowOn": {
           stats.yellows++; chips();
@@ -825,8 +878,8 @@
           banner("Yellow flag", (who.length > 2 ? who.length + " riders" : listNames(who)) + (outN ? (who.length > 1 ? " are" : " is") + " out of the race" : (who.length > 1 ? " go down and remount" : " goes down and remounts")) + " · no passing there next lap", dl(1500), "is-yellow", A.yflag());
           break; }
         case "yellowOff": chips(); pushSoon(); break;
-        case "pass": if (e.pos <= 10 && !e.crash) annShown("pass", { s: e.a, d: e.d, pos: e.pos }); { var pl = T.eventLine(rc, e, nameOfSeat, me); if (pl) logLine(pl); } break;
-        case "lapped": annShown("lapped", { s: e.s, by: e.by }); if (me(e.s) || me(e.by)) logLine(T.eventLine(rc, e, nameOfSeat, me)); break;
+        case "pass": if (e.pos <= 10 && !e.crash && !rv.is3D()) annShown("pass", { s: e.a, d: e.d, pos: e.pos }); { var pl = T.eventLine(rc, e, nameOfSeat, me); if (pl) logLine(pl); } break;
+        case "lapped": if (!rv.is3D()) annShown("lapped", { s: e.s, by: e.by }); if (me(e.s) || me(e.by)) logLine(T.eventLine(rc, e, nameOfSeat, me)); break;
         case "fastest": if (e.k >= 3) logLine(T.eventLine(rc, e, nameOfSeat, me)); break;
       }
     }
@@ -903,6 +956,9 @@
       rv.setTrack(G.series, (c.venue || "") + "|" + (c.city || "") + "|" + G.year);
       layoutPip();
       rv.setRiders(rc.r.map(function (p, s) { var R = riderOfS(s), m = A.mk(R.bike); return { s: s, color: m[0], accent: m[0] === "#f2f4f8" ? "#183a8c" : "#f2f2f6", plate: R.plate, red: R.id === red, me: kOfId(R.id) >= 0 }; }));
+      hs3.seen = rc.phase !== "gate";
+      rv.race3D(rc.tm ? { series: G.series, year: G.year, round: c.n || (G.ri + 1), cal: c, len: rc.o.len, lapT: rc.tm.p || lapMs() / 1000,
+        riders: rc.r.map(function (p, s) { var R = riderOfS(s), m = A.mk(R.bike); return { s: s, color: m[0], accent: m[0] === "#f2f4f8" ? "#183a8c" : (m[1] === "#0b0a12" ? "#16161c" : "#f2f2f6"), num: R.plate, name: R.name, red: R.id === red, me: kOfId(R.id) >= 0 }; }) } : null);   /* the 3D race rides the time model's clock only */
       rv.pace(lapMs(), firstMs());
       rv.onLap(leaderLap);
       rv.onEvent(onTrackEvent);
@@ -929,7 +985,7 @@
     /* ms until the next lap's cards turn: the riding clock, else (reduced motion) the plain clock from the last lap's turn */
     function lapWait() {
       var rc = ui.rc, T = rv.ready();
-      if (T >= 0) return rv.modelOn() ? Math.max(0, T - 350) : T > 0 ? T + Math.round(Math.min(lapMs() * .03, 1500)) : 0;   /* mxtime: the cards turn a moment before the leader's line, so the clock never waits for them */
+      if (T >= 0) return rv.modelOn() ? Math.max(0, T - (rv.is3D() ? Math.max(1500, dl(6000)) : 350)) : T > 0 ? T + Math.round(Math.min(lapMs() * .03, 1500)) : 0;   /* mxtime: the cards turn a moment before the leader's line, so the clock never waits for them (3D: a few seconds before: a war's cards take that long) */
       if (!ui.lapAt) return 0;
       var fm = rc.battle <= 1 ? firstMs() : 0; return Math.max(0, Math.round(ui.lapAt + (fm > 0 ? fm : lapMs()) - Date.now()));
     }
@@ -939,6 +995,7 @@
     function onKey(ev) {
       var ok = ev.key === "Enter" || ev.key === " " || ev.keyCode === 13 || ev.keyCode === 23;
       if (ui.ph === "gate" && ok) { skipGate = true; ev.preventDefault(); ev.stopPropagation(); return; }
+      if ((ev.key === "c" || ev.key === "C" || ev.key === "MediaPlayPause" || ev.keyCode === 179) && rv.is3D() && (ui.ph === "race" || ui.ph === "gate")) { var cn = rv.camNext(); if (cn) H.toast("Camera: " + cn); ev.preventDefault(); return; }   /* the 3D race's camera presets */
       if (panelT && !/^(Shift|Control|Alt|Meta)$/.test(ev.key)) stopCountdown();
     }
     document.addEventListener("keydown", onKey, true);
@@ -1000,7 +1057,7 @@
       var graceAt = 0, grace = Math.max(6000, dl(ph === "war" ? 9000 : 8000));
       for (;;) {
         if (!H.live()) return;
-        rv.setWait(people.some(function (s) { return !intents[s]; }));
+        rv.setWait(rv.is3D() || people.some(function (s) { return !intents[s]; }));   /* (3D: the clock always eases into a wait) */
         if (skipQ || rc.over) break;
         var rdy = ph === "flip" ? lapWait() : 0, all = need.every(function (s) { return intents[s]; });
         if (rdy <= 0 && all) break;
@@ -1053,7 +1110,7 @@
         case "acted": return;
         case "reveal": {
           if (e.w === 0) {
-            ui.lapAt = Date.now(); ui.lastWin = null; ui.war = null; ui.warCards = {}; pipNote(null);
+            ui.lapAt = Date.now(); ui.lastWin = null; ui.war = null; ui.warCards = {}; pipNote(null); rv.hold(null);
             e.cards.forEach(function (x) { ui.lastCards[x.s] = x.c; disp.cnt[x.s] = Math.max(0, disp.cnt[x.s] - 1); });
             H.sfx("card"); stats.laps++;
             drawDuel(null);
@@ -1077,6 +1134,7 @@
           logLine((e.n > 1 ? "War again! " : "War! ") + whoList(e.tied) + " tie" + (tiedR ? " with " + rankPlural(tiedR) : "") + ".");
           ui.war = { n: e.n, seats: e.seats.slice(), tied: e.tied.slice() };
           drawWar(e.seats, true); renderTower({ fight: e.seats }); pushNow();
+          if (rv.is3D()) { rv.hold({ war: e.seats }); banner(e.n === 1 ? "War!" : e.n === 2 ? "Double war!" : e.n === 3 ? "Triple war!" : warWordP(e.n) + "!", e.n === 1 ? "Card event · the winner gains time" : e.n === 2 ? "The loser crashes and remounts" : "The loser crashes out", dl(1300), "is-war"); }
           await pipNote(e.n === 1 ? "War!" : e.n === 2 ? "Double war!|crash, remount" : e.n === 3 ? "Triple war!|crash out" : warWordP(e.n) + "!|crash out", e.n > 1 ? 900 : 850, e.n > 1);
           return;
         }
@@ -1127,9 +1185,13 @@
           await wait(e.war ? 520 : 300); return;
         }
         case "holeshot": {
-          stats.holeshots++; ui.hs = e.s; chips(); H.sfx("bell"); annShown("holeshot", { s: e.s });
-          var hl = null; try { hl = BR && BR.react(G, e); } catch (x) { } logLine(hl || "Holeshot: " + nm(e.s) + "!");
-          var R = riderOfS(e.s); pushSoon();
+          stats.holeshots++;
+          var hl = null; try { hl = BR && BR.react(G, e); } catch (x) { }
+          var R = riderOfS(e.s);
+          if (rv.is3D()) { var hsS = e.s, rcH = rc; seenHs(12000).then(function () { if (!H.live() || ui.rc !== rcH || skipQ) return; ui.hs = hsS; chips(); H.sfx("bell"); logLine(hl || "Holeshot: " + nm(hsS) + "!"); pushSoon(); banner("Holeshot!", "#" + R.plate + " " + R.name + (R.bike ? " · " + R.bike : ""), dl(1100), "is-calm"); }); return; }   /* 3D: as the leader takes turn 1 on the picture (it calls the announcers itself) */
+          ui.hs = e.s; chips(); H.sfx("bell"); annShown("holeshot", { s: e.s });
+          logLine(hl || "Holeshot: " + nm(e.s) + "!");
+          pushSoon();
           await banner("Holeshot!", "#" + R.plate + " " + R.name + (R.bike ? " · " + R.bike : ""), dl(1100), "is-calm"); return;
         }
         case "out": e.seats.forEach(function (s) { disp.cnt[s] = 0; }); logLine(whoList(e.seats) + (e.seats.length > 1 ? " are" : " is") + " out of cards."); if (e.seats.length === 1) say(e); renderTower(null); trackSync(); return;
@@ -1146,7 +1208,7 @@
             status("Last lap: the riders ride to the flag.");
             for (var gi = 0; gi < 2400; gi++) { if (!H.live() || skipQ) break; var ms = rv.ok && rv.ready() >= 0 ? rv.untilLine(e.b) : ui.lapAt ? ui.lapAt + lapMs() - Date.now() : 0; if (ms <= 0) break; await raw(Math.min(ms, 250)); }
           }
-          ui.lap = Math.min(e.b, rc.o.len); rv.lap(e.b, rc.o.len); rv.flag("checkered"); annShown("checkered", { s: e.order[0] });
+          ui.lap = Math.min(e.b, rc.o.len); rv.lap(e.b, rc.o.len); rv.flag("checkered"); if (!rv.is3D()) annShown("checkered", { s: e.order[0] });   /* (3D: the picture calls it as the winner crosses the line) */
           var w = e.order[0], hw = kOfS(w) >= 0;
           ui.order = e.order.slice(); chips(); renderTower({ win: w }); drawDuel(w);
           H.sfx(hw ? "win" : "conquer"); pushNow();
