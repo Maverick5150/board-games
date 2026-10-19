@@ -1537,7 +1537,7 @@ function create(o){
      ================================================================================================================================= */
   function memOn(){ var Gs=A.G; return !!(MEM()&&Gs&&Gs.jr&&Gs.jr.r&&Gs.results); }
   function memNew(jid){ return {v:1,jid:jid,picks:{},told:{},views:{},per:{},career:{},roundN:{},claims:{},lead:{},leadKey:{},youV:{},youSig:{},careerMile:{},patternAt:null,missAt:null,scoreAt:null,rider:{}}; }
-  function memL(){ var Gs=A.G, jid=Gs&&Gs.jr?Gs.jr.id:null, m=A.mem; if(!m||m.v!==1||m.jid!==jid) m=A.mem=memNew(jid); return m; }
+  function memL(){ var Gs=A.G, jid=Gs&&Gs.jr?Gs.jr.id:null, m=A.mem; if(!Gs&&m) return m; if(!m||m.v!==1||m.jid!==jid) m=A.mem=memNew(jid); return m; }   /* a ledger restored before the season is fed is kept until it can be checked */
   function memRi(){ var r=A.race; return r&&r.ri!=null?r.ri:(A.G?A.G.ri:0); }
   /* the ledger stays small: the claims of the last two rounds, the 60 latest stories, the riders' counts of this round; a save from earlier in the
      season loaded back forgets what was said about rounds that have not been raced */
@@ -1550,7 +1550,7 @@ function create(o){
     for(k in m.youSig){ var ys=m.youSig[k]; for(var sg in ys) if(ys[sg]<ri-6) delete ys[sg]; }
     var keys=Object.keys(m.told); if(keys.length>60){ keys.sort(function(a,b){ return (m.told[a].ri|0)-(m.told[b].ri|0); }); keys.slice(0,keys.length-60).forEach(function(x){ delete m.told[x]; }); }
     var Gs=A.G, done=Gs&&Gs.results?Gs.results.length:0;
-    for(k in m.picks) if(+k>done) delete m.picks[k];
+    if(Gs&&Gs.results) for(k in m.picks) if(+k>done) delete m.picks[k];   /* (a ledger restored from a save, before the season is fed: nothing to compare yet) */
   }
   /* the brain's environment for the round: the history book (last season's place, the defending champion: only seasons over before this round) and
      the person's earlier seasons on this device (create({career})) */
