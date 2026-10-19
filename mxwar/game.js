@@ -561,11 +561,11 @@ function syncRules(){
 }
 $("rulesToggle").addEventListener("click",function(){ ui.rulesOpen=!ui.rulesOpen; syncRules(); });
 function drawSetup(){ fixSeason(); drawSeries(); drawSeasonCard(); drawRiders(); drawLength(); drawRules(); drawAnn(); drawGfx(); $("skillNote").textContent=BR.skillNote; syncStart(); }
-function setSpeedSeg(){ cfg.speed=normSpeed(cfg.speed); window.bgGameSpeed=cfg.speed; if(BOOTH) BOOTH.setSpeed(cfg.speed); $("speedSeg").querySelectorAll("button").forEach(function(x){ var on=x.dataset.s===cfg.speed; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
+function setSpeedSeg(){ cfg.speed=normSpeed(cfg.speed); window.bgGameSpeed=cfg.speed; if(BOOTH) BOOTH.setSpeed(cfg.speed); $("speedSeg").querySelectorAll("button").forEach(function(x){ var on=x.dataset.s===cfg.speed; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); heroSync(); }
 $("speedSeg").querySelectorAll("button").forEach(function(b){ b.addEventListener("click",function(){ cfg.speed=b.dataset.s; setSpeedSeg(); save(); drawLength(); }); });
 function setSkillSeg(){ cfg.skill=normSkill(cfg.skill); if(G&&G.o) G.o.skill=cfg.skill; $("skillSeg").querySelectorAll("button").forEach(function(x){ var on=x.dataset.k===cfg.skill; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); }
 $("skillSeg").querySelectorAll("button").forEach(function(b){ b.addEventListener("click",function(){ cfg.skill=b.dataset.k; setSkillSeg(); save(); }); });
-function setAuto(on){ cfg.auto=!!on; $("autoRow").setAttribute("aria-checked",String(cfg.auto)); $("autoBtn").setAttribute("aria-checked",String(cfg.auto)); }
+function setAuto(on){ cfg.auto=!!on; $("autoRow").setAttribute("aria-checked",String(cfg.auto)); $("autoBtn").setAttribute("aria-checked",String(cfg.auto)); heroSync(); }
 $("autoRow").addEventListener("click",function(){ setAuto(!cfg.auto); save(); });
 $("autoBtn").addEventListener("click",function(){ setAuto(!cfg.auto); save(); syncControls(); drive(); });
 $("seasonCard").addEventListener("click",openYearPicker);
@@ -620,6 +620,7 @@ function drawAnn(){
   else if(v.engine==="captions") note=annNoVoice(v.why,v.info);
   else note="Wes Calloway calls the race and Hutch Bramlett adds the colour, out loud and in captions"+annVoiceNames(v)+".";
   $("annNote").textContent=note;
+  heroSync();
 }
 if(!drawAnn.bound){
   drawAnn.bound=true;
@@ -646,9 +647,66 @@ function syncStart(){
   var parts=[]; if(si){ parts.push(si.year+" "+SHORTS[si.series]); parts.push(plural(si.rounds,"round")); }
   if(!resumable){ parts.push(LEN_NAME[RD.MODE_OF[cfg.length]||"real"]); if(changedRules()) parts.push("custom rules"); }
   $("startSub").innerHTML=subParts(parts);
-  $("startDock").classList.toggle("has-resume",resumable);
+  $("startDock").classList.toggle("has-resume",resumable); $("setup").classList.toggle("has-resume",resumable);
   sb.classList.toggle("bg-btn--primary",!resumable); sb.classList.toggle("bg-btn--secondary",resumable);
   rb.classList.toggle("bg-btn--primary",resumable); rb.classList.toggle("bg-btn--secondary",!resumable);
+  heroSync();
+}
+/* the menu poster (UI-SPEC 4.1, 03_MAIN_MENU): the tagline (RACE THE NIGHT. for the stadium series, RACE THE DIRT. for the outdoor Motocross; PAUSED. in the Menu of a
+   season in play, with the gate still as its art), the shortcut rows with the live settings (TV), and the footer from the chosen season. Nothing here changes a setting */
+function heroSync(){
+  var setup=$("setup"); if(!setup||!$("tagB")) return;
+  var menu=liveGame(), si=seasonInfo(cfg.sid), night=cfg.series!=="mx", jv=function(k,t){ var el=setup.querySelector('[data-jv="'+k+'"]'); if(el&&el.textContent!==t) el.textContent=t; };
+  setup.classList.toggle("is-menu",menu);
+  $("tagA").hidden=menu; $("tagB").textContent=menu?"Paused.":night?"Night.":"Dirt."; $("tagC").textContent=menu?"The race waits for you.":"The track is yours.";
+  jv("season",si?si.year+" "+SHORTS[si.series]:"Pick a year");
+  var r0=rx(0), riderT=setup.querySelector('[data-jt="rider"]');
+  if(riderT) riderT.textContent=cfg.humans?(cfg.humans>1?"Your riders":"Your rider"):"Riders";
+  jv("rider",!cfg.humans?"Watch the pros":cfg.humans>1?cfg.humans+" on this "+(onTV()?"TV":"phone"):(r0.num!==""?"#"+r0.num:"Any number")+" "+(r0.bike||""));
+  jv("race",(LEN_NAME[RD.MODE_OF[cfg.length]||"real"]||"Real length")+" · "+({slow:"Slow",medium:"Medium",fast:"Fast"})[normSpeed(cfg.speed)]+" · Auto "+(cfg.auto?"on":"off"));
+  var am=null; try{ am=MX.Booth&&MX.Booth.stored?MX.Booth.stored().mode:null; }catch(e){ am=null; }
+  var gl=GFX?(GFX.filter(function(g){ return g[0]===gfx(); })[0]||GFX[0])[1]:"Auto";
+  jv("gfx",gl+(am?" · Announcers "+(am==="voice"?"on":am==="captions"?"captions":"off"):""));
+  jv("save","Save, load, standard rules");
+  setup.querySelectorAll(".mx-jump").forEach(function(b){ var k=b.getAttribute("data-jump"), show=menu?(k==="race"||k==="gfx"||k==="save"):(k!=="save"); if(b.hidden===show) b.hidden=!show; });
+  var ft=si?[LONG[si.series]+" "+si.year,plural(si.rounds,"round"),si.riders+" real riders"].join(" · "):""; if($("heroFoot").textContent!==ft) $("heroFoot").textContent=ft;
+  railSync();
+}
+/* TV: the start dock (the same #startDock the phone keeps sticky at the foot) sits in the poster's rail: the rail's slot takes the dock's height and the dock the slot's
+   place, measured (the labels, the Continue / Resume button and the fonts change its height), so the shortcut rows under it never meet it */
+var railRO=null;
+function railSync(){
+  var setup=$("setup"), hero=$("hero"), dock=$("startDock"), slot=hero?hero.querySelector(".mx-hero__slot"):null;
+  if(!setup||!hero||!dock||!slot) return;
+  if(!onTV()){ hero.style.removeProperty("--dock-h"); setup.style.removeProperty("--dock-top"); return; }
+  if(!setupShown()) return;
+  var h=dock.offsetHeight; if(h) hero.style.setProperty("--dock-h",h+"px");
+  var top=Math.round(slot.getBoundingClientRect().top-setup.getBoundingClientRect().top); if(top>0) setup.style.setProperty("--dock-top",top+"px");
+  if(!railRO&&window.ResizeObserver){ try{ railRO=new ResizeObserver(function(){ if(onTV()&&setupShown()) railSync(); }); railRO.observe(dock); railRO.observe(hero); }catch(e){ railRO=null; } }
+}
+/* a shortcut row: the section comes into view and its control takes the ring (TV) or the focus */
+function jumpTo(k){
+  var t=null, f=function(id,q){ var b=$(id); return b?b.querySelector(q):null; };
+  if(k==="season") t=$("seasonCard");
+  else if(k==="rider") t=cfg.humans?f("nameCard","input, select"):f("humanSeg","button:not([disabled])");
+  else if(k==="race") t=f("lengthSeg","button.on")||f("lengthSeg","button");
+  else if(k==="gfx") t=f("gfxSeg","button.on")||f("gfxSeg","button");
+  else if(k==="save") t=f("svbar","button:not([disabled])");
+  if(!t) return;
+  if(onTV()) focusTV(t);
+  else { var sec=t.closest("section")||t; try{ sec.scrollIntoView({block:"start"}); }catch(e){} try{ t.focus({preventScroll:true}); }catch(e){} }
+}
+$("jumps").addEventListener("click",function(e){ var b=e.target.closest&&e.target.closest(".mx-jump"); if(b) jumpTo(b.getAttribute("data-jump")); });
+/* the poster's entrance, once (one-shot Web Animations): the wordmark slams in, the tagline rises line by line; Reduce effects = a short fade; reduced motion = nothing */
+var heroIn=false;
+function heroIntro(){
+  if(heroIn) return; heroIn=true;
+  var B=BG(), lv=B&&B.effects&&B.effects.motion?B.effects.motion():"full", mk=$("heroMark"); if(lv==="off"||document.documentElement.getAttribute("data-motion")==="reduce") return;
+  var full=lv==="full"&&document.documentElement.getAttribute("data-effects")!=="reduced", lines=[$("tagA"),$("tagB"),$("tagC")];
+  try{
+    if(mk&&mk.animate) mk.animate(full?[{opacity:0,transform:(onTV()?"":"translateY(-50%) ")+"scale(1.12)"},{opacity:1,transform:(onTV()?"":"translateY(-50%) ")+"scale(1)"}]:[{opacity:0},{opacity:1}],{duration:full?380:150,easing:"cubic-bezier(.2,.8,.2,1)",fill:"backwards"});
+    lines.forEach(function(el,i){ if(el&&el.animate&&!el.hidden) el.animate(full?[{opacity:0,transform:"translateY(12px)"},{opacity:1,transform:"none"}]:[{opacity:0},{opacity:1}],{duration:full?320:150,delay:full?120+i*60:0,easing:"cubic-bezier(.2,.8,.2,1)",fill:"backwards"}); });
+  }catch(e){}
 }
 function seasonWords(g){ return g.year+" "+SHORTS[g.series]; }
 function resumeText(){
@@ -698,7 +756,7 @@ function setView(v,keepBody){
 function barTitle(){
   var e=$("barEyebrow"); if(!e) return;
   var t;
-  if(setupShown()) t=liveGame()?"Paused":ui.result?"Season over":"New season";
+  if(setupShown()) t=liveGame()?"Menu":ui.result?"Season over":"New season";
   else if(!G) t="New season";
   else if(G.over&&ui.finished===gen) t="Season over";
   else if(ui.view==="race"&&ui.rc){ var c=G.cal[Math.min(G.ri,G.cal.length-1)]; t=(c.city||c.venue)+" · "+(ui.label||""); }
@@ -1055,6 +1113,7 @@ function drawGfx(){
     box.querySelectorAll("button").forEach(function(b){ b.addEventListener("click",function(){ setGfx(b.getAttribute("data-gx")); }); });
   });
   $("gfxNote").textContent=gfxNote(cur);
+  heroSync();
 }
 function gfxNote(cur){
   var dev=onTV()?"TV":"device";
@@ -2319,6 +2378,7 @@ document.addEventListener("DOMContentLoaded",function(){
   if(B.icon) document.querySelectorAll("[data-icon]").forEach(function(el){ if(!el.querySelector("svg")) el.insertAdjacentHTML("afterbegin",B.icon(el.getAttribute("data-icon"))); });
   var hub=hubHref(); ["homeBtn","backHub","winHome"].forEach(function(id){ var a=$(id); if(a) a.setAttribute("href",hub); });
   saveBar.refresh(); deviceCopy(); drawSetup();
+  if(setupShown()) heroIntro();
   if(ui.cont&&!G) focusTV($("resumeBtn"));
   document.addEventListener("bgui:tv",function(){ deviceCopy(); syncStart(); if(G&&!setupShown()&&!busy) setView(ui.view); });
 });

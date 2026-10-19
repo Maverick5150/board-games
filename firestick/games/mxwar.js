@@ -413,6 +413,20 @@
     Q + ".mxp-chip{background:var(--mx-hud-panel);box-shadow:inset 0 0 0 1px var(--mx-hairline);font:700 var(--mx-fs-hud-s)/1.3 var(--mx-font-hud);letter-spacing:.05em;text-transform:uppercase}",
     Q + ".mxp .mx-pl{font-family:var(--mx-font-hud);font-weight:700;letter-spacing:.02em}",
     Q + ".mxp .mx-cf{box-shadow:inset 0 0 0 2px var(--mx-card-edge),0 .3rem .8rem rgba(0,0,0,.5)}",
+    /* THE MXWAR SKIN, the lobby section (03_MAIN_MENU, 04): the lockup in its header, the chosen season as the pack's selected row (war red, a white edge, the facts in pale
+       gold, a chevron), our own menu render behind the plugin's lobby box at 25 % (static), segments and notes as the page */
+    Q + "#pgbox{position:relative;isolation:isolate}",
+    Q + "#pgbox::before{content:'';position:absolute;inset:-.75rem -1rem;z-index:-1;border-radius:var(--mx-r-card);background:url('../mxwar/assets/menu/hero-960.webp') 100% 35%/cover no-repeat;opacity:.25;pointer-events:none}",
+    Q + ".mxp-brand{gap:1rem}",
+    Q + ".mxp-brand .mxp-lockup{display:block;flex:none;height:1.75rem;width:auto}",
+    Q + ".mxp-ssec .mxp-year{position:relative;min-height:6.4rem;padding:.6rem 3rem .6rem .6rem;border-radius:var(--mx-r-btn);background:var(--mx-red-deep);box-shadow:inset 0 0 0 2px var(--mx-hud-white)}",
+    Q + ".mxp-ssec .mxp-year .bg-row__title{font:700 var(--mx-fs-hud-l)/1.15 var(--mx-font-hud);letter-spacing:.03em;text-transform:uppercase;color:#FFFFFF}",
+    Q + ".mxp-ssec .mxp-year .bg-row__desc{font:600 var(--mx-fs-hud-s)/1.3 var(--mx-font-hud);letter-spacing:.06em;text-transform:uppercase;color:var(--mx-gold-pale)}",
+    Q + ".mxp-ssec .mxp-year .mxp-chev{color:#FFFFFF}",
+    Q + ".mxp-ssec .mxp-year:active{transform:scale(.985)}",
+    Q + ".mxp-ssec .mxp-year.is-focus," + Q + ".mxp-ssec .mxp-year:focus-visible{box-shadow:inset 0 0 0 2px var(--mx-hud-white),var(--focus-ring) !important}",
+    Q + ".mxp-ssec .mxp-ythumb{box-shadow:inset 0 0 0 1px rgba(240,241,243,.45)}",
+    Q + ".mxp-ssec .mxp-ythumb b{font:400 var(--mx-fs-display-s)/1 var(--mx-font-display);color:#FFFFFF;letter-spacing:.02em}",
     /* reduced effects: nothing moves */
     'html[data-effects="reduced"] ' + Q + ".mxp *{animation:none !important;transition:none !important}"
   ].join("\n");
@@ -560,7 +574,7 @@
     var secs = el.querySelectorAll(".ps-sec"), vsec = secs[0];
     var si = seasonInfo(cfg.sid), F = si && IDX.formats[si.format], n = Math.max(1, api.players());
     var fieldN = F ? RD.fieldSize(F) : 0;
-    var ssec = '<section class="ps-sec mxp-ssec"><div class="bg-section"><h2 class="bg-eyebrow" data-stage-text>Season</h2></div>' +
+    var ssec = '<section class="ps-sec mxp-ssec"><div class="bg-section mxp-brand"><img class="mxp-lockup" src="../mxwar/assets/brand/wordmark-lockup.svg" alt="Motocross War" width="900" height="120"><h2 class="bg-eyebrow" data-stage-text>Season</h2></div>' +
       '<div class="bg-seg mxp-seg" role="group" aria-label="Series">' + [["sx", "Supercross"], ["mx", "Motocross"], ["smx", "SMX Playoffs"]].map(function (s) { var on = s[0] === cfg.series; return '<button type="button" class="aibtn' + (on ? " on" : "") + '" aria-pressed="' + on + '" data-mxs="' + s[0] + '">' + s[1] + "</button>"; }).join("") + "</div>" +
       (si ? '<button type="button" class="bg-row aibtn mxp-year" id="mxpYear" aria-label="Season ' + si.year + " " + esc(LONG[si.series]) + '. Choose the year">' +
         '<span class="mxp-ythumb" aria-hidden="true">' + A.track(si.series === "mx" ? "outdoor" : "stadium", "mxpy" + (++pvSeq)) + "<b>" + si.year + "</b></span>" +

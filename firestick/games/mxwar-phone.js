@@ -176,7 +176,28 @@
       Q + ".mxph-num input{font:400 1.5rem/1 var(--mx-font-display);letter-spacing:.08em}",
       Q + ".mxph-num input[aria-invalid=true]{box-shadow:inset 0 0 0 2px var(--mx-down)}",
       Q + ".mx-pl{font-family:var(--mx-font-hud);font-weight:700;letter-spacing:.02em}",
-      Q + ".mx-cf{box-shadow:inset 0 0 0 2px var(--mx-card-edge),0 .25rem .6rem rgba(0,0,0,.5)}"
+      Q + ".mx-cf{box-shadow:inset 0 0 0 2px var(--mx-card-edge),0 .25rem .6rem rgba(0,0,0,.5)}",
+      /* the controller's frame (10_PHONE_CONTROLLER_SKIN): the brand strip on night with the war-red stripe, the art band (our own render) away from a race, the info
+         card over its foot (a white edge, the gold line, the plate, the Anton title), Watch the TV; the scene behind the controller turns night while it shows */
+      "html:has(.mxph) body.bg-app::before{background:radial-gradient(80% 45% at 50% 0%,rgba(247,45,46,.14),rgba(0,0,0,0) 75%),linear-gradient(180deg,#170C0D 0%,#170C0D 10%,#090C12 70%)}",
+      Q + ".mxph-brand{position:relative;display:flex;align-items:center;justify-content:center;margin:0 calc(50% - 50vw);padding:.7rem 1rem .6rem;background:var(--mx-night-black)}",
+      Q + ".mxph-brand::before{content:'';position:absolute;left:0;right:0;top:0;height:3px;background:var(--mx-war-red)}",
+      Q + ".mxph-brand img{display:block;width:auto;height:1.5rem}",
+      Q + ".mxph-band{position:relative;margin:-.7rem calc(50% - 50vw) 0;height:10rem;overflow:hidden;background:var(--mx-night-black)}",
+      Q + ".mxph-band img{position:absolute;inset:0;display:block;width:100%;height:100%;object-fit:cover;object-position:60% 55%}",
+      Q + ".mxph-band::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(9,12,18,.15) 0%,rgba(9,12,18,0) 35%,var(--mx-night-black) 100%)}",
+      Q + ".mxph-who{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;column-gap:.8rem;row-gap:.4rem;padding:.8rem .95rem .9rem;border-radius:var(--mx-r-card);background:var(--mx-panel-black);box-shadow:inset 0 0 0 2px var(--mx-hud-white)}",
+      Q + ".mxph-band + .mxph-who{position:relative;z-index:1;margin-top:-3.2rem}",
+      Q + ".mxph-eye{grid-column:1/-1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:700 .9375rem/1.15 var(--mx-font-hud);letter-spacing:.07em;text-transform:uppercase;color:var(--mx-stadium-gold)}",
+      Q + ".mxph-who h1{font:400 1.75rem/1.02 var(--mx-font-display);letter-spacing:.01em;text-transform:uppercase}",
+      Q + ".mxph-who p{margin:.25rem 0 0;font:600 .875rem/1.3 var(--mx-font-hud);letter-spacing:.04em;text-transform:uppercase;color:var(--mx-secondary-text)}",
+      Q + ".mxph-stat{background:var(--mx-panel-black);box-shadow:inset 0 0 0 1px var(--mx-hairline);border-radius:var(--mx-r-panel)}",
+      Q + ".mxph-stat b{font-family:var(--mx-font-display);color:var(--mx-hud-white)}",
+      Q + ".mxph-stat span{font:600 .75rem/1.2 var(--mx-font-hud);letter-spacing:.08em;color:var(--mx-secondary-text)}",
+      Q + ".mxph-watch{display:grid;place-items:center;min-height:3.25rem;border-radius:var(--mx-r-btn);background:var(--mx-row);box-shadow:inset 0 0 0 1px var(--mx-hairline);font:700 1.0625rem/1 var(--mx-font-hud);letter-spacing:.1em;text-transform:uppercase;color:var(--mx-hud-white)}",
+      Q + ".mxph-rs li{background:var(--mx-panel-black);box-shadow:inset 0 0 0 1px var(--mx-hairline);font-family:var(--mx-font-hud);font-weight:600;font-size:1rem;letter-spacing:.02em}",
+      Q + ".mxph-taken{background:var(--mx-panel-black);box-shadow:inset 0 0 0 1px var(--mx-hairline)}",
+      Q + ".mxph-taken summary{font:700 1rem/1.2 var(--mx-font-hud);letter-spacing:.04em;text-transform:uppercase}"
     ].join("\n");
     document.head.appendChild(st);
   }
@@ -227,9 +248,15 @@
         else if (pn.kind === "podium" || pn.kind === "final") { title = pn.title; sub = (pn.pod || []).map(function (x, i) { return (i + 1) + ". " + x; }).join(" · "); }
         else { title = pn.title || "Season standings"; sub = pn.next ? "Next: " + pn.next : "Watch the TV."; }
       }
-      var who = '<div class="mxph-who' + (asking ? " is-turn" : "") + '" style="--seat:' + esc(me.hex || "#e7ca90") + '">' + (me.plate != null ? plate(me.plate, me.mk, me.red) : '<span class="mxph-tok" aria-hidden="true">' + esc(((me.name || "?").trim().charAt(0) || "?").toUpperCase()) + "</span>") +
+      /* the pack's controller (10_PHONE_CONTROLLER_SKIN): the brand strip on every screen; away from a race the art band (OUR OWN in-engine render) with the info card over
+         its foot; the gold line of the card names where we are (the race, the sign-up, the season) */
+      var racing = !!(R && (st.ph === "race" || st.ph === "gate"));
+      var eye = racing ? (R.city ? R.city + " · " : "") + (R.label || "") : st.ph === "signup" && st.su ? st.su.year + " " + st.su.series + " · sign-up" : se ? se.year + " " + se.name + " · round " + se.ri + " of " + se.nr + (se.city ? " · " + se.city : "") : "Motocross War";
+      var brand = '<div class="mxph-brand"><img src="../mxwar/assets/brand/wordmark-lockup.svg" alt="Motocross War" width="900" height="120"></div>' +
+        (racing ? "" : '<div class="mxph-band" aria-hidden="true"><img src="../mxwar/assets/menu/band-780.webp" alt="" width="780" height="360" decoding="async"></div>');
+      var who = '<div class="mxph-who' + (asking ? " is-turn" : "") + '" style="--seat:' + esc(me.hex || "#e7ca90") + '"><span class="mxph-eye">' + esc(eye) + "</span>" + (me.plate != null ? plate(me.plate, me.mk, me.red) : '<span class="mxph-tok" aria-hidden="true">' + esc(((me.name || "?").trim().charAt(0) || "?").toUpperCase()) + "</span>") +
         "<div><h1>" + esc(title) + "</h1><p>" + esc(sub) + "</p></div></div>";
-      var html = '<div class="pgph mxph">' + (st.afk ? api.afkHTML("mxTake") : "") + who;
+      var html = '<div class="pgph mxph">' + (st.afk ? api.afkHTML("mxTake") : "") + brand + who;
       if (st.ph === "signup" && st.su) html += asking && kind === "signup" ? signupHTML(st, api) : readyHTML(st, api);
       else if (R && (st.ph === "race" || st.ph === "gate")) {
         if (R.inRace) {
@@ -246,6 +273,7 @@
       } else if (se) {
         html += '<div class="mxph-stats"><div class="mxph-stat"><b>' + (se.place ? ord(se.place) : "-") + "</b><span>season</span></div><div class=\"mxph-stat\"><b>" + se.pts + "</b><span>points</span></div><div class=\"mxph-stat\"><b>" + se.ri + "</b><span>round of " + se.nr + "</span></div></div>";
         if (se.leader) html += '<p class="mxph-last">Red plate (the points leader): ' + esc(se.leader) + "</p>";
+        if (!se.over && st.ph !== "over") html += '<div class="mxph-watch" role="status">Watch the TV</div>';
       }
       if (st.line && st.ph !== "signup") html += '<p class="mxph-last">' + esc(st.line) + "</p>";
       if (se) html += '<p class="mxph-foot">' + esc(se.year + " " + se.name + " · round " + se.ri + " of " + se.nr + " · " + se.city) + "</p>";

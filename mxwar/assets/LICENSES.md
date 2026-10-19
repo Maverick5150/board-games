@@ -78,4 +78,12 @@ Add your lines between your heading and its end marker only (this keeps the role
   - Barlow Condensed SemiBold and Bold (HUD): `barlowcondensed-600-latin.woff2` (22 308 B, sha256 215a93c6...cbb2b66) and `barlowcondensed-700-latin.woff2` (22 444 B, sha256 3787a5a4...dc11ec090fdc3ee2b8),
     from https://fonts.gstatic.com/s/barlowcondensed/v13/; "Copyright 2017 The Barlow Project Authors (https://github.com/jpt/barlow)"; licence `mxwar/assets/fonts/OFL-BarlowCondensed.txt` (the repo's OFL.txt).
     These are the very files of "race screen fonts" above (one copy in the repo, one family name).
+- The wordmark, `mxwar/assets/brand/wordmark.svg` (1200 x 640) and `wordmark-lockup.svg` (900 x 120): ORIGINAL art made for this game by a tool outside the repo
+  (`BG_audit/sprint/mxui/build-A/brand/wordmark.js`): the letters of Anton (the font above, OFL 1.1) outlined to paths with opentype.js 1.3.4 (MIT, the tool only), skewed and
+  turned, with seeded dirt specks, brush streaks, bristles, drips and splatter drawn in code. Font-free, no filter, no mask, no external reference. It copies no logo: the
+  cover in the CEO's pack was used only for its rules (skew, white over red, brush red), never traced.
+- The menu stills, `mxwar/assets/menu/hero-1920.webp`, `hero-960.webp`, `hero-portrait.webp`, `band-780.webp` and `gate-1920.webp`: ORIGINAL in-engine renders of OUR OWN 3D
+  view (race3d.js of this branch) made with the capture harness (mxvis `demo.html`, run from a copy outside the repo: `BG_audit/sprint/mxui/build-A/stills/stills.js`), the 2026
+  Supercross round 1 Main, a fixed seed; WebP, softened a little and encoded to their size budgets. No photo, no third-party texture, logo, sign or likeness: the boards
+  carry the game's own words (see "stadium").
 <!-- end ui skin -->

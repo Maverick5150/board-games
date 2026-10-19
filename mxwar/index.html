@@ -109,13 +109,6 @@
   .mx-hero{order:1} .mx-sec--series{order:2} .mx-sec--players{order:3} .mx-sec--names{order:4} .mx-sec--length{order:5} .mx-sec--speed{order:6}
   .mx-sec--ann{order:7} .mx-sec--gfx{order:8} .mx-sec--rules{order:9} .mx-sec--save{order:10} .mx-back{order:11} .mx-dock{order:12}
   /* [bcast] */ .mx-sec--music{order:10} html[data-tv] .mx-sec--music{order:4} #credBox .mxm-cred{margin-bottom:.75rem} /* [/bcast] */
-  .mx-hero{position:relative; min-height:0; margin:0 calc(-1 * var(--gutter)); padding-top:46%; border-radius:0; background:transparent}
-  .mx-hero .bg-hero__layer{bottom:auto; height:auto; aspect-ratio:16/9; border-radius:0; background-color:transparent;
-    background-image:url("../ui/art/hero-mxwar.svg"); background-size:100% auto; background-position:100% 0;
-    -webkit-mask-image:linear-gradient(180deg,#000 58%,rgba(0,0,0,0) 100%); mask-image:linear-gradient(180deg,#000 58%,rgba(0,0,0,0) 100%)}
-  .mx-hero .bg-hero__shade{display:none}
-  .mx-hero .bg-hero__body{max-width:none; padding:0 var(--gutter) .25rem}
-  .mx-hero .bg-hero__pitch{max-width:30rem}
   .mx-sec{min-width:0}
   .mx-subhead{margin-top:1.25rem}
   .mx-card{display:grid; gap:.75rem}
@@ -179,7 +172,7 @@
   .mx-dock #startBtn{flex:1 1 0; min-width:0}
   .mx-dock.has-resume #startBtn{padding-inline:.75rem}
   .mx-resume{flex:1 1 0; min-width:0; padding:.5rem .75rem; border-radius:var(--r-lg)}
-  .mx-resume > span{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.2rem; min-height:2.75rem}
+  .mx-resume > span:not(.mx-okcap):not(.mx-chevr){display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.2rem; min-height:2.75rem}
   .mx-resume .bg-btn__sub, .mx-dock #startBtn .bg-btn__sub{white-space:normal; text-align:center}
   .mx-resume.bg-btn--secondary .bg-btn__sub, .mx-dock #startBtn.bg-btn--secondary .bg-btn__sub{color:var(--text-2)}
 
@@ -656,13 +649,6 @@
   /* ---------- TV (html[data-tv], 1rem = 24px at 1080p) ---------- */
   html[data-tv] .mx-setup{display:grid; grid-template-columns:minmax(0,32rem) minmax(0,34rem); column-gap:3.5rem; justify-content:center; align-items:start; width:auto; padding:0 var(--gutter) 2rem}
   html[data-tv] .mx-col{display:block; min-width:0}
-  html[data-tv] .mx-hero{margin:1.5rem 0 0; border-radius:var(--r-xl); padding-top:34%}
-  html[data-tv] .mx-hero .bg-hero__layer{border-radius:var(--r-xl) var(--r-xl) 0 0;
-    -webkit-mask-image:linear-gradient(90deg,rgba(0,0,0,0),#000 8%,#000 96%,rgba(0,0,0,0)),linear-gradient(180deg,rgba(0,0,0,0),#000 9%,#000 58%,rgba(0,0,0,0));
-    -webkit-mask-composite:source-in;
-    mask-image:linear-gradient(90deg,rgba(0,0,0,0),#000 8%,#000 96%,rgba(0,0,0,0)),linear-gradient(180deg,rgba(0,0,0,0),#000 9%,#000 58%,rgba(0,0,0,0));
-    mask-composite:intersect}
-  html[data-tv] .mx-hero .bg-hero__body{padding:0}
   html[data-tv] #seriesSeg, html[data-tv] #lengthSeg, html[data-tv] #speedSeg, html[data-tv] #skillSeg, html[data-tv] #versionSeg, html[data-tv] #gfxSeg{gap:1.5rem}
   html[data-tv] .mx-rules .bg-row{min-height:0; padding:.5rem .875rem}
   html[data-tv] .mx-col--b{display:flex; flex-direction:column}
@@ -899,8 +885,6 @@
     html:not([data-tv]) .mx-pod__c[data-p="2"] .mx-pod__step{height:2.6rem}
     html:not([data-tv]) .mx-pod__c[data-p="3"] .mx-pod__step{height:2rem}
     html:not([data-tv]) #resBox .mx-res, html:not([data-tv]) #fullBox .mx-res{max-height:40vh}
-    html:not([data-tv]) .mx-hero{padding-top:5.5rem}
-    html:not([data-tv]) .mx-hero .bg-hero__layer{bottom:0; aspect-ratio:auto; background-size:cover; background-position:50% 40%}
   }
 
   /* ================= THE MXWAR SKIN, step 1 (UI-SPEC 3.2 / 3.4 / 3.7): the night surfaces, the war-red stripe, Anton titles in caps ================= */
@@ -987,8 +971,8 @@
   html[data-game="mxwar"] .bg-seg > button small{font:600 .8125rem/1.2 var(--mx-font-hud); letter-spacing:.02em; text-transform:none; color:var(--mx-secondary-text)}
   html[data-game="mxwar"] .bg-seg > button.on small{color:var(--mx-gold-pale)}
   /* the radio list (the Graphics choice): one row per option with its one-line description and a radio dot; phone one column, TV 2 x 3 */
-  html[data-game="mxwar"] .bg-seg.mx-radios{grid-auto-flow:row; grid-template-columns:minmax(0,1fr); gap:.5rem; padding:0; background:none; box-shadow:none; border-radius:0}
-  html[data-tv][data-game="mxwar"] .bg-seg.mx-radios{grid-template-columns:repeat(2,minmax(0,1fr)); gap:1.5rem}
+  html[data-game="mxwar"] #gfxSeg.mx-radios{grid-auto-flow:row; grid-template-columns:minmax(0,1fr); gap:.5rem; padding:0; background:none; box-shadow:none; border-radius:0}
+  html[data-tv][data-game="mxwar"] #gfxSeg.mx-radios{grid-template-columns:repeat(2,minmax(0,1fr)); gap:1.5rem}
   html[data-game="mxwar"] .mx-radios > button{display:grid; grid-template-columns:minmax(0,1fr) auto; grid-template-rows:auto auto; align-items:center; column-gap:.75rem; row-gap:.1rem; min-height:3.5rem;
     padding:.55rem .95rem .6rem 1rem; text-align:left; white-space:normal; overflow:visible; color:var(--mx-hud-white); background:var(--mx-panel-black); box-shadow:inset 0 0 0 1.5px var(--mx-row-edge); border-radius:var(--mx-r-btn); font-size:var(--mx-fs-hud-l)}
   html[data-game="mxwar"] .mx-radios > button .mx-seg__n{grid-row:1; grid-column:1; min-width:0}
@@ -1038,6 +1022,97 @@
   html[data-game="mxwar"] li.is-me .mx-pl:not(.is-red){box-shadow:inset .3em 0 0 var(--mk,#3a3a44), inset 0 0 0 1px rgba(0,0,0,.4), 0 0 0 2px var(--mx-stadium-gold)}
   /* the playing cards: the ivory face keeps its gradient, with the pack's warm edge inside */
   html[data-game="mxwar"] .mx-cf{box-shadow:inset 0 0 0 2px var(--mx-card-edge), 0 .3rem .8rem rgba(0,0,0,.5)}
+
+  /* ================= THE MXWAR SKIN, step 3: the brand and the menu (UI-SPEC 4.1, 03_MAIN_MENU) =================
+     The top bar carries the original lockup (the name stays for screen readers); the setup page opens on a poster: a night rail with the two-line tagline, the
+     start dock (TV) and shortcut rows to the sections, and the art: OUR OWN in-engine render (assets/menu, made by the capture harness) under the original
+     wordmark. Below it the sections, unchanged in order and content. Phone: the art as a band, the tagline under it, the sticky dock as before. */
+  html[data-game="mxwar"] .bg-topbar__title{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.2rem}
+  html[data-game="mxwar"] .bg-topbar__title .bg-eyebrow{order:0; margin:0}
+  html[data-game="mxwar"] .mx-lockup{order:1; display:block; width:auto; height:1.5rem}
+  html[data-game="mxwar"] .bg-topbar__name{position:absolute !important; width:1px; height:1px; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
+  html[data-tv][data-game="mxwar"] .bg-topbar{padding-left:var(--mx-safe-x); padding-right:var(--mx-safe-x)}
+  html[data-tv][data-game="mxwar"] .bg-topbar__title{flex-direction:row; justify-content:space-between; gap:1.5rem; padding:0 1.5rem}
+  html[data-tv][data-game="mxwar"] .mx-lockup{order:0; height:2rem}
+  html[data-tv][data-game="mxwar"] .bg-topbar__title .bg-eyebrow{order:1; font:600 var(--mx-fs-hud-s)/1.1 var(--mx-font-hud); letter-spacing:.08em; color:var(--mx-secondary-text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  /* the poster, phone first: the art as a full-bleed band (the portrait render), the wordmark in its upper half, the tagline under it */
+  .mx-hero{position:relative; margin:0 calc(50% - 50vw); color:var(--mx-hud-white)}
+  .mx-hero__art{position:relative; height:clamp(15rem, 42vh, 22rem); overflow:hidden; background:var(--mx-night-black)}
+  .mx-hero__pic, .mx-hero__img, .mx-hero__gate{position:absolute; inset:0; display:block; width:100%; height:100%}
+  .mx-hero__img, .mx-hero__gate{object-fit:cover; object-position:62% 50%}
+  .mx-hero__gate{display:none}
+  #setup.is-menu .mx-hero__gate{display:block}
+  #setup.is-menu .mx-hero__pic{visibility:hidden}
+  .mx-hero__art::after{content:""; position:absolute; inset:0; pointer-events:none; background:linear-gradient(180deg, rgba(9,12,18,.35) 0%, rgba(9,12,18,0) 30%, rgba(9,12,18,0) 52%, var(--mx-night-black) 100%)}
+  .mx-hero__mark{position:absolute; z-index:2; left:9%; width:82%; height:auto; top:calc(clamp(15rem, 42vh, 22rem) * .26); transform:translateY(-50%); pointer-events:none}
+  .mx-hero__rail{position:relative; z-index:2; display:flex; flex-direction:column; padding:0 var(--gutter); margin-top:-1.25rem}
+  .mx-tagline{margin:0; font:400 var(--mx-fs-display-l)/.95 var(--mx-font-display); text-transform:uppercase; letter-spacing:.005em}
+  .mx-tagline__a, .mx-tagline__b{display:block}
+  .mx-tagline__a{font-size:1.75rem; line-height:1}
+  .mx-tagline__b{font-size:3rem; line-height:.92; letter-spacing:-.005em}
+  .mx-tagline__c{margin:.35rem 0 0; font:700 .9375rem/1.2 var(--mx-font-hud); letter-spacing:.06em; text-transform:uppercase; color:var(--mx-stadium-gold)}
+  .mx-hero__pitch{margin:.6rem 0 0; font:var(--fw-body) var(--fs-sm)/1.45 var(--font-ui); color:var(--mx-secondary-text); max-width:30rem}
+  .mx-hero__slot, .mx-jumps, .mx-hero__foot{display:none}
+  /* the shortcut rows (TV): menu rows that scroll to a section and put the ring on its control; they change nothing themselves */
+  .mx-jump{position:relative; display:flex; align-items:center; gap:.75rem; width:100%; min-height:3rem; margin:0; padding:0 3rem 0 1.1rem; border:0; border-radius:var(--mx-r-btn); text-align:left; cursor:pointer;
+    color:var(--mx-hud-white); background:var(--mx-panel-black); box-shadow:inset 0 0 0 1.5px var(--mx-row-edge); font:700 var(--mx-fs-hud-l)/1.1 var(--mx-font-hud); letter-spacing:.04em; text-transform:uppercase;
+    transition:transform var(--dur-instant) var(--ease-out); -webkit-tap-highlight-color:transparent}
+  .mx-jump__t{flex:none; white-space:nowrap}
+  .mx-jump__v{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; color:var(--mx-secondary-text); letter-spacing:.05em}
+  .mx-jump__v::before{content:"\00B7"; margin-right:.6rem; color:var(--mx-row-edge)}
+  .mx-jump::after, .mx-chevr{content:""; position:absolute; right:1.1rem; top:50%; width:.6rem; height:.6rem; margin-top:-.32rem; border:solid var(--mx-stadium-gold); border-width:.16rem .16rem 0 0; transform:rotate(45deg); pointer-events:none}
+  .mx-jump:active{transform:scale(.985)}
+  .mx-jump.is-focus, .mx-jump:focus-visible{box-shadow:inset 0 0 0 1.5px var(--mx-hud-white), var(--focus-ring) !important; outline:none; position:relative; z-index:2}
+  html[data-tv] .mx-jump.is-focus, html[data-tv] .mx-jump:focus-visible{transform:scale(var(--focus-scale))}
+  .mx-jump[hidden]{display:none}
+  /* the dock buttons: a right chevron, white on the primary; on TV the primary also shows its OK key */
+  .mx-okcap{display:none}
+  .mx-chevr{display:none; position:absolute; border-color:#FFFFFF}
+  .mx-dock .bg-btn--secondary .mx-chevr{border-color:var(--mx-stadium-gold)}
+  .mx-dock:not(.has-resume) #startBtn .mx-chevr{display:block}
+  .mx-dock:not(.has-resume) #startBtn{padding-right:2.75rem}
+  /* TV: the two-zone poster over both columns, one screen tall: the night rail (40 %) and the art (60 %); the dock moves into the rail (the same elements, placed by CSS) */
+  html[data-tv] .mx-setup{grid-template-columns:minmax(0,1fr) minmax(0,32rem) minmax(0,34rem) minmax(0,1fr); grid-template-areas:"hero hero hero hero" ". a b ."; justify-content:normal; position:relative; padding:0 0 2rem}
+  html[data-tv] .mx-col--a{grid-area:a} html[data-tv] .mx-col--b{grid-area:b}
+  html[data-tv] .mx-hero{grid-area:hero; display:grid; grid-template-columns:40% 60%; width:auto; height:calc(100vh - var(--bg-bar-h, 4.75rem)); margin:0 0 1rem; background:var(--mx-night-black)}
+  html[data-tv] .mx-hero__art{grid-column:2; grid-row:1; height:auto}
+  html[data-tv] .mx-hero__img, html[data-tv] .mx-hero__gate{object-position:100% 50%}
+  html[data-tv] .mx-hero__art::after{background:linear-gradient(90deg, var(--mx-night-black) 0%, rgba(9,12,18,0) 18%), linear-gradient(0deg, rgba(9,12,18,.3), rgba(9,12,18,.3))}
+  html[data-tv] .mx-hero__mark{left:auto; right:var(--mx-safe-x); top:2.2rem; width:30rem; transform:none}
+  html[data-tv] .mx-hero__rail{grid-column:1; grid-row:1; margin:0; padding:2.5rem 1.2rem var(--mx-safe-y) var(--mx-safe-x); min-height:0}
+  html[data-tv] .mx-tagline__a{font-size:2rem}
+  html[data-tv] .mx-tagline__b{font-size:var(--mx-fs-hero); line-height:.9; letter-spacing:-.01em}
+  html[data-tv] .mx-tagline__c{margin-top:.35rem; font-size:var(--mx-fs-hud-l); letter-spacing:.04em; line-height:1.15}
+  html[data-tv] .mx-hero__pitch{display:none}
+  html[data-tv] .mx-hero__slot{display:block; flex:none; height:var(--dock-h, 3.75rem); margin-top:1.25rem}
+  html[data-tv] .mx-jumps{display:grid; grid-template-columns:minmax(0,1fr); gap:1.5rem; width:26rem; margin-top:1.5rem}
+  html[data-tv] .mx-jump{min-width:0}
+  html[data-tv] .mx-hero__foot{display:block; margin:auto 0 0; padding-top:.6rem; border-top:1px solid var(--mx-hairline); width:calc(100% + .45rem);
+    font:600 var(--mx-fs-hud-s)/1.25 var(--mx-font-hud); letter-spacing:.07em; text-transform:uppercase; color:var(--mx-secondary-text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  html[data-tv] #setup.is-menu .mx-tagline__a{display:none}
+  /* (the dock's place in the rail: game.js railSync() puts its top at the slot and gives the slot its height, so the rows below never meet it) */
+  html[data-tv] .mx-dock{position:absolute; left:var(--mx-safe-x); top:var(--dock-top, 11.75rem); bottom:auto; width:26rem; flex-direction:column; gap:1.5rem; margin:0; padding:0; background:none; z-index:3}
+  html[data-tv] .mx-dock #startBtn, html[data-tv] .mx-dock .mx-resume{flex:none}
+  html[data-tv] .mx-dock .bg-btn{width:100%; min-height:3.75rem; padding:.45rem 3rem .45rem 1.1rem; text-align:left; border-radius:var(--mx-r-btn)}
+  html[data-tv] .mx-dock #startBtn{display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:.1rem}
+  html[data-tv] .mx-dock .mx-resume > span:not(.mx-okcap):not(.mx-chevr){align-items:flex-start; justify-content:center; gap:.1rem; min-height:0}
+  html[data-tv] .mx-dock .bg-btn--secondary{min-height:3rem}
+  html[data-tv] .mx-dock .bg-btn--primary{padding-left:4.1rem}
+  html[data-tv] .mx-dock .mx-chevr{display:block}
+  html[data-tv] .mx-dock .bg-btn--primary .mx-okcap{display:inline-grid; place-items:center; position:absolute; left:1.1rem; top:50%; margin-top:-1.05rem; min-width:2.1rem; height:2.1rem; padding:0 .3rem; border-radius:.4rem;
+    font:700 .875rem/1 var(--mx-font-hud); letter-spacing:.06em; color:#FFFFFF; background:rgba(9,12,18,.35); box-shadow:inset 0 0 0 1px rgba(255,214,165,.7)}
+  html[data-tv] #setup.is-menu .mx-hero__art::after{background:linear-gradient(90deg, var(--mx-night-black) 0%, rgba(9,12,18,0) 18%), linear-gradient(0deg, rgba(9,12,18,.48), rgba(9,12,18,.48))}
+  html[data-tv] .mx-dock .mx-resume .bg-btn__sub, html[data-tv] .mx-dock #startBtn .bg-btn__sub{text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%}
+  /* phone sideways: a lower band, the wordmark on its left at 60 % of its height, the tagline beside it in one line */
+  @media (orientation: landscape) and (max-height: 31.25em){
+    html:not([data-tv]) .mx-hero__art{height:38vh; min-height:9rem}
+    html:not([data-tv]) .mx-hero__mark{left:var(--gutter); top:19vh; width:auto; height:22.8vh; min-height:5.4rem}
+    html:not([data-tv]) .mx-hero__rail{position:absolute; left:calc(var(--gutter) + max(22.8vh, 5.4rem) * 1.875 + 1.25rem); right:var(--gutter); top:calc(max(38vh, 9rem) - 4.6rem); margin:0; padding:0}
+    html:not([data-tv]) .mx-tagline__a, html:not([data-tv]) .mx-tagline__b{display:inline; font-size:2rem; line-height:1}
+    html:not([data-tv]) .mx-tagline__c{margin-top:.2rem}
+    html:not([data-tv]) .mx-hero__pitch{display:none}
+    html:not([data-tv]) .mx-hero{margin-bottom:.5rem}
+  }
 </style>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
@@ -1055,23 +1130,41 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
 <body class="bg-app bg-app--scene mx-in-setup">
   <header class="bg-topbar">
     <div class="bg-topbar__start"><a class="bg-btn bg-btn--icon" id="homeBtn" href="../index.html" aria-label="All games" data-icon="back"></a></div>
-    <div class="bg-topbar__title"><span class="bg-eyebrow" id="barEyebrow">New season</span><span class="bg-topbar__name">Motocross War</span></div>
+    <div class="bg-topbar__title"><img class="mx-lockup" src="assets/brand/wordmark-lockup.svg" alt="" aria-hidden="true" width="900" height="120"><span class="bg-eyebrow" id="barEyebrow">New season</span><span class="bg-topbar__name">Motocross War</span></div>
     <div class="bg-topbar__end">
       <button class="bg-btn bg-btn--icon" id="menuBtn" type="button" aria-label="Menu" data-icon="menu" hidden></button>
     </div>
   </header>
 
   <main class="mx-setup" id="setup" aria-label="New season">
+    <!-- the menu poster (03_MAIN_MENU): a night rail with the tagline, the start dock (TV) and shortcut rows; the art is OUR OWN in-engine render (assets/menu, the
+         original wordmark over it); the gate still shows in the Menu while a season is paused -->
+    <section class="mx-hero" id="hero" aria-labelledby="setupTitle">
+      <div class="mx-hero__art" aria-hidden="true">
+        <picture class="mx-hero__pic">
+          <source media="(orientation: portrait) and (max-width: 36em)" srcset="assets/menu/hero-portrait.webp">
+          <source media="(max-width: 75em)" srcset="assets/menu/hero-960.webp">
+          <img class="mx-hero__img" src="assets/menu/hero-1920.webp" alt="" width="1920" height="1080" decoding="async" fetchpriority="high">
+        </picture>
+        <img class="mx-hero__gate" src="assets/menu/gate-1920.webp" alt="" width="1920" height="1080" decoding="async" loading="lazy">
+      </div>
+      <img class="mx-hero__mark" id="heroMark" src="assets/brand/wordmark.svg" alt="Motocross War" width="1200" height="640">
+      <div class="mx-hero__rail">
+        <h1 class="mx-tagline" id="setupTitle"><span class="mx-tagline__a" id="tagA">Race the</span> <span class="mx-tagline__b" id="tagB">Night.</span></h1>
+        <p class="mx-tagline__c" id="tagC">The track is yours.</p>
+        <p class="mx-hero__pitch">Race a real season against the pros of that year. Every heat, LCQ, Main and moto is a game of War.</p>
+        <div class="mx-hero__slot" aria-hidden="true"></div>
+        <nav class="mx-jumps" id="jumps" aria-label="Go to a setting">
+          <button class="mx-jump" type="button" data-jump="season"><span class="mx-jump__t">Season</span><span class="mx-jump__v" data-jv="season"></span></button>
+          <button class="mx-jump" type="button" data-jump="rider"><span class="mx-jump__t" data-jt="rider">Your rider</span><span class="mx-jump__v" data-jv="rider"></span></button>
+          <button class="mx-jump" type="button" data-jump="race"><span class="mx-jump__t">Race</span><span class="mx-jump__v" data-jv="race"></span></button>
+          <button class="mx-jump" type="button" data-jump="gfx"><span class="mx-jump__t">Graphics</span><span class="mx-jump__v" data-jv="gfx"></span></button>
+          <button class="mx-jump" type="button" data-jump="save" hidden><span class="mx-jump__t">Save and load</span><span class="mx-jump__v" data-jv="save"></span></button>
+        </nav>
+        <p class="mx-hero__foot" id="heroFoot"></p>
+      </div>
+    </section>
     <div class="mx-col mx-col--a">
-      <section class="bg-hero mx-hero" aria-labelledby="setupTitle">
-        <div class="bg-hero__layer is-on"></div>
-        <div class="bg-hero__shade"></div>
-        <div class="bg-hero__body">
-          <span class="bg-eyebrow bg-eyebrow--accent" data-stage-text="strong">Gate drop · holeshot · war</span>
-          <h1 class="bg-hero__title" id="setupTitle" data-stage-text>Motocross War</h1>
-          <p class="bg-hero__pitch" data-stage-text>Race a real season against the pros of that year. Every heat, LCQ, Main and moto is a game of War.</p>
-        </div>
-      </section>
       <section class="mx-sec mx-sec--series" aria-labelledby="seriesHead">
         <div class="bg-section"><h2 class="bg-eyebrow" id="seriesHead" data-stage-text>Series and year</h2></div>
         <div class="bg-seg bg-seg--text" id="seriesSeg" role="group" aria-labelledby="seriesHead"></div>
@@ -1163,8 +1256,8 @@ window.Skins=window.Skins||{apply:function(){},mode:function(){return "classic";
       </section>
       <a href="../index.html" class="bg-btn bg-btn--ghost bg-btn--block mx-back" id="backHub" data-icon="home" data-stage-text>Back to all games</a>
       <div class="mx-dock" id="startDock" data-toast-avoid>
-        <button class="bg-btn bg-btn--secondary mx-resume" id="resumeBtn" type="button" style="display:none"><span><span class="bg-btn__label" id="resumeLabel">Resume</span><span class="bg-btn__sub" id="resumeSub">Back to the season</span></span></button>
-        <button class="bg-btn bg-btn--primary bg-btn--cta" id="startBtn" type="button"><span class="bg-btn__label" id="startLabel">Start the season</span><span class="bg-btn__sub" id="startSub"></span></button>
+        <button class="bg-btn bg-btn--secondary mx-resume" id="resumeBtn" type="button" style="display:none" data-focus-first><span class="bg-key mx-okcap" aria-hidden="true">OK</span><span><span class="bg-btn__label" id="resumeLabel">Resume</span><span class="bg-btn__sub" id="resumeSub">Back to the season</span></span><span class="mx-chevr" aria-hidden="true"></span></button>
+        <button class="bg-btn bg-btn--primary bg-btn--cta" id="startBtn" type="button" data-focus-first><span class="bg-key mx-okcap" aria-hidden="true">OK</span><span class="bg-btn__label" id="startLabel">Start the season</span><span class="bg-btn__sub" id="startSub"></span><span class="mx-chevr" aria-hidden="true"></span></button>
       </div>
     </div>
   </main>
