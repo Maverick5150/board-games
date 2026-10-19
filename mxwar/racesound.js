@@ -325,7 +325,7 @@ function create(o){
     G.sfx=G.hold; G.sfxK=dbl(-10);   /* (the PA's horns and pyro go straight into the sum at their own level: one node less) */
     /* the venue: a small feedback-delay room (stadium) for the engines and the reactions; outdoors drier */
     var stad=era.venue==="stadium";
-    G.verb=track(C.createGain()); G.verb.gain.value=dbl(stad?-20:-30);
+    G.verbBase=dbl(stad?-20:-30); G.verb=track(C.createGain()); G.verb.gain.value=G.verbBase;
     var dl=[0.047,0.083], fb=[0.45,0.38];
     G.dly=dl.map(function(t,i){ var d=track(C.createDelay(0.2)), f=track(C.createGain()); d.delayTime.value=t*(stad?1.6:1); f.gain.value=fb[i]*(stad?1:0.6); G.verb.connect(d); d.connect(f); f.connect(d); d.connect(G.hold); return d; });
     G.lp.connect(G.verb);
@@ -418,7 +418,7 @@ function create(o){
       gn.connect(pn); pn.connect(G.pass); } else gn.connect(G.pass);
     src.start(when,off); src.stop(when+dur+0.05);
     var P={seat:r.seat,end:when+dur,k:pick,at:when+(peak-off)/rate,b:+a.b.toFixed(2)};
-    passes.push(P); recent[pick]=T; RS._log.push(["pass",+T.toFixed(3),r.seat,pick,+P.at.toFixed(3),P.b]);
+    passes.push(P); recent[pick]=T; log(["pass",+T.toFixed(3),r.seat,pick,+P.at.toFixed(3),P.b]);
     /* the spectators at that corner: now and then a small cheer as he goes by */
     if(P.b<5&&T-lastPassCheer>20&&rnd()<0.35){ lastPassCheer=T; pendingFollow.push({t:P.at-0.1,pool:"cheerS",db:-8}); }
     src.onended=function(){ try{ src.disconnect(); gn.disconnect(); if(pn) pn.disconnect(); }catch(e){} untrack(pn?3:2); };
@@ -469,7 +469,7 @@ function create(o){
       if(kind==="checkered"&&era.venue==="stadium") pyro(T+0.4);
     }
     var big=!!(k&&/^(roar|cheerL|ooh)/.test(poolKey(k)));
-    lastReact=T; reacts.push([+T.toFixed(3),kind,lv,k||null,big]); RS._log.push(["react",+T.toFixed(3),kind,lv,k||null]);
+    lastReact=T; reacts.push([+T.toFixed(3),kind,lv,k||null,big]); if(reacts.length>60) reacts.splice(0,20); log(["react",+T.toFixed(3),kind,lv,k||null]);
   }
   /* the PA's air horn (synthesized: two detuned saws through a band-pass), n blasts */
   function horns(T,n){
@@ -515,7 +515,7 @@ function create(o){
       EX.kick(0.55); react("drop",3,T+0.15,{force:true}); gateSt={stage:"drop",t:T,done:true};
       if(G.packG) set(G.packG.gain,dbl(-8),T+0.4,0.6);
     }
-    RS._log.push(["gate",+T.toFixed(3),stage]);
+    log(["gate",+T.toFixed(3),stage]);
   };
 
   /* ---------- one read of the picture (10-20 Hz) ---------- */
@@ -593,7 +593,7 @@ function create(o){
     var imp=kind==="crash"&&info.kind==="out"?IMP.out:IMP[kind]; if(imp) EX.kick(imp*(0.6+0.15*lv));
     if(!G) return;
     var T=ctx.currentTime+(info.delay||0);
-    RS._log.push(["moment",+ctx.currentTime.toFixed(3),kind,lv,info.s==null?null:info.s]);
+    log(["moment",+ctx.currentTime.toFixed(3),kind,lv,info.s==null?null:info.s]);
     if(kind==="battle"){ /* door to door: the murmur swells (E) and the crowd cheers them on: a big cheer from size 2, a small one at size 1 */
       if(lv>=2) react("battle",lv,T,info); else if(T-lastFightCheer>20){ lastFightCheer=T; react("battle",1,T,info); } return; }
     if(kind==="crash"){ react(info.kind==="out"?"out":"crash",Math.max(lv,info.place>0&&info.place<=10?2:1),T,{force:true}); if(info.kind!=="out") remountDue.push({t:T+6,s:info.s}); }
@@ -608,7 +608,7 @@ function create(o){
     if(on){ lineOn=true; lineLv=lv; lineEnd=0;
       if(lv>=3&&!reacts.some(function(x){ return x[0]>T-1&&x[4]; })){   /* no big reaction in the last second: one now, the big "ooooh" after a crash, else the roar */
         var lastK=null; for(var q=reacts.length-1;q>=0&&reacts[q][0]>T-2.5;q--){ lastK=reacts[q][1]; break; }
-        if(lastK==="crash"||lastK==="out"){ var ko=draw("ooh",T)||draw("roar",T); if(ko){ shot(ko,T+0.05,{db:-1,pan:0}); reacts.push([+T.toFixed(3),"huge",3,ko,true]); RS._log.push(["react",+T.toFixed(3),"huge-ooh",3,ko]); lastReact=T; } }
+        if(lastK==="crash"||lastK==="out"){ var ko=draw("ooh",T)||draw("roar",T); if(ko){ shot(ko,T+0.05,{db:-1,pan:0}); reacts.push([+T.toFixed(3),"huge",3,ko,true]); log(["react",+T.toFixed(3),"huge-ooh",3,ko]); lastReact=T; } }
         else react("huge",3,T+0.05,{force:true});
         EX.kick(IMP.huge); }
     } else { lineOn=false; lineEnd=T; }
@@ -620,18 +620,19 @@ function create(o){
   RS.replay=function(on,op){
     if(dead||!G) return; inReplay=!!on; var T=ctx.currentTime, p=on?(op&&op.slow===false?1:0.667):1;
     G.pitch=p; if(G.P) set(G.P("pitch"),p,T,0.12);
-    set(G.lp.frequency,on?3000:20000,T,0.15); set(G.verb.gain,dbl(on?-8:(era.venue==="stadium"?-14:-24)),T,0.2);
+    set(G.lp.frequency,on?3000:20000,T,0.15); set(G.verb.gain,G.verbBase*(on?dbl(12):1),T,0.2);   /* (a replay: 12 dB more room) */
     set(G.beds.gain,on?dbl(-10):1,T,0.25);
-    RS._log.push(["replay",+T.toFixed(3),!!on]);
+    log(["replay",+T.toFixed(3),!!on]);
   };
   RS.hold=function(on){ if(dead||!G) return; held=!!on; set(G.hold.gain,(on?dbl(-12):1)*(G.ttsDown?dbl(-3):1),ctx.currentTime,0.15); };
   RS.stop=function(){
     if(dead||!G) return; var T=ctx.currentTime;
     set(G.out.gain,0,T,0.4);
     if(G.P) for(var i=0;i<4;i++) set(G.P("gain"+i),0,T+1.2,0.05);
-    gateSt=null; passes=[]; RS._log.push(["stop",+T.toFixed(3)]);
+    gateSt=null; passes=[]; log(["stop",+T.toFixed(3)]);
   };
-  RS.start=function(){ if(dead||!G) return; set(G.out.gain,1,ctx.currentTime,0.15); revs={}; cur=[-1,-1,-1,-1]; EX=new Excite({main:o.main!==false}); };
+  RS.start=function(){ if(dead||!G) return; set(G.out.gain,1,ctx.currentTime,0.15); revs={}; cur=[-1,-1,-1,-1]; EX=new Excite({main:o.main!==false});   /* the next race: nothing of the last one carries over */
+    G.farFrom=0; gateSt=null; passes=[]; downSeen={}; remountDue=[]; pendingFollow=[]; fight={pair:null,secs:0,done:false}; lastSnapT=-1; RS._hush=0; };
   RS.destroy=function(){
     if(dead) return; dead=true;
     var i=LIVE.indexOf(RS); if(i>=0) LIVE.splice(i,1);
@@ -652,6 +653,7 @@ function create(o){
     nodesPeak:peakNodes(),out:own?"own":(outTo?"mixer":"none"),worklet:!!(G&&G.wk),bank:!!(G&&G.wk&&core&&core.buf[era.stroke===2?"eng2s":"eng4s"]),passes:passes.length,reactions:reacts.slice(-12),frameMs:stats.frames?+(stats.ms/stats.frames).toFixed(4):0,frameMsMax:+stats.msMax.toFixed(3),
     loaded:!!core,files:core?Object.keys(core.buf).length:0}; };
   RS._log=[]; RS._spans=function(){ return spans; };
+  function log(e){ RS._log.push(e); if(RS._log.length>3000) RS._log.splice(0,1000); }
   RS._ctx=function(){ return ctx; };
   RS._G=function(){ return G; };
   return RS;
