@@ -1422,6 +1422,7 @@ function drawTower(){
   if(two) tw.style.setProperty("--tw-rows",String(Math.ceil(n/2))); else tw.style.removeProperty("--tw-rows");
   $("race").style.setProperty("--tw-col",tv?(two?"42rem":"30rem"):"");
   tw.style.removeProperty("--tw-row"); tw.classList.toggle("is-tight",tv&&!hud&&(two?Math.ceil(n/2):n)>15);   /* 16 or more rows in a column (a 20-rider heat, a 40-rider moto): shorter rows, so the tower and the YOU card at its foot fit one 1080p screen */
+  var fitK=key+"|"+hud+"|"+two+"|"+compact+"|"+window.innerWidth+"|"+window.innerHeight; if(TW.fitK!==fitK){ TW.fitK=fitK; fitNames(tw,!compact&&!hud); }
   var mark=ui.twMark&&ui.twMark.until>Date.now()?ui.twMark:null, T=MX.Time, i, r, e, c, sig=[], pre=rc.phase==="gate"||rc.tm.k===0;
   for(i=0;i<n;i++) sig.push(rows[i].s);
   sig=sig.join(",");
@@ -1429,7 +1430,7 @@ function drawTower(){
   for(i=0;i<n;i++){
     r=rows[i]; e=TW.els[r.s]; c=T.towerCells(r); if(pre){ c.gap=""; c.short=""; c.last=""; }
     var gt=compact&&c.short!=null?c.short:c.gap;   /* mxfix1: the phone's two-column board writes its gaps short ("+2.09", "+1:10.3") */
-    var card=ui.lastCards[r.s], chip=(card!=null&&c.tag!=="out"&&c.tag!=="pits")?A.chip(card):"", cls=(r.status==="down"?" is-down":"")+(c.tag==="out"||c.tag==="pits"?" is-out":"")+(r.fl&&r.lastK===r.bestK?" is-fl":"")+(mark&&mark.win===r.s?" is-win":"")+(mark&&mark.fight&&mark.fight.indexOf(r.s)>=0?" is-fight":"")+(G.riders[seatId(r.s)].kind==="human"?" is-me":"");
+    var card=ui.lastCards[r.s], chip=(card!=null&&c.tag!=="out"&&c.tag!=="pits")?A.chip(card):"", cls=(r.status==="down"?" is-down":"")+(c.tag==="out"||c.tag==="pits"?" is-out":"")+(r.fl&&r.lastK===r.bestK?" is-fl":"")+(mark&&mark.win===r.s?" is-win":"")+(mark&&mark.fight&&mark.fight.indexOf(r.s)>=0?" is-fight":"")+(G.riders[seatId(r.s)].kind==="human"?" is-me":"")+(TW.short&&TW.short[r.s]?" is-short":"");
     var v=r.place+"|"+gt+"|"+c.last+"|"+cls+"|"+(card==null?"":card)+"|"+(r.fl&&r.lastK===r.bestK?1:0), old=TW.cells[r.s];
     if(old===v) continue;
     TW.cells[r.s]=v;
@@ -1439,6 +1440,15 @@ function drawTower(){
   var fl=null; rows.forEach(function(x){ if(x.fl) fl=x; });
   $("towerSub").textContent=pre?n+" riders · on the gate":hud?(n>8?"top 8 of "+n+" · live gaps":n+" riders · live gaps"):n+" riders · live gaps"+(fl?" · fastest lap #"+G.riders[seatId(fl.s)].plate+" "+T.fmtLap(fl.best):"");
   drawYou(rows);
+}
+/* mxfix1: a tower that shows the whole name (one column on a phone: a Supercross race; the TV's standings) shows the short name on a row where the whole name
+   would be cut (the CEO's phone is 360 px wide: half the whole names of a one-column tower were cut there) */
+function fitNames(tw,on){
+  TW.short={}; TW.cells={};
+  if(!on) return;
+  var lis=[].slice.call(tw.children);
+  lis.forEach(function(li){ li.classList.remove("is-short"); });
+  lis.forEach(function(li){ var f=li.querySelector(".mx-tw__f"); if(f&&f.clientWidth>0&&f.scrollWidth>f.clientWidth+0.5) TW.short[li.getAttribute("data-s")]=1; });
 }
 /* the old tower (a race without a model): the order of the cards */
 function legacyTower(mark){
