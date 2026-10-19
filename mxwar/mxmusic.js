@@ -34,7 +34,11 @@
      - A one-shot plays to its end before the next music: the checkered fanfare, the open. The podium gives way at once (the next screen's music).
      - Levels (MUSIC-PLAN 4.1): the Menu's music at -18 LUFS, the rotation elsewhere at -22 (a bed under the booth's talk), the post-race bed -22,
        the podium -20, the open and the fanfare -18 (Sound.show's own trims).
-     - A browser starts audio on the first tap or key (sound.js); the Fire TV app starts it with the page. Hidden page: everything waits with the context.
+     - A browser starts audio on the first tap or key; the Fire TV app starts it with the page. Hidden page: everything waits with the context.
+       On a phone sound.js makes the AudioContext at the touch's start, which is not yet a user activation, so it starts suspended: the director
+       resumes it at the touch's end (pointerup / touchend / click, which are), and the Menu's theme starts on the first tap (review 2026-10-19).
+     - A cue or a bed still loading when Sound.show.stop() comes (the race) never plays (mxsound.js); a streamed track the browser refuses
+       to play without a gesture plays today's synthesized playlist until the next tap or key, which plays the track (mxsound.js).
      - Without the package (offline and never fetched): today's synthesized playlist where music plays, and still none in a race.
      - Reduced motion does not change the music. */
 (function(g){
@@ -44,6 +48,8 @@ if(MXW.Music) return;
 var S=g.Sound, doc=g.document||null, ACTIVE=null;
 function dbl(d){ return Math.pow(10,d/20); }
 function okSound(){ return !!(S&&S.show&&S.mix&&typeof S.ctx==="function"&&typeof S.show.bed==="function"); }
+/* the events that give the page the user's activation (HTML: a key, a mouse button going down, a touch or a pen lifting; a click follows one of them) */
+function activating(e){ var t=e&&e.type; return t==="keydown"||t==="mousedown"||t==="touchend"||t==="click"||(t==="pointerup"&&e.pointerType!=="mouse")||(t==="pointerdown"&&e.pointerType==="mouse"); }
 var GAIN_MENU=1, GAIN_BED=dbl(-4), FADE_RACE=250, FADE_CUT=300, FADE_OFF=150;
 
 /* ---------- the credits (the package's own lines: pkg.json, through Sound.show.credits()) ---------- */
@@ -75,18 +81,25 @@ function injectCSS(){
     ".mxm-cred li{display:grid;gap:.15rem;min-width:0;padding:.45rem .65rem;border-radius:var(--r-md,10px);background:var(--ink-3,rgba(255,255,255,.05));box-shadow:inset 0 0 0 1px var(--line-1,rgba(255,255,255,.1));"+
       "font:var(--fw-ui,500) var(--fs-xs,.8rem)/1.4 var(--font-ui,system-ui,sans-serif);color:var(--text-2,#c9c9d2);overflow-wrap:anywhere}"+
     ".mxm-cred b{font-weight:700;color:var(--text-1,#f2f2f6)}.mxm-cred .mxm-use{color:var(--text-1,#f2f2f6)}"+
+    ".mxm-cred a{color:inherit;text-decoration:underline;text-underline-offset:2px}"+
     "html[data-tv] .mxm-cred{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:1rem;max-height:min(58vh,40rem)}";
   (doc.head||doc.documentElement).appendChild(st);
 }
-/* one line per work (the replay whooshes are effects, not music: left out); o.tv = the rows take the remote's focus, so Up / Down scroll the list */
+/* an author whose attribution instructions ask for his name to link to his profile when the credits are HTML (The Wreck's page on OpenGameArt:
+   "link my name to my Twitter or my OGA profile"); the phone's sheet links it, the TV's stays plain text (the remote moves by rows, not links) */
+var BY_URL={"Zander Noriega":"https://opengameart.org/users/zander-noriega"};
+function link(u,text){ return /^https:\/\//.test(String(u||""))?'<a href="'+esc(u)+'" target="_blank" rel="noopener noreferrer">'+esc(text)+"</a>":esc(text); }
+/* one line per work (the replay whooshes are effects, not music: left out); o.tv = the rows take the remote's focus, so Up / Down scroll the list;
+   on the phone the author's profile (BY_URL) and the source are links */
 function creditsHTML(list,o){
   injectCSS(); o=o||{};
   var rows=(list||[]).filter(function(x){ return !/whoosh/.test(String(x.cue||"")); });
   if(!rows.length) return '<p class="mxm-none">The music list comes with the music: it loads when this device is online.</p>';
   return '<ol class="mxm-cred" aria-label="Music credits">'+rows.map(function(x){
     var use=role(x.cue), ch=x.changes?String(x.changes).charAt(0).toUpperCase()+String(x.changes).slice(1)+".":"";
-    return '<li'+(o.tv?' class="bg-focus" data-focus tabindex="-1"':"")+'><span><b>&ldquo;'+esc(x.title)+'&rdquo;</b> '+esc(x.by)+'</span><span>'+esc(licLine(x))+'</span>'+
-      (use||ch?'<span class="mxm-use">'+esc((use?use+" ":"")+ch)+'</span>':"")+(x.source?'<span>Source: '+esc(x.source)+'</span>':"")+"</li>";
+    var by=!o.tv&&BY_URL[x.by]?link(BY_URL[x.by],x.by):esc(x.by), src=x.source?(o.tv?esc(x.source):link(x.source,x.source)):"";
+    return '<li'+(o.tv?' class="bg-focus" data-focus tabindex="-1"':"")+'><span><b>&ldquo;'+esc(x.title)+'&rdquo;</b> '+by+'</span><span>'+esc(licLine(x))+'</span>'+
+      (use||ch?'<span class="mxm-use">'+esc((use?use+" ":"")+ch)+'</span>':"")+(x.source?'<span>Source: '+src+'</span>':"")+"</li>";
   }).join("")+"</ol>";
 }
 
@@ -133,7 +146,7 @@ function create(o){
     cur="rot"; gain=gn;
     if(first) titleUntil=t+(cueOf("title")?cueOf("title").len:0);
     note(first?"theme (MX War Theme, whole)":"rotation",{gain:+gn.toFixed(3)});
-    S.show.bed("menu",{fade:600,gain:gn}).then(null,function(e){ if(my!==seq) return; note("rotation failed",{e:String(e&&e.message||e).slice(0,80)}); cur=null; synthOn(); });
+    S.show.bed("menu",{fade:600,gain:gn}).then(null,function(e){ if(my!==seq||(e&&e.stale)) return; note("rotation failed",{e:String(e&&e.message||e).slice(0,80)}); cur=null; synthOn(); });
   }
   /* a round comes up: its open (Welcome to the Show), unless the visit's theme is playing (then the theme is this round's open) */
   function open(key){
@@ -144,7 +157,7 @@ function create(o){
     try{ S.show.stop({fade:FADE_CUT}); }catch(e){}   // what plays makes room (a podium, the rotation, a bed)
     note("open (Welcome to the Show)",{round:key});
     S.show.cue("open").then(function(when){ if(my!==seq) return; hold=when+tailOf("open"); holdWhat="open"; wake(hold); },
-      function(e){ if(my!==seq) return; note("open failed",{e:String(e&&e.message||e).slice(0,80)}); cur=null; apply(); });
+      function(e){ if(my!==seq||(e&&e.stale)) return; note("open failed",{e:String(e&&e.message||e).slice(0,80)}); cur=null; apply(); });
   }
   /* the round's last results: the recap bed of the post-race music (Megasong), the stakes ladder's variant */
   function post(I){
@@ -153,7 +166,7 @@ function create(o){
     var my=++seq;
     if(cur==="pod") try{ S.show.stop({fade:FADE_CUT}); }catch(e){}
     cur="post"; note("post-race (Megasong)",{variant:SP().stakes});
-    S.show.bed("recapB",{fade:800}).then(null,function(e){ if(my!==seq) return; note("post-race failed",{e:String(e&&e.message||e).slice(0,80)}); cur=null; rot(GAIN_BED); });
+    S.show.bed("recapB",{fade:800}).then(null,function(e){ if(my!==seq||(e&&e.stale)) return; note("post-race failed",{e:String(e&&e.message||e).slice(0,80)}); cur=null; rot(GAIN_BED); });
     preload(["podium"]);
   }
   /* the podium: Megasong's last 16 bars and its final hit, on the bar of the recap bed, which fades out into its downbeat */
@@ -164,7 +177,7 @@ function create(o){
     S.show.cue("podium",{at:"bar"}).then(function(when){
       if(my!==seq) return;
       try{ var p=S.show.bed(null,{fade:Math.max(40,Math.round((when-tnow())*1000))}); if(p&&p.then) p.then(null,function(){}); }catch(e){}
-    },function(e){ if(my!==seq) return; note("podium failed: today's fanfare",{e:String(e&&e.message||e).slice(0,80)}); cur=null; try{ S.sfx("win"); }catch(x){} });
+    },function(e){ if(my!==seq||(e&&e.stale)) return; note("podium failed: today's fanfare",{e:String(e&&e.message||e).slice(0,80)}); cur=null; try{ S.sfx("win"); }catch(x){} });
   }
   function apply(){
     clearTimeout(tmr); tmr=0;
@@ -211,7 +224,7 @@ function create(o){
   function flag(final,fx){
     if(final&&okSound()&&running()&&!muted()&&S.show.ready("checkered")){
       var my=++seq; cur="flag"; note("checkered fanfare (MX War Theme)");
-      S.show.cue("checkered").then(function(when){ if(my!==seq) return; hold=when+tailOf("checkered"); holdWhat="checkered"; },function(){ if(my!==seq) return; cur=null; try{ S.sfx(fx); }catch(e){} });
+      S.show.cue("checkered").then(function(when){ if(my!==seq) return; hold=when+tailOf("checkered"); holdWhat="checkered"; },function(e){ if(my!==seq||(e&&e.stale)) return; cur=null; try{ S.sfx(fx); }catch(x){} });
       return "pkg";
     }
     try{ S.sfx(fx); }catch(e){}
@@ -223,7 +236,7 @@ function create(o){
   function next(){ if(cur!=="rot"||!okSound()) return false; var gn=gain; cur=null; titleUntil=0; note("Next song"); rot(gn); return true; }
   /* the sound panel's "Now playing" line names the track (sound.js writes "Menu music": it knows only its own playlist) */
   function nowText(){
-    var P=SP(), m=P.man; if(!m||!m.credits) return "";
+    var P=SP(), m=P.man; if(!m||!m.credits||P.synth) return "";   // (P.synth: a refused stream's stand-in, today's playlist: sound.js names its song)
     function by(cue){ for(var i=0;i<m.credits.length;i++){ var x=m.credits[i]; if((", "+x.cue+",").indexOf(", "+cue+",")>=0||String(x.cue).split(/,\s*/).indexOf(cue)>=0) return x.title+", "+x.by.replace(/\s*\(.*\)$/,""); } return ""; }
     if(cur==="rot"){ if(tnow()<titleUntil) return by("title"); var src=P.rot; return src?by("long-"+src):""; }
     if(cur==="post"||cur==="pod") return by("podium");
@@ -236,7 +249,16 @@ function create(o){
     if(t){ el.textContent=(cl?"♪ Now playing: ":"Now playing: ")+t; return; }
     if(!synth&&(want.m==="race"||want.m==="flag")) el.textContent=(cl?"♪ ":"")+"No music during the race: engines and the booth";
   }
+  /* a suspended AudioContext is resumed on an event that carries the user's activation (a phone's first tap: sound.js made the context at the
+     touch's start, which does not count, and nothing else resumes it before the race); its statechange to "running" then starts the moment's music */
+  function wakeAudio(e){
+    if(dead||!activating(e)||(doc&&doc.hidden)) return;
+    var c=ctx(); if(!c||c.state==="running"||c.state==="closed"||typeof c.resume!=="function") return;
+    hookCtx();
+    try{ var p=c.resume(); if(p&&p.then) p.then(function(){ kick(); },function(){}); }catch(x){}
+  }
   function gesture(e){
+    wakeAudio(e);
     var t=e.target, inP=!!(t&&t.closest&&t.closest("#bgSoundPanel,#bgSndBtn"));
     if(inP&&e.type==="click"){ var nx=!!t.closest("#bgNext"); setTimeout(function(){ if(dead) return; if(nx) next(); kick(); nowLine(); },0); return; }
     kick();
@@ -245,7 +267,7 @@ function create(o){
     var P=SP();
     return {moment:want.m,info:{round:want.info&&want.info.round||null,last:!!(want.info&&want.info.last)},playing:cur,synth:synth,pend:pend,muted:muted(),running:running(),t:+tnow().toFixed(3),
       hold:+hold.toFixed(3),holdWhat:holdWhat,titleUntil:+titleUntil.toFixed(3),opened:Object.keys(opened),podded:Object.keys(podded),gain:+gain.toFixed(3),
-      show:okSound()?{man:!!P.man,titleDone:!!P.titleDone,stakes:P.stakes,rot:P.rot||null,mem:S.show.mem()}:null,profile:S&&S.mix&&S.mix.get?S.mix.get():null,log:logA.slice()};
+      show:okSound()?{man:!!P.man,titleDone:!!P.titleDone,stakes:P.stakes,rot:P.rot||null,mem:S.show.mem(),synth:!!P.synth,blocked:!!P.blocked}:null,profile:S&&S.mix&&S.mix.get?S.mix.get():null,log:logA.slice()};
   }
   /* the effects keep Motocross War's own flavour (sound.js recolours them by the game's music style): the style is set without a note of the playlist
      (Music off for that one call: the playlist schedules nothing), and the playlist that may be playing (the Party lobby's) stops */
@@ -257,10 +279,11 @@ function create(o){
   return M;
 }
 
-/* the first tap or key starts audio in a browser (sound.js unlocks first: its listeners came first); the sound panel's Music on / off, Next song and
-   "Now playing" (the panel is sound.js's, shared by every game: this only listens) */
+/* the first tap or key starts audio in a browser (sound.js unlocks first: its listeners came first; the director resumes the context at the first event
+   that carries the user's activation: the touch's end on a phone); the sound panel's Music on / off, Next song and "Now playing" (the panel is sound.js's,
+   shared by every game: this only listens) */
 if(doc){
-  ["pointerdown","keydown","touchstart","click"].forEach(function(ev){ doc.addEventListener(ev,function(e){ if(ACTIVE) try{ ACTIVE._gesture(e); }catch(x){} },true); });
+  ["pointerdown","keydown","touchstart","click","pointerup","touchend","mousedown"].forEach(function(ev){ doc.addEventListener(ev,function(e){ if(ACTIVE) try{ ACTIVE._gesture(e); }catch(x){} },true); });
   doc.addEventListener("input",function(e){ var t=e.target; if(ACTIVE&&t&&t.closest&&t.closest("#bgSoundPanel")) setTimeout(function(){ if(ACTIVE) ACTIVE._now(); },0); },true);
   doc.addEventListener("visibilitychange",function(){ if(ACTIVE&&!doc.hidden) try{ ACTIVE._kick(); }catch(e){} });
 }

@@ -1,5 +1,5 @@
 // Offline cache for Motocross War (the season files data/<series>-<year>.js are cached on first use: every .js the page fetches is stored) (bump VERSION to force update)
-const VERSION = "mxwar-v19";
+const VERSION = "mxwar-v20";
 const PREFIX = VERSION.replace(/v[0-9]+$/, "");   // every game shares one origin (one CacheStorage): only ever delete THIS game's old caches
 // [bcast] the music (mxshow S0): mxwar/audio/<pkg>/ (pkg.json + the content-hashed .m4a files) lives in its own cache, filled on first use and KEPT across
 // versions (a new VERSION never re-downloads audio: a changed file has a new name), cache-first; Range requests (the streamed menu tracks) are answered
