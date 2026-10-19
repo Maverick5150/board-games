@@ -1585,14 +1585,17 @@ function create(o){
   /* is a story new to the booth (its key at this version never told) and are its claims unsaid this round (in any words)? */
   function memFresh(s,R){ var m=memL(), t=m.told[s.key]; if(t&&t.ver===s.ver) return false; return !MEM().anySaid(s,m.claims[R]||{}); }
   function memRoom(R,cap){ return (memL().roundN[R]|0)<(cap||14); }   /* a round: 14 memory lines at most (all phases) */
-  function riderRoom(id,R,inRaceToo){ var m=memL(), rr=m.rider[R]||{}; if((rr[id]|0)>=(isHumanId(id)?4:3)) return false; if(inRaceToo&&A.race){ var mr=A.race.memRider||{}; if((mr[id]|0)>=2) return false; } return true; }
+  /* a rider: 3 memory lines a round; a person 4, the last of them kept for after the flag (the person's night in the season, a milestone) */
+  function riderRoom(id,R,inRaceToo,wrap){ var m=memL(), rr=m.rider[R]||{}; if((rr[id]|0)>=(isHumanId(id)?(wrap?4:3):3)) return false; if(inRaceToo&&A.race){ var mr=A.race.memRider||{}; if((mr[id]|0)>=2) return false; } return true; }
   /* a memory line was SAID: its claims, the story, the counts, the views and picks the booth now owns */
   function memSaid(ctx,it){
     var m=memL(), ri=memRi(), bag=m.claims[ri]||(m.claims[ri]={}), s=ctx.mem, rk=A.race?A.race.key:null;
     ctx.facts.mem.forEach(function(c){ bag[c.k]=c.v; });
     m.roundN[ri]=(m.roundN[ri]|0)+1;
     var rr=m.rider[ri]||(m.rider[ri]={}), mr=A.race?(A.race.memRider||(A.race.memRider={})):{};
-    if(it.ev!=="pick_result") (ctx.facts.named||[]).forEach(function(id){ rr[id]=(rr[id]|0)+1; mr[id]=(mr[id]|0)+1; });   /* the pick and its result are one thread (Hutch's call), counted once */
+    var cnt=it.ev==="pick_result"?[]:(ctx.facts.named||[]);   /* the pick and its result are one thread (Hutch's call), counted once */
+    if(it.ev==="analyst_pick") cnt=cnt.filter(function(id){ return !isHumanId(id)||(s&&s.v==="pickYou"); });   /* a pick that only mentions the person ("keep an eye on ...") is about the picked rider */
+    cnt.forEach(function(id){ rr[id]=(rr[id]|0)+1; mr[id]=(mr[id]|0)+1; });
     if(s){
       if(s.key) m.told[s.key]={ver:s.ver,ri:ri,race:rk};
       if(s.view&&s.ids&&s.ids[0]) m.views[s.ids[0]]={v:s.view,ri:ri};
@@ -1654,7 +1657,7 @@ function create(o){
   function wrapCtx(which){
     return function(){
       if(!memOn()) return null; var Gs=A.G, R=memRi(), M=MEM(), m=memL(), pend=m.picks[R]&&m.picks[R].said&&m.picks[R].id&&!Gs.over; if(!memRoom(R,pend?11:12)) return null;   /* the pick's result keeps its place inside 12 */
-      var L=M.wrap(Gs,R,memEnv(),m).filter(function(s){ return memFresh(s,R)&&(s.ids||[]).every(function(id){ return riderRoom(id,R,false); }); }), s=null;
+      var L=M.wrap(Gs,R,memEnv(),m).filter(function(s){ return memFresh(s,R)&&(s.ids||[]).every(function(id){ return riderRoom(id,R,false,true); }); }), s=null;
       var ys=L.filter(function(x){ return x.kind==="you"; }); ys.sort(function(a,b){ var pa=m.per[a.you]!=null?m.per[a.you]:-1, pb=m.per[b.you]!=null?m.per[b.you]:-1; return b.score-a.score||pa-pb; });
       var lk=A.race&&A.race.wrapKind, st=L.filter(function(x){ return x.kind!=="you"&&x.kind!==lk; });
       if(which==="you") s=ys[0]; else if(which==="youfirst") s=ys[0]||st[0]; else s=st[0];
@@ -2575,7 +2578,7 @@ function create(o){
     var Gs=A.G, R=r.ri, M=MEM(), m=memL(), t=c.tags, sl=c.slots, mb={};
     if(!(Gs.results||[]).some(function(x){ return x.ri===R&&x.winner===id; })) return;   /* the round is scored, and it is his */
     if(t.firstwin) c.memMarkBy={firstwin:[{k:"wins|"+id+"|"+R,v:0}]};   /* v3's own first-win call (a big moment, said BIG): the ledger knows it was said, it is not a memory line */
-    if(!riderRoom(id,R,false)||!memRoom(R,12)) return;   /* his memory lines this round are used up */
+    if(!riderRoom(id,R,false,true)||!memRoom(R,12)) return;   /* his memory lines this round are used up */
     if(r.wrapW!=null){   /* the wrap's memory budget (onRoundDone) covers the winner's season tag too, and so does its 45%: the post lines still to come counted */
       if((r.wrapN|0)>=r.wrapW) return;
       var qa=0, qp=0; A.q.forEach(function(x){ if(x.race!==r.key||!x.post||x.ev==="winner_line"||MEMEV[x.ev]||SIMSUM[x.ev]) return; qa++; if(WRAPPTS[x.ev]) qp++; });
@@ -2717,7 +2720,7 @@ function create(o){
       ["p1","p2","p3"].forEach(function(k,i){ if(cls[i]) sl[k]=nameRec(cls[i]).full; });
       var mk={}; cls.slice(0,3).forEach(function(id){ var n=nameRec(id); if(n&&n.make) mk[n.make.c]=1; }); if(Object.keys(mk).length===3) t.makes3=1;
       var nw=(A.G.results||[]).filter(function(x){ return x.winner===cls[0]; }).length; if(nw>=2){ t.wins=1; sl.winsN=cntV(nw,"win","wins"); c.facts.wins=nw;
-        if(memOn()){ var wcl=[{k:"wins|"+cls[0]+"|"+(memRi()+1),v:nw}]; if(MEM().anySaid({claims:wcl},memL().claims[memRi()]||{})||!riderRoom(cls[0],memRi(),false)||!memRoom(memRi(),12)) delete t.wins; else c.memBy={wins:wcl}; } }   /* mxann4: under the ledger */
+        if(memOn()){ var wcl=[{k:"wins|"+cls[0]+"|"+(memRi()+1),v:nw}]; if(MEM().anySaid({claims:wcl},memL().claims[memRi()]||{})||!riderRoom(cls[0],memRi(),false,true)||!memRoom(memRi(),12)) delete t.wins; else c.memBy={wins:wcl}; } }   /* mxann4: under the ledger */
       var hum=cls.slice(0,3).filter(function(id){ return rider(id)&&rider(id).kind==="human"; }); if(hum.length){ t.you=1; sl.you=nameRec(hum[0]).full; c.facts.you=hum[0]; c.human=true; }
       c.story={kind:"podium"}; return c; };
   }
