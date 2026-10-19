@@ -53,3 +53,13 @@ html[data-tv] .bgv-cap__who { font-size: .875rem; }
 html[data-tv] .bgv-cap__text { font-size: 1.25rem; line-height: 1.28; -webkit-line-clamp: 2; }
 @media (prefers-reduced-motion: reduce) { .bgv-cap { transition: none; transform: none; } }
 html[data-motion="reduce"] .bgv-cap, html[data-effects="reduced"] .bgv-cap { transition: none; transform: none; }
+
+/* the line's level (the commentator's intensity, line.lv: 0 calm, 1 lively, 2 BIG, 3 HUGE): a BIG call gets a thicker speaker bar and a heavier
+   line, a HUGE one a thin outline in the speaker's colour as well; calm and lively look as before. Nothing moves (theme.css rules). */
+.bgv-cap[data-lv="2"] { border-left-width: 4px; }
+.bgv-cap[data-lv="2"] .bgv-cap__text { font-weight: 700; }
+.bgv-cap[data-lv="3"] { border-left-width: 5px; box-shadow: inset 0 0 0 1px rgba(231, 202, 144, .5), 0 6px 18px -8px rgba(0, 0, 0, .8); }
+.bgv-cap[data-lv="3"][data-who="b"] { box-shadow: inset 0 0 0 1px rgba(132, 200, 255, .5), 0 6px 18px -8px rgba(0, 0, 0, .8); }
+.bgv-cap[data-lv="3"] .bgv-cap__text { font-weight: 800; }
+html[data-tv] .bgv-cap[data-lv="2"] { border-left-width: .3125rem; }
+html[data-tv] .bgv-cap[data-lv="3"] { border-left-width: .375rem; }

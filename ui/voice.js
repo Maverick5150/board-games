@@ -3,7 +3,7 @@
      BGVoice.speak(text, {who:"a"|"b", say, tier:"T0".."T3", priority:0..3, interrupt, ttl, line, onStart, onEnd})   -> id (null when Off)
      BGVoice.stop()                         stop the line playing and clear the queue
      BGVoice.mode("voice"|"captions"|"off") / BGVoice.on() / BGVoice.off() / BGVoice.volume(0..1)
-     BGVoice.onCaption(fn)                  fn({id, text, who, name, state:"start"|"end"}) for the page's own caption UI
+     BGVoice.onCaption(fn)                  fn({id, text, who, name, state:"start"|"end", lv}) for the page's own caption UI (lv: the line's level 0..3, or null)
      BGVoice.captions(host, {names})        or the built-in caption strip (ui/voice.css, loaded on demand)
      BGVoice.onStart(fn) / BGVoice.onEnd(fn) the duck hook: lower the game's music while a line plays
      BGVoice.ready() / BGVoice.onReady(fn)  {ready, engine:"native"|"speech"|"captions"|"clips", voices (the men's voices it can use), unlocked, why, info (what was found when there is no man)}
@@ -359,7 +359,8 @@ if(doc&&doc.addEventListener){
 
 /* ---------------- captions ---------------- */
 function caption(it,state,cut){
-  var ev={id:it.id,text:it.text,who:it.who,name:S.names[it.who]||"",state:state,cut:!!cut};
+  var lv=it.line&&it.line.lv!=null?Math.max(0,Math.min(3,it.line.lv|0)):null;   /* the line's level (0 calm .. 3 HUGE, the commentator's intensity): the strip marks BIG and HUGE quietly */
+  var ev={id:it.id,text:it.text,who:it.who,name:S.names[it.who]||"",state:state,cut:!!cut,lv:lv};
   call(S.caps,ev);
   S.strips.forEach(function(st){ try{ st.update(ev); }catch(e){} });
 }
@@ -379,7 +380,7 @@ function captions(host,o){
   host.appendChild(el);
   var whoEl=el.firstChild, txtEl=el.lastChild, hideT=null, curId=null;
   var st={el:el,update:function(ev){
-    if(ev.state==="start"){ clearTimeout(hideT); curId=ev.id; whoEl.textContent=ev.name||""; txtEl.textContent=ev.text; el.setAttribute("data-who",ev.who); el.classList.add("is-on"); }
+    if(ev.state==="start"){ clearTimeout(hideT); curId=ev.id; whoEl.textContent=ev.name||""; txtEl.textContent=ev.text; el.setAttribute("data-who",ev.who); el.setAttribute("data-lv",ev.lv!=null?String(ev.lv):""); el.classList.add("is-on"); }
     else if(ev.id===curId){ clearTimeout(hideT); hideT=setTimeout(function(){ if(curId===ev.id) el.classList.remove("is-on"); },ev.cut?150:1300); }
   },hide:function(){ el.classList.remove("is-on"); },destroy:function(){ S.strips=S.strips.filter(function(x){ return x!==st; }); if(el.parentNode) el.parentNode.removeChild(el); }};
   S.strips.push(st);
