@@ -32,16 +32,22 @@ export const BIKE={WB:WB,WR:WR,FA:FA,RA:RA,HEAD:axisPt(0.745),PIVOT:PIVOT,GRIP:V
 export {axisPt,forkPt,UA,NF,A0};
 
 /* ---------------- the material records ---------------- */
-const K=(hex,mt,rg,tint,ao)=>({c:lin(hex),mt:mt,rg:rg,tint:tint||0,ao:ao==null?1:ao});
+/* tint: 0 fixed colour, 1 team colour (the livery and the side-panel number decal apply), 2 accent colour, 3 team colour seen from above (the fenders: the top livery).
+   kind (milestone 2): 0 plain, 1 spoke (dithers away and leaves the blur disc when the wheel turns fast), 2 tyre (the sidewall's moulded marks, dirt packed between the knobs),
+   3 solid team colour with no graphics (handguards, louvre fins), 4 skid plate / under-side parts (they take the mud first), 5 the seat cover (gripper ribs), 6 the front number plate's face (the rider's number from the side-panel atlas). Packed into aMat.z = tint + 4 * kind + 32 * (a wheel or shock part). */
+const K=(hex,mt,rg,tint,ao,kind)=>({c:lin(hex),mt:mt,rg:rg,tint:tint||0,ao:ao==null?1:ao,kind:kind||0});
 export const MAT={
   alu:K("#bcbfc7",0.92,0.34), aluD:K("#80848c",0.88,0.40), aluB:K("#d3d6dc",0.95,0.26),
   caseM:K("#363940",0.70,0.50), cover:K("#a2a6ae",0.88,0.40), cyl:K("#202127",0.55,0.50), head:K("#4a4c54",0.75,0.42),
-  steel:K("#9a9da5",0.92,0.34), exh:K("#bdb7aa",0.93,0.28), muff:K("#cdced4",0.94,0.26), cap:K("#18191c",0.35,0.42),
-  black:K("#111215",0.25,0.55), blackM:K("#0d0e10",0.0,0.82), seat:K("#0b0b0d",0.0,0.80), rubber:K("#0c0c0e",0.0,0.90), tread:K("#101012",0.0,0.88), side:K("#17171a",0.0,0.84),
+  steel:K("#9a9da5",0.92,0.34), exh:K("#a49e92",0.92,0.34), muff:K("#aeb0b6",0.92,0.36), cap:K("#18191c",0.35,0.42),
+  black:K("#111215",0.25,0.55), blackM:K("#0d0e10",0.0,0.82), seat:K("#0b0b0d",0.0,0.80,0,1,5), rubber:K("#0c0c0e",0.0,0.90), tread:K("#101012",0.0,0.88,0,1,2), side:K("#17171a",0.0,0.84),
   gold:K("#d8b050",0.94,0.26), upper:K("#dde0e6",1.0,0.12), anod:K("#17181c",0.85,0.38), anodG:K("#2a2c33",0.85,0.36),
-  rim:K("#c8cbd2",0.93,0.30), hub:K("#d8b050",0.92,0.28), spoke:K("#a9acb4",0.90,0.34,4), disc:K("#b4b8c0",0.92,0.30), discD:K("#4b4d54",0.8,0.45),
-  plastic:{c:[1,1,1],mt:0.0,rg:0.17,tint:1,ao:1}, accent:{c:[1,1,1],mt:0.0,rg:0.26,tint:2,ao:1}, grip:K("#1a1a1d",0.0,0.85), lever:K("#b6b9c0",0.9,0.35), bolt:K("#8c8f97",0.9,0.4),
-  spring:{c:[1,1,1],mt:0.55,rg:0.35,tint:2,ao:1}, shockB:K("#17181c",0.8,0.38), chain:K("#8a8272",0.85,0.42), rad:K("#4a4d55",0.75,0.5), slit:K("#050506",0.0,0.9)
+  rim:K("#c8cbd2",0.93,0.30), hub:K("#d8b050",0.92,0.28), spoke:K("#a9acb4",0.90,0.34,0,1,1), disc:K("#b4b8c0",0.92,0.30), discD:K("#4b4d54",0.8,0.45),
+  plastic:{c:[1,1,1],mt:0.0,rg:0.17,tint:1,ao:1,kind:0}, accent:{c:[1,1,1],mt:0.0,rg:0.26,tint:2,ao:1,kind:0}, grip:K("#1a1a1d",0.0,0.85), lever:K("#b6b9c0",0.9,0.35), bolt:K("#8c8f97",0.9,0.4),
+  spring:{c:[1,1,1],mt:0.55,rg:0.35,tint:2,ao:1,kind:0}, shockB:K("#17181c",0.8,0.38), chain:K("#8a8272",0.85,0.42), rad:K("#4a4d55",0.75,0.5), slit:K("#050506",0.0,0.9),
+  /* milestone 2 */
+  guard:{c:[1,1,1],mt:0.0,rg:0.22,tint:1,ao:1,kind:3}, hose:K("#0f0f11",0.0,0.58), cable:K("#0c0c0e",0.0,0.46), skid:K("#141518",0.05,0.48,0,1,4),
+  plateK:K("#1a1a1e",0.0,0.40), plateF:{c:[1,1,1],mt:0.0,rg:0.22,tint:1,ao:1,kind:6}, link:K("#7d7a74",0.88,0.40), linkD:K("#3a3936",0.8,0.5), blurFar:K("#5c5f66",0.55,0.55), outlet:K("#08080a",0.2,0.7)
 };
 
 /* ---------------- the builder ---------------- */
@@ -50,7 +56,7 @@ export function Builder(){ this.P=[]; this.N=[]; this.C=[]; this.U=[]; this.A=[]
 Builder.prototype.add=function(g,o){
   o=o||{}; const pa=g.attributes.position, na=g.attributes.normal, cnt=pa.count, base=this.P.length/3, m=o.m||_I, flip=m.determinant()<0;
   _nm.getNormalMatrix(m);
-  const c=o.c||[1,1,1], mt=o.mt==null?0:o.mt, rg=o.rg==null?0.5:o.rg, tn=(o.tint||0)+(o.noGrad?8:0), ao0=o.ao==null?1:o.ao, uvm=o.uv||"side", grad=!o.noGrad;
+  const c=o.c||[1,1,1], mt=o.mt==null?0:o.mt, rg=o.rg==null?0.5:o.rg, tn=(o.tint||0)+4*(o.kind||0)+(o.noGrad?32:0), ao0=o.ao==null?1:o.ao, uvm=o.uv||"side", grad=!o.noGrad;
   for(let i=0;i<cnt;i++){
     _v.fromBufferAttribute(pa,i).applyMatrix4(m); _n.fromBufferAttribute(na,i).applyMatrix3(_nm).normalize();
     this.P.push(_v.x,_v.y,_v.z); this.N.push(_n.x,_n.y,_n.z); this.C.push(c[0],c[1],c[2]);
@@ -196,7 +202,10 @@ function wheelBuild(d,rear){
       const nt=d>=2?36:14, ro=0.1005, ri2=0.0955, zS=-0.056, SP=[], SI=[];
       for(let i=0;i<nt*2;i++){ const t=i/(nt*2)*TAU, r=(i%2?ri2:ro); SP.push(Math.cos(t)*r,Math.sin(t)*r,zS+0.0035,Math.cos(t)*0.07,Math.sin(t)*0.07,zS+0.0035,Math.cos(t)*r,Math.sin(t)*r,zS-0.0035,Math.cos(t)*0.07,Math.sin(t)*0.07,zS-0.0035); }
       const nn=nt*2; for(let i=0;i<nn;i++){ const j=(i+1)%nn, a=i*4, b=j*4; SI.push(a,b,a+1,b,b+1,a+1, a+2,a+3,b+2,b+2,a+3,b+3, a,a+2,b,b,a+2,b+2); }
-      orient(SP,SI); B.add(makeGeo(SP,SI),withMat(MAT.steel,{uv:"none",noGrad:true})); } }
+      orient(SP,SI); B.add(makeGeo(SP,SI),withMat(MAT.steel,{uv:"none",noGrad:true}));
+      /* the sprocket's web (milestone 2): six arms and a bolt ring from the carrier to the hub, the big lightening holes between them */
+      if(d>=1){ for(let k=0;k<6;k++){ const t=(k+0.5)/6*TAU; B.add(new THREE.BoxGeometry(0.040,0.014,0.0055),withMat(MAT.steel,{m:Tm(Math.cos(t)*0.055,Math.sin(t)*0.055,zS,0,0,t),uv:"none",noGrad:true})); }
+        const wr=lathe([[0.034,zS-0.003],[0.044,zS-0.003],[0.044,zS+0.003],[0.034,zS+0.003]],d>=2?18:10); wr.applyMatrix4(Zaxis); B.add(wr,withMat(MAT.steel,{uv:"none",noGrad:true})); } } }
   return B.geometry();
 }
 export function buildWheel(d,rear){ return wheelBuild(d,rear); }
@@ -221,7 +230,10 @@ function bodyBuild(d){
   /* the swingarm pivot plates and bolt, the skid plate */
   B.addM(new THREE.BoxGeometry(0.075,0.21,0.012,1,1,1),withMat(MAT.alu,{m:Tm(-0.165,0.475,0.112),ao:0.9}));
   B.add(rod(V(-0.17,0.44,-0.12),V(-0.17,0.44,0.12),0.0155,0.0155,S(d,8,6,5)),withMat(MAT.steel,{ao:0.8}));
-  B.add(blob(0.19,0.008,0.085,3.5,S(d,5,3,3),S(d,10,6,6)),withMat(MAT.aluD,{m:Tm(0.075,0.256,0)}));
+  /* the skid plate (milestone 2): a moulded black guard under the engine with wings up the front of the cases */
+  B.add(blob(0.205,0.030,0.098,4,S(d,6,4,3),S(d,14,8,6)),withMat(MAT.skid,{m:Tm(0.085,0.272,0),ao:0.85}));
+  if(d>=1) B.addM(blob(0.085,0.038,0.006,3.5,S(d,4,3,3),S(d,10,6,6)),withMat(MAT.skid,{m:Tm(0.17,0.305,0.109,0,0,0.35),ao:0.85}));
+  if(d>=2) [[0.0,-1],[0.0,1],[0.20,-1],[0.20,1]].forEach(p=>B.add(cyl(0.006,0.006,0.008,6),withMat(MAT.bolt,{m:Tm(p[0],0.243,p[1]*0.07),uv:"none"})));
   B.mark('before-engine');
   /* ---- the engine ---- */
   B.add(blob(0.215,0.135,0.105,3,S(d,10,5,4),S(d,16,8,6)),withMat(MAT.caseM,{m:Tm(0.055,0.405,0),ao:0.8}));                       /* crankcase */
@@ -251,7 +263,8 @@ function bodyBuild(d){
   const ss=sh.map(r=>mirrorSec(r[0],r[1]));
   B.add(loft(smoothSecs(ss,S(d,3,1,1)),{}),withMat(MAT.plastic,{ao:1}));
   /* louvres in the shrouds: dark slits */
-  if(d>=2) for(let k=0;k<5;k++){ const x=0.285+k*0.035; B.addM(new THREE.BoxGeometry(0.006,0.085,0.012),withMat(MAT.slit,{m:Tm(x,0.755+0.0035*(k-2),0.168-0.003*Math.abs(k-2)+0.002,0,0.0,0),ao:1})); }
+  /* the radiator louvres (milestone 2): fins in the team colour standing proud of the shroud over a black vent (the vent is painted by the shader) */
+  if(d>=1){ const nf=d>=2?6:3, sp=d>=2?0.029:0.058; for(let k=0;k<nf;k++){ const x=0.300+k*sp+(d>=2?0:0.012); B.addM(new THREE.BoxGeometry(d>=2?0.0055:0.008,0.118,0.011),withMat(MAT.guard,{m:Tm(x,0.742,0.1705,0,0.10,0.42),ao:0.9})); } }
   /* the airbox cover and filter cap behind the shroud (black plastic), under the seat */
   if(d>=1) B.addM(blob(0.14,0.085,0.016,3.5,S(d,5,3,3),S(d,10,6,6)),withMat(MAT.side,{m:Tm(-0.185,0.78,0.108),ao:0.9}));
   B.mark('before-seat');
@@ -276,20 +289,48 @@ function bodyBuild(d){
   { const md=V(-0.968,0.250,-0.012).normalize(), mp=V(-0.30,0.748,0.212), mq=new THREE.Quaternion().setFromUnitVectors(V(0,1,0),md), Lm=0.52, me=mp.clone().addScaledVector(md,Lm);
     B.add(lathe(d>=2?[[0.001,0.0],[0.040,0.0],[0.049,0.03],[0.0535,0.10],[0.0545,0.24],[0.0545,0.42],[0.050,0.48],[0.040,0.508],[0.034,Lm],[0.001,Lm]]:[[0.001,0.0],[0.049,0.03],[0.0545,0.24],[0.0545,0.42],[0.034,Lm],[0.001,Lm]],S(d,24,8,6)),
       withMat(MAT.muff,{m:new THREE.Matrix4().compose(mp,mq,V(1,1,1)),uv:"none",ao:1}));                                                  /* the muffler: along -X, rising */
-    B.add(lathe([[0.001,0.0],[0.036,0.0],[0.036,0.022],[0.001,0.022]],S(d,14,8,6)),withMat(MAT.cap,{m:new THREE.Matrix4().compose(me,mq,V(1,1,1)),uv:"none"}));   /* the end cap */
+    /* the end cap (milestone 2): a bright machined ring round a dark face and a short outlet pipe, the first thing the chase camera sees */
+    const mcm=new THREE.Matrix4().compose(me,mq,V(1,1,1));
+    B.add(lathe(d>=1?[[0.0300,-0.002],[0.0362,0.0],[0.0376,0.006],[0.0376,0.017],[0.0330,0.023],[0.0215,0.023],[0.0205,0.019]]:[[0.03,0],[0.0376,0.006],[0.0376,0.017],[0.021,0.023]],S(d,18,10,6)),withMat(MAT.aluB,{m:mcm,uv:"none",ao:1}));
+    B.add(lathe([[0.0215,0.019],[0.0215,0.010],[0.001,0.010]],S(d,14,8,6)),withMat(MAT.cap,{m:mcm,uv:"none"}));
+    if(d>=1) B.add(lathe([[0.0168,0.008],[0.0168,0.046],[0.0150,0.047]],S(d,14,8,6)),withMat(MAT.steel,{m:mcm,uv:"none"}));
+    if(d>=1) B.add(lathe([[0.0150,0.047],[0.0150,0.012],[0.001,0.012]],S(d,12,8,6)),withMat(MAT.outlet,{m:mcm,uv:"none"}));
     B.add(rod(V(-0.250,0.735,0.186),V(-0.300,0.748,0.212),0.0175,0.034,S(d,8,6,4)),withMat(MAT.exh,{ao:0.9}));                          /* the mid-pipe joins header and muffler */
-    if(d>=2){ B.add(rod(V(-0.50,0.80,0.12),V(-0.50,0.80,0.19),0.007,0.007,5),withMat(MAT.aluD)); B.add(rod(V(-0.68,0.835,0.115),V(-0.68,0.835,0.18),0.007,0.007,5),withMat(MAT.aluD));
-      B.add(blob(0.20,0.022,0.036,4,4,10),withMat(MAT.aluB,{m:Tm(-0.50,0.838,0.135,0,0,0.25),ao:1})); } }
+    if(d>=2){ B.add(rod(V(-0.50,0.79,0.12),V(-0.50,0.79,0.19),0.007,0.007,5),withMat(MAT.aluD)); B.add(rod(V(-0.68,0.835,0.115),V(-0.68,0.835,0.18),0.007,0.007,5),withMat(MAT.aluD));
+      B.add(blob(0.20,0.022,0.036,4,4,10),withMat(MAT.aluB,{m:Tm(-0.47,0.780,0.150,0,0,0.10),ao:1}));   /* (milestone 2: the muffler bracket sits under the side-panel number, not across it) */ } }
+  B.mark('before-hoses');
+  /* radiator hoses, the water pump cover (milestone 2) */
+  if(d>=1){ const hs=S(d,7,5,4), hp={per:S(d,3,1,1),caps:true};
+    B.add(sweep([V(0.372,0.880,0.092),V(0.335,0.884,0.078),V(0.290,0.872,0.062),V(0.252,0.858,0.058)],0.0105,hs,hp),withMat(MAT.hose,{ao:0.75}));
+    B.add(sweep([V(0.372,0.880,-0.092),V(0.330,0.880,-0.072),V(0.288,0.868,-0.058),V(0.250,0.856,-0.054)],0.0105,hs,hp),withMat(MAT.hose,{ao:0.75}));
+    B.add(sweep([V(0.402,0.632,0.100),V(0.372,0.572,0.122),V(0.300,0.512,0.136),V(0.232,0.488,0.134)],0.0110,hs,hp),withMat(MAT.hose,{ao:0.7}));
+    if(d>=2){ B.add(sweep([V(0.402,0.632,-0.100),V(0.360,0.565,-0.108),V(0.300,0.520,-0.104),V(0.250,0.500,-0.096)],0.0110,hs,hp),withMat(MAT.hose,{ao:0.65}));
+      B.add(lathe([[0.001,0],[0.034,0],[0.036,0.006],[0.036,0.016],[0.030,0.020],[0.001,0.020]],16),withMat(MAT.cover,{m:Tm(0.215,0.485,0.122,PI/2,0,0),uv:"none",ao:0.85}));
+      /* the clutch cable and the throttle cables below the head tube (their tops turn with the bars: steerBuild) */
+      B.add(sweep([V(0.452,0.930,-0.030),V(0.432,0.880,0.030),V(0.400,0.820,0.072),V(0.360,0.720,0.090)],0.0038,5,{per:2,caps:true}),withMat(MAT.cable,{ao:0.6}));
+      B.add(sweep([V(0.448,0.945,0.062),V(0.410,0.900,0.060),V(0.330,0.850,0.045),V(0.160,0.805,0.040)],0.0034,5,{per:2,caps:true}),withMat(MAT.cable,{ao:0.6}));
+    } }
   B.mark('before-pegs');
   /* ---- footpegs, brake pedal, shifter, shock mount ---- */
   B.addM(new THREE.BoxGeometry(0.10,0.018,0.036),withMat(MAT.steel,{m:Tm(-0.075,0.419,0.205),ao:0.9}));
   B.addM(rod(V(-0.075,0.425,0.150),V(-0.075,0.425,0.222),0.011,0.011,S(d,6,4,4)),withMat(MAT.aluD));
+  /* the pegs' teeth (milestone 2): two rows of cleats on each peg */
+  if(d>=2) for(const ex of [-0.044,0.044]) for(let k=0;k<5;k++) B.addM(cyl(0.0034,0.0006,0.0075,4),withMat(MAT.steel,{m:Tm(-0.075+ex,0.4305,0.190+k*0.0075),uv:"none",ao:0.9}));
   if(d>=1){ B.add(rod(V(-0.04,0.44,0.14),V(-0.28,0.40,0.205),0.0085,0.007,5),withMat(MAT.steel)); B.add(new THREE.BoxGeometry(0.045,0.01,0.03),withMat(MAT.steel,{m:Tm(-0.30,0.399,0.205)})); }
   if(d>=2){ B.add(rod(V(0.08,0.395,-0.12),V(0.16,0.40,-0.18),0.0075,0.0075,5),withMat(MAT.steel)); B.add(rod(V(-0.25,0.84,-0.04),V(-0.25,0.84,0.04),0.012,0.012,6),withMat(MAT.steel,{ao:0.6}));
     B.add(lathe([[0.001,0],[0.034,0],[0.034,0.008],[0.001,0.008]],12),withMat(MAT.steel,{m:Tm(-0.255,0.46,-0.152,-PI/2,0,0),uv:"none"})); }
   return B.geometry();
 }
 
+/* the right handguard's shield (milestone 2): a thin curved plate lofted along the bar, its face turning outward round the bar end (the left one is its mirror image) */
+function guardGeo(d){
+  const ns=S(d,12,7,5), nj=S(d,10,8,6), secs=[];
+  for(let i=0;i<=ns;i++){ const t=i/ns, wrap=sstep(0.60,1.0,t), phi=wrap*1.22;
+    const x=0.476-0.006*Math.sin(PI*t)-0.046*wrap*wrap, z=0.255+0.208*t-0.012*wrap, y=1.117+0.004*t, hh=0.024+0.027*Math.sin(PI*Math.min(1,t*1.08)), th=0.0034, nx=Math.cos(phi), nz=Math.sin(phi);
+    const sec=[]; for(let j=0;j<nj;j++){ const a=j/nj*TAU, c=Math.cos(a), sn=Math.sin(a), bow=0.010*(1-sn*sn); sec.push(V(x+nx*(th*c+bow),y+hh*sn,z+nz*(th*c+bow))); }
+    secs.push(sec); }
+  return loft(secs,{});
+}
 /* ---------------- the steered front: triple clamps, upper fork tubes, bars, levers, grips, plate bracket ---------------- */
 function steerBuild(d){
   const B=new Builder(), sg=S(d,12,6,4);
@@ -320,8 +361,25 @@ function steerBuild(d){
     for(let k=0;k<(d>=2?6:0);k++) B.addM(cyl(0.0191,0.0191,0.0042,12),withMat(MAT.rubber,{m:Tm(0.400,1.120,0.31+k*0.0175,PI/2,0,0)})); }
   /* perches and levers: clutch (left) and brake (right) */
   if(d>=2) B.addM(blob(0.036,0.019,0.022,3,4,8),withMat(MAT.black,{m:Tm(0.414,1.100,0.262),ao:0.9}));
-  B.addM(blob(0.088,0.007,0.0105,3.5,3,S(d,8,5,4)),withMat(MAT.lever,{m:Tm(0.50,1.087,0.275,0,0.10,-0.09),ao:1}));
+  /* the levers (milestone 2): forged blades from the perches out along the bars, a little in front of the grips, the tips curled back */
+  B.addM(sweep([V(0.420,1.101,0.262),V(0.440,1.097,0.290),V(0.452,1.091,0.345),V(0.452,1.087,0.392),V(0.444,1.084,0.418)],t=>[0.0042-0.0012*t,0.0085-0.002*t],S(d,7,4,4),{per:S(d,3,1,1),caps:true}),withMat(MAT.lever,{ao:1}));
+  /* the handguards (milestone 2): moulded shields in the team colour in front of the levers, curling round the bar ends, on alloy mounts */
+  B.addM(guardGeo(d),withMat(MAT.guard,{uv:"none",ao:1}));
+  if(d>=1){ B.addM(rod(V(0.398,1.110,0.212),V(0.468,1.114,0.262),0.0058,0.0058,S(d,6,4,4)),withMat(MAT.alu,{ao:0.9})); B.addM(rod(V(0.402,1.120,0.430),V(0.430,1.121,0.452),0.0058,0.0058,S(d,6,4,4)),withMat(MAT.alu,{ao:0.9})); }
+  /* the front brake line, the clutch cable and the throttle cables (milestone 2): black lines looping forward from the bars; they carry on below the
+     head tube in the chassis (bodyBuild) and down the right fork leg to the caliper (forkBuild) */
+  if(d>=1){ const cs=S(d,6,4,4), cp={per:S(d,3,2,1),caps:true};
+    B.add(sweep([V(0.418,1.122,0.248),V(0.455,1.095,0.228),V(0.478,1.040,0.190),V(0.472,0.985,0.150),forkPt(0.60).setZ(0.136).addScaledVector(NF,0.040),forkPt(0.46).setZ(0.137).addScaledVector(NF,0.034)],0.0045,cs,cp),withMat(MAT.hose,{ao:0.9}));
+    B.add(sweep([V(0.420,1.104,-0.262),V(0.450,1.090,-0.250),V(0.490,1.040,-0.205),V(0.505,0.985,-0.130),V(0.488,0.952,-0.060),V(0.458,0.935,-0.030)],0.0040,cs,cp),withMat(MAT.cable,{ao:0.9}));
+    B.add(sweep([V(0.405,1.104,0.276),V(0.432,1.072,0.255),V(0.462,1.022,0.190),V(0.472,0.982,0.120),V(0.462,0.956,0.078),V(0.448,0.946,0.062)],0.0034,cs,cp),withMat(MAT.cable,{ao:0.9}));
+    if(d>=2) B.add(sweep([V(0.399,1.100,0.280),V(0.424,1.064,0.262),V(0.452,1.016,0.196),V(0.462,0.978,0.126),V(0.452,0.952,0.084),V(0.440,0.944,0.066)],0.0032,cs,cp),withMat(MAT.cable,{ao:0.9})); }
   if(d>=2){ B.add(blob(0.028,0.022,0.020,3,4,8),withMat(MAT.anod,{m:Tm(0.405,1.128,0.255),ao:0.9})); B.add(cyl(0.012,0.012,0.04,8),withMat(MAT.black,{m:Tm(0.404,1.155,0.255)})); }   /* brake master cylinder + reservoir */
+  /* the front number plate (milestone 2): a curved plastic plate in the team colour (the shader paints the rider's number background, numerals and name from the
+     side-panel atlas onto its face, kind 6), a dark back; its frame: centre (0.508, 1.035, 0), leaning back 0.30 rad, 0.25 m across, 0.215 m high */
+  { const pf=new THREE.Matrix4().compose(V(0.508,1.035,0),new THREE.Quaternion().setFromEuler(new THREE.Euler(0,PI/2,0.30,"ZYX")),V(0.25,0.215,1));
+    const face=new THREE.PlaneGeometry(1,1,S(d,10,6,4),S(d,3,1,1)), P=face.attributes.position; for(let i=0;i<P.count;i++){ const x=P.getX(i), y=P.getY(i); P.setZ(i,-0.022*4*x*x-0.006*(1-4*y*y)*0); } face.computeVertexNormals();
+    const back=face.clone(); back.scale(1,1,1); back.translate(0,0,-0.0045); const bi=back.index.array; for(let i=0;i<bi.length;i+=3){ const t=bi[i+1]; bi[i+1]=bi[i+2]; bi[i+2]=t; } back.computeVertexNormals();
+    B.add(face,withMat(MAT.plateF,{m:pf,uv:"none",ao:1})); B.add(back,withMat(MAT.plateK,{m:pf,uv:"none",ao:0.9})); }
   /* the number-plate bracket: two posts from the bars to where the plate stands */
   B.addM(rod(V(0.395,1.145,0.082),V(0.488,1.043,0.082),0.008,0.008,5),withMat(MAT.alu));
   if(d>=2) B.add(rod(V(0.488,1.000,-0.10),V(0.488,1.062,0.10),0.006,0.006,4),withMat(MAT.alu));
@@ -346,6 +404,8 @@ function forkBuild(d){
   /* the brake caliper (right) and its bracket: behind the leg at the disc's edge */
   { const cp=V(FA.x-0.098,FA.y+0.074,0.060); B.add(blob(0.034,0.040,0.020,3,S(d,4,3,3),S(d,8,5,4)),withMat(MAT.anodG,{m:Tm(cp.x,cp.y,cp.z,0,0,0.65),ao:0.9}));
     if(d>=2) B.add(rod(V(FA.x-0.075,FA.y+0.04,0.066),V(FA.x-0.045,FA.y+0.12,0.099),0.011,0.011,6),withMat(MAT.aluD)); }
+  /* the front brake line's lower half (milestone 2): down the outside of the right leg to the caliper */
+  if(d>=1) B.add(sweep([forkPt(0.47).setZ(0.137),forkPt(0.34).setZ(0.139),forkPt(0.22).setZ(0.137),V(0.655,0.500,0.110),V(0.650,0.462,0.078)],0.0045,S(d,6,4,4),{per:S(d,3,2,1),caps:true}),withMat(MAT.hose,{ao:0.85}));
   /* the front fender: a long blade over the tyre, the beak curling up, mounted on the legs */
   const fp=[[0.50,0.716,0.126],[0.57,0.730,0.122],[0.65,0.737,0.115],[0.74,0.740,0.108],[0.83,0.733,0.100],[0.91,0.712,0.093],[0.98,0.676,0.086],[1.04,0.632,0.080],[1.10,0.592,0.073],[1.16,0.574,0.066]];
   const fS=fp.map(p=>superSec(p[0],0,p[1],p[2],0.011,2.6,S(d,12,6,4)));
@@ -374,14 +434,18 @@ function swingBuild(d){
     const fx2=fs.x*c-fs.y*s, fy2=fs.x*s+fs.y*c;                                                  /* (the arm frame has x along -the arm) */
     const rs=0.0975, fr=0.030, a1=V(fx2,fy2+fr,-0.058), a2=V(-L,rs,-0.058), b1=V(fx2,fy2-fr,-0.058), b2=V(-L,-rs,-0.058);
     B.add(box3(a1,a2,0.011,0.0075),withMat(MAT.chain,{ao:0.7,uv:"none"})); B.add(box3(b1,b2,0.011,0.0075),withMat(MAT.chain,{ao:0.7,uv:"none"}));
-    if(d>=2){ for(let k=0;k<22;k++){ const t=(k+0.5)/22; const p=a1.clone().lerp(a2,t); B.add(new THREE.BoxGeometry(0.0085,0.013,0.0095),withMat(MAT.steel,{m:Tm(p.x,p.y+0.0045,p.z,0,0,Math.atan2(a2.y-a1.y,a2.x-a1.x)),uv:"none",ao:0.8}));
-      const q=b1.clone().lerp(b2,t); B.add(new THREE.BoxGeometry(0.0085,0.013,0.0095),withMat(MAT.steel,{m:Tm(q.x,q.y-0.0045,q.z,0,0,Math.atan2(b2.y-b1.y,b2.x-b1.x)),uv:"none",ao:0.8})); } }
+    /* the links (milestone 2): alternating outer and inner side plates at the chain's 15.9 mm pitch along both runs (LOD 0) */
+    if(d>=2){ for(const [p0,p1] of [[a1,a2],[b1,b2]]){ const len=p0.distanceTo(p1), nL=Math.floor(len/0.0159), ang=Math.atan2(p1.y-p0.y,p1.x-p0.x);
+        for(let k=0;k<nL;k++){ const t=(k+0.5)/nL, p=p0.clone().lerp(p1,t), outer=k%2===0, dz=outer?0.0063:0.0048, h=outer?0.0112:0.0096;
+          for(const sz of [-1,1]) B.add(new THREE.BoxGeometry(0.0180,h,0.0013),withMat(outer?MAT.link:MAT.linkD,{m:Tm(p.x,p.y,p.z+sz*dz,0,0,ang),uv:"none",ao:0.8})); } } }
     /* the chain guide and slider on the lower run, the upper guide at the front */
     if(d>=2){ B.add(box3(V(-0.20,-0.045,-0.058),V(-0.42,-0.085,-0.058),0.02,0.014),withMat(MAT.black,{uv:"none",ao:0.7})); }
   }
   /* the rear brake: the caliper and its hanger on the right arm */
   B.add(blob(0.040,0.032,0.020,3,S(d,4,3,3),S(d,8,5,4)),withMat(MAT.anodG,{m:Tm(-L+0.034,-0.092,0.074,0,0,-0.3),ao:0.9,uv:"none"}));
   if(d>=2) B.add(rod(V(-L+0.034,-0.092,0.088),V(-L-0.01,-0.03,0.099),0.008,0.008,5),withMat(MAT.aluD,{uv:"none"}));
+  /* the rear brake line (milestone 2): from the caliper along the top of the right arm toward the pivot */
+  if(d>=1) B.add(sweep([V(-L+0.030,-0.060,0.094),V(-L+0.070,0.002,0.108),V(-L+0.15,0.036,0.110),V(-0.30,0.038,0.110),V(-0.12,0.046,0.112),V(-0.06,0.030,0.124)],0.0040,S(d,5,4,4),{per:S(d,3,1,1),caps:true}),withMat(MAT.hose,{uv:"none",ao:0.85}));
   /* the linkage: a rocker and two dog-bones under the arms in front of the shock */
   if(d>=2){ B.add(blob(0.055,0.025,0.012,3,4,8),withMat(MAT.alu,{m:Tm(-0.105,-0.098,0.0),ao:0.7,uv:"none"})); B.addM(rod(V(-0.10,-0.098,0.045),V(-0.27,-0.075,0.045),0.0075,0.0075,5),withMat(MAT.aluD,{uv:"none"})); }
   return B.geometry();
@@ -415,7 +479,7 @@ function farBuild(){
   /* wheels (static, at the rest height): a tyre lathe of 5 points and a rim disc */
   [[FA,TYRE_F],[RA,TYRE_R]].forEach(([c,ty])=>{ const w=ty.w;
     const t=lathe([[0.265,-w*0.6],[0.322,-w*0.95],[0.34,0],[0.322,w*0.95],[0.265,w*0.6]],10); t.applyMatrix4(Zaxis); B.add(t,withMat(MAT.tread,{m:Tm(c.x,c.y,0),uv:"none",noGrad:true}));
-    B.add(cyl(0.24,0.24,0.02,8),withMat(MAT.rim,{m:Tm(c.x,c.y,0,PI/2,0,0),uv:"none",noGrad:true})); });
+    B.add(cyl(0.24,0.24,0.02,8),withMat(MAT.blurFar,{m:Tm(c.x,c.y,0,PI/2,0,0),uv:"none",noGrad:true})); });   /* (milestone 2: a grey disc, the spokes as a far wheel shows them, not a silver plate) */
   /* frame and engine: two beams and a block */
   B.addM(sweep([V(0.392,0.985,0.04),V(0.07,0.882,0.10),V(-0.10,0.69,0.108),V(-0.17,0.46,0.096)],0.03,4,{per:1,caps:true}),withMat(MAT.alu));
   B.add(blob(0.215,0.135,0.105,3,4,6),withMat(MAT.caseM,{m:Tm(0.055,0.405,0)}));
@@ -432,10 +496,20 @@ function farBuild(){
   B.add(loft([[0.50,0.716,0.126],[0.83,0.733,0.100],[1.04,0.632,0.080],[1.16,0.574,0.066]].map(p=>superSec(p[0],0,p[1],p[2],0.011,2.6,4)),{}),withMat(MAT.plastic,{uv:"top"}));
   B.add(sweep([V(0.298,0.700,0.046),V(0.338,0.505,0.150),V(0.03,0.6,0.172),V(-0.25,0.735,0.186)],0.019,4,{per:1,caps:true}),withMat(MAT.exh));
   { const md=V(-0.968,0.250,-0.012).normalize(); B.add(lathe([[0.001,0],[0.049,0.03],[0.0545,0.24],[0.0545,0.42],[0.034,0.52],[0.001,0.52]],6),withMat(MAT.muff,{m:new THREE.Matrix4().compose(V(-0.30,0.748,0.212),new THREE.Quaternion().setFromUnitVectors(V(0,1,0),md),V(1,1,1)),uv:"none"})); }
+  /* the front plate (milestone 2: the rider's number is painted on it by the shader) */
+  B.add(new THREE.PlaneGeometry(1,1),withMat(MAT.plateF,{m:new THREE.Matrix4().compose(V(0.508,1.035,0),new THREE.Quaternion().setFromEuler(new THREE.Euler(0,PI/2,0.30,"ZYX")),V(0.25,0.215,1)),uv:"none"}));
   /* swingarm and shock: one beam and one rod */
   B.add(rod(V(-0.17,0.44,0),V(-0.74,0.34,0),0.05,0.04,4),withMat(MAT.alu));
   B.add(rod(BIKE.SHOCK_BOT.clone(),BIKE.SHOCK_TOP.clone(),0.035,0.035,4),withMat(MAT.spring));
   return B.geometry();
+}
+/* the spinning wheel's blur disc (milestone 2): two thin annuli (the two planes of spokes) from the hub to the rim at unit radius; r3d-bike.js scales them to the rim and draws them translucent */
+export function buildBlurDisc(seg){
+  seg=seg||28; const P=[], N=[], U=[], I=[]; const r0=0.19;
+  for(const zs of [-1,1]){ const base=P.length/3, z=zs*0.021;
+    for(let i=0;i<=seg;i++){ const a=i/seg*TAU, c=Math.cos(a), s=Math.sin(a); P.push(c*r0,s*r0,z, c,s,z); N.push(0,0,zs,0,0,zs); U.push(r0,a/TAU,1,a/TAU); }
+    for(let i=0;i<seg;i++){ const a=base+i*2; if(zs>0) I.push(a,a+1,a+2,a+1,a+3,a+2); else I.push(a,a+2,a+1,a+1,a+2,a+3); } }
+  const g=new THREE.BufferGeometry(); g.setAttribute("position",new THREE.Float32BufferAttribute(P,3)); g.setAttribute("normal",new THREE.Float32BufferAttribute(N,3)); g.setAttribute("uv",new THREE.Float32BufferAttribute(U,2)); g.setIndex(I); return g;
 }
 /* merge finished builder geometries (same attributes) */
 function merge3(list){ const B=new Builder(); list.forEach(g=>{ const P=g.attributes.position.array, N=g.attributes.normal.array, C=g.attributes.color.array, U=g.attributes.uv.array, A=g.attributes.aMat.array, ix=g.index.array, base=B.P.length/3;
