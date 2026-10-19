@@ -20,8 +20,8 @@ import {createPost,postSupported} from "./r3d-lead-post.js";
 
 /* the tier table: every effect is one flag. post: "full" (HDR scene + bloom + DOF + SMAA + grade) | "lite" (HDR scene + bloom + grade, MSAA) | "off" (the renderer's own frame: nothing extra) */
 export const TIERS={
-  high:  {rig:"full",shadowRes:1024,softShadow:false,env:true, pbr:true, fog:"exp",post:"full",bloom:1.0,bloomDiv:4,dof:true, motionBlur:1.0,haze:0.011,hazeI:1.0,aa:"fxaa",msaa:0,grade:1,vignette:0.34,grain:0.035,exposure:1.0,cssVig:false,half:true,ao:1.0,envCap:true,bikeCC:true},   /* (polish: 1024 and a plain filter, as the quality table says: a 2048 soft map was 4x the texels and 9 taps) */
-  ultra: {rig:"full",shadowRes:2048,softShadow:true, env:true, pbr:true, fog:"exp",post:"full",bloom:1.0,bloomDiv:2,dof:true, motionBlur:1.0,haze:0.011,hazeI:1.0,aa:"fxaa",msaa:0,grade:1,vignette:0.34,grain:0.035,exposure:1.0,cssVig:false,half:true,ao:1.0,envCap:true,bikeCC:true},
+  high:  {rig:"full",shadowRes:1024,softShadow:false,env:true, pbr:true, fog:"exp",post:"full",bloom:1.0,bloomDiv:4,dof:true, motionBlur:1.0,haze:0.011,hazeI:1.0,aa:"fxaa",msaa:0,grade:1,vignette:0.34,grain:0.035,exposure:1.0,cssVig:false,half:true,ao:1.0,envCap:true},   /* (polish: 1024 and a plain filter, as the quality table says: a 2048 soft map was 4x the texels and 9 taps) */
+  ultra: {rig:"full",shadowRes:2048,softShadow:true, env:true, pbr:true, fog:"exp",post:"full",bloom:1.0,bloomDiv:2,dof:true, motionBlur:1.0,haze:0.011,hazeI:1.0,aa:"fxaa",msaa:0,grade:1,vignette:0.34,grain:0.035,exposure:1.0,cssVig:false,half:true,ao:1.0,envCap:true},
   medium:{motionBlur:0,haze:0,hazeI:1,rig:"full",shadowRes:1024,softShadow:false,env:true, pbr:true, fog:"exp",post:"lite",bloom:0.75,bloomDiv:4,dof:false,aa:"fxaa",msaa:0,grade:1,vignette:0.30,grain:0.0, exposure:1.0,cssVig:false,half:true,ao:0,envCap:true,fmt:"r11"},   /* (m2: an R11F_G11F_B10F scene target: half the bytes of RGBA16F; measured -2.9 ms of 50.4 at 1080p on the laptop's iGPU) */
   low:   {motionBlur:0,haze:0,hazeI:1,rig:"lite",shadowRes:1024,softShadow:false,env:false,pbr:false,fog:"lin",post:"off", bloom:0,   dof:false,aa:"none",msaa:0,grade:0,vignette:0,   grain:0.0, exposure:1.0,cssVig:false,half:false,ao:0,envCap:false,tvaa:false,tvGlow:0},
   stick: {motionBlur:0,haze:0,hazeI:1,rig:"lite",shadowRes:1024,softShadow:false,env:false,pbr:false,fog:"lin",post:"off", bloom:0,   dof:false,aa:"none",msaa:0,grade:0,vignette:0,   grain:0.0, exposure:1.0,cssVig:false,half:false,ao:0,envCap:false,tvaa:false,tvGlow:0}
@@ -224,25 +224,9 @@ export function createLook(renderer,opts){
   /* ---- the physically based stand-ins: a Phong material (the base bike, the helmets) gets a Physical one that reflects the environment; the originals are kept for the low tiers ---- */
   function swapPBR(root,on){
     root.traverse(m=>{ if(!m.isMesh||!m.userData||!m.userData.mxPhong) return; const u=m.userData; if(on){ if(!u.mxPbr) u.mxPbr=pbrFromPhong(u.mxPhong,F.post==="full"?"high":"mid"); m.material=u.mxPbr; } else m.material=u.mxPhong; });
-    /* (milestone 2) the bike's plastics get a CLEAR COAT on the high tiers (a second, sharp specular layer: the floodlight banks in the fenders and shrouds) and reflect the scene's
-       environment (the captured stadium) instead of the bike's own generic map. The bike's material is the bike specialist's (r3d-bike.js): this is a stand-in made from it at run time,
-       the same shader patch plus one line that limits the coat to the painted plastics (not the tyres, the wheels, the metal, the mud). The original is kept for the other tiers. */
-    const cc=on&&!!F.bikeCC;
-    root.traverse(m=>{ if(!m.isMesh||!m.material) return; const u=m.userData;
-      if(!u.mxBikeStd&&m.material.isMeshStandardMaterial&&!m.material.isMeshPhysicalMaterial&&typeof m.material.customProgramCacheKey==="function"&&String(m.material.customProgramCacheKey())==="mxbike-std") u.mxBikeStd=m.material;
-      if(!u.mxBikeStd) return;
-      if(cc){ if(!u.mxBikeCC) u.mxBikeCC=bikeCoat(u.mxBikeStd); m.material=u.mxBikeCC; } else m.material=u.mxBikeStd; });
-  }
-  const coatCache=new WeakMap();
-  function bikeCoat(src){
-    if(coatCache.has(src)) return coatCache.get(src);
-    const p=new THREE.MeshPhysicalMaterial({vertexColors:true,roughness:src.roughness,metalness:src.metalness,envMap:null,envMapIntensity:F.bikeEnv!=null?F.bikeEnv:1.25,clearcoat:1.0,clearcoatRoughness:0.07});
-    p.userData=Object.assign({},src.userData,{mxCoat:true});
-    const ob=src.onBeforeCompile;
-    p.onBeforeCompile=function(sh,r){ ob.call(src,sh,r);
-      sh.fragmentShader=sh.fragmentShader.replace("#include <lights_physical_fragment>","#include <lights_physical_fragment>\n#ifdef USE_CLEARCOAT\n material.clearcoat*=step(0.5,bkTn)*(1.0-bkWl)*(1.0-metalnessFactor)*(1.0-mudK);\n#endif"); };
-    p.customProgramCacheKey=()=>"mxbike-coat";
-    coatCache.set(src,p); return p;
+    /* (milestone 2) the bikes' CLEAR COAT on the high tiers is the bike's own since the milestone 2 merge: r3d-bike.js builds its material from the kit (MAT.gloss, MeshPhysicalMaterial)
+       when the kit tier is "high" (this file's setKitTier: HIGH / ULTRA), keeps the coat on the painted plastics only and reflects scene.environment, the captured stadium, at 1.25.
+       The run-time stand-in this file made from the old "mxbike-std" material (the lead's milestone 2 bridge, "bikeCC") is retired, as the lead asked. */
   }
   L.upgrade=function(root){
     /* only plain Phong materials: one with its own onBeforeCompile patch (a specialist's skin, number atlas ...) keeps its own look */

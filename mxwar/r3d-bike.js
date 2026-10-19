@@ -14,7 +14,7 @@
    st.mud (0..1), st.steer (rad, + right; when absent it is worked out from the track's curvature st.k). hideBike(M, i). */
 import * as THREE_NS from "../ui/vendor/three-0.160.0.module.min.js";
 const THREE=THREE_NS;
-import {bone,canvas,clamp,MAT as KIT,getKitTier} from "./r3d-util.js";
+import {bone,canvas,clamp,MAT as KIT,getKitTier,MX_KEEP,KEEP_VS_DECL,KEEP_VS_SET,KEEP_FS_DECL} from "./r3d-util.js";
 import {BIKE,buildBike,buildFarBike,buildWheel,buildBlurDisc,triCount,UA,A0,ARM} from "./r3d-bike-model.js";
 export {BIKE};
 
@@ -155,23 +155,27 @@ const NBK=64;   /* bikes a race at most in the per-bike uniform arrays (a field 
 function bikeMaterial(lo,D,U){
   const T=tex(lo), std=!lo, phys=std&&getKitTier()==="high";
   const o={vertexColors:true,roughness:1,metalness:0,envMap:T.env,envMapIntensity:1.7};
-  /* the plastics' clear coat comes from the lead's material kit on the high tier (MeshPhysicalMaterial, gloss preset); the shader keeps the coat on the plastics only, off the mud */
-  const m=lo?new THREE.MeshLambertMaterial({vertexColors:true}):(phys?KIT.gloss(null,Object.assign(o,{clearcoat:1,clearcoatRoughness:0.07})):new THREE.MeshStandardMaterial(o));
+  /* the plastics' clear coat comes from the lead's material kit on the high tier (MeshPhysicalMaterial, gloss preset); the shader keeps the coat on the plastics only, off the mud.
+     (milestone 2 merge, the lead's request: the coated bike reflects scene.environment, the stadium the look captured (r3d-look.js), at the lead's 1.25, not the bike's own painted map;
+     the look's run-time "bikeCoat" stand-in is retired: the bike carries its coat itself) */
+  const m=lo?new THREE.MeshLambertMaterial({vertexColors:true}):(phys?KIT.gloss(null,Object.assign(o,{envMap:null,envMapIntensity:1.25,clearcoat:1,clearcoatRoughness:0.07})):new THREE.MeshStandardMaterial(o));
   m.userData.keepMaps=true;
   const cl=PLATE_CLASS[plateClass]||PLATE_CLASS["450"], bg=new THREE.Color(cl.bg), fg=new THREE.Color(cl.fg);
   m.onBeforeCompile=sh=>{
     sh.uniforms.uLiv={value:T.liv}; sh.uniforms.uDec={value:D.t}; sh.uniforms.uDecG={value:new THREE.Vector4(D.cols,D.rows,0,0)}; sh.uniforms.uBkC={value:U.c}; sh.uniforms.uBkA={value:U.a};
+    sh.uniforms.uMxKeep=MX_KEEP;   /* (milestone 2 merge: the chase subject's own bike is never dissolved near the lens: r3d-util.js MX_KEEP, CAMS.keep) */
     sh.uniforms.uMudCol={value:new THREE.Vector3(0.115,0.066,0.032)}; sh.uniforms.uMudT={value:T.mud}; sh.uniforms.uPlBg={value:new THREE.Vector3(bg.r,bg.g,bg.b)}; sh.uniforms.uPlFg={value:new THREE.Vector3(fg.r,fg.g,fg.b)};
     sh.vertexShader=sh.vertexShader
-      .replace("#include <common>","#include <common>\nattribute vec4 aMat;\nuniform vec4 uBkC["+NBK+"];\nuniform vec4 uBkA["+NBK+"];\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec4 vMud;\nvarying vec3 vLoc;\nvarying vec3 vNl;")
+      .replace("#include <project_vertex>","#include <project_vertex>"+KEEP_VS_SET)
+      .replace("#include <common>","#include <common>\n"+KEEP_VS_DECL+"attribute vec4 aMat;\nuniform vec4 uBkC["+NBK+"];\nuniform vec4 uBkA["+NBK+"];\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec4 vMud;\nvarying vec3 vLoc;\nvarying vec3 vNl;")
       .replace("#include <color_vertex>","#include <color_vertex>\n{ int bi=int(instanceColor.r); vec4 kc=uBkC[bi], ka=uBkA[bi]; float sty=mod(kc.w,8.0), red=step(7.5,kc.w);\n  float wl=step(31.5,aMat.z); float rr=aMat.z-32.0*wl; float kd=floor((rr+0.5)/4.0); float tn=rr-4.0*kd; vec3 fc=sty>0.5&&sty<1.5?vec3(0.86):(sty>1.5&&sty<2.5?ka.rgb:kc.rgb); vec3 tint=tn<0.5?vec3(1.0):(tn<1.5?kc.rgb:(tn<2.5?ka.rgb:fc)); vColor.rgb=color.rgb*tint;\n  vAcc=ka.rgb; vMud=vec4(instanceColor.b,sty,instanceColor.g,float(bi)+0.5*red); }\nvMat=aMat; vLoc=position; vNl=normal;");
-    let fs=sh.fragmentShader.replace("#include <common>","#include <common>\nuniform sampler2D uLiv;\nuniform sampler2D uDec;\nuniform vec4 uDecG;\nuniform vec3 uMudCol;\nuniform sampler2D uMudT;\nuniform vec3 uPlBg;\nuniform vec3 uPlFg;\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec4 vMud;\nvarying vec3 vLoc;\nvarying vec3 vNl;\n"+GLSL_LIB);
+    let fs=sh.fragmentShader.replace("#include <common>","#include <common>\n"+KEEP_FS_DECL+"uniform sampler2D uLiv;\nuniform sampler2D uDec;\nuniform vec4 uDecG;\nuniform vec3 uMudCol;\nuniform sampler2D uMudT;\nuniform vec3 uPlBg;\nuniform vec3 uPlFg;\nvarying vec4 vMat;\nvarying vec3 vAcc;\nvarying vec4 vMud;\nvarying vec3 vLoc;\nvarying vec3 vNl;\n"+GLSL_LIB);
     const f=n=>n.toFixed(4);
     fs=fs.replace("#include <color_fragment>",[
       "#include <color_fragment>",
       "float bkW=step(31.5,vMat.z); float bkR=vMat.z-32.0*bkW; float bkK=floor((bkR+0.5)/4.0); float bkTn=bkR-4.0*bkK;",
       "float bkIgn=fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))));",
-      "{ float bkZ=vViewPosition.z; if(bkZ<1.7){ if(smoothstep(0.8,1.7,bkZ)<bkIgn) discard; } }",   /* the near-lens fade: no bike ever fills the lens (director note D12) */
+      "{ float bkZ=vViewPosition.z; if(bkZ<1.7&&!mxKept()){ if(smoothstep(0.8,1.7,bkZ)<bkIgn) discard; } }",   /* the near-lens fade: no bike ever fills the lens (director note D12) */
       "if(bkK>0.5&&bkK<1.5&&vMud.z>0.02){ if(bkIgn<vMud.z*0.82) discard; }",   /* the spokes of a fast wheel thin out: the translucent blur disc shows the spinning wheel */
       "vec3 bkN=normalize(vNl); vec3 bkAN=abs(bkN); vec2 bkPP=bkAN.z>max(bkAN.x,bkAN.y)?vLoc.xy:(bkAN.y>bkAN.x?vLoc.xz:vLoc.zy); float bkFW=length(fwidth(bkPP));",
       /* the livery: the side view for the team plastics, the view from above for the fenders */
@@ -237,10 +241,11 @@ function bikeMaterial(lo,D,U){
 function blurMaterial(){
   const m=new THREE.MeshLambertMaterial({color:0x9a9da6,transparent:true,depthWrite:false,side:THREE.DoubleSide}); m.forceSinglePass=true;   /* (a transparent double-sided material is two draws in three.js; the disc has no inside to sort) */
   m.onBeforeCompile=sh=>{
-    sh.vertexShader=sh.vertexShader.replace("#include <common>","#include <common>\nvarying float vBl;\nvarying vec2 vRd;").replace("#include <begin_vertex>","#include <begin_vertex>\nvBl=instanceColor.r; vRd=position.xy;");
-    sh.fragmentShader=sh.fragmentShader.replace("#include <common>","#include <common>\nvarying float vBl;\nvarying vec2 vRd;").replace("#include <color_fragment>",
+    sh.uniforms.uMxKeep=MX_KEEP;   /* (milestone 2 merge: the chase subject's own wheels keep their blur disc near the lens, like his bike) */
+    sh.vertexShader=sh.vertexShader.replace("#include <common>","#include <common>\n"+KEEP_VS_DECL+"varying float vBl;\nvarying vec2 vRd;").replace("#include <begin_vertex>","#include <begin_vertex>\nvBl=instanceColor.r; vRd=position.xy;").replace("#include <project_vertex>","#include <project_vertex>"+KEEP_VS_SET);
+    sh.fragmentShader=sh.fragmentShader.replace("#include <common>","#include <common>\n"+KEEP_FS_DECL+"varying float vBl;\nvarying vec2 vRd;").replace("#include <color_fragment>",
       "#include <color_fragment>\ndiffuseColor.rgb=diffuse;\n{ float r=length(vRd), an=atan(vRd.y,vRd.x); float a=vBl*(0.13+0.40*pow(0.19/max(r,0.19),1.35))*(0.86+0.14*cos(an*9.0));\n"+
-      " a*=smoothstep(0.19,0.25,r)*(1.0-smoothstep(0.93,1.0,r))*smoothstep(0.8,1.7,vViewPosition.z); diffuseColor.a*=a; }");
+      " a*=smoothstep(0.19,0.25,r)*(1.0-smoothstep(0.93,1.0,r))*(mxKept()?1.0:smoothstep(0.8,1.7,vViewPosition.z)); diffuseColor.a*=a; }");
   };
   m.customProgramCacheKey=()=>"mxbike2-blur";
   return m;
