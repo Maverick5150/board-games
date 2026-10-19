@@ -194,7 +194,17 @@
     Q + ".mxp.is-3d .mxp-v3{display:block}",
     Q + ".mxp.is-3d .mxp-lane{visibility:hidden}",
     Q + ".mxp.is-3d .mxp-gate," + Q + ".mxp.is-3d .mxp-dust{display:none !important}",
-    Q + ".mxp.is-3d .mxp-pip{bottom:auto;top:3.4rem}",
+    Q + ".mxp.is-3d .mxp-pip{right:auto;left:1rem;bottom:1rem;top:auto}",   /* (the hero chase keeps the person's rider at about 71% across, 64% down: the window takes the bottom-left corner, the 2D gate rests) */
+    /* the 3D race getting ready (raceView holding(): its world in short tasks, then its shaders while nothing draws; the gate and the clock wait): a quiet card over the picture,
+       its light bar moved by the compositor (it keeps moving while the TV builds) */
+    Q + ".mxp-v3hold{display:none}",
+    Q + ".mxp-main.is-3dhold .mxp-v3hold{display:flex;position:absolute;inset:0;z-index:4;align-items:flex-end;justify-content:center;padding:0 1rem 10%;pointer-events:none;background:radial-gradient(120% 70% at 50% 108%,rgba(123,74,43,.55),rgba(9,12,18,0) 62%),radial-gradient(80% 50% at 50% -10%,rgba(236,185,103,.16),rgba(9,12,18,0) 70%),#090c12}",
+    Q + ".mxp-v3hold__card{display:flex;flex-direction:column;align-items:center;gap:.6rem;min-width:22rem;padding:.8rem 1.4rem .9rem;border-radius:1rem;background:rgba(13,17,27,.86);box-shadow:inset 0 0 0 1px rgba(236,185,103,.38)}",
+    Q + ".mxp-v3hold__t{color:#ecb967;font-weight:700;font-size:1.05rem;letter-spacing:.14em;text-transform:uppercase;text-align:center}",
+    Q + ".mxp-v3hold__bar{position:relative;width:100%;height:3px;border-radius:2px;overflow:hidden;background:rgba(240,241,243,.12)}",
+    Q + ".mxp-v3hold__bar::after{content:'';position:absolute;top:0;bottom:0;left:0;width:38%;border-radius:2px;background:linear-gradient(90deg,rgba(247,45,46,0),#f72d2e 45%,#ecb967);animation:mxpHoldSweep 1.6s cubic-bezier(.45,.05,.35,1) infinite;will-change:transform}",
+    "@keyframes mxpHoldSweep{from{transform:translateX(-100%)}to{transform:translateX(265%)}}",
+    "@media (prefers-reduced-motion: reduce){" + Q + ".mxp-v3hold__bar::after{animation:none;width:100%;opacity:.6}}",
     Q + ".mxp-banner.is-war{background:linear-gradient(180deg,rgba(24,22,28,.97),rgba(12,11,15,.97));box-shadow:inset 0 0 0 2px #f72d2e,0 .8rem 2rem rgba(0,0,0,.6)}",
     Q + ".mxp-banner.is-war b{color:#f72d2e}",
     Q + ".mxp-banner.is-war span{color:#ecb967;letter-spacing:.04em;text-transform:uppercase}",
@@ -534,44 +544,70 @@
   function raceView(host, host3) {
     var T = null, nop = function () { };
     try { T = MX.Track ? MX.Track.create(host) : null; } catch (e) { T = null; }
-    if (!T) return { ok: false, kind: "none", is3D: function () { return false; }, race3D: nop, hold: nop, onShown: nop, onMode: nop, camNext: function () { return null; }, setModel: nop, modelOn: function () { return false; }, rows: function () { return null; }, onEvent: nop, setRate: nop, setWait: nop, setTrack: nop, setHole: nop, size: nop, setRiders: nop, pace: nop, gate: nop, gateRect: function () { return null; }, drop: nop, resume: nop, standings: nop, lap: nop, crash: nop, yellow: nop, yellowOn: function () { return false; }, flag: nop, setRed: nop, ready: function () { return -1; }, untilLine: function () { return 0; }, onLap: nop, live: nop, destroy: nop };
+    if (!T) return { ok: false, kind: "none", is3D: function () { return false; }, holding: function () { return false; }, gateWait: function () { return 0; }, onRelease: nop, prepare: nop, race3D: nop, hold: nop, onShown: nop, onMode: nop, camNext: function () { return null; }, setModel: nop, modelOn: function () { return false; }, rows: function () { return null; }, onEvent: nop, setRate: nop, setWait: nop, setTrack: nop, setHole: nop, size: nop, setRiders: nop, pace: nop, gate: nop, gateRect: function () { return null; }, drop: nop, resume: nop, standings: nop, lap: nop, crash: nop, yellow: nop, yellowOn: function () { return false; }, flag: nop, setRed: nop, ready: function () { return -1; }, untilLine: function () { return 0; }, onLap: nop, live: nop, destroy: nop };
     /* ---- the 3D race on the TV ---- */
-    var V3 = null, st3 = "off", live = false, race = null, model = null, shownFn = null, modeFn = null, dead = false;
+    var V3 = null, st3 = "off", live = false, race = null, model = null, shownFn = null, modeFn = null, relFn = null, dead = false, loadT = 0, LOADMAX = 25000, gen3 = 0, prep = false;
     function gfx() { try { var v = localStorage.getItem("bg_mxwar_gfx"); return v === "2d" || /^(firetv|balanced|high|ultra)$/.test(v || "") ? v : "auto"; } catch (e) { return "auto"; } }   /* the phone game's Graphics choice on this device */
-    function gl2() { try { if (/[?&]gl=0(&|$)/.test(location.search)) return false; var c = document.createElement("canvas"), g = window.WebGL2RenderingContext && c.getContext("webgl2"); if (g) { var lc = g.getExtension("WEBGL_lose_context"); if (lc) lc.loseContext(); } return !!g; } catch (e) { return false; } }
+    function gl2() { try { return !/[?&]gl=0(&|$)/.test(location.search) && !!window.WebGL2RenderingContext; } catch (e) { return false; } }   /* (no probe context: the view's own supported() decides when it loads) */
     function is3() { return st3 === "on" && !!V3 && !V3.lost && !!race; }
+    /* THE WARM HOLD (race3d.js): a new 3D race draws nothing until V3.warm() has compiled its shaders in parallel; the race waits with it (holding(): the
+       race clock does not run, the gate does not drop, no lap's cards turn) while the view loads (at most LOADMAX) or warms; onRelease(fn) says when it goes on */
+    function holding() { if (st3 === "loading") return !!race && Date.now() - loadT < LOADMAX; return is3() && (prep || !!V3.warming && V3.warming()); }
+    function released() { relAt = Date.now(); show(); if (relFn) try { relFn(); } catch (e) { } }
+    /* the riders stand at the gate a moment once the picture shows them (GATE3D ms after a hold), so the drop is seen and the picture's first frames are behind it */
+    var relAt = 0, GATE3D = 1500;
+    function gateWait() { return is3() ? Math.max(0, relAt + GATE3D - Date.now()) : 0; }
     function clock() { return T.tick ? T.tick() : T.clock(); }   /* the 2D track's model clock brought up to now: the 3D view asks every frame */
     function show() {
-      var a = is3(); T.show(live && !a); if (V3) { try { V3.show(live && a); } catch (e) { } }
+      var a = is3(), hd = holding(); T.setLive(live && !hd); T.show(live && !a && !(st3 === "loading" && hd)); if (V3) { try { V3.show(live && a); } catch (e) { } }
+      var mn = host3 && host3.parentNode; if (mn && mn.classList) mn.classList.toggle("is-3dhold", !!(live && hd));
       if (modeFn) try { modeFn(a); } catch (e) { }
     }
     function apply3() {
       if (!V3 || !race || dead) return;
-      try { V3.setRace(race); V3.setModel(model, { clock: clock }); if (V3.warm) { var w = V3.warm(); if (w && w.catch) w.catch(nop); } }
-      catch (e) { st3 = "failed"; try { console.warn("mxwar party: the 3D race", e); } catch (x) { } }
+      var g = ++gen3, done = false, fin = function () { if (done) return; done = true; if (g === gen3 && !dead) released(); };
+      var fail = function (e) { prep = false; st3 = "failed"; try { console.warn("mxwar party: the 3D race", e); } catch (x) { } setTimeout(fin, 0); };
+      T.setLive(false);   /* the build takes a few tasks and the warm a few seconds: the race clock waits (released() starts it again) */
+      /* the world first, over several short tasks (V3.prepareWorld: nothing when this layout is built already), then the riders in one task, so nothing blocks the TV long */
+      prep = true;
+      var pw = null; try { pw = V3.prepareWorld ? V3.prepareWorld(race) : null; } catch (e) { pw = null; }
+      Promise.resolve(pw).then(function () { return new Promise(function (r) { setTimeout(r, 0); }); }).then(function () {   /* (the riders in a task of their own) */
+        if (g !== gen3 || dead) return; prep = false;
+        if (!V3 || V3.lost || st3 !== "on") { setTimeout(fin, 0); return; }
+        try {
+          V3.setRace(race); if (model) V3.setModel(model, { clock: clock });
+          var w = V3.warm ? V3.warm() : null;   /* in THIS task, right after setRace (the view's warm hold needs it) */
+          if (w && w.then) w.then(fin, fin); else setTimeout(fin, 0);
+        } catch (e) { fail(e); return; }
+        setTimeout(function chk() { if (done) return; if (g === gen3 && !dead && V3 && V3.warming && V3.warming()) { setTimeout(chk, 1000); return; } fin(); }, 32000);   /* (a safety: the view ends its hold after 30 s, later only while its shaders still compile: race3d.js [hook:live] V.warm) */
+      });
     }
     (function load() {
       if (!host3 || gfx() === "2d" || !gl2()) return;
       var imp = null; try { imp = new Function("u", "return import(u)"); } catch (e) { return; }
-      st3 = "loading";
+      st3 = "loading"; loadT = Date.now();
+      setTimeout(function () { if (st3 === "loading" && !dead) released(); }, LOADMAX + 50);   /* a load that hangs holds the race no longer: the 2D track rides on */
       var g = gfx(); document.documentElement.setAttribute("data-quality", g === "auto" ? "firetv" : g);   /* the TV: the FIRE TV quality unless this device picked one */
       imp(new URL("../mxwar/race3d.js", location.href).href).then(function (m) {
         if (dead) return;
-        if (!m || !m.supported || !m.supported()) { st3 = "failed"; show(); return; }
-        V3 = m.create(host3, { onLap: nop, onFinish: nop, lost: function () { st3 = "failed"; show(); }, slow: function () { st3 = "slow"; show(); },
+        if (!m || !m.supported || !m.supported()) { st3 = "failed"; released(); return; }
+        V3 = m.create(host3, { onLap: nop, onFinish: nop, lost: function () { st3 = "failed"; released(); }, slow: function () { st3 = "slow"; released(); },
           shown: function (k, i) { if (shownFn && is3()) try { shownFn(k, i); } catch (e) { } } });
         window.__mxpv3 = V3; st3 = "on";
-        apply3(); show(); if (is3()) try { V3.resize(); } catch (e) { }
-      }).catch(function (e) { st3 = "failed"; try { console.warn("mxwar party: the 3D race did not load", e); } catch (x) { } show(); });
+        if (race) apply3(); else released();
+        show(); if (is3()) try { V3.resize(); } catch (e) { }
+      }).catch(function (e) { st3 = "failed"; try { console.warn("mxwar party: the 3D race did not load", e); } catch (x) { } released(); });
     })();
     return {
       ok: true, get kind() { return is3() ? "3d" : "2d"; }, is3D: is3, state3D: function () { return st3; },
-      race3D: function (o) { race = o || null; apply3(); show(); },                 /* {series, year, round, cal, len, lapT, riders: [{s, color, accent, num, name, red, me}]} */
+      holding: holding, gateWait: gateWait, onRelease: function (fn) { relFn = fn; },                  /* the 3D picture is loading or warming: the race waits (and the callback when it goes on) */
+      prepare: function (o) { if (!V3 || st3 !== "on" || V3.lost || prep || !V3.prepareWorld || !o) return; try { if (!(V3.worldReady && V3.worldReady(o))) V3.prepareWorld(o); } catch (e) { } },   /* the next race's world, built over short tasks while a panel shows (V3.prepareWorld) */
+      race3D: function (o) { race = o || null; model = null; apply3(); show(); },   /* {series, year, round, cal, len, lapT, riders: [{s, color, accent, num, name, red, me}]}; rv.setModel(rc) follows (the race clock) */
       hold: function (o) { if (is3()) try { V3.hold(o || null); } catch (e) { } },  /* a war: the director looks at its riders */
       onShown: function (fn) { shownFn = fn; },                                   /* the moments the 3D picture shows (the announcers) */
       onMode: function (fn) { modeFn = fn; },                                     /* 3D on / off (the layout) */
       camNext: function () { if (!is3() || !V3.camNext) return null; var id = V3.camNext(), l = V3.camModes().filter(function (x) { return x.id === id; })[0]; return l ? l.name : id; },
-      setModel: function (rc) { if (T.setModel) T.setModel(rc); model = rc && rc.tm ? rc : null; if (V3 && race) try { V3.setModel(model, { clock: clock }); } catch (e) { } },   /* mxtime: the race clock of the time model rides the field */
+      setModel: function (rc) { if (T.setModel) T.setModel(rc); model = rc && rc.tm ? rc : null; if (V3 && race && !prep) try { V3.setModel(model, { clock: clock }); } catch (e) { } },   /* mxtime: the race clock of the time model rides the field (a 3D race still being built takes it with its riders: apply3) */
       modelOn: function () { return !!(T.model && T.model()); },
       rows: function () { return T.rows ? T.rows() : null; },                      /* the live timing tower at the race clock */
       clock: function () { return T.clock ? T.clock() : 0; },
@@ -597,7 +633,7 @@
       ready: function () { return T.ready(); },                                   /* ms until the next lap's cards may turn; -1 = no riding clock */
       untilLine: function (k) { return T.untilLine(k); },                         /* ms until the leader ends lap k (the checkered flag) */
       onLap: function (fn) { T.onLap = fn; },
-      live: function (on) { live = !!on; T.setLive(on); show(); },
+      live: function (on) { live = !!on; show(); },                              /* (show: the clock runs while live and the 3D picture is not holding) */
       destroy: function () { dead = true; try { T.stop(); } catch (e) { } if (V3) { try { V3.dispose(); } catch (e) { } V3 = null; } st3 = "off"; }
     };
   }
@@ -631,6 +667,7 @@
     H.frame('<div class="mxp" id="mxp">' +
       '<div class="mxp-main" id="mxpMain" data-stage-solid data-toast-avoid>' +
       '<div class="mxp-lane bg-frame" id="mxpLane" role="img" aria-label="The race on the track"></div><div class="mxp-v3" id="mxpV3" aria-hidden="true"></div>' +
+      '<div class="mxp-v3hold" aria-hidden="true"><div class="mxp-v3hold__card"><span class="mxp-v3hold__t">The riders roll up to the gate</span><span class="mxp-v3hold__bar"></span></div></div>' +
       '<div class="mxp-gate" id="mxpGate" aria-hidden="true"></div><div class="mxp-dust" id="mxpDust" aria-hidden="true"></div>' +
       '<div class="mxp-chips"><span class="mxp-chip is-hot" id="mxpLapC"></span><span class="mxp-chip" id="mxpHsC"></span><span class="mxp-chip" id="mxpYelC"></span><span class="mxp-chip" id="mxpFieldC"></span></div>' +
       '<div class="mxp-banner" id="mxpBanner" aria-live="polite"><b id="mxpBannerT"></b><span id="mxpBannerS"></span></div>' +
@@ -1011,7 +1048,7 @@
       var gd = null, dropped = false;
       if (annOn()) {
         /* the announcers call the start (booth.js): the opening, the 30-second board, the board sideways, the drop; OK skips ahead (a second OK drops the gate at once) */
-        gd = booth.gate({ G: G, label: ui.label, people: false, drop: function () { dropped = true; return true; },
+        gd = booth.gate({ G: G, label: ui.label, people: false, drop: function () { if (rv.holding() || rv.gateWait() > 0) return false; dropped = true; return true; },   /* (the 3D picture is not ready yet, or has shown the gate only a moment: the booth asks again at its next tick) */
           stage: function (n) { if (n === "board") banner("30-second board", "The riders are on the gate", dl(1700), "is-calm"); else if (n === "side") banner("Board sideways", "The gate drops any moment", dl(1500), "is-calm"); } });
         H.hint("OK: skip ahead to the gate drop");
       }
@@ -1022,6 +1059,8 @@
         await b;
         if (!skipGate) { banner("30-second board", "The gate drops", dl(1200), "is-calm"); for (t = 0; t < 14 && !skipGate && H.live(); t++) await wait(100); }
       }
+      if (rv.holding()) { status("The riders roll up to the gate..."); while (rv.holding() && H.live()) await raw(150); }   /* the 3D picture loads or warms its shaders: the gate drops once it can show it */
+      while (rv.gateWait() > 0 && H.live()) await raw(Math.min(250, rv.gateWait() + 20));   /* (and once it has shown the riders at the gate a moment) */
       if (!H.live()) return;
       ui.ph = "race";
       var pre = rc.r.map(function (p) { return p.pk.length; });
@@ -1057,6 +1096,7 @@
       var graceAt = 0, grace = Math.max(6000, dl(ph === "war" ? 9000 : 8000));
       for (;;) {
         if (!H.live()) return;
+        if (rv.holding() && !skipQ && !rc.over) { if (!graceAt) status("The 3D race is getting ready: it goes on in a moment"); await raw(200); continue; }   /* a new 3D picture mid-race (a race picked up again): no lap's cards turn until it shows the race (its clock waits too) */
         rv.setWait(rv.is3D() || people.some(function (s) { return !intents[s]; }));   /* (3D: the clock always eases into a wait) */
         if (skipQ || rc.over) break;
         var rdy = ph === "flip" ? lapWait() : 0, all = need.every(function (s) { return intents[s]; });
@@ -1206,7 +1246,7 @@
           /* the last lap's cards turned as it started: the field rides it out and the flag falls as the leader crosses the line */
           if (!skipQ) {
             status("Last lap: the riders ride to the flag.");
-            for (var gi = 0; gi < 2400; gi++) { if (!H.live() || skipQ) break; var ms = rv.ok && rv.ready() >= 0 ? rv.untilLine(e.b) : ui.lapAt ? ui.lapAt + lapMs() - Date.now() : 0; if (ms <= 0) break; await raw(Math.min(ms, 250)); }
+            for (var gi = 0; gi < 4800; gi++) { if (!H.live() || skipQ) break; if (rv.holding()) { await raw(250); continue; } var ms = rv.ok && rv.ready() >= 0 ? rv.untilLine(e.b) : ui.lapAt ? ui.lapAt + lapMs() - Date.now() : 0; if (ms <= 0) break; await raw(Math.min(ms, 250)); }   /* (holding: the 3D picture is getting ready and the clock waits with it) */
           }
           ui.lap = Math.min(e.b, rc.o.len); rv.lap(e.b, rc.o.len); rv.flag("checkered"); if (!rv.is3D()) annShown("checkered", { s: e.order[0] });   /* (3D: the picture calls it as the winner crosses the line) */
           var w = e.order[0], hw = kOfS(w) >= 0;
@@ -1276,12 +1316,23 @@
 
     /* ---------- the panels: sign-up, results, podium, standings (focusable buttons; a countdown picks the main one) ---------- */
     var panelRes = null;
+    /* the next race's 3D world (the course, the stadium, the track) is built while a panel shows (rv.prepare: short tasks), so the next gate only adds the riders */
+    var prepT = 0;
+    function prepNext() {
+      clearTimeout(prepT);
+      prepT = setTimeout(function () {
+        if (!G || G.over || ui.rc || !H.live()) return;
+        var nx = null; try { nx = S.next(G); } catch (e) { nx = null; } if (!nx || nx.t !== "race") return;
+        var c = G.cal[Math.min(G.ri, G.cal.length - 1)];
+        rv.prepare({ series: G.series, year: G.year, round: c.n || (G.ri + 1), cal: c, lapT: nx.lapS || lapMs() / 1000 });
+      }, 1500);
+    }
     function hidePanel() { stopCountdown(); var p = $("mxpPanel"); if (p) { p.hidden = true; p.innerHTML = ""; } if ($("mxp")) $("mxp").classList.remove("is-panel"); panelRes = null; }
     function stopCountdown() { if (!panelT) return; clearInterval(panelT); panelT = 0; var b = $("mxpPanel") && $("mxpPanel").querySelector("[data-cd]"); if (b) { var s = b.querySelector("small"); if (s) s.textContent = b.getAttribute("data-sub") || ""; } }
     function panel(o) {
       stopCountdown();
       var p = $("mxpPanel"); ui.ph = o.ph || "panel"; ui.pinfo = o.info || null; ui.rc = o.keepRace ? ui.rc : null; stats.panels.push(o.kind);
-      if (!o.keepRace) { rv.live(false); chips(); }
+      if (!o.keepRace) { rv.live(false); chips(); prepNext(); }
       p.innerHTML = '<div class="mxp-ph"><div><span class="bg-eyebrow" data-stage-text>' + esc(o.eyebrow || "") + '</span><h2 id="mxpPTitle">' + esc(o.title || "") + "</h2>" + (o.sub ? "<p>" + o.sub + "</p>" : "") + "</div>" + (o.sum || "") + "</div>" +
         '<div class="mxp-pbody" id="mxpPBody">' + (o.body || "") + "</div>" +
         '<div class="mxp-acts">' + (o.buttons || []).map(function (b, i) { return '<button type="button" class="bg-btn bg-btn--lg ' + (i === 0 ? "bg-btn--primary" : "bg-btn--secondary") + '" data-pb="' + esc(b.id) + '"' + (i === 0 && o.countdown ? ' data-cd="1"' : "") + ' data-sub="' + esc(b.sub || "") + '">' + esc(b.label) + (b.sub || (i === 0 && o.countdown) ? "<small>" + esc(b.sub || "") + "</small>" : "") + "</button>"; }).join("") + "</div>";
