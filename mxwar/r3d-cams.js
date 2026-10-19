@@ -531,8 +531,8 @@ export function createCams(VIEW){
     { const fo=Math.cos(th), go=Math.sin(th); let tq=(E.x-S.x)*fo+(E.z-S.z)*go; tq=clamp(tq,-1.05,1.05); const dx=E.x-(S.x+fo*tq), dz=E.z-(S.z+go*tq), d=Math.hypot(dx,dz);
       if(d<1.6&&d>1e-3){ const k=(1.6-d)/d; E.x+=dx*k; E.z+=dz*k; } }
     { const f=r.fr; if(f&&!crash){ const c=Math.cos(f.th), s=Math.sin(f.th), lt=(r.lat||0)+(E.x-S.x)*-s+(E.z-S.z)*c, lim=f.hw+0.3; if(Math.abs(lt)>lim){ const q=Math.sign(lt)*lim-lt; E.x+=-s*q; E.z+=c*q; } } }   /* a push may take it a little over the edge, never into the next lane */
-    /* the push itself glides (tau 0.08 s): two rivals pushing from either side, or one crossing the lens, never throw the eye a metre in one frame */
-    if(first||!K.pxS){ K.pxS=new Sd(E.x-ex0); K.pzS=new Sd(E.z-ez0); } E.x=ex0+K.pxS.step(E.x-ex0,0.2,dt); E.z=ez0+K.pzS.step(E.z-ez0,0.2,dt);   /* (hotfix: 0.2 s, was 0.08) */
+    /* the push itself glides (tau 0.2 s; the hotfix raised it from 0.08): two rivals pushing from either side, or one crossing the lens, never throw the eye a metre in one frame */
+    if(first||!K.pxS){ K.pxS=new Sd(E.x-ex0); K.pzS=new Sd(E.z-ez0); } E.x=ex0+K.pxS.step(E.x-ex0,0.2,dt); E.z=ez0+K.pzS.step(E.z-ez0,0.2,dt);
     /* (hotfix, QD milestone 2 defect 6: the rig whipped 3.3-6.4 m in 0.1 s, the view swinging 90 degrees in 3 frames) inside the shot the eye moves round him at most 12 m/s and swings
        round him at most 120 degrees a second; whatever needs more (a mount change, a hairpin's edge, a rival's push) and leaves the eye more than 2.6 m from where the rig wants it is a CUT:
        the eye and the lens snap there, never a whip (at most one cut in 1.5 s unless the eye would be 5 m out: no stutter of cuts) */
