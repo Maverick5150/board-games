@@ -573,9 +573,10 @@
   function raceView(host, host3) {
     var T = null, nop = function () { };
     try { T = MX.Track ? MX.Track.create(host) : null; } catch (e) { T = null; }
-    if (!T) return { ok: false, kind: "none", is3D: function () { return false; }, holding: function () { return false; }, gateWait: function () { return 0; }, onRelease: nop, prepare: nop, race3D: nop, hold: nop, onShown: nop, onMode: nop, camNext: function () { return null; }, setModel: nop, modelOn: function () { return false; }, rows: function () { return null; }, onEvent: nop, setRate: nop, setWait: nop, setTrack: nop, setHole: nop, size: nop, setRiders: nop, pace: nop, gate: nop, gateRect: function () { return null; }, drop: nop, resume: nop, standings: nop, lap: nop, crash: nop, yellow: nop, yellowOn: function () { return false; }, flag: nop, setRed: nop, ready: function () { return -1; }, untilLine: function () { return 0; }, onLap: nop, live: nop, destroy: nop };
+    if (!T) return { ok: false, kind: "none", is3D: function () { return false; }, holding: function () { return false; }, gateWait: function () { return 0; }, onRelease: nop, prepare: nop, race3D: nop, hold: nop, onShown: nop, onMode: nop, camNext: function () { return null; }, setModel: nop, modelOn: function () { return false; }, rows: function () { return null; }, onEvent: nop, setRate: nop, setWait: nop, setTrack: nop, setHole: nop, size: nop, setRiders: nop, pace: nop, gate: nop, gateRect: function () { return null; }, drop: nop, resume: nop, standings: nop, lap: nop, crash: nop, yellow: nop, yellowOn: function () { return false; }, flag: nop, setRed: nop, ready: function () { return -1; }, untilLine: function () { return 0; }, onLap: nop, live: nop, destroy: nop, noHold: nop, running: function () { return false; }, onLive: nop, tick: function () { return 0; } };
     /* ---- the 3D race on the TV ---- */
     var V3 = null, st3 = "off", live = false, race = null, model = null, shownFn = null, modeFn = null, relFn = null, dead = false, loadT = 0, LOADMAX = 25000, gen3 = 0, prep = false;
+    var noHold = false, liveFn = null, wasLive = null;   /* mxbeat: after a beat race's drop the clock never waits for the 3D picture (the CEO's addendum); liveFn hears the clock start / stop (the phones' rings freeze with it) */
     function gfx() { try { var v = localStorage.getItem("bg_mxwar_gfx"); return v === "2d" || /^(firetv|balanced|high|ultra)$/.test(v || "") ? v : "auto"; } catch (e) { return "auto"; } }   /* the phone game's Graphics choice on this device */
     function gl2() { try { return !/[?&]gl=0(&|$)/.test(location.search) && !!window.WebGL2RenderingContext; } catch (e) { return false; } }   /* (no probe context: the view's own supported() decides when it loads) */
     function is3() { return st3 === "on" && !!V3 && !V3.lost && !!race; }
@@ -588,7 +589,8 @@
     function gateWait() { return is3() ? Math.max(0, relAt + GATE3D - Date.now()) : 0; }
     function clock() { return T.tick ? T.tick() : T.clock(); }   /* the 2D track's model clock brought up to now: the 3D view asks every frame */
     function show() {
-      var a = is3(), hd = holding(); T.setLive(live && !hd); T.show(live && !a && !(st3 === "loading" && hd)); if (V3) { try { V3.show(live && a); } catch (e) { } }
+      var a = is3(), hd = holding(); T.setLive(live && !document.hidden && (noHold || !hd));
+      if (wasLive !== !!T.live) { wasLive = !!T.live; if (liveFn) try { liveFn(wasLive); } catch (e) { } } T.show(live && !a && !(st3 === "loading" && hd)); if (V3) { try { V3.show(live && a); } catch (e) { } }
       var mn = host3 && host3.parentNode; if (mn && mn.classList) mn.classList.toggle("is-3dhold", !!(live && hd));
       if (modeFn) try { modeFn(a); } catch (e) { }
     }
@@ -611,6 +613,7 @@
         setTimeout(function chk() { if (done) return; if (g === gen3 && !dead && V3 && V3.warming && V3.warming()) { setTimeout(chk, 1000); return; } fin(); }, 32000);   /* (a safety: the view ends its hold after 30 s, later only while its shaders still compile: race3d.js [hook:live] V.warm) */
       });
     }
+    document.addEventListener("visibilitychange", show);   /* mxbeat: the TV in the background: the race clock stops (no shot clock runs out there) */
     (function load() {
       if (!host3 || gfx() === "2d" || !gl2()) return;
       var imp = null; try { imp = new Function("u", "return import(u)"); } catch (e) { return; }
@@ -663,7 +666,10 @@
       untilLine: function (k) { return T.untilLine(k); },                         /* ms until the leader ends lap k (the checkered flag) */
       onLap: function (fn) { T.onLap = fn; },
       live: function (on) { live = !!on; show(); },                              /* (show: the clock runs while live and the 3D picture is not holding) */
-      destroy: function () { dead = true; try { T.stop(); } catch (e) { } if (V3) { try { V3.dispose(); } catch (e) { } V3 = null; } st3 = "off"; }
+      noHold: function (on) { noHold = !!on; show(); },                          /* mxbeat: a beat race after its drop: the clock never waits for the picture */
+      running: function () { return !!T.live; }, onLive: function (fn) { liveFn = fn; },
+      tick: function () { return T.tick ? T.tick() : T.clock(); },
+      destroy: function () { dead = true; document.removeEventListener("visibilitychange", show); try { T.stop(); } catch (e) { } if (V3) { try { V3.dispose(); } catch (e) { } V3 = null; } st3 = "off"; }
     };
   }
 
@@ -734,7 +740,8 @@
     /* ---------- the announcers: the TV calls the race (the phones never load the voice: they stay silent). Same booth, same calls as mxwar/game.js ---------- */
     var booth = null;
     function annOn() { return !!(booth && booth.callsRace()); }
-    function annFeed(ev) { if (booth && G) try { booth.feed(G, ev); } catch (e) { } }
+    function annFeed(ev) { if (ev && ev.length && ev[0] && ev[0].e === "gate" && typeof beatOn === "function" && beatOn()) { bInit(); ev = bt.bb.beat(ui.rc, ev); }   /* mxbeat: the drop of a beat race reaches the booth through the bridge */
+      if (booth && G) try { booth.feed(G, ev); } catch (e) { } }
     function annShown(kind, info) { if (booth) try { booth.shown(kind, info); } catch (e) { } }
     function skipSheetUp() { var B = BG(), el = document.getElementById("mxpSkipSheet"); return !!(el && B && B.sheet && B.sheet.isOpen && B.sheet.isOpen(el)); }
     function annBand() {
@@ -822,6 +829,7 @@
           last: s >= 0 && ui.lastCards[s] != null ? ui.lastCards[s] : null, out: !!(mine && mine.out), dnf: mine && mine.dnf ? mine.dnf.why : null, cr: mine ? mine.crashes | 0 : 0,
           war: w ? { n: w.n, down: w.down, up: w.up, won: w.won, lost: w.lost } : null, warOn: !!(ui.war && s >= 0 && ui.war.seats.indexOf(s) >= 0), warN: ui.war ? ui.war.n : 0,
           phase: rc.phase, need: s >= 0 && ui.need.indexOf(s) >= 0 && !ui.intents[s], hs: ui.hs != null ? nm(ui.hs) : "", yellow: !!(rc.yellow && !rc.over), top: top };
+        beatPhoneSt(st, c, s);   /* mxbeat: the beat it flips for, the TV's race clock and the lock (the ring), down, his locked card, the beat line */
       }
       if (ui.pinfo) st.panel = ui.pinfo;
       return st;
@@ -835,6 +843,7 @@
     H.onLeave(function (c) { stats.leaves++; auto[c] = false; renderTower(null); renderSignup(); pushNow(); });
     H.onView(function (c, d) {
       stats.views++; if (!d || typeof d !== "object") return;
+      if (beatView(c, d)) return;   /* mxbeat: a stamped flip, the Auto of a beat race */
       if (d.auto != null) { auto[c] = !!d.auto; if (auto[c]) { H.interrupt(c); H.toast(H.name(c) + " turned on Auto"); } renderTower(null); H.push(c, safeSt(c, null)); }
     });
     twTimer = setInterval(function () { if (ui.rc && (ui.ph === "race" || ui.ph === "gate") && !document.hidden && ui.rc.tm) { try { renderTower(null); } catch (e) { } } }, 250);
@@ -885,6 +894,7 @@
     /* ---------- the chips, the tower, the corner window ---------- */
     function chips() {
       var rc = ui.rc; if (!rc) { ["mxpLapC", "mxpHsC", "mxpYelC", "mxpFieldC"].forEach(function (x) { $(x).innerHTML = ""; }); return; }
+      if (beatChips()) return;   /* mxbeat: the race clock head */
       var lp = Math.min(Math.max(ui.lap, 1), rc.o.len), last = rc.phase !== "gate" && !rc.over && lp === rc.o.len && rc.o.len > 1;
       $("mxpLapC").innerHTML = rc.phase === "gate" ? "On the gate · " + plural(rc.o.len, "lap") : rc.over ? A.flag() + "Checkered flag" : (last ? A.wflag() : "") + "Lap " + lp + " of " + rc.o.len + (last ? " · last lap" : "");
       $("mxpLapC").classList.toggle("is-white", last);
@@ -968,6 +978,7 @@
     /* the events of the race clock, in order: a lap ended, a bike goes down, gets up, the yellow flag, a pass, a lapped rider, the fastest lap */
     function onTrackEvent(e) {
       var rc = ui.rc; if (!rc || !G || !rc.tm || !MX.Time) return;
+      beatTrackEvent(e);   /* mxbeat */
       var T = MX.Time, me = function (s) { return kOfS(s) >= 0; };
       switch (e.e) {
         case "line": if (me(e.s)) youLap(e.s, e.k); break;
@@ -1064,6 +1075,7 @@
       rv.pace(lapMs(), firstMs());
       rv.onLap(leaderLap);
       rv.onEvent(onTrackEvent);
+      rv.noHold(!!(rc.tm && rc.tm.v === 4 && rc.phase !== "gate"));   /* mxbeat: a beat race picked up after its drop never waits for the 3D picture */
       rv.live(true);
       TWK.key = ""; factK = rc.tm ? rc.tm.k : 0; factsK = {}; youK = {};
       if (rc.phase === "gate") { rv.gate(true); if (rc.tm) rv.setModel(rc); $("mxpGate").style.display = ""; $("mxpGate").style.transform = ""; placeGate(); }
@@ -1080,6 +1092,7 @@
     function raceKey() { return ui.rnum + "|" + ui.rkey; }
     function leaderLap(k) {
       var rc = ui.rc; if (!rc || rc.over) return;
+      if (beatOn()) { beatLap(k); return; }   /* mxbeat: the white flag is the model's own board */
       var lp = Math.min(k, rc.o.len); if (lp > ui.lap) ui.lap = lp;
       chips();
       if (k === rc.o.len && rc.o.len > 1 && ui.white !== raceKey()) { ui.white = raceKey(); rv.flag("white"); H.sfx("bell"); logLine("White flag: last lap!"); banner("White flag", "Last lap · " + k + " of " + rc.o.len, dl(1100), "is-calm", A.wflag()); }
@@ -1192,6 +1205,150 @@
       pushNow();
     }
 
+    /* ---------- mxbeat: THE BEAT ON THE TV (ACTION-PLAN-v3.md step 8; the CEO: "Every 10 seconds, there needs to be a card flip"). The TV's race clock
+         decides and never waits for a phone: every 10 s (the LOCK, 1 s before each window) every card turns at once (S.step). A phone's flip carries its
+         beat ({flip: k}, a view message) and counts as the rider's own whenever it arrives before the NEXT lock (the card turned at the lock anyway: War
+         has no decisions; it only records that he flipped). Every push carries the TV's race clock (race.clk) and the lock, so a phone's ring is the TV's
+         shot clock and freezes with it; the phone turns its own Auto on when its ring runs out ({auto: true, clock: true}); a phone that says nothing
+         for a beat gets Auto at lock + 5 s (taken back if its stamped flip still comes). The board plays the best-placed person's war. ---------- */
+    var bt = { rc: null, flips: {}, msg: {}, clockOut: {}, fallback: {}, bb: null, show: 0 };
+    function beatOn() { var rc = ui.rc; return !!(rc && rc.tm && rc.tm.v === 4 && MX.Beat); }
+    function bInit() { var rc = ui.rc; if (bt.rc !== rc) { bt.rc = rc; bt.flips = {}; bt.msg = {}; bt.clockOut = {}; bt.fallback = {}; bt.bb = MX.Beat.bridge(); } }
+    function bWalk(s, t) { var w = null; try { w = MX.Beat.walker(ui.rc); w.at(s, t); } catch (e) { w = null; } return w; }
+    function bDownLeft(s, t) { var w = bWalk(s, t); return w && w.state === "down" ? Math.max(1, Math.ceil((w.h1 - t) / 1000)) : 0; }
+    /* the beat part of a phone's snapshot: the beat it flips for (k), the lock and the TV's race clock (its ring), down, his locked card, the beat line */
+    function beatPhoneSt(st, c, s) {
+      var rc = ui.rc, R = st.race; if (!R || !beatOn()) return; bInit();
+      var ct = rv.clock(), lk = MX.Beat.nextLock(rc);
+      R.beat = 1; R.k = rc.battle + 1; R.lock = isFinite(lk) ? Math.round(lk) : -1; R.clk = { t: Math.round(ct), run: !!(rv.running() && ui.ph === "race" && !rc.over), rate: +modelRate(rc).toFixed(4) };
+      R.head = MX.Beat.clockHead(rc, ct); R.len = rc.tm.L; R.lap = Math.max(1, ui.lap);
+      if (s >= 0) { var w4 = bWalk(s, ct); R.downTo = w4 && w4.state === "down" ? Math.round(w4.h1) : 0; R.down = bDownLeft(s, ct); R.fin = !!rc.tm.r[s].fin; R.mine = rc.pick[s] && rc.r[s].pk.length ? rc.r[s].pk[0] : null; R.need = RC.need(rc).indexOf(s) >= 0 && !rc.pick[s];
+        var bl = MX.Beat.beatLine(rc, s, nameOfSeat); R.bline = bl ? bl.text : ""; R.pile = !!(rc.pile && rc.pile.indexOf(s) >= 0 && rc.battle <= 2); R.own = rc.r[s].own | 0; R.autoN = rc.r[s].auto | 0; }
+    }
+    /* a phone's message in a beat race: its stamped flip, its Auto (the switch, or its ring ran out: clock) */
+    function beatView(c, d) {
+      if (!beatOn() || ui.ph !== "race") return false;
+      var kk = ixOf(c), s = kk >= 0 ? sOfK(kk) : -1, rc = ui.rc; if (s < 0) return false;
+      bInit();
+      var nk = rc.battle + 1;
+      if (d.auto != null) {
+        auto[c] = !!d.auto; (bt.msg[s] = bt.msg[s] || {})[d.k != null ? +d.k : nk] = 1;
+        if (auto[c]) { delete bt.fallback[s]; if (d.clock) { bt.clockOut[s] = d.k != null ? +d.k : nk; if (rc.r[s].aon == null && d.k != null && +d.k < nk) rc.r[s].aon = +d.k; H.toast(H.name(c) + ": 10 seconds ran out, Auto flip is on"); } else H.toast(H.name(c) + " turned on Auto"); }
+        if (d.flip == null) { renderTower(null); H.push(c, safeSt(c, null)); return true; }
+      }
+      if (d.flip != null) {
+        var fk = +d.flip; (bt.msg[s] = bt.msg[s] || {})[fk] = 1; stats.phoneActs++;
+        if (fk === nk) { if (RC.need(rc).indexOf(s) >= 0 && !rc.pick[s]) { var r = S.apply(G, { t: "flip", s: s }); if (r && r.ok) (bt.flips[fk] = bt.flips[fk] || {})[s] = 1; } }
+        else if (fk === nk - 1 && !(bt.flips[fk] && bt.flips[fk][s])) {   /* a flip for the beat just locked, late on the relay: his card turned anyway; the record says he flipped it */
+          (bt.flips[fk] = bt.flips[fk] || {})[s] = 1; var p = rc.r[s]; p.own = (p.own | 0) + 1; if (p.auto > 0) p.auto--; stats.lateFlips++;
+          if (bt.fallback[s] === fk) { auto[c] = false; delete bt.fallback[s]; if (p.aon === fk) p.aon = null; }   /* (the silent-phone Auto taken back) */
+        }
+        renderTower(null); H.push(c, safeSt(c, null));
+        return true;
+      }
+      return false;
+    }
+    /* one beat: the lock on the TV's race clock (rv.ready: ms to it), every card at once, the record, the save, the push, the show (never awaited) */
+    async function beatStep() {
+      var rc = ui.rc; bInit();
+      var k = rc.battle + 1;
+      ui.step = G.ri + ":" + G.rkey + ":b" + k; ui.need = RC.need(rc).slice(); ui.intents = {};
+      ui.need.forEach(function (s) { if (rc.pick[s]) ui.intents[s] = 1; });
+      for (;;) {
+        if (!H.live() || rc.over || skipQ || rc.battle + 1 !== k) return;
+        var ms = rv.ready();
+        if (ms === 0 && rv.clock() >= MX.Beat.nextLock(rc) - 1) break;   /* (never a lock before its time) */
+        await raw(ms < 0 ? 250 : Math.max(16, Math.min(250, ms)));
+      }
+      var ct = rv.clock(), asked = [], clock = [];
+      RC.need(rc).forEach(function (s) { var kk = kOfS(s); if (kk < 0) return; var c = SEATS[kk].color; if (!H.isPhone(c) || auto[c] || bDownLeft(s, ct) > 0) { if (bt.clockOut[s] === k) clock.push(s); return; } asked.push(s); });
+      var ev = S.step(G, { clock: clock });
+      try { if (BR) BR.observe(G, ev); } catch (e) { }
+      captureFacts();
+      var fin = ev.some(function (e) { return e.e === "raceDone"; });
+      annFeed(bt.bb ? (fin ? bt.bb.end(rc, ev) : bt.bb.beat(rc, ev)) : ev);
+      if (rc.battle % 3 === 0 || fin || ev.some(function (e) { return e.e === "crash" || e.e === "flag" || (e.e === "war" && e.seats.some(function (x) { return kOfS(x) >= 0; })); })) save();
+      ui.need = []; ui.intents = {}; ui.step = null;
+      /* the silent phones: no flip and no word for beat k by lock + 5 s of race clock: Auto on (the toast on that phone); its stamped flip takes it back */
+      var silent = asked.filter(function (s) { return !(bt.msg[s] && bt.msg[s][k]); });
+      if (silent.length) setTimeout(function () { if (!H.live() || ui.rc !== rc || rc.over) return;
+        silent.forEach(function (s) { var kk = kOfS(s); if (kk < 0) return; var c = SEATS[kk].color; if (auto[c] || (bt.msg[s] && bt.msg[s][k])) return;
+          auto[c] = true; bt.fallback[s] = k; if (rc.r[s].aon == null) rc.r[s].aon = k; H.info(c, "Auto flip is on: your card flips every 10 s. Tap Flip to play your own cards."); H.push(c, safeSt(c, null)); });
+        renderTower(null); }, Math.round(5000 / Math.max(0.05, modelRate(rc))));
+      beatShow(ev).then(null, function (e) { stats.errors.push("beat show: " + (e && e.message || e)); });
+      pushNow();
+      if (fin) await beatEnd(rc);
+    }
+    /* the race is decided (the last rider in): the field rides on to the line on the clock, then the results */
+    async function beatEnd(rc) {
+      var lastIn = 0; rc.tm.r.forEach(function (R) { var t = R.fin ? R.fin.t : R.dnf ? R.dnf.t : 0; if (t > lastIn) lastIn = t; });
+      for (var i = 0; i < 2400; i++) { if (!H.live() || skipQ) return; var c = rv.tick(); if (c >= lastIn + 600) break; await raw(Math.min(250, Math.max(30, lastIn + 600 - c))); }
+      pushNow();
+    }
+    /* the TV's show of a beat: the card chips on the tower, the board plays the best-placed person's war (else the leader's table), the phones' war cards */
+    async function beatShow(ev) {
+      var rc = ui.rc, my = ++bt.show; function stale() { return bt.show !== my || ui.rc !== rc || !H.live(); }
+      var rev = null; ui.warCards = {}; ui.war = null;
+      ev.forEach(function (e) {
+        if (e.e === "reveal" && e.w === 0) rev = e;
+        if (e.e === "raceDone") ui.lastDone = e; if (e.e === "roundDone") ui.pendRound = e; if (e.e === "seasonOver") ui.pendSeason = e;
+        if (e.e === "crash") { stats.crashes++; var wc = ui.warCards[e.s]; if (wc) wc.lost = e.kind; }
+        if (e.e === "war" && e.n === 1) stats.wars++;
+        if (e.e === "reveal" && e.w > 0) e.cards.forEach(function (x) { var w = ui.warCards[x.s] || (ui.warCards[x.s] = { n: e.w, down: 0, up: null }); w.n = e.w; w.down += x.down; w.up = x.c; });
+        if (e.e === "win" && e.war > 0) Object.keys(ui.warCards).forEach(function (x) { if (rc.lastLap && rc.lastLap.tabs[e.tab] && rc.lastLap.tabs[e.tab].s.indexOf(+x) >= 0) ui.warCards[x].won = +x === e.s; });
+        if (e.e === "out") logLine(whoList(e.seats) + (e.seats.length > 1 ? " are" : " is") + " out of cards.");
+      });
+      if (rev) { rev.cards.forEach(function (x) { ui.lastCards[x.s] = x.c; }); stats.laps++; }
+      ui.order = RC.standings(rc).map(function (r) { return r.s; }); renderTower(null); chips(); pushSoon();
+      var L0 = rc.lastLap || {}, tabs = L0.tabs || [], ppl = [], warTab = -1;
+      rc.r.forEach(function (p, s) { if (kOfS(s) >= 0) ppl.push(s); });
+      ppl.sort(function (a, b) { return (ui.order.indexOf(a) + 1 || 99) - (ui.order.indexOf(b) + 1 || 99); });
+      for (var i = 0; i < ppl.length && warTab < 0; i++) tabs.forEach(function (t, ti) { if (warTab < 0 && t.war > 0 && t.s.indexOf(ppl[i]) >= 0) warTab = ti; });
+      if (warTab < 0) { var t0 = tabs.filter(function (t) { return t.s.indexOf(ui.order[0]) >= 0; })[0]; ui.lastWin = t0 && t0.win >= 0 ? t0.win : null; pipNote(null); drawDuel(ui.lastWin); var tc = $("mxpDuel").querySelector(".mx-card"); if (tc && ui.lastWin != null) await flipEl(tc, ui.lastCards[ui.lastWin], sp(300), false); return; }
+      var wev = ev.filter(function (e) { return e.tab === warTab && (e.e === "war" || (e.e === "reveal" && e.w > 0) || e.e === "win" || e.e === "crash"); });
+      for (var j = 0; j < wev.length; j++) { var e = wev[j]; if (stale()) return;
+        if (e.e === "war") { H.sfx("cannon"); flash(); ui.war = { n: e.n, seats: e.seats.slice(), tied: e.tied.slice() }; drawWar(e.seats, true); renderTower({ fight: e.seats }); pushNow(); if (rv.is3D()) rv.hold({ war: e.seats });
+          logLine((e.n > 1 ? "War again! " : "War! ") + whoList(e.tied) + " tie.");
+          await pipNote(e.n === 1 ? "War!" : e.n === 2 ? "Double war!|crash, remount" : e.n === 3 ? "Triple war!|crash out" : warWordP(e.n) + "!|crash out", e.n > 1 ? 520 : 420, e.n > 1); }
+        else if (e.e === "reveal") { for (var d = 0; d < 3; d++) { var any = false; e.cards.forEach(function (x) { var col = colOf(x.s); if (col && d < x.down) { addBack(col, d); any = true; } }); if (any) { H.sfx("discard"); await wait(110); if (stale()) return; } }
+          var steps = []; e.cards.forEach(function (x) { var col = colOf(x.s); if (col && !x.held) { var top = col.querySelector(".mxp-fight__pile .is-top"); if (top) steps.push(flipEl(top, x.c, sp(360), true)); } }); H.sfx("card"); await Promise.all(steps); }
+        else if (e.e === "win") { var col = colOf(e.s); if (col) col.classList.add("is-win"); Array.prototype.forEach.call($("mxpWar").querySelectorAll(".mxp-fight"), function (x) { if (x !== col) x.classList.add("is-lose"); });
+          var bl = null; try { bl = BR && BR.react(G, e); } catch (x) { } logLine(bl || nm(e.s) + " wins the war and " + plural(e.n, "card") + "."); H.sfx(kOfS(e.s) >= 0 ? "coin" : "slide"); pushSoon(); }
+        else if (e.e === "crash") { var Rc = riderOfS(e.s); logLine("Crash! #" + Rc.plate + " " + Rc.name + (e.kind === "out" ? " loses the " + warWordP(e.depth).toLowerCase() + ": out of the race." : " loses the double war: down, and remounts.")); }
+      }
+      if (rv.is3D()) rv.hold(null);
+    }
+    /* the race clock's own moments of a beat race (track.js): the boards, the flags, the gate-drop pile-up, the announcers fed with the picture */
+    function beatTrackEvent(e) {
+      var rc = ui.rc; if (!beatOn()) return; bInit();
+      var T = MX.Time, me = function (s) { return kOfS(s) >= 0; };
+      switch (e.e) {
+        case "timeup": logLine(T.eventLine(rc, e, nameOfSeat, me)); banner("Time's up!", e.plus > 1 ? e.plus + " more laps after the leader's next line" : "One more lap: the white flag at the leader's next line", dl(1300), "is-calm"); chips(); pushSoon(); break;
+        case "twotogo": logLine(T.eventLine(rc, e, nameOfSeat, me)); banner("2 laps to go", "", dl(1100), "is-calm"); chips(); pushSoon(); break;
+        case "lastlap": rv.flag("white"); H.sfx("bell"); logLine("White flag: last lap!"); banner("White flag", "Last lap", dl(1100), "is-calm", A.wflag()); chips(); pushSoon(); break;
+        case "flagfall": { rv.flag("checkered"); if (!rv.is3D()) annShown("checkered", { s: e.s }); annFeed(bt.bb.flag(rc, e.t)); ui.flagged = true;
+          var w = e.s, hw = w >= 0 && me(w); H.sfx(hw ? "win" : "conquer"); logLine(T.eventLine(rc, e, nameOfSeat, me)); if (w >= 0) { drawDuel(w); banner("Checkered flag", nm(w) + " wins", dl(1500), "is-flag", A.flag()); } chips(); renderTower({ win: w }); pushNow(); break; }
+        case "down": { annFeed(bt.bb.down(rc, e.s));
+          if (rc.pile && rc.pile.indexOf(e.s) >= 0 && e.k === 1 && e.t < MX.Beat.D && bt.pileSaid !== rc) { bt.pileSaid = rc; var all = rc.pile.map(function (x) { var Rx = riderOfS(x); return "#" + Rx.plate + " " + Rx.name; });
+            banner("Trouble in turn one!", (all.length > 2 ? all.length + " riders" : listNames(all)) + (all.length > 1 ? " are" : " is") + " down in the pack", dl(1500), "is-yellow", A.yflag()); logLine("Trouble in turn one: " + listNames(all) + " down in the pack (the lowest card off the gate)."); }
+          break; }
+        case "pass": if (e.pos === 1 && !e.crash) annFeed(bt.bb.lead(rc, e.a, e.d)); break;
+      }
+    }
+    function beatLap(k) { var rc = ui.rc; if (!rc) return; bInit(); if (k > ui.lap) ui.lap = k; chips(); annFeed(bt.bb.lap(rc, k)); }
+    function beatChips() {
+      if (!beatOn()) return false; var rc = ui.rc, ct = rv.clock();
+      var head = rc.phase === "gate" ? "On the gate · " + (rc.tm.fmt ? rc.tm.fmt.min + " min + " + plural(rc.tm.fmt.plus, "lap") : plural(rc.tm.L, "lap")) : rc.over && !ui.flagged ? "Checkered flag" : MX.Beat.clockHead(rc, ct), last = /^Last lap/.test(head), ck = /^Checkered/.test(head);
+      var el = $("mxpLapC"); if (el.getAttribute("data-h") !== head) { el.setAttribute("data-h", head); el.innerHTML = (ck ? A.flag() : last ? A.wflag() : "") + esc(head); }
+      el.classList.toggle("is-white", last);
+      $("mxpHsC").innerHTML = ui.hs != null ? "Holeshot: " + esc(nm(ui.hs)) : "";
+      var yon = !rc.over && rc.phase !== "gate" && rv.ok && rv.yellowOn();
+      $("mxpYelC").innerHTML = yon ? A.yflag() + "Yellow flag" : ""; $("mxpYelC").classList.toggle("is-yellow", !!yon);
+      $("mxpFieldC").textContent = fieldWords();
+      return true;
+    }
+    rv.onLive(function () { if (beatOn() && ui.ph === "race") pushNow(); });   /* the TV's clock stops or starts: every phone's ring freezes / goes on with it */
+
     /* ---------- the events of a batch, in order (mxwar/game.js animEvent, on this screen) ---------- */
     async function playEvents(evs) {
       for (var i = 0; i < evs.length; i++) { if (!H.live()) return; var e = evs[i]; stats.events[e.e] = (stats.events[e.e] || 0) + 1; try { await animEvent(e); } catch (x) { stats.errors.push(String(x && x.message || x)); } }
@@ -1201,6 +1358,7 @@
       var rc = ui.rc; if (!rc) return;
       switch (e.e) {
         case "gate": {
+          if (beatOn()) { rv.noHold(true); rv.drop(rc.o.len); }   /* mxbeat: the riders leave as the gate drops (the CEO's addendum); no 3D hold after it */
           H.sfx("jail"); logLine("The gate drops!");
           var gt = $("mxpGate"), du = $("mxpDust");
           if (!reduced() && gt.animate) {
@@ -1209,7 +1367,7 @@
             await wait(340);
           }
           gt.style.display = "none"; if (gt.getAnimations) gt.getAnimations().forEach(function (a) { a.cancel(); });
-          ui.lap = 1; rv.drop(rc.o.len); chips(); drawDuel(); pushNow();
+          ui.lap = 1; if (!beatOn()) rv.drop(rc.o.len); chips(); drawDuel(); pushNow();
           await wait(250); return;
         }
         case "acted": return;
@@ -1342,13 +1500,13 @@
       while (H.live() && !rc.over) {
         if (skipQ) {
           skipQ = false; ui.ph = "race";
-          var ev = S.simRace(G); try { if (BR) BR.observe(G, ev); } catch (e) { } annFeed(ev); save();
+          var ev = beatOn() && S.simRaceAsync ? await S.simRaceAsync(G) : S.simRace(G); if (!H.live()) return null; try { if (BR) BR.observe(G, ev); } catch (e) { } annFeed(ev); save();   /* (mxbeat: a beat race runs to the flag in short slices: the TV stays live) */
           ui.order = RC.standings(rc).map(function (r) { return r.s; }); ui.lap = rc.o.len; disp = null; renderTower(null); chips(); rv.flag("checkered");
           await playEvents(ev.filter(function (e) { return e.e === "raceDone" || e.e === "roundDone" || e.e === "seasonOver"; }));
           var w = ui.order[0]; drawDuel(w); await banner("Checkered flag", nm(w) + " wins (skipped to the finish)", dl(1300), "is-flag", A.flag());
           break;
         }
-        try { await lapStep(); }
+        try { if (beatOn()) await beatStep(); else await lapStep(); }   /* mxbeat: a beat race locks on the TV's race clock */
         catch (x) { stats.errors.push("lap: " + (x && x.message || x)); try { console.warn("mxwar party: a lap failed", x); } catch (y) { } if (++fails > 2) skipQ = true; else await wait(400); }
       }
       if (!H.live()) return null;
@@ -1492,7 +1650,7 @@
     }
     async function goNext(choice) {
       if (choice === "sim") {
-        var ev = S.simRace(G); try { if (BR) BR.observe(G, ev); } catch (e) { } stats.simmed++; annFeed(ev);
+        var ev = S.simRaceAsync ? await S.simRaceAsync(G) : S.simRace(G); if (!H.live()) return { done: null, simmed: true }; try { if (BR) BR.observe(G, ev); } catch (e) { } stats.simmed++; annFeed(ev);   /* (mxbeat: in short slices, the TV stays live) */
         var done = null; ev.forEach(function (e) { if (e.e === "raceDone") done = e; if (e.e === "roundDone") ui.pendRound = e; if (e.e === "seasonOver") ui.pendSeason = e; });
         save(); return { done: done, simmed: true };
       }
