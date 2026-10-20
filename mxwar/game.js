@@ -1114,7 +1114,15 @@ function pipRestSoon(ms){ clearTimeout(pipT); var my=gen; pipT=setTimeout(functi
 /* a one-shot grow / shrink from the window's corner (transform only) around a change of its size */
 function morphTable(fn){
   var tb=$("table"), r0=tb.getBoundingClientRect(); fn(); var r1=tb.getBoundingClientRect();
-  if(!reduced()&&tb.animate&&r1.width&&r0.width&&(r0.width!==r1.width||r0.height!==r1.height)){ try{ tb.animate([{transform:"scale("+(r0.width/r1.width).toFixed(3)+","+(r0.height/r1.height).toFixed(3)+")"},{transform:"none"}],{duration:sp(220),easing:"cubic-bezier(.2,.8,.3,1)"}); }catch(e){} }
+  if(r0.width!==r1.width||r0.height!==r1.height) morphRect(tb,r0,r1);
+}
+/* review fix: the grow / shrink itself. A scale per axis stretched the words and cards for 220 ms where the two shapes differ (the slim chip and the open
+   window, the chip and the big window, a phone over the 3D race): there, one scale for both axes, from a little smaller or larger than the new size.
+   Shapes alike, and the TV and the 2D track always: the scale per axis, as before */
+function morphRect(tb,r0,r1){
+  if(reduced()||!tb.animate||!r0.width||!r0.height||!r1.width||!r1.height) return;
+  var sx=r0.width/r1.width, sy=r0.height/r1.height, k=sx/sy, from=!restable()||(k>.87&&k<1.15)?"scale("+sx.toFixed(3)+","+sy.toFixed(3)+")":"scale("+clamp(Math.sqrt(sx*sy),.86,1.08).toFixed(3)+")";
+  try{ tb.animate([{transform:from},{transform:"none"}],{duration:sp(220),easing:"cubic-bezier(.2,.8,.3,1)"}); }catch(e){}
 }
 /* the chip's words: your card (or the leader's), the top card and whose; one card when they are the same rider's */
 function shortOf(s){ var rc=ui.rc; if(!rc) return ""; var k=raceId(rc); if(ui.snK!==k){ ui.snK=k; ui.sn=shortNamesOf(rc); } return ui.sn[s]||""; }
@@ -1189,6 +1197,10 @@ function placeMid(){
     var l=ys.offsetLeft-ys.offsetWidth/2+yc.offsetLeft+yc.offsetWidth, r=ts.offsetLeft-ts.offsetWidth/2+tc.offsetLeft;
     mid.style.left=Math.round((l+r)/2)+"px"; if(r-l<mid.offsetWidth+12) mid.hidden=true;
   }
+  else if(big&&one&&!onTV()){   /* review fix: one card: the note in the room LEFT of the card (at 76% "Lap 4" sat on the card's edge at 360 px, and the right is the shrink button's), left out where it is too narrow */
+    var ys1=$("youSlot"), yc1=$("youCard"), l1=remPx()*.5, r1=ys1.offsetLeft-ys1.offsetWidth/2+yc1.offsetLeft;
+    mid.style.left=Math.round((l1+r1)/2)+"px"; if(r1-l1<mid.offsetWidth+12) mid.hidden=true;
+  }
 }
 /* the slot labels: full words in the big window, short ones in the small corner window */
 function lab(el,long,short){ el.setAttribute("data-l",long); el.setAttribute("data-s",short||long); el.textContent=pipBig()?long:(short||long); placeSlots(); if(pipBig()) placeMid(); }
@@ -1214,10 +1226,9 @@ function setPip(big,focus){
   $("pipIc").innerHTML=big?A.pipIcon(false):A.pipIcon(true);
   if(tb.classList.contains("is-rest")) drawChip();
   layoutArena();
-  var row=$("warRow"); if(row.firstChild) row.style.setProperty("--cw",warCw(row.querySelectorAll(".mx-fight").length,!!row.querySelector(".mx-fight__more"))+"px");
-  /* a one-shot grow / shrink from the corner (transform only) */
-  var r1=tb.getBoundingClientRect();
-  if(!reduced()&&tb.animate&&r1.width&&r0.width){ try{ tb.animate([{transform:"scale("+(r0.width/r1.width).toFixed(3)+","+(r0.height/r1.height).toFixed(3)+")"},{transform:"none"}],{duration:sp(220),easing:"cubic-bezier(.2,.8,.3,1)"}); }catch(e){} }
+  var row=$("warRow"); if(row.firstChild) row.style.setProperty("--cw",warCw(row.querySelectorAll(".mx-fight").length,moreW(row))+"px");
+  /* a one-shot grow / shrink from the corner (transform only; review fix: one scale for both axes where the shapes differ, morphRect) */
+  morphRect(tb,r0,tb.getBoundingClientRect());
   if(focus&&onTV()) focusTV(b);
 }
 /* the steel gate (#gate, its drop animation and the dust) stands across the track's start straight */
@@ -1365,7 +1376,7 @@ function renderRace(){
   var gt=$("gate"); if(gt.getAnimations) gt.getAnimations().forEach(function(a){ a.cancel(); }); gt.style.display=gate&&!race3D()?"":"none"; gt.style.transform="";
   layoutArena(); trackRiders(); trackSync(gate);
   /* the cards on the table now (a war in progress is drawn as a war, the window open; else the last battle) */
-  if(rc.phase==="war"&&rc.part&&rc.part.length){ drawWar(rc.part,rc.tb,false); if(restable()) pipOpen(); }
+  if(rc.phase==="war"&&rc.part&&rc.part.length){ if(restable()) pipOpen(); drawWar(rc.part,rc.tb,false); }   /* (review fix: open first, so the war's "+n more" is measured laid out) */
   else { $("warRow").innerHTML=""; pipNote(null); drawDuel(); }
   renderTower(null);
   syncControls();
@@ -1880,6 +1891,10 @@ function nm0(id){ return G.riders[id]?G.riders[id].name:""; }
 function warWorth(n){
   var rc=ui.rc, T=MX.Time, w=null;
   if(n===1&&rc&&rc.tm&&T&&T.worth){ try{ w=T.worth(rc,{c:null,win:true,war:1,fought:true,crash:null,wl:1}); }catch(e){ w=null; } }
+  if(!onTV()){   /* review fix: a phone's flash in a few words (at 360 px the whole line wrapped to 4 lines beside the war's window) */
+    if(n===1) return w&&w.res<0?"Winner gains "+T.secText(-w.res,1):"Winner gains time";
+    return n===2?"Loser crashes, remounts":"Loser crashes out";
+  }
   if(n===1) return w&&w.res<0?"Card event · the winner gains "+T.secText(-w.res,1)+" · the losers lose time":"Card event · the winner gains time";
   return n===2?"The loser crashes and remounts":"The loser crashes out";
 }
@@ -1893,7 +1908,9 @@ function colOf(cols,s){ for(var i=0;i<cols.length;i++) if(+cols[i].getAttribute(
 /* the war's cards in the card window: up to 3 fighters in the small window on a phone (4 on TV), 4 / 5 in the big one; "+n more" */
 function warCw(cols,more){
   var rem=remPx(), W=GEO?(GEO.ww&&!pipBig()&&$("table").classList.contains("is-war")?GEO.ww:GEO.tw):300, H=GEO?GEO.th:160, big=pipBig(), tv=onTV();   /* (mxfix1: a war on a phone over the 3D race has a wider window: GEO.ww) */
-  var colW=(W-rem*.6)/(cols+(more?0.7:0))-rem*.4;
+  /* review fix: "+4 more" keeps its own room (more = its measured width; true = the old estimate, 0.7 of a column): at 360 px the third fighter's card
+     covered its "+" */
+  var colW=typeof more==="number"&&more>0?(W-rem*.6-more-rem*.4)/cols-rem*.4:(W-rem*.6)/(cols+(more?0.7:0))-rem*.4;
   /* review fix (task2): a column fits the window's height: the war's insets (index.html .mx-war: small .3rem / TV .5rem at the bottom, below
      the expand icon at the top; big 2rem + .5rem / TV 3rem + .75rem), the plate row (+ the "tied with" row in the big window) and the pile
      (1.4 cw, the face-down cards lean a little lower): the cards hung out of the window's bottom on TV */
@@ -1909,10 +1926,13 @@ function drawWar(seats,tb,fresh){
   row.style.setProperty("--cw",warCw(vis.length,more>0)+"px");
   row.innerHTML=vis.map(function(s){ var c=ui.lastCards[s]; return '<div class="mx-fight" data-s="'+s+'"><span class="mx-fight__who">'+whoHTML(s)+'</span><div class="mx-fight__pile"><div class="mx-card is-up is-top">'+A.cardInner(c)+'</div></div><span class="mx-fight__tie">tied with '+(c!=null?'<span class="mx-tw__c'+(A.chipRed(c)?" is-red":"")+'">'+A.chip(c)+"</span>":"")+"</span></div>"; }).join("")+
     (more?'<span class="mx-fight__more">+'+more+" more</span>":"");
+  if(more) row.style.setProperty("--cw",warCw(vis.length,moreW(row))+"px");   /* review fix: sized again with the label's real width */
   if(tb&&!fresh){ /* a reload in a war: show the face-down cards already laid */
     row.querySelectorAll(".mx-fight").forEach(function(col){ var s=+col.getAttribute("data-s"), n=tb.filter(function(t){ return t.s===s&&!t.up; }).length; for(var d=0;d<Math.min(3,n);d++) addBack(col,d); });
   }
 }
+/* review fix: the "+n more" label's width in a phone's war row (0: none; true: the TV, or not laid out: warCw keeps its old estimate) */
+function moreW(row){ var m=row&&row.querySelector(".mx-fight__more"); return !m?0:onTV()?true:(m.offsetWidth||true); }
 function addBack(col,d){
   var pile=col.querySelector(".mx-fight__pile"), top=pile.querySelector(".is-top"), b=document.createElement("div");
   b.className="mx-card"; b.innerHTML=A.cardInner(null);
