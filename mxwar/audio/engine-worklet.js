@@ -240,7 +240,8 @@ if(typeof AudioWorkletProcessor!=="undefined"&&typeof registerProcessor==="funct
     constructor(opt){
       super();
       var po=(opt&&opt.processorOptions)||{};
-      this.E=new Engine({stroke:po.stroke,cc:po.cc,seed:po.seed,gate:po.gate,main:po.main,sampleRate:SRATE});
+      /* (the recorded engine banks come in the options, structured-cloned: without them every voice would be the synthesis alone) */
+      this.E=new Engine({stroke:po.stroke,cc:po.cc,seed:po.seed,gate:po.gate,main:po.main,bank:po.bank||null,bankOff:po.bankOff||null,synthK:po.synthK,sampleRate:SRATE});
       this.P={}; this.alive=true;
       var self=this;
       this.port.onmessage=function(e){ var d=e&&e.data; if(d&&d.t==="end") self.alive=false; };
