@@ -90,7 +90,10 @@
       Q + ".mxph-tw.is-two{grid-auto-flow:column;grid-template-rows:repeat(var(--rows,20),auto);grid-template-columns:repeat(2,minmax(0,1fr));column-gap:.35rem}",
       Q + ".mxph-tw li{display:grid;grid-template-columns:1.5rem auto minmax(0,1fr) auto;align-items:center;gap:.35rem;min-height:1.75rem;padding:0 .4rem;border-radius:.4rem;background:var(--ink-3);font:var(--fw-ui-strong) var(--fs-micro)/1.2 var(--font-ui);color:var(--text-1);text-align:left}",
       Q + ".mxph-tw.is-two li{grid-template-columns:1.05rem auto minmax(0,1fr) auto;gap:.2rem;padding:0 .3rem 0 .15rem}",
-      Q + ".mxph-tw.is-two .mxph-n," + Q + ".mxph-tw.is-two .mxph-g," + Q + ".mxph-tw.is-two .mxph-p{font-family:\"Barlow Condensed\",\"Roboto Condensed\",\"sans-serif-condensed\",\"Arial Narrow\",\"Avenir Next Condensed\",\"Bahnschrift Condensed\",sans-serif;font-size:.8125rem}",
+      /* mxfix1 (review fix): the condensed face ships with the game (mxwar/assets/fonts/, SIL OFL 1.1; the same files and family name as mxwar/index.html) */
+      '@font-face{font-family:"MXW Barlow Condensed";src:url("../mxwar/assets/fonts/barlowcondensed-600-latin.woff2") format("woff2");font-weight:600;font-style:normal;font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}',
+      '@font-face{font-family:"MXW Barlow Condensed";src:url("../mxwar/assets/fonts/barlowcondensed-700-latin.woff2") format("woff2");font-weight:700;font-style:normal;font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}',
+      Q + ".mxph-tw.is-two .mxph-n," + Q + ".mxph-tw.is-two .mxph-g," + Q + ".mxph-tw.is-two .mxph-p{font-family:\"MXW Barlow Condensed\",\"Barlow Condensed\",\"Roboto Condensed\",\"sans-serif-condensed\",\"Arial Narrow\",\"Avenir Next Condensed\",\"Bahnschrift Condensed\",sans-serif;font-size:.8125rem}",
       Q + ".mxph-tw.is-two .mxph-n{font-weight:600;letter-spacing:.01em}",
       Q + ".mxph-tw.is-two .mxph-p{font-weight:700}",
       Q + ".mxph-tw.is-two .mx-pl{min-width:1.85em;padding:.06rem .16rem .06rem .45em}",

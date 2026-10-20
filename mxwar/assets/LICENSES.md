@@ -62,3 +62,10 @@ Add your lines between your heading and its end marker only (this keeps the role
 - "MX War Theme", Motocross War (original, made by the game's own code): no licence needed (made for Motocross War). Became `checkered.9f57b7f5.m4a`, `hit.fd5ff5fb.m4a`, `preA1.2ff8a679.m4a`, `preA2.18aafb0e.m4a`, `theme.82dff8a7.m4a`, `title.f5494759.m4a`, `war.3817f7bc.m4a`. Used for: the Main's winner takes the flag; a stat lands, a stamp; the pre-race talk; the pre-race talk, high stakes; the signature under the title card; the title / first menu: the whole theme as the CEO heard it; the WAR flash. Changes: made for Motocross War.
 - "Replay whooshes", Motocross War (original, synthesized by the game's own code): no licence needed (made for Motocross War). Became `whooshIn.f6d675c6.m4a`, `whooshOut.509bb9e1.m4a`. Used for: into a replay; back to live. Changes: made for Motocross War.
 <!-- end shows-music -->
+
+## race screen fonts
+- Barlow Condensed SemiBold and Bold, `mxwar/assets/fonts/barlowcondensed-600-latin.woff2` (22 308 B, sha256 215a93c6...cbb2b66) and `barlowcondensed-700-latin.woff2` (22 444 B, sha256 3787a5a4...dc11ec090fdc3ee2b8):
+  SIL Open Font License 1.1, no Reserved Font Name; Google Fonts' latin subset (https://fonts.gstatic.com/s/barlowcondensed/v13/); "Copyright 2017 The Barlow Project Authors (https://github.com/jpt/barlow)";
+  licence `mxwar/assets/fonts/OFL-BarlowCondensed.txt`. The page names it "MXW Barlow Condensed" (`@font-face`) for the phone's timing board, the cards chip and a results name that would be cut
+  (mxfix1); Party Mode loads the same files. The same files and family name as the visual pack's ("ui skin").
+<!-- end race screen fonts -->

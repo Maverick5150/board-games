@@ -307,7 +307,10 @@
     Q + ".mxp-res li.is-sep{background:none;justify-content:center;color:var(--text-2)}",
     Q + ".mxp-rp{flex:none;min-width:1.6rem;font:400 var(--fs-md)/1 var(--font-display);color:var(--gold-100);text-align:center}",
     Q + ".mxp-rn{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}",
-    Q + ".mxp-rn.is-cond{font-family:\"Barlow Condensed\",\"Roboto Condensed\",\"sans-serif-condensed\",\"Arial Narrow\",\"Avenir Next Condensed\",\"Bahnschrift Condensed\",sans-serif;letter-spacing:.01em}",   /* mxfix1: fitPanel */
+    /* mxfix1 (review fix): the condensed face ships with the game (mxwar/assets/fonts/, SIL OFL 1.1; the same files and family name as mxwar/index.html) */
+    '@font-face{font-family:"MXW Barlow Condensed";src:url("../mxwar/assets/fonts/barlowcondensed-600-latin.woff2") format("woff2");font-weight:600;font-style:normal;font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}',
+    '@font-face{font-family:"MXW Barlow Condensed";src:url("../mxwar/assets/fonts/barlowcondensed-700-latin.woff2") format("woff2");font-weight:700;font-style:normal;font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}',
+    Q + ".mxp-rn.is-cond{font-family:\"MXW Barlow Condensed\",\"Barlow Condensed\",\"Roboto Condensed\",\"sans-serif-condensed\",\"Arial Narrow\",\"Avenir Next Condensed\",\"Bahnschrift Condensed\",sans-serif;letter-spacing:.01em}",   /* mxfix1: fitPanel */
     Q + ".mxp-rx{flex:none;color:var(--gold-100);font-variant-numeric:tabular-nums}",
     Q + ".mxp-tag{flex:none;padding:.12rem .45rem;border-radius:var(--r-pill);font:var(--fw-caps) var(--fs-micro)/1.1 var(--font-ui);letter-spacing:.03em;color:#14110a;background:#e7ca90}",
     Q + ".mxp-tag--next{background:#9fd3ff}",
@@ -1442,6 +1445,11 @@
         var full = t.nodeValue, k = full.indexOf(" ("), head = k >= 0 ? full.slice(0, k) : full.replace(/\s+$/, ""), ini = A.initialName(head) + full.slice(head.length);
         if (ini !== full) { n.setAttribute("data-full", full); n.setAttribute("title", full.trim()); t.nodeValue = ini; }
       });
+      /* review fix: measured again once the condensed face (mxwar/assets/fonts/) has loaded: a fallback face measured first can take an initial for nothing */
+      if ((kind === "results" || kind === "podium") && document.fonts && document.fonts.load) try {
+        var need = ['600 1em "MXW Barlow Condensed"', '700 1em "MXW Barlow Condensed"'].filter(function (c) { return !document.fonts.check(c); });
+        if (need.length) Promise.all(need.map(function (c) { return document.fonts.load(c); })).then(function () { if ($("mxpPBody") === body && body.isConnected) fitPanel(); }, function () {});
+      } catch (e) {}
     }
     function resLi(id, place, extra) { var R = G.riders[id], k = kOfId(id); return '<li class="' + (k >= 0 ? "is-me" : "") + '"' + (k >= 0 ? ' style="--seat:' + hex(k) + '"' : "") + '><span class="mxp-rp">' + place + "</span>" + plateHTML(R) + '<span class="mxp-rn">' + nameHTML(R) + "</span>" + (extra || "") + "</li>"; }
     /* a long list: the rows that fit, then the table's riders below them (their real place kept) */

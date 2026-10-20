@@ -2018,7 +2018,11 @@ function fitCond(root){
     var full=t.nodeValue, ini=iniText(full); if(ini!==full){ n.setAttribute("data-full",full); n.setAttribute("title",full.trim()); t.nodeValue=ini; }
   }); }
   go(); if(window.requestAnimationFrame) requestAnimationFrame(go);
+  condReady(function(){ if(root.isConnected) go(); });   /* review fix: measured again once the condensed face has loaded (a fallback face measured first can take an initial for nothing) */
 }
+/* review fix: the condensed face (index.html "MXW Barlow Condensed", shipped in assets/fonts/): fn runs once it has loaded, if it was still loading */
+var COND=['600 1em "MXW Barlow Condensed"','700 1em "MXW Barlow Condensed"'];
+function condReady(fn){ try{ var F=document.fonts; if(!F||!F.load) return; var need=COND.filter(function(c){ return !F.check(c); }); if(need.length) Promise.all(need.map(function(c){ return F.load(c); })).then(function(){ fn(); },function(){}); }catch(e){} }
 function openResults(e,simmed){
   var T=track(); if(T) T.show(false);
   if(V3) V3.show(false);   /* the 3D race rests under the results */
@@ -2273,6 +2277,7 @@ var rsz=0;
 window.addEventListener("resize",function(){ clearTimeout(rsz); rsz=setTimeout(function(){ if(!G||setupShown()) return; if(ui.view==="race"&&ui.rc){ layoutArena(); if(!busy) renderRace(); else trackSync(ui.rc.phase==="gate"); } else if(ui.view==="season") renderSeason(); },140); });
 
 document.addEventListener("DOMContentLoaded",function(){
+  try{ if(document.fonts&&document.fonts.load) COND.forEach(function(c){ document.fonts.load(c).catch(function(){}); }); }catch(e){}   /* review fix: the condensed face loads early (44 KB), ready for the board and the results */
   register();
   mountNames(); drawRiders();
   var B=BG();

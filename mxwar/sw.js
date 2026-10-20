@@ -16,11 +16,16 @@ const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "../sound.js", "
 // mxwar 3D view: synced from mxvis fd207c6 (BG_audit/sprint/mxlive/sync-view.sh writes this line and the ASSETS3D list)
 const ASSETS3D = [/*3d:assets*/ "./assets/dirt/dirt-tiles-lo.js", "./assets/dirt/dirt-tiles.js", "./course.js", "./data/tracks.js", "./layouts.js", "./r3d-bike-model.js", "./r3d-bike.js", "./r3d-cams.js", "./r3d-dirt-png.js", "./r3d-dirt-relief.js", "./r3d-fx.js", "./r3d-lead-env.js", "./r3d-lead-post.js", "./r3d-look.js", "./r3d-perf-bench.js", "./r3d-perf-warm.js", "./r3d-quality.js", "./r3d-rider-apparel.js", "./r3d-rider-model.js", "./r3d-rider-pose.js", "./r3d-riders.js", "./r3d-stadium-art.js", "./r3d-stadium-bowl.js", "./r3d-track.js", "./r3d-util.js", "./r3d-world.js", "./race3d.js", "../ui/vendor/three-0.160.0.module.min.js", "../ui/vendor/three-addons/Pass.js", "../ui/vendor/three-addons/SMAAPass.js", "../ui/vendor/three-addons/SMAAShader.js" /*/3d:assets*/];
 
+// mxfix1 (review fix): the race screen's condensed face (index.html "MXW Barlow Condensed", assets/fonts/), offline from the first visit. The install drops
+// a repeated address (Cache.addAll fails on a list that names one twice, and the visual pack's list names these files too)
+const ASSETSF = ["./assets/fonts/barlowcondensed-600-latin.woff2", "./assets/fonts/barlowcondensed-700-latin.woff2"];
+const once = l => { const seen = new Set(); return l.filter(u => { const k = new URL(u, self.location).href; if (seen.has(k)) return false; seen.add(k); return true; }); };
+
 // Updates: a new VERSION re-downloads every asset (cache "reload" skips the browser's HTTP cache, so cache-first icons are fresh too)
 // and takes over at once (skipWaiting + clients.claim). Pages and scripts are network-first, so a published update loads on the
 // next launch or navigation by itself; an open game is never reloaded.
 self.addEventListener("install", e => {
-  e.waitUntil(Promise.all([caches.open(VERSION).then(c => c.addAll(ASSETS.concat(ASSETS3D).map(u => new Request(u, { cache: "reload" })))), audioWarm().catch(() => {})]).then(() => self.skipWaiting()));
+  e.waitUntil(Promise.all([caches.open(VERSION).then(c => c.addAll(once(ASSETS.concat(ASSETS3D, ASSETSF)).map(u => new Request(u, { cache: "reload" })))), audioWarm().catch(() => {})]).then(() => self.skipWaiting()));
 });
 // [bcast] the music's essentials go into the audio cache at install, once (a later version finds them there and downloads nothing): the package's manifest
 // (its URL carries the content hash that mxsound.js names, read from that file, so a re-cut package needs no edit here), the theme, the open, the checkered
