@@ -109,6 +109,16 @@ function mound(F,ds,s0,top0,top1,s1,h,shape){
   }
 }
 function put(F,ds,s,y){ var i=Math.round(s/ds); if(i>=0&&i<F.length&&y>F[i]) F[i]=y; }
+/* a row of whoops at s: crest j at cr[j] = [s, h]; between two crests a raised cosine down to the trough half way and up again (each half its own crest's height), to the power
+   0.85 (the round tops a little broader than the troughs); before the first crest it rises from the stretch's start a, after the last it comes down to its end b */
+function whoopY(cr,a,b,s){
+  var n=cr.length; if(!n||s<a||s>b) return 0;
+  if(s<=cr[0][0]){ var u=(cr[0][0]-s)/Math.max(0.5,cr[0][0]-a); return cr[0][1]*Math.pow(0.5*(1+Math.cos(PI*Math.min(1,u))),0.85); }
+  if(s>=cr[n-1][0]){ var u2=(s-cr[n-1][0])/Math.max(0.5,b-cr[n-1][0]); return cr[n-1][1]*Math.pow(0.5*(1+Math.cos(PI*Math.min(1,u2))),0.85); }
+  var lo=0, hi=n-1; while(hi-lo>1){ var m=(lo+hi)>>1; if(cr[m][0]<=s) lo=m; else hi=m; }
+  var u3=(s-cr[lo][0])/(cr[hi][0]-cr[lo][0]);
+  return (u3<0.5?cr[lo][1]:cr[hi][1])*Math.pow(0.5*(1+Math.cos(TAU*u3)),0.85);
+}
 /* a face that ends in a lip (a ramp, concave: steeper near the lip) and a landing (a short up face, the peak, a long down ramp) */
 function ramp(u){ return 0.3*u+0.7*u*u; }   /* a concave face: about 30-35 degrees at the lip of a 2 m jump with a 6 m face */
 function face(F,ds,s0,lip,h){ for(var s=s0;s<=lip;s+=ds*0.5){ var u=(s-s0)/(lip-s0); put(F,ds,s,h*ramp(u)); } for(s=lip;s<=lip+1.6;s+=ds*0.5) put(F,ds,s,h*(1-sstep(lip,lip+1.6,s))); }
@@ -122,6 +132,7 @@ function build(layout){
   if(Lo.path){ var tt=turtle(Lo.x0||0,Lo.z0||0,(Lo.th0||0)*PI/180,Lo.path); raw=tt.P; if(Math.hypot(tt.x-raw[0][0],tt.z-raw[0][1])>0.6) throw new Error("layout "+Lo.id+": the loop doesn't close ("+tt.x.toFixed(2)+","+tt.z.toFixed(2)+")"); raw.pop(); }
   else raw=spline(Lo.pts,true,0.25);
   var C=resample(raw,true,ds); ds=C.ds; var N=C.n, L=C.L;
+  C.N=N;   /* (2026-10-19: set before the features, so tagRange() tags their stretches: until now C.N was undefined there and every C.tag stayed empty) */
   C.id=Lo.id; C.kind=Lo.kind||"stadium"; C.name=Lo.name||""; C.layout=Lo;
   C.hw=new Float64Array(N); C.bank=new Float64Array(N); C.F=new Float64Array(N); C.sand=new Float64Array(N); C.rough=new Float64Array(N); C.tag=new Array(N);
   var w0=(Lo.width||7.5)/2;
@@ -137,9 +148,14 @@ function build(layout){
   (Lo.features||[]).map(function(f){ return metres(f,L); }).forEach(function(f){
     var F=C.F, k=f.k;
     if(k==="whoops"){
-      var n=f.n||14, sp=(f.to-f.from)/n, h=f.h||1.0;
-      for(j=0;j<n;j++){ var c=f.from+sp*(j+0.5); for(var s=c-sp/2;s<=c+sp/2;s+=ds*0.5) put(F,ds,s,h*0.5*(1+Math.cos(TAU*(s-c)/sp))); C.mounds.push({s:c,h:h,w:sp}); }
-      C.feats.push({k:"whoops",from:f.from,to:f.to,n:n,h:h,sp:sp,name:f.name||"The whoops"});
+      /* (2026-10-19, the CEO: "the whoop section is massive ... too high and too deep, it doesn't go proportionate with the bike") A ROW OF REAL WHOOPS: n crests over the
+         stretch (n from the layout, or the stretch over the layout's spacing sp), each whoop its own height (the section's h, +-6%; the first one 10% lower) and its own crest
+         (+-5% of the spacing), seeded by the course and the stretch (hand-built, worn unevenly: never a row of clones); round tops a little broader than the troughs the tyres
+         carve. Crest to trough = the whoop's height. The crests are in the feature (crests: [[s, h], ...]): the riders' skim line (race3d.js) and the dirt's relief read them. */
+      var n=f.n||(f.sp?Math.max(3,Math.round((f.to-f.from)/f.sp)):14), sp=(f.to-f.from)/n, h=f.h||0.75, Rw=rng(hash((Lo.id||"")+"|whoops|"+Math.round(f.from*10))), cr=[];
+      for(j=0;j<n;j++){ var cj=f.from+sp*(j+0.5)+(j>0&&j<n-1?(Rw()-0.5)*0.1*sp:0), hj=h*(1+(Rw()-0.5)*0.12)*(j===0?0.9:1); cr.push([cj,hj]); C.mounds.push({s:cj,h:hj,w:sp}); }
+      for(var s=f.from;s<=f.to;s+=ds*0.5) put(F,ds,s,whoopY(cr,f.from,f.to,s));
+      C.feats.push({k:"whoops",from:f.from,to:f.to,n:n,h:h,sp:sp,crests:cr,name:f.name||"The whoops"});
       tagRange(C,f.from,f.to,"whoops");
     } else if(k==="rhythm"){
       /* n mounds every sp metres; the combo says how they are jumped: 2 = a double (land on the back of the next), 3 = a triple, 1 = rolled */
@@ -254,9 +270,8 @@ function grade(C,i){ var N=C.N, a=(i-2+N)%N, b=(i+2)%N; return (C.y[b]-C.y[a])/(
 function vLimit(C,i,Lo){
   var R=Math.max(Lo.minR||5,1/Math.max(1e-4,Math.abs(C.k[i]))), b=Math.max(0,C.bank[i])/(Lo.berm||1.5), alat=(3.4+4.8*b)*(Lo.grip||1)*(C.sc||1), top=(Lo.vtop||(C.kind==="outdoor"?23:18))*(1-0.22*C.sand[i])*Math.min(1.12,C.sc||1);
   var v=Math.min(top,Math.sqrt(alat*R));
-  var t=C.tag[i];
-  if(t==="whoops") v=Math.min(v,Lo.vwhoops||14.5);
-  if(t==="rollers") v=Math.min(v,18);
+  /* (2026-10-19) no cap by section here: the section tags never reached this line until the C.N fix in build() (C.tag was empty), so every lap the game and its time model
+     know was made without a whoops (14.5 m/s) or rollers (18 m/s) cap; they stay out, and the speed profile stays exactly what it was (when a rider reaches a point is the race's) */
   return Math.max(4.5,v);
 }
 function speedProfile(C,Lo){

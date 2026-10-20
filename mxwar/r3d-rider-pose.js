@@ -180,13 +180,24 @@ export function poseRide(rig,Bm,st,dt,out,base){
   if(dt>0){
     const w1=11.5, z1=0.72;
     if(st.landed){ S[3]-=Math.min(1.6,0.10*st.impact); S[7]+=Math.min(0.9,0.05*st.impact); }   /* the landing: the legs take it */
-    spring(S,0,tx,w1,z1,dt,-aLx*0.55); spring(S,2,ty,w1,z1,dt,-aLy*0.9); spring(S,4,tz,w1*0.9,z1,dt,-aLz*0.4);
+    spring(S,0,tx,w1,z1,dt,-aLx*0.55); spring(S,2,ty,w1,z1,dt,-aLy*0.9*(1-(rig.zk||0))); spring(S,4,tz,w1*0.9,z1,dt,-aLz*0.4);   /* (scale: on the ground the legs' absorber below takes the bike's bobbing; the spring keeps the stance, a landing's kick and the air's lift) */
     spring(S,6,tp,9.5,0.8,dt,0); spring(S,8,tr,8.0,0.8,dt,0);
   }
   /* the head looks into the turn and keeps its eyes on the road ahead whatever the torso does */
   if(dt>0){ spring(S,10,hpT,12,0.8,dt,0); spring(S,12,hyT,7,0.9,dt,0); }
+  /* (scale, 2026-10-19: the CEO, "the suspension needs to be better") THE LEGS AND ARMS ABSORB: the hips follow the bike's SMOOTH path in the world (a tracking filter: it
+     follows a ramp or a jump face exactly, but not the bumps: 0.7 Hz, critically damped, so the whoops' 3 Hz chatter, braking bumps and the kick of a landing are left out of it); the legs take the
+     difference (the hips held down when the bike pops up under him, held up when it drops), the arms reach the bars by themselves (IK). Standing: most of it; seated: a part (the
+     seat carries him); in the air: none (he flies with the bike). Measured in the whoops (milestone 2): the head moved 1.16 x the chassis */
+  let zAb=0;
+  { const yb=Bm[13];
+    if(!rig.zOn||teleport||jump){ rig.zy=yb; rig.zv=0; rig.zp=yb; rig.zk=0; rig.zOn=true; }
+    else if(dt>0){ const vb=(yb-rig.zp)/dt, w=4.5, n=Math.max(1,Math.ceil(dt/0.0083)), h=dt/n; rig.zp=yb;
+      for(let k=0;k<n;k++){ const a=w*w*(yb-rig.zy)+2*w*(vb-rig.zv); rig.zv+=a*h; rig.zy+=rig.zv*h; }
+      rig.zk+=((air?0:0.3+0.55*stand)-rig.zk)*Math.min(1,dt*12); }   /* (how much the legs take: eased in and out over about 0.1 s) */
+    zAb=clamp((yb-rig.zy)*rig.zk*Bm[5],-0.07,0.07); }
   /* the pelvis position, clamped so the legs always reach the pegs and never fold flat */
-  const Px=clamp(S[0],tx-0.20,tx+0.20), Py=clamp(S[2],ty-0.26,ty+0.20), Pz=clamp(S[4],tz-0.15,tz+0.15);
+  const Px=clamp(S[0],tx-0.20,tx+0.20), Py=clamp(S[2]-zAb,ty-0.26,ty+0.20), Pz=clamp(S[4],tz-0.15,tz+0.15);
   P[0]=Px; P[1]=Py; P[2]=Pz;
   /* the pelvis frame: the torso's pitch is shared up the spine; the pelvis takes a part, rolled a little */
   const pitch=S[6], roll=S[8];

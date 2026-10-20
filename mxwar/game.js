@@ -1149,6 +1149,11 @@ function placeGate(){
   du.style.left=Math.round(r.x-r.h*0.2)+"px"; du.style.top=Math.round(r.y-r.h*0.2)+"px"; du.style.height=Math.round(r.h*1.4)+"px"; du.style.width=Math.round(r.h*3)+"px";
 }
 function redId(){ if(!G) return null; var k=gen+"|"+G.results.length+"|"+G.ri; if(ui.redK!==k){ ui.redK=k; ui.red=S.redPlate(G); } return ui.red; }
+/* the night's wear for the 3D race (race3d.js V.setRace night, mxvis-scale 2026-10-19, the CEO: "for the heat races ... the track should be perfect, but the ruts get
+   deeper and deeper as the night goes on"): this race's place in the round's program and every race's laps, from the round (the same on every screen: Party Mode's
+   TV passes the same, firestick/games/mxwar.js). The view digs the ruts from it: the first heat on a groomed track, the Main the deepest, lap by lap inside a race */
+function night3D(){ var RG=G&&G.round; if(!RG||!RG.races||!RG.races.length) return null; var key=G.rkey||(G.last&&G.last.ri===G.ri?G.last.key:null), k=-1;   /* (G.rkey; a 3D view that loads in a race's last lap, after season.js endRace cleared it: that race, G.last) */
+  RG.races.forEach(function(r,i){ if(r.key===key) k=i; }); if(k<0) k=Math.min(RG.cur||0,RG.races.length-1); return {k:k,lens:RG.races.map(function(r){ return r.len||0; })}; }
 /* which race is on show: an id per race OBJECT (ui.rc), so a race is set up once on the track and the 3D view however often trackRiders runs. Not G.rkey:
    season.js endRace clears it while the last lap still plays, and a second setup then (a late 3D load, a fallback to 2D) put the race clock straight
    on the checkered flag (resumeClock) */
@@ -1183,7 +1188,7 @@ function riders3D(){
   var key=gen+"|"+raceId(rc)+"|"+rc.o.len; if(ui.trk3===key) return;
   ui.trk3=key;
   var c=G.cal[Math.min(G.ri,G.cal.length-1)], red=redId();
-  var o={series:G.series,year:G.year,round:c.n||(G.ri+1),cal:c,len:rc.o.len,lapT:rc.tm.p||realLap(),
+  var o={series:G.series,year:G.year,round:c.n||(G.ri+1),cal:c,len:rc.o.len,lapT:rc.tm.p||realLap(),night:night3D(),
     riders:rc.r.map(function(p,s){ var R=G.riders[seatId(s)], m=A.mk(R.bike); return {s:s,color:m[0],accent:m[0]==="#f2f4f8"?"#183a8c":(m[1]==="#0b0a12"?"#16161c":"#f2f2f6"),num:R.plate,name:R.name,red:R.id===red,me:R.kind==="human"}; })};
   if(TRK) TRK.setLive(false);   /* the view's build takes a few tasks and its warm a few seconds: the race clock waits (trackShow starts it again once the picture is ready) */
   /* the world first, over several short tasks (V3.prepareWorld: the course, the stadium, the track; nothing when this layout is built already), then the riders in one task */

@@ -765,6 +765,9 @@
     function lapMs() { var o = +window.__mxpLap; if (o > 0) return o; try { return Math.round(S.lapOf(G) * 1000); } catch (e) { return 55000; } }
     function firstMs() { if (+window.__mxpLap > 0) return 0; try { var x = S.firstLapOf(G); return x > 0 ? Math.round(x * 1000) : 0; } catch (e) { return 0; } }
     function raceLabel() { if (!G || !G.round) return ""; var r = G.round.races.filter(function (x) { return x.key === G.rkey; })[0]; return r ? r.label : ""; }
+    /* the night's wear for the 3D race (race3d.js V.setRace night; the phone game's night3D, mxwar/game.js): this race's place in the round's program and every
+       race's laps, from the round: the first heat on a groomed track, the ruts deeper race by race, the Main the deepest (the same numbers on the TV and the phones) */
+    function night3D() { var RG = G && G.round; if (!RG || !RG.races || !RG.races.length) return null; var key = ui.rkey || G.rkey, k = -1; RG.races.forEach(function (r, i) { if (r.key === key) k = i; }); if (k < 0) k = Math.min(RG.cur || 0, RG.races.length - 1); return { k: k, lens: RG.races.map(function (r) { return r.len || 0; }) }; }
     function cal() { return ui.rc && ui.cal ? ui.cal : G.cal[Math.min(G.ri, G.cal.length - 1)]; }
     function machine(k) { var c = SEATS[k].color; return !H.isHuman(c) || !!auto[c]; }
     function logLine(t) { if (!t) return; ui.log.push(t); if (ui.log.length > 12) ui.log.shift(); var l = $("mxpLog"); if (l) l.innerHTML = ui.log.slice(-3).map(function (x) { return "<li>" + esc(x) + "</li>"; }).join(""); }
@@ -1034,7 +1037,7 @@
       layoutPip();
       rv.setRiders(rc.r.map(function (p, s) { var R = riderOfS(s), m = A.mk(R.bike); return { s: s, color: m[0], accent: m[0] === "#f2f4f8" ? "#183a8c" : "#f2f2f6", plate: R.plate, red: R.id === red, me: kOfId(R.id) >= 0 }; }));
       hs3.seen = rc.phase !== "gate";
-      rv.race3D(rc.tm ? { series: G.series, year: G.year, round: c.n || (G.ri + 1), cal: c, len: rc.o.len, lapT: rc.tm.p || lapMs() / 1000,
+      rv.race3D(rc.tm ? { series: G.series, year: G.year, round: c.n || (G.ri + 1), cal: c, len: rc.o.len, lapT: rc.tm.p || lapMs() / 1000, night: night3D(),
         riders: rc.r.map(function (p, s) { var R = riderOfS(s), m = A.mk(R.bike); return { s: s, color: m[0], accent: m[0] === "#f2f4f8" ? "#183a8c" : (m[1] === "#0b0a12" ? "#16161c" : "#f2f2f6"), num: R.plate, name: R.name, red: R.id === red, me: kOfId(R.id) >= 0 }; }) } : null);   /* the 3D race rides the time model's clock only */
       rv.pace(lapMs(), firstMs());
       rv.onLap(leaderLap);

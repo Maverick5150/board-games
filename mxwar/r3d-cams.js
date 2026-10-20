@@ -45,12 +45,18 @@ const CHASE={back:3.5,up:1.5,side:-1.1,fov:70};
    and at 2.1 m it ate the subject's own rear wheel and fender; at 2.6 m his tyre's back edge is 1.5 m from the lens. With the fade off for the chased subject (a REQUEST) b = 2.1.) The rig keeps the subject exactly where the mount wants him (the eye rides his own heading, smoothed: a hairpin swings it round behind him, never ahead),
    and chooses between MOUNTS by cost (a rival filling the lens now or in 0.35 s, the track's edge, a berm under the lens) with hysteresis, gliding between them (critically damped):
    b = metres back, s = metres to his right (- = left), u = metres up, x / y = where his hip point sits on screen (NDC), pref = the mount's cost when nothing is in the way */
-const HERO={fov:72,mounts:[
-  {id:"cover",b:2.6,s:-1.0,u:1.1,x:0.42,y:-0.28,pref:0},
-  {id:"mirror",b:2.6,s:1.0,u:1.1,x:-0.42,y:-0.28,pref:0.55},   /* (the cover puts him in the RIGHT third: the mirror only when the cover's side is really in the way; at 0.30 it took half of the chase time) */
-  {id:"high",b:3.4,s:-0.8,u:3.4,x:0.30,y:-0.22,pref:0.6},   /* (over the roost of a pack ahead and over a rival's head: milestone 2 raised it from 2.7 m, the lens sat inside lap one's dust) */
+/* (scale, 2026-10-19: the CEO, "it looks like everything is going too slow") Measured on the harness race (seat 12, the director, T 8-150 s): the person's rider was filmed from the
+   "high" mount 33% of his screen time and from the cover mount 5%, the eye a median 3.8 m over the dirt, with a 72 degree lens: the dirt streams slowly through a frame shot from that
+   high and that wide, and the bike is small in it. Now: the cover mount lower and closer (2.45 m back, 0.95 m up), the crane retired to a RAISED chase (3.0 m back, 2.0 m up, the last
+   choice: pref 1.2, as the milestone 3 plan's C1), the lens 66 degrees opening with his speed (+0.6 a m/s over 8 m/s, at most +9: 69.6 at 14 m/s, 72 at 18 m/s, 75 from 23 m/s: the scenery rushes past the edges faster the faster he goes), the eye easing back a little as he
+   goes faster and as he accelerates (closing in on the brakes): the rig keeps up with him the way a camera bike would, never a rigid mount */
+const HERO={fov:66,fovV:0.6,fovMax:9,mounts:[
+  {id:"cover",b:2.45,s:-0.95,u:0.95,x:0.42,y:-0.28,pref:0},
+  {id:"mirror",b:2.45,s:0.95,u:0.95,x:-0.42,y:-0.28,pref:0.55},   /* (the cover puts him in the RIGHT third: the mirror only when the cover's side is really in the way; at 0.30 it took half of the chase time) */
+  {id:"high",b:3.0,s:-0.8,u:2.0,x:0.30,y:-0.24,pref:1.2},   /* (scale: the 3.4 m crane looked down on the toy angle 33% of his time; a raised chase over a rival's roost, the last choice) */
   {id:"wide",b:3.6,s:-1.2,u:1.6,x:0.32,y:-0.22,pref:0.62}],
   crash:{id:"crash",b:7,s:-2.4,u:2.8,x:0,y:-0.1,pref:0}};
+const heroFov=v=>HERO.fov+clamp(((v||0)-8)*HERO.fovV,0,HERO.fovMax);
 /* the lens of a frame: a phone held upright gets a wider vertical field (the sides crop, the riders stay big); not the gate, the crash or the broadcast, which frame their scene's width for the frame's shape themselves */
 function lensFov(fov,asp,sh){ return asp<1&&sh!=="gate"&&sh!=="crash"&&sh!=="bcast"?clamp(2*Math.atan(Math.tan(fov*PI/360)/Math.max(0.78,Math.pow(asp,0.55)))*R2D,10,84):fov; }
 
@@ -479,8 +485,8 @@ export function createCams(VIEW){
           const xn=(px*rX+pz*rZ)/(zz*tanH), yn=(px*uX+py*uY+pz*uZ)/(zz*tanV); if(xn<x0) x0=xn; if(xn>x1) x1=xn; if(yn<y0) y0=yn; if(yn>y1) y1=yn; }
         let cov=0;
         if(nf){ x0=Math.max(-1,x0); x1=Math.min(1,x1); y0=Math.max(-1,y0); y1=Math.min(1,y1); if(x1>x0&&y1>y0) cov=(x1-x0)*(y1-y0)/4; }   /* (all of him behind the lens: nothing) */
-        const k=clamp((cov-0.12)/0.2,0,1)*(w?0.7:1); if(k>I) I=k; } }   /* (from 12%: the riders ahead in the frame ARE the cover's picture; a rival filling the lens is 20-30%. From 5%, any rider ahead sent the rig up to the high mount and the hysteresis kept it there) */
-    let P=m.pref+2.4*I+(m.s<0?1:-1)*clamp((kA||0)*3,-0.06,0.06)+(m.u<2?0.5*clamp((dust||0)-0.6,0,2.2):0);   /* a low lens behind a roosting pack films a wall of dust (milestone 2): the high mount looks down over it. (From 0.6: one or two riders ahead cost nothing,
+        const k=clamp((cov-0.22)/0.2,0,1)*(w?0.7:1); if(k>I) I=k; } }   /* (scale: from 22%, as the QD asked: the cover itself has three rivals in frame; from 12%: the riders ahead in the frame ARE the cover's picture; a rival filling the lens is 20-30%. From 5%, any rider ahead sent the rig up to the high mount and the hysteresis kept it there) */
+    let P=m.pref+2.4*I+(m.s<0?1:-1)*clamp((kA||0)*3,-0.06,0.06)+(m.u<2?0.5*clamp((dust||0)-1.2,0,2.2):0);   /* a low lens behind a roosting pack films a wall of dust (milestone 2): the high mount looks down over it. (From 0.6: one or two riders ahead cost nothing,
        so the rig comes back down to the cover's framing as soon as the pack thins: measured on the real race, the dust ahead of seats 7 / 12 is 0.6 / 0.8 at the median and 2.1 / 3.1 at p90) */   /* a right turn ahead (kA > 0) leans a little toward the lens on his right (the composition looks into the turn by itself: xT) */
     const f=r.fr; if(f&&!r.crash){ const c=Math.cos(f.th), s=Math.sin(f.th), lt=(r.lat||0)+(hm.x-S.x)*-s+(hm.z-S.z)*c, over=Math.abs(lt)-(f.hw-0.35); if(over>0) P+=0.25+over*0.5;
       if(groundNear(r,hm.x-S.x,hm.z-S.z)>gS+0.75) P+=0.35; }
@@ -489,7 +495,7 @@ export function createCams(VIEW){
   }
   function rigHero(r,j,dt,snap){
     const K=shot.k, st=j>=0&&VIEW.st?VIEW.st[j]:null, S=r.pos, asp=VIEW.W/Math.max(1,VIEW.H), crash=!!r.crash, th=r.th||0;
-    const fovL=lensFov(crash?60:HERO.fov+clamp(((r.v||0)-10)*0.12,0,2),asp,"chase"), tanV=Math.tan(fovL*PI/360), tanH=tanV*asp, xs=clamp(asp/1.78,0.45,1);
+    const fovL=lensFov(crash?60:heroFov(r.v),asp,"chase"), tanV=Math.tan(fovL*PI/360), tanH=tanV*asp, xs=clamp(asp/1.78,0.45,1);
     const first=!K.init||snap;
     if(first){ K.hy=new Sd(th); K.mi=-1; K.mT=9; K.hb=new Sd(0); K.hs=new Sd(0); K.hu=new Sd(0); K.hx=new Sd(0); K.hyy=new Sd(0); K.gb=new Sd(0); K.sy=new Sd(S.y); K.py=S.y; K.wasAir=!!r.air; K.vyMin=0; K.shkA=0; K.shkT=9; }
     /* the heading the eye rides: his, smoothed, at most 43 degrees behind */
@@ -512,13 +518,17 @@ export function createCams(VIEW){
     if(!K.cs) K.cs=costs.map(c=>c.cost); else { const a=Math.min(1,Math.max(0,dt)/0.25); for(let i=0;i<M.length;i++) K.cs[i]+=(costs[i].cost-K.cs[i])*a; }
     for(let i=0;i<M.length;i++) if(K.cs[i]<bc){ bc=K.cs[i]; best=i; }
     if(first||K.mi<0||K.mi>=M.length) K.mi=best;
-    else if(best!==K.mi){ const cc=K.cs[K.mi]; if((bc<cc-0.3&&K.mT>1.4)||(costs[K.mi].I>0.6&&bc<cc-0.35&&K.mT>0.5)){ K.mi=best; K.mT=0; } }
+    else if(best!==K.mi){ const cc=K.cs[K.mi]; if((bc<cc-0.3&&K.mT>1.8)||(costs[K.mi].I>0.6&&bc<cc-0.45&&K.mT>1.1)){ K.mi=best; K.mT=0; } }   /* (scale: a dwell of 1.8 s, 1.1 s when the lens is badly blocked (was 1.4 / 0.5): the lower, closer mounts meet rivals more often, and the rig hunted 28 times a minute (milestone 2: 14); the push and the lift round a rival do the rest) */
     const m=M[K.mi]; K.mount=m.id; K.lensI=costs[K.mi].I;
     if(first){ K.hb.snap(m.b); K.hs.snap(m.s); K.hu.snap(m.u); K.hx.snap(m.x); K.hyy.snap(m.y); }
     const b=K.hb.step(m.b,0.5,dt), sd=K.hs.step(m.s,0.5,dt), u=K.hu.step(m.u,0.45,dt), xT=clamp(K.hx.step(m.x,0.55,dt)-clamp(kS*2.5,-0.22,0.22),-0.6,0.6)*xs, yT=K.hyy.step(m.y,0.5,dt);
     /* the eye */
     const fx=Math.cos(yawS), fz=Math.sin(yawS);
-    E.x=S.x-fx*b-fz*sd; E.z=S.z-fz*b+fx*sd;
+    /* (scale) the camera keeps up the way a camera bike would: it eases back as he goes faster (2.5 cm a m/s over 10 m/s) and as he accelerates (4 cm a m/s^2), closes in on the brakes
+       (his own speed and acceleration, smoothed over half a second: never a jolt, well inside the rig's 12 m/s limit) */
+    if(first||!K.vS){ K.vS=new Sd(r.v||0); K.aS=new Sd(0); }
+    const vSm=K.vS.step(r.v||0,0.6,dt), aSm=K.aS.step(st&&isFinite(st.acc)?clamp(st.acc,-8,8):0,0.5,dt), pull=crash?0:clamp((vSm-10)*0.025,-0.05,0.15)+clamp(aSm*0.04,-0.06,0.2);   /* (closing in at most 11 cm: a hairpin is slow and on the brakes, and the eye is near him there already) */
+    E.x=S.x-fx*(b+pull)-fz*sd; E.z=S.z-fz*(b+pull)+fx*sd;
     { const f=r.fr; if(f&&!crash){ const c=Math.cos(f.th), s=Math.sin(f.th), lt=(r.lat||0)+(E.x-S.x)*-s+(E.z-S.z)*c, lim=Math.max(0.4,f.hw-0.35); if(Math.abs(lt)>lim){ const q=Math.sign(lt)*lim-lt; E.x+=-s*q; E.z+=c*q; } } }   /* over the dirt, never over the blocks */
     /* riders are solid: whatever mount is chosen, a rival's body near the lens pushes it away (out to 2.4 m from his wheelbase segment: a continuous push, so it glides round the
        pack; the vector has the length d: no flash frames, QD motion #4) and lifts it over his head (up to 1.8 m); the subject's own body keeps it 1.6 m away */
@@ -549,11 +559,17 @@ export function createCams(VIEW){
     const hAir=crash?0:Math.max(0,(r.oy!=null?r.oy:gS)-gS), air=K.air.step(Math.min(4.5,hAir),0.22,dt);
     const gE=groundNear(r,E.x-S.x,E.z-S.z), gBase=crash?gS:0.5*gE+0.5*gS;
     if(first||cut) K.gb.snap(gBase); const gb=K.gb.step(gBase,0.28,dt);
-    let yT2=gb+u+0.8*air+1.8*K.near;   /* (lifted over a rival's head: a helmet is at 1.95 m) */
+    let yT2=gb+u+0.8*air+1.2*K.near;   /* (scale: at most 1.2 m (it was 1.8 m, a crane over a pack; the milestone 3 plan's C3 asks 0.6 m once its arc search steers round the pack: without it, 0.6 m left a rival 0.8-1.2 m from the lens for seconds at the start). Lifted over a rival's head: a helmet is at 1.95 m) */
     { let need=-1e9; for(let q=1;q<=3;q++){ const t=q*0.25, g=groundNear(r,(E.x-S.x)*(1-t),(E.z-S.z)*(1-t))+0.25; need=Math.max(need,(g-t*S.y)/(1-t)); } if(need>yT2) yT2=need; }   /* he stays in sight over a crest */
     if(first||cut) K.y.snap(yT2); const ys=K.y.step(yT2,0.18,dt);
     const floor=Math.max(gE,groundNear(r,E.x-S.x+fx*0.6,E.z-S.z+fz*0.6),groundNear(r,E.x-S.x-fx*0.6,E.z-S.z-fz*0.6))+0.45;
     E.y=Math.max(ys,floor);
+    /* (scale) THE LENS IS NEVER IN A BODY: with the lower, closer mounts a hairpin (the eye squeezed beside him by the track's edge) put it 0.6 m from his back, and a pack at the
+       start put a rival 0.8 m from it. The last word: his hip point at least 1.8 m from the lens, every rival's at least 1.4 m, pushed straight away from it (continuous: the push
+       is 0 at the boundary), never under the dirt */
+    if(!crash){ const keep=(px,py,pz,Dk)=>{ const dx=E.x-px, dy=E.y-py, dz=E.z-pz, d=Math.sqrt(dx*dx+dy*dy+dz*dz); if(d<Dk&&d>1e-4){ const k=Dk/d; E.x=px+dx*k; E.y=py+dy*k; E.z=pz+dz*k; } };
+      keep(S.x,S.y,S.z,1.8); const rsK=VIEW.rs; for(let i2=0;i2<rsK.length;i2++){ const o=rsK[i2]; if(o===r||(o.gone&&!o.crash)||!o.pos) continue; keep(o.pos.x,o.pos.y-0.2,o.pos.z,1.4); }
+      E.y=Math.max(E.y,floor); }
     /* a landing: the camera drops with the bike and comes back (a soft shake) */
     const vy=dt>0?(S.y-K.py)/dt:0; K.py=S.y; if(r.air){ if(!K.wasAir) K.vyMin=0; K.vyMin=Math.min(K.vyMin,vy); }
     if(K.wasAir&&!r.air&&!crash){ K.shkA=clamp(-K.vyMin*0.017,0.03,0.14); K.shkT=0; }
@@ -564,11 +580,14 @@ export function createCams(VIEW){
        smoothed, so the suspension's bob over the whoops does not shake the frame) */
     if(first){ K.sy.snap(S.y); K.roll.snap(0); K.init=true; }
     const syS=K.sy.step(S.y,0.05,dt), be=Math.atan2(S.z-E.z,S.x-E.x), hd=Math.max(0.6,Math.hypot(S.x-E.x,S.z-E.z)), el=Math.atan2(syS-E.y,hd);
-    const psi=be-Math.atan(xT*tanH), pit=clamp(el-Math.atan(yT*tanV),-0.7,0.8)+shk*0.4, cp=Math.cos(pit);
+    let psi=be-Math.atan(xT*tanH); const pit=clamp(el-Math.atan(yT*tanV),-0.7,0.8)+shk*0.4, cp=Math.cos(pit);
+    /* (scale) the lens pans at most 115 degrees a second inside the shot (a camera operator's pan): a mount change, a hairpin at walking pace or a rival's push close to the lens no
+       longer swing the view faster than the eye may move round him (the hotfix's 120 degrees a second); the tilt is not held back (a landing drops him fast, he stays in frame) */
+    if(first||cut||K.psiL==null||!(dt>0)) K.psiL=psi; else { const lim=2.0*dt; psi=K.psiL+clamp(wrapA(psi-K.psiL),-lim,lim); K.psiL=psi; }
     T.set(E.x+Math.cos(psi)*cp*14,E.y+Math.sin(pit)*14,E.z+Math.sin(psi)*cp*14);
     cFocus.copy(S);
     const lean=st?st.lean:(r.lean||0), roll=K.roll.step(crash?0:clamp(lean*0.22,-0.12,0.12),0.35,dt);   /* the bike's lean banks it a little in a berm */
-    RG.fov=crash?60:HERO.fov+clamp(((r.v||0)-10)*0.12,0,2); RG.roll=roll; RG.near=0.5; RG.clr=0.4; RG.follow=true;
+    RG.fov=crash?60:heroFov(r.v); RG.roll=roll; RG.near=0.5; RG.clr=0.4; RG.follow=true;
   }
   /* onboard: the rider's eyes just in front of the helmet, over the bars; the bike's roll and pitch softened (a helmet camera is stabilised), looking into the corner */
   const oEul=new THREE.Euler(0,0,0,"YZX"), oQ=new THREE.Quaternion(), oV=new THREE.Vector3();
