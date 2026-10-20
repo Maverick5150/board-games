@@ -1129,6 +1129,7 @@
   html[data-game="mxwar"] .mx-next__t{font:400 var(--mx-fs-display-l)/1 var(--mx-font-display); letter-spacing:.01em; text-transform:uppercase; color:var(--mx-hud-white)}
   html[data-game="mxwar"] .mx-next__s{display:grid; gap:.4rem; color:var(--mx-secondary-text)}
   html[data-game="mxwar"] .mx-next__facts{display:block; font:600 var(--mx-fs-hud-m)/1.3 var(--mx-font-hud); letter-spacing:.06em; text-transform:uppercase; color:var(--mx-hud-white)}
+  html:not([data-tv])[data-game="mxwar"] .mx-scol{display:grid; gap:1rem; min-width:0}   /* (a phone: the next race and the calendar, both white-edged, never touch) */
   html[data-game="mxwar"] .mx-next__real{display:block; font:var(--fw-ui) var(--fs-xs)/1.45 var(--font-ui); color:var(--mx-secondary-text)}
   html[data-game="mxwar"] .mx-next__real b{color:var(--mx-hud-white)}
   html[data-game="mxwar"] #goBtn{padding-left:2.75rem; padding-right:2.75rem}
@@ -1186,7 +1187,7 @@
   html[data-tv][data-game="mxwar"] .mx-next__real{font-size:.8125rem}
   html[data-tv][data-game="mxwar"] .mx-scol--a .mx-panel, html[data-tv][data-game="mxwar"] .mx-scol--b .mx-panel, html[data-tv][data-game="mxwar"] .mx-scol--c .mx-panel{align-self:start; max-height:100%; padding:.8rem 1rem .9rem}
   html[data-tv][data-game="mxwar"] .mx-panel > h2.bg-eyebrow{margin-bottom:.5rem}
-  html[data-tv][data-game="mxwar"] #teamHead{position:absolute; width:1px; height:1px; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}   /* (TV: the team table's head bar names it, "Team (ours)": its rows get the room) */
+  html[data-tv][data-game="mxwar"] #teamHead.is-barred{position:absolute; width:1px; height:1px; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}   /* (TV: the team table's head bar names it, "Team (ours)": its rows get the room) */
   html[data-tv][data-game="mxwar"] .mx-next__real{line-height:1.38}
   html[data-tv][data-game="mxwar"] .mx-cal{gap:.3rem}
   html[data-tv][data-game="mxwar"] .mx-cal li{min-height:1.75rem; padding:.15rem .7rem .15rem .3rem}

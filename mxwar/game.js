@@ -956,7 +956,7 @@ function renderSeason(){
     if(c.venue&&c.city) bits.push(esc(c.venue)); if(c.date) bits.push(esc(fmtDate(c.date)));
     bits.push(esc(plural(nx.len,"lap"))+(nx.lapS?" · about "+Math.max(1,Math.round(nx.len*nx.lapS/60))+" min ("+esc(lapWords(nx.lapS))+" a lap)":""));
     if(nx.n) bits.push(nx.n+" riders");
-    $("nextSub").innerHTML='<span class="mx-next__facts">'+bits.join(" · ")+'</span><span class="mx-next__real">'+realLine(nx)+(nx.newRound?"<br><b>Tonight:</b> "+esc(progWords(F))+".":"")+(!nx.humanIn&&G.humans.length?"<br><b>You're not in this race.</b>":"")+"</span>";
+    $("nextSub").innerHTML='<span class="mx-next__facts">'+bits.map(function(x){ return '<span class="mx-nw">'+x+"</span>"; }).join(" · ")+'</span><span class="mx-next__real">'+realLine(nx)+(nx.newRound?"<br><b>Tonight:</b> "+esc(progWords(F))+".":"")+(!nx.humanIn&&G.humans.length?"<br><b>You're not in this race.</b>":"")+"</span>";
     $("timesBtn").hidden=false;
     var final=nx.kind==="main"||nx.kind==="moto";
     ui.goSim=!nx.humanIn&&!final&&cfg.others==="sim"&&G.humans.length>0;
@@ -977,7 +977,7 @@ function renderSeason(){
   var T=teamTable();
   $("teamList").innerHTML=T.length?T.slice(0,onTV()?10:8).map(function(r){ return '<li><span class="mx-st__p">'+r.place+'</span><span class="mx-mk" style="'+A.mkStyle(r.make)+'">'+esc(r.make)+'</span><span class="mx-st__n"></span><span class="mx-st__v">'+r.pts+'</span><span class="mx-st__g">'+(r.wins?plural(r.wins,"win"):"")+"</span></li>"; }).join(""):
     '<li class="is-gap">After the first round</li>';
-  $("teamHeadRow").hidden=!T.length;
+  $("teamHeadRow").hidden=!T.length; $("teamHead").classList.toggle("is-barred",!!T.length);   /* (TV: the head bar names the table once it has rows; until then the title shows) */
   barTitle();
   fitRows("standList",3); fitRows("teamList",1,"teamNote");
 }
