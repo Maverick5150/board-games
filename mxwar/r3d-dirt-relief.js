@@ -1,7 +1,8 @@
 /* MOTOCROSS WAR 3D — THE DIRT'S RELIEF (owner: dirt). Pure maths, no three.js, no DOM: a height field in TRACK SPACE (s along the lap, lat across) made from
    the course numbers (curvature, berms, features, the speed profile) and a seed. One field feeds everything, so the wheels, the mesh and the lighting agree:
      phys   the smooth part (ruts, berm grooves, windrows, whoop erosion, swells, half of the braking-bump crests) on a grid of rows x columns: the mesh's
-            heights, and the ground the wheels follow (r3d-track.js adds delta() to Course.ground), so a wheel sits IN a rut and never floats or sinks
+            heights, and the ground the wheels follow (r3d-track.js adds delta() to Course.ground), so a wheel sits IN a rut and never floats or sinks.
+            Two grids (2026-10-19): phys0 = the groomed track, physW = what the racing digs into it; the ground is phys0 + m x physW, m = the night's wear (Rl.m)
      moist  how wet the dirt is (0..255: dark and shiny in ruts and on the racing line, dry and pale on crests and edges); tone = a slow colour drift
      fine() the detail a mesh can't carry, as a track-space texture: R,G = the slope along / across the track (tyre grooves, braking bumps, roost ripples, clods),
             B = cavity (ambient occlusion from the whole relief), A = loose-dirt mask (the shader blends the crumbly scan in there)
@@ -24,12 +25,19 @@ function noiseKit(seed){
 /* the course arrays sampled at loop distance s (linear, wrapping) */
 function sampler(C){ const N=C.N, ds=C.ds, L=C.L; return (A,s)=>{ s%=L; if(s<0) s+=L; const x=s/ds, i=Math.floor(x), f=x-i, a=A[i%N], b=A[(i+1)%N]; return a+(b-a)*f; }; }
 
+/* the whoop (or roller) at loop distance s: {ix: its index in the row (the nearest crest), h: its height}; course.js gives every whoop its crest (f.crests = [[s, h], ...]) */
+function whoopAt(feats,s){
+  for(let q=0;q<feats.length;q++){ const f=feats[q]; if((f.k!=="whoops"&&f.k!=="rollers")||s<f.from-1||s>f.to+1) continue;
+    if(f.crests&&f.crests.length){ let j=0, d=1e9; for(let c=0;c<f.crests.length;c++){ const e=Math.abs(f.crests[c][0]-s); if(e<d){ d=e; j=c; } } return {ix:j,h:f.crests[j][1]}; }
+    const sp=f.sp||((f.to-f.from)/(f.n||5)); return {ix:Math.max(0,Math.floor((s-f.from)/sp)),h:f.h||0.75}; }
+  return {ix:Math.floor(s/4),h:0.75};
+}
 /* the rows of per-s facts (n rows over the lap) */
 function makeRows(C,n,K){
   const L=C.L, ds=L/n, at=sampler(C), R={n:n,ds:ds};
   const f=()=>new Float32Array(n);
   Object.assign(R,{hw:f(),side:f(),A:f(),k:f(),la:f(),line:f(),bank:f(),F:f(),Fs:f(),rough:f(),sand:f(),acc:f(),whoop:f(),brake:f(),accel:f(),
-    gc0:f(),gc1:f(),gc2:f(),ga0:f(),ga1:f(),ga2:f(),gw:f(),bph:f(),blam:f(),aph:f(),alam:f(),wind:f(),wnd:f(),swirl:f(),hi:f(),gen:f(),land:f(),pile:f()});
+    gc0:f(),gc1:f(),gc2:f(),ga0:f(),ga1:f(),ga2:f(),gw:f(),bph:f(),blam:f(),aph:f(),alam:f(),wind:f(),wnd:f(),swirl:f(),hi:f(),gen:f(),land:f(),pile:f(),wix:f(),wh:f()});
   const feats=C.feats||[], vA=C.v, N=C.N;
   let bp=0, ap=0;
   for(let i=0;i<n;i++){
@@ -46,6 +54,9 @@ function makeRows(C,n,K){
     /* tags */
     const ii=Math.round(s/C.ds)%N, tg=C.tag?C.tag[ii]:""; R.whoop[i]=(tg==="whoops"||tg==="rollers")?1:0; R.gen[i]=0;
     R.hi[i]=(tg==="jump"||tg==="bigjump"||tg==="rhythm")?1:0;
+    /* (2026-10-19) the whoop this row is on: its index along the row (each one its own noise) and its height (the scour and the crests scale with it); the tags work since the
+       course's C.N fix, so this block (written for 1.05 m whoops 3.75 m apart) runs for the first time: everything in it is relative to the whoop's own size now */
+    if(R.whoop[i]){ const w=whoopAt(feats,s); R.wix[i]=w.ix; R.wh[i]=w.h; }
     /* the straight-line grooves (three wandering tyre tracks) */
     const w0=K.n2(s*0.045,3.1), w1=K.n2(s*0.05,11.7), w2=K.n2(s*0.04,23.9);
     R.gc0[i]=-0.62+(w0-0.5)*0.9; R.gc1[i]=(w1-0.5)*0.7; R.gc2[i]=0.62+(w2-0.5)*0.9;
@@ -86,16 +97,20 @@ function rutA(d,w,wi,D,side){ if(d*side>0){ const a=Math.abs(d)/wi; if(a>=1) ret
    (pushed-up, crumbly dirt: rut lips, berm lips, windrows); K = noise kit; the profile of every smooth part is here.
    Milestone 2 (the cover's dirt): the main rut on the racing line is 20-28 cm deep (was 12-16), its bottom wanders and its depth comes and goes (dug by many lines, chopped by
    the braking); the two braided wings split off and rejoin; the berm's outside edge carries a lip of loose dirt the riders threw up; three soil families by moisture (the
-   track's colour reads them: wet dark brown in the ruts and on the line, mid brown, dry tan on crests, lips and edges), with big watered patches across the floor. */
+   track's colour reads them: wet dark brown in the ruts and on the line, mid brown, dry tan on crests, lips and edges), with big watered patches across the floor.
+   THE NIGHT'S WEAR (2026-10-19, the CEO: "the track should be perfect, but the ruts get deeper and deeper as the night goes on, just like actual motocross physics"): every part
+   is either the GROOMED track (out.h0: the windrows the crew's blade leaves, the slow swells, the dozer-built whoops; out.wet0, out.loose0) or what the racing digs into it
+   (out.hW: the corner ruts and their lips, the berm's lip of thrown dirt, the braking bumps, the roost ripples, the whoops' scoured troughs, chopped crests and the lane the
+   skimming tyres knock into their tops; out.wet1 / out.loose1 = the worn track's). The ground at a night's wear m is h0 + m x hW (m = 1: milestone 2's ruts). */
 function smoothAt(R,i,s,lat,K,out){
   const hw=R.hw[i], a=Math.abs(lat);
   const edge=(1-sstep(hw-0.28,hw-0.02,a))*sstep(1.2,4.5,Math.min(s,R.ds*R.n-s));   /* everything dies at the track's edge (the ribbon's shoulders are not mine) and flattens at the finish line */
-  let h=0, wet=0.4, loose=0.12;
-  if(edge<=0){ out.h=0; out.wet=0.16; out.traf=0; out.loose=0.6; return out; }
+  let h=0, hW=0, wet=0.4, wW=0, loose=0.12, lW=0;   /* (h, wet, loose: the groomed track's; hW, wW, lW: what the racing adds) */
+  if(edge<=0){ out.h0=out.hW=0; out.wet0=out.wet1=0.16; out.traf=0; out.loose0=out.loose1=0.6; return out; }
   const A=R.A[i], side=R.side[i], lc=R.line[i];
   /* how much of a corner's racing line this row has (0 on a straight, 1 in a corner): the smoothed line over its full value */
   const cw=clamp(Math.abs(lc)/Math.max(0.5,hw*0.36),0,1);
-  /* corner ruts: the main trench on the racing line, two wings (braided), the high line up the berm face, an inside line */
+  /* corner ruts: the main trench on the racing line, two wings (braided), the high line up the berm face, an inside line (all of it dug by the racing) */
   if(A>0.001){
     const n1=K.n2(s*0.13,7.7), n2=K.n2(s*0.17,19.3), n3=K.n2(s*0.11,29.9), n4=K.n2(s*0.14,43.1), n5=K.n2(s*0.47,61.7), wan=(K.n2(s*0.19,71.3)-0.5)*0.18;
     const D0=0.235*A*(0.84+0.3*n1)*(0.88+0.24*n5), w0=0.31+0.08*n2;
@@ -105,14 +120,17 @@ function smoothAt(R,i,s,lat,K,out){
     const r3=rut(lat-(-side*(hw*0.8+0.1*n1)),0.27,0.16*A*sstep(0.18,0.5,n2)*(0.6+0.4*R.bank[i]));
     const r4=rut(lat-(side*hw*0.3),0.26,0.08*A*sstep(0.22,0.5,n1));
     const rs=(r0+r1+r2+r3+r4)*(R.rutK||1);   /* (the TV's coarse mesh draws them at 65%: o.rut) */
-    h+=rs; if(rs<0) wet+=A*(-rs)*5.0; else { wet-=rs*3.2; loose+=rs*7.5; }   /* the rut bottoms are the wettest dirt; the lips are dry crumbly pushed dirt */
+    hW+=rs; if(rs<0) wW+=A*(-rs)*5.0; else { wW-=rs*3.2; lW+=rs*7.5; }   /* the rut bottoms are the wettest dirt; the lips are dry crumbly pushed dirt */
   }
-  /* the windrows of loose dirt at both edges; on the outside of a corner the berm's lip: the dirt the riders threw up the face, lumpy along the lap */
+  /* the windrows of loose dirt at both edges (the groomer's); on the outside of a corner the berm's lip: the dirt the riders threw up the face, lumpy along the lap */
   { const c=hw-0.52, x=(a-c)/0.4; if(x>-1&&x<1){ const t=1-x*x, hb=R.wind[i]*(0.55+0.9*K.n2(s*0.9+(lat>0?31:0),9.3))*t*t; h+=hb; wet-=0.2*t; loose+=0.55*t; } }
   if(A>0.001&&Math.sign(lat)===-side){ const c=hw-0.62, x=(a-c)/0.5; if(x>-1&&x<1){ const t=1-x*x, lump=0.55+0.75*K.n2(s*1.35,lat*0.8+17.1)+0.35*(K.n2(s*3.1,lat*2.2+5.3)-0.5);
-    const hb=A*0.14*lump*t*t; h+=hb; wet-=0.28*t*A; loose+=0.7*t*A; } }
-  /* whoops: the troughs are scoured, every crest a little uneven across the lane */
-  if(R.whoop[i]>0){ const f=R.F[i]; h+=-0.04*sstep(0.28,0,f)*R.whoop[i]; h+=0.028*(K.n2(lat*0.55+Math.floor(s/3.75)*7.1,Math.floor(s/3.75)*3.3)-0.5)*2*sstep(0.45,0.95,f); wet-=0.25*sstep(0.55,1.0,f); loose+=0.25*sstep(0.6,1.0,f); }
+    const hb=A*0.14*lump*t*t; hW+=hb; wW-=0.28*t*A; lW+=0.7*t*A; } }
+  /* whoops: built smooth (1 cm of scour, crests uneven +-0.6 cm); the racing scours the troughs (5 cm more), chops the crests (+-3 cm across the lane) and knocks a lane into the
+     tops where the skimming tyres hit them (4 cm, +-0.8 m round the line) */
+  if(R.whoop[i]>0){ const f=R.F[i], wh=Math.max(0.3,R.wh[i]||0.75), ix=R.wix[i], tr=sstep(0.36*wh,0,f)*R.whoop[i], cr=sstep(0.55*wh,0.95*wh,f), un=(K.n2(lat*0.55+ix*7.1,ix*3.3)-0.5)*2;
+    h+=-0.01*tr+0.006*un*cr; hW+=-0.05*tr+0.03*un*cr-0.04*cr*Math.exp(-Math.pow((lat-lc*0.5)/0.8,2));
+    wet-=0.25*sstep(0.6*wh,wh,f); loose+=0.25*sstep(0.65*wh,wh,f); }   /* the crests dry and loose */
   /* slow swells, wavelength well above the springs' resonance */
   h+=(K.f2(s*0.075,lat*0.22,2)-0.5)*0.026;
   /* the traffic: where the wheels go. In a corner the riders hold the racing line (+-0.2 m, the wings when they pass); on a straight they spread over +-0.6 m */
@@ -124,11 +142,11 @@ function smoothAt(R,i,s,lat,K,out){
   { const wx=s+(K.n2(s*0.08,lat*0.2+3)-0.5)*7, wy=lat+(K.n2(s*0.1+9,lat*0.25)-0.5)*2.6; wet+=(K.f2(wx*0.075,wy*0.3+50,3)-0.5)*0.42; }
   /* big watered patches (the crew's water trucks: dark wet stretches and dry pale ones, 15-30 m across) */
   wet+=(sstep(0.3,0.7,K.f2(s*0.035+3.7,lat*0.09+81.3,2))-0.5)*0.36;
-  /* the braking bumps' crests (the wheels ride the crests: half the amplitude is in the ground the wheels follow) */
+  /* the braking bumps' crests (the wheels ride the crests: half the amplitude is in the ground the wheels follow) and the roost ripples out of a corner: the racing's */
   const bAmp=R.brake[i]*0.05*Math.exp(-Math.pow((lat-lc*0.5)/1.8,2));
-  h+=bAmp*0.5; h+=R.accel[i]*0.017*Math.exp(-Math.pow((lat-lc*0.5)/1.1,2))*0.5;
+  hW+=bAmp*0.5; hW+=R.accel[i]*0.017*Math.exp(-Math.pow((lat-lc*0.5)/1.1,2))*0.5;
   loose+=0.3*sstep(hw*0.5,hw,a)-0.15*traf;
-  out.h=h*edge; out.wet=clamp(wet,0,1); out.traf=traf*edge; out.loose=clamp(loose,0,1); return out;
+  out.h0=h*edge; out.hW=hW*edge; out.wet0=clamp(wet,0,1); out.wet1=clamp(wet+wW,0,1); out.traf=traf*edge; out.loose0=clamp(loose,0,1); out.loose1=clamp(loose+lW,0,1); return out;
 }
 
 /* the field on the mesh's grid: nl columns across [-LATR, LATR] (nl odd), ns rows. Returns the arrays and the samplers */
@@ -136,19 +154,25 @@ export function buildRelief(C,o){
   o=o||{}; const L=C.L, ns=4*Math.max(2,Math.round(L/(4*(o.ds||0.25)))), ds=L/ns;   /* a multiple of 4 rows: the mesh's three levels of detail all land on whole rows */
   let LATR=0; for(let i=0;i<C.N;i++) if(C.hw[i]>LATR) LATR=C.hw[i];
   const nl=o.nl||51, dl=2*LATR/(nl-1), K=noiseKit(((C.id||"").length*2654435761+(Math.round(L*10)))>>>0);
-  const rows=makeRows(C,ns,K); rows.rutK=o.rut||1; const phys=new Float32Array(ns*nl), moist=new Uint8Array(ns*nl), tone=new Uint8Array(ns*nl), traf=new Uint8Array(ns*nl), loose=new Uint8Array(ns*nl), tmp={h:0,wet:0,traf:0,loose:0};
+  const rows=makeRows(C,ns,K); rows.rutK=o.rut||1;
+  const phys0=new Float32Array(ns*nl), physW=new Float32Array(ns*nl), moist0=new Uint8Array(ns*nl), moist=new Uint8Array(ns*nl), tone=new Uint8Array(ns*nl), traf=new Uint8Array(ns*nl), loose0=new Uint8Array(ns*nl), loose=new Uint8Array(ns*nl), tmp={};
   for(let i=0;i<ns;i++){ const s=i*ds;
-    for(let j=0;j<nl;j++){ const lat=-LATR+j*dl, k=i*nl+j; smoothAt(rows,i,s,lat,K,tmp); phys[k]=tmp.h; moist[k]=Math.round(tmp.wet*255); traf[k]=Math.round(tmp.traf*255); loose[k]=Math.round(tmp.loose*255);
+    for(let j=0;j<nl;j++){ const lat=-LATR+j*dl, k=i*nl+j; smoothAt(rows,i,s,lat,K,tmp); phys0[k]=tmp.h0; physW[k]=tmp.hW; moist0[k]=Math.round(tmp.wet0*255); moist[k]=Math.round(tmp.wet1*255); traf[k]=Math.round(tmp.traf*255);
+      loose0[k]=Math.round(tmp.loose0*255); loose[k]=Math.round(tmp.loose1*255);
       tone[k]=Math.round(clamp(0.5+(K.f2(s*0.045,lat*0.13+9,3)-0.5)*0.9+(K.n2(s*0.3,lat*0.5)-0.5)*0.12,0,1)*255); } }
-  const Rl={ns:ns,nl:nl,ds:ds,dl:dl,LATR:LATR,L:L,phys:phys,moist:moist,tone:tone,traf:traf,loose:loose,rows:rows,K:K,C:C};
+  /* phys0 / moist0 / loose0: the groomed track; physW: what the racing digs (height at a night's wear of 1); moist / loose: the worn track's (wear 1) */
+  const Rl={ns:ns,nl:nl,ds:ds,dl:dl,LATR:LATR,L:L,phys0:phys0,physW:physW,moist0:moist0,moist:moist,tone:tone,traf:traf,loose0:loose0,loose:loose,rows:rows,K:K,C:C,m:1};
   /* at(A, s, lat): bilinear sample of any of the grid arrays (the loop wraps along s, the lateral edge clamps) */
   Rl.at=function(A,s,lat){
     s%=L; if(s<0) s+=L; const x=s/ds, i0=Math.floor(x), fx=x-i0, i1=(i0+1)%ns, y=clamp((lat+LATR)/dl,0,nl-1.0001), j0=Math.floor(y), fy=y-j0, j1=j0+1, a=(i0%ns)*nl, b=i1*nl;
     const p00=A[a+j0], p01=A[a+j1], p10=A[b+j0], p11=A[b+j1];
     return (p00+(p01-p00)*fy)*(1-fx)+(p10+(p11-p10)*fy)*fx;
   };
-  /* delta(s, lat): the ground the wheels follow (the mesh's heights; zero outside the track, and fading to zero at the finish line so the painted line lies flat) */
-  Rl.delta=function(s,lat){ if(lat>=LATR||lat<=-LATR) return 0; return Rl.at(phys,s,lat); };
+  /* delta(s, lat): the ground the wheels follow (the mesh's heights as drawn: the groomed track plus the night's wear Rl.m (r3d-track.js sets it every frame: 0.12 for the first
+     heat's start .. 1.2 at the end of the Main); zero outside the track, and fading to zero at the finish line so the painted line lies flat); deltaAt(s, lat, m): at a given wear */
+  Rl.deltaAt=function(s,lat,m){ if(lat>=LATR||lat<=-LATR) return 0; return Rl.at(phys0,s,lat)+m*Rl.at(physW,s,lat); };
+  Rl.delta=function(s,lat){ return Rl.deltaAt(s,lat,Rl.m); };
+  Rl.wearAt=function(s,lat){ if(lat>=LATR||lat<=-LATR) return 0; return Rl.at(physW,s,lat); };
   /* lineAt(s): the racing line's lateral offset (m, + right) the ruts lie on: the outside of a corner at 0.36 of the half width, smoothed (race3d.js's riders aim at the same, unsmoothed) */
   Rl.lineAt=function(s){ s%=L; if(s<0) s+=L; const x=s/ds, i0=Math.floor(x), f=x-i0, a=rows.line[i0%ns], b=rows.line[(i0+1)%ns]; return a+(b-a)*f; };
   Rl.fine=(nt,nv)=>fineMap(Rl,nt,nv);
@@ -209,7 +233,7 @@ function fineMap(Rl,nt,nv){
       const ld=rows.land[i], pl=rows.pile[i];
       if(ld>0.02||pl>0.02){ const en=Math.exp(-Math.pow(lat/1.9,2)), sc=0.5+0.5*Math.cos(s*17+lat*3.7+K.n2(s*1.3,lat*1.1)*5); f-=ld*en*(0.02+0.014*sc*K.n2(s*0.9,lat*0.6+4)); f+=pl*en*0.028*(0.6+0.4*K.n2(s*4,lat*3)); }
       /* whoops: chopped scallops down the faces */
-      if(wh>0){ const fs=rows.Fs[i]; if(fs<-0.04){ f+=0.03*Math.cos(s*12.2+lat*2.1+Math.floor(s/3.75)*1.7)*clamp(-fs*3,0,1)*sstep(0.1,0.7,1-Math.abs(lat)/hw); } }
+      if(wh>0){ const fs=rows.Fs[i]; if(fs<-0.04){ f+=0.03*Math.cos(s*12.2+lat*2.1+rows.wix[i]*1.7)*clamp(-fs*3,0,1)*sstep(0.1,0.7,1-Math.abs(lat)/hw); } }
       /* milestone 2: the corner ruts are CHOPPED: braking chatter across the trench every 0.6-1.0 m, slanted, strongest in its bottom (the mesh carries the trench, this the chatter) */
       if(A>0.01){ const dl0=(lat-line)/0.42; if(dl0*dl0<1){ const t=1-dl0*dl0, ch=Math.cos(s*(TAU/(0.72+0.22*K.n2(s*0.3,5.1)))+lat*2.6+K.n2(s*0.9,lat*0.7+13)*3.2);
         f+=A*0.03*t*t*ch*(0.6+0.5*K.n2(s*0.5,lat*0.4+21)); } }
@@ -219,7 +243,7 @@ function fineMap(Rl,nt,nv){
       const c1=K.f2(s*3.1,lat*3.1,2), c2=K.n2(s*10.5,lat*10.5);
       f+=((c1-0.5)*0.034*(0.5+loose)+(c2-0.5)*0.012*(0.5+loose))*(1-0.35*tr);
       F[k]=f*edge; LO[k]=loose;
-      H[k]=Rl.delta(s,lat)+f*edge;
+      H[k]=Rl.deltaAt(s,lat,1)+f*edge;   /* (the cavity of the worn track: the shader fades it with the night's wear) */
     }
   }
   return encode(F,H,LO,nt,nv,dsT,dlT,true);

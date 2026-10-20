@@ -155,10 +155,17 @@ function clumpTile(W){
    cavities, on the worn line and in the race's own grooves (darker, more saturated, a sheen the key light catches); dry loose crests turn a paler, dustier tan; near the lens the
    loose dirt is CHUNKY: a cellular clump tile (clods and crumbs, their slopes and cracks) laid in world space at two scales and faded out with distance (it would shimmer);
    the WEAR (uWear.x 0..1, from the race clock: r3d-track.js frame) darkens, packs and polishes where the wheels pass (aTraf) and reveals the wear map's grooves lap by lap. */
-const GL_VS_PARS="attribute float aWet;\nattribute float aTraf;\nvarying float vWet;\nvarying float vTraf;\nvarying vec2 vTm;\nvarying vec2 vWxz;\n";
-const GL_VS_BODY="vWet=aWet; vTraf=aTraf; vTm=uv; vWxz=(modelMatrix*vec4(transformed,1.0)).xz;\n";
+/* THE NIGHT'S WEAR (2026-10-19, the CEO: "the track should be perfect, but the ruts get deeper and deeper as the night goes on"): every vertex carries the groomed track (its position,
+   its normal, aCol0 = its colour and moisture) and what the racing digs (aRut = the height the ruts, bumps and chop add at a wear of 1, aNw = the normal there, color / aWet = the worn
+   colour and moisture); uNight = (m: the ruts' depth, 0.12 at the first heat's gate .. 1.2 at the end of the Main; wN: the worn look's share, 0 .. 1.23; the fine detail's
+   strength; the cavities' strength) from the race order and the laps already run (nightFrame below). The normal at a wear m is exact: the height is linear in m, so the
+   normal's slope is too. */
+const GL_VS_PARS="attribute float aWet;\nattribute float aTraf;\nattribute float aRut;\nattribute vec3 aNw;\nattribute vec4 aCol0;\nuniform vec4 uNight;\nvarying float vWet;\nvarying float vTraf;\nvarying vec2 vTm;\nvarying vec2 vWxz;\n";
+const GL_VS_NORMAL="{ vec3 mxN0=objectNormal/max(objectNormal.y,0.05), mxN1=aNw/max(aNw.y,0.05); objectNormal=normalize(mxN0+(mxN1-mxN0)*uNight.x); }\n";
+const GL_VS_BODY="transformed.y+=uNight.x*aRut*0.5;\nvWet=clamp(mix(aCol0.a,aWet,min(uNight.y,1.0)),0.0,1.0); vTraf=aTraf; vTm=uv; vWxz=(modelMatrix*vec4(transformed,1.0)).xz;\n";
+const GL_VS_COLOR="#ifdef USE_COLOR\nvColor=mix(aCol0.rgb*aCol0.rgb,vColor,min(uNight.y,1.0));\n#endif\n";
 const GL_FS_PARS=`uniform sampler2D uTrack; uniform sampler2D uTileA; uniform sampler2D uTileB; uniform sampler2D uClump; uniform sampler2D uWearT;
-uniform vec4 uTm; uniform vec3 uSheen; uniform vec4 uTun; uniform vec4 uTun2; uniform vec4 uWear;
+uniform vec4 uTm; uniform vec3 uSheen; uniform vec4 uTun; uniform vec4 uTun2; uniform vec4 uWear; uniform vec4 uNight;
 varying float vWet; varying float vTraf; varying vec2 vTm; varying vec2 vWxz;
 vec2 mxRot(vec2 p,float a){ float c=cos(a), s=sin(a); return vec2(c*p.x-s*p.y, s*p.x+c*p.y); }
 `;
@@ -172,7 +179,7 @@ vec4 mxB1=texture2D(uTileB,mxP*0.92), mxB2=texture2D(uTileB,mxRot(mxP,-0.43)*0.3
 vec4 mxK1=texture2D(uClump,mxRot(mxP,0.37)*1.18+vec2(0.13,0.71)), mxK2=texture2D(uClump,mxRot(mxP,-1.13)*0.75+vec2(0.41,0.29));
 float mxWr=clamp(uWear.x*vTraf,0.0,1.0);
 float mxGv=mxW.a<0.995?smoothstep(mxW.a,mxW.a+0.07,uWear.x):0.0;
-float mxLoose=clamp((mxT.a*1.15+(mxA2.r-0.5)*0.35)*(1.0-0.7*mxWr),0.0,1.0);
+float mxLoose=clamp((mxT.a*1.15*(0.45+0.55*min(uNight.y,1.0))+(mxA2.r-0.5)*0.35)*(1.0-0.7*mxWr),0.0,1.0);
 float mxDist=length(vViewPosition);
 float mxCl=(1.0-smoothstep(5.0,30.0,mxDist))*(0.3+0.7*mxLoose)*(1.0-0.55*mxWr)*uTun2.x;
 float mxCl2=(1.0-smoothstep(12.0,60.0,mxDist))*(0.1+0.9*mxLoose)*uTun2.y;
@@ -181,7 +188,7 @@ float mxLuma=pow(max(mix(mxLumA,mxLumB,mxLoose),0.02),uTun.w)*(1.0+(mxK1.r-0.5)*
 vec2 mxGd=mix((mxA1.gb-0.5)*2.0+(mxA2.gb-0.5)*1.3,(mxB1.gb-0.5)*2.0+(mxB2.gb-0.5)*1.3,mxLoose)*(1.0-0.4*mxWr);
 vec2 mxGk=mxRot((mxK1.gb-0.5)*2.0,-0.37)*mxCl+mxRot((mxK2.gb-0.5)*2.0,1.13)*0.6*mxCl2;
 float mxAOd=mix(mxA1.a*mxA2.a,mxB1.a*mxB2.a,mxLoose)*mix(1.0,mxK1.a,mxCl*0.7)*mix(1.0,mxK2.a,mxCl2*0.5);
-float mxWx=clamp((1.0-mxT.b)*0.5+mxWr*0.62+mxW.b*mxGv*0.75,0.0,1.0);
+float mxWx=clamp((1.0-mxT.b)*0.5*uNight.w+mxWr*0.62+mxW.b*mxGv*0.75,0.0,1.0);
 float mxWet=clamp(vWet+mxWx,0.0,1.0);
 `;
 const GL_MAP_LO=`vec2 mxUv=vec2(vTm.x*uTm.x,(vTm.y+uTm.y)*uTm.z);
@@ -190,12 +197,12 @@ vec2 mxP=vWxz;
 vec4 mxA1=texture2D(uTileA,mxP*0.47), mxB1=texture2D(uTileB,mxP*0.92), mxA2=texture2D(uTileA,mxRot(mxP,0.62)*0.173+vec2(0.31,0.17));
 vec4 mxK1=texture2D(uClump,mxRot(mxP,0.37)*1.18+vec2(0.13,0.71));
 float mxWr=clamp(uWear.x*vTraf,0.0,1.0);
-float mxLoose=clamp(mxT.a*1.15*(1.0-0.7*mxWr),0.0,1.0);
+float mxLoose=clamp(mxT.a*1.15*(0.45+0.55*min(uNight.y,1.0))*(1.0-0.7*mxWr),0.0,1.0);
 float mxCl=(1.0-smoothstep(4.0,24.0,length(vViewPosition)))*(0.3+0.7*mxLoose)*(1.0-0.55*mxWr)*uTun2.x;
 float mxLuma=pow(max(mix(mxA1.r*1.992,mxB1.r*1.992,mxLoose)*mix(1.0,mxA2.r*1.992,0.5),0.02),uTun.w)*(1.0+(mxK1.r-0.5)*0.9*mxCl);
 vec2 mxGd=mix((mxA1.gb-0.5)*2.0,(mxB1.gb-0.5)*2.0,mxLoose)*(1.0-0.4*mxWr)+mxRot((mxK1.gb-0.5)*2.0,-0.37)*mxCl;
 float mxAOd=mix(mxA1.a,mxB1.a,mxLoose)*mix(1.0,mxK1.a,mxCl);
-float mxWx=clamp((1.0-mxT.b)*0.5+mxWr*0.62,0.0,1.0);
+float mxWx=clamp((1.0-mxT.b)*0.5*uNight.w+mxWr*0.62,0.0,1.0);
 float mxWet=clamp(vWet+mxWx,0.0,1.0);
 `;
 /* the colour, after the vertex colour (the soil family by moisture): the scans' grain and the clumps, the per-pixel extra moisture, the dusty dry crust */
@@ -211,7 +218,7 @@ const GL_NORMAL_HI=`{
   vec3 q1p=cross(q1,normal), q0p=cross(normal,q0);
   vec3 mxTa=q1p*st0.x+q0p*st1.x, mxBi=q1p*st0.y+q0p*st1.y;
   float det=max(dot(mxTa,mxTa),dot(mxBi,mxBi)); float sc=(det==0.0)?0.0:inversesqrt(det); mxTa*=sc; mxBi*=sc;
-  vec2 gs=(mxT.rg*2.0-1.0)*uTun.x*(1.0-0.35*mxWr)+(mxW.rg*2.0-1.0)*uTun.x*mxGv;
+  vec2 gs=(mxT.rg*2.0-1.0)*uTun.x*(1.0-0.35*mxWr)*uNight.z+(mxW.rg*2.0-1.0)*uTun.x*mxGv;
   normal=normalize(normal-mxTa*gs.x-mxBi*gs.y);
   normal=normalize(normal-mat3(viewMatrix)*vec3(mxGd.x*uTun.y+mxGk.x*uTun2.z,0.0,mxGd.y*uTun.y+mxGk.y*uTun2.z));
 }
@@ -221,14 +228,14 @@ const GL_NORMAL_LO=`{
   vec3 q1p=cross(q1,normal), q0p=cross(normal,q0);
   vec3 mxTa=q1p*st0.x+q0p*st1.x, mxBi=q1p*st0.y+q0p*st1.y;
   float det=max(dot(mxTa,mxTa),dot(mxBi,mxBi)); float sc=(det==0.0)?0.0:inversesqrt(det); mxTa*=sc; mxBi*=sc;
-  vec2 gs=(mxT.rg*2.0-1.0)*uTun.x*(1.0-0.35*mxWr);
+  vec2 gs=(mxT.rg*2.0-1.0)*uTun.x*(1.0-0.35*mxWr)*uNight.z;
   normal=normalize(normal-mxTa*gs.x-mxBi*gs.y);
   normal=normalize(normal-mat3(viewMatrix)*vec3(mxGd.x,0.0,mxGd.y)*uTun.y);
 }
 `;
 const GL_NORMAL_PRE="vec3 mxNg=normal;\n";
 /* the light: cavities and cracks occlude; wet dirt catches the key light's highlight (the direct specular rises with the moisture) and glistens at a grazing angle */
-const GL_AO_HI=`float mxAO=clamp(mxT.b*mxAOd,0.0,1.0);
+const GL_AO_HI=`float mxAO=clamp(mix(1.0,mxT.b,uNight.w)*mxAOd,0.0,1.0);
 reflectedLight.indirectDiffuse*=mxAO*mxAO;
 reflectedLight.directDiffuse*=mix(1.0,mxAO,0.9);
 float mxWs=smoothstep(0.4,0.92,mxWet);
@@ -237,7 +244,7 @@ reflectedLight.indirectSpecular*=mix(0.18,0.7,mxWs)*mxAO*vec3(1.0,0.84,0.62);   
 float mxFr=pow(1.0-clamp(dot(mxNg,normalize(vViewPosition)),0.0,1.0),5.0);
 reflectedLight.indirectSpecular+=uSheen*(mxFr*mxWs*uTun.z*mxAO);
 `;
-const GL_AO_LO=`float mxAO=clamp(mxT.b*mxAOd,0.0,1.0);
+const GL_AO_LO=`float mxAO=clamp(mix(1.0,mxT.b,uNight.w)*mxAOd,0.0,1.0);
 reflectedLight.indirectDiffuse*=mxAO*mxAO;
 reflectedLight.directDiffuse*=mix(1.0,mxAO,0.9);
 `;
@@ -253,11 +260,12 @@ function dirtMaterial(tier,tiles,sheen){
   const m=hi?new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.95,metalness:0,vertexColors:true,side:THREE.DoubleSide})
             :new THREE.MeshLambertMaterial({color:0xffffff,vertexColors:true,side:THREE.DoubleSide});
   const U={uTrack:{value:null},uTileA:{value:tiles.A},uTileB:{value:tiles.B},uClump:{value:tiles.K},uWearT:{value:noWear()},uTm:{value:new THREE.Vector4(1/500,4,0.125,1)},uSheen:{value:new THREE.Color(sheen)},
-    uTun:{value:new THREE.Vector4(hi?1.5:1.2,hi?1.15:0.9,0.22,hi?1.35:1.2)},uTun2:{value:new THREE.Vector4(1,hi?1:0,1,0)},uWear:{value:new THREE.Vector4(0,0,0,0)}};
+    uTun:{value:new THREE.Vector4(hi?1.5:1.2,hi?1.15:0.9,0.22,hi?1.35:1.2)},uTun2:{value:new THREE.Vector4(1,hi?1:0,1,0)},uWear:{value:new THREE.Vector4(0,0,0,0)},uNight:{value:new THREE.Vector4(1,1,1,1)}};
   m.userData.mx=U;
   m.onBeforeCompile=sh=>{
     Object.assign(sh.uniforms,U);
-    sh.vertexShader=sh.vertexShader.replace("#include <common>","#include <common>\n"+GL_VS_PARS).replace("#include <begin_vertex>","#include <begin_vertex>\n"+GL_VS_BODY);
+    sh.vertexShader=sh.vertexShader.replace("#include <common>","#include <common>\n"+GL_VS_PARS).replace("#include <beginnormal_vertex>","#include <beginnormal_vertex>\n"+GL_VS_NORMAL)
+      .replace("#include <begin_vertex>","#include <begin_vertex>\n"+GL_VS_BODY).replace("#include <color_vertex>","#include <color_vertex>\n"+GL_VS_COLOR);
     let f=sh.fragmentShader.replace("#include <common>","#include <common>\n"+GL_FS_PARS).replace("#include <map_fragment>",hi?GL_MAP_HI:GL_MAP_LO)
       .replace("#include <color_fragment>","#include <color_fragment>\n"+(hi?GL_COLOR_HI:GL_COLOR_LO))
       .replace("#include <normal_fragment_maps>",GL_NORMAL_PRE+(hi?GL_NORMAL_HI:GL_NORMAL_LO))
@@ -265,7 +273,7 @@ function dirtMaterial(tier,tiles,sheen){
     if(hi) f=f.replace("#include <roughnessmap_fragment>",GL_ROUGH);
     sh.fragmentShader=f;
   };
-  m.customProgramCacheKey=()=>"mx-dirt2-"+tier;
+  m.customProgramCacheKey=()=>"mx-dirt3-"+tier;
   return m;
 }
 /* the track-space texture (slopes of the fine detail, cavity, loose mask) from the relief */
@@ -289,9 +297,11 @@ function trackBuild(C,look,q,tier,tiles){
      drawn at 65% of the depth (a V that deep would read as a fold; the fine map's shading carries the rest) */
   const R=buildRelief(C,{ds:hi?(long?0.5:0.25):(long?1.0:0.5),nl:hi?(long?41:61):21,rut:hi?1:0.65});
   installGround(C,R);
+  R.m=0;   /* (the night's wear: the mesh is built GROOMED (positions, normals, colours) with what the racing digs beside it (PW, CR / WT: the worn colours); trackMesh sets it back) */
   const ns=R.ns, nl=R.nl, SH=[1.35,1.85], U=[-SH[1],-SH[0]], nc=nl+4;
   for(let j=0;j<nl;j++) U.push(-1+2*j/(nl-1)); U.push(SH[0],SH[1]);
   const PX=new Float32Array((ns+1)*nc), PY=new Float32Array((ns+1)*nc), PZ=new Float32Array((ns+1)*nc), CR=new Float32Array((ns+1)*nc*3), WT=new Float32Array((ns+1)*nc), TF=new Float32Array((ns+1)*nc), UVs=new Float32Array((ns+1)*nc), UVl=new Float32Array((ns+1)*nc);
+  const PW=new Float32Array((ns+1)*nc), CR0=new Float32Array((ns+1)*nc*3), WT0=new Float32Array((ns+1)*nc);
   const o={}, o2={}, prevX=new Float64Array(nc), prevZ=new Float64Array(nc);
   for(let i=0;i<=ns;i++){
     const s=i*R.ds, ss=i===ns?0:s, f=Co.frame(C,ss,o), hw=f.hw, nx=-Math.sin(f.th), nz=Math.cos(f.th), ii=Math.round(ss/C.ds)%C.N, sand=C.sand[ii]||0;
@@ -310,50 +320,62 @@ function trackBuild(C,look,q,tier,tiles){
       if(i>0&&i<ns){ const al=(vx-prevX[c])*Math.cos(f.th)+(vz-prevZ[c])*Math.sin(f.th); if(al<0.02){ vx+=Math.cos(f.th)*(0.02-al); vz+=Math.sin(f.th)*(0.02-al); } }
       prevX[c]=vx; prevZ[c]=vz;
       const k=i*nc+c; PX[k]=vx; PY[k]=y; PZ[k]=vz; UVs[k]=ss; UVl[k]=lat;
-      /* colour: moisture sets the tone (dry pale crests and edges, dark packed ruts and racing line), the slow drift breaks up the lanes; berm faces packed, sand pale, the shoulders grass outdoors */
-      const inner=a<=1, latc=clamp(lat,-R.LATR+0.001,R.LATR-0.001);
-      let w=inner?R.at(R.moist,ss,latc)/255:R.at(R.moist,ss,Math.sign(lat)*(R.LATR-0.01))/255*0.6, tone=R.at(R.tone,ss,latc)/255;
-      /* the soil family by moisture (milestone 2): dry tan -> mid brown -> wet dark brown -> the deep wet of a rut's bottom */
-      let col=mixc(mixc(mixc(lite,base,sstep(0.06,0.32,w)),dark,sstep(0.42,0.78,w)),deep,sstep(0.84,1.0,w));
-      const bermFace=a>0.55&&a<=1?C.bank[ii]/2:0; col=mixc(col,dark,bermFace*0.18);
+      /* colour: moisture sets the tone (dry pale crests and edges, dark packed ruts and racing line), the slow drift breaks up the lanes; berm faces packed, sand pale, the shoulders grass outdoors.
+         Twice: the worn track's (CR, WT: the moisture of the racing's ruts and lips) and the groomed track's (CR0, WT0); the shader blends them by the night's wear */
+      const inner=a<=1, latc=clamp(lat,-R.LATR+0.001,R.LATR-0.001), tone=R.at(R.tone,ss,latc)/255;
+      const bermFace=a>0.55&&a<=1?C.bank[ii]/2:0;
       const hs=Fh>0.05?clamp(0.9+0.2*clamp(Fh/1.4,0,1)-0.14*clamp(Fs,0,1),0.7,1.12):1;   /* the tops of whoops, mounds and jumps catch the light, the steep faces are darker */
-      const tn=(0.84+0.32*tone)*hs; col=[col[0]*tn,col[1]*tn,col[2]*tn];
-      if(sand>0) col=mixc(col,sandc,sand*0.85);
-      if(!inner){ const hAbove=y-(f.y-0.55);
-        col=outdoor?mixc(mixc(base,lite,0.3),grassEdge,sstep(1.05,1.8,a)*(1-sstep(0.35,1.1,hAbove))):mixc(mixc(base,dark,0.4),dark.map(v=>v*0.78),sstep(1.0,1.85,a)); w=0.25; }
-      CR[k*3]=col[0]; CR[k*3+1]=col[1]; CR[k*3+2]=col[2]; WT[k]=sand>0.3?w*0.4:w; TF[k]=inner?R.at(R.traf,ss,latc)/255:0;
+      for(let v2=0;v2<2;v2++){ const MA=v2?R.moist0:R.moist, CA=v2?CR0:CR, WA=v2?WT0:WT;
+        let w=inner?R.at(MA,ss,latc)/255:R.at(MA,ss,Math.sign(lat)*(R.LATR-0.01))/255*0.6;
+        /* the soil family by moisture (milestone 2): dry tan -> mid brown -> wet dark brown -> the deep wet of a rut's bottom */
+        let col=mixc(mixc(mixc(lite,base,sstep(0.06,0.32,w)),dark,sstep(0.42,0.78,w)),deep,sstep(0.84,1.0,w));
+        col=mixc(col,dark,bermFace*0.18);
+        const tn=(0.84+0.32*tone)*hs; col=[col[0]*tn,col[1]*tn,col[2]*tn];
+        if(sand>0) col=mixc(col,sandc,sand*0.85);
+        if(!inner){ const hAbove=y-(f.y-0.55);
+          col=outdoor?mixc(mixc(base,lite,0.3),grassEdge,sstep(1.05,1.8,a)*(1-sstep(0.35,1.1,hAbove))):mixc(mixc(base,dark,0.4),dark.map(v=>v*0.78),sstep(1.0,1.85,a)); w=0.25; }
+        CA[k*3]=col[0]; CA[k*3+1]=col[1]; CA[k*3+2]=col[2]; WA[k]=sand>0.3?w*0.4:w; }
+      TF[k]=inner?R.at(R.traf,ss,latc)/255:0; PW[k]=inner?R.wearAt(ss,lat):0;
     }
   }
-  return {R,PX,PY,PZ,CR,WT,TF,UVs,UVl,nc,ns,U,Co};
+  return {R,PX,PY,PZ,CR,WT,TF,UVs,UVl,nc,ns,U,Co,PW,CR0,WT0};
 }
 
 /* one mesh from a list of grid rows (ascending; any spacing), columns every sc (the shoulders always), positions relative to (cx, cy, cz); skirts hide the cracks between levels of detail */
 function gridMesh(G,rowList,sc,cx,cy,cz,skirts,mat){
-  const {R,PX,PY,PZ,CR,WT,TF,UVs,UVl,nc,ns}=G, nl=R.nl, r0=rowList[0], r1=rowList[rowList.length-1];
+  const {R,PX,PY,PZ,CR,WT,TF,UVs,UVl,nc,ns,PW,CR0,WT0}=G, nl=R.nl, r0=rowList[0], r1=rowList[rowList.length-1];
   const cols=[0,1]; for(let j=0;j<nl;j+=sc) cols.push(2+j); if((nl-1)%sc) cols.push(2+nl-1); cols.push(nc-2,nc-1);
   const nr=rowList.length, ncc=cols.length, nv=nr*ncc+(skirts?2*ncc:0);
   /* (milestone 2: normals as normalized bytes, moisture and traffic as bytes: 37 bytes a vertex instead of 52; the near level has half as many vertices again as milestone 1's) */
   const pos=new Float32Array(nv*3), nor=new Int8Array(nv*3), col=new Float32Array(nv*3), wet=new Uint8Array(nv), trf=new Uint8Array(nv), uv=new Float32Array(nv*2);
+  /* (the night's wear: + 9 bytes a vertex: the wear's height (16 bits over +-0.5 m), its normal (bytes), the groomed colour (bytes of its square root: fine in the darks) and moisture) */
+  const rut=new Int16Array(nv), nw=new Int8Array(nv*3), c0=new Uint8Array(nv*4);
   const at=(r,c)=>{ if(r>=ns) return (r===ns?ns:r-ns)*nc+c; if(r<0) return (r+ns)*nc+c; return r*nc+c; };
   let v=0;
   for(let ri=0;ri<nr;ri++){ const r=rowList[ri], rp=ri>0?rowList[ri-1]:r-(rowList[Math.min(1,nr-1)]-r||1), rn=ri<nr-1?rowList[ri+1]:r+(r-(ri>0?rowList[ri-1]:r-1));
     for(let ci=0;ci<ncc;ci++){ const c=cols[ci], k=at(r,c);
       const cm=cols[Math.max(0,ci-1)], cp=cols[Math.min(ncc-1,ci+1)], kl=at(r,cm), kr=at(r,cp), ku=at(rp,c), kd=at(rn,c);
-      const ax=PX[kr]-PX[kl], ay=PY[kr]-PY[kl], az=PZ[kr]-PZ[kl], bx=PX[kd]-PX[ku], by=PY[kd]-PY[ku], bz=PZ[kd]-PZ[ku];
-      /* lateral x along-the-track: up (the lap runs along +s, lat to the right) */
-      let nx=ay*bz-az*by, ny=az*bx-ax*bz, nz=ax*by-ay*bx; const ln=Math.hypot(nx,ny,nz)||1; nx/=ln; ny/=ln; nz/=ln; if(ny<0){ nx=-nx; ny=-ny; nz=-nz; }
-      pos[v*3]=PX[k]-cx; pos[v*3+1]=PY[k]-cy; pos[v*3+2]=PZ[k]-cz; nor[v*3]=Math.round(nx*127); nor[v*3+1]=Math.round(ny*127); nor[v*3+2]=Math.round(nz*127);
-      col[v*3]=CR[k*3]; col[v*3+1]=CR[k*3+1]; col[v*3+2]=CR[k*3+2]; wet[v]=Math.round(clamp(WT[k],0,1)*255); trf[v]=Math.round(clamp(TF[k],0,1)*255); uv[v*2]=UVs[k]; uv[v*2+1]=UVl[k]; v++; } }
+      for(let q=0;q<2;q++){   /* the groomed surface's normal, then the worn one's (the heights plus the wear at 1) */
+        const ax=PX[kr]-PX[kl], ay=PY[kr]-PY[kl]+(q?PW[kr]-PW[kl]:0), az=PZ[kr]-PZ[kl], bx=PX[kd]-PX[ku], by=PY[kd]-PY[ku]+(q?PW[kd]-PW[ku]:0), bz=PZ[kd]-PZ[ku];
+        /* lateral x along-the-track: up (the lap runs along +s, lat to the right) */
+        let nx=ay*bz-az*by, ny=az*bx-ax*bz, nz=ax*by-ay*bx; const ln=Math.hypot(nx,ny,nz)||1; nx/=ln; ny/=ln; nz/=ln; if(ny<0){ nx=-nx; ny=-ny; nz=-nz; }
+        const N=q?nw:nor; N[v*3]=Math.round(nx*127); N[v*3+1]=Math.round(ny*127); N[v*3+2]=Math.round(nz*127); }
+      pos[v*3]=PX[k]-cx; pos[v*3+1]=PY[k]-cy; pos[v*3+2]=PZ[k]-cz; rut[v]=Math.round(clamp(PW[k]/0.5,-1,1)*32767);
+      col[v*3]=CR[k*3]; col[v*3+1]=CR[k*3+1]; col[v*3+2]=CR[k*3+2]; wet[v]=Math.round(clamp(WT[k],0,1)*255); trf[v]=Math.round(clamp(TF[k],0,1)*255); uv[v*2]=UVs[k]; uv[v*2+1]=UVl[k];
+      c0[v*4]=Math.round(Math.sqrt(clamp(CR0[k*3],0,1))*255); c0[v*4+1]=Math.round(Math.sqrt(clamp(CR0[k*3+1],0,1))*255); c0[v*4+2]=Math.round(Math.sqrt(clamp(CR0[k*3+2],0,1))*255); c0[v*4+3]=Math.round(clamp(WT0[k],0,1)*255); v++; } }
   /* the loop's last row is the first row again: its s runs on to L so the texture coordinate is continuous */
   if(r1>=ns){ for(let ri=0;ri<nr;ri++){ const r=rowList[ri]; if(r>=ns){ for(let ci=0;ci<ncc;ci++) uv[(ri*ncc+ci)*2]=R.L+(r-ns)*R.ds; } } }
   const I=[]; for(let ri=0;ri<nr-1;ri++) for(let ci=0;ci<ncc-1;ci++){ const a=ri*ncc+ci, b=a+1, c2=a+ncc, d=c2+1; I.push(a,b,c2,b,d,c2); }
   if(skirts){ /* a skirt under the first and the last row: a strip dropped 0.16 m */
     [0,nr-1].forEach((ri,m)=>{ const base0=nr*ncc+m*ncc; for(let ci=0;ci<ncc;ci++){ const s0=(ri*ncc+ci), d=base0+ci; pos[d*3]=pos[s0*3]; pos[d*3+1]=pos[s0*3+1]-0.16; pos[d*3+2]=pos[s0*3+2]; nor[d*3]=nor[s0*3]; nor[d*3+1]=nor[s0*3+1]; nor[d*3+2]=nor[s0*3+2];
-      col[d*3]=col[s0*3]; col[d*3+1]=col[s0*3+1]; col[d*3+2]=col[s0*3+2]; wet[d]=wet[s0]; trf[d]=trf[s0]; uv[d*2]=uv[s0*2]; uv[d*2+1]=uv[s0*2+1]; }
+      col[d*3]=col[s0*3]; col[d*3+1]=col[s0*3+1]; col[d*3+2]=col[s0*3+2]; wet[d]=wet[s0]; trf[d]=trf[s0]; uv[d*2]=uv[s0*2]; uv[d*2+1]=uv[s0*2+1];
+      rut[d]=rut[s0]; nw[d*3]=nw[s0*3]; nw[d*3+1]=nw[s0*3+1]; nw[d*3+2]=nw[s0*3+2]; for(let q=0;q<4;q++) c0[d*4+q]=c0[s0*4+q]; }
       for(let ci=0;ci<ncc-1;ci++){ const t0=ri*ncc+ci, t1=t0+1, b0=base0+ci, b1=b0+1; I.push(t0,b0,t1,t1,b0,b1); } });
   }
   const g=new THREE.BufferGeometry(); g.setAttribute("position",new THREE.BufferAttribute(pos,3)); g.setAttribute("normal",new THREE.BufferAttribute(nor,3,true)); g.setAttribute("color",new THREE.BufferAttribute(col,3));
   g.setAttribute("aWet",new THREE.BufferAttribute(wet,1,true)); g.setAttribute("aTraf",new THREE.BufferAttribute(trf,1,true)); g.setAttribute("uv",new THREE.BufferAttribute(uv,2)); g.setIndex(nv>65000?new THREE.BufferAttribute(new Uint32Array(I),1):new THREE.BufferAttribute(new Uint16Array(I),1));
+  g.setAttribute("aRut",new THREE.BufferAttribute(rut,1,true)); g.setAttribute("aNw",new THREE.BufferAttribute(nw,3,true)); g.setAttribute("aCol0",new THREE.BufferAttribute(c0,4,true));
+  g.computeBoundingSphere(); if(g.boundingSphere) g.boundingSphere.radius+=0.5;   /* (the ruts move the surface up to about 0.35 m at the night's deepest: the culling sphere allows for it) */
   const m=new THREE.Mesh(g,mat); m.receiveShadow=true; m.position.set(cx,cy,cz); return m;
 }
 
@@ -384,20 +406,37 @@ function clodsFor(G,C,r0,r1,cx,cy,cz,mat,look){
       if(rnd()>p) continue;
       const big=rnd()<0.06+0.12*lo, sz=big?0.06+0.05*rnd():0.022+0.03*Math.pow(rnd(),1.6), ds2=(rnd()-0.5)*R.ds*2;
       const x=f.x+nx*lat+Math.cos(f.th)*ds2, z=f.z+nz*lat+Math.sin(f.th)*ds2, y=Co.ground(C,s+ds2,lat)+sz*0.78*0.42;
-      const tone=0.78+0.4*rnd(), c=mixc(lite,base,0.35+0.5*rnd()); list.push([x-cx,y-cy,z-cz,sz,rnd()*6.283,(rnd()-0.5)*0.6,(rnd()-0.5)*0.6,c[0]*tone,c[1]*tone,c[2]*tone]);
+      const tone=0.78+0.4*rnd(), c=mixc(lite,base,0.35+0.5*rnd()); list.push([x-cx,y-cy,z-cz,sz,rnd()*6.283,(rnd()-0.5)*0.6,(rnd()-0.5)*0.6,c[0]*tone,c[1]*tone,c[2]*tone,R.wearAt(s+ds2,lat)]);   /* (the last: the wear under it: the clod rides the night's dirt) */
     }
   }
   if(!list.length) return null;
-  const m=new THREE.InstancedMesh(clodGeo(),mat,list.length), M=new THREE.Matrix4(), Q=new THREE.Quaternion(), E=new THREE.Euler(), V=new THREE.Vector3(), Sc=new THREE.Vector3(), cl=new THREE.Color();
+  /* (the night's wear: a geometry per chunk sharing the clod's buffers, with two numbers per clod: the height the wear moves the dirt under it (aRutI) and the wear it appears at
+     (aThr): a groomed track has a few clods (the crew's blade leaves some), the racing throws the rest up, race by race) */
+  const cg=clodGeo(), geo=new THREE.BufferGeometry(); for(const k in cg.attributes) geo.setAttribute(k,cg.attributes[k]); if(cg.index) geo.setIndex(cg.index);
+  const rutI=new Float32Array(list.length), thr=new Float32Array(list.length); list.forEach((a,i)=>{ rutI[i]=a[10]; thr[i]=((i*0.6180339+0.13)%1)*1.15-0.2; });
+  geo.setAttribute("aRutI",new THREE.InstancedBufferAttribute(rutI,1)); geo.setAttribute("aThr",new THREE.InstancedBufferAttribute(thr,1));
+  const m=new THREE.InstancedMesh(geo,mat,list.length), M=new THREE.Matrix4(), Q=new THREE.Quaternion(), E=new THREE.Euler(), V=new THREE.Vector3(), Sc=new THREE.Vector3(), cl=new THREE.Color();
   list.forEach((a,i)=>{ E.set(a[5],a[4],a[6]); Q.setFromEuler(E); V.set(a[0],a[1],a[2]); Sc.set(a[3]*(0.8+0.4*((i*0.618)%1)),a[3],a[3]*(0.8+0.4*((i*0.382)%1))); M.compose(V,Q,Sc); m.setMatrixAt(i,M); cl.setRGB(a[7],a[8],a[9]); m.setColorAt(i,cl); });
-  m.instanceMatrix.needsUpdate=true; if(m.instanceColor) m.instanceColor.needsUpdate=true; m.receiveShadow=true; m.castShadow=false; m.computeBoundingSphere(); m.userData.mxClods=list.length;
+  m.instanceMatrix.needsUpdate=true; if(m.instanceColor) m.instanceColor.needsUpdate=true; m.receiveShadow=true; m.castShadow=false; m.computeBoundingSphere(); if(m.boundingSphere) m.boundingSphere.radius+=0.5; m.userData.mxClods=list.length;
   return m;
+}
+/* the clods' material follows the night's wear: each clod rides the dirt under it (aRutI x the wear's depth, added after its own turn and size) and appears once the wear passes
+   its own threshold (aThr), growing from nothing over 0.15 of the wear */
+const CLOD_PROJ="vec4 mvPosition=vec4(transformed,1.0);\n#ifdef USE_INSTANCING\nmvPosition=instanceMatrix*mvPosition;\n#endif\nmvPosition.y+=uNight.x*aRutI;\nmvPosition=modelViewMatrix*mvPosition;\ngl_Position=projectionMatrix*mvPosition;\n";
+const CLOD_WPOS="#if defined( USE_ENVMAP ) || defined( DISTANCE ) || defined ( USE_SHADOWMAP ) || defined ( USE_TRANSMISSION ) || NUM_SPOT_LIGHT_COORDS > 0\nvec4 worldPosition=vec4(transformed,1.0);\n#ifdef USE_INSTANCING\nworldPosition=instanceMatrix*worldPosition;\n#endif\nworldPosition.y+=uNight.x*aRutI;\nworldPosition=modelMatrix*worldPosition;\n#endif\n";
+function clodNight(m){
+  const U={uNight:{value:new THREE.Vector4(1,1,1,1)}}; m.userData.mx=U;
+  m.onBeforeCompile=sh=>{ Object.assign(sh.uniforms,U);
+    sh.vertexShader=sh.vertexShader.replace("#include <common>","#include <common>\nattribute float aRutI;\nattribute float aThr;\nuniform vec4 uNight;\n")
+      .replace("#include <begin_vertex>","#include <begin_vertex>\ntransformed*=smoothstep(aThr,aThr+0.15,uNight.y);\n").replace("#include <project_vertex>",CLOD_PROJ).replace("#include <worldpos_vertex>",CLOD_WPOS); };
+  m.customProgramCacheKey=()=>"mx-clod-night";
 }
 /* [live] trackMesh in STEPS (a generator: each yield is a point where the live game may hand the page back to the browser: race3d.js V.prepareWorld builds a race's
    world over several tasks; mxlive 2026-10-19). trackMesh() runs every step at once, exactly as before. */
 function trackMesh(C,look,q,mat,tier,tiles){ const it=trackMeshSteps(C,look,q,mat,tier,tiles); let r=it.next(); while(!r.done) r=it.next(); return r.value; }
 function* trackMeshSteps(C,look,q,mat,tier,tiles){
   const t0=RT(), G=trackBuild(C,look,q,tier,tiles), {R}=G, hi=tier==="hi", root=new THREE.Group(), t1=RT();
+  let clodMat=null;   /* (the clods' material: the night frame drives it too) */
   yield "track:fine";   /* [live] */
   const fine=R.fine(hi?(C.L>800?8192:4096):2048,hi?128:64), track=trackTexture(fine,true), t2=RT();
   const U=mat.userData.mx; U.uTrack.value=track; U.uTm.value.set(1/R.L,R.LATR,1/(2*R.LATR),1);
@@ -409,7 +448,7 @@ function* trackMeshSteps(C,look,q,mat,tier,tiles){
     const td=clamp(q&&q.terrainDetail!=null?q.terrainDetail:1,0.5,1.2), nCh=Math.max(1,Math.round(R.L/48)), nsq=R.ns/4;
     /* the clods: HIGH and ULTRA (rank 2+; a build without a rank, e.g. a test, gets them too); BALANCED keeps its call budget */
     /* (the clods barely mirror the floodlit environment: at a grazing angle toward the lights a lip of clods read as a white ribbon in the captures, envMapIntensity 1 -> 0.1) */
-    const clodMat=(q&&q.rank!=null&&q.rank<2)?null:new THREE.MeshStandardMaterial({color:0xffffff,roughness:1,metalness:0,envMapIntensity:0.1}); if(clodMat) clodMat.userData.keepEnv=true; info.clods=0;
+    clodMat=(q&&q.rank!=null&&q.rank<2)?null:new THREE.MeshStandardMaterial({color:0xffffff,roughness:1,metalness:0,envMapIntensity:0.1}); if(clodMat){ clodMat.userData.keepEnv=true; clodNight(clodMat); } info.clods=0;
     for(let c=0;c<nCh;c++){ const r0=4*Math.round(c*nsq/nCh), r1=c===nCh-1?R.ns:4*Math.round((c+1)*nsq/nCh); if(r1<=r0) continue;
       const mid=Math.round((r0+r1)/2), k=Math.min(mid,R.ns-1)*G.nc+Math.floor(G.nc/2), cx=G.PX[k], cy=G.PY[k], cz=G.PZ[k];
       const lod=new THREE.LOD(); lod.position.set(cx,cy,cz);
@@ -430,7 +469,8 @@ function* trackMeshSteps(C,look,q,mat,tier,tiles){
   }
   root.traverse(o=>{ if(o.isMesh) o.geometry.addEventListener("dispose",()=>{ track.dispose(); if(wearT) wearT.dispose(); }); });
   info.meshMs=RT()-t2;
-  return {root,relief:R,info,track};
+  R.m=1;   /* (built groomed; until the race sets the night (setNight), the ground is the worn track of milestone 2) */
+  return {root,relief:R,info,track,clodMat};
 }
 
 /* ---------------- the start path (a flatter strip: the same material, neutral track texture) ---------------- */
@@ -447,6 +487,9 @@ function startMesh(C,look,q,mat){
   for(let k=0;k<rows-1;k++) for(let j=0;j<nl2-1;j++){ const a=k*nl2+j, b=a+1, c2=a+nl2, d=c2+1; I2.push(a,b,c2,b,d,c2); }
   const g=new THREE.BufferGeometry(); g.setAttribute("position",new THREE.Float32BufferAttribute(P2,3)); g.setAttribute("color",new THREE.Float32BufferAttribute(C2,3)); g.setAttribute("uv",new THREE.Float32BufferAttribute(U2,2));
   g.setAttribute("aWet",new THREE.Float32BufferAttribute(W2,1)); g.setAttribute("aTraf",new THREE.Float32BufferAttribute(new Float32Array(W2.length),1)); g.setIndex(I2); g.computeVertexNormals();
+  /* (the night's wear: the start path is groomed for every race: no ruts, the same colour and moisture both ways) */
+  { const n=W2.length, c0=new Float32Array(n*4); for(let k=0;k<n;k++){ c0[k*4]=Math.sqrt(Math.max(0,C2[k*3])); c0[k*4+1]=Math.sqrt(Math.max(0,C2[k*3+1])); c0[k*4+2]=Math.sqrt(Math.max(0,C2[k*3+2])); c0[k*4+3]=W2[k]; }   /* (the start strip: aRut 0 (Float32: as is), aCol0 = the square root of its colour, as the track's) */
+    g.setAttribute("aRut",new THREE.Float32BufferAttribute(new Float32Array(n),1)); g.setAttribute("aNw",g.attributes.normal.clone()); g.setAttribute("aCol0",new THREE.Float32BufferAttribute(c0,4)); }
   const m=new THREE.Mesh(g,mat); m.receiveShadow=true; return m;
 }
 
@@ -536,17 +579,35 @@ export function* addTrackSteps(C,look,q,root,mat){
     st.geometry.addEventListener("dispose",()=>stex.dispose()); root.add(st); }
   if(C.kind!=="outdoor"&&look.around!=="hills-trees") root.add(edgeBlocks(C,look,q));
   T.info.totalMs=RT()-tb; T.info.tilesMs=T.info.tilesMs||0;
-  return {track:T.root,frame:wearFrame([mat,sm],C.L),relief:T.relief,info:T.info,tier:tier};
+  const nf=nightFrame([mat,sm,T.clodMat],C.L,T.relief);
+  return {track:T.root,frame:nf,setNight:nf.setNight,night:nf.state,relief:T.relief,info:T.info,tier:tier};
 }
-/* THE WEAR OVER THE RACE (milestone 2). race3d.js calls frame(dt, riders) every frame (the dirt zone): the wear is a pure function of the race, never of the frame rate: the leader's race
-   distance in laps (st.D / L), eased: wear = 1 - exp(-laps / 5.5) (lap 1: 0.17, lap 4: 0.52, lap 10: 0.84, lap 22: 0.98). The shader darkens, packs and polishes the dirt where the wheels pass
-   (aTraf) and reveals the wear map's grooves as the wear passes each one's threshold: the line is visibly more worn every lap. Only two uniforms change; nothing is uploaded. */
-function wearFrame(mats,L){
+/* THE NIGHT'S WEAR (2026-10-19, the CEO: "the ruts get deeper as the night goes on. So for the heat races ... the track should be perfect, but the ruts get deeper and deeper as
+   the night goes on, just like actual motocross physics"). race3d.js calls frame(dt, riders) every frame (the dirt zone) and setNight({base, total, len}) for every race: the laps the
+   night has run before this race (base), the night's laps in all (total: every race of the round's program, the heats first, the Main last), this race's laps (len). The night's
+   progress p = (base + the leader's laps in this race) / total: a pure function of the round, the race and the race's own progress (the leader's race distance, st.D / L), never of
+   the frame rate or the screen: the TV in Party Mode and every phone see the same dirt. From p (nightLevels):
+     m   the depth of what the racing digs (ruts, their lips, the berm's lip, braking bumps, roost ripples, the whoops' scour, chop and lane): 0.12 at the first heat's gate (a
+         groomed track: the practice's faint lines), 0.24 after a heat of a 4-race night, 0.57 at the Main's gate, 1.2 at its flag (1 = milestone 2's ruts, 20-28 cm in a corner)
+     wN  the worn look's share (the colours and moisture of the ruts and lips, the clods thrown up, the cavities and the fine detail's strength)
+     ws  the line's packing and the race's grooves (the wear map: milestone 2's uWear, now over the night: p^0.8)
+   The ground the wheels follow is the relief at m (Rl.m), so the riders ride the worn track: their wheels drop into the ruts that are there. Only uniforms change; nothing is uploaded. */
+export function nightLevels(p){
+  p=clamp(p,0,1); const m=0.12+1.08*Math.pow(p,1.25), wN=clamp((m-0.12)/0.88,0,1.23);
+  return {p:p,m:m,wN:wN,ws:Math.pow(p,0.8),kF:Math.min(1.08,0.5+0.5*wN),kA:Math.min(1.1,0.4+0.6*wN)};
+}
+function nightFrame(mats,L,Rl){
+  const N={base:1,total:2,len:1,p:-1};   /* (until setNight: the second half of a night of two races) */
   let last=-1;
-  return function(dt,RST){
+  const apply=(p,laps)=>{ const lv=nightLevels(p); if(Rl) Rl.m=lv.m; N.p=p; N.m=lv.m; N.wN=lv.wN;
+    for(const m of mats){ const U=m&&m.userData.mx; if(!U) continue; if(U.uNight) U.uNight.value.set(lv.m,lv.wN,lv.kF,lv.kA); if(U.uWear) U.uWear.value.set(lv.ws,laps,0,0); } };
+  const f=function(dt,RST){
     let Dm=0; if(RST) for(let i=0;i<RST.length;i++){ const st=RST[i]; if(st&&st.visible!==false&&typeof st.D==="number"&&st.D>Dm) Dm=st.D; }
-    const laps=Dm/L, w=1-Math.exp(-laps/5.5);
-    if(Math.abs(w-last)<2e-4) return; last=w;
-    for(const m of mats){ const U=m&&m.userData.mx; if(U&&U.uWear) U.uWear.value.set(w,laps,0,0); }
+    const laps=Dm/L, p=clamp((N.base+Math.min(N.len,laps))/Math.max(1e-6,N.total),0,1);
+    if(Math.abs(p-last)<1e-4) return; last=p; apply(p,laps);
   };
+  f.setNight=function(o){ o=o||{}; const len=Math.max(1,+o.len||1), total=Math.max(len,+o.total||2*len), base=clamp(o.base!=null?+o.base:total-len,0,total-len);
+    N.base=base; N.total=total; N.len=len; last=-1; apply(clamp(base/total,0,1),0); return N; };
+  f.state=N;
+  return f;
 }
