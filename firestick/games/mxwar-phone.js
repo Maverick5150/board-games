@@ -215,8 +215,9 @@
         var stepNow = st.step;
         setTimeout(function () { if (sentStep === stepNow || !api.asking()) return; if (api.act("flip", {})) sentStep = stepNow; }, 350);
       } else if (asking) api.focusFirst();
+      beatDecorate(st, api, isAuto);   /* mxbeat: a beat race: the Flip button with its shot-clock ring (the TV's race clock), Auto at 0, stamped flips */
     },
-    reset: function () { sentStep = ""; autoLocal = null; su = { key: "", num: "", bike: "" }; }
+    reset: function () { sentStep = ""; autoLocal = null; su = { key: "", num: "", bike: "" }; bReset(); }
   });
 
   function warHTML(w) {
@@ -317,5 +318,73 @@
     };
     paint();
     if (numFocus) { try { inp.focus({ preventScroll: true }); var L = inp.value.length; inp.setSelectionRange(L, L); } catch (e) { } }
+  }
+  /* ================= mxbeat: A BEAT RACE ON THE PHONE (ACTION-PLAN-v3.md step 9) =================
+     The TV's race clock decides: every push carries it (race.clk = {t, run, rate}), the next lock (race.lock) and the beat this phone flips for (race.k).
+     The ring counts down to the lock less 750 ms on this phone's best estimate of the TV clock (the smallest delay seen since the clock last started) and
+     freezes while the TV's clock stops. A tap sends a STAMPED flip ({flip: k}: the rider's own card whenever it reaches the TV before the next lock); when
+     the ring runs out with no flip (and he is not down) this phone turns its own Auto on (the toast) and tells the TV ({auto: true, clock: true}). On Auto
+     the button reads "Auto · tap to flip yourself": one tap turns it off and flips. */
+  var bst = { st: null, api: null, est: null, k: null, sentK: null, outK: null, ringT: 0 };
+  function bReset() { clearInterval(bst.ringT); bst = { st: null, api: null, est: null, k: null, sentK: null, outK: null, ringT: 0 }; }
+  function bEsc(x) { return String(x == null ? "" : x).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function bCss() {
+    if (document.getElementById("mxph-beat-css")) return;
+    var st = document.createElement("style"); st.id = "mxph-beat-css";
+    st.textContent = [".mxph .mxph-bgo{position:relative}",
+      ".mxph .mxph-bgo.mx-ring::before{content:'';position:absolute;inset:-4px;border-radius:inherit;padding:4px;pointer-events:none;background:conic-gradient(var(--ring-c,#f0d48a) calc(var(--ring,1) * 1turn),rgba(255,255,255,.12) 0);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0)}",
+      ".mxph .mxph-bgo.mx-ring.is-low{--ring-c:#ff8f6b}",
+      ".mxph .mxph-bhead{margin:0;font:var(--fw-caps) var(--fs-sm)/1.3 var(--font-ui);letter-spacing:.06em;text-transform:uppercase;color:var(--gold-200)}"].join("\n");
+    document.head.appendChild(st);
+  }
+  function bTvNow(R) { var c = R.clk; if (!c) return 0; if (!c.run || !bst.est) return c.t; return Date.now() * (c.rate || 1) + bst.est.off; }
+  function bEst(R) {
+    var c = R.clk; if (!c) return;
+    if (!c.run) { bst.est = null; return; }
+    var off = c.t - Date.now() * (c.rate || 1), key = (R.label || "") + "|" + (c.rate || 1);
+    if (!bst.est || bst.est.key !== key) bst.est = { key: key, off: off };
+    else if (off > bst.est.off) bst.est.off = off;   /* the smallest delay seen (the push that came fastest) */
+  }
+  function bAuto() { var st = bst.st; return autoLocal != null ? autoLocal : !!(st && st.auto); }
+  function beatDecorate(st, api, isAuto) {
+    var R = st && st.race;
+    var on = !!(R && R.beat && R.inRace && !R.gate && !R.out && !R.over && st.ph === "race");
+    if (!on) { clearInterval(bst.ringT); bst.ringT = 0; return; }
+    bCss(); bst.st = st; bst.api = api; bEst(R);
+    if (bst.k !== R.k) { bst.k = R.k; if (bst.sentK !== R.k) bst.sentK = null; }
+    var who = document.querySelector(".mxph .mxph-who"), box = document.querySelector(".mxph .mxph-box"), au = document.getElementById("mxAuto");
+    if (who && R.head) { var hd = document.getElementById("mxBHead"); if (!hd) { hd = document.createElement("p"); hd.id = "mxBHead"; hd.className = "mxph-bhead"; who.parentNode.insertBefore(hd, who.nextSibling); } hd.textContent = R.head + (R.pile ? " · lowest card off the gate: down in the pack" : ""); }
+    var btn = document.getElementById("mxBGo");
+    if (!btn) { btn = document.createElement("button"); btn.type = "button"; btn.id = "mxBGo"; btn.className = "opt bg-btn bg-btn--block opt--seat mxph-go mxph-bgo"; btn.setAttribute("data-seat", String(api.seat() || 1));
+      if (box) box.parentNode.insertBefore(btn, box); else if (au) au.parentNode.insertBefore(btn, au.nextSibling); else (document.querySelector(".mxph") || document.body).appendChild(btn); }
+    btn.onclick = function () { bTap(); };
+    if (au) { var sm = au.querySelector("small"); if (sm) sm.textContent = isAuto ? "On: your card flips every 10 s" : "Off: flip every 10 s (miss one and Auto takes over)"; }
+    if (R.bline) { var yl = document.querySelector(".mxph-you__line"); if (!yl) { var yb = document.querySelector(".mxph-you"); if (yb) { yl = document.createElement("p"); yl.className = "mxph-you__line"; yb.appendChild(yl); } } if (yl) yl.textContent = R.bline; }
+    bPaint();
+    if (!bst.ringT) bst.ringT = setInterval(bPaint, 100);
+  }
+  function bPaint() {
+    var st = bst.st, R = st && st.race, btn = document.getElementById("mxBGo");
+    if (!R || !btn || !btn.isConnected) { clearInterval(bst.ringT); bst.ringT = 0; return; }
+    var now = bTvNow(R), left = R.lock >= 0 ? R.lock - 750 - now : -1, sec = Math.max(0, Math.ceil((R.lock - now) / 1000)), auto = bAuto(), sent = bst.sentK === R.k || R.mine != null;
+    var down = R.downTo > now ? Math.max(1, Math.ceil((R.downTo - now) / 1000)) : 0, lbl, sub, ring = false;
+    if (R.fin) { lbl = "Finished"; sub = "watch the others to the line"; }
+    else if (down) { lbl = "Down"; sub = "back on the bike in " + down + " s"; }
+    else if (auto) { lbl = "Auto · tap to flip yourself"; sub = "your card flips every 10 s"; }
+    else if (sent) { lbl = "Your card is in"; sub = (R.mine != null ? cardName(R.mine) + " · " : "") + "battle in " + sec + " s"; }
+    else { lbl = "Flip"; sub = "battle in " + sec + " s"; ring = R.lock >= 0; }
+    var html = bEsc(lbl) + "<small>" + bEsc(sub) + "</small>"; if (btn.getAttribute("data-h") !== html) { btn.setAttribute("data-h", html); btn.innerHTML = html; }
+    btn.disabled = !!R.fin; btn.classList.toggle("mx-ring", ring);
+    if (ring) { btn.style.setProperty("--ring", Math.max(0, Math.min(1, left / 9250)).toFixed(3)); btn.classList.toggle("is-low", left < 3000); }
+    /* THE CEO'S RULE on this phone: the ring ran out with no flip (and he is not down): Auto on, the toast, the TV told */
+    if (ring && left <= 0 && R.clk && R.clk.run && bst.outK !== R.k) { bst.outK = R.k; autoLocal = true; autoAt = Date.now();
+      if (bst.api) { bst.api.view({ auto: true, clock: true, k: R.k }); bst.api.toast("Auto flip is on: your card flips every 10 s. Tap Flip to play your own cards."); }
+      var au = document.getElementById("mxAuto"); if (au) au.setAttribute("aria-checked", "true"); bPaint(); }
+  }
+  function bTap() {
+    var st = bst.st, R = st && st.race, api = bst.api; if (!R || !api || R.fin) return;
+    if (bAuto()) { autoLocal = false; autoAt = Date.now(); api.view({ auto: false }); var au = document.getElementById("mxAuto"); if (au) au.setAttribute("aria-checked", "false"); }
+    if (bst.sentK !== R.k && R.mine == null) { bst.sentK = R.k; api.view({ flip: R.k }); }
+    bPaint();
   }
 })();
