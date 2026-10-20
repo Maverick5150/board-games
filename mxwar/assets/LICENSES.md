@@ -84,6 +84,6 @@ Add your lines between your heading and its end marker only (this keeps the role
   cover in the CEO's pack was used only for its rules (skew, white over red, brush red), never traced.
 - The menu stills, `mxwar/assets/menu/hero-1920.webp`, `hero-960.webp`, `hero-portrait.webp`, `band-780.webp` and `gate-1920.webp`: ORIGINAL in-engine renders of OUR OWN 3D
   view (race3d.js of this branch) made with the capture harness (mxvis `demo.html`, run from a copy outside the repo: `BG_audit/sprint/mxui/build-A/stills/stills.js`), the 2026
-  Supercross round 1 Main, a fixed seed; WebP, softened a little and encoded to their size budgets. No photo, no third-party texture, logo, sign or likeness: the boards
+  Supercross round 1 Main, a fixed seed; WebP, softened a little and encoded to their size budgets (`band-780.webp` is cut from `hero-1920.webp`). No photo, no third-party texture, logo, sign or likeness: the boards
   carry the game's own words (see "stadium").
 <!-- end ui skin -->
