@@ -1282,7 +1282,9 @@
   html:not([data-tv]) body.mx-intro-on #youBox{display:none !important}
   html[data-tv] body.mx-intro-on .mx-rhead{visibility:hidden}
   /* the 3D hold: our own gate render behind the cards; on a TV the hold's small card rests while the intro card is up */
-  body.mx-3dhold .mx-v3hold{background:linear-gradient(180deg,rgba(9,12,18,.15),rgba(9,12,18,.55) 70%,rgba(9,12,18,.85)),url("assets/menu/gate-1920.webp") 50% 45%/cover no-repeat,#090c12}
+  body.mx-3dhold:not(.mx-outdoor) .mx-v3hold{background:linear-gradient(180deg,rgba(9,12,18,.15),rgba(9,12,18,.55) 70%,rgba(9,12,18,.85)),url("assets/menu/gate-1920.webp") 50% 45%/cover no-repeat,#090c12}   /* (a stadium series only: the outdoor Motocross keeps the plain night card, never a stadium) */
+  /* TV: the cards window hides while the card is up (it holds only empty slots on the gate; UI-SPEC 4.3), so nothing peeks out under the card */
+  html[data-tv] body.mx-intro-on .mx-table{visibility:hidden}
   html[data-tv] body.mx-intro-on .mx-v3hold__card{display:none}   /* (TV: the intro card over the picture carries the bar; a phone keeps the hold's own card in its picture) */
   /* TV: the card over the picture's top centre (Z-TC; game.js puts it inside the arena on a TV), between the timing tower and the YOU panel; the city shrinks to one
      line (game.js introFit) */

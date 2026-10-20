@@ -1098,6 +1098,7 @@ function gateWait3D(){ return race3D()?Math.max(0,v3relT+GATE3D-Date.now()):0; }
 function holdUI(){
   var on=!!(G&&ui.rc&&ui.view==="race"&&!setupShown()&&hold3D());
   if(on!==document.body.classList.contains("mx-3dhold")) document.body.classList.toggle("mx-3dhold",on);
+  var od=!!(G&&G.series==="mx"); if(od!==document.body.classList.contains("mx-outdoor")) document.body.classList.toggle("mx-outdoor",od);   /* (the hold's backdrop: a stadium picture for the stadium series only) */
   if(on){ var t=$("v3holdT"), w=ui.rc.phase==="gate"?"The riders roll up to the gate":"The 3D race is getting ready"; if(t&&t.textContent!==w) t.textContent=w; }
 }
 /* ================= the race intro (05_RACE_INTRO): the card on the gate and over the 3D hold (index.html #mxIntro) =================

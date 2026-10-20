@@ -526,7 +526,7 @@
     Q + ".mxp-main.is-3dhold .mxp-intro__strip," + Q + ".mxp-main.is-3dhold .mxp-intro__line{display:none}",
     Q + ".mxp-main.has-intro .mxp-chips{visibility:hidden}",
     Q + ".mxp-main.has-intro .mxp-v3hold__card{display:none}",
-    Q + ".mxp-main.is-3dhold .mxp-v3hold{background:linear-gradient(180deg,rgba(9,12,18,.15),rgba(9,12,18,.55) 70%,rgba(9,12,18,.85)),url('../mxwar/assets/menu/gate-1920.webp') 50% 45%/cover no-repeat,#090c12}",
+    Q + ".mxp:not(.is-outdoor) .mxp-main.is-3dhold .mxp-v3hold{background:linear-gradient(180deg,rgba(9,12,18,.15),rgba(9,12,18,.55) 70%,rgba(9,12,18,.85)),url('../mxwar/assets/menu/gate-1920.webp') 50% 45%/cover no-repeat,#090c12}",
     Q + "#mxpPanel[data-kind=lineup] .mxp-lu__h{font:400 var(--mx-fs-display-s)/1.1 var(--mx-font-display);letter-spacing:.02em;text-transform:uppercase;color:var(--mx-hud-white)}",
     Q + "#mxpPanel[data-kind=lineup] .mxp-lu__h span{margin-left:.5rem;font:700 var(--mx-fs-hud-m)/1.2 var(--mx-font-hud);letter-spacing:.05em;text-transform:uppercase;color:var(--mx-secondary-text)}",
     Q + "#mxpPanel[data-kind=lineup] .mxp-lu__tm .mx-mk{font:700 var(--mx-fs-hud-s)/1.3 var(--mx-font-hud);letter-spacing:.05em;text-transform:uppercase}",
@@ -1230,6 +1230,7 @@
     function setupRace() {
       var rc = ui.rc, c = cal(), red = redId();
       rv.setTrack(G.series, (c.venue || "") + "|" + (c.city || "") + "|" + G.year);
+      var mxp0 = $("mxp"); if (mxp0) mxp0.classList.toggle("is-outdoor", G.series === "mx");   /* (the 3D hold's backdrop: a stadium picture for the stadium series only) */
       layoutPip();
       rv.setRiders(rc.r.map(function (p, s) { var R = riderOfS(s), m = A.mk(R.bike); return { s: s, color: m[0], accent: m[0] === "#f2f4f8" ? "#183a8c" : "#f2f2f6", plate: R.plate, red: R.id === red, me: kOfId(R.id) >= 0 }; }));
       hs3.seen = rc.phase !== "gate";
