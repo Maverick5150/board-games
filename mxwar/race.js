@@ -512,6 +512,7 @@ function endBeat(G,ev){
   for(s=0;s<G.n;s++){ var p=G.r[s]; if(p.out||p.fin) continue; if(p.pk.length===0){ p.out=true; p.outAt=G.battle; p.outN=p.bn; p.dnf={lap:G.battle,why:"cards"}; outs.push(s); } }
   if(outs.length){ ev.push({e:"out",seats:outs,b:G.battle}); log(G,names(G,outs)+(outs.length>1?" are":" is")+" out of cards.","out"); }
   if(B&&G.tm) B.beat(G);   /* the model writes this beat's 10 s (its events stay in G.tm.ev: the views read them on the race clock) */
+  var L1=G.lastLap; if(!G.laps) G.laps=[]; G.laps.push({b:G.battle,t:L1.tabs.filter(function(x){ return !x.alone; }).length,w:L1.tabs.filter(function(x){ return x.war>0; }).length,cr:L1.cr.length,ch:L1.ch?Object.keys(L1.ch).length:0}); if(G.laps.length>12) G.laps.shift();   /* (the battle board's log) */
   var tm=G.tm;
   if(tm?tm.done:G.battle>=G.o.len){ endBeatRace(G,"flag",ev); return; }
   var alive=0; for(s=0;s<G.n;s++) if(canPlayB(G,s)) alive++;
