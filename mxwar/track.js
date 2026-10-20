@@ -348,6 +348,7 @@ function create(host,opt){
   };
   /* the gate: the riders lined up behind it in gate order (lanes across the start straight, rows back from the gate) */
   V.gate=function(on){
+    if(!on&&V.phase==="race"&&beatOn()) return;   /* (mxbeat: the clock left the gate with the drop; a second call never resets it) */
     V.phase=on?"gate":"race";
     var C=V.C; if(!C) return;
     var n=V.riders.length, lanes=n>30?5:n>12?4:3, cols=Math.ceil(n/lanes);
@@ -414,7 +415,7 @@ function create(host,opt){
   V.ready=function(){
     advance(now());
     if(!timed()) return -1;
-    if(V.phase==="gate") return 0;
+    if(V.phase==="gate") return beatOn()?-1:0;   /* (mxbeat: the gate is never a lock: the clock starts with the drop) */
     if(beatOn()){ poll(); var lk=MX.Beat.nextLock(V.mdl); return !isFinite(lk)||lk<=V.ct?0:Math.ceil((lk-V.ct)/V.rate); }
     if(V.mdl){ poll(); var lim=limitMs(); return V.mdl.tm.done||lim<=V.ct?0:Math.round((lim-V.ct)/V.rate)+30; }   /* ms of the clock to the leader's line: then the next lap's cards turn */
     var line=V.pFin+V.laps;
