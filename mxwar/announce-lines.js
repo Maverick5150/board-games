@@ -30,7 +30,11 @@
    round_wrap the round in the season story, career_note the person's earlier seasons on this device (years before the season only, counts only).
    The first tag after a memory event's kind is its VARIANT: announce.js renders a memory line only from templates that carry it, so every template
    of a variant states the same facts (its claims, line.facts.mem). No year in a memory line (career_note and the career milestone excepted), "last
-   week" only with the lastweek tag, a person only ever {you}; all of them calm or lively. */
+   week" only with the lastweek tag, a person only ever {you}; all of them calm or lively.
+   The two-man booth (mxann4; the CEO, 2026-10-19 evening: "Seems like they are saying my name a lot, the announcers. They gotta get better with
+   announcing more natural"): announce.js holds the person's name back (25 s between two mentions outside the big moments; the number, the surname
+   or no name at all in between); talk_throw is Wes handing over to Hutch by name before Hutch's analysis; the tag fol marks Hutch's ANSWERS to
+   Wes's call (said only as its follow-up: no name, no he / him / his); the tag hand marks a line that names the other voice (180 s apart). */
 (function(g){
 "use strict";
 var MX=g.MXWar=g.MXWar||{};
@@ -243,7 +247,10 @@ holeshot:{p:"I",t:"T3",rank:10,w:[1,0],ttl:6,story:"holeshot",L:[
   "A||The holeshot isn't the win, but it sure makes the rest of the race easier.",
   "C||{rider} gets the best start, and he leads out of the first corner!",
   "A||The first corner is a lottery. {last} just had the winning ticket.",
-  "A|red|The points leader gets the holeshot. That's a statement."]},
+  "A|red|The points leader gets the holeshot. That's a statement.",
+  "A|fol|Perfect timing off the gate.",
+  "A|fol you|Great reactions. Now settle in and ride.",
+  "A|fol|Clean air now. That's worth a lot."]},
 first_lap_order:{p:"H",t:"T1",w:[3,1],ttl:8,story:"leader",L:[
   "C||End of the first lap: {p1}, {p2}, {p3}.",
   "C||Through lap one, it's {p1} in front, then {p2} and {p3}.",
@@ -257,7 +264,9 @@ first_lap_order:{p:"H",t:"T1",w:[3,1],ttl:8,story:"leader",L:[
   "A||You can win a race in the first lap and lose it in the second. Let's see who settles in.",
   "C|pickback|Hutch's pick, {pickLast}, is back in {pickPlace} after one lap.",
   "C|pickback|After one lap, Hutch's pick, {pickLast}, is down in {pickPlace}.",
-  "C|pickback|One lap in, and Hutch's pick {pickLast} is back in {pickPlace}."]},
+  "C|pickback|One lap in, and Hutch's pick {pickLast} is back in {pickPlace}.",
+  "A|fol|Lap one done. Now we see who has the pace.",
+  "A|fol you plenty|Plenty of race left from there."]},
 lap_win:{p:"H",t:"T2",w:[2,1],ttl:6,story:"pass",L:[
   "C|up|{rider} turns {card} and charges forward!",
   "C|up|{last} takes the lap with {card}. Up to {place}!",
@@ -328,7 +337,10 @@ lead_change:{p:"I",t:"T3",rank:5,w:[1,0],ttl:5,story:"lead-change",L:[
   "C||The lead changes, and it's {last} out front now.",
   "C|late|{last} takes over at the front with {leftN} left.",
   "A||That's why you never stop racing. The lead is never safe.",
-  "A||{last} went for it, and it worked."]},
+  "A||{last} went for it, and it worked.",
+  "A|fol|Now everybody is chasing a new leader.",
+  "A|fol again|Another change up front. This one's wide open.",
+  "A|fol you|Out front. Now ride a clean race."]},
 pass_top:{p:"H",t:"T2",w:[2,1],ttl:6,story:"pass",L:[
   "C||{last} by {otherLast} for {place}!",
   "C||{rider} moves into {place}.",
@@ -351,7 +363,10 @@ pass_top:{p:"H",t:"T2",w:[2,1],ttl:6,story:"pass",L:[
   "A||Look at the exit speed. That's where that pass was made.",
   "C|youOut|{last} takes {place} away from {you}!",
   "C|youOut|{you} can't hold {place}. {last} is through.",
-  "A|youOut|That one hurts, {you}. {place} is gone, for now."]},
+  "A|youOut|That one hurts, {you}. {place} is gone, for now.",
+  "A|fol|Patient, then decisive. That's how it's done.",
+  "A|fol podium|Onto the podium with that one.",
+  "A|fol youOut|Lost a spot, not the race. Time to answer."]},
 you_up:{p:"N",t:"T1",w:[1,1],ttl:8,story:"you",L:[
   "C||{you} moves up to {place}!",
   "C||Nice lap for {you}. {place} now.",
@@ -374,7 +389,14 @@ you_up:{p:"N",t:"T1",w:[1,1],ttl:8,story:"you",L:[
   "A||That's the right kind of lap for {you}. Keep going.",
   "A|top10|{you} is in the top ten now. That's a good place to be.",
   "A|lastlap|{you} finds some speed on the last lap. That's a good way to finish.",
-  "A|lastlap|{you} moves up on the last lap, and every spot counts now."]},
+  "A|lastlap|{you} moves up on the last lap, and every spot counts now.",
+  "A|fol|That's the way. Head down, keep it going.",
+  "A|fol|Good lap. That's the rhythm you want.",
+  "A|fol near10|And the top ten is right there now.",
+  "A|fol transfer|That's a ticket to the next race, if it holds.",
+  "A|fol podium|On the podium. Now keep it clean.",
+  "A|fol top10|Top ten now. Keep that going.",
+  "A|fol hand|See that, Wes? That's a rider on a charge."]},
 you_down:{p:"N",t:"T1",w:[1,1],ttl:8,story:"you",L:[
   "C||{you} drops back to {place}.",
   "C||Tough lap for {you}. Down to {place}.",
@@ -395,7 +417,13 @@ you_down:{p:"N",t:"T1",w:[1,1],ttl:8,story:"you",L:[
   "A|plenty|It's a long race, {you}. Plenty of time to get it back.",
   "A|time|The cards didn't help {you} there, but the next one might.",
   "A|lastlap|{you} loses ground on the last lap. Nothing left to do but ride it home.",
-  "A|lastlap|Not the finish {you} wanted. That's racing."]},
+  "A|lastlap|Not the finish {you} wanted. That's racing.",
+  "A|fol|One lap doesn't make a race. Reset and go.",
+  "A|fol time|Next card could swing it right back.",
+  "A|fol plenty|Long way to go. Stay calm.",
+  "A|fol transfer|Just outside the cut. It can come back.",
+  "A|fol lastlap|Tough way to end it.",
+  "A|fol|That one stings. Shake it off and go again."]},
 running_order:{p:"N",t:"T1",w:[5,1],ttl:8,story:"leader",L:[
   "C||Lap {lap}: {p1} leads, {p2} second, {p3} third.",
   "C||Here's the order: {p1}, {p2}, {p3}, {p4} and {p5}.",
@@ -546,7 +574,12 @@ war_won:{p:"H",t:"T2",w:[2,1],ttl:6,story:"pass",L:[
   "A|two|Same card, same moment, different result. That's what makes a war so cruel.",
   "A|up|That war changed the order, and it changed the mood in that pack.",
   "A|up|One card, and {by} moves up. That's how a war pays off.",
-  "A|up|Wars like that decide who is still in the picture for the finish."]},
+  "A|up|Wars like that decide who is still in the picture for the finish.",
+  "A|fol|And just like that, the order looks different.",
+  "A|fol up|And that's a big swing in the order.",
+  "A|fol you|Right card, right moment.",
+  "A|fol youOut plenty|Bad luck there. Plenty of cards still to turn.",
+  "A|fol hand up|Wes, that war just changed the whole picture."]},
 double_war:{p:"I",t:"T3",rank:9.1,w:[1,0],ttl:4,story:"war",L:[
   "C||Tied again! Double war.",
   "C||Double war! {riders} still can't be separated.",
@@ -604,7 +637,10 @@ crash_remount:{p:"I",t:"T3",rank:4,w:[1,0],ttl:5,story:"crash",L:[
   "C||{rider} is down in the dirt!",
   "C||Oh, {last} hits the ground!",
   "A||That's the risk when a war goes the wrong way. {last} will be back at it in a second.",
-  "A||He gets it up quickly. In a race, the seconds on the ground are the longest."]},
+  "A||He gets it up quickly. In a race, the seconds on the ground are the longest.",
+  "A|fol|Up quickly. That's the important part.",
+  "A|fol you|Back on the bike. That's what matters now.",
+  "A|fol|Back on the bike fast. Every second counts there."]},
 crash_out:{p:"I",t:"T3",rank:3,w:[1,0],ttl:5,story:"crash",L:[
   "C||{rider} is down hard, and his race is over.",
   "C||Big crash for {last}! He won't continue.",
@@ -1173,7 +1209,25 @@ talk_battle:{p:"F",t:"T1",w:[3,2],ttl:6,story:"battle",L:[
   "A||They're fighting for {place}, and both of them know what it's worth.",
   "A|side|Side by side for {place}. Somebody has to give.",
   "A|closing|{bLast} keeps taking time out of {aLast}. {gap} now.",
-  "A|steady|{gap} for laps now. {bLast} is waiting for the right moment."]},
+  "A|steady|{gap} for laps now. {bLast} is waiting for the right moment.",
+  "A|fol|Yeah, and neither one of them is going to back off.",
+  "A|fol|Right, and you can feel a move coming.",
+  "A|fol close|One mistake up front and that's a pass.",
+  "A|fol side|That's as close as it gets. Proper racing.",
+  "A|fol closing|And it's coming down every lap.",
+  "A|fol closing|Right, and the one behind is the quicker rider right now.",
+  "A|fol away|And it's opening up. That fight could be over soon.",
+  "A|fol steady|Same gap every lap. Whoever cracks first loses it.",
+  "A|fol war|That war earlier set all of this up.",
+  "A|fol lead|A fight for the lead. This is what we came for.",
+  "A|fol third|The last spot on the box. That's worth fighting for.",
+  "A|fol cutfight|Whoever wins this one goes through.",
+  "A|fol late|Not many laps left to make it happen.",
+  "A|fol many|A whole train of them. One mistake and everybody shuffles.",
+  "A|fol youBehind|Patience. The pass will be there.",
+  "A|fol youAhead|Just hold the line. Make them go around.",
+  "A|fol hand|Wes, I'd rather be the one chasing in that fight.",
+  "A|fol hand close|Wes, a gap like that is nothing out there."]},
 talk_you:{p:"F",t:"T1",w:[3,2],ttl:6,story:"you",L:[
   "C|ahead|{you} is running {place}, {gapA} behind {aheadLast}.",
   "C|ahead|{you} sits {place}. {aheadLast} is the next target, {gapA} up the road.",
@@ -1229,7 +1283,20 @@ talk_you:{p:"F",t:"T1",w:[3,2],ttl:6,story:"you",L:[
   "C|gainedStart|{you} was {startPlace} after the opening lap. {place} now.",
   "A|gainedStart|That's progress for {you}. {gainN} better than the opening lap.",
   "C|lostStart|{you} has lost {lostN} since the opening lap.",
-  "A|lostStart|{you} was {startPlace} after the opening lap. Time to dig in and get those spots back."]},
+  "A|lostStart|{you} was {startPlace} after the opening lap. Time to dig in and get those spots back.",
+  "A|fol smart|And it's a tidy ride. No wasted moves.",
+  "A|fol aheadClose|Close enough to smell it. Wait for the card.",
+  "A|fol behindClose|Got to watch the one behind, though.",
+  "A|fol podium|On the box right now. Protect it.",
+  "A|fol lead|Out front. Now it's about rhythm, not risk.",
+  "A|fol out plenty|Still plenty of time to find those spots.",
+  "A|fol in|Right where it needs to be. Hold that spot.",
+  "A|fol back plenty|Lots of race left. The spots will come.",
+  "A|fol toTen plenty|Top ten is right there. Two good laps.",
+  "A|fol lapped|Keep racing the riders around you. That's all that counts now.",
+  "A|fol gainedStart|That's real progress from the opening lap.",
+  "A|fol lostStart|Those spots can come back. Stay with it.",
+  "A|fol hand gainedStart|Wes, that's the kind of ride that builds a season."]},
 talk_leader:{p:"F",t:"T0",w:[3,2],ttl:6,story:"leader",L:[
   "C|gapF|{last1} leads the race by {gap} over {last2}.",
   "C|gapF|Out front, {last1} has {gap} on {last2}.",
@@ -1260,7 +1327,14 @@ talk_leader:{p:"F",t:"T0",w:[3,2],ttl:6,story:"leader",L:[
   "C|gapF|The gap at the front: {gap}, {last1} over {last2}.",
   "A|small|{last2} is close enough to see every mistake {last1} makes.",
   "C|gapF|{last1} leads by {gap}.",
-  "C|gapF|Still {last1} in front, by {gap}."]},
+  "C|gapF|Still {last1} in front, by {gap}.",
+  "A|fol steady|Controlled. That's how you lead a race.",
+  "A|fol growing|That gap keeps stretching.",
+  "A|fol shrinking|And it's coming down. This could get interesting.",
+  "A|fol big|Plenty of breathing room up there.",
+  "A|fol small|That's no lead at all out here.",
+  "A|fol ledall|Every lap at the front so far. Impressive.",
+  "A|fol hand shrinking|Wes, I think we're going to get a fight up front."]},
 talk_top5:{p:"F",t:"T0",w:[3,1],ttl:6,story:"leader",L:[
   "C|order5|The top five right now: {last1}, {last2}, {last3}, {last4} and {p5}.",
   "C|order5|{p4} and {p5} round out the top five behind {last1}, {last2} and {last3}.",
@@ -1492,7 +1566,11 @@ track_pass:{p:"H",t:"T2",w:[1,0],ttl:5,story:"pass",L:[
   "A||That's a clean pass. No contact, just better speed.",
   "A|you|Nice move, {you}. That's how you do it.",
   "A|closing|{last} had been closing for a while. That pass was coming.",
-  "A|youOut|Don't let that one get away, {you}. Answer back."]},
+  "A|youOut|Don't let that one get away, {you}. Answer back.",
+  "A|fol|Clean and simple. Better drive out of the turn.",
+  "A|fol|Saw that one coming a corner away.",
+  "A|fol you|Clean pass. No hesitation.",
+  "A|fol youOut|Get it back before this lap is out."]},
 /* ---------------- mxann4: the season's memory (see the header) ---------------- */
 season_story:{p:"N",t:"T1",w:[1,1],ttl:40,story:"start",L:[
   "C|title close|{red} leads {second} by {leadN}, and that's within one round's points.",
@@ -1967,7 +2045,29 @@ career_note:{p:"N",t:"T1",w:[1,1],ttl:40,story:"start",L:[
   "C|you many|{seasonsN} with us before this one for {you}.",
   "A|you many|{you} is no rookie here. {seasonsN} with us already.",
   "A|you full|{you} did all {roundsN} of the {hyear} season with us. That's commitment.",
-  "A|you plain|{you} is back. The last time out with us was {hyear}."]}
+  "A|you plain|{you} is back. The last time out with us was {hyear}."]},
+/* ---------------- mxann4: the two-man booth (see the header) ---------------- */
+talk_throw:{p:"F",t:"T0",w:[1,0],ttl:4,L:[
+  "C|hand|What are you seeing out there, Hutch?",
+  "C|hand|Hutch, what do you make of this one?",
+  "C|hand|Hutch, give me your read on it.",
+  "C|hand|Your thoughts on this, Hutch?",
+  "C|hand thRecap|Hutch, what's the story of this race so far?",
+  "C|hand thRecap|How has this one played out, Hutch?",
+  "C|hand thLaps|Hutch, what are the lap times telling you?",
+  "C|hand thLaps|What jumps off the timing screen for you, Hutch?",
+  "C|hand thStats|Hutch, what do the numbers say about this race?",
+  "C|hand thCrash|Hutch, what does a crash like that cost?",
+  "C|hand thCrash|How much did that one hurt, Hutch?",
+  "C|hand thSeason|Hutch, you've been watching this season closely.",
+  "C|hand thMemory|Hutch, you've had an eye on the earlier rounds.",
+  "C|hand thMemory|What have the earlier rounds told you, Hutch?",
+  "C|hand thRider|Hutch, there's some history on this gate.",
+  "C|hand thRider|Hutch, you know the record books.",
+  "C|hand thColour|Hutch, you've ridden tracks like this one.",
+  "C|hand thColour|What does it take to go fast out there, Hutch?",
+  "C|hand thVenue|Hutch, this place has seen some racing.",
+  "C|hand thSeries|Hutch, you've been around this series a long time."]}
 };
 
 /* the phonetic table: [name as in the data, first-name speech, last-name speech] for every rider whose name an engine would say wrong, made
