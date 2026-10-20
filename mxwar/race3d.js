@@ -471,6 +471,68 @@ export function create(host,hooks){
       riders:rs.map(r=>({s:r.seat,pr:r.mpr!=null?+r.mpr.toFixed(4):null,st:r.mst,D:+r.D.toFixed(2),Dm:r.mpr!=null&&C?+MX.Course.dOfT(C,tauPr(r.mpr)).toFixed(2):null,sb:+(r.sb||0).toFixed(2),crash:r.crash?r.crash.kind:null,ct:r.crash?+(T-r.crash.T).toFixed(2):null,down:r.crash?+(+r.crash.down).toFixed(2):null,plan:r.crashPlan?r.crashPlan.kind:null,rmt:!!r.rmt,gone:!!r.gone})),
       order:rs.filter(r=>!r.gone&&!r.crash).sort((a,b)=>(b.D-a.D)||(a.k-b.k)).map(r=>r.seat)};
   };
+  /* V.audioFrame(out) -> out: THE RACE SOUND'S READ OF THE PICTURE (SHOW-PLAN W10 step 3, MUSIC-PLAN 11.3; the TV race sound, mxwar/racesound.js, calls it
+     10-20 times a second). Allocation-free: the first call fills an empty out with its fields, every later call only writes numbers into them.
+       out = {t: the race clock (s), mode: "gate" | "run" | "fin", cam: {x, y, z, fx, fz} (the lens and its forward direction on the ground, unit),
+              hero: the camera's subject's seat (the person's rider on a shot without one; -1 none), n: how many riders are filled, cut: 1 when the lens
+              jumped since the last read (a camera cut: the radial speeds use no camera motion then),
+              riders: [8 x {seat, d, az, vr, v, a, air, land, crash}]: the 6 nearest to the lens + the hero + the leader (entries past n: seat -1)}
+       d = distance to the lens (m); az = the side, -1 (left) .. 1 (right) of the picture; vr = radial speed (m/s, + moving away; the lens's own motion
+       counts); v = speed (m/s); a = acceleration (m/s^2); air = 1 airborne now; land = the landing impulse since the last read (0..1, from the view's
+       st.impact or the height flown); crash = 0 | 1 (down) | 2 (out). Reads only (rs, the per-rider state RST, the camera); never moves anything. */
+  const AF={n:-1,gen:-1,air:null,peak:null,land:null,near:new Int32Array(8),nd:new Float64Array(8),sel:new Int32Array(8),px:0,py:0,pz:0,pw:-1,cx:0,cy:0,cz:0,fx:0,fz:1,vx:0,vy:0,vz:0};
+  /* one rider into O[n] (once each: the hero or the leader may already be among the nearest) -> the new n */
+  function afPut(O,n,i){
+    for(let j=0;j<n;j++) if(AF.sel[j]===i) return n;
+    const r=rs[i], st=RST[i], o=O[n]; AF.sel[n]=i;
+    const dx=st.x-AF.cx, dy=st.y+0.6-AF.cy, dz=st.z-AF.cz, d=Math.sqrt(dx*dx+dy*dy+dz*dz)||0.01, dh=Math.sqrt(dx*dx+dz*dz);
+    const vx=Math.cos(st.th)*st.v-AF.vx, vz=Math.sin(st.th)*st.v-AF.vz;
+    o.seat=r.seat; o.d=d; o.az=Math.max(-1,Math.min(1,(-dx*AF.fz+dz*AF.fx)/Math.max(1,dh)));
+    o.vr=(vx*dx-AF.vy*dy+vz*dz)/d; o.v=st.v; o.a=st.acc; o.air=st.air?1:0;
+    o.land=AF.land[i]; o.crash=r.crash?(r.crash.kind==="out"?2:1):0;
+    return n+1;
+  }
+  V.audioFrame=function(out){
+    if(!out) out={};
+    if(!out.cam){ out.cam={x:0,y:0,z:0,fx:0,fz:1}; out.riders=[]; for(let j=0;j<8;j++) out.riders.push({seat:-1,d:0,az:0,vr:0,v:0,a:0,air:0,land:0,crash:0}); }
+    const O=out.riders;
+    out.t=T; out.mode=mode==="race"?(finished?"fin":"run"):"gate"; out.n=0; out.hero=-1; out.cut=0;
+    for(let j=0;j<8;j++) O[j].seat=-1;
+    if(!C||!R||!N||!RST.length) return out;
+    if(AF.n!==N||AF.gen!==raceGen){ AF.n=N; AF.gen=raceGen; AF.air=new Uint8Array(N); AF.peak=new Float32Array(N); AF.land=new Float32Array(N); AF.pw=-1; }   /* (once per race) */
+    /* the lens: where it is, where it looks (on the ground), its own motion since the last read (a jump = a cut) */
+    const e=cam.matrixWorld.elements, cx=cam.position.x, cy=cam.position.y, cz=cam.position.z;
+    let fx=-e[8], fz=-e[10]; const fl=Math.sqrt(fx*fx+fz*fz)||1; fx/=fl; fz/=fl;
+    const tw=now(), dtw=AF.pw>0?(tw-AF.pw)/1000:0;
+    AF.vx=0; AF.vy=0; AF.vz=0;
+    if(dtw>0.005&&dtw<0.6){ const mx=cx-AF.px, my=cy-AF.py, mz=cz-AF.pz, md=Math.sqrt(mx*mx+my*my+mz*mz);
+      if(md>2+70*dtw) out.cut=1; else { AF.vx=mx/dtw; AF.vy=my/dtw; AF.vz=mz/dtw; } }
+    else if(AF.pw>0) out.cut=1;
+    AF.px=cx; AF.py=cy; AF.pz=cz; AF.pw=tw; AF.cx=cx; AF.cy=cy; AF.cz=cz; AF.fx=fx; AF.fz=fz;
+    const c=out.cam; c.x=cx; c.y=cy; c.z=cz; c.fx=fx; c.fz=fz;
+    /* the 6 nearest (insertion into fixed arrays), the leader and the hero, by index */
+    let m=0, lead=-1, ld=-1e9, hero=-1;
+    for(let i=0;i<N;i++){
+      const r=rs[i], st=RST[i]; if(!st||(r.gone&&!r.crash)) continue;
+      if(!r.crash&&r.D>ld){ ld=r.D; lead=i; }
+      const dx=st.x-cx, dy=st.y+0.6-cy, dz=st.z-cz, d2=dx*dx+dy*dy+dz*dz;
+      if(m<6||d2<AF.nd[m-1]){ let k=m<6?m++:5; while(k>0&&AF.nd[k-1]>d2){ AF.nd[k]=AF.nd[k-1]; AF.near[k]=AF.near[k-1]; k--; } AF.nd[k]=d2; AF.near[k]=i; }
+      /* the landing: latched between reads (a read every 66 ms must not miss the frame a bike touches down) and settled for every rider at every
+         read, near the lens or not, so a landing far away never reaches a later read */
+      if(st.air){ AF.air[i]=1; if(st.hAir>AF.peak[i]) AF.peak[i]=st.hAir; AF.land[i]=0; }
+      else if(AF.air[i]){ AF.land[i]=Math.min(1,Math.max(st.landed?st.impact/8:0,Math.sqrt(19.62*AF.peak[i])/10)); AF.air[i]=0; AF.peak[i]=0; }
+      else AF.land[i]=0;
+    }
+    const sh=CAMS.shot;
+    if(sh&&sh.subj>=0&&sh.subj<N&&rs[sh.subj]&&!(rs[sh.subj].gone&&!rs[sh.subj].crash)) hero=sh.subj;
+    else if(meSeats.length){ for(let i=0;i<N;i++) if(rs[i].seat===meSeats[0]){ hero=i; break; } }
+    let n=0;
+    for(let j=0;j<m;j++) n=afPut(O,n,AF.near[j]);
+    if(hero>=0) n=afPut(O,n,hero);
+    if(lead>=0) n=afPut(O,n,lead);
+    out.n=n; out.hero=hero>=0?rs[hero].seat:-1;
+    return out;
+  };
   // [/hook:live]
 
   /* ---------------- the loop ---------------- */
