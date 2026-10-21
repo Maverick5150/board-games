@@ -32,7 +32,7 @@
    of a variant states the same facts (its claims, line.facts.mem). No year in a memory line (career_note and the career milestone excepted), "last
    week" only with the lastweek tag, a person only ever {you}; all of them calm or lively.
    The two-man booth (mxann4; the CEO, 2026-10-19 evening: "Seems like they are saying my name a lot, the announcers. They gotta get better with
-   announcing more natural"): announce.js holds the person's name back (25 s between two mentions outside the big moments; the number, the surname
+   announcing more natural"): announce.js holds the person's name back (30 s between two mentions in the race outside the big moments; the number, the surname
    or no name at all in between); talk_throw is Wes handing over to Hutch by name before Hutch's analysis; the tag fol marks Hutch's ANSWERS to
    Wes's call (said only as its follow-up: no name, no he / him / his); the tag hand marks a line that names the other voice (180 s apart). */
 (function(g){
@@ -805,7 +805,10 @@ last_lap_battle:{p:"I",t:"T3",rank:5,w:[1,0],ttl:5,story:"last-lap",L:[
   "A||That's the move he waited all race to make.",
   "A|ledlong|Heartbreak for {otherLast}. Led all that way.",
   "A|transfer|Heartbreak for {otherLast}. He held that spot until the very last lap.",
-  "A||You can't get a better time to make a pass than the last lap."]},
+  "A||You can't get a better time to make a pass than the last lap.",
+  "A|fol|Right at the death. That's how you steal one.",
+  "A|fol transfer|A spot in the next race, taken on the very last lap.",
+  "A|fol|What a time to do it. Last lap, and it's done."]},
 checkered:{p:"I",t:"T3",rank:1,w:[1,0],ttl:7,story:"checkered",L:[
   "C||{rider} wins {race}!",
   "C||Checkered flag! {rider} takes it.",
@@ -1294,7 +1297,7 @@ talk_you:{p:"F",t:"T1",w:[3,2],ttl:6,story:"you",L:[
   "A|fol back plenty|Lots of race left. The spots will come.",
   "A|fol toTen plenty|Top ten is right there. Two good laps.",
   "A|fol lapped|Keep racing the riders around you. That's all that counts now.",
-  "A|fol gainedStart|That's real progress from the opening lap.",
+  "A|fol gainedStart|That's solid progress from the opening lap.",
   "A|fol lostStart|Those spots can come back. Stay with it.",
   "A|fol hand gainedStart|Wes, that's the kind of ride that builds a season."]},
 talk_leader:{p:"F",t:"T0",w:[3,2],ttl:6,story:"leader",L:[
@@ -2055,7 +2058,7 @@ talk_throw:{p:"F",t:"T0",w:[1,0],ttl:4,L:[
   "C|hand thRecap|Hutch, what's the story of this race so far?",
   "C|hand thRecap|How has this one played out, Hutch?",
   "C|hand thLaps|Hutch, what are the lap times telling you?",
-  "C|hand thLaps|What jumps off the timing screen for you, Hutch?",
+  "C|hand thLaps|What stands out in those lap times for you, Hutch?",
   "C|hand thStats|Hutch, what do the numbers say about this race?",
   "C|hand thCrash|Hutch, what does a crash like that cost?",
   "C|hand thCrash|How much did that one hurt, Hutch?",

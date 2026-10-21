@@ -347,9 +347,9 @@ var SOFT={city:1,lastround:1,daygap:1,left:1,maxpts:1,careeryear:1,pick:1,view:1
 function claimSaid(c,said){ var t=String(c.k).split("|")[0]; if(SOFT[t]) return false; return !!said&&(c.k in said)&&String(said[c.k])===String(c.v); }
 function anySaid(s,said){ return s.claims.some(function(c){ return claimSaid(c,said); }); }
 function fresh(s,led,R){ var t=led&&led.told&&led.told[s.key]; if(!t) return true; return t.ver!==s.ver; }
-function lead(G,R,env,led,said){
-  if(R<1) return null;
-  var st=stories(G,R,env,led), lk=led&&led.lead&&led.lead[R-1];
+function lead(G,R,env,led,said,o){
+  if(R<1) return null; var skip=o&&o.skip;   /* skip(s): the booth cannot say this one right now (its person was just named) */
+  var st=stories(G,R,env,led).filter(function(s){ return !(skip&&skip(s)); }), lk=led&&led.lead&&led.lead[R-1];
   var ok=function(s){ return s.kind!=="title"&&s.kind!=="you"&&s.kind!=="career"&&fresh(s,led,R)&&!anySaid(s,said); };
   var c=st.filter(function(s){ return ok(s)&&(s.kind!==lk||s.score>=0.9); });
   if(c.length) return c[0];
@@ -359,7 +359,7 @@ function lead(G,R,env,led,said){
 }
 function second(G,R,env,led,said,leadKey,o){
   if(R<1) return null; o=o||{};
-  var st=stories(G,R,env,led).filter(function(s){ return s.key!==leadKey&&fresh(s,led,R)&&!anySaid(s,said); });
+  var st=stories(G,R,env,led).filter(function(s){ return s.key!==leadKey&&fresh(s,led,R)&&!anySaid(s,said)&&!(o.skip&&o.skip(s)); });
   var per=led&&led.per||{}, ys=st.filter(function(s){ return s.kind==="you"; });
   if(ys.length){ ys.sort(function(a,b){ var pa=per[a.you]!=null?per[a.you]:-1, pb=per[b.you]!=null?per[b.you]:-1; return (b.milestone?1:0)-(a.milestone?1:0)||pa-pb||b.score-a.score; }); return ys[0]; }
   if(!o.standingsSaid){ var t=st.filter(function(s){ return s.kind==="title"; })[0]; if(t) return t; }

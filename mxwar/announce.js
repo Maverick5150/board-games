@@ -347,20 +347,23 @@ function create(o){
      means ...") when the line answers one about the person (the same exchange: the follow-up of a call that named him, or a talk line right after
      the OTHER voice's line that named him; never a news line, never the same voice twice), or a template that needs no name. Per person (Party:
      each their own):
-       the name       again only PN_NAME (25 s) after it was last said, unless the moment is BIG or HUGE (real emotion names the rider) or the line
-                      is the person's milestone of the night (his news after the flag, his result and where it takes him: 8 s);
+       the name       while the race is on (the gate to the checkered flag) again only PN_NAME (30 s) after it was last said, unless the moment is
+                      BIG or HUGE (real emotion names the rider) or the line is the person's milestone of the night; outside the race (the pre-race
+                      show, the race intro and the gate, his news after the flag, the wrap) PN_NEWS (8 s): a TV show names its featured rider in
+                      each segment, the call of the race is where it grates; there the other voice may pick him up from the line before
+                      after PN_SWAP (4 s), once ("Jess carries the red plate." / "Jess won in Anaheim last time out."), never back and forth;
        the number     only from Wes (he calls a rider by number and name; Hutch never does), and seldom: in the talk PN_NUM (60 s) after the
                       last number and 10 s after any reference, in a call of the action PN_NUMCALL (20 s) after the last number and
                       PN_REFCALL (12 s) after any reference ("Crine and #672" three times in a minute is the name problem again);
        a reference    (the name, the surname, the number) at most every PN_REF (10 s) outside the big moments;
-       the last resort before a silence (A.tk.relax) eases them once: the name after 20 s, Wes's number 10 s after any reference;
+       the last resort before a silence (A.tk.relax) eases them once: the name after 25 s, Wes's number 40 s after the last one;
        a template that cannot keep to them gives way to another template of the moment, another topic, or nothing;
        the talk turns to the race around the person for PN_REST (20 s) after a line about him: a talk line that would refer to him waits until
                       every other race topic was tried (his news, his calls and the big moments are not held);
        the number     also only in a line that names another rider too (a battle, a pass: "Smith and #55"), never "#55 turned a 57.2"; and when
                       the name is free, now and then for variety (Wes, one time in four, PN_NUMVAR 90 s after the last number).
      A said line carries facts.refs = [{id, how: "name" | "sur" | "leader" | "num" | "drop"}] (the tests check the budget on them). */
-  var PN_NAME=25000, PN_REF=10000, PN_NUM=60000, PN_NUMCALL=20000, PN_REFCALL=12000, PN_NUMVAR=90000, PN_NEWS=8000, PN_REST=20000, PN_FULL=180000;
+  var PN_NAME=30000, PN_REF=10000, PN_NUM=60000, PN_NUMCALL=20000, PN_REFCALL=12000, PN_NUMVAR=90000, PN_NEWS=8000, PN_SWAP=4000, PN_REST=20000, PN_FULL=180000;
   /* the person's news after the flag (his result, where it takes him, his points): his name again after 8 s */
   var PN_NEWSEV={result_rundown:1,heat_transfers:1,lcq_result:1,moto_done:1,overall:1,round_podium:1,points_update:1,season_champion:1,walkover:1};
   function pnOf(id){ var m=A.pn||(A.pn={}); return m[id]||(m[id]={name:-1e9,ref:-1e9,num:-1e9,full:-1e9,about:-1e9}); }
@@ -407,7 +410,7 @@ function create(o){
       var id=hum[h], st=pnOf(id), keys=[], re=/\{([A-Za-z0-9]+)\}/g, m;
       while((m=re.exec(text))){ var v=slotVal(sl,m[1]); if(v&&(v.rid===id||(v.pr&&v.pr.indexOf(id)>=0))&&keys.indexOf(m[1])<0) keys.push(m[1]); }
       if(!keys.length) continue;
-      if(big||ctx.nameAlways||now-st.name>=(PN_NEWSEV[ev]?PN_NEWS:A.tk.relax?PN_NAME-5000:PN_NAME)){
+      if(big||ctx.nameAlways||now-st.name>=(PN_NEWSEV[ev]||!pnRacing()?(!pnRacing()&&pnSwap(id,tp.role)?PN_SWAP:PN_NEWS):A.tk.relax?PN_NAME-5000:PN_NAME)){
         /* the number now and then for variety (a TV caller says "Smith and the 55" as often as the name): Wes, in a battle or a pass that names another
            rider too, one place in the line, PN_NUMVAR (90 s) after the last number, one time in four; never a big moment or his milestone */
         if(!big&&!ctx.nameAlways&&!A.tk.relax&&tp.role==="C"&&now-st.num>=PN_NUMVAR&&now-st.ref>=PN_REF&&pnOther(out,id)){
@@ -453,6 +456,13 @@ function create(o){
   function pnOccs(text,keys,sl){ var occ=[], re2=/\{([A-Za-z0-9]+)\}/g, m2; while((m2=re2.exec(text))){ if(keys.indexOf(m2[1])<0) continue; var vv=slotVal(sl,m2[1]), isList=!!(vv&&vv.pr); occ.push({k:m2[1],i:m2.index,len:m2[0].length,kind:isList?"plain":pnOcc(text,m2.index,m2[0].length),list:isList}); } return occ; }
   /* the filled line names another rider too (a battle, a pass) */
   function pnOther(out,id){ return (out.parts||[]).some(function(p){ return p.t==="slot"&&((p.rid!=null&&p.rid!==id)||(p.pr&&p.pr.some(function(x){ return x!==id; }))); }); }
+  /* outside the race: the other voice picks him up from the line before (which named him; the line before that did not: once, never back and forth) */
+  function pnSwap(id,role){ var n=A.hist.length, L=A.hist[n-1], P=A.hist[n-2]; if(!L||L.role===role||A.now-lastEnd()>3000) return false;
+    var nm=function(x){ return ((x&&x.facts&&x.facts.refs)||[]).some(function(r){ return r.id===id&&(r.how==="name"||r.how==="sur"); }); }; return nm(L)&&!(nm(P)&&L.at-(P.at+P.est)<10000); }
+  /* his name may be said now (the race call: 30 s; outside the race: 8 s) */
+  function pnFree(id,role){ var p=A.pn&&A.pn[id]; return !p||A.now-p.name>=(pnRacing()?PN_NAME:role&&pnSwap(id,role)?PN_SWAP:PN_NEWS); }
+  /* the race is on: from the gate drop to the checkered call (the name budget of the race call applies) */
+  function pnRacing(){ var r=A.race; return !!(r&&r.gated&&!r.ckSaid&&!r.sim); }
   /* he leads the race right now (the order on the race clock, else the order at the line) */
   function pnLeads(id){ if(!A.race||!A.race.gated||A.race.ckSaid) return false; var rows=null; try{ rows=liveRows(); }catch(e){ rows=null; } var x=rows&&rows[0]; if(x) return seatId(x.s)===id&&racingRow(x); var c=A.race.cur&&A.race.cur[0]; return !!(c&&!c.out&&seatId(c.s)===id); }
   /* a line was said: the people it referred to, and how */
@@ -746,7 +756,7 @@ function create(o){
     return {ctx:ctx,role:role,out:out,who:who,est:estMs(who,out.text)};
   }
   function emit2(it,cut){
-    if(it.follow&&it.parent&&(!A.booth.cur||A.booth.cur.id!==it.parent)) return false;   /* another line came between the call and its answer: the answer is dropped */
+    if(it.follow&&it.parent&&!it.answer&&(!A.booth.cur||A.booth.cur.id!==it.parent)) return false;   /* another line came between the call and its answer: the answer is dropped (Hutch's answer to Wes's question still comes after a call that cut in) */
     var pr=it.pre||prepare(it); it.pre=null;
     if(!pr) return false;
     var ctx=pr.ctx, role=pr.role, out=pr.out, E=EV[it.ev];
@@ -848,7 +858,7 @@ function create(o){
          stays true long enough */
       if(it.pri<=2&&!it.post&&!it.build&&A.race&&A.race.gated){ var le2=nextBigAt(t);
         if(isFinite(le2)&&le2-t<6000&&le2-t>-500){
-          if(!(it.follow&&it.parent&&(!b.cur||b.cur.id!==it.parent))){ var pr2=inRace(it,function(){ return prepare(it); }); if(pr2) it.pre=pr2; }
+          if(!(it.follow&&it.parent&&!it.answer&&(!b.cur||b.cur.id!==it.parent))){ var pr2=inRace(it,function(){ return prepare(it); }); if(pr2) it.pre=pr2; }
           var need=it.pre?it.pre.est+200:3000;
           if(need>le2-t&&(LIVEFACT[it.ev]||it.follow)&&it.pre&&le2-t>=1300){ for(var tr=0;tr<4;tr++){ var pr4=inRace(it,function(){ return prepare(it); }); if(pr4&&pr4.est+200<=le2-t){ it.pre=pr4; need=pr4.est+200; break; } } }   /* a shorter way to say it may fit */
           if(need>le2-t){ it.pre=null; if(it.exp>le2+3000){ if(LIVEFACT[it.ev]) it.held=true; if(!busy) talk(); return; }   /* while it waits, a few words that fit may still come (the leader at the line) */ A.q=A.q.filter(function(x){ return x!==it; }); resolveAfter(it.id); return; }   /* it would still be speaking when a big call (or the next cards) comes: it waits for it, or, when it cannot wait that long, is dropped (never cut) */
@@ -1388,7 +1398,7 @@ function create(o){
   }
   function topicSeason(rows,cl){
     var mem=memOn(); if(mem&&!memGate()) return null;
-    var rl=!!A.tk.relax, R=memRi(), focus=mem?memFocus():null, cand=(mem?focus.filter(function(s){ var x=rowOf(rows,s); return x&&onTrack(x); }):talkRiders(rows)).filter(function(s){ var id=seatId(s); return A.now-(A.tk.rider[id]||-1e9)>(rl?10000:20000)&&A.now-(A.tk.season&&A.tk.season[id]||-1e9)>(rl?60000:150000)&&(!mem||riderRoom(id,R,true)); });
+    var rl=!!A.tk.relax, R=memRi(), focus=mem?memFocus():null, cand=(mem?focus.filter(function(s){ var x=rowOf(rows,s); return x&&onTrack(x); }):talkRiders(rows)).filter(function(s){ var id=seatId(s); return A.now-(A.tk.rider[id]||-1e9)>(rl?10000:20000)&&A.now-(A.tk.season&&A.tk.season[id]||-1e9)>(rl?60000:150000)&&(!mem||riderRoom(id,R,true))&&(!isHumanId(id)||pnFree(id)); });   /* mxann4: a person whose name was just said: the others first */
     for(var i=0;i<cand.length;i++){ var s=cand[i], id=seatId(s), f=seasonFacts(id); if(!f) return null;
       var vs=seasonVars(f).filter(function(x){ if(factUsed(id+"|s|"+x.v)) return false; if(!mem) return true; return !MEM().anySaid({claims:seasonClaims(id,x.v,f)},memL().claims[R]||{}); }); if(!vs.length) continue;
       vs.sort(function(a,b){ return b.w-a.w; }); var pk=vs[Math.floor(rnd()*Math.min(2,vs.length))];
@@ -1769,8 +1779,9 @@ function create(o){
     return function(){
       if(!memOn()) return null; var Gs=A.G, R=memRi(), M=MEM(); if(R<1||!memRoom(R)) return null;
       var m=memL(), said=m.claims[R]||{}, env=memEnv(), s=null;
-      if(which==="lead") s=M.lead(Gs,R,env,m,said);
-      else s=M.second(Gs,R,env,m,said,m.leadKey[R]||null,{standingsSaid:said["red|"+(R-1)]!=null,leadKind:m.lead[R]||null});
+      var skip=function(x){ return (x.ids||[]).concat(x.you!=null?[x.you]:[]).some(function(id){ return isHumanId(id)&&!pnFree(id,which==="lead"?"A":"C"); }); };   /* mxann4: a person just named (the show open's red plate): another story first */
+      if(which==="lead") s=M.lead(Gs,R,env,m,said,{skip:skip});
+      else s=M.second(Gs,R,env,m,said,m.leadKey[R]||null,{standingsSaid:said["red|"+(R-1)]!=null,leadKind:m.lead[R]||null,skip:skip});
       if(!s||(s.ids||[]).some(function(id){ return !riderRoom(id,R,false); })) return null;
       var c=memCtx(s,"season_story"); if(!c) return null;
       if(which==="lead") c.memDone=function(){ m.lead[R]=s.kind; m.leadKey[R]=s.key; };
@@ -1808,7 +1819,8 @@ function create(o){
       var L=M.wrap(Gs,R,memEnv(),m).filter(function(s){ return memFresh(s,R)&&(s.ids||[]).every(function(id){ return riderRoom(id,R,false,true); }); }), s=null;
       var ys=L.filter(function(x){ return x.kind==="you"; }); ys.sort(function(a,b){ var pa=m.per[a.you]!=null?m.per[a.you]:-1, pb=m.per[b.you]!=null?m.per[b.you]:-1; return b.score-a.score||pa-pb; });
       var lk=A.race&&A.race.wrapKind, st=L.filter(function(x){ return x.kind!=="you"&&x.kind!==lk; });
-      if(which==="you") s=ys[0]; else if(which==="youfirst") s=ys[0]||st[0]; else s=st[0];
+      var yfree=ys[0]&&(MILESTONE[ys[0].v]||pnFree(ys[0].you));   /* his name was just said (his points line): his night comes later in the wrap */
+      if(which==="you") s=yfree?ys[0]:null; else if(which==="youfirst") s=(yfree?ys[0]:null)||st[0]; else s=st[0];
       if(!s) return null;
       var c=memCtx(s,"round_wrap"); if(!c) return null;
       if(s.kind!=="you"&&A.race){ var rr=A.race; c.memDone=function(){ rr.wrapKind=s.kind; }; }
@@ -1902,7 +1914,7 @@ function create(o){
   function topicMemory(rows,cl){
     if(!memGate()) return null;
     var Gs=A.G, R=memRi(), M=MEM(), m=memL(), env=memEnv(), focus=memFocus(), best=null;
-    function cand(s,seat){ if(!s||!memFresh(s,R)) return; if((s.ids||[]).some(function(id){ return !riderRoom(id,R,true); })) return; if(!best||s.score>best.s.score) best={s:s,seat:seat}; }
+    function cand(s,seat){ if(!s||!memFresh(s,R)) return; if((s.ids||[]).some(function(id){ return !riderRoom(id,R,true); })) return; if(s.you!=null&&!pnFree(s.you)) return; if(!best||s.score>best.s.score) best={s:s,seat:seat}; }   /* mxann4: his name was just said: the others in focus first */
     focus.forEach(function(seat){ var x=rowOf(rows,seat); if(!onTrack(x)) return; var id=seatId(seat); if(!id) return;
       /* the person: the live stake against the season only in the night's one final (a heat or a moto place is not the round's result); the season notes anywhere */
       if(isHumanSeat(seat)){ var one=A.race.isFinal&&A.race.F&&A.race.F.finals&&A.race.F.finals.races===1; youLive(id,x,rows).forEach(function(s){ if(one||(A.race.isFinal&&s.v==="youRival")) cand(s,seat); });
@@ -1951,6 +1963,12 @@ function create(o){
       if(cd.subj&&cd.subj.some(function(s){ return isHumanSeat(s)&&pnRest(seatId(s)); })) cd.score*=0.35;   /* mxann4: the person was just talked about: the race around him first (the CEO: "saying my name a lot") */
       out.push(cd);
     });
+    /* mxann4 (plan 6): a fresh memory line takes the context's turn: the book history and the colour give way to it, and behind its pace (fewer
+       lines than one per 3 minutes of the race clock allows) it scores like the best context topic at least */
+    var memC=null; out.forEach(function(c){ if(c.k==="memory") memC=c; });
+    if(memC){ var ctxBest=0; out.forEach(function(c){ if(c!==memC&&!c.race){ ctxBest=Math.max(ctxBest,c.score); c.score*=0.3; } });
+      var rr=A.race, clk=rclock(), per=180000/((o.speed==="fast"?0.7:1)*(o.chatter==="more"?1.3:1));
+      if(rr&&clk!=null&&(rr.memN|0)<Math.floor(clk/per)) memC.score=Math.max(memC.score,ctxBest*1.2,memC.score*1.6); }
     out.sort(function(a,b){ return (a.fb?1:0)-(b.fb?1:0)||b.score-a.score; });
     return out;
   }
@@ -1994,7 +2012,7 @@ function create(o){
     function restHeld(pre){ return ((pre&&pre.out&&pre.out.refs)||[]).some(function(x){ var R=rider(x.id); return !!(R&&R.kind==="human"&&pnRest(x.id)); }); }
     function tryList(list){
       for(var i=0;i<list.length;i++){
-        if(held&&held.length&&!list[i].race){ var hq=held; held=[]; if(tryList(hq)) return true; }   /* the person's lines held back come before the context */
+        if(held&&held.length&&!list[i].race&&list[i].k!=="memory"){ var hq=held; held=[]; if(tryList(hq)) return true; }   /* the person's lines held back come before the context (the season memory keeps its place: it is about the riders in focus) */
         var cd=list[i], it=q(cd.ev,{pri:0,ctx:cd.ctx,ttl:4,budget:false,story:cd.story||null,followP:cd.fp||0,subj:cd.subj||null});
         if(!it) continue;
         it.talk=cd.k;
@@ -2020,13 +2038,14 @@ function create(o){
       if(((pre.ctx&&pre.ctx.facts&&pre.ctx.facts.mem)||[]).some(function(x){ return /^live\|/.test(x.k); })) return false;   /* a live place against the season is said the moment it is true */
       if(t-(tk.throwAt!=null?tk.throwAt:-1e9)<(o.chatter==="more"?120000:180000)||t-(tk.handAt!=null?tk.handAt:-1e9)<75000) return false;
       if(cd.k==="colour"&&!/^color_/.test(cd.ev)) return false;   /* the track and the bike, not a filler line */
+      if((cd.k==="memory"||cd.k==="season")&&!(A.story&&t-A.story.at<=5000)) return false;   /* the season memory follows the rider in focus: a hand-over only while that focus is fresh */
       if(!chance(0.5)) return false;
       var th=q("talk_throw",{role:"C",pri:0,ctx:throwCtx(TH[cd.k],cd.subj),ttl:4,budget:false,story:cd.story||null}); if(!th) return false;
       th.talk="throw"; var tp=inRace(th,function(){ return prepare(th); });
       var need=tp?tp.est+350+pre.est:0, nx=nextDue(t,1);
-      if(!tp||need>fit||(nx&&nx.due<t+need+300)){ drop(th); return false; }   /* the throw and its answer fit before the next call (no line is waiting to come between) */
+      if(!tp||need+250>room||(nx&&nx.due<t+need+300)){ drop(th); return false; }   /* the throw and its answer end before the next call or the next cards (no line is waiting to come between, nothing runs over) */
       th.pre=tp; if(!emit(th)){ drop(th); return false; }
-      it.follow=true; it.parent=A.booth.cur?A.booth.cur.id:null; it.pri=2; it.due=t+tp.est+350; it.exp=it.due+5000; it.ttlMs=5000; it.answer=1;
+      it.follow=true; it.role="A"; it.parent=A.booth.cur?A.booth.cur.id:null; it.pri=2; it.due=t+Math.round(tp.est*0.6); it.exp=t+tp.est+5000; it.ttlMs=5000; it.answer=1;   /* first in line the moment Wes stops */
       tk.throwAt=t; return true;
     }
     /* nothing fitted: a shorter way to say one of the best topics (another template) may fit before the next big call */
@@ -2630,7 +2649,7 @@ function create(o){
         if(star){ t.star=1; riderSlots(sl,star.id); sl.star=nameRec(star.id).full; sl.place=ordV(star.p); c.facts.star=star.id; c.facts.place=star.p; c.facts.rid=star.id; }
         var hs=al.filter(function(x){ return isHumanSeat(x.s); })[0]; if(hs&&!star){ t.you=1; sl.you=nameRec(seatId(hs.s)).full; sl.place=ordV(placeIn(cur,hs.s)); c.facts.you=seatId(hs.s); c.facts.place=placeIn(cur,hs.s); c.human=true; }
         /* mxann4: Wes on Hutch's pick, buried after the opening lap (once a race) */
-        if(memOn()&&!r.teased){ var mpk=memL().picks[r.ri]; if(mpk&&mpk.said&&mpk.id&&!isHumanId(mpk.id)&&riderRoom(mpk.id,r.ri,true)&&memRoom(r.ri,12)){ var mps=(A.rmap||[]).indexOf(mpk.id), mpp=mps>=0?placeIn(cur,mps):0;
+        if(memOn()&&!r.teased){ var mpk=memL().picks[r.ri]; if(mpk&&mpk.said&&mpk.id&&!isHumanId(mpk.id)&&riderRoom(mpk.id,r.ri,true)&&memRoom(r.ri,10)){ var mps=(A.rmap||[]).indexOf(mpk.id), mpp=mps>=0?placeIn(cur,mps):0;
           if(mpp>10){ t.pickback=1; sl.pickLast=nameRec(mpk.id).last; sl.pickPlace=ordV(mpp); c.memBy={pickback:[{k:"pick|"+r.ri,v:mpk.id},{k:"lapplace|"+r.ri+"|"+r.key+"|1|"+mpk.id,v:mpp}]}; c.memDone=function(){ r.teased=1; }; if(!star) c.only="pickback"; } } }
       }
       c.story={kind:"leader",riders:[cur[0].s]};
@@ -2880,6 +2899,7 @@ function create(o){
       ch("round_wrap",{role:"any",ctx:wrapBudget(wrapCtx(hum?"youfirst":"story")),delay:900});
       ch("pick_result",{role:"A",ctx:wrapBudget(pickResCtx(false)),delay:700});
       if(two) ch("round_wrap",{role:"any",ctx:wrapBudget(wrapCtx("story")),delay:700});
+      if(hum) ch("round_wrap",{role:"any",ctx:wrapBudget(wrapCtx("you")),delay:700});   /* the person's night when it waited for his name (the ledger: never twice) */
     }
     A.sit.redHist.push(redA); A.postAfter=after;
   }
