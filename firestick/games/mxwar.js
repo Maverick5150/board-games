@@ -598,7 +598,7 @@
       if (!V3 || !race || dead) return;
       var g = ++gen3, done = false, fin = function () { if (done) return; done = true; if (g === gen3 && !dead) released(); };
       var fail = function (e) { prep = false; st3 = "failed"; try { console.warn("mxwar party: the 3D race", e); } catch (x) { } setTimeout(fin, 0); };
-      T.setLive(false);   /* the build takes a few tasks and the warm a few seconds: the race clock waits (released() starts it again) */
+      if (!noHold) T.setLive(false);   /* the build takes a few tasks and the warm a few seconds: the race clock waits (released() starts it again; mxbeat: never once a beat race's clock has run after its drop) */
       /* the world first, over several short tasks (V3.prepareWorld: nothing when this layout is built already), then the riders in one task, so nothing blocks the TV long */
       prep = true;
       var pw = null; try { pw = V3.prepareWorld ? V3.prepareWorld(race) : null; } catch (e) { pw = null; }
@@ -986,7 +986,7 @@
           stats.yellows++; chips();
           var by = (e.by || []).filter(function (x) { return rc.r[x]; }), outN = by.filter(function (x) { return rc.tm.r[x].dnf && rc.tm.r[x].dnf.why === "crash"; }).length, who = by.map(function (x) { var R = riderOfS(x); return "#" + R.plate + " " + R.name; });
           logLine(T.eventLine(rc, e, nameOfSeat, me)); pushSoon();
-          banner("Yellow flag", (who.length > 2 ? who.length + " riders" : listNames(who)) + (outN ? (who.length > 1 ? " are" : " is") + " out of the race" : (who.length > 1 ? " go down and remount" : " goes down and remounts")) + " · no passing there next lap", dl(1500), "is-yellow", A.yflag());
+          banner("Yellow flag", (who.length > 2 ? who.length + " riders" : listNames(who)) + (outN ? (who.length > 1 ? " are" : " is") + " out of the race" : (who.length > 1 ? " go down and remount" : " goes down and remounts")) + (beatOn() ? " · no passing there" : " · no passing there next lap"), dl(1500), "is-yellow", A.yflag());
           break; }
         case "yellowOff": chips(); pushSoon(); break;
         case "pass": if (e.pos <= 10 && !e.crash && !rv.is3D()) annShown("pass", { s: e.a, d: e.d, pos: e.pos }); { var pl = T.eventLine(rc, e, nameOfSeat, me); if (pl) logLine(pl); } break;
@@ -1012,7 +1012,7 @@
       el.style.setProperty("--cw", Math.round(remPx() * 3.6) + "px");
       el.innerHTML = '<span class="mxp-lapbig"><span>' + (rc.phase === "gate" ? "On the" : rc.over ? "The" : "Lap") + "</span><b>" + (rc.phase === "gate" ? "Gate" : rc.over ? "Flag" : Math.min(Math.max(ui.lap, 1), rc.o.len)) + "</b><span>" + (rc.phase === "gate" || rc.over ? "&nbsp;" : "of " + rc.o.len) + "</span></span>" +
         cardHTML(c, c != null, c != null ? "is-win" : "") +
-        '<span class="mxp-dwho"><em>' + (c != null ? "Top card" : "Cards turn") + "</em>" + (c != null ? "<span>" + plateHTML(riderOfS(w)) + '<span class="mxp-sn">' + esc(nm(w)) + "</span></span>" : "<span>each lap</span>") + "</span>";
+        '<span class="mxp-dwho"><em>' + (c != null ? "Top card" : "Cards turn") + "</em>" + (c != null ? "<span>" + plateHTML(riderOfS(w)) + '<span class="mxp-sn">' + esc(nm(w)) + "</span></span>" : "<span>" + (rc.tm && rc.tm.v === 4 ? "every 10 s" : "each lap") + "</span>") + "</span>";
     }
     function drawWar(seats, fresh) {
       var el = $("mxpWar"), rc = ui.rc; $("mxpDuel").hidden = true;
@@ -1073,7 +1073,7 @@
       rv.pace(lapMs(), firstMs());
       rv.onLap(leaderLap);
       rv.onEvent(onTrackEvent);
-      rv.noHold(!!(rc.tm && rc.tm.v === 4 && rc.phase !== "gate"));   /* mxbeat: a beat race picked up after its drop never waits for the 3D picture */
+      rv.noHold(false);   /* mxbeat: a beat race waits for its 3D picture before its drop, and once when it is picked up again; from the moment its clock runs, never (rv.onLive) */
       rv.live(true);
       TWK.key = ""; factK = rc.tm ? rc.tm.k : 0; factsK = {}; youK = {};
       if (rc.phase === "gate") { rv.gate(true); if (rc.tm) rv.setModel(rc); $("mxpGate").style.display = ""; $("mxpGate").style.transform = ""; placeGate(); }
@@ -1144,6 +1144,11 @@
       annFeed(r.ev || []);
       save();
       disp = { cnt: pre };
+      if (beatOn()) {   /* mxbeat: the riders leave as the gate drops; the drop's show plays on while the race runs (never awaited: the first beat's show cuts it) */
+        var dd = disp, my = bt.show; await playEvents((r.ev || []).filter(function (e) { return e.e === "gate"; }));
+        playEvents((r.ev || []).filter(function (e) { return e.e !== "gate"; }), function () { return bt.show !== my; }).then(function () { if (disp === dd) disp = null; });
+        return;
+      }
       await playEvents(r.ev || []);
       disp = null;
     }
@@ -1345,11 +1350,11 @@
       $("mxpFieldC").textContent = fieldWords();
       return true;
     }
-    rv.onLive(function () { if (beatOn() && ui.ph === "race") pushNow(); });   /* the TV's clock stops or starts: every phone's ring freezes / goes on with it */
+    rv.onLive(function (on) { if (on && beatOn() && ui.rc && ui.rc.phase !== "gate") rv.noHold(true); if (beatOn() && ui.ph === "race") pushNow(); });   /* the TV's clock stops or starts: every phone's ring freezes / goes on with it (a beat race whose clock has run never waits for the picture again) */
 
     /* ---------- the events of a batch, in order (mxwar/game.js animEvent, on this screen) ---------- */
-    async function playEvents(evs) {
-      for (var i = 0; i < evs.length; i++) { if (!H.live()) return; var e = evs[i]; stats.events[e.e] = (stats.events[e.e] || 0) + 1; try { await animEvent(e); } catch (x) { stats.errors.push(String(x && x.message || x)); } }
+    async function playEvents(evs, cut) {
+      for (var i = 0; i < evs.length; i++) { if (!H.live() || (cut && cut())) return; var e = evs[i]; stats.events[e.e] = (stats.events[e.e] || 0) + 1; try { await animEvent(e); } catch (x) { stats.errors.push(String(x && x.message || x)); } }
     }
     function bestOf(cards) { var rc = ui.rc, best = -1, out = []; cards.forEach(function (x) { var v = RC.val(rc, x.c); if (v > best) { best = v; out = [x.s]; } else if (v === best) out.push(x.s); }); return out; }
     async function animEvent(e) {
