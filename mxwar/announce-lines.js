@@ -655,6 +655,20 @@ crash_out:{p:"I",t:"T3",rank:3,w:[1,0],ttl:5,story:"crash",L:[
   "A|gain|{by} collects his cards. That's a big haul.",
   "A|you|That one hurts, {you}. You'll still be scored for {place}.",
   "A||Nobody wants to go out like that. All you can do is shake hands and move on."]},
+/* the gate-drop pile-up (the lowest card off the gate): every line is tagged one / many, so no line talks of a lost war */
+crash_pile:{p:"I",t:"T3",rank:4,w:[1,0],ttl:5,story:"crash",L:[
+  "C|one|Trouble in turn one! {num}, {rider}, is down in the pack!",
+  "C|one|Trouble in turn one! {last} is down in the pack!",
+  "C|one you|Trouble in turn one! {you} is down in the pack, but gets right back on it!",
+  "C|one|{rider} goes down in the bunch off the gate!",
+  "C|one|Right off the gate, {last} is on the ground in the pack!",
+  "C|many|Trouble in turn one! {riders} are down in the pack!",
+  "C|many|A pile-up in the first turn! {k} riders are on the ground!",
+  "C|many|{riders} all go down in the bunch off the gate!",
+  "A|one|Worst card off the gate puts him in the dirt. He fights back from the rear of the pack.",
+  "A|many|Worst cards off the gate put a bunch of riders down together. Rough start.",
+  "A||Turn one is a lottery. Now it is about getting back on the bike and chasing.",
+  "A|one you|Shake it off, {you}. The whole race is still ahead of you."]},
 multi_crash:{p:"I",t:"T3",rank:3,w:[1,0],ttl:5,story:"crash",L:[
   "C||Multiple riders down! {riders}.",
   "C|section many|A pile-up {atSection}! {k} riders on the ground.",

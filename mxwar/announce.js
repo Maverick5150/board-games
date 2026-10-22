@@ -176,7 +176,7 @@ var HYPE=["unbelievable","what a","statement","heartbreak","huge","monster","inc
 var PRONOUN=/\b(he|him|his|he's|himself)\b/i;
 /* action events: an analyst line spoken on its own (not as the follow-up of a call) must name the rider it is about */
 var ACTION={lap_win:1,big_move:1,pass_top:1,war_won:1,wild_card:1,transfer_change:1,lead_battle:1,bubble:1,midpack_battle:1,teammates:1,privateer:1,runaway:1,
-  out_of_cards:1,deadlock:1,kitty:1,you_up:1,you_down:1,lead_change:1,crash_remount:1,crash_out:1,multi_crash:1,holeshot:1,war_start:1,double_war:1,triple_war:1,last_lap_battle:1};
+  out_of_cards:1,deadlock:1,kitty:1,you_up:1,you_down:1,lead_change:1,crash_remount:1,crash_out:1,multi_crash:1,crash_pile:1,holeshot:1,war_start:1,double_war:1,triple_war:1,last_lap_battle:1};
 var YOULOW={halfway:1,laps_to_go:1,white_flag:1,show_open:1,race_intro_heat:1,race_intro_semi:1,race_intro_lcq:1,race_intro_qual:1,race_intro_main:1,race_intro_moto:1,lineup_gate:1,first_lap_order:1,heat_transfers:1,lcq_result:1,moto_done:1,overall:1,round_podium:1,records:1,championship_math:1};
 var NAMED=/\{(rider|last|num|you|by|p1|last1|a|red|cutRider|bubble|star|riders|humans|aLast|bLast|cLast|otherLast|last2|bestBy|quickLast|redLast|secondLast|leaderLast|aheadLast|behindLast|hsLast|wLast|lLast|p4|p5|hchamp|hwinner|champion|oldLast|rivalLast|pickLast)\}/;
 /* the talk and the passes on the track: an analyst line said on its own (not as the answer to a call) must name who it is about, or the
@@ -876,9 +876,9 @@ function create(o){
   /* the next line in the queue that will come due (a chained line waits for its predecessor and is not counted) */
   /* the lines whose facts are read live when they are said (the race clock, the view's own moment): one held back for the next cards may still be
      said early in the next lap; every other line is about its own lap and goes stale with it */
-  var CARRY={crash_remount:1,crash_out:1,multi_crash:1,lead_change:1,lapped:1};   /* a lap of traffic the view showed at the very end of a lap is still true a moment later (its own 8 s) */
+  var CARRY={crash_pile:1,crash_remount:1,crash_out:1,multi_crash:1,lead_change:1,lapped:1};   /* a lap of traffic the view showed at the very end of a lap is still true a moment later (its own 8 s) */
   var FACTSLOT=/\{(?!(rider|last|other|otherLast|you|by|p[1-5]|last[1-5]|a|b|c|aLast|bLast|cLast|red|redLast|second|secondLast|third|first|cutRider|bubble|star|riders|others|humans|lapper|champion|champ|next|old|m1winner|bestBy|quickLast|leaderLast|aheadLast|behindLast|hsLast|wLast|lLast|hwinner|hchamp|num)\})[A-Za-z0-9]+\}/;   /* a slot that is a fact (any slot but a name or a plate) */
-  var ATLINE={track_pass:1,pass_top:1,big_move:1,you_up:1,you_down:1,crash_remount:1,crash_out:1,multi_crash:1,last_lap_battle:1,transfer_change:1};   /* still news after the winner's call */
+  var ATLINE={track_pass:1,pass_top:1,big_move:1,you_up:1,you_down:1,crash_pile:1,crash_remount:1,crash_out:1,multi_crash:1,last_lap_battle:1,transfer_change:1};   /* still news after the winner's call */
   function dropQ(pred){ var gone=[]; A.q=A.q.filter(function(x){ if(pred(x)){ gone.push(x.id); return false; } return true; }); gone.forEach(resolveAfter); }
   var LIVEFACT={lapped:1,track_pass:1,talk_battle:1,talk_you:1,talk_leader:1,talk_top5:1,talk_laps:1,talk_crash:1,talk_points:1,talk_stats:1,talk_season:1,talk_history:1,talk_venue:1,talk_series:1,talk_recap:1,talk_memory:1};
   function nextDue(t,minPri){ var best=null; for(var i=0;i<A.q.length;i++){ var x=A.q[i]; if(x.after!=null||x.due<=t||(minPri!=null&&x.pri<minPri)) continue; if(!best||x.due<best.due) best=x; } return best; }
@@ -1974,7 +1974,7 @@ function create(o){
   }
   /* the event lines that already said a topic's facts count as that topic (no "the lead is 2.1 s" right after the order read said it) */
   var TOPIC_OF={running_order:"top5",first_lap_order:"top5",halfway:"leader",laps_to_go:"leader",lead_battle:"leader",runaway:"leader",clock:"leader",white_flag:"leader",last_lap_lead:"leader",
-    you_up:"you",you_down:"you",bubble:"you",crash_remount:"crash",crash_out:"crash",multi_crash:"crash"};
+    you_up:"you",you_down:"you",bubble:"you",crash_remount:"crash",crash_pile:"crash",crash_out:"crash",multi_crash:"crash"};
   /* the next lap's cards on the commentator's clock (the leader at the line, less the 350 ms the page turns them early); null when unknown */
   function lapEndAt(){ var r=A.race, R=A.R, T=TMm(); if(!T||!r||!r.gated||r.lap<1) return null; if(r.flagged) return r.flagAt||null; if(r.lap>=r.len||R.tm.k<r.lap) return null; var tl=T.leaderLine(R,r.lap); return tl==null?null:screenAt(tl)-350; }
   function talkOK(){
@@ -2176,6 +2176,7 @@ function create(o){
         case "win": onWin(e); lapDone=true; break;
         case "holeshot": onHoleshot(e); break;
         case "crash": if(A.race) A.race.crashQ.push(e); break;
+        case "pileup": onPile(e); break;   /* the CEO's gate-drop pile-up: its own call (crash_pile), no lost war in it */
         case "crashCards": if(A.race) A.race.crashGain=(A.race.crashGain||0)+e.n; break;
         case "yellow": onYellow(e); break;
         case "out": case "short": onOut(e); break;
@@ -2374,6 +2375,14 @@ function create(o){
     return Math.max(A.now+300,screenAt(tp)+300);
   }
   /* ---------------- after a lap's result: what the field will ride this lap, and what the booth says about it ---------------- */
+  /* the gate-drop pile-up (the lowest card off the gate): called at once, as the bikes go down (the lap is not over: no lap bookkeeping here) */
+  function onPile(e){
+    var r=A.race; if(!r||r.sim||!e.seats||!e.seats.length) return;
+    if(!r.cur) r.cur=gateOrder();
+    var cq=e.seats.map(function(x){ return {e:"crash",s:x,kind:"remount",depth:0,by:-1,pile:1,lap:r.lap}; });
+    var at=A.now+200, cit=q("crash_pile",{role:"C",ctx:crashCtx(cq,0.06,0),due:at,ttl:7,followP:0.7,key:"crash@pile",story:"crash",subj:e.seats.slice()});
+    cq.forEach(function(x){ var ent={s:x.s,lap:r.lap,kind:x.kind,from:placeIn(r.cur,x.s),at:at}; (r.crashLog=r.crashLog||[]).push(ent); if(cit) (cit.crashRefs=cit.crashRefs||[]).push(ent); });
+  }
   function onLapDone(){
     var r=A.race, R=A.R; if(!r||!R) return;
     var cur=rstand(); r.prev=r.cur||gateOrder(); r.cur=cur;
@@ -2389,7 +2398,8 @@ function create(o){
       if(TMm()){ try{ var hw=TMm().holdWindow(R,cq[0].s,b); if(hw&&isFinite(hw[0])) at=Math.max(A.now+300,screenAt(hw[0])+250); }catch(x){} }   /* mxtime: the moment he goes down on the race clock */
       var gain=r.crashGain|0;
       var cit;
-      if(cq.length>=2) cit=q("multi_crash",{role:"C",ctx:crashCtx(cq,sector,gain),due:at,ttl:7,followP:0.8,key:"crash@"+b,story:"crash",subj:cq.map(function(x){ return x.s; })});
+      if(cq.every(function(x){ return x.pile; })) cit=q("crash_pile",{role:"C",ctx:crashCtx(cq,sector,gain),due:at,ttl:7,followP:0.7,key:"crash@"+b,story:"crash",subj:cq.map(function(x){ return x.s; })});
+      else if(cq.length>=2) cit=q("multi_crash",{role:"C",ctx:crashCtx(cq,sector,gain),due:at,ttl:7,followP:0.8,key:"crash@"+b,story:"crash",subj:cq.map(function(x){ return x.s; })});
       else cit=q(cq[0].kind==="out"?"crash_out":"crash_remount",{role:"C",ctx:crashCtx(cq,sector,gain),due:at,ttl:7,followP:cq[0].kind==="out"?0.85:0.7,key:"crash@"+b,story:"crash",subj:[cq[0].s]});
       cq.forEach(function(x){ used[x.s]=1; var ent={s:x.s,lap:b,kind:x.kind,from:placeIn(prev,x.s)||placeIn(cur,x.s),at:at}; (r.crashLog=r.crashLog||[]).push(ent); if(cit) (cit.crashRefs=cit.crashRefs||[]).push(ent); });   /* talk: what each crash cost, told later (by the lap its call was heard on) */
     }
@@ -2493,6 +2503,7 @@ function create(o){
       sl.place=ordV(placeIn(cur,s0)); c.facts.place=placeIn(cur,s0); c.facts.rid=id;
       var by=cq[0].by; if(by!=null&&by>=0){ sl.by=nameRec(seatId(by)).last; c.facts.by=seatId(by); }
       if(cq.length>=2){ sl.riders=listV(cq.map(function(x){ return seatId(x.s); }),true); sl.k=numV(cq.length); if(cq.some(function(x){ return x.kind==="out"; })) t.out=1; c.human=cq.some(function(x){ return isHumanSeat(x.s); }); if(cq.length>=3) t.many=1; else t.pair=1; }
+      if(cq.every(function(x){ return x.pile; })) t[cq.length>1?"many":"one"]=1;
       if(cq[0].kind==="out"&&gain>0) t.gain=1;
       /* the war the crash came out of: "double" is a remount, "triple", "quadruple" ... a crash out (the lines name the depth from the engine's own number) */
       var dp=cq[0].depth|0; if(dp>=2){ sl.depthw=V(depthWord(dp)); c.facts.depth=dp; }
