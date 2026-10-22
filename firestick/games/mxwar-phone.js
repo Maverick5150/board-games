@@ -332,8 +332,11 @@
     if (document.getElementById("mxph-beat-css")) return;
     var st = document.createElement("style"); st.id = "mxph-beat-css";
     st.textContent = [".mxph .mxph-bgo{position:relative}",
-      ".mxph .mxph-bgo.mx-ring::before{content:'';position:absolute;inset:-4px;border-radius:inherit;padding:4px;pointer-events:none;background:conic-gradient(var(--ring-c,#f0d48a) calc(var(--ring,1) * 1turn),rgba(255,255,255,.12) 0);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0)}",
-      ".mxph .mxph-bgo.mx-ring.is-low{--ring-c:#ff8f6b}",
+      ".mxph .mxph-shot{display:none;position:absolute;left:1rem;top:50%;width:3.1rem;height:3.1rem;transform:translateY(-50%);place-items:center}",
+      ".mxph .mxph-bgo.mx-ring .mxph-shot{display:grid}",
+      ".mxph .mxph-shot::before{content:'';position:absolute;inset:0;border-radius:50%;background:conic-gradient(var(--shot-c,#2b2010) calc(var(--ring,1) * 1turn),rgba(43,32,16,.2) 0);-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - .3rem),#000 calc(100% - .29rem));mask:radial-gradient(farthest-side,transparent calc(100% - .3rem),#000 calc(100% - .29rem))}",
+      ".mxph .mxph-shot b{position:relative;font:800 1.35rem/1 var(--font-ui);font-variant-numeric:tabular-nums;color:var(--shot-c,#2b2010)}",
+      ".mxph .mxph-bgo.mx-ring.is-low .mxph-shot{--shot-c:#a3200f}",
       ".mxph .mxph-bhead{margin:0;font:var(--fw-caps) var(--fs-sm)/1.3 var(--font-ui);letter-spacing:.06em;text-transform:uppercase;color:var(--gold-200)}"].join("\n");
     document.head.appendChild(st);
   }
@@ -358,7 +361,8 @@
     if (!btn) { btn = document.createElement("button"); btn.type = "button"; btn.id = "mxBGo"; btn.className = "opt bg-btn bg-btn--block opt--seat mxph-go mxph-bgo"; btn.setAttribute("data-seat", String(api.seat() || 1));
       if (box) box.parentNode.insertBefore(btn, box); else if (au) au.parentNode.insertBefore(btn, au.nextSibling); else (document.querySelector(".mxph") || document.body).appendChild(btn); }
     btn.onclick = function () { bTap(); };
-    if (au) { var sm = au.querySelector("small"); if (sm) sm.textContent = isAuto ? "On: your card flips every 10 s" : "Off: flip every 10 s (miss one and Auto takes over)"; }
+    if (au) { var sm = au.querySelector("small"); if (sm) sm.textContent = isAuto ? "On: your card flips every 10 s" : "Off: flip every 10 s (miss one and Auto takes over)";
+      au.onclick = function () { autoLocal = !bAuto(); autoAt = Date.now(); api.view({ auto: autoLocal }); au.setAttribute("aria-checked", String(autoLocal)); var s2 = au.querySelector("small"); if (s2) s2.textContent = autoLocal ? "On: your card flips every 10 s" : "Off: flip every 10 s (miss one and Auto takes over)"; bPaint(); }; }
     if (R.bline) { var yl = document.querySelector(".mxph-you__line"); if (!yl) { var yb = document.querySelector(".mxph-you"); if (yb) { yl = document.createElement("p"); yl.className = "mxph-you__line"; yb.appendChild(yl); } } if (yl) yl.textContent = R.bline; }
     bPaint();
     if (!bst.ringT) bst.ringT = setInterval(bPaint, 100);
@@ -372,8 +376,9 @@
     else if (down) { lbl = "Down"; sub = "back on the bike in " + down + " s"; }
     else if (auto) { lbl = "Auto · tap to flip yourself"; sub = "your card flips every 10 s"; }
     else if (sent) { lbl = "Your card is in"; sub = (R.mine != null ? cardName(R.mine) + " · " : "") + "battle in " + sec + " s"; }
-    else { lbl = "Flip"; sub = "battle in " + sec + " s"; ring = R.lock >= 0; }
-    var html = bEsc(lbl) + "<small>" + bEsc(sub) + "</small>"; if (btn.getAttribute("data-h") !== html) { btn.setAttribute("data-h", html); btn.innerHTML = html; }
+    else { lbl = "Flip"; sub = "miss it and Auto flip takes over"; ring = R.lock >= 0; }
+    var html = '<span class="mxph-shot" aria-hidden="true"><b></b></span>' + bEsc(lbl) + "<small>" + bEsc(sub) + "</small>"; if (btn.getAttribute("data-h") !== html) { btn.setAttribute("data-h", html); btn.innerHTML = html; }
+    var nb = btn.querySelector(".mxph-shot b"), tx = String(Math.max(0, Math.ceil(left / 1000))); if (nb && nb.textContent !== tx) nb.textContent = tx;
     btn.disabled = !!R.fin; btn.classList.toggle("mx-ring", ring);
     if (ring) { btn.style.setProperty("--ring", Math.max(0, Math.min(1, left / 9250)).toFixed(3)); btn.classList.toggle("is-low", left < 3000); }
     /* THE CEO'S RULE on this phone: the ring ran out with no flip (and he is not down): Auto on, the toast, the TV told */

@@ -326,8 +326,9 @@ function adoptTime(G){
     if(list.length!==R.n) return false;
     var NR=Race.newRace(o,list,R.rs>>>0,info); NR.kind=R.kind; NR.lapS=R.lapS; NR.fl=R.fl; G.race=NR; return true;
   }
-  if(R.phase==="war"&&R.battle+1>=R.o.len) return !!R.tm;   /* (the last lap's war: the per-lap engine finishes it, and the race, as it was saved) */
-  if(!R.tm){ var i3=clone(info); delete i3.beat; delete i3.fmt; T1.adopt(R,i3); }
+  var i3=clone(info); delete i3.beat; delete i3.fmt;
+  if(R.phase==="war"&&R.battle+1>=R.o.len){ if(!R.tm) T1.adopt(R,i3); return true; }   /* (the last lap's war: the per-lap engine finishes it, and the race, as it was saved; a save from before the time model takes one first, as before the beats) */
+  if(!R.tm) T1.adopt(R,i3);
   if(B4&&R.tm&&R.tm.v===3&&!R.over) B4.adopt4(R,info);
   return true;
 }

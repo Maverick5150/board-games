@@ -514,6 +514,8 @@ function endBeat(G,ev){
   if(B&&G.tm) B.beat(G);   /* the model writes this beat's 10 s (its events stay in G.tm.ev: the views read them on the race clock) */
   var L1=G.lastLap; if(!G.laps) G.laps=[]; G.laps.push({b:G.battle,t:L1.tabs.filter(function(x){ return !x.alone; }).length,w:L1.tabs.filter(function(x){ return x.war>0; }).length,cr:L1.cr.length,ch:L1.ch?Object.keys(L1.ch).length:0}); if(G.laps.length>12) G.laps.shift();   /* (the battle board's log) */
   var tm=G.tm;
+  /* (a safety net that a sound race never reaches: a race that has run four times its length is ended where it stands, so no save can leave a race that never ends) */
+  if(tm&&!tm.done&&B&&G.battle-(tm.k0|0)>=60+4*Math.max(tm.L|0,tm.Lr|0)*(+tm.p||55)/10){ tm.done=true; if(tm.flag==null) tm.flag=B.winAt(tm,tm.k+1); }
   if(tm?tm.done:G.battle>=G.o.len){ endBeatRace(G,"flag",ev); return; }
   var alive=0; for(s=0;s<G.n;s++) if(canPlayB(G,s)) alive++;
   if(!alive&&B&&tm){ B.complete(G); endBeatRace(G,"all",ev); return; }

@@ -589,6 +589,10 @@ function adopt4(G,info){
   var guard=0; while(!G.over&&G.phase==="war"&&guard++<64) Race.step(G);
   if(G.over) return G;
   var told=G.tm, cl=Time.clockLimit(G), g0=cl===Infinity?told.flag:cl, n=G.n;
+  /* (a save from the first builds, before the battle board kept each lap's cards, saved in a war: the war's lap has no cards to ride on, so the per-lap model
+     decides it with nobody riding and its clock limit is 0. The carry-over point is then the last line the per-lap model did write: the history up to it
+     is kept, and the beats ride on from there. Every other save: the per-lap clock limit, as the reference) */
+  if(!(g0>0)&&told.k>=1){ for(var kk=told.k;kk>=1;kk--){ var ll=Time.leaderLine(G,kk); if(ll!=null&&ll>0){ g0=ll; break; } } }
   /* the War state, as a beat race keeps it */
   G.o.beat=10000; G.o.house=G.o.house!=null?G.o.house:G.o.cards;
   G.r.forEach(function(p){ p.fin=false; });
@@ -714,7 +718,8 @@ function bridge(){
         if(e.e==="gate") gate=true;
         if(e.e==="reveal"&&e.w===0){ if(e.b===1){ out.push(e); st.b=1; } else out.push({ e:"reveal", w:1, cards:e.cards.map(function(x){ return { s:x.s, c:x.c, held:false }; }), beat:e.b }); return; }
         if(e.e==="reveal"&&e.w>0){ out.push(e); return; }
-        if(e.e==="crash"){ (st.held[e.s]=st.held[e.s]||[]).push(e); return; }   /* (fed as the bike goes down: bridge.down) */
+        if(e.e==="crash"){ if(e.pile) return; (st.held[e.s]=st.held[e.s]||[]).push(e); return; }   /* (fed as the bike goes down: bridge.down; the gate-drop pile-up is no war crash: its own event, below) */
+        if(e.e==="pileup"){ st.pile=e; return; }   /* (the CEO's gate-drop pile-up: fed as its first bike goes down, bridge.down; the booth's own call for it comes with part 2) */
         if(e.e==="crashCards"){ st.gain=(st.gain|0)+e.n; return; }
         if(KEEP[e.e]) out.push(e);
       });
@@ -724,7 +729,7 @@ function bridge(){
     /* the leader starts lap k on the race clock */
     lap:function(G,k){ var R=G.race||G; if(!R||!R.tm||k<2||st.flagged) return []; lapsRec(R); var b=synth(R,k); if(b<=st.b) return []; st.b=b; return [{ e:"reveal", w:0, b:b, cards:cardsNow(R) },{ e:"next", b:b+1 }]; },
     /* rider s goes down (a remount or out) on the race clock: the crash call lands with the picture */
-    down:function(G,s){ var R=G.race||G, q=st.held[s]; if(!R||!R.tm||!q||!q.length) return []; st.held[s]=[]; var out=q.slice(); if(st.gain){ out.push({ e:"crashCards", s:-1, n:st.gain }); st.gain=0; } out.push({ e:"next", b:st.b+1 }); return out; },
+    down:function(G,s){ var R=G.race||G, q=st.held[s], pl=[]; if(!R||!R.tm) return []; if(st.pile&&st.pile.seats.indexOf(s)>=0){ pl.push(st.pile); st.pile=null; } if(!q||!q.length) return pl; st.held[s]=[]; var out=pl.concat(q); if(st.gain){ out.push({ e:"crashCards", s:-1, n:st.gain }); st.gain=0; } out.push({ e:"next", b:st.b+1 }); return out; },
     /* a pass for the lead on the race clock */
     lead:function(G,a,d){ var R=G.race||G; if(!R||!R.tm||st.flagged) return []; lapsRec(R); return [{ e:"lead", s:a, from:d },{ e:"next", b:st.b+1 }]; },
     /* the checkered flag at the winner's line: the order on the tower now (the riders in, then the rest by distance) */
