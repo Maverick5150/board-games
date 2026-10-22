@@ -39,7 +39,7 @@ function evalEvent(evd,fl,trace){
 
 /* ---------------- the situation ---------------- */
 function placeIn(L,s){ if(!L) return 0; for(var i=0;i<L.length;i++) if(L[i].s===s) return i+1; return 0; }
-function crashEv(ev){ return ev==="crash_remount"||ev==="crash_out"||ev==="multi_crash"; }
+function crashEv(ev){ return ev==="crash_remount"||ev==="crash_out"||ev==="multi_crash"||ev==="crash_pile"; }
 function flagsOf(A,it,ctx){
   var r=A.race||{}, t=ctx.tags||{}, f=ctx.facts||{}, fl={}, k;
   for(k in t) if(t[k]) fl[k]=true;
