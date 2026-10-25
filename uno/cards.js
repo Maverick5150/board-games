@@ -147,7 +147,7 @@ var CSS=(function(){
 "@media (prefers-reduced-motion:reduce){.uc.pop{animation:none}}"
   ].concat(rows).join("\n");
 })();
-function injectCSS(){ if(typeof document==="undefined"||document.getElementById("unoCardCss")) return; var s=document.createElement("style"); s.id="unoCardCss"; s.textContent=CSS; document.head.appendChild(s); }
+function injectCSS(){ if(typeof document==="undefined"||document.getElementById("unoCardCss")) return; var s=document.createElement("style"); s.id="unoCardCss"; s.textContent=CSS+NEXT_CSS; document.head.appendChild(s); }
 
 /* ================= controller (reads a snapshot V, sends action objects) ================= */
 var CTCSS=[
@@ -193,6 +193,7 @@ var LCSS=[
 ".un-lux .ucname{font:var(--fw-ui-strong) var(--fs-sm)/1.2 var(--font-ui);color:var(--text-1)}",
 ".un-lux .upen{margin:0;padding:.2rem .7rem;border-radius:var(--r-pill);font:var(--fw-caps) var(--fs-md)/1.2 var(--font-ui);color:var(--danger-ink);background:var(--danger)}",
 ".un-lux .ustat{display:flex;align-items:center;justify-content:center;gap:.5rem;min-height:calc(1.3em + 1.25rem);margin:.5rem 0 .25rem;padding:.625rem .875rem;font:var(--fw-ui) var(--fs-md)/1.3 var(--font-ui);text-align:center;color:var(--text-1);border:0;border-radius:var(--r-lg)}",
+".un-lux .ustat{flex-wrap:wrap}.un-lux .ustat .unn{flex-basis:100%;font-size:.8em;margin-top:.25rem}",
 ".un-lux .ustat[data-seat]{box-shadow:var(--panel-edge),inset 0 0 0 1.5px var(--seat-ring),var(--elev-2)}",
 ".un-lux .ustat .dot{flex:none;width:.75rem;height:.75rem;border-radius:50%;background:var(--seat);box-shadow:0 0 0 2px var(--ink-1),0 0 0 3px rgba(255,255,255,.18)}",
 ".un-lux .uacts{display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center;margin:.375rem 0;min-height:var(--tap)}",
@@ -408,7 +409,7 @@ function create(cfg){
     }
     var s=$("ustat");
     if(V.over||V.roundOver) s.removeAttribute("data-seat"); else s.setAttribute("data-seat",seatOf(V.actor));
-    put(s,(V.over||V.roundOver?"":'<span class="dot" aria-hidden="true"></span>')+'<span>'+st+'</span>');
+    put(s,(V.over||V.roundOver?"":'<span class="dot" aria-hidden="true"></span>')+'<span>'+st+'</span>'+(tv?"":nextHTML(V,V.cols)));
     put($("uacts"),acts);
     // hand
     if(me>=0){
@@ -473,6 +474,16 @@ function create(cfg){
   var self={update:function(v){ V=v; if(L) renderLux(); else render(); },destroy:function(){ if(modal.parentNode) modal.parentNode.removeChild(modal); },closeModal:closeModal,luxe:L,resetTurn:function(){ turnKey=""; focusPhase=""; }};
   return self;
 }
-Uno.Cards={cardHTML:cardHTML,backHTML:backHTML,injectCSS:injectCSS,faceName:faceName,COL:COL,CSS:CSS};
+/* "Next up" strip (TV bottom line and phone status): direction + next player + the order after. V = a snapshot (V.order, V.dir, V.players);
+   cols = optional player colours. Returns '' when the round is over. */
+function nextHTML(V,cols){
+  if(!V||V.over||V.roundOver||!V.order||!V.order.length) return "";
+  var cw=V.dir>0, nm=function(i){ var c=cols&&cols[i]; return '<b class="unn-p"'+(c?' style="--pc:'+c+'"':"")+'><i class="unn-d"></i>'+esc(V.players[i].name)+'</b>'; };
+  var rest=V.order.slice(1);
+  return '<div class="unn" data-dir="'+(cw?"cw":"ccw")+'"><span class="unn-dir" role="img" aria-label="'+(cw?"Play goes clockwise":"Play goes counter-clockwise")+'">'+(cw?DIR_CW:DIR_CCW)+'<span>'+(cw?"Clockwise":"Counter-clockwise")+'</span></span>'+
+    '<span class="unn-nx">Next up: '+nm(V.order[0])+'</span>'+(rest.length?'<span class="unn-then">Then: '+rest.map(nm).join(' <span class="unn-a">&gt;</span> ')+'</span>':"")+'</div>';
+}
+var NEXT_CSS=".unn{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:.25em 1.1em;font-weight:700;line-height:1.25}.unn-dir{display:inline-flex;align-items:center;gap:.4em;color:var(--gold-200,#e8c66a);white-space:nowrap}.unn-dir svg{width:1.5em;height:1.5em}.unn-nx{white-space:nowrap}.unn-then{opacity:.85;white-space:nowrap}.unn-p{display:inline-flex;align-items:center;gap:.35em}.unn-d{width:.7em;height:.7em;border-radius:50%;background:var(--pc,#fff);box-shadow:0 0 0 2px rgba(255,255,255,.25)}.unn-a{opacity:.7;margin:0 .15em}";
+Uno.Cards={nextHTML:nextHTML,NEXT_CSS:NEXT_CSS,cardHTML:cardHTML,backHTML:backHTML,injectCSS:injectCSS,faceName:faceName,COL:COL,CSS:CSS};
 Uno.Ctrl={create:create,CSS:CTCSS,COL:COL};
 })(typeof window!=="undefined"?window:globalThis);

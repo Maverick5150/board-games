@@ -98,6 +98,15 @@ function nextIdx(G,from,steps,dir){
   for(var s=0;s<steps;s++){ var guard=0; do{ i=(i+d+n)%n; guard++; }while(!G.players[i].alive&&guard<=n); }
   return i;
 }
+/* who plays after the current actor, in the live direction (dead players skipped; the actor is never listed). The engine has already applied
+   Reverse / Skip / Draw effects to G.turn and G.dir, so walking nextIdx from the actor is exactly the real order. Two players: Reverse acts as Skip,
+   so the same other seat is always next. */
+function turnOrder(G,count){
+  var cur=actor(G), out=[], n=G.players.length, i=cur;
+  count=count==null?3:count;
+  for(var s=0;s<n&&out.length<count;s++){ i=nextIdx(G,i,1); if(i===cur||out.indexOf(i)>=0) break; out.push(i); }
+  return out;
+}
 function teamOf(G,p){ return G.o.teams?p%2:p; }
 
 /* ---------------- new game / round ---------------- */
@@ -555,7 +564,7 @@ function noteLack(G){ /* remember colours a player had to draw on */ }
 function snapshot(G,me){
   var mp=me>=0?G.players[me]:null, act=G.over||G.roundOver?-1:actor(G);
   var top=G.discard[G.discard.length-1];
-  var s={o:G.o,n:G.n,round:G.round,side:G.side,dir:G.dir,color:G.color,turn:G.turn,actor:act,me:me,phase:G.phase,needColor:!!G.needColor,
+  var s={o:G.o,n:G.n,round:G.round,side:G.side,dir:G.dir,order:(G.over||G.roundOver)?[]:turnOrder(G,3),color:G.color,turn:G.turn,actor:act,me:me,phase:G.phase,needColor:!!G.needColor,
     top:top?{id:top.id,f:top.f}:null,topName:top?cardName(G,top):"",drawCount:G.draw.length,discardCount:G.discard.length,
     pen:G.pen?{n:G.pen.n,v:G.pen.v}:null,
     chal:(G.phase==="challenge")?{by:G.chal.by,victim:G.chal.victim,v:G.chal.v,n:G.chal.n}:null,
@@ -575,7 +584,7 @@ function snapshot(G,me){
 Uno.Engine={VERSIONS:VERSIONS,HOUSE:HOUSE,houseFor:houseFor,namesColor:namesColor,defaultOpts:defaultOpts,mergeOpts:mergeOpts,versionOpts:versionOpts,buildDeck:buildDeck,newGame:newGame,startRound:startRound,
   canPlay:canPlay,playableIds:playableIds,actor:actor,play:play,drawAction:drawAction,passAction:passAction,respondChallenge:respondChallenge,respondRoulette:respondRoulette,
   chooseStartColor:chooseStartColor,callUno:callUno,catchUno:catchUno,jumpIn:jumpIn,jumpIds:jumpIds,aiAction:aiAction,aiActionLegacy:aiActionLegacy,applyAction:applyAction,aiCatchTarget:aiCatchTarget,
-  snapshot:snapshot,cardName:cardName,cardPoints:cardPoints,handPoints:handPoints,colorsNow:colorsNow,CNAME:CNAME,VNAME:VNAME,DRAWN:DRAWN,LIGHT:LIGHT,DARK:DARK,isNum:isNum,needsTarget:needsTarget,alive:alive,nextIdx:nextIdx,bestColor:bestColor};
+  snapshot:snapshot,cardName:cardName,cardPoints:cardPoints,handPoints:handPoints,colorsNow:colorsNow,CNAME:CNAME,VNAME:VNAME,DRAWN:DRAWN,LIGHT:LIGHT,DARK:DARK,isNum:isNum,needsTarget:needsTarget,alive:alive,nextIdx:nextIdx,turnOrder:turnOrder,bestColor:bestColor};
 if(typeof module!=="undefined"&&module.exports) module.exports=Uno.Engine;
 /* browsers: bring in the brain right after this file (the page, the Party TV and the Party phones all load engine.js, so all get it); a failed load = the old code */
 if(typeof document!=="undefined"&&document.currentScript&&document.currentScript.src&&document.readyState==="loading"&&!Uno.Brain){
