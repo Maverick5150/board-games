@@ -2554,9 +2554,10 @@ function playUno(){
    "#unPl .bg-players{padding:.9rem 0 .3rem}"+
    "#unLog{font:var(--fw-body) var(--fs-md)/1.4 var(--font-ui);color:var(--text-2);min-height:12vh}"+
    "#unBanner{position:fixed;left:50%;top:10%;transform:translateX(-50%);font:400 8vh/1.1 var(--font-display);letter-spacing:.04em;color:var(--gold-100);text-shadow:0 0 .12em rgba(4,5,12,.95),0 .06em .3em rgba(4,5,12,.9);opacity:0;pointer-events:none;transition:opacity .25s;z-index:80}#unBanner.show{opacity:1}"+
+   "#unNext{width:100%;margin-top:1.2vh;padding:.9vh 2vw;box-sizing:border-box;font:var(--fw-ui-strong) clamp(20px,3.2vh,40px)/1.25 var(--font-ui);color:var(--text-1);text-align:center;min-height:1.3em}#unNext .unn-dir svg{width:1.6em;height:1.6em}"+
    "@media (prefers-reduced-motion: reduce){#unBanner{transition:none}}";
   document.head.appendChild(st0);
-  wrap.innerHTML='<div class="untv"><div id="unMain"><div id="unCtl" data-toast-avoid></div><div id="unTable" class="bg-surface--felt bg-frame" data-stage-solid data-toast-avoid hidden></div></div><div id="unSide"><div id="unPl"></div><div id="unLog"></div></div></div><div id="unBanner"></div>'+hintBar("Players: use your phones")+'';
+  wrap.innerHTML='<div class="untv"><div id="unMain"><div id="unCtl" data-toast-avoid></div><div id="unTable" class="bg-surface--felt bg-frame" data-stage-solid data-toast-avoid hidden></div></div><div id="unSide"><div id="unPl"></div><div id="unLog"></div></div></div><div id="unBanner"></div><div id="unNext" role="status" aria-live="polite"></div>'+hintBar("Players: use your phones")+'';
   UC.injectCSS();
   var ctl=Uno.Ctrl.create({root:$("unCtl"),luxe:true,tv:function(){ return false; },pulse:function(){ return false; },send:function(){ return {ok:false}; },gameKey:function(){ return String(myRun); }});
   window.__unCtl=ctl;
@@ -2568,6 +2569,7 @@ function playUno(){
     $("unPl").innerHTML='<ul class="bg-players'+(V.players.length>5?' is-two':'')+'">'+V.players.map(function(p,i){ var cur=!V.over&&!V.roundOver&&i===V.actor; return chipHTML({color:cols[i],name:p.name,meta:(p.team>=0?"Team "+(p.team+1):"")+(p.team>=0&&V.o.target?" · ":"")+(V.o.target?p.score+" pts":"")||(p.cards===1?"1 card":p.cards+" cards"),cpu:!p.human,out:!p.alive,turn:cur,cls:"unp"+(cur?" cur":"")+(p.alive?"":" out"),badge:p.cards}); }).join("")+'</ul>'; markTurn($("unPl"),"t"+V.actor);
     $("unLog").innerHTML=G.log.slice(-6).map(function(e){ return e.text; }).filter(Boolean).slice(-5).map(esc).join("<br>");
     var tn=G.players[G.turn].name, act=UE.actor(G);
+    if($("unNext")) $("unNext").innerHTML=UC.nextHTML(V,cols);   // direction + "Next up" + the order after, straight from the engine's live turn order
     setStatus('<span class="dot" style="background:'+cols[act]+'"></span> '+esc(G.players[act].name)+(G.phase==="challenge"?" is deciding on a challenge":G.phase==="roulette"?" is spinning the roulette":" is playing")+(G.players[act].human&&seat[active[act]]?" (use your phone)":""));
   }
   function snapFor(i){ var st=UE.snapshot(G,i); st.cols=cols; st.seats=active.map(seatNo); if(afk[i]) st.afk=true; return st; }
