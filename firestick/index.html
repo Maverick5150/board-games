@@ -50,6 +50,7 @@
   .bg-hintbar #hint{flex:0 1 auto;min-width:0;max-width:62vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-1);}
   .hintbar{font:var(--fw-ui) var(--fs-sm)/1.25 var(--font-ui);color:var(--text-2);text-align:center;}
   /* game select: the shelf */
+  .ps-resume{width:min(46rem,92vw);padding:1.2rem 1.6rem;text-align:center;display:grid;gap:.5rem;justify-items:center;}.ps-resume h2{margin:0;font:var(--fw-ui-strong,700) 1.6rem var(--font-ui,sans-serif);}.ps-resume p{margin:0;}.ps-resume-sub{opacity:.8;font-size:.95rem;}.ps-resume-acts{display:flex;gap:1rem;margin-top:.4rem;}
   .ps-select{width:100%;max-width:72rem;display:grid;gap:1.25rem;justify-items:center;}
   .ps-head{text-align:center;display:grid;gap:.4rem;justify-items:center;}
   .ps-head h1{margin:0;font:400 var(--fs-3xl)/1.1 var(--font-display);color:var(--text-1);}
@@ -279,6 +280,7 @@
 <script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js" async></script><!-- async: the screen never waits for the CDN; net.js opens the relays once it is in -->
 <script src="qr.js"></script>
 <script src="net.js"></script>
+<script src="partysave.js"></script>
 <script src="monodata.js"></script>
 <script src="monorules.js"></script>
 <script src="../monopoly/board.js"></script>
@@ -507,7 +509,12 @@ function prepRoom(){
 function startRoom(){
   closeRoom("The host opened a new game room. Scan the new QR code to join.");
   players={}; seat={}; settlePending(); lastAsk={};
-  if(pre){ var p=pre; pre=null; room=p.room; net=p.net; showConn(p.st); }
+  if(RESUME&&RESUME.room){   // resuming a saved lobby / game: the SAME room code, so the phones' QR, code and seat memory all still work
+    if(pre){ try{ pre.net.close(); }catch(e){} pre=null; }
+    room=RESUME.room;
+    net=BGNet.connect(room,"host",{status:showConn,ready:function(){},msg:onMsg});
+  }
+  else if(pre){ var p=pre; pre=null; room=p.room; net=p.net; showConn(p.st); }
   else {
     room=BGNet.roomCode();
     net=BGNet.connect(room,"host",{
@@ -528,7 +535,7 @@ function closeRoom(msg){
 /* step 10 colour pick (Trouble, Sorry!): the lobby message lists the game's colours (colors), so a phone shows a picker with the colours
    other phones hold greyed out; a phone sends {t:"color"} and the host moves its seat when that colour is free. Other games: no list. */
 function pickColors(){ return chosenGame==="trouble"||chosenGame==="sorry"||!!(plugE()&&plugE().pickColors); }
-function broadcastLobby(){ var m={t:"lobby", players:Object.keys(players).map(function(p){return players[p];})}; if(pickColors()) m.colors=ORDER().slice(); send(m, true); }
+function broadcastLobby(){ lobbySaveSoon(); var m={t:"lobby", players:Object.keys(players).map(function(p){return players[p];})}; if(pickColors()) m.colors=ORDER().slice(); send(m, true); }
 
 function onMsg(o){
   if(o&&o.pid&&typeof o.pid==="string") lastSeen[o.pid]=Date.now();
@@ -841,7 +848,7 @@ function standCmp(a,b){ if(!!b.win!==!!a.win) return b.win?1:-1; var as=a.s||[],
   var aa=a.at==null?Infinity:+a.at, ba=b.at==null?Infinity:+b.at; if(aa!==ba) return aa<ba?-1:1; return (a.k||0)-(b.k||0); }
 function standHTML(rows){ if(!rows||!rows.length) return "";
   return '<ol class="ps-stand'+(rows.length>5?" is-two":"")+(rows.length>10?" is-many":"")+'" aria-label="Standings">'+rows.map(function(r,i){ return '<li><span class="ps-stand__n">'+(i+1)+'</span><span class="dot" style="background:'+attr(r.color)+'" aria-hidden="true"></span><span class="ps-stand__nm">'+esc(r.name)+'</span><span class="ps-stand__v">'+esc(r.v)+'</span></li>'; }).join("")+'</ol>'; }
-function announceOver(name){ gameOver=true; rjOver(); winnerName=name; lastStand=standRows(); Sound.sfx("win"); send({t:"over", winner:name, n:gamePlayers, ms:gameStartedAt?Date.now()-gameStartedAt:0, standings:lastStand}, true); }
+function announceOver(name){ gameOver=true; clearTimeout(lsT); try{ if(window.PartySave) PartySave.clear(); }catch(e){} rjOver(); winnerName=name; lastStand=standRows(); Sound.sfx("win"); send({t:"over", winner:name, n:gamePlayers, ms:gameStartedAt?Date.now()-gameStartedAt:0, standings:lastStand}, true); }
 
 /* ---------- toast ---------- */
 var toastT;
@@ -857,10 +864,13 @@ function dressTiles(){ var B=BG(); if(!B||!B.icon) return;
 function screenSelect(){
   runId++; pgEnd(); closeFirstShow(); closeRulingSheet(); rjReset(); settlePending(); noWait=false; inLobby=true; screenState="select"; gameSnap=null; viewHandler=null; leaveHandler=null; unguardHistory(); closeWin(); Skins.apply("party"); Sound.music("menu"); setBack(window.AndroidTV?"Exit":"Hub", true);
   closeRoom("The host went back to the game menu.");                  // each game gets its own brand-new room
+  RESUME=null; resumeSt=null; clearTimeout(lsT);
+  if(booted&&window.PartySave) PartySave.clear();                      // the host chose to leave this room: nothing to resume
   setTimeout(function(){ if(screenState==="select") prepRoom(); },400);   // after the picker is on screen
   setMode("select"); setBar("Play together","Party Mode");
   wrap.innerHTML='<div class="ps-select"><div class="ps-head"><h1 data-stage-text>Pick a game</h1><p data-stage-text>Players scan a QR code on the next screen and join from their phones.</p></div>'+
-    '<nav class="bg-tiles" id="cards" aria-label="Games"></nav></div>';
+    resumeCardHTML()+'<nav class="bg-tiles" id="cards" aria-label="Games"></nav></div>';
+  wireResumeCard();
   var games=[
     {id:"trouble", title:"Trouble", n:"2-4", meta:"Pop the dome", on:true},
     {id:"sorry", title:"Sorry!", n:"2-4", meta:"Slide and bump", on:true},
@@ -881,7 +891,7 @@ function screenSelect(){
     c.appendChild(d);
   });
   dressTiles(); paintIcons();
-  var first=c.querySelector(".gc"); if(first){ if(B&&B.focus&&B.focus.enabled&&B.focus.set) B.focus.set(first); else first.focus(); }
+  var first=c.querySelector(".gc"); if(first&&!$("rsGo")){ if(B&&B.focus&&B.focus.enabled&&B.focus.set) B.focus.set(first); else first.focus(); }
 }
 var chosenGame="trouble";
 var cpuCount=3;           // how many computer players to add (capped by free seats)
@@ -961,6 +971,66 @@ window.addEventListener("popstate",function(){
 });
 window.addEventListener("beforeunload",function(e){ if(screenState==="game"&&!gameOver){ e.preventDefault(); e.returnValue=""; return ""; } });
 function attr(s){ return esc(s).replace(/"/g,"&quot;"); }
+/* ---------- Party save / resume (partysave.js): the room, the seats, the settings and (where the game can) the board, in this TV's localStorage ----------
+   A record is written when the lobby changes and after every turn; a TV that reloads or sleeps offers "Resume saved game" on the picker and puts the
+   SAME room code back, so the phones (which keep their id and seat) rejoin their own seats by themselves. Games that keep their own save
+   (Snakes, Candy Land, War, Motocross War) resume through it (cfg.resume); Trouble, Sorry!, Monopoly, 500 Rummy, Risk, Uno and Scattergories hand
+   their plain-JSON state to gameSave(). */
+var BOOT_SAVE=null, BOOT_BAD="", RESUME=null, resumeSt=null, booted=false, lsT=null;
+function lobbySettings(){ var o={cpu:cpuCount,pace:PACE,speed:modeOfPace(PACE),skill:CPU_SKILL,mono:chosenGame==="monopoly"?monoRules:null,rv:chosenGame==="rummy500"?rvCfg:null,rk:chosenGame==="risk"?rkCfg:null,un:chosenGame==="uno"?unCfg:null,sc:chosenGame==="scatter"?scCfg:null}; if(plugE()) o.pg=pgCfg; return o; }
+function applyLobbySettings(s){ if(!s) return; if(s.cpu!=null) cpuCount=s.cpu; if(s.skill) setCpuSkill(s.skill); if(s.speed==="slow"||s.speed==="medium"||s.speed==="fast") setSpeedMode(s.speed); else if(s.pace>0) setPace(s.pace); if(s.mono&&chosenGame==="monopoly") monoRules=s.mono; if(s.rv&&chosenGame==="rummy500") rvCfg={version:s.rv.version||"standard",over:s.rv.over||{}}; if(s.rk&&chosenGame==="risk") rkCfg={version:s.rk.version||"1959",over:s.rk.over||{}}; if(s.un&&chosenGame==="uno") unCfg={version:s.un.version||"classic",over:s.un.over||{}}; if(s.sc&&chosenGame==="scatter") scCfg={version:s.sc.version||"classic",over:s.sc.over||{}}; if(s.pg&&typeof s.pg==="object"&&plugE()) pgCfg=pgRestore(s.pg); }
+function saveRecord(kind,st){
+  if(!window.PartySave||!room||!chosenGame||!booted) return false;
+  try{
+    var seats=Object.keys(seat).map(function(c){ var p=players[seat[c]]; return p?{pid:p.pid,color:c,name:p.name}:null; }).filter(Boolean);
+    return PartySave.save({kind:kind,game:chosenGame,room:room,cfg:lobbySettings(),seats:seats,cpun:CPUN,cpu:cpuCount,act:computeActive(ORDER()),own:!!plugE(),st:st==null?null:st});
+  }catch(e){ return false; }
+}
+function lobbySaveSoon(){ if(!inLobby||RESUME) return; clearTimeout(lsT); lsT=setTimeout(function(){ if(inLobby&&screenState==="lobby") saveRecord("lobby"); },400); }
+/* the games call this at the start of every turn with their plain-JSON state (a throw or a too-big state never stops play) */
+function gameSave(st){ if(gameOver||inLobby) return; saveRecord("game",st); }
+function savedFor(game){ var rs=resumeSt; resumeSt=null; return rs&&rs.game===game?rs.st:null; }   // a game's first line: its saved state, once
+/* copy saved values into a live object / array in place (other code holds references to it) */
+function fillIn(dst,src){ if(!src||!dst) return; if(Array.isArray(dst)){ dst.length=0; src.forEach(function(v){ dst.push(v); }); } else { Object.keys(dst).forEach(function(k){ delete dst[k]; }); Object.keys(src).forEach(function(k){ dst[k]=src[k]; }); } }
+function resumeSaved(rec){
+  var P=PG(), go=function(){ chosenGame=rec.game; RESUME=rec; screenLobby(); };
+  if(plugE(rec.game)){ P.load(rec.game,"tv").then(function(){ P.palette(rec.game,COL,CNAME,SEATNO); go(); }, function(){ toast("Couldn't load that game. Check the connection and try again."); }); }
+  else if(["trouble","sorry","monopoly","rummy500","risk","uno","scatter"].indexOf(rec.game)>=0) go();
+  else { PartySave.clear(); BOOT_SAVE=null; toast("That saved game is not available any more."); screenSelect(); }
+}
+/* runs at the end of screenLobby while RESUME is set: the settings, the seats and the computers' names come back, then the game (or the lobby) */
+function finishResume(){
+  var rec=RESUME;
+  applyLobbySettings(rec.cfg);
+  players={}; seat={};
+  var order=ORDER();
+  rec.seats.forEach(function(s){ if(order.indexOf(s.color)<0||seat[s.color]) return; players[s.pid]={pid:s.pid,name:s.name,color:s.color}; seat[s.color]=s.pid; lastSeen[s.pid]=Date.now(); });
+  CPUN=rec.cpun&&typeof rec.cpun==="object"?rec.cpun:{};
+  if(rec.cpu!=null) cpuCount=rec.cpu|0;
+  if(plugE()) pgCfg.resume=true;   // the plugin's own save carries the board
+  redrawLobbyAll(); broadcastLobby();
+  if(rec.kind==="game"){
+    var same=!rec.act||JSON.stringify(rec.act)===JSON.stringify(computeActive(ORDER()));
+    if(!same) rec.st=null;
+    toast(rec.st||rec.own?"Resuming the saved game…":"Resuming (this game restarts from its first turn)…");
+    startGame();
+  } else { RESUME=null; toast("Lobby restored. Phones rejoin by themselves."); }
+}
+function redrawLobbyAll(){ try{ renderPgRules(); if(chosenGame==="scatter") renderScRules(); if(chosenGame==="monopoly") renderRules(); if(chosenGame==="rummy500") renderRvRules(); if(chosenGame==="risk") renderRkRules(); if(chosenGame==="uno") renderUnRules(); renderLobby(); }catch(e){} }
+function resumeCardHTML(){
+  if(!BOOT_SAVE&&!BOOT_BAD) return "";
+  if(!BOOT_SAVE) return '<div class="ps-resume bg-card" role="status"><p>A saved game was found but could not be used ('+esc(BOOT_BAD)+'). It was discarded.</p><div class="ps-resume-acts"><button type="button" class="bg-btn bg-btn--secondary" id="rsOk">OK</button></div></div>';
+  var d=PartySave.describe(BOOT_SAVE,gameTitle);
+  return '<div class="ps-resume bg-card" role="group" aria-label="Saved game"><h2>Resume saved game</h2><p><b>'+esc(d.title)+'</b> · '+esc(d.line)+'</p><p class="ps-resume-sub">Room '+esc(BOOT_SAVE.room)+' comes back, and the phones rejoin their own seats.</p><div class="ps-resume-acts"><button type="button" class="bg-btn bg-btn--primary bg-btn--lg" id="rsGo">Resume</button><button type="button" class="bg-btn bg-btn--secondary" id="rsNo">Discard</button></div></div>';
+}
+function wireResumeCard(){
+  var go=$("rsGo"), no=$("rsNo"), ok=$("rsOk"), card=document.querySelector(".ps-resume");
+  var drop=function(){ BOOT_SAVE=null; BOOT_BAD=""; if(card&&card.parentNode) card.parentNode.removeChild(card); var f=document.querySelector("#cards .gc"); if(f) f.focus(); };
+  if(go) go.onclick=function(){ var r=BOOT_SAVE; BOOT_SAVE=null; if(r) resumeSaved(r); };
+  if(no) no.onclick=function(){ PartySave.clear(); drop(); };
+  if(ok) ok.onclick=drop;
+  if(go){ var B=BG(); if(B&&B.focus&&B.focus.enabled&&B.focus.set) B.focus.set(go); else go.focus(); }
+}
 function screenLobby(){
   monoRules=JSON.parse(MONO_DEFAULT); rvCfg={version:"standard",over:{}}; rkCfg={version:"1959",over:{}}; unCfg={version:"classic",over:{}}; scCfg={version:"classic",over:{}};      // every game opens on the standard rules
   pgCfg=pgDefaults(); pgLobbyMark();   // a plugin game opens on its official rules too
@@ -1004,6 +1074,7 @@ function screenLobby(){
   broadcastLobby();
   $("startBtn").onclick=startGame;
   lobbyFocus();
+  if(RESUME) finishResume(); else lobbySaveSoon();
 }
 /* saves.js bar in Luxe: its emoji labels become line icons (ids, data-a and every behaviour stay saves.js's own) */
 var SV_ICON={ss:"save",ls:"load",std:"reset",sg:"save",lg:"load",au:"resume"};
@@ -1228,10 +1299,12 @@ function pgHost(myRun,e){
 }
 
 function startGame(){
-  drawCpuNames();   // step 10: fresh random names for this game's computers (also on "Play again")
+  var rs=RESUME; RESUME=null; resumeSt=(rs&&rs.kind==="game"&&rs.st)?{game:rs.game,st:rs.st}:null;
+  if(!rs) drawCpuNames();   // step 10: fresh random names for this game's computers (also on "Play again"); a resumed game keeps the names it had
   rjReset(); gameCols=computeActive(ORDER()); Object.keys(seat).forEach(function(c){ lastSeen[seat[c]]=Date.now(); });   // getting back in: this game's seats; the games set rejoinHandler / awayFn
   inLobby=false; gameOver=false; leaveHandler=null; standFn=null; lastStand=null; Sound.skip(); winnerName=""; gameStartedAt=Date.now(); gamePhones=Object.keys(seat).length; gamePlayers=computeActive(ORDER()).length;   // each game sets its own leaveHandler
   send({t:"started"}, true);   // retained so a reconnecting phone knows the game is on (not the lobby)
+  clearTimeout(lsT); if(!resumeSt) saveRecord("game",null);   // from now on the room is saved as a running game (each game adds its board at every turn)
   if(chosenGame==="trouble") playTrouble();
   else if(chosenGame==="sorry") playSorry();
   else if(chosenGame==="monopoly") playMonopoly();
@@ -1263,6 +1336,8 @@ function playTrouble(){
   rejoinHandler=function(c){ human[c]=true; };                // getting back in: a phone took the seat (by invite): its turns go to the phone again
   var pegs={}; active.forEach(function(c){ pegs[c]=[null,null,null,null]; });
   var die=0, turn=0, sixStreak=0, over=false;
+  var rsT=savedFor("trouble");   // a resumed game: the pegs and whose turn it was (autosaved at every turn)
+  if(rsT&&rsT.pegs&&active.every(function(c){ return rsT.pegs[c]&&rsT.pegs[c].length===4; })){ active.forEach(function(c){ pegs[c]=rsT.pegs[c].slice(); }); turn=(rsT.turn|0)%active.length; sixStreak=rsT.sixStreak|0; } else rsT=null;
   standFn=function(){ return active.map(function(c,k){ var home=pegs[c].filter(function(d){ return d!==null&&d>=28; }).length, prog=pegs[c].reduce(function(a,d){ return a+(d==null?0:d+1); },0); return {name:colName(c),color:COL[c],k:k,s:[home,prog],v:home+" of 4 home"}; }); };
 
   function ang(i){ return (-90 + 360*i/TRACK)*Math.PI/180; }
@@ -1468,7 +1543,7 @@ function playTrouble(){
     gameFrame("tboard",'<i class="tb-pulse" id="domePulse" aria-hidden="true"><svg viewBox="0 0 200 200" focusable="false"><circle cx="100" cy="100" r="94" fill="none" stroke="currentColor" stroke-width="5"/></svg></i>'); svg=$("tboard");
     pulseEl=$("domePulse"); build();
     startPulse(pulseEl,function(){ return live()&&!over; });
-    if(active.length>1){
+    if(active.length>1&&!rsT){
       var ro=rollOffFirst(active), last=ro.rounds[ro.rounds.length-1];
       var nm=function(c){ return seat[c]?players[seat[c]].name:cpuName(c); };
       turn=active.indexOf(ro.first);
@@ -1491,6 +1566,7 @@ function playTrouble(){
     }
     while(!over && live()){
       var c=active[turn]; die=0; renderPegs(); tvTurn();
+      gameSave({pegs:pegs,turn:turn,sixStreak:sixStreak});
       waitAllExcept(c, c);
       if(human[c]){ await ask(c, "Your turn", "Pop the die!", [{id:"pop",label:"🎲 POP THE DIE"}]); }
       else { await sleep(900); }
@@ -1549,6 +1625,9 @@ function playSorry(){
   leaveHandler=function(c){ human[c]=false; };                // a phone left: the computer plays that colour
   rejoinHandler=function(c){ human[c]=true; };                // getting back in: a phone took the seat (by invite): its turns go to the phone again
   var deck=shuffle(buildDeck()), over=false;
+  var rsS=savedFor("sorry");   // a resumed game: every pawn, the deck and whose turn it was (autosaved at every turn)
+  if(rsS&&rsS.pawns&&Array.isArray(rsS.deck)&&active.every(function(c){ return rsS.pawns[c]&&rsS.pawns[c].length===4; })){ active.forEach(function(c){ pawns[c].forEach(function(p,i){ p.loc=rsS.pawns[c][i]; }); }); deck=rsS.deck.slice(); } else rsS=null;
+  function sorrySt(turn){ var pw={}; active.forEach(function(c){ pw[c]=pawns[c].map(function(p){ return p.loc; }); }); return {pawns:pw,deck:deck,turn:turn}; }
 
   function allP(){ var a=[]; active.forEach(function(c){ a=a.concat(pawns[c]); }); return a; }
   function stepFwd(color,loc){ if(loc.t==="start"||loc.t==="home")return null; if(loc.t==="ring"){ if(loc.i===SAFE_ENTRY[color])return{t:"safe",j:0}; return{t:"ring",i:(loc.i+1)%60}; } if(loc.t==="safe")return loc.j<4?{t:"safe",j:loc.j+1}:{t:"home"}; return null; }
@@ -1768,8 +1847,9 @@ function playSorry(){
   }
   async function run(){
     gameFrame("sboard"); svg=$("sboard"); build();
-    var turn=0;
-    if(hasFirstShow()&&active.length>1){   // step 10, who goes first: each flips a card, the highest number first (a Sorry! card counts 0), ties flip again
+    var turn=rsS?(rsS.turn|0)%active.length:0;
+    if(rsS) renderPawns();
+    if(!rsS&&hasFirstShow()&&active.length>1){   // step 10, who goes first: each flips a card, the highest number first (a Sorry! card counts 0), ties flip again
       var cut=shuffle(buildDeck()), res=BG().firstPlayer.resolve(active.length,function(){ return cut.pop(); },{rank:function(v){ return v==="sorry"?0:v; }});
       turn=res.winner; centerCard(null,active[turn],nmOf(active[turn]),true);
       setStatus('<span class="dot" style="background:var(--gold-300)"></span> Flipping for the first turn…');   /* review step 10: no spoiler */
@@ -1779,7 +1859,7 @@ function playSorry(){
       if(!live()) return;
     }
     while(!over && live()){
-      var c=active[turn]; waitAllExcept(c,c);
+      var c=active[turn]; waitAllExcept(c,c); gameSave(sorrySt(turn));
       setStatus('<span class="dot" style="background:'+COL[c]+'"></span> '+(seat[c]?players[seat[c]].name:cpuName(c)+" (CPU)")+" — "+(human[c]?"draw on your phone":"drawing…"));
       centerCard(null,c,(seat[c]?players[seat[c]].name:cpuName(c)),true);
       if(human[c]){ await ask(c,"Your turn","Draw a card",[{id:"draw",label:"🂠 DRAW A CARD"}],{card:{back:true,color:c,who:(seat[c]?players[seat[c]].name:cpuName(c))}}); }
@@ -2242,10 +2322,19 @@ function playMonopoly(){
       var ck=!colTaken[c]?c:all.filter(function(x){ return !colTaken[x]; })[0]; if(ck){ colTaken[ck]=1; look[c]=ck; } });
     setGameCenter(""); renderBoard();
   }
+  /* Party save: everything that makes up the game at the start of a turn (plain JSON); restored in place because the brain and the board hold the same arrays */
+  function monoSt(){ return {cash:cash,pos:pos,injail:injail,jailT:jailT,jokers:jokers,bankrupt:bankrupt,tokE:tokE,owner:owner,houses:houses,mort:mort,housesLeft:housesLeft,hotelsLeft:hotelsLeft,chanceDeck:chanceDeck,chanceDisc:chanceDisc,chestDeck:chestDeck,chestDisc:chestDisc,turn:turn,passed:passed,tcount:tcount,tlast:tlast,ownTurns:ownTurns,look:look,fpPool:fpPool,heldCh:heldCh,heldCs:heldCs,mTurns:mTurns}; }
+  function monoRestore(r){
+    ["cash","pos","injail","jailT","jokers","bankrupt","tokE","owner","houses","mort","chanceDeck","chanceDisc","chestDeck","chestDisc","passed","tcount","tlast","ownTurns","look"].forEach(function(k){ var dst={cash:cash,pos:pos,injail:injail,jailT:jailT,jokers:jokers,bankrupt:bankrupt,tokE:tokE,owner:owner,houses:houses,mort:mort,chanceDeck:chanceDeck,chanceDisc:chanceDisc,chestDeck:chestDeck,chestDisc:chestDisc,passed:passed,tcount:tcount,tlast:tlast,ownTurns:ownTurns,look:look}[k]; if(r[k]) fillIn(dst,r[k]); });
+    housesLeft=r.housesLeft|0; hotelsLeft=r.hotelsLeft|0; turn=(r.turn|0)%active.length; fpPool=r.fpPool|0; heldCh=r.heldCh|0; heldCs=r.heldCs|0; mTurns=r.mTurns|0;
+  }
+  var rsM=savedFor("monopoly");
+  if(!(rsM&&rsM.cash&&rsM.owner&&rsM.owner.length===40&&active.every(function(c){ return rsM.cash[c]!=null; }))) rsM=null;
   async function run(){
+    if(rsM) monoRestore(rsM);   // a resumed game: cash, places, deeds, houses, jail and the card decks come back
     monoFrame(); boardEl=$("mboard"); gameSnap=snapNow; renderBoard(); snapNow();
-    if(R.pickLook&&active.some(human)){ await pickLooks(); if(!live()) return; }
-    if(hasFirstShow()&&active.length>1){   // step 10, who goes first (official rule): everyone rolls both dice, the highest total starts, a tie rolls again
+    if(!rsM&&R.pickLook&&active.some(human)){ await pickLooks(); if(!live()) return; }
+    if(!rsM&&hasFirstShow()&&active.length>1){   // step 10, who goes first (official rule): everyone rolls both dice, the highest total starts, a tie rolls again
       var d6=function(){ return 1+Math.floor(Math.random()*6); };
       var res=BG().firstPlayer.resolve(active.length,function(){ return [d6(),d6()]; },{rank:function(v){ return v[0]+v[1]; }});
       turn=res.winner; renderBoard();
@@ -2260,6 +2349,7 @@ function playMonopoly(){
     }
     while(alive().length>1 && live()){
       var c=active[turn]; if(bankrupt[c]){ turn=(turn+1)%active.length; continue; }
+      gameSave(monoSt());
       doublesCount=0; mTurns++;
       // play this player's turn (may repeat on doubles)
       var endTurn=false;
@@ -2344,6 +2434,8 @@ function playRummy(){
     for(var ci=cut.length-1;ci>0;ci--){ var cj=Math.floor(Math.random()*(ci+1)), ct=cut[ci]; cut[ci]=cut[cj]; cut[cj]=ct; }
     fpCut=BG().firstPlayer.resolve(active.length,function(){ return cut.pop(); },{rank:function(c){ return c.r===1?14:c.r; }}); }
   var G=GM.newGame(fpCut?{names:names,humans:humans,opts:opts,dealer:(fpCut.winner-1+active.length)%active.length}:{names:names,humans:humans,opts:opts}); G.skill=CPU_SKILL;
+  var rsR=savedFor("rummy500");   // a resumed game: the whole table (Party save, every turn)
+  if(rsR&&rsR.G&&rsR.G.players&&rsR.G.players.length===active.length&&rsR.G.o){ G=rsR.G; G.skill=CPU_SKILL; fpCut=null; G.players.forEach(function(p,i){ p.human=!!humans[i]; if(!humans[i]) p.name=names[i]; }); } else rsR=null;
   standFn=function(){ var U=G.units||G.players.map(function(p,i){ return [i]; }); return U.map(function(u,ui){ var sc=G.scores?G.scores[ui]:G.players[u[0]].score; return {name:u.map(function(i){ return G.players[i].name; }).join(" & "),color:COL[active[u[0]]],k:ui,s:[sc|0],v:(sc|0)+" pts"}; }); };   // step 10: the Computer skill row (rummy500/brain.js reads G.skill)
   leaveHandler=function(c){ var i=active.indexOf(c); if(i>=0) G.players[i].human=false; };   // a phone left: the computer plays that hand
   rejoinHandler=function(c,nm){ var i=active.indexOf(c); if(i<0) return; G.players[i].human=true; G.players[i].name=nm; names[i]=nm; draw(); pushAll(askingIdx); };   // getting back in: the phone gets the hand, the computer stops
@@ -2409,7 +2501,7 @@ function playRummy(){
   }
   async function run(){
     while(alive()){
-      GM.startRound(G); G.logText=[]; flashMeld=null; flashCard=null; Sound.sfx("deal");
+      if(rsR){ rsR=null; G.logText=G.logText||[]; } else { GM.startRound(G); G.logText=[]; Sound.sfx("deal"); } flashMeld=null; flashCard=null;
       if(!fpCut) log(G.players[G.dealer].name+" deals — round "+G.round);   // review step 10: the first deal's line waits for the cut (no spoiler)
       draw();
       if(fpCut){ var fc=fpCut; fpCut=null;   // the cut for the deal, over the dealt table (the first round only)
@@ -2417,7 +2509,7 @@ function playRummy(){
           result:function(w){ return {title:colName(active[w])+" deals",sub:colName(active[G.turn])+" plays first, to the dealer's left. The high card deals."}; }},active[G.turn],active[fc.winner],alive);
         if(!alive()) return; log(G.players[G.dealer].name+" deals — round "+G.round); draw(); }
       pushAll(-1); await sleep(1800);
-      while(alive()&&!G.roundOver){ var i=G.turn; if(G.players[i].human) await humanStep(i); else await cpuStep(i); }
+      while(alive()&&!G.roundOver){ gameSave({G:G}); var i=G.turn; if(G.players[i].human) await humanStep(i); else await cpuStep(i); }
       if(!alive()) return;
       await roundEnd();
       if(G.over){ var wn=G.roundOver.winnerName; if(alive()){ announceOver(wn); showPlayAgain(); } return; }
@@ -2439,6 +2531,8 @@ function playRisk(){
   // turn, a tie rolls again (engine G.first). Without ui.js the engine picks at random, as before
   var fpRes=hasFirstShow()?BG().firstPlayer.resolve(active.length,function(){ return 1+Math.floor(Math.random()*6); }):null;
   var G=E.newGame(fpRes?{names:names,humans:humans,colors:colors,opts:opts,skill:CPU_SKILL,first:fpRes.winner}:{names:names,humans:humans,colors:colors,opts:opts,skill:CPU_SKILL});
+  var rsK=savedFor("risk");   // a resumed game: the whole map and hands (Party save, every turn)
+  if(rsK&&rsK.G&&rsK.G.players&&rsK.G.players.length===active.length&&rsK.G.terr){ G=rsK.G; G.skill=CPU_SKILL; fpRes=null; G.players.forEach(function(p,i){ if(!p.neutral){ p.human=!!humans[i]; if(!humans[i]) p.name=names[i]; } }); }
   standFn=function(){ return G.players.map(function(p,i){ if(p.neutral) return null; var n=(G.terr||[]).filter(function(t){ return t.o===i; }).length; return {name:p.name,color:COL[active[i]]||"#888",k:i,win:G.winner===i,s:[p.alive?1:0,n],v:p.alive?n+" territor"+(n===1?"y":"ies"):"Out"}; }).filter(Boolean); };   // step 10: skill known before a random setup (risk/brain.js)
   var afk={}, askingIdx=-1, shown=0;
   enterGame(); Skins.apply("risk");
@@ -2515,6 +2609,7 @@ function playRisk(){
       if(!alive()) return; }
     pushAll(-1); await sleep(1500);
     while(alive()&&!G.over){
+      gameSave({G:G});
       var i=G.turn, p=G.players[i];
       if(p.human&&seat[seatOf(i)]&&!afk[i]) await humanStep(i); else await cpuStep();
     }
@@ -2543,6 +2638,8 @@ function playUno(){
     for(var pi=pool.length-1;pi>0;pi--){ var pj=Math.floor(Math.random()*(pi+1)), pt=pool[pi]; pool[pi]=pool[pj]; pool[pj]=pt; }
     fpRes=BG().firstPlayer.resolve(active.length,function(){ return pool.pop(); },{rank:function(v){ return typeof v[1]==="number"?v[1]:0; }}); }
   var G=UE.newGame(fpRes?{names:names,humans:humans,opts:opts,dealer:(fpRes.winner-1+active.length)%active.length}:{names:names,humans:humans,opts:opts}); G.skill=CPU_SKILL;
+  var rsU=savedFor("uno");   // a resumed game: the whole table (Party save, every turn)
+  if(rsU&&rsU.G&&rsU.G.players&&rsU.G.players.length===active.length&&rsU.G.o){ G=rsU.G; G.skill=CPU_SKILL; fpRes=null; G.players.forEach(function(p,i){ p.human=!!humans[i]; if(!humans[i]) p.name=names[i]; }); } else rsU=null;
   standFn=function(){ var wn=G.roundOver&&G.roundOver.gameWinnerName; return G.players.map(function(p,i){ return {name:p.name,color:COL[active[i]],k:i,win:!!wn&&(wn===p.name||String(wn).split(" & ").indexOf(p.name)>=0),s:[p.alive===false?0:1,p.score|0],v:(p.score|0)+" pts"}; }); };   // step 10: uno/brain.js reads G.skill
   var afk={}, askingIdx=-1;
   enterGame(); Skins.apply("uno");
@@ -2644,7 +2741,8 @@ function playUno(){
   }
   async function run(){
     while(alive()){
-      UE.startRound(G); if($("unTable")){ $("unTable").hidden=true; $("unCtl").hidden=false; } drawTv();
+      if(rsU){ rsU=null; } else UE.startRound(G);
+      if($("unTable")){ $("unTable").hidden=true; $("unCtl").hidden=false; } drawTv();
       if(fpRes){ var fr=fpRes, FC={R:"#d83a3a",G:"#1f9a52",B:"#2a6fd6",Y:"#d6a514",W:"#1d1a2a"}; fpRes=null;   // the draw for the deal, over the dealt table (the first round only)
         await partyFirst({mode:"card",title:"Draw for the deal",rounds:fr.rounds,winner:fr.winner,players:active.map(fpPlayer),
           face:function(v){ return '<span class="un-fpc" style="background:'+FC[v[0]]+'">'+(typeof v[1]==="number"?v[1]:'<small>'+v[1]+'</small>')+'</span>'; },
@@ -2652,7 +2750,7 @@ function playUno(){
           result:function(w){ return {title:colName(active[w])+" deals",sub:colName(active[G.turn])+" plays first, to the dealer's left. The highest card deals."}; }},active[G.turn],active[fr.winner],alive);
         if(!alive()) return; }
       pushAll(-1); await sleep(1500);
-      while(alive()&&!G.roundOver){ var a=UE.actor(G), p=G.players[a]; if(p.human&&seat[active[a]]&&!afk[a]) await humanStep(a); else await cpuStep(a); }
+      while(alive()&&!G.roundOver){ gameSave({G:G}); var a=UE.actor(G), p=G.players[a]; if(p.human&&seat[active[a]]&&!afk[a]) await humanStep(a); else await cpuStep(a); }
       if(!alive()) return;
       drawTv(); await roundEnd();
       if(G.over){ if(alive()){ announceOver(G.roundOver.gameWinnerName); showPlayAgain(); } return; }
@@ -2674,6 +2772,8 @@ function playScatter(){
   // roll goes round the table (engine G.first). Without ui.js the first seat rolls first, as before
   var fpFirst=hasFirstShow()?Math.floor(Math.random()*active.length):null;
   var G=SE.newGame(fpFirst!=null?{names:names,humans:humans,opts:opts,first:fpFirst}:{names:names,humans:humans,opts:opts});
+  var rsG=savedFor("scatter");   // a resumed game: the scores and rounds so far; play carries on with the next round
+  if(rsG&&rsG.G&&rsG.G.players&&rsG.G.players.length===active.length&&rsG.G.o){ G=rsG.G; fpFirst=null; G.players.forEach(function(p,i){ p.human=!!humans[i]; if(!humans[i]) p.name=names[i]; }); }
   standFn=function(){ return G.players.map(function(p,i){ return {name:p.name,color:COL[active[i]],k:i,win:(G.winners||[]).indexOf(i)>=0,s:[p.score|0],v:(p.score|0)+" pts"}; }); };
   var endAt=0, revealN=0, ready={}, nexts={}, phase="idle", curTimer=null, rollTxt="", pendCh=null;
   enterGame(); Skins.apply("scatter");
@@ -2941,6 +3041,7 @@ function playScatter(){
         result:function(w){ return {title:colName(active[w])+" rolls first",sub:"Then the die goes round the table, one roller each round."}; }},active[fpFirst],null,alive);
       if(!alive()) return; }
     while(alive()){
+      gameSave({G:G});
       SE.startRound(G); setPhase("roll"); pushAll(-1);
       await rollScreen(); if(!alive()) return;
       if(G.star){ await starPhase(); if(!alive()) return; }
@@ -2982,9 +3083,10 @@ function showPlayAgain(){
 
 function esc(s){ return String(s==null?"":s).replace(/[&<>]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;"}[c];}); }
 
-/* boot */
+/* boot: a saved room / game from before this page loaded is offered on the picker (Resume saved game) */
+try{ if(window.PartySave){ var _ld=PartySave.load(); if(_ld.rec) BOOT_SAVE=_ld.rec; else if(_ld.bad) BOOT_BAD=_ld.bad; } }catch(e){}
 Sound.mountButton();
-screenSelect();
+screenSelect(); booted=true;
 /* ui/ui.js is deferred, so it arrives after the first screen is drawn: finish the Luxe parts then */
 function enhance(){
   var B=BG(); if(!B) return;

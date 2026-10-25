@@ -29,6 +29,9 @@
   #conn:empty{display:none;}
   #conn[data-state="online"]{color:var(--tag-ok-ink);background:var(--tag-ok-bg);box-shadow:inset 0 0 0 1px rgba(79,214,156,.45);}
   .bg-topbar__title{display:grid;justify-items:center;}
+  #linkbar{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top,0px) + 3.4rem);z-index:60;margin:0 auto;max-width:34rem;padding:.55rem .8rem;display:none;gap:.5rem;align-items:center;flex-wrap:wrap;justify-content:center;border-radius:var(--r-lg,14px);background:rgba(20,16,10,.94);color:var(--text-1,#fff);box-shadow:0 0 0 1px rgba(255,200,90,.45),0 8px 24px rgba(0,0,0,.5);font-size:.9rem;text-align:center;}
+  #linkbar.on{display:flex;}
+  #linkbar p{margin:0;flex:1 1 100%;}
   #main{flex:1 0 auto;width:100%;max-width:34rem;margin:0 auto;}
   .big{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:.875rem;padding:1rem var(--gutter) calc(env(safe-area-inset-bottom,0px) + 1.5rem);}
   .big.scroll{justify-content:flex-start;padding-top:.75rem;}
@@ -373,12 +376,14 @@
     <div class="bg-topbar__title"><span class="bg-eyebrow" id="room">Room —</span><span class="bg-topbar__name" id="barName">Party Mode</span><span class="bg-chip" id="conn" role="status">connecting…</span></div>
     <div class="bg-topbar__end"><button id="plbtn" class="bg-btn bg-btn--icon" type="button" style="display:none" aria-label="Players and holdings" data-icon="user"></button><button id="setbtn" class="bg-btn bg-btn--icon" type="button" aria-label="Settings" data-icon="gear"></button></div>
   </header>
+  <div id="linkbar" role="status" aria-live="polite"></div>
   <main class="big" id="main"></main>
   <section class="bg-sheet" id="ov" aria-label="Details"><div class="bg-sheet__grip" aria-hidden="true"></div><div id="ovin" class="ph-sheet-body"></div></section>
   <section class="bg-sheet" id="setsheet" aria-labelledby="setTitle"><div class="bg-sheet__grip" aria-hidden="true"></div><div class="ph-sheet-body"><h2 class="bg-sheet__title" id="setTitle">Settings</h2><div class="ph-effects" id="effRow"></div><a class="bg-btn bg-btn--ghost bg-btn--block" id="sethome" href="../index.html" data-icon="home">Back to all games</a><button class="bg-btn bg-btn--secondary bg-btn--block" type="button" id="setDone">Done</button></div></section>
 
 <script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js" async></script><!-- async: the screen never waits for the CDN; net.js opens the relays once it is in -->
 <script src="net.js"></script>
+<script src="link.js"></script>
 <script src="monodata.js"></script>
 <script src="../rummy500/engine.js"></script>
 <script src="../rummy500/game.js"></script>
@@ -448,7 +453,7 @@ var room=(params.get("room")||"").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0
 var myPid=BGNet.pid();
 var myName=null, myColor=null, net=null, curReq=null, started=false;
 var joined=false, joinTick=0, joinTimer=null;
-var wantJoin=false, netReady=false, netRoom=null;   /* step 10: the relays open while the name is typed; "Sit down" then only knocks */
+var wantJoin=false, netReady=false, netRoom=null, lastUpJoin=0, netSt="connecting";   /* step 10: the relays open while the name is typed; "Sit down" then only knocks */
 /* getting back in (the CEO, 2026-10-16): a seat code from the TV's invite (typed, or ?seat= from the invite's QR) rides along in the join */
 var seatCode=(params.get("seat")||"").replace(/\D/g,"").slice(0,4)||null, viewSeen=false, rjAgain=false;
 /* seated: the invite's seat code leaves the address, so a reload goes straight back to the seat (not "Take my seat" again) */
@@ -457,11 +462,31 @@ function dropSeatParam(){ try{ if(!params.get("seat")) return; params.delete("se
    key "bg_player_name"), and a phone that sat down in this room ("bgfs_seat": {room, name, at}; forgotten on Leave) goes straight back to its seat */
 function nameGet(){ try{ return String(localStorage.getItem("bg_player_name")||"").replace(/[\u0000-\u001f\u007f<>]/g,"").replace(/\s+/g," ").trim().slice(0,12); }catch(e){ return ""; } }
 function nameSet(v){ try{ if(v) localStorage.setItem("bg_player_name",v); }catch(e){} }
-function seatMem(){ try{ var o=JSON.parse(localStorage.getItem("bgfs_seat")||"null"); return o&&o.room&&o.name&&Date.now()-(+o.at||0)<12*3600000?o:null; }catch(e){ return null; } }
+function seatMem(){ try{ var o=JSON.parse(localStorage.getItem("bgfs_seat")||"null"); return o&&o.room&&o.name&&Date.now()-(+o.at||0)<24*3600000?o:null; }catch(e){ return null; } }
 function seatSave(){ try{ localStorage.setItem("bgfs_seat",JSON.stringify({room:room,name:myName,at:Date.now()})); }catch(e){} }
 function seatForget(){ try{ localStorage.removeItem("bgfs_seat"); }catch(e){} }
 
-function setConn(s){ connEl.textContent = s==="online"?"connected":(s==="connecting"?"connecting…":"reconnecting…"); connEl.setAttribute("data-state",s==="online"?"online":"wait"); }
+function setConn(s){ connEl.textContent = s==="online"?"Connected":(s==="connecting"?"Connecting…":"Reconnecting…"); connEl.setAttribute("data-state",s==="online"?"online":"wait"); }
+/* the link to the TV (link.js): the chip says Connected / Reconnecting…; when the TV stays quiet a bar says why and offers Rejoin */
+function chip(){ if(netSt!=="online"){ setConn(netSt==="connecting"?"connecting":"reconnecting"); return; } if(link&&link.joined()) setConn(link.state()==="online"?"online":"reconnecting"); else setConn("connecting"); }
+function hello(){ if(Date.now()-lastUpJoin<1200) return; lastUpJoin=Date.now(); if(net&&wantJoin) sendJoin(); }
+var link=null, linkTimer=null, linkBar=document.getElementById("linkbar");
+var LINK_MSG={tv:"The TV is not answering room {R}. Check the TV is on and still showing this game. If the TV was restarted, ask them to choose Resume saved game on the TV, then tap Rejoin.",net:"This phone cannot reach the connection service. Check Wi-Fi or mobile data, then tap Rejoin.",lib:"The connection library did not load (slow or blocked network). Check Wi-Fi, then tap Rejoin."};
+function renderLink(st,info){
+  if(!linkBar) return;
+  if(st==="online"||st==="connecting"){ linkBar.className=""; linkBar.innerHTML=""; chip(); return; }
+  setConn("reconnecting");
+  var lost=st==="lost", msg=lost?(LINK_MSG[(info&&info.why)||"tv"]||LINK_MSG.tv).replace("{R}",room):"Reconnecting… your seat is kept.";
+  linkBar.className="on"; linkBar.innerHTML="<p>"+esc(msg)+"</p>"+'<button type="button" class="bg-btn bg-btn--primary bg-btn--sm" id="lkRejoin">Rejoin</button>'+(lost?'<button type="button" class="bg-btn bg-btn--secondary bg-btn--sm" id="lkOther">Other room code</button>':"");
+  var rj=document.getElementById("lkRejoin"); if(rj) rj.onclick=function(){ if(link) link.rejoin(); else if(net) net.reconnect(); };
+  var ot=document.getElementById("lkOther"); if(ot) ot.onclick=function(){ stopLink(); stopNet(); askRoom(); };
+}
+function stopLink(){ if(link) link.stop(); link=null; if(linkTimer){ clearInterval(linkTimer); linkTimer=null; } if(linkBar){ linkBar.className=""; linkBar.innerHTML=""; } }
+function startLink(){
+  stopLink();
+  link=BGLink.create({now:Date.now, send:hello, reconnect:function(){ if(net&&net.reconnect) net.reconnect(); }, onChange:renderLink});
+  linkTimer=setInterval(function(){ if(link) link.tick(); },1000);
+}
 function setRoom(t){ roomEl.textContent=t; }
 function chrome(inRoom){   /* the top bar: Leave while seated, the home link otherwise */
   $("lvbtn").style.display= inRoom?"":"none"; $("homebtn").style.display= inRoom?"none":""; $("sethome").style.display= inRoom?"none":"";   /* seated: Leave (with its confirm) is the way out, so the room is told */
@@ -478,6 +503,7 @@ function askRoom(msg){
 function hubLink(){ return '<a href="../index.html" class="bg-btn bg-btn--ghost ph-link"><span data-icon="home" aria-hidden="true"></span>Back to all games</a>'; }
 /* stop talking to this room (Leave, or the TV said we can't sit down) and forget the seat */
 function stopNet(){
+  stopLink();
   if(joinTimer){ clearInterval(joinTimer); joinTimer=null; }
   var old=net; net=null; wantJoin=false; netReady=false; netRoom=null; if(old){ try{ old.close(); }catch(e){} }
   joined=false; started=false; curReq=null; overShown=false; lastSnap=null; myColor=null;
@@ -533,10 +559,11 @@ function openNet(){
   netReady=false; netRoom=room;
   var self=null;
   self=net=BGNet.connect(room,"ctrl",{
-    status:setConn,
+    status:function(s){ if(net&&net!==self) return; netSt=s; if(link) link.netStatus(s); chip(); },
+    libFail:function(){ if(net===self) renderLink("lost",{why:"lib"}); },
     ready:function(){ if(net!==self) return; netReady=true; if(wantJoin) knock(); },
-    up:function(){ if(net===self&&wantJoin&&!joined&&joinTimer) sendJoin(); },   // a relay just came up: knock on it right away
-    msg:function(o){ if(self&&net===self&&wantJoin) onMsg(o); }   // a closed connection (Leave / new room) can't change the screen any more
+    up:function(){ if(net===self&&wantJoin&&joinTimer) hello(); },   // a relay just came up (first time, or back after a drop / sleep): say hello right away, seated or not
+    msg:function(o){ if(self&&net===self&&wantJoin){ if(link) link.heard(o&&o.t==="you"&&o.pid===myPid); onMsg(o); } }   // a closed connection (Leave / new room) can't change the screen any more
   });
 }
 function knock(){
@@ -552,7 +579,7 @@ function knock(){
 function connect(){
   joined=false; joinTick=0; viewSeen=false; if(joinTimer){ clearInterval(joinTimer); joinTimer=null; }
   showWaiting(netReady&&net&&netRoom===room?"Joining room "+room+"…":"Connecting to the TV…", true);
-  openNet(); wantJoin=true;
+  startLink(); openNet(); wantJoin=true;
   if(netReady) knock();   // already connected while the name was typed: knock now (otherwise the relay's ready does)
 }
 function sendJoin(){ net && net.send(seatCode&&!joined?{t:"join", pid:myPid, name:myName, code:seatCode}:{t:"join", pid:myPid, name:myName}); }
@@ -570,7 +597,7 @@ function onMsg0(o){
   if(o.pid===myPid&&/^(ask|rvs|rks|ups|pgs|scs|wait|first)$/.test(o.t)) viewSeen=true;   // this phone has a game screen from the TV
   if(o.t==="nojoin" && o.pid===myPid){ if(!joined){ if(o.rejoin){ if(joinTimer){ clearInterval(joinTimer); joinTimer=null; } seatCode=null; showRejoin(o); } else { var r=room; stopNet(); room=r; seatForget(); showNoJoin(o); } } else if(o.rejoin&&started){ var rn=room; seatForget(); stopNet(); room=rn; setRoom("Room "+room); showRejoin({bumped:1}); } }   // a started game: the seat code / the host's answer (the relays stay open)
   else if(o.t==="bumped" && o.pid===myPid){ var rb=room; seatForget(); stopNet(); room=rb; setRoom("Room "+room); showRejoin({bumped:1}); }   // another phone took this seat by invite
-  else if(o.t==="you" && o.pid===myPid){ var first=!joined; chrome(true); myColor=o.color; if(o.name) myName=o.name; joined=true; seatCode=null; if(first){ seatSave(); dropSeatParam(); } if(o.started) started=true;
+  else if(o.t==="you" && o.pid===myPid){ var first=!joined; chrome(true); myColor=o.color; if(o.name) myName=o.name; joined=true; seatCode=null; if(first){ dropSeatParam(); } seatSave(); if(o.started) started=true;
     if(first&&o.started&&!isAsking()&&!overShown&&!viewSeen) showWaiting("You’re back in the game. Waiting for the TV…", false);   // reloaded / let back in: its game, never the lobby (FOLLOWUPS party-reload-lobby-screen)
     if(!joinTimer&&wantJoin) knock();   // seated by the host after a request: the keep-alive starts again
     if(!started && !isAsking() && !overShown) showLobby({players:[{pid:myPid,name:myName,color:myColor}]}); }
