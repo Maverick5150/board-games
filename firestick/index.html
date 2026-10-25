@@ -992,8 +992,6 @@ function gameSave(st){ if(gameOver||inLobby) return; saveRecord("game",st); }
 function savedFor(game){ var rs=resumeSt; resumeSt=null; return rs&&rs.game===game?rs.st:null; }   // a game's first line: its saved state, once
 /* copy saved values into a live object / array in place (other code holds references to it) */
 function fillIn(dst,src){ if(!src||!dst) return; if(Array.isArray(dst)){ dst.length=0; src.forEach(function(v){ dst.push(v); }); } else { Object.keys(dst).forEach(function(k){ delete dst[k]; }); Object.keys(src).forEach(function(k){ dst[k]=src[k]; }); } }
-/* a saved engine state has lost its random function (JSON): hand it back */
-function reviveG(G){ if(G&&typeof G.rnd!=="function") G.rnd=Math.random; return G; }
 function resumeSaved(rec){
   var P=PG(), go=function(){ chosenGame=rec.game; RESUME=rec; screenLobby(); };
   if(plugE(rec.game)){ P.load(rec.game,"tv").then(function(){ P.palette(rec.game,COL,CNAME,SEATNO); go(); }, function(){ toast("Couldn't load that game. Check the connection and try again."); }); }
@@ -2437,7 +2435,7 @@ function playRummy(){
     fpCut=BG().firstPlayer.resolve(active.length,function(){ return cut.pop(); },{rank:function(c){ return c.r===1?14:c.r; }}); }
   var G=GM.newGame(fpCut?{names:names,humans:humans,opts:opts,dealer:(fpCut.winner-1+active.length)%active.length}:{names:names,humans:humans,opts:opts}); G.skill=CPU_SKILL;
   var rsR=savedFor("rummy500");   // a resumed game: the whole table (Party save, every turn)
-  if(rsR&&rsR.G&&rsR.G.players&&rsR.G.players.length===active.length&&rsR.G.o){ G=reviveG(rsR.G); G.skill=CPU_SKILL; fpCut=null; G.players.forEach(function(p,i){ p.human=!!humans[i]; if(!humans[i]) p.name=names[i]; }); } else rsR=null;
+  if(rsR&&rsR.G&&rsR.G.players&&rsR.G.players.length===active.length&&rsR.G.o){ G=rsR.G; G.skill=CPU_SKILL; fpCut=null; G.players.forEach(function(p,i){ p.human=!!humans[i]; if(!humans[i]) p.name=names[i]; }); } else rsR=null;
   standFn=function(){ var U=G.units||G.players.map(function(p,i){ return [i]; }); return U.map(function(u,ui){ var sc=G.scores?G.scores[ui]:G.players[u[0]].score; return {name:u.map(function(i){ return G.players[i].name; }).join(" & "),color:COL[active[u[0]]],k:ui,s:[sc|0],v:(sc|0)+" pts"}; }); };   // step 10: the Computer skill row (rummy500/brain.js reads G.skill)
   leaveHandler=function(c){ var i=active.indexOf(c); if(i>=0) G.players[i].human=false; };   // a phone left: the computer plays that hand
   rejoinHandler=function(c,nm){ var i=active.indexOf(c); if(i<0) return; G.players[i].human=true; G.players[i].name=nm; names[i]=nm; draw(); pushAll(askingIdx); };   // getting back in: the phone gets the hand, the computer stops
@@ -2534,7 +2532,7 @@ function playRisk(){
   var fpRes=hasFirstShow()?BG().firstPlayer.resolve(active.length,function(){ return 1+Math.floor(Math.random()*6); }):null;
   var G=E.newGame(fpRes?{names:names,humans:humans,colors:colors,opts:opts,skill:CPU_SKILL,first:fpRes.winner}:{names:names,humans:humans,colors:colors,opts:opts,skill:CPU_SKILL});
   var rsK=savedFor("risk");   // a resumed game: the whole map and hands (Party save, every turn)
-  if(rsK&&rsK.G&&rsK.G.players&&rsK.G.players.length===active.length&&rsK.G.terr){ G=reviveG(rsK.G); G.skill=CPU_SKILL; fpRes=null; G.players.forEach(function(p,i){ if(!p.neutral){ p.human=!!humans[i]; if(!humans[i]) p.name=names[i]; } }); }
+  if(rsK&&rsK.G&&rsK.G.players&&rsK.G.players.length===active.length&&rsK.G.terr){ G=rsK.G; G.skill=CPU_SKILL; fpRes=null; G.players.forEach(function(p,i){ if(!p.neutral){ p.human=!!humans[i]; if(!humans[i]) p.name=names[i]; } }); }
   standFn=function(){ return G.players.map(function(p,i){ if(p.neutral) return null; var n=(G.terr||[]).filter(function(t){ return t.o===i; }).length; return {name:p.name,color:COL[active[i]]||"#888",k:i,win:G.winner===i,s:[p.alive?1:0,n],v:p.alive?n+" territor"+(n===1?"y":"ies"):"Out"}; }).filter(Boolean); };   // step 10: skill known before a random setup (risk/brain.js)
   var afk={}, askingIdx=-1, shown=0;
   enterGame(); Skins.apply("risk");
@@ -2641,7 +2639,7 @@ function playUno(){
     fpRes=BG().firstPlayer.resolve(active.length,function(){ return pool.pop(); },{rank:function(v){ return typeof v[1]==="number"?v[1]:0; }}); }
   var G=UE.newGame(fpRes?{names:names,humans:humans,opts:opts,dealer:(fpRes.winner-1+active.length)%active.length}:{names:names,humans:humans,opts:opts}); G.skill=CPU_SKILL;
   var rsU=savedFor("uno");   // a resumed game: the whole table (Party save, every turn)
-  if(rsU&&rsU.G&&rsU.G.players&&rsU.G.players.length===active.length&&rsU.G.o){ G=reviveG(rsU.G); G.skill=CPU_SKILL; fpRes=null; G.players.forEach(function(p,i){ p.human=!!humans[i]; if(!humans[i]) p.name=names[i]; }); } else rsU=null;
+  if(rsU&&rsU.G&&rsU.G.players&&rsU.G.players.length===active.length&&rsU.G.o){ G=rsU.G; G.skill=CPU_SKILL; fpRes=null; G.players.forEach(function(p,i){ p.human=!!humans[i]; if(!humans[i]) p.name=names[i]; }); } else rsU=null;
   standFn=function(){ var wn=G.roundOver&&G.roundOver.gameWinnerName; return G.players.map(function(p,i){ return {name:p.name,color:COL[active[i]],k:i,win:!!wn&&(wn===p.name||String(wn).split(" & ").indexOf(p.name)>=0),s:[p.alive===false?0:1,p.score|0],v:(p.score|0)+" pts"}; }); };   // step 10: uno/brain.js reads G.skill
   var afk={}, askingIdx=-1;
   enterGame(); Skins.apply("uno");
@@ -2775,7 +2773,7 @@ function playScatter(){
   var fpFirst=hasFirstShow()?Math.floor(Math.random()*active.length):null;
   var G=SE.newGame(fpFirst!=null?{names:names,humans:humans,opts:opts,first:fpFirst}:{names:names,humans:humans,opts:opts});
   var rsG=savedFor("scatter");   // a resumed game: the scores and rounds so far; play carries on with the next round
-  if(rsG&&rsG.G&&rsG.G.players&&rsG.G.players.length===active.length&&rsG.G.o){ G=reviveG(rsG.G); fpFirst=null; G.players.forEach(function(p,i){ p.human=!!humans[i]; if(!humans[i]) p.name=names[i]; }); }
+  if(rsG&&rsG.G&&rsG.G.players&&rsG.G.players.length===active.length&&rsG.G.o){ G=rsG.G; fpFirst=null; G.players.forEach(function(p,i){ p.human=!!humans[i]; if(!humans[i]) p.name=names[i]; }); }
   standFn=function(){ return G.players.map(function(p,i){ return {name:p.name,color:COL[active[i]],k:i,win:(G.winners||[]).indexOf(i)>=0,s:[p.score|0],v:(p.score|0)+" pts"}; }); };
   var endAt=0, revealN=0, ready={}, nexts={}, phase="idle", curTimer=null, rollTxt="", pendCh=null;
   enterGame(); Skins.apply("scatter");
