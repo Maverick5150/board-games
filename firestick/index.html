@@ -280,6 +280,7 @@
 <script src="qr.js"></script>
 <script src="net.js"></script>
 <script src="monodata.js"></script>
+<script src="monorules.js"></script>
 <script src="../monopoly/board.js"></script>
 <script src="../sound.js"></script>
 <script src="../skins.js"></script>
@@ -884,13 +885,18 @@ function screenSelect(){
 }
 var chosenGame="trouble";
 var cpuCount=3;           // how many computer players to add (capped by free seats)
-var monoRules={fpJackpot:false,noAuction:false,doubleGo:false,snakeEyes:false,noRentJail:false,lux75:false,unlimited:false,evenBuild:true};
+var monoRules={fpJackpot:false,noAuction:false,doubleGo:false,snakeEyes:false,noRentJail:false,lux75:false,unlimited:false,evenBuild:true,mustPassGo:true,tradeLock:true,fairTrade:true,pickLook:true,incomeTaxChoice:true};
 var MONO_DEFAULT=JSON.stringify(monoRules);
-var MONO_RULE_DEFS=[["fpJackpot","Free Parking jackpot"],["noAuction","No auctions"],["doubleGo","$400 for landing on GO"],["snakeEyes","Snake-eyes bonus $500"],["noRentJail","No rent while in Jail"],["lux75","Luxury tax $75"],["unlimited","Unlimited houses & hotels"],["evenBuild","Even building (official)"]];
+var MONO_RULE_DEFS=[["fpJackpot","Free Parking jackpot"],["noAuction","No auctions"],["doubleGo","$400 for landing on GO"],["snakeEyes","Snake-eyes bonus $500"],["noRentJail","No rent while in Jail"],["lux75","Luxury tax $75"],["unlimited","Unlimited houses & hotels"],["evenBuild","Even building (official)"],
+ ["mustPassGo","Must pass GO to buy","You cannot buy until you have gone past GO once; landing exactly on GO does not count the first time."],
+ ["tradeLock","Trading locked until all owned","No trades until all 28 properties are owned; then 5 trades each, 3 of your own turns apart."],
+ ["fairTrade","Fair-trade check","Trades are checked first: gifts, monopoly-for-pocket-change and feeding a trailing player are refused."],
+ ["pickLook","Pick your own token and colour","Every player chooses a unique token and colour before the game; computers take what is left."],
+ ["incomeTaxChoice","Income Tax: $200 or 10%","On Income Tax you choose: pay $200 or 10% of your total worth."]];
 function renderRules(){ var el=$("ruleBtns"); if(!el) return;
   var fa=document.activeElement, fk=fa&&el.contains(fa)?fa.getAttribute("data-k"):null;
   el.innerHTML=MONO_RULE_DEFS.map(function(r){ var on=!!monoRules[r[0]], tag=r[0]==="evenBuild"?"official":"house";
-    return '<div class="ps-rule"><span class="bg-tag bg-tag--'+tag+'">'+tag+'</span><button type="button" class="bg-row aibtn'+(on?" on":"")+'" role="switch" aria-checked="'+on+'" data-k="'+r[0]+'"><span class="bg-row__main"><span class="bg-row__title">'+r[1]+'</span></span><span class="bg-toggle" aria-hidden="true"></span></button></div>'; }).join("");
+    return '<div class="ps-rule"><span class="bg-tag bg-tag--'+tag+'">'+tag+'</span><button type="button" class="bg-row aibtn'+(on?" on":"")+'" role="switch" aria-checked="'+on+'" data-k="'+r[0]+'"><span class="bg-row__main"><span class="bg-row__title">'+r[1]+'</span>'+(r[2]?'<span class="bg-row__desc">'+r[2]+'</span>':'')+'</span><span class="bg-toggle" aria-hidden="true"></span></button></div>'; }).join("");
   Array.prototype.forEach.call(el.querySelectorAll("button"),function(b){ b.onclick=function(){ monoRules[b.dataset.k]=!monoRules[b.dataset.k]; renderRules(); }; });
   if(fk){ var nf=el.querySelector('button[data-k="'+fk+'"]'); if(nf){ nf.focus(); var B=BG(); if(B&&B.focus&&B.focus.enabled&&B.focus.set) B.focus.set(nf); } } }
 var screenState="select";
@@ -1809,7 +1815,8 @@ function playMonopoly(){
   var COLORVAR={brown:"#8b5a2b",light_blue:"#9fd0ef",pink:"#d93a96",orange:"#f08d1c",red:"#e23b3b",yellow:"#f3d41b",green:"#1f9d54",dark_blue:"#2b4fe0"};
   var TOKS=["Top Hat","Race Car","Dog","Battleship","Boot","Thimble","Wheelbarrow","Horse & Rider"];   // the pieces are drawn by MonoBoard (board.js), by name
   var SEATN={red:1,blue:2,green:3,yellow:4,purple:5,teal:6,orange:7,pink:8};   // player colour -> the Luxe seat colour of the pieces and owner marks
-  function tokH(c){ return '<span class="mtk">'+(window.MonoBoard?MonoBoard.tokenSVG(tokE[c],SEATN[c]||1):'')+'</span>'; }
+  var look={}; function lk(c){ return look[c]||c; }   // the colour a player chose (pickLook); defaults to the lobby colour
+  function tokH(c){ return '<span class="mtk">'+(window.MonoBoard?MonoBoard.tokenSVG(tokE[c],SEATN[lk(c)]||1):'')+'</span>'; }
   var BOARD=MONO_BOARD, CHANCE=MONO_CHANCE, CHEST=MONO_CHEST, RR_IDX=[5,15,25,35], UTIL_IDX=[12,28];
   var GROUPS={}; BOARD.forEach(function(s,i){ if(s.t==="prop"){ (GROUPS[s.g]=GROUPS[s.g]||[]).push(i); } });
   try{ if(window.MonoBrain) MonoBrain.init({BOARD:BOARD,GROUPS:GROUPS,RR_IDX:RR_IDX,UTIL_IDX:UTIL_IDX}); }catch(e){}   // step 10: the computers' brain reads this board
@@ -1823,6 +1830,15 @@ function playMonopoly(){
   var dice=[0,0], doublesCount=0, turn=0, over=false;
   var R={}; for(var rk in monoRules) R[rk]=monoRules[rk];
   var fpPool=0, heldCh=0, heldCs=0, snapT=null;
+  var passed={}, tcount={}, tlast={}, ownTurns={}, MR=window.MonoRules;   // house rules: passed GO once / trades made / ownTurns at the last trade / own complete turns
+  active.forEach(function(c){ passed[c]=false; tcount[c]=0; tlast[c]=null; ownTurns[c]=0; });
+  function eligible(c){ return !R.mustPassGo||!!passed[c]; }
+  function allOwned(){ for(var i=0;i<40;i++){ var t=BOARD[i].t; if((t==="prop"||t==="rr"||t==="util")&&owner[i]==null) return false; } return true; }
+  function tgate(c){ if(!R.tradeLock) return {ok:true,left:99,wait:0,label:"",reason:""}; return MR.tradeGate({allOwned:allOwned(),count:tcount[c],ownTurns:ownTurns[c],lastAt:tlast[c]}); }
+  function tradeDone(c){ tcount[c]++; tlast[c]=ownTurns[c]; }
+  function fairCheck(a,b,give,get,cg,cr,jg,jr){ if(!R.fairTrade) return {ok:true,reason:""};
+    var worth={}, names={}; active.forEach(function(x){ if(!bankrupt[x]){ worth[x]=netWorth(x); } names[x]=nm(x); });
+    return MR.evaluateTrade({BOARD:BOARD,owner:owner,houses:houses,mort:mort,worth:worth,names:names,a:a,b:b,give:give,get:get,cg:cg,cr:cr,jg:jg,jr:jr}); }
   var centerGame="", centerView="";
   function centerRender(){ var el=boardEl&&boardEl.querySelector(".mcenter"); if(!el) return; var h=centerView||centerGame; el.innerHTML = h?('<div class="mcw">'+h+'</div>'):(window.MonoBoard?MonoBoard.plateHTML():'MONOPOLY'); }
   function setGameCenter(h){ centerGame=h||""; centerRender(); }
@@ -1835,7 +1851,7 @@ function playMonopoly(){
   function rangeArr(n){ var a=[]; for(var i=0;i<n;i++)a.push(i); return a; }
   function shuf(a){ for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i];a[i]=a[j];a[j]=t; } return a; }
   function nm(c){ return seat[c]?players[seat[c]].name:(cpuName(c)+" (CPU)"); }
-  standFn=function(){ return active.map(function(c,k){ var b=!!bankrupt[c], w=b?0:netWorth(c); return {name:colName(c),color:COL[c],k:k,win:!b&&alive().length===1,s:[b?0:1,w],v:b?"Bankrupt":"$"+w+" net worth"}; }); };
+  standFn=function(){ return active.map(function(c,k){ var b=!!bankrupt[c], w=b?0:netWorth(c); return {name:colName(c),color:COL[lk(c)],k:k,win:!b&&alive().length===1,s:[b?0:1,w],v:b?"Bankrupt":"$"+w+" net worth"}; }); };
   function human(c){ return !!seat[c]; }
   function alive(){ return active.filter(function(c){return !bankrupt[c];}); }
   function money(n){ return (n<0?"-$":"$")+Math.abs(n); }
@@ -1852,11 +1868,11 @@ function playMonopoly(){
 
   // ---------- rendering (HTML grid) ----------
   var boardEl;
-  function PC(c){ return COL[c]; }
+  function PC(c){ return COL[lk(c)]; }
   var MB=null, centerEl=null;
   function boardState(){
-    var own=[],i; for(i=0;i<40;i++) own[i]=owner[i]!=null?(SEATN[owner[i]]||1):0;
-    var toks=active.filter(function(c){return !bankrupt[c];}).map(function(c){ return {id:c,i:pos[c],seat:SEATN[c]||1,tok:tokE[c],cur:active[turn]===c,title:nm(c),jail:!!injail[c]}; });
+    var own=[],i; for(i=0;i<40;i++) own[i]=owner[i]!=null?(SEATN[lk(owner[i])]||1):0;
+    var toks=active.filter(function(c){return !bankrupt[c];}).map(function(c){ return {id:c,i:pos[c],seat:SEATN[lk(c)]||1,tok:tokE[c],cur:active[turn]===c,title:nm(c),jail:!!injail[c]}; });
     var cc=active[turn];
     return {own:own,houses:houses,mort:mort,toks:toks,hl:(cc&&!bankrupt[cc]&&!over)?pos[cc]:-1};
   }
@@ -1993,7 +2009,7 @@ function playMonopoly(){
   // the same person again from this computer for about three rounds after a "no".
   var hOff={};
   async function aiTrades(c){
-    if(over||alive().length<2) return; var p=mb(c,"trade"); if(!p) return;
+    if(over||alive().length<2) return; if(!tgate(c).ok) return; var p=mb(c,"trade"); if(!p) return;
     var hum=MG.players.map(function(x){ return x.human; }), offers;
     MG.players.forEach(function(x){ x.human=false; });
     try{ offers=brainTry(function(){ return MonoBrain.propose(MG,p); }); } finally { MG.players.forEach(function(x,k){ x.human=hum[k]; }); }
@@ -2001,6 +2017,7 @@ function playMonopoly(){
     var list=(Array.isArray(offers)?offers:[offers]).slice(0,6), askedHuman=false;
     for(var k=0;k<list.length;k++){ var t=list[k], q=t&&active[t.to];
       if(!q||q===c||bankrupt[q]||!aiDealOK(c,q,t)) continue;
+      if(!fairCheck(c,q,t.give||[],t.get||[],t.cashGive|0,t.cashGet|0,0,0).ok) continue;
       var give=t.give||[], get=t.get||[], cg=t.cashGive|0, cr=t.cashGet|0, yes;
       if(human(q)){
         var pk=c+">"+q; if(askedHuman||!seat[q]||(hOff[pk]!=null&&mTurns-hOff[pk]<3*active.length)) continue;
@@ -2013,7 +2030,7 @@ function playMonopoly(){
       if(yes){
         give.forEach(function(i){ owner[i]=q; if(mort[i]) cash[q]-=Math.ceil(BOARD[i].mort*0.1); });
         get.forEach(function(i){ owner[i]=c; if(mort[i]) cash[c]-=Math.ceil(BOARD[i].mort*0.1); });
-        cash[c]+=cr-cg; cash[q]+=cg-cr;
+        cash[c]+=cr-cg; cash[q]+=cg-cr; tradeDone(c);
         toast("Trade done: "+nm(c)+" and "+nm(q)); renderBoard(); return; }
     }
   }
@@ -2046,14 +2063,16 @@ function playMonopoly(){
   // step 10 (the CEO's rule, SHARED-UX section 3): one hop per space at the Game speed (230 ms at medium, as the single-device board):
   // board.js glides .mb-pos one space (--mb-hop) while BGUI.hop lifts its plain .mb-hw wrapper (all 8 pieces are board.js's own)
   function hopTok(c,ms){ var h=ms||Math.max(120,Math.round(170*PACE/1.8)); if(MB&&MB.hop) MB.hop(c,h); }
-  async function stepTo(c,steps){ for(var s=0;s<steps;s++){ pos[c]=(pos[c]+1)%40; Sound.sfx("tick"); if(pos[c]===0) passGo(c); renderBoard(); hopTok(c); await sleep(230/1.8); } }
+  async function stepTo(c,steps){ for(var s=0;s<steps;s++){ pos[c]=(pos[c]+1)%40; Sound.sfx("tick"); if(pos[c]===0){ passGo(c); if(MR.passesGoAtStep(s,steps)) passed[c]=true; } renderBoard(); hopTok(c); await sleep(230/1.8); } }
   async function moveToIdx(c,idx,collect){ var steps=(idx-pos[c]+40)%40; await stepTo(c,steps); }
   function goJail(c){ pos[c]=10; injail[c]=true; jailT[c]=0; doublesCount=0; renderBoard(); }
 
   // ---------- auction ----------
   async function auction(i){
     toast("Auction: "+BOARD[i].n);
-    var bidders=alive().slice(); var price=0, high=null, idx=0;
+    var bidders=alive().filter(eligible); var price=0, high=null, idx=0;
+    if(!bidders.length){ toast("Nobody has passed GO yet: "+BOARD[i].n+" stays unowned"); return; }
+    if(R.mustPassGo&&bidders.length<alive().length) toast("Only players who have passed GO may bid");
     // every player gets the chance to bid: it ends only when no one is left, or only the high bidder is left
     while(bidders.length>1 || (bidders.length===1 && high!==bidders[0])){
       var c=bidders[idx%bidders.length];
@@ -2113,6 +2132,10 @@ function playMonopoly(){
     try{ await offerBuyInner(c,i); } finally { setGameCenter(""); }
   }
   async function offerBuyInner(c,i){ var s=BOARD[i];
+    if(!eligible(c)){   // house rule: must pass GO once before buying; the deed goes to auction among eligible players only
+      var why=nm(c)+" can't buy yet: must pass GO first (landing on GO doesn't count)";
+      toast(why); setGameCenter(deedBox(i,esc(why))); if(seat[c]) waitPhone(c,"You can't buy yet: pass GO once first.",c);
+      await sleep(2600); await declineBuy(i); return; }
     if(human(c)){
       var opts=[{id:"buy",label:"✅ Buy "+s.n+" for "+money(s.price),color:"green"},{id:"no",label:R.noAuction?"❌ Don’t buy":"❌ Decline, then auction",color:"red"}];
       if(cash[c]<s.price) opts=[{id:"no",label:R.noAuction?"Can’t afford":"Can’t afford — to Auction",color:"red"}];
@@ -2123,12 +2146,20 @@ function playMonopoly(){
     }
   }
   function aiWantsBuy(c,i){ var s=BOARD[i]; if(cash[c]<s.price+50) return false; var score=0.5; if(s.t==="prop"){ var owned=GROUPS[s.g].filter(function(x){return owner[x]===c;}).length; score+=owned*0.25; } if(s.t==="rr")score+=0.3; if(cash[c]>s.price*2.5)score+=0.3; return Math.random()<score; }
+  async function incomeTaxAmt(c){
+    if(!R.incomeTaxChoice) return 200;
+    var w=MR.taxWorth(BOARD,c,cash[c],owner,houses), t=MR.incomeTax(w), cheap=t.pct<t.flat?"pct":"flat";
+    if(!human(c)) return cheap==="pct"?t.pct:t.flat;
+    setGameCenter('<div class="mwho">'+esc(nm(c))+' owes Income Tax</div><div class="mtradebox">Pay <b>'+money(t.flat)+'</b> flat, or <b>10% = '+money(t.pct)+'</b> of your total worth ('+money(w)+')</div>');
+    var pk; try{ pk=await ask(c,"Income Tax","Total worth "+money(w)+": choose how to pay",[{id:"flat",label:"Pay "+money(t.flat)+" flat",color:"blue"},{id:"pct",label:"Pay 10%: "+money(t.pct),color:"green"}],{dflt:cheap}); } finally { setGameCenter(""); }
+    return pk&&pk.id==="pct"?t.pct:(pk&&pk.id==="flat"?t.flat:(cheap==="pct"?t.pct:t.flat));
+  }
   async function resolveLanding(c,wasDouble){ var i=pos[c], s=BOARD[i];
     if(s.t==="go"){ if(R.doubleGo){ cash[c]+=200; toast(nm(c)+" landed on GO — extra $200!"); } }
     else if(s.t==="fp"){ if(R.fpJackpot&&fpPool>0){ toast(nm(c)+" collects the Free Parking pot "+money(fpPool)+"!"); cash[c]+=fpPool; fpPool=0; } }
     else if(s.t==="jail"){ }
     else if(s.t==="gotojail"){ toast(nm(c)+" goes to Jail"); goJail(c); }
-    else if(s.t==="tax"){ var amt = s.tax==="income"?200:(R.lux75?75:100); toast(nm(c)+" pays "+(s.tax==="income"?"Income":"Luxury")+" Tax "+money(amt)); await payBank(c,amt); }
+    else if(s.t==="tax"){ var amt = s.tax==="income"?await incomeTaxAmt(c):(R.lux75?75:100); toast(nm(c)+" pays "+(s.tax==="income"?"Income":"Luxury")+" Tax "+money(amt)); await payBank(c,amt); }
     else if(s.t==="chance"){ await drawCard(c,"chance"); }
     else if(s.t==="cc"){ await drawCard(c,"chest"); }
     else if(s.t==="prop"||s.t==="rr"||s.t==="util"){
@@ -2149,13 +2180,16 @@ function playMonopoly(){
     inc.forEach(function(i){ var sp=BOARD[i]; if(sp.t==="prop"){ var after=GROUPS[sp.g].filter(function(x){return owner[x]===p||inc.indexOf(x)>=0;}).length; if(after===GROUPS[sp.g].length) v+=sp.price; } });
     out.forEach(function(i){ var sp=BOARD[i]; if(sp.t==="prop"&&ownsGroup(p,sp.g)) v-=Math.floor(sp.price*1.5); });
     return v>=-10; }
+  function tradeTag(c){ if(!R.tradeLock) return ""; var g=tgate(c); return g.ok?" ("+g.left+" left)":" (locked)"; }
   function sumTxt(items,amt,j){ var a=items.map(function(i){return BOARD[i].n+(mort[i]?" (mortgaged)":"");}); if(amt) a.push(money(amt)); if(j) a.push("a Get Out of Jail Free card"); return a.length?a.join(", "):"nothing"; }
   async function tradeFlow(c){
+    var g0=tgate(c);
+    if(!g0.ok){ await ask(c,"Trading is closed",g0.reason+" ("+g0.label+")",[{id:"ok",label:"OK",color:"blue"}],{dflt:"ok"}); return; }
     var others=alive().filter(function(x){return x!==c;}); if(!others.length) return;
     var popts=others.map(function(x){ return {id:x,label:nm(x)+" ("+tokE[x]+") — "+money(cash[x]),color:x}; }); popts.push({id:"cancel",label:"Cancel",color:"blue"});
-    var pk=await ask(c,"Trade with who?","Pick a player",popts,{dflt:"cancel"});
+    var pk=await ask(c,"Trade with who?","Pick a player"+(g0.label?" · "+g0.label:""),popts,{dflt:"cancel"});
     if(!pk.id||pk.id==="cancel"||others.indexOf(pk.id)<0) return; var p=pk.id;
-    var tr=await ask(c,"Trade","",[{id:"cancel",label:"Cancel"}],{kind:"trade",partner:{name:nm(p),color:p},mine:tradeableOf(c),theirs:tradeableOf(p),myCash:cash[c],theirCash:cash[p],myJokers:jokers[c],theirJokers:jokers[p]});
+    var tr=await ask(c,"Trade","",[{id:"cancel",label:"Cancel"}],{kind:"trade",note:g0.label,partner:{name:nm(p),color:p},mine:tradeableOf(c),theirs:tradeableOf(p),myCash:cash[c],theirCash:cash[p],myJokers:jokers[c],theirJokers:jokers[p]});
     if(tr.id!=="offer"||!tr.data) return;
     var d=tr.data;
     var okT=function(who,i){ return i>=0&&i<40&&owner[i]===who && !(BOARD[i].t==="prop"&&GROUPS[BOARD[i].g].some(function(x){return houses[x]>0;})); };
@@ -2169,6 +2203,8 @@ function playMonopoly(){
     var fee=function(list){ return list.filter(function(i){return mort[i];}).reduce(function(a,i){return a+Math.ceil(BOARD[i].mort*0.1);},0); };
     if(cash[c]-cg+cr<fee(get)){ toast(nm(c)+" can’t cover the 10% interest on the mortgaged deed"); return; }
     if(cash[p]-cr+cg<fee(give)){ toast(nm(p)+" can’t cover the 10% interest on the mortgaged deed"); return; }
+    var fr=fairCheck(c,p,give,get,cg,cr,jg,jr);
+    if(!fr.ok){ toast(fr.reason); await ask(c,"Trade refused",fr.reason,[{id:"ok",label:"OK",color:"blue"}],{dflt:"ok"}); return; }
     toast(nm(c)+" offers a trade to "+nm(p));
     setGameCenter('<div class="mtradebox"><b>Trade offer</b><div style="margin-top:1vh"><b>'+esc(nm(c))+' gives:</b> '+esc(sumTxt(give,cg,jg))+'</div><div style="margin-top:.8vh"><b>'+esc(nm(p))+' gives:</b> '+esc(sumTxt(get,cr,jr))+'</div><div style="margin-top:1vh;color:#555">'+esc(nm(p))+' is deciding…</div></div>');
     var accept;
@@ -2177,7 +2213,7 @@ function playMonopoly(){
     setGameCenter(""); if(!accept){ toast(nm(p)+" declined the trade"); return; }
     give.forEach(function(i){ owner[i]=p; if(mort[i]) cash[p]-=Math.ceil(BOARD[i].mort*0.1); });
     get.forEach(function(i){ owner[i]=c; if(mort[i]) cash[c]-=Math.ceil(BOARD[i].mort*0.1); });
-    cash[c]-=cg; cash[p]+=cg; cash[p]-=cr; cash[c]+=cr;
+    cash[c]-=cg; cash[p]+=cg; cash[p]-=cr; cash[c]+=cr; tradeDone(c);
     if(jg){ jokers[c]--; jokers[p]++; } if(jr){ jokers[p]--; jokers[c]++; }
     toast("Trade done: "+nm(c)+" and "+nm(p));
     renderBoard(); turnBanner(c);
@@ -2186,8 +2222,27 @@ function playMonopoly(){
 
   // ---------- turn loop ----------
   async function aiPreRoll(c){ if(mb(c,"build")){ await aiTrades(c); if(!live()||bankrupt[c]) return; aiManage(c); renderBoard(); return; } aiBuild(c); }
+  async function pickLooks(){
+    var tokTaken={}, colTaken={}, hum=active.filter(human), cpu=active.filter(function(c){ return !human(c); }), all=Object.keys(SEATN);
+    var cap=function(x){ return x.charAt(0).toUpperCase()+x.slice(1); };
+    for(var k=0;k<hum.length;k++){ var c=hum[k];
+      setGameCenter('<div class="mwho">'+esc(nm(c))+' is choosing a token and colour…</div>');
+      active.forEach(function(x){ if(x!==c&&seat[x]) waitPhone(x, nm(c)+" is choosing a token…", c); });
+      var tfree=TOKS.filter(function(t){ return !tokTaken[t]; });
+      var tp=await ask(c,"Pick your token","Each token can be used by one player",tfree.map(function(t){ return {id:t,label:t}; }),{dflt:tfree[0]}); if(!live()) return;
+      var tk=tfree.indexOf(tp.id)>=0?tp.id:tfree[0]; tokTaken[tk]=1; tokE[c]=tk;
+      var cfree=all.filter(function(x){ return !colTaken[x]; });
+      var cp=await ask(c,"Pick your colour","Each colour can be used by one player",cfree.map(function(x){ return {id:x,label:cap(x),color:x}; }),{dflt:cfree.indexOf(c)>=0?c:cfree[0]}); if(!live()) return;
+      var ck=cfree.indexOf(cp.id)>=0?cp.id:(cfree.indexOf(c)>=0?c:cfree[0]); colTaken[ck]=1; look[c]=ck;
+      toast(nm(c)+" picks the "+tk+" in "+ck); renderBoard();
+    }
+    cpu.forEach(function(c){ var t=TOKS.filter(function(x){ return !tokTaken[x]; })[0]; if(t){ tokTaken[t]=1; tokE[c]=t; }
+      var ck=!colTaken[c]?c:all.filter(function(x){ return !colTaken[x]; })[0]; if(ck){ colTaken[ck]=1; look[c]=ck; } });
+    setGameCenter(""); renderBoard();
+  }
   async function run(){
     monoFrame(); boardEl=$("mboard"); gameSnap=snapNow; renderBoard(); snapNow();
+    if(R.pickLook&&active.some(human)){ await pickLooks(); if(!live()) return; }
     if(hasFirstShow()&&active.length>1){   // step 10, who goes first (official rule): everyone rolls both dice, the highest total starts, a tie rolls again
       var d6=function(){ return 1+Math.floor(Math.random()*6); };
       var res=BG().firstPlayer.resolve(active.length,function(){ return [d6(),d6()]; },{rank:function(v){ return v[0]+v[1]; }});
@@ -2195,7 +2250,7 @@ function playMonopoly(){
       var tot=res.rounds[res.rounds.length-1].vals[turn];
       setStatus('<span class="dot" style="background:var(--gold-300)"></span> Rolling for the first turn…');   /* review step 10: no spoiler */
       await partyFirst({mode:"dice",dice:2,gold:true,title:"Roll for the first turn",rounds:res.rounds,winner:res.winner,
-        players:active.map(function(c){ var p=fpPlayer(c); if(window.MonoBoard) p.tokenHTML=MonoBoard.tokenSVG(tokE[c],SEATN[c]||1); return p; }),
+        players:active.map(function(c){ var p=fpPlayer(c); p.seat=SEATN[lk(c)]||p.seat; if(window.MonoBoard) p.tokenHTML=MonoBoard.tokenSVG(tokE[c],SEATN[lk(c)]||1); return p; }),
         onLand:function(i){ hopTok(active[i],320); },
         result:function(w){ return {title:colName(active[w])+" goes first",sub:"The highest total starts. Play goes clockwise."}; }},active[turn],null,live);
       if(!live()) return;
@@ -2226,7 +2281,7 @@ function playMonopoly(){
         // pre-roll menu
         if(human(c)){
           var pre=[{id:"roll",label:"🎲 Roll Dice",color:"blue"},{id:"manage",label:"🏠 Manage properties"}];
-          if(alive().length>1) pre.push({id:"trade",label:"🤝 Trade"});
+          if(alive().length>1) pre.push({id:"trade",label:"🤝 Trade"+tradeTag(c)});
           var pk=await ask(c,"Your turn — "+money(cash[c]),"Roll, manage, or trade first",pre);
           if(pk.id==="manage"){ await manage(c); continue; }
           if(pk.id==="trade"){ await tradeFlow(c); continue; }
@@ -2244,7 +2299,7 @@ function playMonopoly(){
         if(human(c)){
           while(true){
             var post=[{id:"end",label:"✔ End Turn",color:"green"},{id:"manage",label:"🏠 Manage properties"}];
-            if(alive().length>1) post.push({id:"trade",label:"🤝 Trade"});
+            if(alive().length>1) post.push({id:"trade",label:"🤝 Trade"+tradeTag(c)});
             var pe=await ask(c,"Turn done — "+money(cash[c]),"Manage, trade, or End Turn",post);
             if(pe.id==="manage"){ await manage(c); }
             else if(pe.id==="trade"){ await tradeFlow(c); }
@@ -2255,6 +2310,7 @@ function playMonopoly(){
         endTurn=true;
       }
       if(alive().length<=1){ break; }
+      ownTurns[c]++;
       turn=(turn+1)%active.length;
       await sleep(250);
     }

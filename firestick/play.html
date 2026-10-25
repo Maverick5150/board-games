@@ -729,7 +729,7 @@ function showTrade(o){
   if(!tradeSel||tradeSel.req!==o.reqId) tradeSel={req:o.reqId,give:{},get:{},cg:0,cr:0,jg:0,jr:0};
   var T=tradeSel;
   function list(arr,side){ return (arr||[]).map(function(p){ var d=MD[p.i]; return '<label class="trow"><input type="checkbox" data-s="'+side+'" data-i="'+p.i+'" '+((side==="give"?T.give:T.get)[p.i]?"checked":"")+'><span class="chip" style="width:14px;height:14px;border-radius:4px;background:'+chipColor(p.i)+'"></span><span class="tname">'+esc(d.n)+'</span><small>'+(p.m?"mortgaged":"")+'</small><button type="button" data-v="'+p.i+'">deed</button></label>'; }).join("")||'<p class="sub">nothing tradeable (buildings must be sold first)</p>'; }
-  put('<h1 class="title">Trade with '+esc(o.partner&&o.partner.name||"player")+'</h1>'+
+  put('<h1 class="title">Trade with '+esc(o.partner&&o.partner.name||"player")+'</h1>'+(o.note?'<p class="sub">'+esc(o.note)+'</p>':'')+
     '<div class="sec"><h3>You give</h3>'+list(o.mine,"give")+
       '<div class="trow">Cash: $<input class="numin" type="number" inputmode="numeric" min="0" max="'+o.myCash+'" id="cg" value="'+(T.cg||"")+'" placeholder="0" aria-label="Cash you give"> <small>you have $'+o.myCash+'</small></div>'+
       (o.myJokers>0?'<label class="trow"><input type="checkbox" id="jg" '+(T.jg?"checked":"")+'> Give a Get Out of Jail Free card</label>':'')+'</div>'+
