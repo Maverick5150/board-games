@@ -1,0 +1,30 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>rummy table test</title>
+<style>html,body{margin:0;background:#06281a;color:#fff;font-family:system-ui,sans-serif}#rvtv{display:flex;flex-direction:column;align-items:center}</style></head>
+<body><div id="rvtv"></div>
+<script src="../../rummy500/engine.js"></script><script src="../../rummy500/game.js"></script><script src="../../rummy500/cards.js"></script><script src="../../rummy500/party.js"></script>
+<script>
+/* test page for firestick/test/rummy-table.test.js: builds a TV table of n players with `total` melds spread over the seats
+   (every third meld has a lay-off by the next player) and draws it through the Party snapshot, as the real TV/phone link does */
+window.build=function(n,total,opts){
+  var R=Rummy,GM=R.Game,P=R.Party;
+  var G=GM.newGame({names:Array.from({length:n},function(_,i){ return ["Maverick","Corey","Ann","Dee","Eddie","Fiona","Gus","Hannah"][i]; }),humans:Array(n).fill(true),opts:R.versionOpts("standard",Object.assign({decksAuto:false,decks:2},opts||{})),rnd:function(){ return .37; },dealer:0});
+  GM.startRound(G); G.turn=0; G.phase="play"; G.melds=[]; var pool=R.makeDeck(G.o), used={};
+  function take(r,s){ for(var i=0;i<pool.length;i++){ var c=pool[i]; if(!used[c.id]&&c.r===r&&c.s===s){ used[c.id]=1; return c; } } return null; }
+  var suits=["S","H","D","C"], id=1, lays=0;
+  for(var k=0;k<total;k++){
+    var owner=k%n, len=3+(k%4), m=null;
+    for(var t=0;t<40&&!m;t++){ var s=suits[(k+t)%4], lo=1+((k*3+t)%(13-len)), cs=[];
+      for(var q=0;q<len;q++){ var c=take(lo+q,s); if(!c){ cs=null; break; } cs.push(c); }
+      if(cs) m=R.buildRun(cs,G.o); }
+    if(!m) break; m.id=id++; m.owner=owner; m.cards.forEach(function(e){ e.by=owner; e.lay=owner; });
+    if(k%3===0){ var lay=(owner+1)%n, last=m.cards[m.cards.length-1], nx=last.r<13?take(last.r+1,m.suit):null;
+      if(nx){ var nm=R.layOff(m,nx,G.o); if(nm){ nm.cards.forEach(function(e){ var old=m.cards.filter(function(x){ return x.c.id===e.c.id; })[0]; e.by=old?old.by:(G.o.layoffScoring===false?owner:lay); e.lay=old?old.lay:lay; }); nm.id=m.id; nm.owner=m.owner; m=nm; lays++; } } }
+    G.melds.push(m);
+  }
+  var st=document.getElementById("rvStyle"); if(!st){ st=document.createElement("style"); st.id="rvStyle"; st.textContent=P.tvCSS; document.head.appendChild(st); }
+  R.UI.injectCSS();
+  var G2=P.unpack(P.snap(G,-1)); G2.round=G.round; G2.history=[];
+  document.getElementById("rvtv").innerHTML=P.tvHTML(G2,{});
+  return {melds:G.melds.length,lays:lays};
+};
+</script></body></html>

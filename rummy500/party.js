@@ -13,7 +13,7 @@ function snap(G,me,ex){
     canUndo:!!(G.snap&&G.turn===me&&G.phase==="play"),
     hand:me>=0?G.players[me].hand.map(enc):[],discard:G.discard.map(enc),stock:G.stock.length,round:G.round,dealer:G.dealer,
     melds:G.melds.map(function(m){ return {id:m.id,owner:m.owner,kind:m.kind,rank:m.rank,suit:m.suit,lo:m.lo,hi:m.hi,
-      cards:m.cards.map(function(e){ return [e.c.id,e.c.r,e.c.s,e.r,e.s,e.by,e.dbl?1:0]; })}; }),
+      cards:m.cards.map(function(e){ return [e.c.id,e.c.r,e.c.s,e.r,e.s,e.by,e.dbl?1:0,e.lay==null?e.by:e.lay]; })}; }),
     hist:(G.history||[]).map(function(h){ return h.rows.map(function(r){ return [r.t,r.s]; }); }),target:G.o.target,
     log:(G.logText||[]).slice(-3),ro:G.roundOver?{reason:G.roundOver.reason,out:G.roundOver.out,rows:G.roundOver.rows,over:G.roundOver.over,winner:G.roundOver.winner,winnerName:G.roundOver.winnerName}:null };
   if(ex) for(var k in ex) st[k]=ex[k];
@@ -25,7 +25,7 @@ function unpack(st){
   for(var i=0;i<st.n;i++) G.players.push({id:i,name:st.names[i],hand:[]});
   if(st.me>=0) G.players[st.me].hand=st.hand.map(dec);
   G.melds=st.melds.map(function(m){ return {id:m.id,owner:m.owner,kind:m.kind,rank:m.rank,suit:m.suit,lo:m.lo,hi:m.hi,
-    cards:m.cards.map(function(a){ return {c:{id:a[0],r:a[1],s:a[2],joker:a[1]===0},r:a[3],s:a[4],by:a[5],dbl:a[6]}; })}; });
+    cards:m.cards.map(function(a){ return {c:{id:a[0],r:a[1],s:a[2],joker:a[1]===0},r:a[3],s:a[4],by:a[5],dbl:a[6],lay:a[7]}; })}; });
   return G;
 }
 
@@ -49,14 +49,19 @@ var TVCSS=[
 ".rvchip{display:flex;align-items:center;gap:1vh;background:#00000060;border:.4vh solid #ffffff25;border-radius:99vh;padding:.7vh 1.8vh;font-size:2.5vh;font-weight:800}",
 ".rvchip .rd{width:2.4vh;height:2.4vh;border-radius:50%}.rvchip b{color:#ffd84a}.rvchip small{opacity:.8;font-size:2vh}",
 ".rvchip.act{border-color:var(--c);box-shadow:0 0 0 .4vh var(--c),0 0 3vh .5vh var(--c);background:#000000a0}",
-"#rtable{width:96vw;height:60vh;background:radial-gradient(120% 100% at 50% 20%,#1b7a4f,#0c4a2f);padding:1.4vh;position:relative;overflow:hidden;display:flex;flex-direction:column}",
-".rvmelds{flex:1;display:flex;flex-wrap:wrap;align-content:flex-start;justify-content:center;overflow:hidden;padding:.4vh}",
-".rvmelds .empty{color:#bfe3cc;font-size:2.6vh;opacity:.8;align-self:center}",
-".rvmelds .meld{--cw:var(--mcw);padding:.7vh 1.2vh .7vh 1vh;margin:.4vh;border-radius:1.4vh}",
+"#rtable{width:96vw;height:60vh;background:radial-gradient(120% 100% at 50% 20%,#1b7a4f,#0c4a2f);padding:1.4vh;position:relative;overflow:hidden;display:grid;box-sizing:border-box;gap:.4vh}",
+".rvside{display:flex;min-width:0;min-height:0;gap:.8vh}.rvside.t,.rvside.b{flex-direction:row}.rvside.l,.rvside.r{flex-direction:column}",
+".rvz{flex:1 1 0;min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column;border-radius:1.2vh;background:#0000002a;box-shadow:inset 0 0 0 .3vh #ffffff1c;padding:.2vh .6vh}",
+".rvz.act{box-shadow:inset 0 0 0 .4vh var(--c)}",
+".rvzn{flex:none;display:flex;align-items:center;gap:.8vh;height:3vh;font-size:2.3vh;font-weight:800;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff}.rvzn .rd{width:1.9vh;height:1.9vh;border-radius:50%;flex:none}",
+".rvmelds{flex:1;min-height:0;display:flex;flex-wrap:wrap;align-content:flex-start;align-items:flex-start;overflow:hidden}",
+".rvmelds .empty{color:#bfe3cc;font-size:2.2vh;opacity:.7;padding:.4vh}",
+".rvmelds .meld{--cw:var(--mcw);padding:.5vh .9vh .5vh .8vh;margin:.3vh;border-radius:1.2vh}",
 ".rvmelds .meld .pc{margin-left:calc(var(--mcw)*-.4)}.rvmelds .meld .pc:first-child{margin-left:0}",
-".rvpiles{display:flex;gap:3vh;align-items:center;border-top:.3vh dashed #ffffff40;padding:1vh 1vh 0;height:18vh}",
+".rvmelds .lopill{font-size:2vh}.rvmelds .lotags{margin-top:.3vh;gap:.4vh}",
+".rvmid{display:flex;gap:3vh;align-items:center;justify-content:center;min-width:0;min-height:0;overflow:hidden}",
 ".rvstock{text-align:center;font-size:2.2vh;font-weight:800;color:#d6efdf;flex:none}.rvstock .pc{display:block;margin:0 auto .5vh}",
-".rvdisc{flex:1;display:flex;align-items:center;overflow:hidden;padding:1vh 1vh}",
+".rvdisc{flex:1;display:flex;align-items:center;overflow:hidden;padding:1.6vh 1vh .6vh;min-width:0}",
 ".rvdisc .none{font-size:2.4vh;opacity:.8}",
 ".rvdisc .pc.pf{transform:translateY(-1.6vh);box-shadow:0 0 0 .5vh #7bf2a3}",
 ".rvlog{font-size:2.3vh;color:#cfe9da;text-align:center;line-height:1.35;min-height:9vh;margin-top:.6vh}",
@@ -65,6 +70,28 @@ var TVCSS=[
 ".rvsheet td.pos{color:#8ff0b0}.rvsheet td.neg{color:#ff9a9a}",
 ".rvsheet .bg-ico{width:1em;height:1em;vertical-align:-.12em;color:#ffd84a}"
 ].join("\n");
+/* ---- seat-based table: every player's melds (and the cards laid off onto them) sit on THAT player's side of the table ----
+   sides clockwise from the bottom: [bottom, left, top, right] seat counts per player count (2 face each other, 4 = one per side, 5-8 share sides) */
+var SIDE_COUNTS={2:[1,0,1,0],3:[1,1,0,1],4:[1,1,1,1],5:[1,1,2,1],6:[2,1,2,1],7:[2,1,3,1],8:[2,2,2,2]};
+var SIDE_NAMES=["b","l","t","r"];
+function seatSides(n){
+  var cnt=SIDE_COUNTS[n]||SIDE_COUNTS[4], out=[], pos=[];
+  for(var sd=0;sd<4;sd++) for(var k=0;k<cnt[sd];k++){ out.push(SIDE_NAMES[sd]); pos.push(k); }
+  return {side:out.slice(0,n),pos:pos.slice(0,n),cnt:cnt};
+}
+/* the biggest card width (in vh) at which a player's melds fit their zone (w x h in vh); greedy row packing, the same as the wrapping flex row */
+function fitCw(melds,w,h){
+  for(var cw=7.6;cw>=3.2;cw-=.2){
+    var rows=1,x=0,rowH=cw*1.42+2.6, avail=h-3.4;
+    for(var i=0;i<melds.length;i++){
+      var mw=cw*(1+.6*(melds[i].cards.length-1))+2.4+(melds[i].lo?Math.max(0,5-cw*.6*melds[i].cards.length):0);
+      if(x>0&&x+mw>w){ rows++; x=0; } x+=mw;
+    }
+    if(rows*(rowH+(melds.some(function(m){ return m.lo; })?2.8:0))<=avail) return Math.round(cw*10)/10;
+  }
+  return 3.2;
+}
+function hasLo(m){ return m.cards.some(function(e){ return e.lay!=null&&e.lay!==m.owner; }); }
 function tvHTML(G,ctx){
   ctx=ctx||{};
   var chips=rankIdx(G.scores,G.units.length).map(function(ui){
@@ -72,13 +99,28 @@ function tvHTML(G,ctx){
     var nm=u.map(function(i){ var q=G.players[i]; return esc(q.name)+' <small>'+q.hand.length+(q.hand.length===1?' card':' cards')+'</small>'; }).join(" &amp; ");
     return '<div class="rvchip'+(act?" act":"")+'" style="--c:'+col+'"><span class="rd" style="background:'+col+'"></span>'+nm+' · <b>'+G.scores[ui]+'</b></div>';
   }).join("");
-  var nm=G.melds.length, cw=nm>22?3.8:nm>14?4.8:nm>8?6:nm>4?7.2:8.6;
-  var melds=nm?G.melds.map(function(m){ return UI.meldHTML(m,G,{cls:(ctx.flashMeld===m.id?"flash":"")}); }).join(""):'<div class="empty">No melds yet — sets of 3–4 of a kind, runs of 3+ in one suit</div>';
-  var nd=G.discard.length, dcw=8, step=Math.min(4.6,100/Math.max(nd,1)), ml=-(dcw-step);
+  var n=G.players.length, ss=seatSides(n), cnt=ss.cnt, SIDE_H=16, wide=170;
+  var midH=57-(cnt[2]?SIDE_H:0)-(cnt[0]?SIDE_H:0), sideW=cnt[1]||cnt[3]?44:0, tall=cnt[1]>1||cnt[3]>1;   // tall: with two players on a side edge, the side columns take the corners too
+  var zones={b:[],l:[],t:[],r:[]};
+  G.players.forEach(function(q,i){
+    var ms=G.melds.filter(function(m){ return m.owner===i; }).map(function(m){ return {m:m,cards:m.cards,lo:hasLo(m)}; });
+    var side=ss.side[i], horiz=side==="b"||side==="t", k=cnt[SIDE_NAMES.indexOf(side)]||1;
+    var w=horiz?((tall?wide-2*sideW-4:wide-2)/k)-2:sideW-3, h=horiz?SIDE_H-.6:(tall?57:midH)/k-.6, cw=fitCw(ms,w,h), col=UI.colorOf(G,i);
+    var act=!G.roundOver&&G.turn===i;
+    zones[side].push('<div class="rvz'+(act?" act":"")+'" data-seat="'+i+'" data-side="'+side+'" style="--c:'+col+';--mcw:'+cw+'vh"><div class="rvzn"><span class="rd" style="background:'+col+'"></span>'+esc(q.name)+'</div>'+
+      '<div class="rvmelds">'+(ms.length?ms.map(function(x){ return UI.meldHTML(x.m,G,{cls:(ctx.flashMeld===x.m.id?"flash":"")}); }).join(""):'<span class="empty">no melds</span>')+'</div></div>');
+  });
+  var nd=G.discard.length, dcw=7, midW=wide-2*sideW-14, step=Math.min(4.4,Math.max(1.2,(midW-34)/Math.max(nd,1))), ml=-(dcw-step);
   var disc=nd?G.discard.map(function(c,i){ return UI.cardHTML(c,{cls:(ctx.pf!=null&&i>=ctx.pf?"pf ":"")+(ctx.flashCard===c.id?"flash":""),style:"margin-left:"+(i?ml:0)+"vh"}); }).join(""):'<span class="none">Discard pile is empty</span>';
-  return '<div class="rvscore">'+chips+'<div class="rvchip" style="background:#00000040">Round '+G.round+(G.o.deals>0?' · <b>'+G.o.deals+'</b> deals':' · first to <b>'+G.o.target+'</b>')+'</div></div>'+
-    '<div id="rtable"><div class="rvmelds" style="--mcw:'+cw+'vh">'+melds+'</div>'+
-    '<div class="rvpiles"><div class="rvstock" style="--cw:7vh">'+UI.backHTML({label:G.stock.length?"":"EMPTY"})+G.stock.length+' in stock</div><div class="rvdisc" style="--cw:'+dcw+'vh">'+disc+'</div></div></div>';
+  var cols=(cnt[1]||cnt[3]?"44vh":"0")+" minmax(0,1fr) "+(cnt[1]||cnt[3]?"44vh":"0");
+  var rows=(cnt[2]?SIDE_H+"vh":"0")+" minmax(0,1fr) "+(cnt[0]?SIDE_H+"vh":"0");
+  return '<div class="rvscore">'+chips+'<div class="rvchip" style="background:#00000040">Round '+G.round+(G.o.deals>0?' · <b>'+G.o.deals+'</b> deals':' · first to <b>'+G.o.target+'</b>')+(G.o.handSize>0?' · <b>'+GM.dealSize(G)+'</b> cards each':'')+'</div></div>'+
+    '<div id="rtable" class="rvgrid n'+n+'" style="grid-template-columns:'+cols+';grid-template-rows:'+rows+'">'+
+    '<div class="rvside t" style="grid-area:'+(tall?'1/2/2/3':'1/1/2/4')+'">'+zones.t.join("")+'</div>'+
+    '<div class="rvside l" style="grid-area:'+(tall?'1/1/4/2':'2/1/3/2')+'">'+zones.l.join("")+'</div>'+
+    '<div class="rvmid" style="grid-area:2/2/3/3"><div class="rvstock" style="--cw:6.4vh">'+UI.backHTML({label:G.stock.length?"":"EMPTY"})+G.stock.length+' in stock</div><div class="rvdisc" style="--cw:'+dcw+'vh">'+disc+'</div></div>'+
+    '<div class="rvside r" style="grid-area:'+(tall?'1/3/4/4':'2/3/3/4')+'">'+zones.r.join("")+'</div>'+
+    '<div class="rvside b" style="grid-area:'+(tall?'3/2/4/3':'3/1/4/4')+'">'+zones.b.join("")+'</div></div>';
 }
 function roundSheetHTML(G){
   var ro=G.roundOver; if(!ro) return "";

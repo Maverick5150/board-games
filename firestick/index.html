@@ -1057,6 +1057,7 @@ function renderLobby(){
     cb.querySelectorAll("button:not([disabled])").forEach(function(b){ b.onclick=function(){ cpuCount=+b.dataset.n; renderLobby(); }; });
   }
   var total=Math.min(order.length, seated+cpuCount);
+  if(chosenGame==="rummy500"&&total!==rvSeatCount){ rvSeatCount=total; if($("rvbox")) renderRvRules(); }   // the starting-hand choices follow the player count
   var pbx=$("paceBtns");
   if(pbx){ var PO=[["Slow","slow"],["Medium","medium"],["Fast","fast"]];
     pbx.innerHTML=PO.map(function(p){ var on=modeOfPace(PACE)===p[1]; return '<button type="button" class="aibtn'+(on?" on":"")+'" aria-pressed="'+on+'" data-p="'+p[1]+'">'+p[0]+'</button>'; }).join("");
@@ -1077,23 +1078,23 @@ function renderLobby(){
 function gameTitle(id){ var pe=plugE(id); if(pe) return pe.title; return id==="trouble"?"Trouble":id==="sorry"?"Sorry!":id==="rummy500"?"500 Rummy":id==="risk"?"Risk":id==="uno"?"Uno":id==="scatter"?"Scattergories":"Monopoly"; }
 /* the Version cards and the rule rows of a lobby box. Every button keeps what the harnesses and old saves read: data-v / data-k, the .on
    class, and "Label: value" as its text (the switch and the value are drawn from separate nodes) */
-function ruleRows(HOUSE,o,show){
+function ruleRows(HOUSE,o,show,help){
   return HOUSE.map(function(hr,k){
     if(show&&!show(hr,o)) return "";
     var v=o[hr[0]], tag=(hr[4]&&hr[4]!=="hotseat")?"official":"house", tg='<span class="bg-tag bg-tag--'+tag+'">'+tag+'</span>';
-    if(hr[2]==="bool") return '<div class="ps-rule">'+tg+'<button type="button" class="bg-row aibtn'+(v?" on":"")+'" role="switch" aria-checked="'+(!!v)+'" data-k="'+k+'"><span class="bg-row__main"><span class="bg-row__title">'+esc(hr[1])+'</span></span><span class="bg-sr">: '+(v?"ON":"off")+'</span><span class="bg-toggle" aria-hidden="true"></span></button></div>';
+    if(hr[2]==="bool") return '<div class="ps-rule">'+tg+'<button type="button" class="bg-row aibtn'+(v?" on":"")+'" role="switch" aria-checked="'+(!!v)+'" data-k="'+k+'"><span class="bg-row__main"><span class="bg-row__title">'+esc(hr[1])+'</span>'+(help&&help[hr[0]]?'<span class="bg-row__desc">'+esc(help[hr[0]])+'</span>':'')+'</span><span class="bg-sr">: '+(v?"ON":"off")+'</span><span class="bg-toggle" aria-hidden="true"></span></button></div>';
     var m=hr[3].filter(function(c){return String(c[0])===String(v);})[0];
-    return '<div class="ps-rule">'+tg+'<button type="button" class="bg-row aibtn" data-k="'+k+'"><span class="bg-row__main"><span class="bg-row__title">'+esc(hr[1])+'</span></span><span class="bg-sr">: </span><span class="ps-val">'+esc(m?m[1]:v)+'</span><span class="bg-ico-slot" aria-hidden="true" data-icon="chevron"></span></button></div>';
+    return '<div class="ps-rule">'+tg+'<button type="button" class="bg-row aibtn" data-k="'+k+'"><span class="bg-row__main"><span class="bg-row__title">'+esc(hr[1])+'</span>'+(help&&help[hr[0]]?'<span class="bg-row__desc">'+esc(help[hr[0]])+'</span>':'')+'</span><span class="bg-sr">: </span><span class="ps-val">'+esc(m?m[1]:v)+'</span><span class="bg-ico-slot" aria-hidden="true" data-icon="chevron"></span></button></div>';
   }).join("");
 }
-function renderRuleBox(id,cfg,VER,HOUSE,optsFn,showFn,self){
+function renderRuleBox(id,cfg,VER,HOUSE,optsFn,showFn,self,help){
   var el=$(id); if(!el) return;
   var o=optsFn(), cur=VER.filter(function(v){return v.id===cfg.version;})[0]||VER[0];
   var fa=document.activeElement, fk=fa&&el.contains(fa)?(fa.getAttribute("data-k")!=null?'[data-k="'+fa.getAttribute("data-k")+'"]':fa.getAttribute("data-v")!=null?'[data-v="'+fa.getAttribute("data-v")+'"]':null):null;
   el.innerHTML='<section class="ps-sec"><div class="bg-section"><h2 class="bg-eyebrow" data-stage-text>Version</h2></div><div class="bg-versions" role="radiogroup" aria-label="Version">'+
     VER.map(function(v){ var on=v.id===cfg.version; return '<button type="button" class="bg-version aibtn'+(on?" on":"")+'" role="radio" aria-checked="'+on+'" data-v="'+attr(v.id)+'" data-value="'+attr(v.id)+'"><span class="bg-version__title">'+esc(v.name)+'</span><span class="bg-version__meta">'+esc(v.tag)+'</span></button>'; }).join("")+
     '</div><p class="ps-vdesc"><b>'+esc(cur.name)+'.</b> '+esc(cur.desc)+'</p></section>'+
-    '<section class="ps-sec"><div class="bg-section"><h2 class="bg-eyebrow" data-stage-text>Rules</h2></div><div class="ps-rules">'+ruleRows(HOUSE,o,showFn)+'</div>'+
+    '<section class="ps-sec"><div class="bg-section"><h2 class="bg-eyebrow" data-stage-text>Rules</h2></div><div class="ps-rules">'+ruleRows(HOUSE,o,showFn,help)+'</div>'+
     '<p class="ps-legend" data-stage-text><span class="bg-tag bg-tag--official">official</span> in a published rulebook · <span class="bg-tag bg-tag--house">house</span> a popular home rule or convenience. Press OK on a rule to change it.</p></section>';
   paintIcons(el);
   Array.prototype.forEach.call(el.querySelectorAll("button[data-v]"),function(b){ b.onclick=function(){ cfg.version=b.dataset.v; cfg.over={}; self(); renderLobby(); }; });
@@ -1118,7 +1119,8 @@ function rkOpts(){ var o=Risk.Engine.versionOpts(rkCfg.version,rkCfg.over); o.de
 function renderRkRules(){ var E=Risk.Engine; renderRuleBox("rkbox",rkCfg,E.VERSIONS,E.HOUSE,rkOpts,function(hr){ return hr[4]!=="hotseat"; },renderRkRules); }   // rows tagged "hotseat" (Defender chooses dice) ask on the shared device: not offered in Party
 var rvCfg={version:"standard",over:{}};
 function rvOpts(){ return Rummy.versionOpts(rvCfg.version,rvCfg.over); }
-function renderRvRules(){ var R=Rummy; renderRuleBox("rvbox",rvCfg,R.VERSIONS,R.HOUSE,rvOpts,function(hr,o){ return !(R.houseApplies&&!R.houseApplies(hr[0],o)); },renderRvRules); }   // e.g. Target score in a two-deal game
+var rvSeatCount=0;
+function renderRvRules(){ var R=Rummy; if(R.setSeats) R.setSeats(rvSeatCount||4,rvOpts()); renderRuleBox("rvbox",rvCfg,R.VERSIONS,R.HOUSE,rvOpts,function(hr,o){ return !(R.houseApplies&&!R.houseApplies(hr[0],o)); },renderRvRules,R.HOUSE_HELP); }   // e.g. Target score in a two-deal game
 
 /* ============================================================
    PARTY GAME PLUGINS: a Party game in its own files (games/registry.js lists them; games/<id>.js is the TV side, games/<id>-phone.js the
