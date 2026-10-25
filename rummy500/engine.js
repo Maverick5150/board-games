@@ -33,7 +33,9 @@ function defaultOpts(){
     deals:0,                             // 0: play to the target | N: the game ends after N deals (Persian: 2), a tie plays one more deal
     dealsBonus:50,                       // after the last deal the side with the best score gets this bonus and wins
     winnerRule:"highest",                // "highest" | "outPlayer" (if several pass the target in one hand)
-    mustGoOut:false                      // you must also have gone out to win
+    mustGoOut:false,                     // you must also have gone out to win
+    handSize:0,                          // starting cards per player: 0 = the standard deal (13 for two players, 7 otherwise) | 7..15 (limited by the deck)
+    layoffScoring:true                   // a card laid off on ANOTHER player's meld scores for the player who laid it (false: it scores for the meld's owner)
   };
 }
 function mergeOpts(o){ var d=defaultOpts(); for(var k in (o||{})) d[k]=o[k]; return d; }
@@ -42,7 +44,7 @@ function mergeOpts(o){ var d=defaultOpts(); for(var k in (o||{})) d[k]=o[k]; ret
 var VERSIONS=[
   {id:"standard",name:"Standard 500 Rum",tag:"Pagat",desc:"The classic game: 2 jokers (wild), take any card from the pile (only buried cards must be used), cards 2–9 at face value, ace 15 (1 in A-2-3).",opts:{}},
   {id:"classic",name:"Classic 500 Rum",tag:"Bicycle",desc:"No jokers. Any card you take from the pile must be used right away in a meld or lay-off.",opts:{jokers:0,pickup:"always"}},
-  {id:"five",name:"5-10-15 Scoring",tag:"Wikipedia",desc:"Cards 2–9 are worth 5 each, 10–K are 10, ace is 15 (5 low). If several players pass 500, the player who went out wins. Nobody loses their hand when the stock runs out.",opts:{cardValues:"five",aceLowValue:5,winnerRule:"outPlayer",stockEndPenalty:false}},
+  {id:"five",name:"5-10-15 Scoring",tag:"Wikipedia",desc:"Cards 2–9 are worth 5 each, 10–K are 10, ace is 15 (5 low). If several players pass 500, the player who went out wins. Nobody loses their hand when the stock runs out.",opts:{cardValues:"five",aceLowValue:5,winnerRule:"outPlayer",stockEndPenalty:false,layoffScoring:true}},
   {id:"strict",name:"Strict 500",tag:"Tournament style",desc:"No jokers. You must discard to go out, pile pickups must be used, and the deepest card must go into a brand-new meld.",opts:{jokers:0,pickup:"always",deepestNewMeld:true,goOutNeedsDiscard:true}},
   {id:"partner",name:"Partnership 500",tag:"4 players, teams",desc:"Four players in two teams (partners sit opposite). Team scores are joint; partners can lay off on each other's melds.",opts:{teams:true}},
   {id:"persian",name:"Persian Rummy",tag:"4 players, teams",desc:"Partnership game with 4 jokers worth 20 that are NOT wild — they only meld with other jokers. A meld of exactly four laid at once counts double. Going out earns 25. The game is two deals; the side ahead then gets 50.",opts:{teams:true,jokers:4,decks:1,decksAuto:false,jokerMode:"group",jokerValue:20,doubleFour:true,goOutBonus:25,deals:2}}
@@ -63,8 +65,43 @@ var HOUSE=[
   ["target","Target score","choice",[[100,"100"],[300,"300"],[500,"500"],[750,"750"],[1000,"1000"]]],
   ["winnerRule","If several pass the target","choice",[["highest","Highest total wins"],["outPlayer","Player who went out wins"]]],
   ["mustGoOut","Must go out to win","bool"],
-  ["minNat","Wild joker needs 2 natural cards in a meld","choice",[[1,"No"],[2,"Yes"]]]
+  ["minNat","Wild joker needs 2 natural cards in a meld","choice",[[1,"No"],[2,"Yes"]]],
+  ["handSize","Starting cards per player","choice",[[0,"Standard deal"]]],   // the choices follow the player count (see below)
+  ["layoffScoring","Lay-off points go to the player who laid them","bool"],
+  ["emptyStock","When the stock runs out","choice",[["end","The hand ends"],["reshuffle","Reshuffle the pile"]]],
+  ["jokerMode","Jokers are wild","choice",[["wild","Yes, wild"],["group","No, only with jokers"]]],
+  ["aceLow","Ace can be low (A-2-3)","bool"],
+  ["aceHigh","Ace can be high (Q-K-A)","bool"]
 ];
+/* the one-line explanation of each house rule (shown under / beside the switch) */
+var HOUSE_HELP={
+  handSize:"How many cards everyone is dealt. The choices shown fit the deck for this many players.",
+  layoffScoring:"Cards you lay off on another player's meld score for YOU, not the meld's owner (on: standard 500 Rum; off: the owner keeps them).",
+  emptyStock:"Hand ends (everyone loses their hand) when the stock is empty, or the discard pile below the top card is reshuffled instead.",
+  jokerMode:"Wild jokers stand in for any card. Otherwise they only meld with other jokers.",
+  aceLow:"Allows A-2-3 runs.",aceHigh:"Allows Q-K-A runs (never wrap-around).",
+  jokers:"How many jokers are added per deck.",deals:"Play to a score, or a fixed two deals.",cardValues:"Face value, or 5 points for every card from 2 to 9.",
+  pickup:"Take only the top card freely, or every pile card must be used at once.",deepestNewMeld:"The deepest card you take must start a brand-new meld.",
+  layOffOpp:"You may add cards to your opponents' melds.",layOffNeedsOwnMeld:"You need a meld of your own on the table before you may lay off.",
+  goOutNeedsDiscard:"You must finish with a discard, not just melding your last card.",goOutBonus:"Extra points for going out.",
+  addOppHands:"The player who goes out also scores the cards left in opponents' hands.",stockEndPenalty:"Everyone loses their hand points when the stock runs out.",
+  target:"The score that ends the game.",winnerRule:"Who wins if more than one player passes the target in one hand.",mustGoOut:"Passing the target is not enough: you must also have gone out.",
+  minNat:"A meld holding a wild joker must have two natural cards."
+};
+/* deck size and the starting-hand limits for a player count */
+var SEATS=4, HINT=null;
+function setSeats(n,o){ SEATS=Math.max(2,Math.min(8,n|0)); HINT=o||null; }   // the setup screens call this before drawing the rules
+function deckSize(o,n){ var decks=o.decksAuto?(n>=5?2:1):o.decks; return decks*(52+(o.jokers||0)); }
+function standardHand(n){ return n===2?13:7; }
+/* the most cards each player can be dealt: one discard up and at least 8 left in the stock */
+function maxHandSize(o,n){ return Math.min(15,Math.floor((deckSize(o,n)-9)/n)); }
+function handSizeFor(o,n){ var h=o.handSize|0; if(!(h>0)) return standardHand(n); return Math.max(3,Math.min(h,maxHandSize(o,n))); }
+function handSizeChoices(n,o){
+  var std=standardHand(n), out=[[0,"Standard deal ("+std+")"]], mx=maxHandSize(o||defaultOpts(),n);
+  for(var k=7;k<=mx;k++) if(k!==std) out.push([k,k+" cards"]);
+  return out;
+}
+(function(){ for(var i=0;i<HOUSE.length;i++) if(HOUSE[i][0]==="handSize") Object.defineProperty(HOUSE[i],3,{get:function(){ return handSizeChoices(SEATS,HINT); },configurable:true,enumerable:true}); })();
 /* house rows that do nothing in a fixed-length (two-deal) game: the game ends after the deals, not at a target */
 function houseApplies(key,o){ return !(o.deals>0&&(key==="target"||key==="winnerRule"||key==="mustGoOut")); }
 function versionOpts(id,extra){ var v=VERSIONS.filter(function(x){ return x.id===id; })[0]||VERSIONS[0]; var o={}; for(var k in v.opts) o[k]=v.opts[k]; for(var k2 in (extra||{})) o[k2]=extra[k2]; return mergeOpts(o); }
@@ -236,7 +273,7 @@ function bestMelds(hand,o){
   return best;
 }
 
-g.Rummy={ SUITS:SUITS,SYM:SYM,RED:RED,VERSIONS:VERSIONS,HOUSE:HOUSE,houseApplies:houseApplies,rankLabel:rankLabel,cardLabel:cardLabel,defaultOpts:defaultOpts,mergeOpts:mergeOpts,versionOpts:versionOpts,
+g.Rummy={ HOUSE_HELP:HOUSE_HELP,setSeats:setSeats,handSizeFor:handSizeFor,handSizeChoices:handSizeChoices,maxHandSize:maxHandSize,standardHand:standardHand,SUITS:SUITS,SYM:SYM,RED:RED,VERSIONS:VERSIONS,HOUSE:HOUSE,houseApplies:houseApplies,rankLabel:rankLabel,cardLabel:cardLabel,defaultOpts:defaultOpts,mergeOpts:mergeOpts,versionOpts:versionOpts,
   makeDeck:makeDeck,shuffle:shuffle,pipValue:pipValue,meldCardValue:meldCardValue,handCardValue:handCardValue,
   buildSet:buildSet,buildRun:buildRun,buildMeld:buildMeld,layOff:layOff,meldPoints:meldPoints,canLayOffAny:canLayOffAny,
   candidateMelds:candidateMelds,bestMelds:bestMelds,isNat:isNat };

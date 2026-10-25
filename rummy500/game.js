@@ -2,7 +2,6 @@
 (function(g){
 "use strict";
 var R=g.Rummy;
-var DEAL={2:13,3:7,4:7,5:7,6:7,7:7,8:7};
 
 function newGame(cfg){
   var o=R.mergeOpts(cfg.opts), rnd=cfg.rnd||Math.random, n=cfg.names.length;
@@ -26,7 +25,7 @@ function startRound(G){
   var o=G.o; G.round++; G.roundOver=null;
   var deck=R.shuffle(R.makeDeck(o),G.rnd);
   G.players.forEach(function(p){ p.hand=[]; });
-  var per=DEAL[G.n]||7;
+  var per=R.handSizeFor(o,G.n);
   for(var i=0;i<per;i++) G.players.forEach(function(p){ p.hand.push(deck.pop()); });
   G.stock=deck; G.discard=[G.stock.pop()]; G.melds=[]; G.nextMeldId=1;
   G.dealer=(G.dealer+1)%G.n; G.turn=(G.dealer+1)%G.n; G.phase="draw"; G.mustUse=null; G.mustNew=false; G.noDiscard=null; G.snap=null;
@@ -34,7 +33,7 @@ function startRound(G){
 }
 
 /* ---------- snapshots (undo back to just after the draw) ---------- */
-function cloneMelds(ms){ return ms.map(function(m){ var c={}; for(var k in m) c[k]=m[k]; c.cards=m.cards.map(function(e){ return {c:e.c,r:e.r,s:e.s,by:e.by,dbl:e.dbl}; }); return c; }); }
+function cloneMelds(ms){ return ms.map(function(m){ var c={}; for(var k in m) c[k]=m[k]; c.cards=m.cards.map(function(e){ return {c:e.c,r:e.r,s:e.s,by:e.by,lay:e.lay,dbl:e.dbl}; }); return c; }); }
 function takeSnap(G){ G.snap={ hand:cur(G).hand.slice(), melds:cloneMelds(G.melds), mustUse:G.mustUse, mustNew:G.mustNew, noDiscard:G.noDiscard, nextMeldId:G.nextMeldId }; }
 function undo(G){
   if(G.phase!=="play"||!G.snap) return {ok:false,msg:"Nothing to undo."};
@@ -107,7 +106,7 @@ function meld(G,ids){
   if(!m) return {ok:false,msg:"That isn't a valid set or run."};
   m.id=G.nextMeldId++; m.owner=G.turn;
   var dbl=G.o.doubleFour&&cards.length===4;   // Persian: a meld of exactly four laid down at once counts double
-  m.cards.forEach(function(e){ e.by=G.turn; if(dbl) e.dbl=true; });
+  m.cards.forEach(function(e){ e.by=G.turn; e.lay=G.turn; if(dbl) e.dbl=true; });
   p.hand=p.hand.filter(function(c){ return ids.indexOf(c.id)<0; });
   if(G.mustUse!=null&&ids.indexOf(G.mustUse)>=0){ G.mustUse=null; G.mustNew=false; }
   G.melds.push(m);
@@ -126,7 +125,8 @@ function layOffCard(G,meldId,cardId){
   if(wouldEmpty(G,p,1)) return {ok:false,msg:"You must keep a card to discard when going out."};
   var card=p.hand[k], nm=R.layOff(m,card,G.o);
   if(!nm) return {ok:false,msg:"That card doesn't fit that meld."};
-  nm.cards.forEach(function(e){ var old=null; for(var j=0;j<m.cards.length;j++) if(m.cards[j].c.id===e.c.id) old=m.cards[j]; e.by=old?old.by:G.turn; if(old&&old.dbl) e.dbl=true; });
+  nm.cards.forEach(function(e){ var old=null; for(var j=0;j<m.cards.length;j++) if(m.cards[j].c.id===e.c.id) old=m.cards[j]; if(old){ e.by=old.by; e.lay=old.lay; if(old.dbl) e.dbl=true; }
+    else { e.lay=G.turn; e.by=(G.o.layoffScoring===false)?m.owner:G.turn; } });   // the new card scores for whoever laid it, unless the house rule gives it to the meld's owner
   G.melds[mi]=nm; p.hand.splice(k,1);
   if(G.mustUse===cardId){ G.mustUse=null; G.mustNew=false; }
   var events=[ev(G,"layOff",{p:G.turn,meld:meldId,card:cardId})];
@@ -279,7 +279,7 @@ function hint(G){
 
 g.Rummy.Game={ newGame:newGame,startRound:startRound,cur:cur,unitOf:unitOf,unitName:unitName,drawStock:drawStock,takeDiscard:takeDiscard,takeFeasible:takeFeasible,mustUseRule:mustUseRule,
   mayLayOn:mayLayOn,layTarget:layTarget,
-  meld:meld,layOffCard:layOffCard,discardCard:discardCard,undo:undo,endRound:endRound,goalText:goalText,aiAction:aiAction,aiActionLegacy:aiActionLegacy,applyAction:applyAction,hint:hint,handValue:handValue,DEAL:DEAL };
+  meld:meld,layOffCard:layOffCard,discardCard:discardCard,undo:undo,endRound:endRound,goalText:goalText,aiAction:aiAction,aiActionLegacy:aiActionLegacy,applyAction:applyAction,hint:hint,handValue:handValue };
 if(typeof module!=="undefined"&&module.exports) module.exports=g.Rummy.Game;
 /* browsers: bring in the brain right after this file (the page and Party Mode both load game.js, so both get it); a failed load = the old code */
 if(typeof document!=="undefined"&&document.currentScript&&document.readyState==="loading"&&!g.Rummy.Brain){

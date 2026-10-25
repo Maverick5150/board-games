@@ -471,7 +471,7 @@ function speedFactor(){ return ({slow:1.75, fast:0.5})[window.bgGameSpeed] || 1 
 function normSpeed(v){ return v==="slow"||v==="fast"?v:"medium"; }
 // Computer skill (easy / normal / hard; normal = the new brain): saved with the settings and the game; a change from the Menu applies at once; old saves = normal
 function normSkill(v){ return v==="easy"||v==="hard"?v:"normal"; }
-const OFFICIAL_NOT={minNat:1,addOppHands:1,mustGoOut:1,deals:1};
+const OFFICIAL_NOT={minNat:1,addOppHands:1,mustGoOut:1,deals:1,handSize:1,layoffScoring:1,emptyStock:1,jokerMode:1,aceLow:1,aceHigh:1};
 let cfg={version:"standard",over:{},humans:1,cpus:1,speed:"medium",skill:"normal"};
 window.bgGameSpeed="medium";
 let G=null,sel=new Set(),pileFrom=null,flashCards={},flashMeld=null,logLines=[],gen=0,handoffOk=null,lastTurn=-1,busy=false,drawnAt={},sortPrefs={};
@@ -574,6 +574,7 @@ function drawSeats(){
     cs.querySelectorAll("button:not([disabled])").forEach(b=>b.addEventListener("click",()=>{ cfg.cpus=+b.dataset.n; drawSeats(); }));
   });
   const tot=cfg.humans+cfg.cpus, decks=o.decksAuto?(tot>=5?2:1):o.decks;
+  if(tot!==lastHouseTot) setTimeout(drawHouse,0);   // the starting-hand choices follow the player count
   $("seatNote").textContent=`${tot} players · ${decks} deck${decks>1?"s":""}${o.jokers?` + ${o.jokers*decks} jokers`:""}${teams?" · partners sit opposite (1&3 vs 2&4)":""}`;
   // the seat preview: who sits at the table, in the seat colours of the strip
   if(nameUI) nameUI.count(cfg.humans);
@@ -586,21 +587,24 @@ function drawSeats(){
   $("cpuDesc").textContent=teams?"Four players in two teams: partners sit opposite.":"2 to 8 players in all.";
   syncStart();
 }
+var lastHouseTot=-1;
 function drawHouse(){
+  lastHouseTot=cfg.humans+cfg.cpus; R.setSeats(lastHouseTot,curOpts());
+  if(!R.handSizeChoices(lastHouseTot,curOpts()).some(c=>c[0]===curOpts().handSize)) cfg.over.handSize=0;   // a saved size this table can't be dealt
   const o=curOpts(), box=$("houseRules");
   keepFocus(box,"data-k",()=>{
-    box.innerHTML="";
+    box.innerHTML=""; R.setSeats(cfg.humans+cfg.cpus,o);   // the starting-hand choices follow the player count
     R.HOUSE.forEach(h=>{
       if(!R.houseApplies(h[0],o)) return;   // e.g. Target score in a two-deal game
       const key=h[0], label=h[1], kind=h[2], tag=OFFICIAL_NOT[key]?'<span class="bg-tag bg-tag--house">house</span>':'<span class="bg-tag bg-tag--official">official</span>';
       let row;
       if(kind==="bool"){
         row=document.createElement("label"); row.className="bg-row row";
-        row.innerHTML=`<span class="bg-row__main"><span class="bg-row__title">${esc(label)} ${tag}</span></span><input type="checkbox" class="bg-toggle" data-k="${key}"${o[key]?" checked":""}>`;
+        row.innerHTML=`<span class="bg-row__main"><span class="bg-row__title">${esc(label)} ${tag}</span>${R.HOUSE_HELP[key]?`<span class="bg-row__desc">${esc(R.HOUSE_HELP[key])}</span>`:""}</span><input type="checkbox" class="bg-toggle" data-k="${key}"${o[key]?" checked":""}>`;
         row.querySelector("input").addEventListener("change",e=>{ cfg.over[key]=e.target.checked; drawSeats(); syncRules(); });
       } else {
         row=document.createElement("div"); row.className="bg-row bg-row--static row";
-        row.innerHTML=`<span class="bg-row__main"><span class="bg-row__title">${esc(label)} ${tag}</span></span><select class="bg-select" data-k="${key}" aria-label="${esc(label)}">${h[3].map(c=>`<option value="${esc(c[0])}"${String(o[key])===String(c[0])?" selected":""}>${esc(c[1])}</option>`).join("")}</select>`;
+        row.innerHTML=`<span class="bg-row__main"><span class="bg-row__title">${esc(label)} ${tag}</span>${R.HOUSE_HELP[key]?`<span class="bg-row__desc">${esc(R.HOUSE_HELP[key])}</span>`:""}</span><select class="bg-select" data-k="${key}" aria-label="${esc(label)}">${h[3].map(c=>`<option value="${esc(c[0])}"${String(o[key])===String(c[0])?" selected":""}>${esc(c[1])}</option>`).join("")}</select>`;
         row.querySelector("select").addEventListener("change",e=>{ const raw=e.target.value; const m=h[3].filter(c=>String(c[0])===raw)[0]; cfg.over[key]=m?m[0]:raw; drawSeats(); if(key==="deals") drawHouse(); syncRules(); });
       }
       box.appendChild(row);

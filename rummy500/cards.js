@@ -63,13 +63,26 @@ function backHTML(o){ o=o||{}; return '<div class="pc back'+(o.cls?" "+o.cls:"")
 function meldCardHTML(e,o){
   o=o||{};
   var sub=(e.c.joker&&e.s!=="J")?"="+R.rankLabel(e.r)+'<svg class="sbp'+(R.RED[e.s]?" r":"")+'" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><use href="#rp-'+e.s+'"/></svg>':"";
-  return cardHTML(e.c,{cls:o.cls,sub:sub,attrs:o.attrs,style:o.style});
+  return cardHTML(e.c,{cls:((o.cls||"")+(o.lay?" lay":"")).replace(/^ /,""),sub:sub,attrs:o.attrs,style:(o.style||"")+(o.lay?"--lc:"+o.lay+";":"")||undefined});
 }
+/* a meld, with its owner's colour. A card laid off by someone ELSE gets a ring in that player's colour, and a tag under the cards says who
+   laid how many points: "Ann +10" (they score it), or "Ann > Bob +10" when the house rule gives the points to the meld's owner */
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+function shortName(n){ n=String(n==null?"":n); return n.length>9?n.slice(0,8)+"…":n; }
 function meldHTML(m,G,o){
   o=o||{};
-  var col=colorOf(G,m.owner);
-  var inner=m.cards.map(function(e){ return meldCardHTML(e); }).join("");
-  return '<div class="meld'+(o.cls?" "+o.cls:"")+'" data-m="'+m.id+'" style="--oc:'+col+'">'+inner+'</div>';
+  var col=colorOf(G,m.owner), lays={}, order=[];
+  m.cards.forEach(function(e){
+    if(e.lay==null||e.lay===m.owner||!G.players[e.lay]) return;
+    var d=lays[e.lay]; if(!d){ d=lays[e.lay]={p:e.lay,pts:0,to:e.by}; order.push(e.lay); }
+    d.pts+=R.meldCardValue(G.o,e,m.kind)*(e.dbl?2:1);
+  });
+  var inner=m.cards.map(function(e){ return meldCardHTML(e,{lay:(e.lay!=null&&e.lay!==m.owner&&G.players[e.lay])?colorOf(G,e.lay):null}); }).join("");
+  var tags=order.map(function(p){
+    var d=lays[p], cr=(d.to!=null&&d.to!==p&&G.players[d.to])?' &gt; '+esc(shortName(G.players[d.to].name)):"";
+    return '<span class="lopill" data-lay="'+p+'" data-credit="'+d.to+'" style="--lc:'+colorOf(G,p)+'">'+esc(shortName(G.players[p].name))+cr+' +'+d.pts+'</span>';
+  }).join("");
+  return '<div class="meld'+(tags?" has-lo":"")+(o.cls?" "+o.cls:"")+'" data-m="'+m.id+'" style="--oc:'+col+'">'+(tags?'<div class="mc">'+inner+'</div><div class="lotags">'+tags+'</div>':inner)+'</div>';
 }
 var FD='var(--font-display,"DM Serif Display","Iowan Old Style",Georgia,serif)', FU='var(--font-ui,Manrope,system-ui,sans-serif)';
 var CW='var(--cw,54px)';
@@ -106,7 +119,11 @@ var CSS=[
 "@keyframes fitbeat{50%{opacity:1}}",
 "@media (prefers-reduced-motion: reduce){.meld.fit:not(.flash)::after{animation:none;opacity:1}}",
 "html[data-motion=reduce] .meld.fit:not(.flash)::after,html[data-effects=reduced] .meld.fit:not(.flash)::after{animation:none;opacity:1}",
-".meld.flash{animation:pcflash 1.4s ease-out 1}"
+".meld.flash{animation:pcflash 1.4s ease-out 1}",
+".meld.has-lo{flex-direction:column;align-items:flex-start}.meld .mc{display:flex;align-items:center}",
+".pc.lay{box-shadow:inset 0 0 0 calc("+CW+"*.035) var(--paper-50,#fbf6ea),0 0 0 max(2px,calc("+CW+"*.07)) var(--lc,#fff),0 2px 5px #0009}",
+".lotags{display:flex;flex-wrap:wrap;gap:3px;margin-top:3px}",
+".lopill{display:inline-block;white-space:nowrap;padding:0 .5em;border-radius:99px;background:var(--lc,#888);color:#10142a;font:800 max(11px,calc("+CW+"*.36))/1.35 "+FU+"}"
 ].join("\n");
 function injectCSS(){
   if(typeof document==="undefined"||document.getElementById("rummyCardCss")) return;
