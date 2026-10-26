@@ -1,0 +1,26 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Party relay test</title>
+<style>body{background:#0b0b14;color:#eee;font:18px system-ui,sans-serif;margin:0;padding:16px}h1{font-size:22px}table{width:100%;border-collapse:collapse}td{padding:10px 6px;border-bottom:1px solid #333;word-break:break-all}.ok{color:#5f5}.bad{color:#f66}.wait{color:#fc4}small{color:#999}</style></head><body>
+<h1>Party relay test</h1><p id="lib">Loading mqtt.js...</p><table id="t"></table><p><small>Green relays work on this network. Party Mode needs the TV and phones to share at least one green relay.</small></p>
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js" async></script>
+<script src="net.js"></script>
+<script>
+var rows={}, started=false, t0=Date.now();
+BGNet.BROKERS.forEach(function(b,i){ var tr=document.createElement("tr"); tr.innerHTML='<td>'+b.url.replace("wss://","")+'</td><td class="wait">waiting</td>'; document.getElementById("t").appendChild(tr); rows[i]=tr.cells[1]; });
+function set(i,c,m){ rows[i].className=c; rows[i].textContent=m; }
+function run(){
+  if(started) return; started=true;
+  document.getElementById("lib").textContent="mqtt.js loaded after "+(Date.now()-t0)+" ms";
+  BGNet.BROKERS.forEach(function(b,i){
+    var s=Date.now(), done=false, o={connectTimeout:8000,reconnectPeriod:0,clientId:"bgt_"+Math.random().toString(36).slice(2)};
+    if(b.username){o.username=b.username;o.password=b.password;}
+    set(i,"wait","connecting...");
+    var c=mqtt.connect(b.url,o), tp="bgfs/test/"+Math.random().toString(36).slice(2);
+    var to=setTimeout(function(){ if(!done){done=true;set(i,"bad","FAILED: timeout 8 s");try{c.end(true)}catch(e){}} },8500);
+    c.on("error",function(e){ if(!done){done=true;clearTimeout(to);set(i,"bad","FAILED: "+(e&&e.message||e));try{c.end(true)}catch(x){}} });
+    c.on("connect",function(){ var ms=Date.now()-s; set(i,"wait","connected "+ms+" ms, testing...");
+      c.on("message",function(){ if(done)return; done=true;clearTimeout(to); set(i,"ok","WORKS: connect "+ms+" ms, round trip "+(Date.now()-p)+" ms"); try{c.end(true)}catch(x){} });
+      var p; c.subscribe(tp,function(){ p=Date.now(); c.publish(tp,"x"); }); });
+  });
+}
+var iv=setInterval(function(){ if(window.mqtt){clearInterval(iv);run();} else if(Date.now()-t0>5000&&!window.__fb){window.__fb=1;var f=document.createElement("script");f.src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js";document.head.appendChild(f);} else if(Date.now()-t0>20000){clearInterval(iv);document.getElementById("lib").textContent="mqtt.js could not load from jsdelivr or unpkg (CDN blocked?)";} },100);
+</script></body></html>

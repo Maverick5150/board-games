@@ -15,7 +15,7 @@
 <link rel="preload" href="../ui/fonts/manrope-var-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="../ui/fonts/dmserifdisplay-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
-<link rel="dns-prefetch" href="https://broker.emqx.io"><link rel="dns-prefetch" href="https://broker.hivemq.com"><link rel="dns-prefetch" href="https://test.mosquitto.org">
+<link rel="dns-prefetch" href="https://broker.emqx.io"><link rel="dns-prefetch" href="https://broker.hivemq.com"><link rel="dns-prefetch" href="https://public.cloud.shiftr.io">
 <script src="../ui/icons.js" defer></script>
 <script src="../ui/ui.js" defer></script>
 <style>
@@ -270,7 +270,7 @@
   <header class="bg-topbar" id="topbar">
     <div class="bg-topbar__start"><button class="bg-btn bg-btn--secondary" id="backbtn" type="button" style="display:none"><span id="backicon" data-icon="back" aria-hidden="true"></span><span id="backlbl">Back</span></button></div>
     <div class="bg-topbar__title"><span class="bg-eyebrow" id="barEyebrow">Party Mode</span><span class="bg-topbar__name" id="barName">Pick a game</span><div class="status" id="status" role="status"></div></div>
-    <div class="bg-topbar__end"><button class="bg-btn bg-btn--secondary" id="menubtn" type="button" style="display:none" aria-label="Menu: invite a player back"><span data-icon="menu" aria-hidden="true"></span><span>Menu</span></button><span class="bg-chip" id="conn" role="status">connecting…</span></div>
+    <div class="bg-topbar__end"><button class="bg-btn bg-btn--secondary" id="menubtn" type="button" style="display:none" aria-label="Menu: invite a player back"><span data-icon="menu" aria-hidden="true"></span><span>Menu</span></button><span class="bg-chip" id="conn" role="status">connecting…</span><small id="relayhint" style="opacity:.55;font-size:11px;margin-left:6px"></small></div>
   </header>
   <main class="wrap" id="wrap"></main>
   <div class="bg-sr" id="toast" aria-hidden="true"></div>
