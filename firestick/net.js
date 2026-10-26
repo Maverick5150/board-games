@@ -4,17 +4,23 @@
    mqtt.js may still be loading (the pages load it async so the screen never waits for the CDN): the relays open as soon as it is in. */
 (function(global){
   "use strict";
+  // Verified 2026-10-26 (BG_audit/party-relay-measure.md). test.mosquitto.org:8081 dropped (websocket upgrade refused), mqtt.eclipseprojects.io (no CONNACK).
   var BROKERS = [
-    "wss://broker.emqx.io:8084/mqtt",
-    "wss://broker.hivemq.com:8884/mqtt",
-    "wss://test.mosquitto.org:8081/mqtt"
+    { url:"wss://broker.emqx.io:8084/mqtt" },
+    { url:"wss://broker.hivemq.com:8884/mqtt" },
+    { url:"wss://public.cloud.shiftr.io", username:"public", password:"public" }
   ];
+  var MQTT_FALLBACK = "https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js";   // same pinned version, only used if jsdelivr gave nothing after 5 s
   // run fn once window.mqtt exists (the async <script> that loads it may still be on its way)
   function whenMqtt(fn){
     if(global.mqtt){ fn(); return; }
     var done=false, go=function(){ if(!done && global.mqtt){ done=true; fn(); } };
     var s=document.querySelector('script[src*="mqtt"]'); if(s) s.addEventListener("load", go);
-    var n=0, t=setInterval(function(){ go(); if(done || ++n>600) clearInterval(t); }, 100);   // also polls (a cached script may have run already)
+    var n=0, t=setInterval(function(){
+      go();
+      if(!done && n===50 && !global.mqtt){ var f=document.createElement("script"); f.src=MQTT_FALLBACK; f.async=true; f.onload=go; document.head.appendChild(f); }
+      if(done || ++n>600) clearInterval(t);
+    }, 100);   // also polls (a cached script may have run already)
   }
   function topic(room, which){ return "bgfs/" + room + "/" + which; }
   function rnd(n){ return Math.floor(Math.random()*n); }
@@ -41,15 +47,18 @@
     function remember(id){ seen[id]=1; seenQ.push(id); if(seenQ.length>500){ delete seen[seenQ.shift()]; } }
     function report(){
       var up = entries.filter(function(e){ return e.up; }).length;
+      try{ var h=document.getElementById("relayhint"); if(h) h.textContent = "relays: "+up+" of "+BROKERS.length+" up"; }catch(x){}
       handlers.status && handlers.status(up>0 ? "online" : (closed ? "offline" : "connecting"));
     }
-    function open(url){
+    function open(b){
       var e = { up:false, c:null };
       entries.push(e);
-      e.c = global.mqtt.connect(url, {
+      var o = {
         clientId: "bg_" + role + "_" + rnd(1e9).toString(36) + rnd(1e9).toString(36),
-        keepalive: 30, reconnectPeriod: 2500, connectTimeout: 8000, clean: true
-      });
+        keepalive: 30, reconnectPeriod: 1500, connectTimeout: 8000, clean: true
+      };
+      if(b.username){ o.username=b.username; o.password=b.password; }
+      e.c = global.mqtt.connect(b.url, o);
       e.c.on("connect", function(){
         e.c.subscribe(subT, {qos:0}, function(){
           e.up = true; report(); handlers.up && handlers.up();
@@ -67,7 +76,7 @@
       e.c.on("close", function(){ e.up = false; if(!closed) report(); });
     }
     handlers.status && handlers.status("connecting");
-    whenMqtt(function(){ if(!closed) BROKERS.forEach(function(u){ try{ open(u); }catch(x){} }); });
+    whenMqtt(function(){ if(!closed) BROKERS.forEach(function(b){ try{ open(b); }catch(x){} }); report(); });
 
     return {
       send: function(obj, retain){
@@ -88,5 +97,5 @@
       }
     };
   }
-  global.BGNet = { connect: connect, roomCode: roomCode, pid: pid };
+  global.BGNet = { connect: connect, roomCode: roomCode, pid: pid, BROKERS: BROKERS };
 })(window);
